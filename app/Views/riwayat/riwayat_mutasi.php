@@ -89,7 +89,7 @@ foreach ($detail_mutasi as $row) {
                                         </iconify-icon>
                                         Lihat Detail
                                     </button>
-                                    <a href="<?php echo base_url('cetak/invoice_mutasi/' . $row->mutasi_idmutasi) ?>">
+                                    <a href="<?php echo base_url('cetak/invoice_mutasi/' . $first->mutasi_idmutasi) ?>">
                                         <button type="button" class="btn btn-sm btn-danger"
                                             style="display: inline-flex; align-items: center;">
                                             <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">

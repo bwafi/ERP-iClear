@@ -15,7 +15,11 @@ use App\Models\ModelStokAwal;
 use App\Models\ModelHppBarang;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
+use App\Models\ModelDetailPenjualan;
 use App\Models\ModelPembayaranBank;
+use App\Models\ModelPenjualan;
+use App\Models\ModelUnit;
+use App\Models\ModelKartuStok;
 
 class Service extends BaseController
 
@@ -33,6 +37,11 @@ class Service extends BaseController
     protected $JurnalModel;
     protected $BankModel;
     protected $PembayaranBankModel;
+    protected $PenjualanModel;
+    protected $DetailPenjualanModel;
+    protected $UnitModel;
+    protected $KartuStokModel;
+
 
 
     public function __construct()
@@ -49,6 +58,10 @@ class Service extends BaseController
         $this->JurnalModel = new ModelJurnal();
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
+        $this->PenjualanModel = new ModelPenjualan();
+        $this->DetailPenjualanModel = new ModelDetailPenjualan();
+        $this->UnitModel = new ModelUnit();
+        $this->KartuStokModel = new ModelKartuStok();
     }
 
     public function index()
@@ -56,6 +69,18 @@ class Service extends BaseController
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $teknisi = $this->AuthModel->getdataakun();
         $idservice = session('idservice') ?? null;
+
+        $unitId = session('ID_UNIT');
+
+        $sparepart = $this->StokBarangModel
+            ->where('id_unit', $unitId)
+            ->where('stok_akhir >', 0)
+            ->groupStart()
+                ->like('kode_barang', 'sprt')
+                ->orLike('kode_barang', 'acc')
+            ->groupEnd()
+            ->findAll();
+
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
         $oldsparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
         $data =  array(
@@ -68,7 +93,8 @@ class Service extends BaseController
             'oldkerusakan' => $oldkerusakan,
             'oldsparepart' => $oldsparepart,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'sparepart' => $this->StokBarangModel->getSparepart(),
+            'sparepart' => $sparepart,
+            'unit' => $this->UnitModel->getUnit(),
             'body'  => 'transaksi/service'
         );
         return view('template', $data);
@@ -113,14 +139,12 @@ class Service extends BaseController
         $no_hp = $this->request->getPost('no_hp');
         $imei = $this->request->getPost('imei');
         $dp_bayar = $this->rupiahToInt($this->request->getPost('dp_bayar'));
-        $tipe_passcode = $this->request->getPost('tipe_passcode');
+        $tipe_hp = $this->request->getPost('tipe_hp');
         $passcode = $this->request->getPost('passcode');
         $email_icloud = $this->request->getPost('email_icloud');
         $password_icloud = $this->request->getPost('password_icloud');
-        $alamat = $this->request->getPost('alamat');
         $keluhan = $this->request->getPost('keluhan');
         $keterangan = $this->request->getPost('keterangan');
-        $estimasi_biaya = $this->request->getPost('estimasi_biaya');
 
         $idunit = session('ID_UNIT');
         $idakun = session('ID_AKUN');
@@ -154,16 +178,15 @@ class Service extends BaseController
             'no_hp' => $no_hp,
             'imei' => $imei,
             'dp_bayar' => $dp_bayar,
-            'alamat' => $alamat,
             'keluhan' => $keluhan,
             'keterangan' => $keterangan,
-            'type_passcode' => $tipe_passcode,
+            'tipe_hp' => $tipe_hp,
             'passcode' => $passcode,
             'email_icloud' => $email_icloud,
             'password_icloud' => $password_icloud,
             'pelanggan_id_pelanggan' => $idpelanggan,
-            'estimasi_biaya' => $estimasi_biaya,
             'unit_idunit' => $idunit,
+            'service_by' => $idakun,
             'input_by' => $idakun,
             'created_at' => $created_at,
         );
@@ -193,7 +216,7 @@ class Service extends BaseController
         $idservice = $this->request->getPost('idservice_k');
 
         if (empty($fungsiTerpilih)) {
-            return redirect()->to('/service?tab=sparepart')->with('info', 'Tidak ada kerusakan yang dipilih.');
+            return redirect()->to('/service?tab=kerusakan')->with('info', 'Tidak ada kerusakan yang dipilih.');
         }
 
         date_default_timezone_set('Asia/Jakarta');
@@ -234,7 +257,7 @@ class Service extends BaseController
             $this->ServiceKerusakanModel->deleteByServiceAndFungsi($idservice, $idfungsi);
         }
 
-        return redirect()->to('/service?tab=sparepart')->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to('cetak/invoice_service/' . $idservice)->with('success', 'Data kerusakan berhasil diperbarui.');
     }
 
 
@@ -311,6 +334,8 @@ class Service extends BaseController
             }
         }
 
+        $this->buatPenjualanDariService($idservice, $produkData);
+
         // Hapus data sparepart yang tidak lagi ada di form
         foreach ($existingMap as $barangId => $item) {
             if (!in_array($barangId, $submittedIds)) {
@@ -321,7 +346,65 @@ class Service extends BaseController
         return redirect()->to('/service?tab=pembayaran')->with('success', 'Data kerusakan berhasil diperbarui.');
     }
 
+    private function buatPenjualanDariService($idservice, $produkData)
+    {
+        $db = \Config\Database::connect();
+        $db->transStart();
 
+        // ambil data service
+        $service = $this->ServiceModel->find($idservice);
+
+        // generate invoice (copy dari insert_penjualan, tapi sederhana)
+        $no_invoice = 'SRV' . date('YmdHis');
+
+        $total = 0;
+        foreach ($produkData as $p) {
+            $harga = $this->rupiahToInt($p['harga']);
+            $qty   = (int)$p['jumlah'];
+            $diskon = $this->rupiahToInt($p['diskon']);
+
+            $total += ($harga * $qty) - $diskon;
+        }
+
+        // insert penjualan (tanpa pembayaran dulu)
+        $dataPenjualan = [
+            'kode_invoice' => $no_invoice,
+            'tanggal' => date('Y-m-d H:i:s'),
+            'total_penjualan' => $total,
+            'harus_dibayar' => $total,
+            'bayar' => 0,
+            'keterangan' => 'Belum Lunas',
+            'unit_idunit' => session('ID_UNIT'),
+            'id_pelanggan' => $service->id_pelanggan ?? null,
+        ];
+
+        $this->PenjualanModel->insert_Penjualan($dataPenjualan);
+        $idPenjualan = $this->PenjualanModel->insertID();
+
+        // insert detail + potong stok
+        foreach ($produkData as $p) {
+            $produkid = $p['id'];
+            $qty = (int)$p['jumlah'];
+            $harga = $this->rupiahToInt($p['harga']);
+            $diskon = $this->rupiahToInt($p['diskon']);
+
+            $subtotal = ($harga * $qty) - $diskon;
+
+            $hpp = $this->HppBarangModel->getById($produkid);
+
+            $this->DetailPenjualanModel->insert_detail([
+                'barang_idbarang' => $produkid,
+                'jumlah' => $qty,
+                'harga_penjualan' => $harga,
+                'sub_total' => $subtotal,
+                'penjualan_idpenjualan' => $idPenjualan,
+                'hpp_penjualan' => $hpp->hpp ?? 0,
+                'unit_idunit' => session('ID_UNIT'),
+            ]);
+        }
+
+        $db->transComplete();
+    }
 
     public function insert_pembayaran()
     {
@@ -371,7 +454,6 @@ class Service extends BaseController
             'total_diskon' => $diskon_pembayaran,
             'harus_dibayar' => $total_harga_pembayaran,
             'bayar' => $total_bayar,
-            'service_by' => $service_by_pembayaran,
             'total_service_garansi' => 0,
             'biaya_tambahan_garansi' => 0,
             'total_diskon_garansi' => 0,

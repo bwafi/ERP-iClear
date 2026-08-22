@@ -39,6 +39,14 @@ $routes->group('pegawai', ['filter' => 'auth'], function ($routes) {
     $routes->post('delete_jabatan', 'Pegawai::delete_jabatan');
 });
 
+$routes->group('unit', ['filter' => 'auth'], function ($routes) {
+    $routes->get('/', 'Unit::index');
+});
+
+    $routes->post('insert_unit', 'Unit::insert_unit', ['filter' => 'auth']);
+    $routes->post('update_unit', 'Unit::update_unit', ['filter' => 'auth']);
+    $routes->post('delete_unit', 'Unit::delete_unit', ['filter' => 'auth']);
+
 //produk
 $routes->group('produk', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'Produk::index');
@@ -156,6 +164,8 @@ $routes->post('update_service/saveKerusakan', 'Riwayat_Service::insert_kerusakan
 $routes->post('update_service/saveSparepart', 'Riwayat_Service::insert_sparepart', ['filter' => 'auth']);
 $routes->post('update_insert/service/savePembayaran', 'Riwayat_Service::insert_pembayaran', ['filter' => 'auth']);
 
+$routes->get('sparepart_keluar', 'Riwayat_Service::sparepart', ['filter' => 'auth']);
+
 //riwayat service garansi
 $routes->get('riwayat_service_garansi', 'Riwayat_Service::index2', ['filter' => 'auth']);
 
@@ -193,6 +203,9 @@ $routes->get('input_stokawal', 'StokAwal::input_stokawal', ['filter' => 'auth'])
 $routes->post('insert/stokawal', 'StokAwal::insert', ['filter' => 'auth']);
 $routes->get('/stok/getBarang', 'StokAwal::getBarang');
 
+$routes->get('input_stokawal/(:any)', 'StokAwal::input_stokawal/$1', ['filter' => 'auth']);
+
+$routes->get('stok', 'StokAwal::stok', ['filter' => 'auth']);
 
 //stokopname
 $routes->get('stok_opname', 'StokOpname::index', ['filter' => 'auth']);
@@ -396,7 +409,13 @@ $routes->post('delete_penilaian', 'Penilaian::delete_penilaian', ['filter' => 'a
 $routes->post('export_penilaian', 'Penilaian::export_penilaian', ['filter' => 'auth']);
 $routes->get('penilaian/get_template_by_jabatan/(:num)', 'Penilaian::get_template_by_jabatan/$1');
 
-
+//payroll
+$routes->get('payroll2', 'Payroll::index', ['filter' => 'auth']);
+$routes->post('insert_payroll2', 'Payroll::insert', ['filter' => 'auth']);
+$routes->post('update_payroll2', 'Payroll::update', ['filter' => 'auth']);
+$routes->post('delete_payroll2', 'Payroll::delete', ['filter' => 'auth']);
+$routes->post('lock_payroll2', 'Payroll::lockPayroll', ['filter' => 'auth']);
+$routes->post('unlock_payroll2', 'Payroll::unlockPayroll', ['filter' => 'auth']);
 
 //penilaian kpi
 $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);
@@ -407,7 +426,11 @@ $routes->post('export_penilaian_KPI', 'PenilaianKPI::export_penilaian', ['filter
 $routes->post('export_riwayat_garding', 'PenilaianKPI::export_penilaian_detail', ['filter' => 'auth']);
 $routes->get('riwayat_penilaian_KPI', 'PenilaianKPI::index_riwayat', ['filter' => 'auth']);
 
+$routes->get('penilaian_kinerja', 'PenilaianKPI::penilaian_kinerja', ['filter' => 'auth']);
 
+$routes->get('gaji', 'PenilaianKPI::gaji', ['filter' => 'auth']);
+
+$routes->get('penilaian/slip_gaji/(:num)', 'PenilaianKPI::slip_gaji/$1', ['filter' => 'auth']);
 
 //riwayat penyusutan asset
 $routes->get('riwayat_penyusutan_asset', 'RiwayatPenyusutanAsset::index', ['filter' => 'auth']);
@@ -454,6 +477,15 @@ $routes->post('export_riwayat_ciputang', 'Piutang::export_riwayat_piutang',  ['f
 $routes->post('export_daftar_piutang', 'Piutang::export_daftar_piutang',  ['filter => auth']);
 $routes->get('umur_piutang', 'Piutang::umur_piutang',  ['filter => auth']);
 $routes->post('export_aging_piutang', 'Piutang::export_aging_piutang',  ['filter => auth']);
+
+$routes->get('tutup_kasir', 'TutupKasir::index',  ['filter => auth']);
+$routes->get('cetak-tutup-kasir/(:num)', 'TutupKasir::cetak_tutup_kasir/$1');
+$routes->post('tutupkasir/tutup', 'TutupKasir::tutup');
+$routes->get('kasir_bulanan', 'TutupKasir::kasirbulanan',  ['filter => auth']);
+
+$routes->get('omset_bulanan', 'TutupKasir::omsetbulanan',  ['filter => auth']);
+
+$routes->get('asset_berjalan', 'TutupKasir::assetberjalan',  ['filter => auth']);
 
 //nama handphone
 $routes->get('namahandphone', 'NamaHandphone::index', ['filter' => 'auth']);

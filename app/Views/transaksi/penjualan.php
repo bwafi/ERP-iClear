@@ -58,9 +58,9 @@
 
 
                 <div class="col-md-6">
-                    <label for="sales_by" class="form-label">Frontliner</label>
+                    <label for="sales_by" class="form-label">Staff</label>
                     <select class="form-control" id="sales_by" name="sales_by" required>
-                        <option value="">-- Pilih Frontliner --</option>
+                        <option value="">-- Pilih Staff --</option>
                         <?php foreach ($frontliner as $akun): ?>
                             <option value="<?= esc($akun->ID_AKUN) ?>"><?= esc($akun->NAMA_AKUN) ?></option>
                         <?php endforeach; ?>
@@ -136,7 +136,7 @@
                                     <!-- Produk -->
                                     <div class="tab-pane fade show active" id="produk-content" role="tabpanel"
                                         aria-labelledby="produk-tab">
-                                        <div class="table-responsive mb-4 px-4">
+                                        <div class="table-responsive mb-4 px- table-scroll">
                                             <table class="table border text-nowrap mb-0 align-middle"
                                                 id="produk-modal-table">
                                                 <thead class="text-dark fs-4">
@@ -169,6 +169,9 @@
                                                         <th>
                                                             <h6 class="fs-4 fw-semibold mb-0">Warna</h6>
                                                         </th>
+                                                        <th>
+                                                            <h6 class="fs-4 fw-semibold mb-0">Jenis</h6>
+                                                        </th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -187,7 +190,7 @@
                                                             </td>
                                                             <td><?= $p->kode_barang ?></td>
                                                             <td><?= $p->nama_barang ?></td>
-                                                            <td><?= $p->status_barang == 1 ? 'Baru' : 'Second' ?></td>
+                                                            <td><?= (int)$p->kondisi === 1 ? 'Second' : 'Baru' ?></td>
                                                             <td><?= 'Rp ' . number_format($p->harga, 0, ',', '.') ?></td>
                                                             <td><?= $p->nama_kategori ?></td>
                                                             <td>
@@ -196,6 +199,7 @@
                                                             <td><?= $p->imei ? $p->imei : 'Tidak Ada' ?></td>
                                                             <td><?= $p->internal ? $p->internal : 'Tidak Ada' ?></td>
                                                             <td><?= $p->warna ? $p->warna : 'Tidak Ada' ?></td>
+                                                            <td><?= $p->jenis_hp ? $p->jenis_hp : 'Tidak Ada' ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                 </tbody>
@@ -664,6 +668,10 @@
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
+                                <label>nik</label>
+                                <input type="text" class="form-control" name="nik" required>
+                            </div>
+                            <div class="mb-3">
                                 <label>Nama</label>
                                 <input type="text" class="form-control" name="nama" required>
                             </div>
@@ -672,62 +680,13 @@
                                 <input type="text" class="form-control" name="alamat" required>
                             </div>
 
-                            <div class="mb-3">
-                                <label>Provinsi</label>
-                                <select class="form-control select2" name="provinsi" id="provinsi" required>
-                                    <option value="">-- Pilih Provinsi --</option>
-                                    <?php foreach ($provinsi as $p): ?>
-                                        <!-- VALUE = NAME -->
-                                        <option value="<?= esc($p->name) ?>">
-                                            <?= esc($p->name) ?>
-                                        </option>
-                                    <?php endforeach ?>
-                                </select>
-                            </div>
-
-                            <div class="mb-3">
-                                <label>Kabupaten</label>
-                                <select class="form-control select2" name="kabupaten" id="kabupaten" required>
-                                    <option value="">-- Pilih Kabupaten --</option>
-                                </select>
-                            </div>
-
-                            <div class="mb-3">
-                                <label>Kecamatan</label>
-                                <select class="form-control select2" name="kecamatan" id="kecamatan" required>
-                                    <option value="">-- Pilih Kecamatan --</option>
-                                </select>
-                            </div>
-
 
                             <div class="mb-3">
                                 <label>Nomor HP</label>
                                 <input type="text" class="form-control" name="no_hp" required>
                             </div>
-                            <div class="mb-3">
-                                <label>Jenis Pelanggan</label>
-                                <select class="form-control" name="kategori" required>
-                                    <option value="">-- Pilih Jenis Pelanggan --</option>
-                                    <option value="0">Umum</option>
-                                    <option value="1">Toko</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label>Mengetahui Dari</label>
-                                <select class="form-control" name="mengetahui_dari" id="mengetahui_dari" required>
-                                    <option value="">-- Mengetahui Dari --</option>
-                                    <option value="Iklan di Facebook">Iklan di Facebook</option>
-                                    <option value="Iklan di Instagram">Iklan di Instagram</option>
-                                    <option value="Iklan di Tiktok">Iklan di Tiktok</option>
-                                    <option value="Iklan di Google">Iklan di Google</option>
-                                    <option value="Teman/Kerabat/Saudara">Teman/Kerabat/Saudara</option>
-                                    <option value="Store Offline">Store Offline</option>
-                                    <option value="Pelanggan Lama">Pelanggan lama</option>
-                                    <option value="Sosial Media Store">Sosial Media Store</option>
-                                    <option value="Informasi dari Store">Informasi dari Store Lain</option>
-                                    <option value="Informasi dari Store">Informasi dari Karyawan Store</option>
-                                </select>
-                            </div>
+                            
+                            
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Simpan Pelanggan</button>
@@ -912,7 +871,7 @@
                         <option disabled selected>Pilih Bank</option>
                         <?php foreach ($bank as $p): ?>
                             <option value="<?= htmlspecialchars($p->idbank) ?>">
-                                <?= htmlspecialchars($p->nama_bank) ?> : <?= htmlspecialchars($p->norek) ?>
+                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -1013,3 +972,34 @@
                 }
             });
         </script>
+        
+<script>
+    const slider = document.querySelector('.table-scroll')
+
+    let isDown = false
+    let startX
+    let scrollLeft
+
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true
+        slider.classList.add('active')
+        startX = e.pageX - slider.offsetLeft
+        scrollLeft = slider.scrollLeft
+    })
+
+    slider.addEventListener('mouseleave', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mouseup', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return
+        e.preventDefault()
+        const x = e.pageX - slider.offsetLeft
+        const walk = (x - startX) * 2
+        slider.scrollLeft = scrollLeft - walk
+    })
+</script>

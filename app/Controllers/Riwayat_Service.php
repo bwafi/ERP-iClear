@@ -22,7 +22,9 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelJurnal;
 use App\Models\ModelUnit;
 use App\Models\ModelBank;
+use App\Models\ModelDetailPenjualan;
 use App\Models\ModelPembayaranBank;
+use App\Models\ModelPenjualan;
 
 class Riwayat_Service extends BaseController
 
@@ -43,6 +45,8 @@ class Riwayat_Service extends BaseController
     protected $UnitModel;
     protected $BankModel;
     protected $PembayaranBankModel;
+    protected $PenjualanModel;
+    protected $DetailPenjualanModel;
 
 
 
@@ -63,6 +67,8 @@ class Riwayat_Service extends BaseController
         $this->UnitModel = new ModelUnit();
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
+        $this->PenjualanModel = new ModelPenjualan();
+        $this->DetailPenjualanModel = new ModelDetailPenjualan();
     }
 
     public function index()
@@ -93,7 +99,17 @@ class Riwayat_Service extends BaseController
 
     public function detail_service($idservice)
     {
-
+        $unitId = session('ID_UNIT');
+       
+       $sparepart = $this->StokBarangModel
+            ->where('id_unit', $unitId)
+            ->where('stok_akhir >', 0)
+            ->groupStart()
+                ->like('kode_barang', 'sprt')
+                ->orLike('kode_barang', 'acc')
+            ->groupEnd()
+            ->findAll();
+            
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
         $oldsparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
@@ -111,7 +127,7 @@ class Riwayat_Service extends BaseController
             'oldsparepart' => $oldsparepart,
             'lama_garansi' => $lama_garansi ? (int)$lama_garansi->garansi_hari : null,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'sparepart' => $this->StokBarangModel->getSparepart(),
+            'sparepart' => $sparepart,
             'body'  => 'riwayat/table/service'
         );
         return view('template', $data);
@@ -124,6 +140,7 @@ class Riwayat_Service extends BaseController
         $dp_bayar = $this->rupiahToInt($this->request->getPost('dp_bayar'));
         $tipe_passcode = $this->request->getPost('tipe_passcode');
         $passcode = $this->request->getPost('passcode');
+        $tipe_hp = $this->request->getPost('tipe_hp');
         $email_icloud = $this->request->getPost('email_icloud');
         $password_icloud = $this->request->getPost('password_icloud');
         $keluhan = $this->request->getPost('keluhan');
@@ -132,6 +149,7 @@ class Riwayat_Service extends BaseController
 
         $data = array(
             'imei' => $imei,
+            'tipe_hp' => $tipe_hp,
             'tipe_passcode' => $tipe_passcode,
             'passcode' => $passcode,
             'email_icloud' => $email_icloud,
@@ -268,6 +286,8 @@ class Riwayat_Service extends BaseController
             }
         }
 
+        $this->buatPenjualanDariService($idservice, $produkData);
+
         // Hapus data sparepart yang tidak lagi ada di form
         foreach ($existingMap as $barangId => $item) {
             if (!in_array($barangId, $submittedIds)) {
@@ -278,7 +298,65 @@ class Riwayat_Service extends BaseController
         return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=pembayaran'))->with('success', 'Data kerusakan berhasil diperbarui.');
     }
 
+    private function buatPenjualanDariService($idservice, $produkData)
+    {
+        $db = \Config\Database::connect();
+        $db->transStart();
 
+        // ambil data service
+        $service = $this->ServiceModel->find($idservice);
+
+        // generate invoice (copy dari insert_penjualan, tapi sederhana)
+        $no_invoice = 'SRV' . date('YmdHis');
+
+        $total = 0;
+        foreach ($produkData as $p) {
+            $harga = $this->rupiahToInt($p['harga']);
+            $qty   = (int)$p['jumlah'];
+            $diskon = $this->rupiahToInt($p['diskon']);
+
+            $total += ($harga * $qty) - $diskon;
+        }
+
+        // insert penjualan (tanpa pembayaran dulu)
+        $dataPenjualan = [
+            'kode_invoice' => $no_invoice,
+            'tanggal' => date('Y-m-d H:i:s'),
+            'total_penjualan' => $total,
+            'harus_dibayar' => $total,
+            'bayar' => 0,
+            'keterangan' => 'Belum Lunas',
+            'unit_idunit' => session('ID_UNIT'),
+            'id_pelanggan' => $service->id_pelanggan ?? null,
+        ];
+
+        $this->PenjualanModel->insert_Penjualan($dataPenjualan);
+        $idPenjualan = $this->PenjualanModel->insertID();
+
+        // insert detail + potong stok
+        foreach ($produkData as $p) {
+            $produkid = $p['id'];
+            $qty = (int)$p['jumlah'];
+            $harga = $this->rupiahToInt($p['harga']);
+            $diskon = $this->rupiahToInt($p['diskon']);
+
+            $subtotal = ($harga * $qty) - $diskon;
+
+            $hpp = $this->HppBarangModel->getById($produkid);
+
+            $this->DetailPenjualanModel->insert_detail([
+                'barang_idbarang' => $produkid,
+                'jumlah' => $qty,
+                'harga_penjualan' => $harga,
+                'sub_total' => $subtotal,
+                'penjualan_idpenjualan' => $idPenjualan,
+                'hpp_penjualan' => $hpp->hpp ?? 0,
+                'unit_idunit' => session('ID_UNIT'),
+            ]);
+        }
+
+        $db->transComplete();
+    }
 
     public function insert_pembayaran()
     {
@@ -351,6 +429,7 @@ class Riwayat_Service extends BaseController
 
         $datap = array(
 
+            'bayar_tunai' => $bayar_pembayaran,
             'total_service' => $total_harga_pembayaran,
             'total_diskon' => $diskon_pembayaran,
             'harus_dibayar' => $harus_dibayar,
@@ -361,7 +440,7 @@ class Riwayat_Service extends BaseController
 
         session()->remove('idservice');
         session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
-        return redirect()->to(base_url('/riwayat_service'));
+        return redirect()->to(base_url('/proses_service'));
     }
 
 
@@ -779,7 +858,7 @@ class Riwayat_Service extends BaseController
             'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
         ];
 
-        // $this->ServiceModel->updateService($idservice, $data);
+         $this->ServiceModel->updateService($idservice, $data);
 
         if (!empty($bankData) && is_array($bankData)) {
             foreach ($bankData as $b) {
@@ -794,10 +873,10 @@ class Riwayat_Service extends BaseController
         }
         $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service', [$dataservice->total_service], "Pembayaran Jasa Service", $idservice, 'service');
 
-        // $datapbgaransi = array(
-        //     'tabel_referensi' => 'service_garansi_0'
-        // );
-        // $this->PembayaranBankModel->updateByReferensi($idservice, $datapbgaransi);
+         $datapbgaransi = array(
+             'tabel_referensi' => 'service_garansi_0'
+         );
+         $this->PembayaranBankModel->updateByReferensi($idservice, $datapbgaransi);
 
         session()->setFlashdata('sukses', 'Berhasil Memperbarui Status');
         return redirect()->to(base_url('bisa_diambil'));
@@ -823,5 +902,52 @@ class Riwayat_Service extends BaseController
 
         $cleaned = str_replace(['Rp', '.', ' '], '', $value);
         return (float) $cleaned;
+    }
+    
+    public function sparepart()
+    {
+        $db = \Config\Database::connect();
+
+        $selected_unit = $this->request->getGet('unit') ?? 1;
+        $selected_day  = $this->request->getGet('day');
+
+        $builder = $db->table('detail_penjualan dp')
+            ->select('
+                p.kode_invoice,
+                dp.iddetail_penjualan,
+                dp.sub_total,
+                dp.hpp_penjualan,
+                b.nama_barang,
+                p.tanggal,
+                u.NAMA_UNIT
+            ')
+            ->join('barang b', 'b.idbarang = dp.barang_idbarang')
+            ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
+            ->join('unit u', 'u.idunit = p.unit_idunit')
+            ->where('p.unit_idunit', $selected_unit)
+            ->where('YEAR(p.tanggal)', date('Y'));
+
+        // Jika tanggal dipilih
+        if (!empty($selected_day)) {
+            $builder->where('DATE(p.tanggal)', $selected_day);
+        }
+
+        $data_pen = $builder->get()->getResultArray();
+
+        // Dropdown unit
+        $list_unit = $db->table('unit')
+            ->orderBy('NAMA_UNIT', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $data = [
+            'data_penjualan' => $data_pen,
+            'list_unit'      => $list_unit,
+            'selected_unit'  => $selected_unit,
+            'selected_day'   => $selected_day,
+            'body'           => 'riwayat/sparepart_keluar'
+        ];
+
+        return view('template', $data);
     }
 }

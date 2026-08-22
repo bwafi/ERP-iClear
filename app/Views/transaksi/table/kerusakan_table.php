@@ -51,7 +51,8 @@
         <div>
             <input hidden type="text" name="idservice_k" value="<?php echo @$idservice ?>">
             <button type="button" class="btn btn-light" id="btn-previous-to-pelanggan">Sebelumnya</button>
-            <button type="submit" id="btnnextnya" class="btn btn-success">Selanjutnya</button>
+            <button type="submit" id="btnnextnya" class="btn btn-success">Simpan</button>
+            
         </div>
 
     </div>

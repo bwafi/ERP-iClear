@@ -1,3 +1,10 @@
+<style>
+    .disabled-tab {
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+</style>
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <h4 class="fw-semibold mb-0">Service</h4>
@@ -31,8 +38,14 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link d-flex flex-column align-items-center" id="sparepart-tab" data-bs-toggle="tab" href="#sparepart"
-                    role="tab" aria-controls="sparepart" aria-selected="false">
+                <a class="nav-link d-flex flex-column align-items-center <?= session('ID_JABATAN') == 36 ? 'disabled-tab' : '' ?>"
+                    id="sparepart-tab"
+                    data-bs-toggle="tab"
+                    href="#sparepart"
+                    role="tab"
+                    aria-controls="sparepart"
+                    aria-selected="false"
+                    <?= session('ID_JABATAN') == 36 ? 'tabindex="-1" aria-disabled="true"' : '' ?>>
                     <i class="bi bi-clipboard-check fs-5"></i>
                     <span class="ms-2 mt-1">Sparepart</span>
                 </a>
@@ -65,6 +78,23 @@
     </div>
 </div>
 
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const isRestricted = <?= session('ID_JABATAN') == 36 ? 'true' : 'false' ?>;
+
+    if (isRestricted) {
+        const sparepartTab = document.querySelector('#sparepart-tab');
+
+        // Blok klik & keyboard
+        sparepartTab.addEventListener('show.bs.tab', function (e) {
+            e.preventDefault();
+            return false;
+        });
+    }
+
+});
+</script>
 
 <script>
     // Cek apakah ada parameter ?tab=xxx di URL

@@ -92,7 +92,7 @@ class Penjualan extends BaseController
         $data = array(
             'akun' => $akun,
             'produk' => $this->StokBarangModel->getAllBarang2(),
-            'frontliner' => $this->AuthModel->getAkunFrontliner(),
+            'frontliner' => $this->AuthModel->getdataakun(),
             'bank' => $this->BankModel->getBank(),
             'kategori' => $this->KategoriModel->getKategori(),
             'suplier' => $this->SuplierModel->getSuplier(),
@@ -157,10 +157,15 @@ class Penjualan extends BaseController
 
 
         if ($lastInvoice) {
-            // Ambil 4 digit terakhir (urutan)
-            $lastNumber = (int) substr($lastInvoice->kode_invoice, -4);
+
+            preg_match('/(\d{4})$/', $lastInvoice->kode_invoice, $matches);
+        
+            $lastNumber = isset($matches[1]) ? (int)$matches[1] : 0;
+        
             $urutan = str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
+        
         } else {
+        
             $urutan = '0001';
         }
 
@@ -520,7 +525,7 @@ class Penjualan extends BaseController
                 $html = view('cetak/cetak_penjualan_thermal', $data3);
             } else {
                 // cetak default
-                $html = view('cetak/cetak_penjualan', $data3);
+                $html = view('cetak/cetak_penjualan_thermal', $data3);
             }
 
             error_reporting(0);

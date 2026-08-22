@@ -1,3 +1,16 @@
+<style>
+.table-scroll {
+    max-height: 400px; /* tinggi area scroll */
+    overflow-y: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 2;
+}
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cleave.js/1.6.0/cleave.min.js"></script>
 
 <div class="card shadow-none position-relative overflow-hidden mb-4">
@@ -96,7 +109,7 @@
     </div>
 
 
-    <div class="table-responsive mb-4 px-4">
+    <div class="table-responsive mb-4 px-4 table-scroll">
         <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
             <thead class="text-dark fs-4">
                 <tr>
@@ -703,4 +716,34 @@ $(document).ready(function() {
     });
 
 });
+</script>
+<script>
+    const slider = document.querySelector('.table-scroll')
+
+    let isDown = false
+    let startX
+    let scrollLeft
+
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true
+        slider.classList.add('active')
+        startX = e.pageX - slider.offsetLeft
+        scrollLeft = slider.scrollLeft
+    })
+
+    slider.addEventListener('mouseleave', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mouseup', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return
+        e.preventDefault()
+        const x = e.pageX - slider.offsetLeft
+        const walk = (x - startX) * 2
+        slider.scrollLeft = scrollLeft - walk
+    })
 </script>

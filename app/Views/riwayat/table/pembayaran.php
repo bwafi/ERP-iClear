@@ -212,7 +212,7 @@
                         <option disabled selected>Pilih Bank</option>
                         <?php foreach ($bank as $p): ?>
                             <option value="<?= htmlspecialchars($p->idbank) ?>">
-                                <?= htmlspecialchars($p->nama_bank) ?> : <?= htmlspecialchars($p->norek) ?>
+                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

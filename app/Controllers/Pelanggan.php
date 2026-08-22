@@ -241,15 +241,9 @@ class Pelanggan extends BaseController
         $data = $this->request->getPost();
 
         $insertData = [
-            'nik'             => "", // sesuai permintaan
+            'nik'             => $data['nik'], // sesuai permintaan
             'nama'            => $data['nama'],
-            'alamat'          => $data['alamat'],
-            'provinsi'        => $data['provinsi'],
-            'kabupaten'       => $data['kabupaten'],
-            'kecamatan'       => $data['kecamatan'],
             'no_hp'           => $data['no_hp'],
-            'kategori'        => $data['kategori'],
-            'mengetahui_dari' => $data['mengetahui_dari'],
         ];
 
         $insertId = $this->PelangganModel->insert_Pelanggan($insertData);
@@ -261,8 +255,6 @@ class Pelanggan extends BaseController
                     'id_pelanggan' => $insertId,
                     'nama'         => $data['nama'],
                     'no_hp'        => $data['no_hp'],
-                    'alamat'       => $data['alamat'],
-                    'kategori'     => $data['kategori'],
                     'deleted'      => 0,
                 ]
             ]);

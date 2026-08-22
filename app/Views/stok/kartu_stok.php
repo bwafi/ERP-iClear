@@ -1,3 +1,16 @@
+<style>
+.table-scroll {
+    max-height: 400px; /* tinggi area scroll */
+    overflow-y: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 2;
+}
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cleave.js/1.6.0/cleave.min.js"></script>
 
 <div class="card shadow-none position-relative overflow-hidden mb-4">
@@ -65,7 +78,7 @@
         </div>
     </form>
 
-    <div class="table-responsive mb-4 px-4">
+    <div class="table-responsive mb-4 px-4 table-scroll">
         <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
             <thead class="text-dark fs-4">
                 <tr>
@@ -77,6 +90,18 @@
                     </th>
                     <th>
                         <h6 class="fs-4 fw-semibold mb-0">Nama Unit</h6>
+                    </th>
+                    <th>
+                        <h6 class="fs-4 fw-semibold mb-0">Warna</h6>
+                    </th>
+                    <th>
+                        <h6 class="fs-4 fw-semibold mb-0">Jenis</h6>
+                    </th>
+                    <th>
+                        <h6 class="fs-4 fw-semibold mb-0">HPP</h6>
+                    </th>
+                    <th>
+                        <h6 class="fs-4 fw-semibold mb-0">Harga Jual</h6>
                     </th>
                     <th>
                         <h6 class="fs-4 fw-semibold mb-0">Nama Kategori</h6>
@@ -120,6 +145,10 @@
                         <small><?= esc($row->imei) ?></small>
                     </td>
                     <td><?= esc($row->nama_unit) ?></td>
+                    <td><?= esc($row->warna) ?></td>
+                    <td><?= esc($row->jenis_hp) ?></td>
+                    <td><?= esc($row->harga_beli) ?></td>
+                    <td><?= esc($row->harga) ?></td>
                     <td><?= esc($row->nama_kategori) ?></td>
                     <td><?= $row->status_ppn == 1 ? 'PPN' : 'Non PPN' ?></td>
                     <td><?= esc($row->stok_awal) ?></td>
@@ -132,10 +161,6 @@
                     <td><b><?= esc($row->stok_akhir) ?></b></td>
                 </tr>
                 <?php endforeach; ?>
-                <?php else: ?>
-                <tr>
-                    <td colspan="12" class="text-center">Tidak ada data</td>
-                </tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -160,7 +185,7 @@ $(document).ready(function() {
         const unitIdInTable = $(rowNode).attr('data-idunit') || '';
         const tanggalAttr = ($(rowNode).attr('data-tanggal') || '').trim();
 
-        const ppn = (data[4] || '').toLowerCase(); // kolom Status PPN
+        const ppn = (data[8] || '').toLowerCase(); // kolom Status PPN
 
         // Parse date from data-tanggal
         let rowDate = null;
@@ -211,4 +236,35 @@ document.querySelectorAll('.currency').forEach(function(el) {
         numeralThousandsGroupStyle: 'thousand'
     });
 });
+</script>
+
+<script>
+    const slider = document.querySelector('.table-scroll')
+
+    let isDown = false
+    let startX
+    let scrollLeft
+
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true
+        slider.classList.add('active')
+        startX = e.pageX - slider.offsetLeft
+        scrollLeft = slider.scrollLeft
+    })
+
+    slider.addEventListener('mouseleave', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mouseup', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return
+        e.preventDefault()
+        const x = e.pageX - slider.offsetLeft
+        const walk = (x - startX) * 2
+        slider.scrollLeft = scrollLeft - walk
+    })
 </script>

@@ -34,6 +34,29 @@
                 <label class="ms-3 me-2">Tanggal Akhir:</label>
                 <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
                     style="width: auto; display: inline-block;" onchange="filterData()">
+                
+                <label class="ms-3 me-2">Aspek:</label>
+                <select id="aspekFilter" class="form-select d-inline"
+                    style="width: 200px; display: inline-block;"
+                    onchange="filterData()">
+                    <option value="">-- Semua Aspek --</option>
+                
+                    <?php
+                    $listAspek = [];
+                    foreach ($penilaian as $row) {
+                        if (!in_array($row->aspek, $listAspek)) {
+                            $listAspek[] = $row->aspek;
+                        }
+                    }
+                
+                    sort($listAspek);
+                
+                    foreach ($listAspek as $aspek): ?>
+                        <option value="<?= esc($aspek) ?>">
+                            <?= esc(ucwords($aspek)) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
 
                 <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
             </form>
@@ -57,6 +80,7 @@
                     <th>Nama Pegawai</th>
                     <th>Aspek</th>
                     <th>Keterangan</th>
+                    <th>Input By</th>
                     <th>Skor</th>
                     <th>Tanggal Penilaian</th>
                     <th>Action</th>
@@ -66,27 +90,65 @@
                 <?php if (!empty($penilaian)): ?>
                 <?php foreach ($penilaian as $row): ?>
                 <tr>
-                    <td><?= esc($row->NAMA_AKUN) ?></td>
+                    <td><?= esc($row->nama_pegawai) ?></td>
                     <td><?= esc($row->aspek) ?></td>
                     <td><?= esc($row->keterangan) ?></td>
+                    <td><?= esc($row->nama_input) ?></td>
                     <td><?= esc($row->skor) ?></td>
                     <td><?= esc(date('d-m-Y', strtotime($row->tanggal_penilaian))) ?></td>
                     <td>
+
                         <button type="button" class="btn btn-danger delete-button" data-bs-toggle="modal"
                             data-bs-target="#delete-penilaian-modal" data-idpenilaian="<?= esc($row->idpenilaian) ?>">
                             <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="24" height="24">
                             </iconify-icon>
                         </button>
+                            
                     </td>
                 </tr>
                 <?php endforeach; ?>
-                <?php else: ?>
-                <tr>
-                    <td colspan="8" class="text-center">Tidak ada data</td>
-                </tr>
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+</div>
+
+<div class="modal fade" id="delete-penilaian-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+
+            <form action="<?= base_url('delete_penilaian') ?>" method="post">
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Hapus Penilaian</h5>
+                    <button type="button" class="btn-close"
+                        data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <p>Yakin ingin menghapus data ini?</p>
+
+                    <input type="hidden"
+                        name="idpenilaian"
+                        id="delete-id_penilaian">
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                        Batal
+                    </button>
+
+                    <button type="submit"
+                        class="btn btn-danger">
+                        Hapus
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
     </div>
 </div>
 
@@ -125,6 +187,61 @@
                                     required>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="aspek3" class="form-label">Aspek</label>
+                                <select class="form-select" name="aspek3"
+                                    id="aspek3" required>
+                                    <option value="" disabled selected>-- Pilih Aspek --</option>
+                                    <?php if (in_array(session()->get('ID_JABATAN'), [35, 41, 1])): ?>
+                                        <option value="kehadiran">Kehadiran</option>
+                                        <option value="kebersihan">Kebersihan</option>
+                                        <option value="kepatuhan sop">Kepatuhan SOP</option>
+                                        <option value="seragam">Seragam</option>
+                                    <?php endif; ?>
+
+                                    <?php if (in_array(session()->get('ID_JABATAN'), [43])): ?>
+                                        <option value="kebersihan">Kebersihan</option>
+                                        <option value="kepatuhan sop">Kepatuhan SOP</option>
+                                        <option value="seragam">Seragam</option>
+                                    <?php endif;?>
+                                    
+                                    <?php if (in_array(session()->get('ID_JABATAN'), [40, 1, 43])): ?>
+                                        <option value="closing">closing</option>
+                                        <option value="follow up">Follow Up</option>
+
+                                        <option value="budgeting">Budgeting</option>
+                                        <option value="ROAS">ROAS</option>
+
+                                        <option value="Feed PL">Feed PL</option>
+                                        <option value="Video">Video</option>
+                                        <option value="Feed Mingguan">Feed Mingguan</option>
+                                        <option value="story">story</option>
+                                        <option value="testimoni">Testimoni</option>
+                                        
+                                        <option value="bug minor">Bug Minor</option>
+                                        <option value="operasional">Operasional</option>
+                                        <option value="ecommerce">Ecommerce</option>
+                                        <option value="fitur">Fitur</option>
+                                    <?php endif; ?>
+
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="skor3" class="form-label">Skor</label>
+                                <input
+                                    type="number"
+                                    class="form-control"
+                                    name="skor3"
+                                    id="skor3"
+                                    min="1"
+                                    max="5"
+                                    step="1"
+                                    required>
+                            </div>
+                        </div>
                     </div>
 
                     <hr class="my-3">
@@ -133,6 +250,21 @@
                         <div class="col-md-6 slider-container"></div>
                         <div class="col-md-12 input-container"></div>
                     </div>
+                    <?php if (session()->get('ID_JABATAN') == 35): ?>
+                        *Note : Skor Maksimal 5<br>
+                        <li>5(Tepat Waktu)
+                        <li>4(Telat 5 Menit)
+                        <li>3(Telat 10 Menit)
+                        <li>2(Telat 15 menit)
+                        <li>1(Telat 20 Menit)
+                    <?php else: ?>
+                        *Note : Skor Maksimal 5<br>
+                        <li>5 (Sangat Baik)</li>
+                        <li>4 (Baik)</li>
+                        <li>3 (Cukup)</li>
+                        <li>2 (Kurang)</li>
+                        <li>1 (Sangat Kurang)</li>
+                    <?php endif; ?>
                 </div>
 
                 <div class="modal-footer">
@@ -152,12 +284,13 @@ document.addEventListener('DOMContentLoaded', function() {
         $(this).find('.select2').select2({
             dropdownParent: $('#input-penilaian-modal'),
             width: '100%',
-            placeholder: 'Pilih Pegawai',
-            allowClear: true
         });
     });
 
     document.querySelector('#zero_config').addEventListener('click', function(e) {
+
+        table.settings()[0].aoColumns[1,2,3,4,5].bSearchable = false;
+
         const editBtn = e.target.closest('.edit-button');
         if (editBtn) {
             $('.select2').select2({
@@ -175,11 +308,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 $('#edit-pegawai_idpegawai').val(pegawaiId).trigger('change');
             }, 200);
         }
-        const deleteBtn = e.target.closest('.delete-button');
-        if (deleteBtn) {
-            document.getElementById('delete-id_penilaian').value = deleteBtn.getAttribute(
-                'data-idpenilaian');
-        }
+        
     });
 });
 
@@ -263,38 +392,219 @@ $(document).ready(function() {
 
 // ==================== DATE FILTER FUNCTION ====================
 function filterData() {
+
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
-    const table = document.getElementById('zero_config');
-    const rows = table.getElementsByTagName('tr');
+    const aspek = document.getElementById('aspekFilter').value.toLowerCase();
 
-    if (!startDate || !endDate) {
-        for (let i = 1; i < rows.length; i++) rows[i].style.display = '';
-        return;
-    }
+    const rows = document.querySelectorAll('#zero_config tbody tr');
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    rows.forEach(row => {
 
-    for (let i = 1; i < rows.length; i++) {
-        const dateCell = rows[i].getElementsByTagName('td')[4];
-        if (dateCell) {
-            const dateParts = dateCell.textContent.trim().split('-');
-            const rowDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
-            if (rowDate >= start && rowDate <= end) {
-                rows[i].style.display = '';
-            } else {
-                rows[i].style.display = 'none';
+        let tampil = true;
+
+        // ================= Filter Tanggal =================
+        if (startDate && endDate) {
+
+            const dateCell = row.cells[5];
+
+            if (dateCell) {
+
+                const dateParts = dateCell.innerText.trim().split('-');
+                const rowDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                if (rowDate < start || rowDate > end) {
+                    tampil = false;
+                }
+
             }
+
         }
-    }
+
+        // ================= Filter Aspek =================
+        if (aspek !== '') {
+
+            const aspekCell = row.cells[1].innerText.trim().toLowerCase();
+
+            if (aspekCell !== aspek) {
+                tampil = false;
+            }
+
+        }
+
+        row.style.display = tampil ? '' : 'none';
+
+    });
+
 }
 
 // ==================== RESET FILTER ====================
 function resetFilter() {
+
     document.getElementById('startDate').value = '';
     document.getElementById('endDate').value = '';
-    const rows = document.querySelectorAll('#zero_config tbody tr');
-    rows.forEach(row => row.style.display = '');
+    document.getElementById('aspekFilter').value = '';
+
+    document.querySelectorAll('#zero_config tbody tr').forEach(row => {
+        row.style.display = '';
+    });
+
 }
+</script>
+<script>
+$(document).ready(function () {
+
+    // hapus wrapper datatable sebelumnya
+    if ($.fn.DataTable.isDataTable('#zero_config')) {
+        $('#zero_config').DataTable().destroy();
+    }
+
+    // hapus elemen UI datatable yang dobel
+    $('#zero_config').siblings('.dataTables_wrapper').remove();
+
+    // init ulang
+    $('#zero_config').DataTable({
+        destroy: true,
+        retrieve: true,
+        columnDefs: [
+            {
+                targets: [1,2,3,4,5,6],
+                searchable: false
+            }
+        ]
+    });
+
+});
+</script>
+<script>
+    $(document).on('click', '.delete-button', function () {
+
+    const idpenilaian = $(this).data('idpenilaian');
+
+    $('#delete-id_penilaian').val(idpenilaian);
+
+    console.log(idpenilaian); // cek apakah masuk
+});
+</script>
+<script>
+const skorInput = document.getElementById('skor3');
+
+// cegah minus & karakter aneh
+skorInput.addEventListener('keydown', function(e) {
+
+    // blok:
+    // minus
+    // e
+    // +
+    // .
+    if (
+        e.key === '-' ||
+        e.key === 'e' ||
+        e.key === '+' ||
+        e.key === '.'
+    ) {
+        e.preventDefault();
+    }
+
+});
+
+// validasi nilai
+skorInput.addEventListener('input', function() {
+
+    let value = parseInt(this.value);
+
+    if (value < 1) {
+        this.value = 1;
+    }
+
+    if (value > 5) {
+        this.value = 5;
+    }
+
+});
+
+</script>
+<script>
+$(document).ready(function () {
+    const idJabatanSession = <?= json_encode(session()->get('ID_JABATAN')) ?>;
+
+    if (idJabatanSession == 40){
+        $('#input-pegawai_idpegawai').on('change', function () {
+
+            const idJabatan = $(this).find(':selected').data('idjabatan');
+            const aspek = $('#aspek3');
+
+            aspek.html('<option value="" disabled selected>-- Pilih Aspek --</option>');
+            
+            if (idJabatan == 41) {
+
+                aspek.append(`
+                    <option value="kebersihan">Kebersihan</option>
+                    <option value="kepatuhan sop">Kepatuhan SOP</option>
+                    <option value="seragam">Seragam</option>
+                `);
+
+            }
+
+            if (idJabatan == 42) {
+
+                aspek.append(`
+                    <option value="kebersihan">Kebersihan</option>
+                    <option value="kepatuhan sop">Kepatuhan SOP</option>
+                    <option value="seragam">Seragam</option>
+                    <option value="closing">Closing</option>
+                    <option value="follow up">Follow Up</option>
+                `);
+
+            }   
+
+            // jabatan 40
+            else if (idJabatan == 43) {
+
+                aspek.append(`
+                    <option value="kebersihan">Kebersihan</option>
+                    <option value="kepatuhan sop">Kepatuhan SOP</option>
+                    <option value="seragam">Seragam</option>
+                    <option value="budgeting">Budgeting</option>
+                    <option value="ROAS">ROAS</option>
+                `);
+
+            }
+
+            else if (idJabatan == 44) {
+
+                aspek.append(`
+                    <option value="kebersihan">Kebersihan</option>
+                    <option value="kepatuhan sop">Kepatuhan SOP</option>
+                    <option value="seragam">Seragam</option>
+                    <option value="Feed PL">Feed PL</option>
+                    <option value="Video">Video</option>
+                    <option value="Feed Mingguan">Feed Mingguan</option>
+                    <option value="story">Story</option>
+                    <option value="testimoni">Testimoni</option>
+                `);
+
+            }
+
+            else if (idJabatan == 45) {
+
+                aspek.append(`
+                    <option value="kebersihan">Kebersihan</option>
+                    <option value="kepatuhan sop">Kepatuhan SOP</option>
+                    <option value="seragam">Seragam</option>
+                    <option value="bug minor">Bug Minor</option>
+                    <option value="operasional">Operasional</option>
+                    <option value="ecommerce">Ecommerce</option>
+                    <option value="fitur">Fitur</option>
+                `);
+
+            }
+
+        });
+    }
+
+});
 </script>

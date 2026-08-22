@@ -92,25 +92,38 @@ foreach ($detail_penjualan as $row) {
                                 </iconify-icon>
                                 Lihat Detail
                             </button>
-                            <a href="<?= base_url('riwayat_penjualan/struk/' . $kode_invoice) ?>" target="_blank">
-                                <button type="button" class="btn btn-sm btn-danger"
-                                    style="display: inline-flex; align-items: center;">
-                                    <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
-                                    </iconify-icon>
-                                    Cetak Struk
-                                </button>
-                            </a>
 
-                            <a href="<?= base_url('riwayat_penjualan/struk/' . $kode_invoice . '?mode=thermal') ?>"
-                                target="_blank">
-                                <button type="button" class="btn btn-sm btn-danger"
-                                    style="display: inline-flex; align-items: center;">
-                                    <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
-                                    </iconify-icon>
-                                    Cetak Struk (Thermal)
-                                </button>
-                            </a>
+                            <?php
+                            $adaPelanggan = false;
 
+                            foreach ($items as $item) {
+                                if (!empty($item->id_pelanggan) && $item->id_pelanggan != 0) {
+                                    $adaPelanggan = true;
+                                    break;
+                                }
+                            }
+                            ?>
+
+                            <?php if ($adaPelanggan): ?>
+                                <a href="<?= base_url('riwayat_penjualan/struk/' . $kode_invoice) ?>" target="_blank">
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                        style="display: inline-flex; align-items: center;">
+                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
+                                        </iconify-icon>
+                                        Cetak Struk
+                                    </button>
+                                </a>
+
+                                <a href="<?= base_url('riwayat_penjualan/struk/' . $kode_invoice . '?mode=thermal') ?>"
+                                    target="_blank">
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                        style="display: inline-flex; align-items: center;">
+                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
+                                        </iconify-icon>
+                                        Cetak Struk (Thermal)
+                                    </button>
+                                </a>
+                            <?php endif; ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -142,6 +155,7 @@ foreach ($detail_penjualan as $row) {
                             <tr>
                                 <th>Nama Barang</th>
                                 <th>Jumlah</th>
+                                <th>HPP</th>
                                 <th>Harga Jual</th>
                                 <th>Diskon</th>
                                 <th>SubTotal</th>
@@ -156,6 +170,7 @@ foreach ($detail_penjualan as $row) {
                                 </td>
 
                                 <td><?= esc($item->jumlah) ?></td>
+                                <td><?= esc(number_format($item->hpp_penjualan, 0, ',', '.')) ?></td>
                                 <td><?= esc(number_format($item->harga_penjualan, 0, ',', '.')) ?></td>
                                 <td><?= esc(number_format($item->diskon_penjualan, 0, ',', '.')) ?></td>
                                 <td><?= esc(number_format($item->sub_total, 0, ',', '.')) ?></td>

@@ -66,7 +66,7 @@
                     </th>
 
                     <th style="display: flex; justify-content: center;">
-                        <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
                     </th>
 
                     <th>
@@ -91,7 +91,9 @@
                             <td><?= esc(date('d-m-Y', strtotime($row->tanggal_selesai))) ?></td>
                             <td><?= esc($row->nama_pelanggan) ?></td>
                             <td><?= esc($row->no_hp) ?></td>
-                            <td><?= esc($row->alamat) ?></td>
+                            <td>
+                                <?= esc($row->unit_idunit == 1 ? 'Probolinggo' : ($row->unit_idunit == 2 ? 'Jember' : ($row->unit_idunit == 3 ? 'Banyuwangi': ($row->unit_idunit == 4 ? 'Pandaan' : $row->unit_idunit)))) ?>
+                            </td>
                             <td><?= esc($row->lama_service) ?></td>
 
 
@@ -127,6 +129,16 @@
                                         Cetak Struk
                                     </button>
                                 </a>
+                                
+                                <a href="<?= base_url('cetak/invoice_service/' . $row->idservice . '?mode=thermal') ?>">
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                        style="display: inline-flex; align-items: center;">
+                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
+                                        </iconify-icon>
+                                        Cetak Struk (Thermal)
+                                    </button>
+                                </a>
+                                
                                 <button type="button" class="btn btn-wa"
                                     data-nohp="<?= esc($row->no_hp) ?>"
                                     data-nama="<?= esc($row->nama_pelanggan) ?>"

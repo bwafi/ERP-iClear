@@ -1743,7 +1743,7 @@
                     <!--  Header End -->
 
 
-                    <?php include($body . '.php'); ?>
+                    <?= view($body); ?>
 
                 </div>
             </div>

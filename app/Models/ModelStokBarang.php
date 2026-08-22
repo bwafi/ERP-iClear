@@ -77,6 +77,7 @@ class ModelStokBarang extends Model
                 barang.jenis_hp,
                 barang.internal,
                 barang.warna,
+                barang.status_barang AS kondisi,
                 barang.status AS status_barang,
                 barang.status_ppn,
                 barang.input,

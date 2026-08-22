@@ -95,12 +95,6 @@
                                 <?php endforeach; ?>
                             </tr>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="<?= count($months) + 3 ?>" class="text-center">
-                                Tidak ada data untuk periode yang dipilih
-                            </td>
-                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>

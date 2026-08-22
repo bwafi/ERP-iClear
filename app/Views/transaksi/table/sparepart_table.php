@@ -15,22 +15,30 @@
                 </div>
                 <div class="modal-body">
                     <table class="table table-bordered" id="sparepartDataTable">
+                        <label class="me-2 ms-4">Nama Unit:</label>
+                        <input type="form-control" id="unit" value="<?= session('NAMA_UNIT') ?>" readonly>
                         <thead>
                             <tr>
                                 <th></th>
                                 <th>Nama Sparepart</th>
+                                <th>Warna</th>
+                                <th>Nama Unit</th>
+                                <th>HPP</th>
                                 <th>Harga</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($sparepart as $s) : ?>
-                                <tr>
+                            <?php foreach ($sparepart as $row) : ?>
+                                <tr data-unit="<?= esc($row->id_unit) ?>">
                                     <td>
-                                        <input type="checkbox" class="sparepart-check" data-id="<?= esc($s->idbarang) ?>"
-                                            data-nama="<?= esc($s->nama_barang) ?>" data-harga="<?= esc($s->harga) ?>">
+                                        <input type="checkbox" class="sparepart-check" data-id="<?= esc($row->idbarang) ?>"
+                                            data-nama="<?= esc($row->nama_barang) ?>" data-harga="<?= esc($row->harga) ?>">
                                     </td>
-                                    <td><?= esc($s->nama_barang) ?></td>
-                                    <td><?= 'Rp ' . number_format($s->harga, 0, ',', '.') ?></td>
+                                    <td><?= esc($row->nama_barang) ?></td>
+                                    <td><?= esc($row->warna) ?></td>
+                                    <td><?= esc($row->nama_unit) ?></td>
+                                    <td><?= 'Rp ' . number_format($row->harga_beli, 0, ',', '.') ?></td>
+                                    <td><?= 'Rp ' . number_format($row->harga, 0, ',', '.') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -75,7 +83,10 @@
             <option value="0">Tidak Ada</option>
             <option value="7">1 Minggu</option>
             <option value="30">1 Bulan</option>
-            <option value="manual">Lainnya (isi manual)</option>
+            <option value="180">6 Bulan</option>
+            <option value="360">1 Tahun</option>
+            <option value="720">2 Tahun</option>
+            <option value="999">Selamanya</option>
         </select>
 
         <!-- Input manual akan muncul kalau pilih 'manual' -->
@@ -102,6 +113,25 @@
     <input type="text" hidden value="<?php echo @$idservice ?>" name="" id="idpelabel">
 </form>
 
+<script>
+$(document).ready(function() {
+    const table = $('#sparepartDataTable').DataTable();
+
+    $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+        if (settings.nTable.id !== 'sparepartDataTable') return true;
+
+        const unitFilter = $('#unitFilter').val();
+        const rowNode = table.row(dataIndex).node();
+        const unitRow = $(rowNode).data('unit');
+
+        return !unitFilter || unitRow == unitFilter;
+    });
+
+    window.filterKategori = function() {
+        table.draw();
+    };
+});
+</script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {

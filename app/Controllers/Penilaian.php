@@ -52,7 +52,7 @@ public function index()
 
     $data = array(
         'template'   => $this->TemplatePenilaianModel->getTemplatePenilaian(),
-        'penilaian'  => $this->PenilaianModel->getPenilaian(),
+        'penilaian'  => $this->PenilaianModel->where('MONTH(tanggal_penilaian)', date('m'))->where('YEAR(tanggal_penilaian)', date('Y'))->getPenilaian(),
         'jumlahMap'  => $jumlahMap,
         'akun'       => $this->AuthModel->getdataakun(),
         'body'       => 'penilaian/penilaian',
@@ -104,8 +104,13 @@ public function get_template_by_jabatan($idjabatan)
 
 public function insert_penilaian()
 {
+    $akun = session('ID_AKUN');
     $pegawai_idpegawai = $this->request->getPost('pegawai_idpegawai');
     $tanggal_penilaian = $this->request->getPost('tanggal_penilaian');
+    
+    $skor3 = $this->request->getPost('skor3');
+
+    $aspek3 = $this->request->getPost('aspek3');
 
     $idTempKpi2 = $this->request->getPost('idtempkpi2');
     $skor2      = $this->request->getPost('skor2');
@@ -123,11 +128,13 @@ public function insert_penilaian()
     }
 
     // Tentukan keterangan
-    if ($totalSkorAkhir2 <= 10) {
-        $keterangan2 = 'Skor Kinerja buruk';
-    } elseif ($totalSkorAkhir2 <= 20) {
-        $keterangan2 = 'Skor Kinerja cukup baik';
-    } elseif ($totalSkorAkhir2 <= 25) {
+    if ($skor3 == 1) {
+        $keterangan2 = 'Skor Kinerja sangat kurang';
+    } elseif ($skor3 == 2) {
+        $keterangan2 = 'Skor Kinerja kurang';
+    } elseif ($skor3 == 3) {
+        $keterangan2 = 'Skor Kinerja cukup';
+    } elseif ($skor3 == 4) {
         $keterangan2 = 'Skor Kinerja baik';
     } else {
         $keterangan2 = 'Skor Kinerja sangat baik';
@@ -135,10 +142,11 @@ public function insert_penilaian()
 
     // Simpan ke tabel penilaian (utama)
     $data2 = [
-        'aspek'             => $aspek2,
+        'aspek'             => $aspek3,
         'keterangan'        => $keterangan2,
-        'skor'              => $totalSkorAkhir2,
+        'skor'              => $skor3,
         'pegawai_idpegawai' => $pegawai_idpegawai,
+        'input_by'          => $akun,
         'tanggal_penilaian' => $tanggal_penilaian
     ];
     $idPenilaian = $this->PenilaianModel->insertPenilaian($data2); // <-- dapatkan ID insert
@@ -294,8 +302,12 @@ if (!empty($detailData)) {
 
     public function delete_penilaian()
     {
-        $idpenilaian = $this->request->getPost('id_penilaian');
-        $this->PenilaianModel->delete($idpenilaian);
+        $idpenilaian = $this->request->getPost('idpenilaian');
+
+        $db = \Config\Database::connect();
+        $db->table('penilaian')
+            ->where('idpenilaian', $idpenilaian)
+            ->delete();
         session()->setFlashData('sukses', 'Data Berhasil Dihapus');
         return redirect()->to(base_url('penilaian'));
     }

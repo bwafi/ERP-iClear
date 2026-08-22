@@ -288,7 +288,7 @@
                             <option value="">Pilih Bank</option>
                             <?php foreach ($bank as $b): ?>
                                 <option value="<?= esc($b->idbank) ?>">
-                                    <?= esc($b->nama_bank . ' : ' . $b->norek) ?>
+                                    <?= esc($b->nama_bank . ' ' . ($b->atas_nama). ' : ' . $b->norek) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -405,7 +405,7 @@
                 <select class="form-control select2-rekening" name="akun[${akunIndex}][no_rekening]" disabled>
                     <?= esc('<option value="">-- Pilih No Rekening --</option>') ?>
                     <?php foreach ($bank as $b): ?>
-                        <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank) ?> : <?= esc($b->norek) ?></option>
+                        <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank. ' ' . ($b->atas_nama)) ?> : <?= esc($b->norek) ?></option>
                     <?php endforeach; ?>
                 </select>
             </td>
@@ -478,7 +478,7 @@
         <option value="">-- Pilih No Rekening --</option>
         <?php foreach ($bank as $b): ?>
             <option value="<?= esc($b->idbank) ?>">
-                <?= esc($b->nama_bank) ?> : <?= esc($b->norek) ?>
+                <?= esc($b->nama_bank) . ' ' . ($b->atas_nama)?> : <?= esc($b->norek) ?>
             </option>
         <?php endforeach; ?>
     `;

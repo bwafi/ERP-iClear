@@ -178,6 +178,9 @@
                                                 <h6 class="fs-4 fw-semibold mb-0">Harga</h6>
                                             </th>
                                             <th>
+                                                <h6 class="fs-4 fw-semibold mb-0">HPP</h6>
+                                            </th>
+                                            <th>
                                                 <h6 class="fs-4 fw-semibold mb-0">Kategori</h6>
                                             </th>
                                             <th>
@@ -205,6 +208,7 @@
                                             <td><?= $p->kode_barang ?></td>
                                             <td><?= $p->nama_barang ?></td>
                                             <td><?= 'Rp ' . number_format($p->harga, 0, ',', '.') ?></td>
+                                            <td><?= 'Rp ' . number_format($p->harga_beli, 0, ',', '.') ?></td>
                                             <td><?= $p->nama_kategori ?></td>
                                             <td><?= $p->imei ? $p->imei : 'Tidak Ada' ?></td>
                                             <td><?= $p->internal ? $p->internal : 'Tidak Ada' ?></td>
@@ -919,7 +923,7 @@
                         <option disabled selected>Pilih Bank</option>
                         <?php foreach ($bank as $p): ?>
                             <option value="<?= htmlspecialchars($p->idbank) ?>">
-                                <?= htmlspecialchars($p->nama_bank) ?> : <?= htmlspecialchars($p->norek) ?>
+                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -1011,7 +1015,7 @@
                                 <label for="nama_barang" class="form-label">Nama Barang</label>
                                 <input type="text" class="form-control" id="nama_barang" name="nama_barang">
                             </div>
-                            <div class="mb-3">
+                            <!-- <div class="mb-3">
                                 <label for="">Nama Handphone</label>
                                 <select id="namahandphone-select" name="nama_hp" class="select2 form-control"
                                     style="width: 100%;">
@@ -1025,7 +1029,7 @@
                                     <?php endforeach; ?>
                                 </select>
 
-                            </div>
+                            </div> -->
 
                             <div class="mb-3">
                                 <label for="id_kategori" class="form-label">Kategori</label>
@@ -1038,25 +1042,9 @@
                                 </select>
                             </div>
 
-                            <div class="mb-3">
-                                <label for="subKategori"> Sub Kategori</label>
-                                <br>
-                                <select id="subKategori" name="subkategori" class="form-select d-inline"
-                                    style="width: 100%; display: inline-block;" required>
-                                    <option value="">-- Pilih Kategori --</option>
-                                    <?php foreach ($sub_kategori as $row): ?>
-                                    <?php if (!empty($row->nama_sub_kategori)): ?>
-                                    <option data-idparent_kategori="<?= $row->id_kategori_parent ?>"
-                                        value="<?= esc($row->id) ?>">
-                                        <?= esc($row->nama_sub_kategori) ?>
-                                    </option>
-                                    <?php endif; ?>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
 
                             <div class="mb-3">
-                                <label for="harga" class="form-label">Harga</label>
+                                <label for="harga" class="form-label">Harga PL</label>
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="text" class="form-control currency" id="harga" name="harga" required>
@@ -1064,7 +1052,7 @@
                             </div>
 
                             <div class="mb-3">
-                                <label for="harga_beli" class="form-label">Harga Beli</label>
+                                <label for="harga_beli" class="form-label">HPP</label>
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="text" class="form-control currency" id="harga_beli" name="harga_beli"
@@ -1082,6 +1070,14 @@
                                 <input type="text" class="form-control" id="type" name="type">
                             </div>
 
+                            <div class="mb-3">
+                                <label for="kondisi" class="form-label">Kondisi</label>
+                                <select id="kondisi" name="kondisi" class="form-control"
+                                    style="width: 100%;" required>
+                                    <option value=0>Baru</option>
+                                    <option value=1>Second</option>
+                                </select>
+                            </div>
 
                             <div class="mb-3">
                                 <label for="size" class="form-label">Spesifikasi</label>
@@ -1145,93 +1141,59 @@
 
 
         <script>
-        document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function() {
 
-            // Inisialisasi Select2
-            $("#namahandphone-select").select2({
-                dropdownParent: $("#input-produk-modal"),
-                width: "100%"
-            });
+    const kategori = document.getElementById("id_kategori");
+    const namaBarangInput = document.getElementById("nama_barang");
 
-            const kategori = document.getElementById("id_kategori");
-            const namaBarangInput = document.getElementById("nama_barang");
-            const selectHandphone = document.getElementById("namahandphone-select");
+    const typeInput = document.getElementById("type");
+    const sizeInput = document.getElementById("size");
+    const imeiInput = document.getElementById("imei");
 
-            const typeInput = document.getElementById("type");
-            const sizeInput = document.getElementById("size");
-            const imeiInput = document.getElementById("imei");
+    const typeWrapper = typeInput.parentElement;
+    const sizeWrapper = sizeInput.parentElement;
+    const imeiWrapper = imeiInput.parentElement;
 
-            // Parent wrapper (supaya bisa hide 1 blok)
-            const typeWrapper = typeInput.parentElement;
-            const sizeWrapper = sizeInput.parentElement;
-            const imeiWrapper = imeiInput.parentElement;
+    // default hide field tambahan
+    imeiWrapper.style.display = "none";
+    typeWrapper.style.display = "none";
+    sizeWrapper.style.display = "none";
 
-            // Default: sembunyikan select handphone
-            selectHandphone.parentElement.style.display = "none";
+    kategori.addEventListener("change", function() {
 
-            // Default: sembunyikan IMEI, tipe, spesifikasi
+        if (this.value === "Handphone") {
+
+            // ✅ tampilkan input manual nama barang
+            namaBarangInput.parentElement.style.display = "block";
+            namaBarangInput.setAttribute("required", "required");
+            namaBarangInput.placeholder = "Masukkan nama handphone";
+
+            // ✅ tampilkan field tambahan
+            imeiWrapper.style.display = "block";
+            typeWrapper.style.display = "block";
+            sizeWrapper.style.display = "block";
+
+        } else {
+
+            // tetap pakai input biasa
+            namaBarangInput.parentElement.style.display = "block";
+            namaBarangInput.setAttribute("required", "required");
+            namaBarangInput.placeholder = "Masukkan nama barang";
+
+            // sembunyikan field tambahan
             imeiWrapper.style.display = "none";
             typeWrapper.style.display = "none";
             sizeWrapper.style.display = "none";
 
-            // Ketika kategori berubah
-            kategori.addEventListener("change", function() {
-                if (this.value === "Handphone") {
+            // reset value
+            typeInput.value = "";
+            sizeInput.value = "";
+            imeiInput.value = "";
+        }
+    });
 
-                    // tampilkan select2
-                    selectHandphone.parentElement.style.display = "block";
-
-                    // sembunyikan input manual nama barang
-                    namaBarangInput.parentElement.style.display = "none";
-                    namaBarangInput.removeAttribute("required");
-
-                    // tampilkan IMEI, Tipe, Spesifikasi
-                    imeiWrapper.style.display = "block";
-                    typeWrapper.style.display = "block";
-                    sizeWrapper.style.display = "block";
-
-                    selectHandphone.setAttribute("required", "required");
-
-                } else {
-                    // tampilkan input nama manual
-                    namaBarangInput.parentElement.style.display = "block";
-                    namaBarangInput.setAttribute("required", "required");
-
-                    // sembunyikan Select2 handphone
-                    selectHandphone.parentElement.style.display = "none";
-                    selectHandphone.removeAttribute("required");
-
-                    // sembunyikan IMEI, tipe, spesifikasi
-                    imeiWrapper.style.display = "none";
-                    typeWrapper.style.display = "none";
-                    sizeWrapper.style.display = "none";
-
-                    // kosongkan otomatis
-                    typeInput.value = "";
-                    sizeInput.value = "";
-                    imeiInput.value = "";
-
-                    // reset select2
-                    $("#namahandphone-select").val(null).trigger("change");
-                }
-            });
-
-            // Ketika user memilih handphone
-            $("#namahandphone-select").on("change", function() {
-                let selected = $(this).find(":selected");
-
-                let type = selected.data("type");
-                let size = selected.data("size");
-                let nama = selected.text().trim();
-
-                // Masukkan otomatis
-                $("#type").val(type);
-                $("#size").val(size);
-                $("#nama_barang").val(nama);
-            });
-
-        });
-        </script>
+});
+</script>
 
 
         <script>

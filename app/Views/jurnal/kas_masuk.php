@@ -82,7 +82,7 @@
                     <th>No Rekening</th>
                     <th>Jumlah</th>
                     <th>Jenis</th>
-                    <!-- <th>Action</th> -->
+                  
                 </tr>
             </thead>
             <tbody>
@@ -99,30 +99,9 @@
                             <td><?= esc($row->norek) ?></td>
                             <td>Rp.<?= number_format($row->jumlah, 0, ',', '.') ?></td>
                             <td><?= esc($row->jenis) ?></td>
-                            <!-- <td>
-                                <button type="button" class="btn btn-warning edit-button" data-bs-toggle="modal"
-                                    data-bs-target="#edit-kas-modal" data-id="<?= esc($row->idkas_masuk) ?>"
-                                    data-tanggal="<?= esc($row->tanggal) ?>"
-                                    data-kategori="<?= esc($row->kategori_idkategori) ?>"
-                                    data-idbank="<?= $row->idbank ?>"
-                                    data-jenis="<?= esc($row->jenis) ?>"
-                                    data-deskripsi="<?= esc($row->deskripsi) ?>" data-jumlah="<?= esc($row->jumlah) ?>"
-                                    data-penerima="<?= esc($row->penerima) ?>">
-
-                                    <iconify-icon icon="solar:clapperboard-edit-broken" width="24" height="24"></iconify-icon>
-                                </button>
-                                <button type="button" class="btn btn-danger delete-button" data-bs-toggle="modal"
-                                    data-bs-target="#delete-kas-modal" data-id="<?= esc($row->idkas_masuk) ?>">
-                                    <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="24" height="24">
-                                    </iconify-icon>
-                                </button>
-                            </td> -->
+                            
                         </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="6" class="text-center">Tidak ada data</td>
-                    </tr>
+                    <?php endforeach; ?>                
                 <?php endif; ?>
             </tbody>
         </table>
@@ -291,7 +270,7 @@
                             <option value="">Pilih Bank</option>
                             <?php foreach ($bank as $b): ?>
                                 <option value="<?= esc($b->idbank) ?>">
-                                    <?= esc($b->nama_bank . ' : ' . $b->norek) ?>
+                                    <?= esc($b->nama_bank . ' ' . ($b->atas_nama). ' : ' . $b->norek) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -390,7 +369,7 @@
             <td><input type="text" class="form-control" name="akun[${akunIndex}][no_akun]" value="${noAkun}" readonly></td>
             <td><input type="text" class="form-control" name="akun[${akunIndex}][jenis_akun]" value="${jenisAkun}" readonly></td>
             <td>
-                <select style="width: 100px;" class="form-control" name="akun[${akunIndex}][kategori_idkategori]" required>
+                <select style="width: 100px;" class="form-control" name="akun[${akunIndex}][kategori_idkategori]">
                     <option value="">-- Pilih Kategori --</option>
                     <?php foreach ($kategori_kas as $kat): ?>
                         <option value="<?= esc($kat->idkategori_kas) ?>"><?= esc($kat->kategori) ?></option>
@@ -408,7 +387,7 @@
                 <select class="form-control select2-rekening" name="akun[${akunIndex}][no_rekening]" disabled>
                     <?= esc('<option value="">-- Pilih No Rekening --</option>') ?>
                     <?php foreach ($bank as $b): ?>
-                        <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank) ?> : <?= esc($b->norek) ?></option>
+                        <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank) . ' ' . ($b->atas_nama)?> : <?= esc($b->norek) ?></option>
                     <?php endforeach; ?>
                 </select>
             </td>
@@ -480,7 +459,7 @@
         <option value="">-- Pilih No Rekening --</option>
         <?php foreach ($bank as $b): ?>
             <option value="<?= esc($b->idbank) ?>">
-                <?= esc($b->nama_bank) ?> : <?= esc($b->norek) ?>
+                <?= esc($b->nama_bank) . ' ' . ($b->atas_nama)?> : <?= esc($b->norek) ?>
             </option>
         <?php endforeach; ?>
     `;

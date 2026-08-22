@@ -35,11 +35,13 @@ class ModelJurnal extends Model
                 'id_unit'           => $id_unit,
                 'id_akun'           => $id_akun
             );
+            $nilai = isset($ar_value[$value->array_value]) ? $ar_value[$value->array_value] : 0;
+
             if ($value->debet_kredit == 'debet') {
-                $data['debet'] = $ar_value[$value->array_value];
+                $data['debet'] = $nilai;
                 $data['kredit'] = 0;
             } else {
-                $data['kredit'] = $ar_value[$value->array_value];
+                $data['kredit'] = $nilai;
                 $data['debet'] = 0;
             }
             $this->insert($data);

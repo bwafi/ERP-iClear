@@ -1,13 +1,13 @@
 <!-- Card Header -->
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Fee Service</h4>
+        <h4 class="fw-semibold mb-0">Omset Service</h4>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
                     <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Service</a>
                 </li>
-                <li class="breadcrumb-item active" aria-current="page">Fee Service</li>
+                <li class="breadcrumb-item active" aria-current="page">Omset Service</li>
             </ol>
         </nav>
     </div>
@@ -94,7 +94,7 @@
                         <h6 class="fs-4 fw-semibold mb-0">Nama Teknisi</h6>
                     </th>
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Total Laba</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Total Omset</h6>
                     </th>
                     <th>
                         <h6 class="fs-4 fw-semibold mb-0">Detail</h6>
@@ -110,7 +110,7 @@
             ?>
                 <?php foreach ($groups as $nama_teknisi => $items): 
                 $modalId = 'modal_' . md5($nama_teknisi);
-                $totalLabaTeknisi = array_sum(array_column($items, 'laba_service'));
+                $totalLabaTeknisi = array_sum(array_column($items, 'omset'));
             ?>
                 <tr class="teknisi-row" data-teknisi="<?= md5($nama_teknisi) ?>">
                     <td><?= esc($nama_teknisi) ?></td>
@@ -156,7 +156,7 @@ $tableId = 'datatable_' . md5($nama);
                                     <th>Total HPP</th>
                                     <th>Total Service</th>
                                     <th>Total Diskon</th>
-                                    <th>Laba</th>
+                                    <th>omset</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -173,7 +173,7 @@ $tableId = 'datatable_' . md5($nama);
                                     <td>Rp. <?= number_format($r->total_hpp_penjualan,0,',','.') ?></td>
                                     <td>Rp. <?= number_format($r->total_service,0,',','.') ?></td>
                                     <td>Rp. <?= number_format($r->total_diskon,0,',','.') ?></td>
-                                    <td>Rp. <?= number_format($r->laba_service,0,',','.') ?></td>
+                                    <td>Rp. <?= number_format($r->omset,0,',','.') ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>

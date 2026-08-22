@@ -18,7 +18,10 @@
                         <thead>
                             <tr>
                                 <th></th>
+                                <th>Kode Barang</th>
                                 <th>Nama Sparepart</th>
+                                <th>Nama Unit</th>
+                                <th>HPP</th>
                                 <th>Harga</th>
                             </tr>
                         </thead>
@@ -29,7 +32,10 @@
                                         <input type="checkbox" class="sparepart-check" data-id="<?= esc($s->idbarang) ?>"
                                             data-nama="<?= esc($s->nama_barang) ?>" data-harga="<?= esc($s->harga) ?>">
                                     </td>
+                                    <td><?= esc($s->kode_barang) ?></td>
                                     <td><?= esc($s->nama_barang) ?></td>
+                                    <td><?= esc($s->nama_unit) ?></td>
+                                    <td><?= 'Rp ' . number_format($s->harga_beli, 0, ',', '.') ?></td>
                                     <td><?= 'Rp ' . number_format($s->harga, 0, ',', '.') ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -75,11 +81,14 @@
     <div class="mb-3">
         <label class="form-label">Garansi</label>
         <select class="form-select" name="garansi" id="garansiSelect" onchange="cekGaransi(this)">
-            <option disabled <?= $garansi_lama === null ? 'selected' : '' ?>>---Pilih Garansi---</option>
-            <option value="0" <?= $garansi_lama == 0 ? 'selected' : '' ?>>Tidak Ada</option>
-            <option value="7" <?= $garansi_lama == 7 ? 'selected' : '' ?>>1 Minggu</option>
-            <option value="30" <?= $garansi_lama == 30 ? 'selected' : '' ?>>1 Bulan</option>
-            <option value="manual" <?= $is_manual ? 'selected' : '' ?>>Lainnya (isi manual)</option>
+            <option selected disabled>---Pilih Garansi---</option>
+            <option value="0">Tidak Ada</option>
+            <option value="7">1 Minggu</option>
+            <option value="30">1 Bulan</option>
+            <option value="180">6 Bulan</option>
+            <option value="360">1 Tahun</option>
+            <option value="720">2 Tahun</option>
+            <option value="999">Selamanya</option>
         </select>
 
         <!-- Input manual akan muncul kalau pilih 'manual' -->

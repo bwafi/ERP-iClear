@@ -10,19 +10,7 @@
                 <option value="tunai_transfer">Tunai + Transfer</option>
             </select>
         </div>
-
-        <div class="mb-3">
-            <label class="form-label fw-semibold">Service Staff</label>
-            <select name="service_by_pembayaran" class="form-control form-control-lg">
-                <option value="" disabled <?= empty($old_service_pelanggan->service_by) ? 'selected' : '' ?>>-- Pilih Service Staff --</option>
-                <?php foreach ($teknisi as $a): ?>
-                    <option value="<?= $a->ID_AKUN ?>" <?= @$old_service_pelanggan->service_by == $a->ID_AKUN ? 'selected' : '' ?>>
-                        <?= $a->NAMA_AKUN ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-
-        </div>
+        
         <input type="text" hidden name="idservice_p" value="<?php echo @$idservice ?>" id="">
 
         <div class="mb-3">
@@ -195,7 +183,7 @@
                         <option disabled selected>Pilih Bank</option>
                         <?php foreach ($bank as $p): ?>
                             <option value="<?= htmlspecialchars($p->idbank) ?>">
-                                <?= htmlspecialchars($p->nama_bank) ?> : <?= htmlspecialchars($p->norek) ?>
+                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

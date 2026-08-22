@@ -1,3 +1,16 @@
+<style>
+.table-scroll {
+    max-height: 400px; /* tinggi area scroll */
+    overflow-y: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 2;
+}
+</style>
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <h4 class="fw-semibold mb-0">Proses Service</h4>
@@ -36,6 +49,19 @@
             <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
                 style="width: auto; display: inline-block;" onchange="filterData()">
 
+            <label class="ms-3 me-2">Unit:</label>
+            <select id="unitFilter"
+                class="form-select d-inline"
+                style="width: auto; display: inline-block;"
+                onchange="filterData()">
+
+                <option value="">Semua Unit</option>
+                <option value="Probolinggo">Probolinggo</option>
+                <option value="Jember">Jember</option>
+                <option value="Banyuwangi">Banyuwangi</option>
+                <option value="Pandaan">Pandaan</option>
+            </select>
+
             <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
         </div>
     </form>
@@ -44,7 +70,7 @@
 
 
 
-    <div class="table-responsive mb-4 px-4">
+    <div class="table-responsive mb-4 px-4 table-scroll">
         <table class="table border text-nowrap mb-0 align-middle" <?= empty($service) ? '' : 'id="zero_config"' ?>>
 
             <thead class="text-dark fs-4">
@@ -68,7 +94,11 @@
                     </th>
 
                     <th style="display: flex; justify-content: center;">
-                        <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Tipe HP</h6>
+                    </th>
+
+                    <th >
+                        <h6 style="display: flex; justify-content: center;" class="fs-4 fw-semibold mb-0">Unit</h6>
                     </th>
 
                     <th>
@@ -121,7 +151,15 @@
 
                     <td><?= esc($row->nama_pelanggan) ?></td>
                     <td><?= esc($row->no_hp) ?></td>
-                    <td><?= esc($row->alamat) ?></td>
+                    <td><?= esc($row->tipe_hp) ?></td>
+                    <td>
+                        <?= esc([
+                            1 => 'Probolinggo',
+                            2 => 'Jember',
+                            3 => 'Banyuwangi',
+                            4 => 'Pandaan'
+                        ][$row->unit_idunit] ?? 'Tidak diketahui') ?>
+                    </td>
                     <td><?= esc($row->lama_service) ?></td>
                     <td>
                         <?php if (!empty($row->tanggal_claim_garansi) && $row->tanggal_claim_garansi > '1971-01-01'): ?>
@@ -158,7 +196,14 @@
                             data-jumlah_sparepart="<?= $row->jumlah_sparepart ?>">
                             Bisa Diambil
                         </button>
-
+                        <button class="btn btn-success btn-sudah-diambil"
+                            data-bs-toggle="modal"
+                            data-bs-target="#sudahDiambilModal"
+                            data-idservice="<?= esc($row->idservice) ?>"
+                            data-jumlah_kerusakan="<?= $row->jumlah_kerusakan ?>"
+                            data-jumlah_sparepart="<?= $row->jumlah_sparepart ?>">
+                            Sudah Diambil
+                        </button>
                         <button class="btn btn-success btn-Dibatalkan" data-bs-toggle="modal"
                             data-bs-target="#DibatalkanModal" data-idservice="<?= esc($row->idservice) ?>"
                             data-jumlah_kerusakan="<?= $row->jumlah_kerusakan ?>"
@@ -304,6 +349,31 @@
                     </div>
                 </div>
 
+                <div class="modal fade" id="sudahDiambilModal" tabindex="-1" aria-labelledby="sudahDiambilModalLabel" aria-hidden="true">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header d-flex align-items-center">
+                                    <h4 class="modal-title" id="sudahDiambilModalLabel">Konfirmasi Pengambilan</h4>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                            </div>
+                            <form action="<?= base_url('service/sudah_diambil') ?>" method="post">
+                                    <div class="modal-body">
+                                            <input type="hidden" name="idservice" id="modal-sudah-idservice">
+                                        <p class="modal-text">
+                                            Jumlah kerusakan: <span class="kerusakan-count">0</span><br>
+                                            Jumlah sparepart: <span class="sparepart-count">0</span><br><br>
+                                            Apakah Anda yakin service ini sudah diambil oleh pelanggan?
+                                        </p>
+                                    </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                                    <button type="submit" class="btn btn-success">Konfirmasi</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Dibatalkan modal -->
                 <div class="modal fade" id="DibatalkanModal" tabindex="-1" aria-labelledby="DibatalkanModalLabel"
                     aria-hidden="true">
@@ -338,10 +408,6 @@
 
 
                 <?php endforeach; ?>
-                <?php else: ?>
-                <tr>
-                    <td colspan="3" class="text-center">Tidak ada data</td>
-                </tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -420,44 +486,71 @@ window.onload = function() {
 function filterData() {
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
+    const selectedUnit = document.getElementById('unitFilter').value;
 
     const tbody = document.querySelector('#zero_config tbody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
 
     rows.forEach(row => {
         const prioritas = row.getAttribute('data-prioritas');
-        const dateCell = row.children[1];
+
+        // kolom tanggal
+        const dateCell = row.children[3];
         if (!dateCell) return;
 
         const dateText = dateCell.textContent.trim();
         const parts = dateText.split('-');
         const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
 
+        // kolom unit
+        const unitCell = row.children[7];
+        const rowUnit = unitCell
+            ? unitCell.textContent.trim()
+            : '';
+
         const startDate = start ? new Date(start) : null;
         const endDate = end ? new Date(end) : null;
 
         let dateMatch = true;
-        if (startDate && rowDate < startDate) dateMatch = false;
-        if (endDate && rowDate > endDate) dateMatch = false;
+        let unitMatch = true;
 
-        // Baris prioritas selalu ditampilkan
+        if (startDate && rowDate < startDate) {
+            dateMatch = false;
+        }
+
+        if (endDate && rowDate > endDate) {
+            dateMatch = false;
+        }
+
+        if (selectedUnit && rowUnit !== selectedUnit) {
+            unitMatch = false;
+        }
+
+        // prioritas tetap tampil
         if (prioritas === "1") {
             row.style.display = '';
         } else {
-            row.style.display = (dateMatch) ? '' : 'none';
+            row.style.display =
+                (dateMatch && unitMatch)
+                    ? ''
+                    : 'none';
         }
     });
 
-    // Pindahkan baris prioritas ke paling atas
-    const priorityRows = rows.filter(row => row.getAttribute('data-prioritas') === "1");
+    // pindahkan prioritas ke atas
+    const priorityRows = rows.filter(
+        row => row.getAttribute('data-prioritas') === "1"
+    );
+
     priorityRows.forEach(row => {
-        tbody.prepend(row); // pindahkan ke atas tbody
+        tbody.prepend(row);
     });
 }
 
 function resetFilter() {
     document.getElementById('startDate').value = '';
     document.getElementById('endDate').value = '';
+    document.getElementById('unitFilter').value = '';
 
     filterData();
 }
@@ -538,4 +631,56 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+</script>
+
+<script>
+    const slider = document.querySelector('.table-scroll')
+
+    let isDown = false
+    let startX
+    let scrollLeft
+
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true
+        slider.classList.add('active')
+        startX = e.pageX - slider.offsetLeft
+        scrollLeft = slider.scrollLeft
+    })
+
+    slider.addEventListener('mouseleave', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mouseup', () => {
+        isDown = false
+    })
+
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return
+        e.preventDefault()
+        const x = e.pageX - slider.offsetLeft
+        const walk = (x - startX) * 2
+        slider.scrollLeft = scrollLeft - walk
+    })
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const modalElement = document.getElementById('sudahDiambilModal');
+
+        document.addEventListener('click', function(e) {
+            const button = e.target.closest('.btn-sudah-diambil');
+            if (button) {
+                // Ambil data dari tombol
+                const idservice = button.getAttribute('data-idservice');
+                const jumlahKerusakan = button.getAttribute('data-jumlah_kerusakan');
+                const jumlahSparepart = button.getAttribute('data-jumlah_sparepart');
+
+                // Isi modal
+                modalElement.querySelector('#modal-sudah-idservice').value = idservice;
+                modalElement.querySelector('.kerusakan-count').textContent = jumlahKerusakan;
+                modalElement.querySelector('.sparepart-count').textContent = jumlahSparepart;
+            }
+        });
+    });
 </script>

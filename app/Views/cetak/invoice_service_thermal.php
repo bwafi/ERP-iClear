@@ -7,12 +7,18 @@
     <style>
     body {
         font-family: monospace, Arial, sans-serif;
-        font-size: 11px;
+        font-size: 12px;
         margin: 0;
-        padding: 5px;
+        padding: 2px;
         color: #000;
         width: 240px;
         /* ~80mm paper */
+        min-height: 1000mm;
+    }
+    
+    @page {
+        margin-top: 0;
+        margin-bottom: 0;
     }
 
     .center {
@@ -32,7 +38,6 @@
         font-weight: bold;
         margin-top: 6px;
         margin-bottom: 2px;
-        text-decoration: underline;
     }
 
     table {
@@ -55,6 +60,7 @@
 <body>
     <!-- Header -->
     <div class="center">
+        <div style="text-align: center;" colspan="2"><img src="https://iclear.my.id/assets/img/logo.png" style="height: 40px; display: left; margin: auto;"></div>
         <div class="bold"><?= @$dataunit->NAMA_UNIT ?></div>
         <div>
             <?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?><br>
@@ -65,8 +71,14 @@
 
     <!-- Info Pengguna -->
     <div class="section-title">Info Pengguna</div>
+    <div>No.Faktur : <?= @$service->no_service ?></div>
+    <div>Tanggal : <?= date('d-m-Y', strtotime(@$service->created_at)) ?></div>
     <div>Nama : <?= @$human->nama_pelanggan ?></div>
     <div>Teknisi : <?= @$human->nama_service_by ?></div>
+
+    <td colspan="2">
+        <div class="line"></div>
+    </td>
 
     <!-- Jenis Struk -->
     <!-- <div class="section-title">Jenis Struk</div> -->
@@ -75,9 +87,28 @@
         Garansi Service
         <?php else: ?>
         Service Handphone
-        <?php endif; ?>
+        <?php endif; ?><br>
+        Tipe : <?= @$service->tipe_hp ?>
     </div>
 
+    <div>
+         Garansi : <?= @$service->garansi_hari . " hari"?>
+    </div>
+    
+    <div>
+         <?php
+            $tanggal_awal = @$service->created_at;
+            $garansi = (int) @$service->garansi_hari;
+
+            // hitung tanggal berakhir
+            $tanggal_berakhir = date('d-m-Y', strtotime($tanggal_awal . " +$garansi days"));
+            ?>(Berakhir dalam <?= $tanggal_berakhir ?>)
+    </div>
+    
+    <td colspan="2">
+        <div class="line"></div>
+    </td>
+    
     <!-- Detail Sparepart -->
     <div class="section-title">Detail Sparepart</div>
     <table>
@@ -123,7 +154,9 @@
             </tr>
             <tr>
                 <td>Subtotal</td>
-                <td class="right">Rp.<?= number_format($sub_total_non_garansi, 0, ',', '.') ?></td>
+                <td class="right">
+                    Rp. <?= number_format($sub_total_non_garansi, 0, ',', '.') . ' '?>
+                </td>
             </tr>
             <tr>
                 <td colspan="2">
@@ -135,6 +168,56 @@
         </tbody>
     </table>
 
+    <td colspan="2">
+        <div class="line"></div>
+    </td>
+
+    <?php
+    $status = '-';
+
+    $bayarTunai = $service->bayar_tunai ?? 0;
+    $dp          = $service->dp ?? 0;
+    $harusBayar  = $service->harus_dibayar ?? 0;
+
+    $totalBayar = $bayarTunai + $dp;
+
+    // 1. Jika tunai + dp >= harus dibayar → Cash
+    if ($totalBayar >= $harusBayar) {
+        $status = 'Cash';
+
+        // 2. Jika tunai = 0 → Transfer
+    } elseif ($bayarTunai == 0) {
+        $status = 'Transfer';
+
+        // 3. Jika masih kurang → Cash + TF
+    } else {
+        $status = 'Cash + TF';
+        
+    }
+
+    // Hitung kembalian
+    $kembalian = 0;
+    if ($status == 'Cash') {
+        $kembalian = $bayarTunai - $harusBayar;
+    }
+
+    // Tentukan nilai yang ditampilkan
+    if ($status == 'Cash') {
+        $nilaiBayar = $service->bayar_tunai ?? 0;
+    } else {
+        $nilaiBayar = $service->bayar ?? 0;
+    }
+    ?>
+    
+    <div>Total Diskon : <?= number_format(@$service->total_diskon, 0, ',', '.') . ' ' ?></div>
+    <div>Total : Rp. <?= number_format(@$service->harus_dibayar, 0, ',', '.') . ' ' ?></div>
+    <div>Tunai : Rp. <?= number_format($nilaiBayar, 0, ',', '.') ?><?= '(' . $status . ')' ?></div>
+    <div>Kembalian : Rp. <?= number_format($kembalian, 0, ',', '.') ?></div>
+    
+    <td colspan="2">
+        <div class="line"></div>
+    </td>
+    
     <!-- Info Kerusakan -->
     <div class="section-title">Info Kerusakan</div>
     <?php foreach ($kerusakan as $krs): ?>
@@ -142,10 +225,6 @@
     <div>Keterangan : <?= $krs->keterangan ?></div>
     <div class="line"></div>
     <?php endforeach; ?>
-    <br>
-    <br>
-    <br>
-    <br>
     <!-- QR Code -->
     <?php if (isset($qrImageUrl)): ?>
     <div class="center">

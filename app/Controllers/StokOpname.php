@@ -80,6 +80,7 @@ class StokOpname extends BaseController
         $data = $this->request->getPost('data');
 
         if ($data && is_array($data)) {
+
             foreach ($data as $row) {
 
                 if (!isset($row['checked']) || $row['checked'] != '1') {
@@ -91,37 +92,48 @@ class StokOpname extends BaseController
                 $namaproduk = $databarang->nama_barang ?? 'Tidak diketahui';
 
                 if (!$datastokawal || $datastokawal->satuan_terkecil == null) {
-                    session()->setFlashdata('gagal', 'Barang "' . $namaproduk . '" belum memiliki data satuan di stok awal.');
+                    session()->setFlashdata(
+                        'gagal',
+                        'Barang "' . $namaproduk . '" belum memiliki data satuan di stok awal.'
+                    );
                     return redirect()->back();
                 }
 
                 $satuanterkecil = $datastokawal->satuan_terkecil;
+
                 $datahppbarang = $this->HppBarangModel->getById($row['barang_idbarang']);
                 $hppbarang = $datahppbarang->hpp ?? 0;
 
-                $exists = $this->StokOpnameDraftModel->existsForToday($row['barang_idbarang'], $row['unit_idunit']);
+                $exists = $this->StokOpnameDraftModel
+                            ->existsForToday(
+                                $row['barang_idbarang'],
+                                $row['unit_idunit']
+                            );
 
                 if ($exists) {
-                    session()->setFlashdata('gagal', 'Barang "' . $namaproduk . '" dari unit yang sama sudah ada di draft stok opname hari ini.');
-                    return redirect()->back();
+                    continue; // lewati jika sudah ada
                 }
 
-                $data = array(
-                    'tanggal' => date('Y-m-d'),
-                    'hpp' => $hppbarang,
-                    'jumlah_real' => $row['jumlah_real'],
-                    'jumlah_komp' => $row['jumlah_komp'],
-                    'jumlah_selisih' => $row['jumlah_selisih'],
-                    'satuan_terkecil' => $satuanterkecil,
-                    'barang_idbarang' => $row['barang_idbarang'],
-                    'unit_idunit' => $row['unit_idunit']
-                );
-                $result =  $this->StokOpnameDraftModel->insert_StokOpnameDraft($data);
-                if ($result) {
-                    return redirect()->to(base_url('stok_opname'))->with('sukses', 'Data stok opname berhasil disimpan.');
-                }
+                $insertData = [
+                    'tanggal'           => date('Y-m-d'),
+                    'hpp'               => $hppbarang,
+                    'jumlah_real'       => $row['jumlah_real'],
+                    'jumlah_komp'       => $row['jumlah_komp'],
+                    'jumlah_selisih'    => $row['jumlah_selisih'],
+                    'satuan_terkecil'   => $satuanterkecil,
+                    'barang_idbarang'   => $row['barang_idbarang'],
+                    'unit_idunit'       => $row['unit_idunit']
+                ];
+
+                $this->StokOpnameDraftModel->insert_StokOpnameDraft($insertData);
             }
+
+            return redirect()->to(base_url('stok_opname'))
+                            ->with('sukses', 'Data stok opname berhasil disimpan.');
         }
+
+        return redirect()->back()
+                        ->with('gagal', 'Tidak ada data yang dipilih.');
     }
 
 

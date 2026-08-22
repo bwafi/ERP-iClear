@@ -46,6 +46,7 @@ class ModelDetailPenjualan extends Model
                 detail_penjualan.*,
                 penjualan.kode_invoice,
                 penjualan.tanggal,
+                penjualan.id_pelanggan,
                 penjualan.total_ppn,
                 barang.nama_barang,
                 barang.imei,

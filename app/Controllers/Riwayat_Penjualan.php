@@ -163,6 +163,8 @@ public function cetak_struk($kode_invoice)
     $nilaidiskon     = $datapenjualan2->diskon;
     $total_penjualan = $datapenjualan2->total_penjualan;
     $bayar           = $datapenjualan2->bayar;
+    $bayar_tunai           = $datapenjualan2->bayar_tunai;
+    $bayar_bank           = $datapenjualan2->bayar_bank;
 
     $sub_total_cetak = $total_penjualan - $total_ppn + $nilaidiskon;
     $kembalian_cetak = max(0, $bayar - $total_penjualan);
@@ -183,6 +185,8 @@ public function cetak_struk($kode_invoice)
         'customer'         => $namaCustomer,
         'total'            => $total_penjualan,
         'bayar'            => $bayar,
+        'bayar_tunai'       => $bayar_tunai,
+        'bayar_bank'        => $bayar_bank,
         'kembalian'        => $kembalian_cetak,
         'dataunit'         => $dataunit
     ];

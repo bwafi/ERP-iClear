@@ -21,8 +21,8 @@
                     style="margin-right: 8px;"></iconify-icon>
                 Input Barang
             </button>
-    </div>
     </a>
+</div>
 
     <!-- data-bs-toggle="modal" data-bs-target="#input-stokawal-modal" -->
 
@@ -247,26 +247,14 @@
                                         </td> -->
                                     <td>
                                         <select name="satuan_terkecil[<?= $b->kode_barang ?>]" class="form-select"
-                                            id="satuan_terkecil_<?= $index ?>" disabled style="min-width: 190px;">
+                                            id="satuan_terkecil_<?= $index ?>" disabled style="min-width: 190px;" >
                                             <option value="">-- Pilih Satuan --</option>
                                             <option value="pcs">pcs</option>
                                             <option value="pack">pack</option>
                                         </select>
                                     </td>
 
-                                    <td>
-                                        <?php $isImeiEmpty = empty($b->imei);
-                                            $tipeRelasiDisabled = $isImeiEmpty ? 'disabled' : ''; ?>
-                                        <select name="tipe_relasi[<?= $b->kode_barang ?>]" class="form-select"
-                                            id="tipe_relasi_<?= $index ?>" onchange="toggleRelasiFields(<?= $index ?>)"
-                                            <?= $tipeRelasiDisabled ?> style="min-width: 190px;">
-                                            <option value="">-- Pilih Tipe --</option>
-                                            <option value="suplier" <?= $isImeiEmpty ? 'selected' : '' ?>>Suplier
-                                            </option>
-                                            <option value="pelanggan" <?= $isImeiEmpty ? 'disabled' : '' ?>>Pelanggan
-                                            </option>
-                                        </select>
-                                    </td>
+                                    
                                     <td>
                                         <select name="id_suplier_text[<?= $b->kode_barang ?>]" class="form-select"
                                             id="id_suplier_text_<?= $index ?>" disabled style="min-width: 190px;">
@@ -366,7 +354,11 @@ function resetKategoriFilter() {
 </script>
 
 <script>
-let tablecc = $('#table_barang').DataTable();
+let tablecc;
+
+$(document).ready(function() {
+    tablecc = $('#table_barang').DataTable();
+});
 const suplierList = <?= json_encode($suplier) ?>;
 const pelangganList = <?= json_encode($pelanggan) ?>;
 const allBarang = <?= json_encode($barang) ?>;

@@ -73,7 +73,7 @@ class Kas_Masuk extends BaseController
             if (empty($noRekening)) {
                 $noRekening = null;
             }
-            $jumlah = $data['jumlah'];
+            $jumlah = preg_replace('/[^0-9]/', '', $data['jumlah']);
             $penerima = $data['penerima'];
             $jenis = $data['posisi_drk']; // debet/kredit
             $kategori_idkategori = $data['kategori_idkategori'];

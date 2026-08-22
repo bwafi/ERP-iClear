@@ -416,27 +416,26 @@ class Pembelian extends BaseController
         $idkategori = $data_kategori->id;
         $kode_kategori = $data_kategori->idkategori;
 
-        $lastBarang = $this->BarangModel->getLastBarangByKategori($idkategori);
+        $lastBarang = $this->BarangModel->getLastBarangByKategori($idkategori, $kode_kategori);
 
-        if ($lastBarang) {
-            $lastNumber = (int) substr($lastBarang->kode_barang, strlen($kode_kategori));
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
-        }
+        $lastNumber = $lastBarang->max_kode ?? 0;
+        $newNumber = $lastNumber + 1;
+        
+        $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
+        
+        $kode_barang = $kode_kategori . $formattedNumber;
 
         $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
 
         $kode_barang = $kode_kategori . $formattedNumber;
         $status_ppn = $this->request->getPost('status_ppn');
-        $warna = $this->request->getPost('warna');
 
         $nama_barang = "";
         $id_nama_barang = 0;
         if ($kategori == "Handphone") {
-            $id_nama_barang = $this->request->getPost('nama_hp');
-            $datanamahandphone =  $this->NamaHandphoneModel->getNamaHandphoneById($id_nama_barang);
-            $nama_barang = $datanamahandphone->nama;
+            $nama_barang = $this->request->getPost('nama_barang');
+            // $datanamahandphone =  $this->NamaHandphoneModel->getNamaHandphoneById($id_nama_barang);
+            // $nama_barang = $datanamahandphone->nama;
         } else {
             $nama_barang = $this->request->getPost('nama_barang');
         }
@@ -452,9 +451,10 @@ class Pembelian extends BaseController
             'idkategori' => $idkategori,
             'id_sub_kategori' => $this->request->getPost('subkategori'),
             'imei' => $this->request->getPost('imei'),
+            'warna' => $this->request->getPost('warna'),
+            'status_barang' => $this->request->getPost('kondisi'),
             'jenis_hp' => $this->request->getPost('type'),
             'internal' => $this->request->getPost('size'),
-            'warna' => $warna,
             'status' => "1",
             'status_ppn' => $status_ppn,
             'nama_barang_id' => $id_nama_barang,

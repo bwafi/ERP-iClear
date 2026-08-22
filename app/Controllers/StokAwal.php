@@ -23,6 +23,8 @@ class StokAwal extends BaseController
     protected $SuplierModel;
     protected $PelangganModel;
     protected $AuthModel;
+    
+    protected $db;
 
     public function __construct()
     {
@@ -33,6 +35,8 @@ class StokAwal extends BaseController
         $this->SuplierModel = new ModelSuplier();
         $this->PelangganModel = new ModelPelanggan();
         $this->AuthModel = new ModelAuth();
+        
+        $this->db = \Config\Database::connect();
     }
 
     public function index()
@@ -67,37 +71,110 @@ class StokAwal extends BaseController
         return view('template', $data);
     }
 
-    public function input_stokawal()
-    {
-        $akun = $this->AuthModel->getById(session('ID_AKUN'));
+public function input_stokawal($jenis = null)
+{
+    $akun = $this->AuthModel->getById(session('ID_AKUN'));
 
+    $builder = $this->db->table('barang');
 
-        $allBarang = $this->BarangModel->getAllBarang();
-        $stok = $this->StokAwalModel->getAllStok();
+    // Filter berdasarkan jenis barang
+    if (!empty($jenis)) {
 
+        if ($jenis === 'ACC') {
 
-        $barangSudahAda = [];
-        foreach ($stok as $stockItem) {
-            $barangSudahAda[$stockItem->unit_idunit][] = $stockItem->barang_idbarang;
+            $builder->where('idkategori', 2);
+
+        } elseif ($jenis === 'HP') {
+
+            $builder->where('idkategori', 1);
+
+        } else {
+
+            $builder->like('nama_barang', $jenis);
         }
-
-
-        $barangTersedia = $allBarang;
-
-        $unitData = $this->UnitModel->getUnit();
-
-
-        $data = array(
-            'akun' => $akun,
-            'stok' => $stok,
-            'barang' => $barangTersedia,
-            'unit' => $unitData,
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'suplier' => $this->SuplierModel->getSuplier(),
-            'body' => 'stok/input_stokawal'
-        );
-        return view('template', $data);
     }
+
+    // =========================
+    // SERVER-SIDE PAGINATION
+    // =========================
+
+    $perPage = 20;
+
+    $page = max(
+        1,
+        (int) $this->request->getGet('page')
+    );
+
+    // Hitung total data berdasarkan filter
+    $total = $builder->countAllResults(false);
+
+    // Hitung offset
+    $offset = ($page - 1) * $perPage;
+
+    // Ambil hanya data halaman saat ini
+    $allBarang = $builder
+        ->orderBy('idbarang', 'DESC')
+        ->limit($perPage, $offset)
+        ->get()
+        ->getResult();
+
+    // Total halaman
+    $totalPages = (int) ceil($total / $perPage);
+
+    // =========================
+    // DATA STOK
+    // =========================
+
+    $stok = $this->StokAwalModel->getAllStok();
+
+    $barangSudahAda = [];
+
+    foreach ($stok as $stockItem) {
+
+        $barangSudahAda[$stockItem->unit_idunit][] =
+            $stockItem->barang_idbarang;
+    }
+
+    // =========================
+    // DATA UNIT
+    // =========================
+
+    $unitData = $this->UnitModel->getUnit();
+
+    // =========================
+    // DATA VIEW
+    // =========================
+
+    $data = [
+
+        'akun' => $akun,
+
+        'stok' => $stok,
+
+        'barang' => $allBarang,
+
+        'unit' => $unitData,
+
+        'jenis' => $jenis,
+
+        'pelanggan' => $this->PelangganModel->getPelanggan(),
+
+        'suplier' => $this->SuplierModel->getSuplier(),
+
+        // Pagination
+        'currentPage' => $page,
+
+        'perPage' => $perPage,
+
+        'total' => $total,
+
+        'totalPages' => $totalPages,
+
+        'body' => 'stok/input_stokawal'
+    ];
+
+    return view('template', $data);
+}
 
 
     public function insert()
@@ -139,10 +216,18 @@ class StokAwal extends BaseController
             }
 
             session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
-            return redirect()->to(base_url('/stok_awal'));
+            return redirect()->to(base_url('/kartu_stok'));
         } else {
             session()->setFlashdata('error', 'Tidak ada produk yang dipilih');
-            return redirect()->to(base_url('/stok_awal'));
+            return redirect()->to(base_url('/input_stokawal'));
         }
+    }
+    
+    public function stok()
+    {
+        $data = array(            
+            'body' => 'stok/stok'
+        );
+        return view('template', $data);
     }
 }

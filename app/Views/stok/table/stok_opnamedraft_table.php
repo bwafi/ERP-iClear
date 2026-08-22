@@ -39,7 +39,7 @@
                     <td><?= esc($row->nama_barang) ?></td>
                     <td><?= esc($row->nama_unit ?? $row->NAMA_UNIT ?? 'N/A') ?></td>
                     <td><input class="form-control jumlah-komp" name="data[<?= $index ?>][jumlah_komp]"
-                            value="<?= $row->stok_akhir ?>"></td>
+                            value="<?= $row->stok_akhir ?>" readonly></td>
                     <td><input type="number" class="form-control jumlah-real" name="data[<?= $index ?>][jumlah_real]">
                     </td>
                     <td><input readonly class="form-control jumlah_selisih" name="data[<?= $index ?>][jumlah_selisih]">

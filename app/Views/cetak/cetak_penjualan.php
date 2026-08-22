@@ -122,6 +122,15 @@
                 <td>Customer:</td>
                 <td><?= @$customer ?></td>
             </tr>
+            <?php
+            $status = $produk->status_barang ?? null;
+            $garansi = ($status == 1) ? '1 Tahun' : '30 Hari';
+            ?>
+
+            <tr>
+                <td>Garansi:</td>
+                <td><?= $garansi ?></td>
+            </tr>
         </table>
 
         <table class="items-table">
@@ -153,7 +162,11 @@
                 ?>
                 <tr>
                     <td>
-                        <?= htmlspecialchars($p['nama']) ?><br>
+                        <?= htmlspecialchars(
+                            ($p['nama'] ?? '') . ' ' .
+                            (($p['status_barang'] ?? null) == 1 ? 'Second' : 'Baru') . ' ' .
+                            ($p['warna'] ?? '') . ' ' . ($p['jenis_hp'] ?? '')
+                        ) ?>
                         <?php if (!empty($p['imei']) && $p['imei'] !== '-' && $p['imei'] !== 'null'): ?>
                         <span class="imei">IMEI: <?= htmlspecialchars($p['imei']) ?></span>
                         <?php endif; ?>
@@ -204,9 +217,42 @@
                 <td><strong>Total</strong></td>
                 <td class="text-end"><strong><?= number_format(@$total, 0, ',', '.') ?></strong></td>
             </tr>
+            <?php
+            $status = '-';
+        
+            $bayarTunai = $bayar_tunai ?? 0;
+            $bayarBank = $bayar_bank ?? 0;
+            $harus_dibayar = $harus_dibayar ?? 0;
+        
+            // 1. Jika tunai + dp >= harus dibayar → Cash
+            if ($bayarTunai > 0 && $harus_dibayar == $bayarTunai) {
+                $status = 'Cash';
+        
+                // 2. Jika tunai = 0 → Transfer
+            } elseif ($bayarBank > 0 && $harus_dibayar == $bayarBank) {
+                $status = 'Transfer';
+        
+                // 3. Jika masih kurang → Cash + TF
+            } elseif ($bayarBank > 0 && $bayarTunai > 0){
+                $status = 'Cash + TF';
+            }
+        
+            // Hitung kembalian
+            $kembalian = 0;
+            if ($status == 'Cash') {
+                $kembalian = $bayarTunai - $harus_dibayar;
+            }
+        
+            // Tentukan nilai yang ditampilkan
+            if ($status == 'Cash') {
+                $nilaiBayar = $service->bayar_tunai ?? 0;
+            } else {
+                $nilaiBayar = $service->bayar ?? 0;
+            }
+            ?>
             <tr>
                 <td><strong>Bayar</strong></td>
-                <td class="text-end"><?= number_format(@$bayar, 0, ',', '.') ?></td>
+                <td class="text-end"><?= number_format(@$bayar, 0, ',', '.') ?><br><small><?= '(' . $status . ')' ?></small></td>
             </tr>
             <tr>
                 <td><strong>Kembalian</strong></td>

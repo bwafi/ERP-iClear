@@ -38,15 +38,9 @@
             <label class="form-label">Imei</label>
             <input type="text" value="<?php echo @$old_service_pelanggan->imei ?>" class="form-control" name="imei">
         </div>
-        <div class="col-md-6">
-            <label class="form-label">Tipe Passcode</label>
-            <select class="form-control" name="tipe_passcode">
-                <option value="">-- Pilih Tipe --</option>
-                <option value="pola"
-                    <?php echo (@$old_service_pelanggan->type_passcode == 'pola') ? 'selected' : ''; ?>>Pola</option>
-                <option value="text"
-                    <?php echo (@$old_service_pelanggan->type_passcode == 'text') ? 'selected' : ''; ?>>Text</option>
-            </select>
+        <div class="col-md-6">            
+            <label class="form-label">Tipe HP</label>
+            <input type="text" value="<?php echo @$old_service_pelanggan->tipe_hp ?>" placeholder="" class="form-control" name="tipe_hp">
         </div>
 
 
@@ -78,20 +72,6 @@
             </div>
         </div>
 
-        <!-- <div class="col-md-6"> 
-            <label class="form-label">Gudang</label>
-            <select class="form-select" name="gudang">
-                <option selected>---Pilih Gudang---</option>
-                
-            </select>
-        </div> -->
-        <div class="col-md-6">
-            <label class="form-label">Alamat</label>
-            <textarea readonly style="height: 100px;" type="text" class="form-control" name="alamat"
-                id="alamat"><?php echo @$old_service_pelanggan->alamat ?></textarea>
-
-        </div>
-
         <div class="col-md-6">
             <label class="form-label">Keluhan</label>
             <textarea style="height: 100px;" class="form-control"
@@ -102,11 +82,6 @@
             <label class="form-label">Keterangan</label>
             <textarea style="height: 100px;" type="text" class="form-control"
                 name="keterangan"><?php echo @$old_service_pelanggan->keterangan ?></textarea>
-        </div>
-
-        <div class="col-md-6">
-            <label class="form-label">Estimasi Biaya</label>
-            <input type="text" placeholder="" class="form-control" name="estimasi_biaya">
         </div>
 
 
@@ -178,10 +153,6 @@
                         <label for="no_hp" class="form-label">No HP</label>
                         <input type="text" id="no_hp" name="no_hp" class="form-control" required />
                     </div>
-                    <div class="mb-3">
-                        <label for="alamat" class="form-label">Alamat</label>
-                        <textarea id="alamat" name="alamat" class="form-control" rows="3"></textarea>
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-primary">Simpan Pelanggan</button>
@@ -240,12 +211,10 @@
 
             const nama = selectedOption.getAttribute('data-nama');
             const no_hp = selectedOption.getAttribute('data-nohp');
-            const alamat = selectedOption.getAttribute('data-alamat');
 
             // Set nilai ke form input
             document.getElementById('nama_pelanggan').value = nama;
             document.getElementById('no_hp').value = no_hp;
-            document.getElementById('alamat').value = alamat;
 
 
             pelangganModal.hide();

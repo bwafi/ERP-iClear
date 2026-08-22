@@ -39,9 +39,6 @@
                     Download Format Excell
                 </button></a>
         </div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#input-produk-modal">
-            Input
-        </button>
     </div>
 
     <br>
@@ -246,7 +243,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="edit-harga" class="form-label">Harga</label>
+                        <label for="edit-harga" class="form-label">Harga PL</label>
                         <div class="input-group">
                             <span class="input-group-text">Rp</span>
                             <input type="text" class="form-control currency" id="edit-harga" name="harga" required>
@@ -254,7 +251,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="edit-harga-beli" class="form-label">Harga Beli</label>
+                        <label for="edit-harga-beli" class="form-label">HPP</label>
                         <div class="input-group">
                             <span class="input-group-text">Rp</span>
                             <input type="text" class="form-control currency" id="edit-harga-beli" name="harga_beli"
@@ -562,28 +559,29 @@
 
 <script>
     function filterSubKategori() {
-        const kategoriSelect = document.getElementById('kategoriFilter');
-        const subKategoriSelect = document.getElementById('subKategoriFilter');
-        const selectedKategori = kategoriSelect.options[kategoriSelect.selectedIndex];
-        const idKategori = selectedKategori.getAttribute('data-idkategori');
 
-        // Tampilkan semua dulu
+    const kategoriSelect = document.getElementById('kategoriFilter');
+    const subKategoriSelect = document.getElementById('subKategoriFilter');
+    const selectedKategori = kategoriSelect.options[kategoriSelect.selectedIndex];
+    const idKategori = selectedKategori.getAttribute('data-idkategori');
+
+    for (let option of subKategoriSelect.options) {
+        if (option.value === '') continue;
+        option.style.display = '';
+    }
+
+    if (idKategori) {
         for (let option of subKategoriSelect.options) {
-            if (option.value === '') continue; // biarkan "Semua Sub Kategori"
-            option.style.display = '';
-        }
+            const idParent = option.getAttribute('data-idparent_kategori');
 
-        // Jika ada kategori dipilih, sembunyikan subkategori yang tidak sesuai
-        if (idKategori) {
-            for (let option of subKategoriSelect.options) {
-                const idParent = option.getAttribute('data-idparent_kategori');
-                if (idParent !== idKategori) {
-                    option.style.display = 'none';
-                }
+            if (idParent !== idKategori) {
+                option.style.display = 'none';
             }
         }
-
-        // Reset pilihan sub kategori
-        subKategoriSelect.value = '';
     }
+
+    subKategoriSelect.value = '';
+
+    table.draw(); // ← ini yang kurang
+}
 </script>

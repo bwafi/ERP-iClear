@@ -21,6 +21,7 @@ class ModelService extends Model
         'keterangan',
         'passcode',
         'type_passcode',
+        'tipe_hp',
         'email_icloud',
         'password_icloud',
         'status_service',
@@ -184,26 +185,41 @@ class ModelService extends Model
 
     public function getServiceWithLaba()
     {
-        return $this->select('
+        return $this->select("
             service.*,
             akun.NAMA_AKUN AS nama_teknisi,
-            
+
             COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0) AS total_hpp_penjualan,
+
             COALESCE(SUM(service_sparepart.hpp_penjualan_garansi * service_sparepart.jumlah_tambahan_garansi), 0) AS total_hpp_garansi,
 
-            COALESCE(SUM(service_sparepart.harga_penjualan * service_sparepart.jumlah), 0) 
-                - COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0) 
+            COALESCE(SUM(service_sparepart.harga_penjualan * service_sparepart.jumlah), 0)
+                - COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0)
                 - COALESCE(SUM(service_sparepart.diskon_penjualan), 0) AS laba_service,
 
-            COALESCE(SUM(service_sparepart.harga_penjualan_garansi * service_sparepart.jumlah_tambahan_garansi), 0) 
-                - COALESCE(SUM(service_sparepart.hpp_penjualan_garansi * service_sparepart.jumlah_tambahan_garansi), 0) 
-                - COALESCE(SUM(service_sparepart.diskon_penjualan_garansi), 0) AS laba_garansi
-        ')
-            ->join('service_sparepart', 'service_sparepart.service_idservice = service.idservice', 'left')
-            ->join('akun', 'akun.ID_AKUN = service.service_by', 'left')
-            ->where('service.status_service', 4)
-            ->groupBy('service.idservice')
-            ->findAll();
+            COALESCE(SUM(service_sparepart.harga_penjualan_garansi * service_sparepart.jumlah_tambahan_garansi), 0)
+                - COALESCE(SUM(service_sparepart.hpp_penjualan_garansi * service_sparepart.jumlah_tambahan_garansi), 0)
+                - COALESCE(SUM(service_sparepart.diskon_penjualan_garansi), 0) AS laba_garansi,
+
+            COALESCE(MAX(service.harus_dibayar), 0)
+                - COALESCE(SUM(service_sparepart.hpp_penjualan), 0) AS omset
+        ")
+        ->join(
+            'service_sparepart',
+            'service_sparepart.service_idservice = service.idservice',
+            'right'
+        )
+        ->join(
+            'akun',
+            'akun.ID_AKUN = service.service_by',
+            'right'
+        )
+        ->where('service.status_service', 4)
+        ->where('akun.ID_JABATAN !=', 1)
+        ->where('MONTH(service.tanggal_selesai)', date('m'))
+        ->where('YEAR(service.tanggal_selesai)', date('Y'))
+        ->groupBy('service.idservice')
+        ->findAll();
     }
 
     //kerusakan
