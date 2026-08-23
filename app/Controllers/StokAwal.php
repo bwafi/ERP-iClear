@@ -12,9 +12,7 @@ use App\Models\ModelUnit;
 use Config\Database;
 
 class StokAwal extends BaseController
-
 {
-
     protected $KategoriModel;
     protected $StokAwalModel;
     protected $BarangModel;
@@ -23,7 +21,7 @@ class StokAwal extends BaseController
     protected $SuplierModel;
     protected $PelangganModel;
     protected $AuthModel;
-    
+
     protected $db;
 
     public function __construct()
@@ -35,7 +33,7 @@ class StokAwal extends BaseController
         $this->SuplierModel = new ModelSuplier();
         $this->PelangganModel = new ModelPelanggan();
         $this->AuthModel = new ModelAuth();
-        
+
         $this->db = \Config\Database::connect();
     }
 
@@ -43,157 +41,136 @@ class StokAwal extends BaseController
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
 
-
         $allBarang = $this->BarangModel->getAllBarang();
         $stok = $this->StokAwalModel->getAllStok();
-
 
         $barangSudahAda = [];
         foreach ($stok as $stockItem) {
             $barangSudahAda[$stockItem->unit_idunit][] = $stockItem->barang_idbarang;
         }
 
-
         $barangTersedia = $allBarang;
 
         $unitData = $this->UnitModel->getUnit();
 
-
-        $data = array(
+        $data = [
             'akun' => $akun,
             'stok' => $stok,
             'barang' => $barangTersedia,
             'unit' => $unitData,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'suplier' => $this->SuplierModel->getSuplier(),
-            'body' => 'stok/stok_awal'
-        );
+            'body' => 'stok/stok_awal',
+        ];
         return view('template', $data);
     }
 
-public function input_stokawal($jenis = null)
-{
-    $akun = $this->AuthModel->getById(session('ID_AKUN'));
+    public function input_stokawal($jenis = null)
+    {
+        $akun = $this->AuthModel->getById(session('ID_AKUN'));
 
-    $builder = $this->db->table('barang');
+        $builder = $this->db->table('barang');
 
-    // Filter berdasarkan jenis barang
-    if (!empty($jenis)) {
-
-        if ($jenis === 'ACC') {
-
-            $builder->where('idkategori', 2);
-
-        } elseif ($jenis === 'HP') {
-
-            $builder->where('idkategori', 1);
-
-        } else {
-
-            $builder->like('nama_barang', $jenis);
+        // Filter berdasarkan jenis
+        if (!empty($jenis)) {
+            if ($jenis === 'ACC') {
+                $builder->where('idkategori', 2);
+            } elseif ($jenis === 'HP') {
+                $builder->where('idkategori', 1);
+            } else {
+                $builder->like('nama_barang', $jenis);
+            }
         }
+
+        // =========================
+        // SEARCH
+        // =========================
+
+        $search = trim($this->request->getGet('search') ?? '');
+
+        if ($search !== '') {
+            $builder->groupStart()->like('nama_barang', $search)->orLike('kode_barang', $search)->orLike('imei', $search)->groupEnd();
+        }
+
+        // =========================
+        // PAGINATION
+        // =========================
+
+        $perPage = 25;
+
+        $page = max(1, (int) $this->request->getGet('page'));
+
+        // Total hasil setelah filter + search
+        $total = $builder->countAllResults(false);
+
+        $offset = ($page - 1) * $perPage;
+
+        $allBarang = $builder->orderBy('idbarang', 'DESC')->limit($perPage, $offset)->get()->getResult();
+
+        $totalPages = (int) ceil($total / $perPage);
+
+        // =========================
+        // DATA LAINNYA
+        // =========================
+
+        $stok = $this->StokAwalModel->getAllStok();
+
+        $barangSudahAda = [];
+
+        foreach ($stok as $stockItem) {
+            $barangSudahAda[$stockItem->unit_idunit][] = $stockItem->barang_idbarang;
+        }
+
+        $unitData = $this->UnitModel->getUnit();
+
+        $data = [
+            'akun' => $akun,
+
+            'stok' => $stok,
+
+            'barang' => $allBarang,
+
+            'unit' => $unitData,
+
+            'jenis' => $jenis,
+
+            'search' => $search,
+
+            'pelanggan' => $this->PelangganModel->getPelanggan(),
+
+            'suplier' => $this->SuplierModel->getSuplier(),
+
+            'currentPage' => $page,
+
+            'perPage' => $perPage,
+
+            'total' => $total,
+
+            'totalPages' => $totalPages,
+
+            'body' => 'stok/input_stokawal',
+        ];
+
+        return view('template', $data);
     }
-
-    // =========================
-    // SERVER-SIDE PAGINATION
-    // =========================
-
-    $perPage = 20;
-
-    $page = max(
-        1,
-        (int) $this->request->getGet('page')
-    );
-
-    // Hitung total data berdasarkan filter
-    $total = $builder->countAllResults(false);
-
-    // Hitung offset
-    $offset = ($page - 1) * $perPage;
-
-    // Ambil hanya data halaman saat ini
-    $allBarang = $builder
-        ->orderBy('idbarang', 'DESC')
-        ->limit($perPage, $offset)
-        ->get()
-        ->getResult();
-
-    // Total halaman
-    $totalPages = (int) ceil($total / $perPage);
-
-    // =========================
-    // DATA STOK
-    // =========================
-
-    $stok = $this->StokAwalModel->getAllStok();
-
-    $barangSudahAda = [];
-
-    foreach ($stok as $stockItem) {
-
-        $barangSudahAda[$stockItem->unit_idunit][] =
-            $stockItem->barang_idbarang;
-    }
-
-    // =========================
-    // DATA UNIT
-    // =========================
-
-    $unitData = $this->UnitModel->getUnit();
-
-    // =========================
-    // DATA VIEW
-    // =========================
-
-    $data = [
-
-        'akun' => $akun,
-
-        'stok' => $stok,
-
-        'barang' => $allBarang,
-
-        'unit' => $unitData,
-
-        'jenis' => $jenis,
-
-        'pelanggan' => $this->PelangganModel->getPelanggan(),
-
-        'suplier' => $this->SuplierModel->getSuplier(),
-
-        // Pagination
-        'currentPage' => $page,
-
-        'perPage' => $perPage,
-
-        'total' => $total,
-
-        'totalPages' => $totalPages,
-
-        'body' => 'stok/input_stokawal'
-    ];
-
-    return view('template', $data);
-}
-
 
     public function insert()
     {
         $selectedProducts = $this->request->getPost('selected_products');
-        $idUnit = $this->request->getPost("global_unit") ?? '';
+        $idUnit = $this->request->getPost('global_unit') ?? '';
 
         if ($selectedProducts) {
             foreach ($selectedProducts as $kodeBarang) {
-                $jumlah = $this->request->getPost("jumlah")[$kodeBarang] ?? 0;
+                $jumlah = $this->request->getPost('jumlah')[$kodeBarang] ?? 0;
 
-                //hidden sementara 
+                //hidden sementara
                 // $hargaBeli = $this->request->getPost("harga_beli")[$kodeBarang] ?? 0;
                 //hidden sementara
 
-                $satuanTerkecil = $this->request->getPost("satuan_terkecil")[$kodeBarang] ?? '';
-                $tipeRelasi = $this->request->getPost("tipe_relasi")[$kodeBarang] ?? '';
-                $idSuplier = $this->request->getPost("id_suplier_text")[$kodeBarang] ?? 0;
-                $idPelanggan = $this->request->getPost("id_pelanggan_text")[$kodeBarang] ?? 0;
+                $satuanTerkecil = $this->request->getPost('satuan_terkecil')[$kodeBarang] ?? '';
+                $tipeRelasi = $this->request->getPost('tipe_relasi')[$kodeBarang] ?? '';
+                $idSuplier = $this->request->getPost('id_suplier_text')[$kodeBarang] ?? 0;
+                $idPelanggan = $this->request->getPost('id_pelanggan_text')[$kodeBarang] ?? 0;
                 $databarang = $this->BarangModel->getBykode($kodeBarang);
                 $idbarang = $databarang->idbarang;
 
@@ -207,10 +184,9 @@ public function input_stokawal($jenis = null)
                     'harga_beli' => $hargaBeli,
                     'satuan_terkecil' => $satuanTerkecil,
                     'unit_idunit' => $idUnit,
-                    'suplier_id_suplier' => ($tipeRelasi === 'suplier') ? $idSuplier : 0,
-                    'pelanggan_id_pelanggan' => ($tipeRelasi === 'pelanggan') ? $idPelanggan : 0
+                    'suplier_id_suplier' => $tipeRelasi === 'suplier' ? $idSuplier : 0,
+                    'pelanggan_id_pelanggan' => $tipeRelasi === 'pelanggan' ? $idPelanggan : 0,
                 ];
-
 
                 $this->StokAwalModel->insert_Stok($data);
             }
@@ -222,12 +198,12 @@ public function input_stokawal($jenis = null)
             return redirect()->to(base_url('/input_stokawal'));
         }
     }
-    
+
     public function stok()
     {
-        $data = array(            
-            'body' => 'stok/stok'
-        );
+        $data = [
+            'body' => 'stok/stok',
+        ];
         return view('template', $data);
     }
 }
