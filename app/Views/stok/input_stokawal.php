@@ -14,48 +14,228 @@
 >
 
 <style>
-    /* --------------------------------------------------
-       SELECT2 CUSTOM UNIFORMITY
-       -------------------------------------------------- */
+    /* ==========================================================
+       SELECT2 — SAMAKAN DENGAN BOOTSTRAP .form-select
+       ========================================================== */
+
+
+       .pelanggan-select-search{
+          --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  display: block;
+  width: 100%;
+  padding: 8px 48px 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--bs-body-color);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: transparent;
+  background-image: var(--bs-form-select-bg-img),
+    var(--bs-form-select-bg-icon, none);
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 16px 12px;
+  border: var(--bs-border-width) solid #aebcc3;
+  border-radius: 0.5rem;
+  box-shadow: unset;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+       }
+
     .select2-container {
         width: 100% !important;
     }
 
     .select2-container .select2-selection--single {
         height: 38px !important;
+        min-height: 38px !important;
+
         border: 1px solid #dee2e6 !important;
         border-radius: 6px !important;
+
         background-color: #fff !important;
+
+        display: flex !important;
+        align-items: center !important;
+
+        box-sizing: border-box !important;
     }
 
-    .select2-container .select2-selection--single .select2-selection__rendered {
+    /* Text */
+    .select2-container
+    .select2-selection--single
+    .select2-selection__rendered {
+        padding: 0 40px 0 12px !important;
+
+        color: #212529 !important;
+
+        font-size: 1rem !important;
+        font-weight: 400 !important;
+
         line-height: 36px !important;
-        padding-left: 12px !important;
+
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+
+        width: 100% !important;
+    }
+
+    /* Arrow */
+    .select2-container
+    .select2-selection--single
+    .select2-selection__arrow {
+        height: 36px !important;
+        width: 36px !important;
+
+        top: 0 !important;
+        right: 4px !important;
+
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .select2-container
+    .select2-selection--single
+    .select2-selection__arrow b {
+        border-color: #6c757d transparent transparent transparent !important;
+
+        border-width: 5px 4px 0 4px !important;
+
+        margin: 0 !important;
+
+        position: static !important;
+    }
+
+    /* ==========================================================
+       FOCUS
+       ========================================================== */
+
+    .select2-container--open
+    .select2-selection--single,
+
+    .select2-container
+    .select2-selection--single:focus {
+        border-color: #86b7fe !important;
+
+        box-shadow:
+            0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+
+        outline: 0 !important;
+    }
+
+    /* ==========================================================
+       DROPDOWN
+       ========================================================== */
+
+    .select2-dropdown {
+        border: 1px solid #dee2e6 !important;
+        border-radius: 6px !important;
+
+        overflow: hidden !important;
+
+        z-index: 9999 !important;
+
+        box-shadow:
+            0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+
+    .select2-search--dropdown {
+        padding: 8px !important;
+    }
+
+    .select2-search--dropdown
+    .select2-search__field {
+        height: 38px !important;
+
+        border: 1px solid #dee2e6 !important;
+        border-radius: 6px !important;
+
+        padding: 6px 12px !important;
+
+        font-size: 1rem !important;
+
+        outline: none !important;
+    }
+
+    .select2-search--dropdown
+    .select2-search__field:focus {
+        border-color: #86b7fe !important;
+
+        box-shadow:
+            0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+    }
+
+    /* ==========================================================
+       OPTION
+       ========================================================== */
+
+    .select2-results__option {
+        padding: 8px 12px !important;
+
+        font-size: 1rem !important;
+
         color: #212529 !important;
     }
 
-    .select2-container .select2-selection--single .select2-selection__arrow {
-        height: 36px !important;
+    .select2-results__option--highlighted {
+        background-color: #0d6efd !important;
+        color: #fff !important;
     }
 
-    .select2-dropdown {
-        z-index: 9999;
-    }
+    /* ==========================================================
+       DISABLED
+       ========================================================== */
 
-    /* Sinkronisasi total saat Select2 dalam kondisi DISABLED */
-    .select2-container.select2-container--disabled .select2-selection--single {
+    .select2-container.select2-container--disabled
+    .select2-selection--single {
         background-color: #e9ecef !important;
+
         border-color: #dee2e6 !important;
+
         opacity: 1 !important;
+
         cursor: not-allowed !important;
     }
 
-    .select2-container.select2-container--disabled .select2-selection--single .select2-selection__rendered {
+    .select2-container.select2-container--disabled
+    .select2-selection--single
+    .select2-selection__rendered {
         color: #6c757d !important;
     }
 
-    .select2-container.select2-container--disabled .select2-selection--single .select2-selection__arrow {
-        display: none !important; /* Menghilangkan panah saat disabled agar persis seperti select biasa */
+    .select2-container.select2-container--disabled
+    .select2-selection--single
+    .select2-selection__arrow {
+        display: none !important;
+    }
+
+    /* ==========================================================
+       CLEAR BUTTON
+       ========================================================== */
+
+    .select2-container
+    .select2-selection--single
+    .select2-selection__clear {
+        height: 36px !important;
+
+        margin-right: 8px !important;
+
+        font-size: 18px !important;
+
+        color: #6c757d !important;
+
+        position: relative !important;
+
+        z-index: 2 !important;
+    }
+
+    .select2-container
+    .select2-selection--single
+    .select2-selection__clear:hover {
+        color: #dc3545 !important;
     }
 </style>
 
@@ -1379,7 +1559,7 @@ function initPelangganSelect() {
         }
 
         select.select2({
-            theme: 'bootstrap-5', 
+            // theme: 'bootstrap-5', 
             width: '100%',
 
             placeholder:
