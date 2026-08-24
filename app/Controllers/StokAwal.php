@@ -68,7 +68,6 @@ class StokAwal extends BaseController
     public function input_stokawal($jenis = null)
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
-
         $builder = $this->db->table('barang');
 
         // Filter berdasarkan jenis
@@ -97,16 +96,11 @@ class StokAwal extends BaseController
         // =========================
 
         $perPage = 25;
-
         $page = max(1, (int) $this->request->getGet('page'));
-
         // Total hasil setelah filter + search
         $total = $builder->countAllResults(false);
-
         $offset = ($page - 1) * $perPage;
-
         $allBarang = $builder->orderBy('idbarang', 'DESC')->limit($perPage, $offset)->get()->getResult();
-
         $totalPages = (int) ceil($total / $perPage);
 
         // =========================
@@ -114,7 +108,6 @@ class StokAwal extends BaseController
         // =========================
 
         $stok = $this->StokAwalModel->getAllStok();
-
         $barangSudahAda = [];
 
         foreach ($stok as $stockItem) {
@@ -125,29 +118,17 @@ class StokAwal extends BaseController
 
         $data = [
             'akun' => $akun,
-
             'stok' => $stok,
-
             'barang' => $allBarang,
-
             'unit' => $unitData,
-
             'jenis' => $jenis,
-
             'search' => $search,
-
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
-
+            // 'pelanggan' => $this->PelangganModel->searchPelanggan($search, 20),
             'suplier' => $this->SuplierModel->getSuplier(),
-
             'currentPage' => $page,
-
             'perPage' => $perPage,
-
             'total' => $total,
-
             'totalPages' => $totalPages,
-
             'body' => 'stok/input_stokawal',
         ];
 

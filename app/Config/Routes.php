@@ -104,6 +104,8 @@ $routes->get('export/pelanggan', 'Pelanggan::export_pelanggan', ['filter' => 'au
 $routes->post('import/pelanggan', 'Pelanggan::import_pelanggan', ['filter' => 'auth']);
 $routes->post('simpan/pelanggan', 'Pelanggan::simpanPelanggan', ['filter' => 'auth']);
 $routes->get('riwayat_transaksi_pelanggan/(:num)', 'Pelanggan::riwayat_transaksi_pelanggan/$1', ['filter' => 'auth']);
+// $routes->get('search/pelanggan', 'Pelanggan::searchPelanggan', ['filter' => 'auth']); 
+$routes->get('pelanggan/search', 'Pelanggan::searchPelanggan', ['filter' => 'auth']);
 
 $routes->get('region/kabupaten/(:any)', 'Pelanggan::getKabupaten/$1');
 $routes->get('region/kecamatan/(:any)', 'Pelanggan::getKecamatan/$1');

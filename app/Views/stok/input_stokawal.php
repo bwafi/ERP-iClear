@@ -1,33 +1,117 @@
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<link
+    rel="stylesheet"
+    href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"
+>
+
+<link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+
+<link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+>
+
+<style>
+    /* --------------------------------------------------
+       SELECT2 CUSTOM UNIFORMITY
+       -------------------------------------------------- */
+    .select2-container {
+        width: 100% !important;
+    }
+
+    .select2-container .select2-selection--single {
+        height: 38px !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 6px !important;
+        background-color: #fff !important;
+    }
+
+    .select2-container .select2-selection--single .select2-selection__rendered {
+        line-height: 36px !important;
+        padding-left: 12px !important;
+        color: #212529 !important;
+    }
+
+    .select2-container .select2-selection--single .select2-selection__arrow {
+        height: 36px !important;
+    }
+
+    .select2-dropdown {
+        z-index: 9999;
+    }
+
+    /* Sinkronisasi total saat Select2 dalam kondisi DISABLED */
+    .select2-container.select2-container--disabled .select2-selection--single {
+        background-color: #e9ecef !important;
+        border-color: #dee2e6 !important;
+        opacity: 1 !important;
+        cursor: not-allowed !important;
+    }
+
+    .select2-container.select2-container--disabled .select2-selection--single .select2-selection__rendered {
+        color: #6c757d !important;
+    }
+
+    .select2-container.select2-container--disabled .select2-selection--single .select2-selection__arrow {
+        display: none !important; /* Menghilangkan panah saat disabled agar persis seperti select biasa */
+    }
+</style>
+
+<!-- ==========================================================
+     HEADER
+=========================================================== -->
 
 <div class="card shadow-none position-relative overflow-hidden mb-4">
+
     <div class="card-body d-flex align-items-center justify-content-between p-4">
+
         <h4 class="fw-semibold mb-0">
             Datamaster Stok Awal
         </h4>
 
         <nav aria-label="breadcrumb">
+
             <ol class="breadcrumb mb-0">
+
                 <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">
+
+                    <a
+                        class="text-muted text-decoration-none"
+                        href="<?= base_url('/') ?>"
+                    >
                         Datamaster
                     </a>
+
                 </li>
 
-                <li class="breadcrumb-item active" aria-current="page">
+                <li
+                    class="breadcrumb-item active"
+                    aria-current="page"
+                >
                     Stok Awal
                 </li>
+
             </ol>
+
         </nav>
+
     </div>
+
 </div>
 
 
+<!-- ==========================================================
+     CARD UTAMA
+=========================================================== -->
+
 <div class="card w-100 position-relative overflow-hidden">
 
-    <!-- ==========================================================
+
+    <!-- ======================================================
          FORM UTAMA
-    =========================================================== -->
+    ======================================================= -->
 
     <form
         id="stokAwalForm"
@@ -36,17 +120,23 @@
         method="post"
     >
 
-        <!-- ======================================================
-             UNIT & SEARCH
-        ======================================================= -->
 
-        <div class="d-flex justify-content-between align-items-center flex-wrap px-4 pt-4 pb-2">
+        <!-- ==================================================
+             UNIT & SEARCH
+        =================================================== -->
+
+        <div
+            class="d-flex justify-content-between align-items-center flex-wrap px-4 pt-4 pb-2"
+        >
 
             <!-- UNIT -->
 
             <div class="d-flex align-items-center gap-3 mb-2 mb-md-0">
 
-                <label for="global_unit" class="col-form-label fw-semibold">
+                <label
+                    for="global_unit"
+                    class="col-form-label fw-semibold"
+                >
                     Unit:
                 </label>
 
@@ -66,7 +156,9 @@
 
                                 <?php if ($u && isset($u->idunit)): ?>
 
-                                    <option value="<?= esc($u->idunit) ?>">
+                                    <option
+                                        value="<?= esc($u->idunit) ?>"
+                                    >
                                         <?= esc($u->NAMA_UNIT) ?>
                                     </option>
 
@@ -104,7 +196,7 @@
             </div>
 
 
-            <!-- SEARCH -->
+            <!-- SEARCH BARANG -->
 
             <div class="mb-2 mb-md-0">
 
@@ -131,7 +223,9 @@
                     <?php if (!empty($search)): ?>
 
                         <a
-                            href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>"
+                            href="<?= base_url(
+                                'input_stokawal/' . urlencode($jenis)
+                            ) ?>"
                             class="btn btn-light border"
                         >
                             Reset
@@ -146,47 +240,96 @@
         </div>
 
 
-        <!-- ======================================================
-             INDIKATOR SELECTION
-        ======================================================= -->
+        <!-- ==================================================
+             SELECTION INDICATOR
+        =================================================== -->
 
-        <div class="px-4 pt-2">
+        <div class="px-4 pt-3">
 
             <div
                 id="selectionIndicator"
-                class="alert alert-primary d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3"
+                class="card border-0 shadow-sm bg-light-subtle rounded-3 p-3 mb-3 border-start border-primary border-4"
                 style="display: none !important;"
             >
 
-                <div>
+                <div
+                    class="d-flex align-items-center justify-content-between flex-wrap gap-3"
+                >
 
-                    <strong>
-                        <span id="selectedCount">0</span>
-                        barang dipilih
-                    </strong>
+                    <div class="d-flex align-items-center gap-3">
 
-                    <div class="small mt-1">
-                        Pilihan tetap tersimpan saat berpindah halaman.
+                        <div
+                            class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center"
+                            style="
+                                width: 45px;
+                                height: 45px;
+                                min-width: 45px;
+                            "
+                        >
+
+                            <i class="bi bi-check2-square fs-4"></i>
+
+                        </div>
+
+                        <div>
+
+                            <div
+                                class="d-flex align-items-center gap-2"
+                            >
+
+                                <span
+                                    class="badge bg-primary fs-6 px-2 py-1"
+                                    id="selectedCount"
+                                >
+                                    0
+                                </span>
+
+                                <span
+                                    class="fw-bold text-dark fs-5"
+                                >
+                                    Barang Terpilih
+                                </span>
+
+                            </div>
+
+                            <p
+                                class="text-muted small mb-0 mt-1"
+                            >
+                                <i class="bi bi-info-circle me-1"></i>
+                                Pilihan produk tetap aman tersimpan otomatis
+                                meskipun Anda berpindah halaman.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                    <div>
+
+                        <button
+                            type="button"
+                            id="openCancelModalBtn"
+                            class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1 px-3 py-2 fw-semibold"
+                        >
+
+                            <i class="bi bi-trash3"></i>
+
+                            Batalkan Semua
+
+                        </button>
+
                     </div>
 
                 </div>
-
-                <button
-                    type="button"
-                    id="clearSelection"
-                    class="btn btn-sm btn-outline-danger"
-                >
-                    Batalkan Semua
-                </button>
 
             </div>
 
         </div>
 
 
-        <!-- ======================================================
+        <!-- ==================================================
              TABLE
-        ======================================================= -->
+        =================================================== -->
 
         <div class="table-responsive mb-4 px-4">
 
@@ -253,75 +396,103 @@
                     <?php foreach ($barang as $b): ?>
 
                         <?php
+
                         $kode_barang = $b->kode_barang;
+
                         $isImeiEmpty = empty($b->imei);
+
                         ?>
 
                         <tr>
 
-                            <!-- ==================================================
-                                 PILIH
-                            =================================================== -->
 
-                            <td>
+                            <!-- PILIH -->
+
+                            <td class="text-center">
 
                                 <input
                                     type="checkbox"
-                                    class="product-checkbox"
+                                    class="product-checkbox form-check-input"
                                     value="<?= esc($kode_barang) ?>"
                                     id="product_<?= esc($kode_barang) ?>"
                                     onchange="toggleCheckbox('<?= esc($kode_barang) ?>')"
+                                    style="
+                                        width: 20px;
+                                        height: 20px;
+                                        cursor: pointer;
+                                    "
                                 >
 
                             </td>
 
 
-                            <!-- ==================================================
-                                 BARANG
-                            =================================================== -->
+                            <!-- BARANG -->
 
-                            <td style="min-width: 140px; text-align: center;">
+                            <td
+                                style="
+                                    min-width: 140px;
+                                    text-align: center;
+                                "
+                            >
 
-                                <p style="font-weight: bold; margin-bottom: 4px;">
+                                <p
+                                    style="
+                                        font-weight: bold;
+                                        margin-bottom: 4px;
+                                    "
+                                >
                                     <?= esc($kode_barang) ?>
                                 </p>
 
-                                <p style="font-style: italic; margin-bottom: 0;">
+                                <p
+                                    style="
+                                        font-style: italic;
+                                        margin-bottom: 0;
+                                    "
+                                >
                                     <?= esc($b->nama_barang) ?>
                                 </p>
 
                             </td>
 
 
-                            <!-- ==================================================
-                                 IMEI
-                            =================================================== -->
+                            <!-- IMEI -->
 
                             <td>
 
-                                <p style="font-style: italic; margin-bottom: 0;">
-                                    <?= esc($b->imei ?? 'tidak ada imei') ?>
+                                <p
+                                    style="
+                                        font-style: italic;
+                                        margin-bottom: 0;
+                                    "
+                                >
+                                    <?= esc(
+                                        $b->imei ?? 'tidak ada imei'
+                                    ) ?>
                                 </p>
 
                             </td>
 
 
-                            <!-- ==================================================
-                                 HPP
-                            =================================================== -->
+                            <!-- HPP -->
 
                             <td>
 
-                                <p style="font-style: italic; margin-bottom: 0;">
-                                    <?= esc($b->harga_beli ?? 'tidak ada HPP') ?>
+                                <p
+                                    style="
+                                        font-style: italic;
+                                        margin-bottom: 0;
+                                    "
+                                >
+                                    <?= esc(
+                                        $b->harga_beli ?? 'tidak ada HPP'
+                                    ) ?>
                                 </p>
 
                             </td>
 
 
-                            <!-- ==================================================
-                                 JUMLAH
-                            =================================================== -->
+                            <!-- JUMLAH -->
 
                             <td>
 
@@ -338,9 +509,7 @@
                             </td>
 
 
-                            <!-- ==================================================
-                                 SATUAN
-                            =================================================== -->
+                            <!-- SATUAN -->
 
                             <td>
 
@@ -369,9 +538,7 @@
                             </td>
 
 
-                            <!-- ==================================================
-                                 SUMBER
-                            =================================================== -->
+                            <!-- SUMBER -->
 
                             <td>
 
@@ -380,7 +547,9 @@
                                     class="form-select product-input"
                                     id="tipe_relasi_<?= esc($kode_barang) ?>"
                                     onchange="toggleSumber('<?= esc($kode_barang) ?>')"
-                                    <?= $isImeiEmpty ? 'disabled data-always-disabled="true"' : '' ?>
+                                    <?= $isImeiEmpty
+                                        ? 'disabled data-always-disabled="true"'
+                                        : '' ?>
                                     style="min-width: 190px;"
                                 >
 
@@ -390,7 +559,9 @@
 
                                     <option
                                         value="suplier"
-                                        <?= $isImeiEmpty ? 'selected' : '' ?>
+                                        <?= $isImeiEmpty
+                                            ? 'selected'
+                                            : '' ?>
                                     >
                                         Suplier
                                     </option>
@@ -404,9 +575,7 @@
                             </td>
 
 
-                            <!-- ==================================================
-                                 SUPLIER
-                            =================================================== -->
+                            <!-- SUPLIER -->
 
                             <td>
 
@@ -424,8 +593,14 @@
 
                                     <?php foreach ($suplier as $s): ?>
 
-                                        <option value="<?= esc($s->id_suplier) ?>">
-                                            <?= esc($s->nama_suplier) ?>
+                                        <option
+                                            value="<?= esc(
+                                                $s->id_suplier
+                                            ) ?>"
+                                        >
+                                            <?= esc(
+                                                $s->nama_suplier
+                                            ) ?>
                                         </option>
 
                                     <?php endforeach; ?>
@@ -435,40 +610,27 @@
                             </td>
 
 
-                            <!-- ==================================================
-                                 PELANGGAN
-                            =================================================== -->
+                            <!-- PELANGGAN -->
 
                             <td>
 
                                 <select
                                     name="id_pelanggan_text[<?= esc($kode_barang) ?>]"
-                                    class="form-select product-input"
+                                    class="form-select product-input pelanggan-select-search"
                                     id="id_pelanggan_text_<?= esc($kode_barang) ?>"
                                     disabled
-                                    style="min-width: 190px;"
+                                    style="min-width: 230px;"
                                 >
-
                                     <option value="">
                                         -- Pilih Pelanggan --
                                     </option>
-
-                                    <?php foreach ($pelanggan as $p): ?>
-
-                                        <option value="<?= esc($p->id_pelanggan) ?>">
-                                            <?= esc($p->nama) ?>
-                                        </option>
-
-                                    <?php endforeach; ?>
 
                                 </select>
 
                             </td>
 
 
-                            <!-- ==================================================
-                                 UNIT HIDDEN
-                            =================================================== -->
+                            <!-- UNIT -->
 
                             <td>
 
@@ -480,10 +642,19 @@
 
                                     <?php foreach ($unit as $u): ?>
 
-                                        <?php if ($u && isset($u->idunit)): ?>
+                                        <?php if (
+                                            $u &&
+                                            isset($u->idunit)
+                                        ): ?>
 
-                                            <option value="<?= esc($u->idunit) ?>">
-                                                <?= esc($u->NAMA_UNIT) ?>
+                                            <option
+                                                value="<?= esc(
+                                                    $u->idunit
+                                                ) ?>"
+                                            >
+                                                <?= esc(
+                                                    $u->NAMA_UNIT
+                                                ) ?>
                                             </option>
 
                                         <?php endif; ?>
@@ -495,9 +666,7 @@
                             </td>
 
 
-                            <!-- ==================================================
-                                 KODE BARANG
-                            =================================================== -->
+                            <!-- KODE BARANG -->
 
                             <td hidden>
                                 <?= esc($kode_barang) ?>
@@ -514,13 +683,15 @@
         </div>
 
 
-        <!-- ======================================================
-             SERVER-SIDE PAGINATION
-        ======================================================= -->
+        <!-- ==================================================
+             PAGINATION
+        =================================================== -->
 
         <div class="px-4 pb-3">
 
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div
+                class="d-flex justify-content-between align-items-center flex-wrap gap-3"
+            >
 
                 <!-- INFO -->
 
@@ -530,15 +701,17 @@
 
                     <strong>
                         <?= $total > 0
-                            ? ($currentPage - 1) * $perPage + 1
-                            : 0
-                        ?>
+                            ? (($currentPage - 1) * $perPage) + 1
+                            : 0 ?>
                     </strong>
 
                     -
 
                     <strong>
-                        <?= min($currentPage * $perPage, $total) ?>
+                        <?= min(
+                            $currentPage * $perPage,
+                            $total
+                        ) ?>
                     </strong>
 
                     dari
@@ -560,6 +733,20 @@
 
                         <ul class="pagination mb-0">
 
+                            <?php
+
+                            $baseUrl = base_url(
+                                'input_stokawal/' .
+                                urlencode($jenis)
+                            );
+
+                            $searchQuery = !empty($search)
+                                ? '&search=' . urlencode($search)
+                                : '';
+
+                            ?>
+
+
                             <!-- SEBELUMNYA -->
 
                             <?php if ($currentPage > 1): ?>
@@ -568,7 +755,7 @@
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $currentPage - 1 ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=<?= $currentPage - 1 ?><?= $searchQuery ?>"
                                     >
                                         Sebelumnya
                                     </a>
@@ -588,41 +775,55 @@
                             <?php endif; ?>
 
 
-                            <?php
+                            <?php if ($totalPages <= 7): ?>
 
-                            if ($totalPages <= 7):
+                                <!-- SEMUA PAGE -->
 
-                                for ($i = 1; $i <= $totalPages; $i++):
-                            ?>
-
-                                <li
-                                    class="page-item <?= $i === (int) $currentPage ? 'active' : '' ?>"
-                                >
-
-                                    <a
-                                        class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $i ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
-                                    >
-                                        <?= $i ?>
-                                    </a>
-
-                                </li>
-
-                            <?php
-                                endfor;
-
-                            elseif ($currentPage <= 4):
-                            ?>
-
-                                <?php for ($i = 1; $i <= 4; $i++): ?>
+                                <?php for (
+                                    $i = 1;
+                                    $i <= $totalPages;
+                                    $i++
+                                ): ?>
 
                                     <li
-                                        class="page-item <?= $i === (int) $currentPage ? 'active' : '' ?>"
+                                        class="page-item
+                                        <?= $i === (int) $currentPage
+                                            ? 'active'
+                                            : '' ?>"
                                     >
 
                                         <a
                                             class="page-link"
-                                            href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $i ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                            href="<?= $baseUrl ?>?page=<?= $i ?><?= $searchQuery ?>"
+                                        >
+                                            <?= $i ?>
+                                        </a>
+
+                                    </li>
+
+                                <?php endfor; ?>
+
+
+                            <?php elseif ($currentPage <= 4): ?>
+
+                                <!-- AWAL -->
+
+                                <?php for (
+                                    $i = 1;
+                                    $i <= 4;
+                                    $i++
+                                ): ?>
+
+                                    <li
+                                        class="page-item
+                                        <?= $i === (int) $currentPage
+                                            ? 'active'
+                                            : '' ?>"
+                                    >
+
+                                        <a
+                                            class="page-link"
+                                            href="<?= $baseUrl ?>?page=<?= $i ?><?= $searchQuery ?>"
                                         >
                                             <?= $i ?>
                                         </a>
@@ -645,7 +846,7 @@
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $totalPages - 1 ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=<?= $totalPages - 1 ?><?= $searchQuery ?>"
                                     >
                                         <?= $totalPages - 1 ?>
                                     </a>
@@ -657,7 +858,7 @@
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $totalPages ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=<?= $totalPages ?><?= $searchQuery ?>"
                                     >
                                         <?= $totalPages ?>
                                     </a>
@@ -665,15 +866,17 @@
                                 </li>
 
 
-                            <?php
-                            elseif ($currentPage >= $totalPages - 3):
-                            ?>
+                            <?php elseif (
+                                $currentPage >= $totalPages - 3
+                            ): ?>
+
+                                <!-- AKHIR -->
 
                                 <li class="page-item">
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=1<?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=1<?= $searchQuery ?>"
                                     >
                                         1
                                     </a>
@@ -685,7 +888,7 @@
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=2<?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=2<?= $searchQuery ?>"
                                     >
                                         2
                                     </a>
@@ -709,12 +912,15 @@
                                 ): ?>
 
                                     <li
-                                        class="page-item <?= $i === (int) $currentPage ? 'active' : '' ?>"
+                                        class="page-item
+                                        <?= $i === (int) $currentPage
+                                            ? 'active'
+                                            : '' ?>"
                                     >
 
                                         <a
                                             class="page-link"
-                                            href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $i ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                            href="<?= $baseUrl ?>?page=<?= $i ?><?= $searchQuery ?>"
                                         >
                                             <?= $i ?>
                                         </a>
@@ -726,11 +932,13 @@
 
                             <?php else: ?>
 
+                                <!-- TENGAH -->
+
                                 <li class="page-item">
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=1<?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=1<?= $searchQuery ?>"
                                     >
                                         1
                                     </a>
@@ -754,12 +962,15 @@
                                 ): ?>
 
                                     <li
-                                        class="page-item <?= $i === (int) $currentPage ? 'active' : '' ?>"
+                                        class="page-item
+                                        <?= $i === (int) $currentPage
+                                            ? 'active'
+                                            : '' ?>"
                                     >
 
                                         <a
                                             class="page-link"
-                                            href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $i ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                            href="<?= $baseUrl ?>?page=<?= $i ?><?= $searchQuery ?>"
                                         >
                                             <?= $i ?>
                                         </a>
@@ -782,7 +993,7 @@
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $totalPages ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=<?= $totalPages ?><?= $searchQuery ?>"
                                     >
                                         <?= $totalPages ?>
                                     </a>
@@ -794,13 +1005,15 @@
 
                             <!-- BERIKUTNYA -->
 
-                            <?php if ($currentPage < $totalPages): ?>
+                            <?php if (
+                                $currentPage < $totalPages
+                            ): ?>
 
                                 <li class="page-item">
 
                                     <a
                                         class="page-link"
-                                        href="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>?page=<?= $currentPage + 1 ?><?= !empty($search) ? '&search=' . urlencode($search) : '' ?>"
+                                        href="<?= $baseUrl ?>?page=<?= $currentPage + 1 ?><?= $searchQuery ?>"
                                     >
                                         Berikutnya
                                     </a>
@@ -830,9 +1043,9 @@
         </div>
 
 
-        <!-- ======================================================
+        <!-- ==================================================
              BUTTON
-        ======================================================= -->
+        =================================================== -->
 
         <div class="px-4 pb-4">
 
@@ -858,9 +1071,9 @@
 </div>
 
 
-<!-- ============================================================
+<!-- ==========================================================
      SEARCH FORM TERPISAH
-============================================================= -->
+=========================================================== -->
 
 <form
     id="searchForm"
@@ -869,568 +1082,464 @@
 ></form>
 
 
+<!-- ==========================================================
+     MODAL
+=========================================================== -->
+
+<div
+    class="modal fade"
+    id="cancelConfirmModal"
+    tabindex="-1"
+    aria-labelledby="cancelConfirmModalLabel"
+    aria-hidden="true"
+>
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content border-0 shadow">
+
+            <div class="modal-body text-center p-4">
+
+                <div
+                    class="text-danger bg-danger-subtle rounded-circle mx-auto d-flex align-items-center justify-content-center mb-3"
+                    style="
+                        width: 60px;
+                        height: 60px;
+                    "
+                >
+
+                    <i class="bi bi-exclamation-triangle fs-2"></i>
+
+                </div>
+
+                <h5
+                    class="fw-bold mb-2"
+                    id="cancelConfirmModalLabel"
+                >
+                    Batalkan Semua Pilihan?
+                </h5>
+
+                <p class="text-muted small mb-4">
+
+                    Semua barang yang telah Anda pilih beserta
+                    pengisian jumlah dan satuannya akan dihapus
+                    dari daftar sementara.
+
+                </p>
+
+                <div class="d-flex justify-content-center gap-2">
+
+                    <button
+                        type="button"
+                        class="btn btn-light px-4"
+                        data-bs-dismiss="modal"
+                    >
+                        Tidak, Kembali
+                    </button>
+
+                    <button
+                        type="button"
+                        id="confirmClearSelectionBtn"
+                        class="btn btn-danger px-4"
+                    >
+                        Ya, Batalkan Semua
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================================
+     JAVASCRIPT
+=========================================================== -->
+
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 
+<script
+    src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"
+></script>
+
 
 <script>
 
-    // ============================================================
-    // STORAGE
-    // ============================================================
+const STORAGE_KEY = 'stokAwalSelectedProducts';
 
-    const STORAGE_KEY = 'stokAwalSelectedProducts';
-
-    let selectedProducts = {};
+let selectedProducts = {};
 
 
-    // ============================================================
-    // LOAD STORAGE
-    // ============================================================
+/* ============================================================
+   LOAD STORAGE
+============================================================ */
 
-    function loadSelectedProducts() {
+function loadSelectedProducts() {
 
-        try {
+    try {
 
-            const saved =
-                localStorage.getItem(STORAGE_KEY);
+        const saved =
+            localStorage.getItem(STORAGE_KEY);
 
-            if (saved) {
+        if (saved) {
 
-                selectedProducts =
-                    JSON.parse(saved);
-
-            }
-
-        } catch (error) {
-
-            console.error(
-                'Gagal membaca selection:',
-                error
-            );
-
-            selectedProducts = {};
+            selectedProducts =
+                JSON.parse(saved);
 
         }
+
+    } catch (error) {
+
+        console.error(
+            'Gagal membaca selection:',
+            error
+        );
+
+        selectedProducts = {};
+
+    }
+}
+
+
+/* ============================================================
+   SAVE STORAGE
+============================================================ */
+
+function saveSelectedProducts() {
+
+    try {
+
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(selectedProducts)
+        );
+
+    } catch (error) {
+
+        console.error(
+            'Gagal menyimpan selection:',
+            error
+        );
 
     }
 
+    updateSelectionIndicator();
+}
 
-    // ============================================================
-    // SAVE STORAGE
-    // ============================================================
 
-    function saveSelectedProducts() {
+/* ============================================================
+   INDIKATOR
+============================================================ */
 
-        try {
+function updateSelectionIndicator() {
 
-            localStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify(selectedProducts)
-            );
+    const indicator =
+        document.getElementById(
+            'selectionIndicator'
+        );
 
-        } catch (error) {
+    const countElement =
+        document.getElementById(
+            'selectedCount'
+        );
 
-            console.error(
-                'Gagal menyimpan selection:',
-                error
-            );
-
-        }
-
-        updateSelectionIndicator();
-
+    if (!indicator || !countElement) {
+        return;
     }
 
+    const count =
+        Object.keys(selectedProducts).length;
 
-    // ============================================================
-    // INDIKATOR
-    // ============================================================
+    countElement.textContent = count;
 
-    function updateSelectionIndicator() {
+    if (count > 0) {
 
-        const indicator =
-            document.getElementById(
-                'selectionIndicator'
-            );
+        indicator.style.setProperty(
+            'display',
+            'block',
+            'important'
+        );
 
-        const countElement =
-            document.getElementById(
-                'selectedCount'
-            );
+    } else {
 
-        if (!indicator || !countElement) {
-            return;
-        }
-
-        const count =
-            Object.keys(
-                selectedProducts
-            ).length;
-
-
-        countElement.textContent = count;
-
-
-        if (count > 0) {
-
-            indicator.style.setProperty(
-                'display',
-                'flex',
-                'important'
-            );
-
-        } else {
-
-            indicator.style.setProperty(
-                'display',
-                'none',
-                'important'
-            );
-
-        }
+        indicator.style.setProperty(
+            'display',
+            'none',
+            'important'
+        );
 
     }
+}
 
 
-    // ============================================================
-    // GET DATA PRODUK DI HALAMAN
-    // ============================================================
+/* ============================================================
+   DATA PRODUK
+============================================================ */
 
-    function getProductData(kodeBarang) {
+function getProductData(kodeBarang) {
 
-        const jumlah =
-            document.getElementById(
-                'jumlah_' + kodeBarang
-            );
+    const jumlah =
+        document.getElementById(
+            'jumlah_' + kodeBarang
+        );
 
-        const satuan =
-            document.getElementById(
-                'satuan_terkecil_' + kodeBarang
-            );
+    const satuan =
+        document.getElementById(
+            'satuan_terkecil_' + kodeBarang
+        );
 
-        const sumber =
-            document.getElementById(
-                'tipe_relasi_' + kodeBarang
-            );
+    const sumber =
+        document.getElementById(
+            'tipe_relasi_' + kodeBarang
+        );
 
-        const suplier =
-            document.getElementById(
-                'id_suplier_text_' + kodeBarang
-            );
+    const suplier =
+        document.getElementById(
+            'id_suplier_text_' + kodeBarang
+        );
 
-        const pelanggan =
-            document.getElementById(
-                'id_pelanggan_text_' + kodeBarang
-            );
+    const pelanggan =
+        document.getElementById(
+            'id_pelanggan_text_' + kodeBarang
+        );
 
 
-        return {
+    return {
 
-            jumlah:
-                jumlah
-                    ? jumlah.value
-                    : '',
+        jumlah: jumlah
+            ? jumlah.value
+            : '',
 
-            satuan_terkecil:
-                satuan
-                    ? satuan.value
-                    : '',
+        satuan_terkecil: satuan
+            ? satuan.value
+            : '',
 
-            tipe_relasi:
-                sumber
-                    ? sumber.value
-                    : '',
+        tipe_relasi: sumber
+            ? sumber.value
+            : '',
 
-            id_suplier_text:
-                suplier
-                    ? suplier.value
-                    : '',
+        id_suplier_text: suplier
+            ? suplier.value
+            : '',
 
-            id_pelanggan_text:
-                pelanggan
-                    ? pelanggan.value
-                    : ''
+        id_pelanggan_text: pelanggan
+            ? pelanggan.value
+            : ''
 
-        };
+    };
 
+}
+
+
+/* ============================================================
+   SAVE DATA PRODUK
+============================================================ */
+
+function saveProductData(kodeBarang) {
+
+    const checkbox =
+        document.getElementById(
+            'product_' + kodeBarang
+        );
+
+    if (!checkbox || !checkbox.checked) {
+        return;
     }
 
+    selectedProducts[kodeBarang] =
+        getProductData(kodeBarang);
 
-    // ============================================================
-    // SAVE DATA PRODUK
-    // ============================================================
+    saveProductDataStorage = saveSelectedProducts();
 
-    function saveProductData(kodeBarang) {
+}
 
-        const checkbox =
-            document.getElementById(
-                'product_' + kodeBarang
-            );
 
-        if (!checkbox || !checkbox.checked) {
-            return;
-        }
+/* ============================================================
+   SELECT2 PELANGGAN
+============================================================ */
 
+function initPelangganSelect() {
 
-        selectedProducts[kodeBarang] =
-            getProductData(kodeBarang);
+    $('.pelanggan-select-search').each(function () {
 
-
-        saveSelectedProducts();
-
-    }
-
-
-    // ============================================================
-    // TOGGLE CHECKBOX
-    // ============================================================
-
-    function toggleCheckbox(kodeBarang) {
-
-        const checkbox =
-            document.getElementById(
-                'product_' + kodeBarang
-            );
-
-        if (!checkbox) {
-            return;
-        }
-
-
-        const checked =
-            checkbox.checked;
-
-
-        const jumlah =
-            document.getElementById(
-                'jumlah_' + kodeBarang
-            );
-
-        const satuan =
-            document.getElementById(
-                'satuan_terkecil_' + kodeBarang
-            );
-
-        const sumber =
-            document.getElementById(
-                'tipe_relasi_' + kodeBarang
-            );
-
-        const suplier =
-            document.getElementById(
-                'id_suplier_text_' + kodeBarang
-            );
-
-        const pelanggan =
-            document.getElementById(
-                'id_pelanggan_text_' + kodeBarang
-            );
-
-
-        // ========================================================
-        // CENTANG
-        // ========================================================
-
-        if (checked) {
-
-            if (!selectedProducts[kodeBarang]) {
-
-                selectedProducts[kodeBarang] = {
-
-                    jumlah: '',
-
-                    satuan_terkecil: '',
-
-                    tipe_relasi:
-                        sumber
-                            ? sumber.value
-                            : '',
-
-                    id_suplier_text: '',
-
-                    id_pelanggan_text: ''
-
-                };
-
-            }
-
-
-            if (jumlah) {
-
-                jumlah.disabled = false;
-
-            }
-
-
-            if (satuan) {
-
-                satuan.disabled = false;
-
-            }
-
-
-            if (sumber) {
-
-                if (
-                    !sumber.hasAttribute(
-                        'data-always-disabled'
-                    )
-                ) {
-
-                    sumber.disabled = false;
-
-                }
-
-            }
-
-
-            saveProductData(kodeBarang);
-
-            toggleSumber(kodeBarang);
-
-        }
-
-
-        // ========================================================
-        // UNCHECK
-        // ========================================================
-
-        else {
-
-            delete selectedProducts[kodeBarang];
-
-
-            if (jumlah) {
-
-                jumlah.value = '';
-
-                jumlah.disabled = true;
-
-            }
-
-
-            if (satuan) {
-
-                satuan.value = '';
-
-                satuan.disabled = true;
-
-            }
-
-
-            if (sumber) {
-
-                if (
-                    !sumber.hasAttribute(
-                        'data-always-disabled'
-                    )
-                ) {
-
-                    sumber.value = '';
-
-                    sumber.disabled = true;
-
-                }
-
-            }
-
-
-            if (suplier) {
-
-                suplier.value = '';
-
-                suplier.disabled = true;
-
-            }
-
-
-            if (pelanggan) {
-
-                pelanggan.value = '';
-
-                pelanggan.disabled = true;
-
-            }
-
-
-            saveSelectedProducts();
-
-        }
-
-    }
-
-
-    // ============================================================
-    // TOGGLE SUMBER
-    // ============================================================
-
-    function toggleSumber(kodeBarang) {
-
-        const sumber =
-            document.getElementById(
-                'tipe_relasi_' + kodeBarang
-            );
-
-        const suplier =
-            document.getElementById(
-                'id_suplier_text_' + kodeBarang
-            );
-
-        const pelanggan =
-            document.getElementById(
-                'id_pelanggan_text_' + kodeBarang
-            );
-
-        const checkbox =
-            document.getElementById(
-                'product_' + kodeBarang
-            );
-
-
-        if (!sumber || !checkbox) {
-            return;
-        }
-
-
-        // Reset supplier & pelanggan
-
-        if (suplier) {
-
-            suplier.disabled = true;
-
-        }
-
-
-        if (pelanggan) {
-
-            pelanggan.disabled = true;
-
-        }
-
-
-        if (!checkbox.checked) {
-            return;
-        }
-
-
-        // Supplier
+        const select = $(this);
 
         if (
-            sumber.value === 'suplier' &&
-            suplier
+            select.hasClass(
+                'select2-hidden-accessible'
+            )
         ) {
-
-            suplier.disabled = false;
-
-        }
-
-
-        // Pelanggan
-
-        else if (
-            sumber.value === 'pelanggan' &&
-            pelanggan
-        ) {
-
-            pelanggan.disabled = false;
-
-        }
-
-
-        saveProductData(kodeBarang);
-
-    }
-
-
-    // ============================================================
-    // RESTORE PRODUCT
-    // ============================================================
-
-    function restoreProduct(kodeBarang) {
-
-        const data =
-            selectedProducts[kodeBarang];
-
-        if (!data) {
             return;
         }
 
+        select.select2({
+            theme: 'bootstrap-5', 
+            width: '100%',
 
-        const checkbox =
-            document.getElementById(
-                'product_' + kodeBarang
-            );
+            placeholder:
+                '-- Pilih Pelanggan --',
 
-        const jumlah =
-            document.getElementById(
-                'jumlah_' + kodeBarang
-            );
+            allowClear: true,
 
-        const satuan =
-            document.getElementById(
-                'satuan_terkecil_' + kodeBarang
-            );
+            minimumInputLength: 2,
 
-        const sumber =
-            document.getElementById(
-                'tipe_relasi_' + kodeBarang
-            );
+            ajax: {
 
-        const suplier =
-            document.getElementById(
-                'id_suplier_text_' + kodeBarang
-            );
+                url:
+                    '<?= base_url('pelanggan/search') ?>',
 
-        const pelanggan =
-            document.getElementById(
-                'id_pelanggan_text_' + kodeBarang
-            );
+                dataType: 'json',
+
+                delay: 300,
+
+                data: function (params) {
+
+                    return {
+                        q: params.term
+                    };
+
+                },
+
+                processResults: function (data) {
+
+                    return {
+                        results: data
+                    };
+
+                },
+
+                cache: true
+
+            }
+
+        });
 
 
-        if (checkbox) {
+        /*
+        ========================================================
+        EVENT SELECT2
+        ========================================================
+        */
 
-            checkbox.checked = true;
+        select.on(
+            'change',
+            function () {
+
+                const kodeBarang =
+                    getKodeBarangFromId(
+                        this.id
+                    );
+
+                if (!kodeBarang) {
+                    return;
+                }
+
+                saveProductData(
+                    kodeBarang
+                );
+
+            }
+        );
+
+    });
+
+}
+
+
+/* ============================================================
+   TOGGLE CHECKBOX
+============================================================ */
+
+function toggleCheckbox(kodeBarang) {
+
+    const checkbox =
+        document.getElementById(
+            'product_' + kodeBarang
+        );
+
+    if (!checkbox) {
+        return;
+    }
+
+    const checked =
+        checkbox.checked;
+
+    const jumlah =
+        document.getElementById(
+            'jumlah_' + kodeBarang
+        );
+
+    const satuan =
+        document.getElementById(
+            'satuan_terkecil_' + kodeBarang
+        );
+
+    const sumber =
+        document.getElementById(
+            'tipe_relasi_' + kodeBarang
+        );
+
+    const suplier =
+        document.getElementById(
+            'id_suplier_text_' + kodeBarang
+        );
+
+    const pelanggan =
+        document.getElementById(
+            'id_pelanggan_text_' + kodeBarang
+        );
+
+
+    /* ========================================================
+       CENTANG
+    ======================================================== */
+
+    if (checked) {
+
+        if (!selectedProducts[kodeBarang]) {
+
+            selectedProducts[kodeBarang] = {
+
+                jumlah: '',
+
+                satuan_terkecil: '',
+
+                tipe_relasi:
+                    sumber
+                        ? sumber.value
+                        : '',
+
+                id_suplier_text: '',
+
+                id_pelanggan_text: ''
+
+            };
 
         }
 
 
         if (jumlah) {
-
             jumlah.disabled = false;
-
-            jumlah.value =
-                data.jumlah ?? '';
-
         }
 
-
         if (satuan) {
-
             satuan.disabled = false;
-
-            satuan.value =
-                data.satuan_terkecil ?? '';
-
         }
 
 
         if (sumber) {
 
-            sumber.value =
-                data.tipe_relasi ?? '';
-
-
             if (
-                sumber.hasAttribute(
+                !sumber.hasAttribute(
                     'data-always-disabled'
                 )
             ) {
-
-                sumber.disabled = true;
-
-            } else {
 
                 sumber.disabled = false;
 
@@ -1439,546 +1548,959 @@
         }
 
 
+        saveProductData(
+            kodeBarang
+        );
+
+        toggleSumber(
+            kodeBarang
+        );
+
+    }
+
+
+    /* ========================================================
+       UNCHECK
+    ======================================================== */
+
+    else {
+
+        delete selectedProducts[
+            kodeBarang
+        ];
+
+
+        if (jumlah) {
+
+            jumlah.value = '';
+
+            jumlah.disabled = true;
+
+        }
+
+
+        if (satuan) {
+
+            satuan.value = '';
+
+            satuan.disabled = true;
+
+        }
+
+
+        if (sumber) {
+
+            if (
+                !sumber.hasAttribute(
+                    'data-always-disabled'
+                )
+            ) {
+
+                sumber.value = '';
+
+                sumber.disabled = true;
+
+            }
+
+        }
+
+
         if (suplier) {
 
-            suplier.value =
-                data.id_suplier_text ?? '';
+            suplier.value = '';
+
+            suplier.disabled = true;
 
         }
 
 
         if (pelanggan) {
 
-            pelanggan.value =
-                data.id_pelanggan_text ?? '';
+            $(pelanggan)
+                .val(null)
+                .trigger('change');
+
+            pelanggan.disabled = true;
+
+            $(pelanggan)
+                .prop('disabled', true);
 
         }
 
 
-        toggleSumber(kodeBarang);
+        saveSelectedProducts();
+
+    }
+
+}
+
+
+/* ============================================================
+   TOGGLE SUMBER
+============================================================ */
+
+function toggleSumber(kodeBarang) {
+
+    const sumber =
+        document.getElementById(
+            'tipe_relasi_' + kodeBarang
+        );
+
+    const suplier =
+        document.getElementById(
+            'id_suplier_text_' + kodeBarang
+        );
+
+    const pelanggan =
+        document.getElementById(
+            'id_pelanggan_text_' + kodeBarang
+        );
+
+    const checkbox =
+        document.getElementById(
+            'product_' + kodeBarang
+        );
+
+
+    if (!sumber || !checkbox) {
+        return;
+    }
+
+
+    /* Reset */
+
+    if (suplier) {
+
+        suplier.disabled = true;
 
     }
 
 
-    // ============================================================
-    // GET KODE BARANG DARI ID INPUT
-    // ============================================================
+    if (pelanggan) {
 
-    function getKodeBarangFromId(id) {
+        $(pelanggan)
+            .prop('disabled', true);
 
-        const prefixes = [
-
-            'jumlah_',
-
-            'satuan_terkecil_',
-
-            'tipe_relasi_',
-
-            'id_suplier_text_',
-
-            'id_pelanggan_text_'
-
-        ];
+    }
 
 
-        for (
-            const prefix of prefixes
-        ) {
+    if (!checkbox.checked) {
+        return;
+    }
+
+
+    /* Supplier */
+
+    if (
+        sumber.value === 'suplier' &&
+        suplier
+    ) {
+
+        suplier.disabled = false;
+
+    }
+
+
+    /* Pelanggan */
+
+    else if (
+        sumber.value === 'pelanggan' &&
+        pelanggan
+    ) {
+
+        $(pelanggan)
+            .prop('disabled', false);
+
+    }
+
+
+    saveProductData(
+        kodeBarang
+    );
+
+}
+
+
+/* ============================================================
+   RESTORE PELANGGAN
+============================================================ */
+
+function restorePelanggan(
+    kodeBarang,
+    pelangganId
+) {
+
+    const pelanggan =
+        document.getElementById(
+            'id_pelanggan_text_' + kodeBarang
+        );
+
+    if (
+        !pelanggan ||
+        !pelangganId
+    ) {
+        return;
+    }
+
+
+    $.ajax({
+
+        url:
+            '<?= base_url('pelanggan/search') ?>',
+
+        type: 'GET',
+
+        dataType: 'json',
+
+        data: {
+            search: pelangganId
+        },
+
+        success: function (data) {
+
+            const pelangganData =
+                data.find(function (item) {
+
+                    return String(item.id) ===
+                        String(pelangganId);
+
+                });
+
+
+            if (!pelangganData) {
+                return;
+            }
+
 
             if (
-                id.startsWith(prefix)
+                $(pelanggan)
+                    .find(
+                        'option[value="' +
+                        pelangganData.id +
+                        '"]'
+                    ).length === 0
             ) {
 
-                return id.substring(
-                    prefix.length
-                );
+                const option =
+                    new Option(
+                        pelangganData.text,
+                        pelangganData.id,
+                        true,
+                        true
+                    );
+
+                $(pelanggan)
+                    .append(option);
 
             }
 
+
+            $(pelanggan)
+                .val(pelangganData.id)
+                .trigger('change');
+
+        },
+
+        error: function (xhr) {
+
+            console.error(
+                'Gagal restore pelanggan:',
+                xhr.responseText
+            );
+
         }
 
+    });
 
-        return null;
+}
+
+
+/* ============================================================
+   RESTORE PRODUCT
+============================================================ */
+
+function restoreProduct(kodeBarang) {
+
+    const data =
+        selectedProducts[kodeBarang];
+
+    if (!data) {
+        return;
+    }
+
+
+    const checkbox =
+        document.getElementById(
+            'product_' + kodeBarang
+        );
+
+    const jumlah =
+        document.getElementById(
+            'jumlah_' + kodeBarang
+        );
+
+    const satuan =
+        document.getElementById(
+            'satuan_terkecil_' + kodeBarang
+        );
+
+    const sumber =
+        document.getElementById(
+            'tipe_relasi_' + kodeBarang
+        );
+
+    const suplier =
+        document.getElementById(
+            'id_suplier_text_' + kodeBarang
+        );
+
+    const pelanggan =
+        document.getElementById(
+            'id_pelanggan_text_' + kodeBarang
+        );
+
+
+    if (checkbox) {
+
+        checkbox.checked = true;
 
     }
 
 
-    // ============================================================
-    // BIND INPUT
-    // ============================================================
+    if (jumlah) {
 
-    function bindProductInputs() {
+        jumlah.disabled = false;
 
-        document
-            .querySelectorAll(
-                '.product-input'
+        jumlah.value =
+            data.jumlah ?? '';
+
+    }
+
+
+    if (satuan) {
+
+        satuan.disabled = false;
+
+        satuan.value =
+            data.satuan_terkecil ?? '';
+
+    }
+
+
+    if (sumber) {
+
+        sumber.value =
+            data.tipe_relasi ?? '';
+
+
+        if (
+            sumber.hasAttribute(
+                'data-always-disabled'
             )
-            .forEach(function(input) {
+        ) {
 
-                input.addEventListener(
-                    'input',
-                    function() {
+            sumber.disabled = true;
 
-                        const kodeBarang =
-                            getKodeBarangFromId(
-                                input.id
-                            );
+        } else {
 
+            sumber.disabled = false;
 
-                        if (kodeBarang) {
+        }
 
-                            saveProductData(
-                                kodeBarang
-                            );
-
-                        }
-
-                    }
-                );
+    }
 
 
-                input.addEventListener(
-                    'change',
-                    function() {
+    if (suplier) {
 
-                        const kodeBarang =
-                            getKodeBarangFromId(
-                                input.id
-                            );
+        suplier.value =
+            data.id_suplier_text ?? '';
+
+    }
 
 
-                        if (!kodeBarang) {
-                            return;
-                        }
+    if (
+        data.id_pelanggan_text
+    ) {
 
+        restorePelanggan(
+            kodeBarang,
+            data.id_pelanggan_text
+        );
+
+    }
+
+
+    toggleSumber(
+        kodeBarang
+    );
+
+}
+
+
+/* ============================================================
+   GET KODE BARANG
+============================================================ */
+
+function getKodeBarangFromId(id) {
+
+    const prefixes = [
+
+        'jumlah_',
+
+        'satuan_terkecil_',
+
+        'tipe_relasi_',
+
+        'id_suplier_text_',
+
+        'id_pelanggan_text_'
+
+    ];
+
+
+    for (
+        const prefix of prefixes
+    ) {
+
+        if (
+            id.startsWith(prefix)
+        ) {
+
+            return id.substring(
+                prefix.length
+            );
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+/* ============================================================
+   BIND INPUT
+============================================================ */
+
+function bindProductInputs() {
+
+    document
+        .querySelectorAll(
+            '.product-input'
+        )
+        .forEach(function (input) {
+
+
+            input.addEventListener(
+                'input',
+                function () {
+
+                    const kodeBarang =
+                        getKodeBarangFromId(
+                            input.id
+                        );
+
+                    if (kodeBarang) {
 
                         saveProductData(
                             kodeBarang
                         );
 
-
-                        if (
-                            input.id.startsWith(
-                                'tipe_relasi_'
-                            )
-                        ) {
-
-                            toggleSumber(
-                                kodeBarang
-                            );
-
-                        }
-
                     }
-                );
-
-            });
-
-    }
-
-
-    // ============================================================
-    // RESTORE CURRENT PAGE
-    // ============================================================
-
-    function restoreCurrentPage() {
-
-        document
-            .querySelectorAll(
-                '.product-checkbox'
-            )
-            .forEach(function(checkbox) {
-
-                const kodeBarang =
-                    checkbox.value;
-
-
-                if (
-                    selectedProducts[
-                        kodeBarang
-                    ]
-                ) {
-
-                    restoreProduct(
-                        kodeBarang
-                    );
 
                 }
-
-            });
-
-
-        bindProductInputs();
-
-
-        updateSelectionIndicator();
-
-    }
-
-
-    // ============================================================
-    // CLEAR ALL SELECTION
-    // ============================================================
-
-    const clearButton =
-        document.getElementById(
-            'clearSelection'
-        );
-
-
-    if (clearButton) {
-
-        clearButton.addEventListener(
-            'click',
-            function() {
-
-                const confirmed =
-                    confirm(
-                        'Batalkan semua barang yang sudah dipilih?'
-                    );
-
-
-                if (!confirmed) {
-                    return;
-                }
-
-
-                selectedProducts = {};
-
-
-                localStorage.removeItem(
-                    STORAGE_KEY
-                );
-
-
-                document
-                    .querySelectorAll(
-                        '.product-checkbox'
-                    )
-                    .forEach(function(checkbox) {
-
-                        checkbox.checked =
-                            false;
-
-
-                        const kodeBarang =
-                            checkbox.value;
-
-
-                        const jumlah =
-                            document.getElementById(
-                                'jumlah_' +
-                                kodeBarang
-                            );
-
-                        const satuan =
-                            document.getElementById(
-                                'satuan_terkecil_' +
-                                kodeBarang
-                            );
-
-                        const sumber =
-                            document.getElementById(
-                                'tipe_relasi_' +
-                                kodeBarang
-                            );
-
-                        const suplier =
-                            document.getElementById(
-                                'id_suplier_text_' +
-                                kodeBarang
-                            );
-
-                        const pelanggan =
-                            document.getElementById(
-                                'id_pelanggan_text_' +
-                                kodeBarang
-                            );
-
-
-                        if (jumlah) {
-
-                            jumlah.value = '';
-
-                            jumlah.disabled =
-                                true;
-
-                        }
-
-
-                        if (satuan) {
-
-                            satuan.value = '';
-
-                            satuan.disabled =
-                                true;
-
-                        }
-
-
-                        if (sumber) {
-
-                            if (
-                                !sumber.hasAttribute(
-                                    'data-always-disabled'
-                                )
-                            ) {
-
-                                sumber.value =
-                                    '';
-
-                                sumber.disabled =
-                                    true;
-
-                            }
-
-                        }
-
-
-                        if (suplier) {
-
-                            suplier.value =
-                                '';
-
-                            suplier.disabled =
-                                true;
-
-                        }
-
-
-                        if (pelanggan) {
-
-                            pelanggan.value =
-                                '';
-
-                            pelanggan.disabled =
-                                true;
-
-                        }
-
-                    });
-
-
-                updateSelectionIndicator();
-
-            }
-        );
-
-    }
-
-
-    // ============================================================
-    // CREATE HIDDEN INPUT
-    // ============================================================
-
-    function createHiddenInput(
-        form,
-        name,
-        value
-    ) {
-
-        const input =
-            document.createElement(
-                'input'
             );
 
 
-        input.type = 'hidden';
+            input.addEventListener(
+                'blur',
+                function () {
 
-        input.name = name;
+                    const kodeBarang =
+                        getKodeBarangFromId(
+                            input.id
+                        );
 
-        input.value = value;
+                    if (kodeBarang) {
 
-        input.className =
-            'generated-selection-input';
-
-
-        form.appendChild(
-            input
-        );
-
-    }
-
-
-    // ============================================================
-    // SUBMIT FORM
-    // ============================================================
-
-    const stokAwalForm =
-        document.getElementById(
-            'stokAwalForm'
-        );
-
-
-    if (stokAwalForm) {
-
-        stokAwalForm.addEventListener(
-            'submit',
-            function(event) {
-
-                const form = this;
-
-
-                // Hapus hidden input lama
-
-                form
-                    .querySelectorAll(
-                        '.generated-selection-input'
-                    )
-                    .forEach(function(input) {
-
-                        input.remove();
-
-                    });
-
-
-                const selectedIds =
-                    Object.keys(
-                        selectedProducts
-                    );
-
-
-                // Tidak ada barang
-
-                if (
-                    selectedIds.length === 0
-                ) {
-
-                    event.preventDefault();
-
-                    alert(
-                        'Tidak ada produk yang dipilih.'
-                    );
-
-                    return;
-
-                }
-
-
-                // ==================================================
-                // GENERATE HIDDEN INPUT
-                // ==================================================
-
-                selectedIds.forEach(
-                    function(kodeBarang) {
-
-                        const data =
-                            selectedProducts[
-                                kodeBarang
-                            ];
-
-
-                        // selected_products[]
-
-                        createHiddenInput(
-                            form,
-                            'selected_products[]',
+                        saveProductData(
                             kodeBarang
                         );
 
+                    }
 
-                        // jumlah[]
+                }
+            );
 
-                        createHiddenInput(
-                            form,
-                            'jumlah[' +
-                            kodeBarang +
-                            ']',
-                            data.jumlah ??
-                            ''
+
+            input.addEventListener(
+                'change',
+                function () {
+
+                    const kodeBarang =
+                        getKodeBarangFromId(
+                            input.id
                         );
 
-
-                        // satuan_terkecil[]
-
-                        createHiddenInput(
-                            form,
-                            'satuan_terkecil[' +
-                            kodeBarang +
-                            ']',
-                            data.satuan_terkecil ??
-                            ''
-                        );
+                    if (!kodeBarang) {
+                        return;
+                    }
 
 
-                        // tipe_relasi[]
-
-                        createHiddenInput(
-                            form,
-                            'tipe_relasi[' +
-                            kodeBarang +
-                            ']',
-                            data.tipe_relasi ??
-                            ''
-                        );
+                    saveProductData(
+                        kodeBarang
+                    );
 
 
-                        // supplier
+                    if (
+                        input.id.startsWith(
+                            'tipe_relasi_'
+                        )
+                    ) {
 
-                        createHiddenInput(
-                            form,
-                            'id_suplier_text[' +
-                            kodeBarang +
-                            ']',
-                            data.id_suplier_text ??
-                            ''
-                        );
-
-
-                        // pelanggan
-
-                        createHiddenInput(
-                            form,
-                            'id_pelanggan_text[' +
-                            kodeBarang +
-                            ']',
-                            data.id_pelanggan_text ??
-                            ''
+                        toggleSumber(
+                            kodeBarang
                         );
 
                     }
-                );
+
+                }
+            );
+
+        });
+
+}
 
 
-                // Hapus state setelah hidden input
-                // berhasil dibuat.
+/* ============================================================
+   RESTORE CURRENT PAGE
+============================================================ */
 
-                localStorage.removeItem(
-                    STORAGE_KEY
+function restoreCurrentPage() {
+
+    document
+        .querySelectorAll(
+            '.product-checkbox'
+        )
+        .forEach(function (checkbox) {
+
+            const kodeBarang =
+                checkbox.value;
+
+
+            if (
+                selectedProducts[
+                    kodeBarang
+                ]
+            ) {
+
+                restoreProduct(
+                    kodeBarang
                 );
 
             }
-        );
-
-    }
-
-
-    // ============================================================
-    // INITIALIZE
-    // ============================================================
-
-    loadSelectedProducts();
-
-
-    $(document).ready(function() {
-
-        $('#table_barang').DataTable({
-
-            responsive: true,
-
-            autoWidth: false,
-
-            paging: false,
-
-            searching: false,
-
-            info: false
 
         });
 
 
-        restoreCurrentPage();
+    bindProductInputs();
+
+    updateSelectionIndicator();
+
+}
+
+
+/* ============================================================
+   CLEAR ALL
+============================================================ */
+
+const openCancelModalBtn =
+    document.getElementById(
+        'openCancelModalBtn'
+    );
+
+const confirmClearSelectionBtn =
+    document.getElementById(
+        'confirmClearSelectionBtn'
+    );
+
+
+if (openCancelModalBtn) {
+
+    openCancelModalBtn.addEventListener(
+        'click',
+        function () {
+
+            const modalElement =
+                document.getElementById(
+                    'cancelConfirmModal'
+                );
+
+            if (
+                modalElement &&
+                typeof bootstrap !== 'undefined'
+            ) {
+
+                const modal =
+                    new bootstrap.Modal(
+                        modalElement
+                    );
+
+                modal.show();
+
+            }
+
+        }
+    );
+
+}
+
+
+if (confirmClearSelectionBtn) {
+
+    confirmClearSelectionBtn.addEventListener(
+        'click',
+        function () {
+
+
+            selectedProducts = {};
+
+            localStorage.removeItem(
+                STORAGE_KEY
+            );
+
+
+            document
+                .querySelectorAll(
+                    '.product-checkbox'
+                )
+                .forEach(function (checkbox) {
+
+
+                    checkbox.checked =
+                        false;
+
+
+                    const kodeBarang =
+                        checkbox.value;
+
+
+                    const jumlah =
+                        document.getElementById(
+                            'jumlah_' +
+                            kodeBarang
+                        );
+
+                    const satuan =
+                        document.getElementById(
+                            'satuan_terkecil_' +
+                            kodeBarang
+                        );
+
+                    const sumber =
+                        document.getElementById(
+                            'tipe_relasi_' +
+                            kodeBarang
+                        );
+
+                    const suplier =
+                        document.getElementById(
+                            'id_suplier_text_' +
+                            kodeBarang
+                        );
+
+                    const pelanggan =
+                        document.getElementById(
+                            'id_pelanggan_text_' +
+                            kodeBarang
+                        );
+
+
+                    if (jumlah) {
+
+                        jumlah.value = '';
+
+                        jumlah.disabled =
+                            true;
+
+                    }
+
+
+                    if (satuan) {
+
+                        satuan.value = '';
+
+                        satuan.disabled =
+                            true;
+
+                    }
+
+
+                    if (sumber) {
+
+                        if (
+                            !sumber.hasAttribute(
+                                'data-always-disabled'
+                            )
+                        ) {
+
+                            sumber.value = '';
+
+                            sumber.disabled =
+                                true;
+
+                        }
+
+                    }
+
+
+                    if (suplier) {
+
+                        suplier.value = '';
+
+                        suplier.disabled =
+                            true;
+
+                    }
+
+
+                    if (pelanggan) {
+
+                        $(pelanggan)
+                            .val(null)
+                            .trigger('change');
+
+                        $(pelanggan)
+                            .prop(
+                                'disabled',
+                                true
+                            );
+
+                    }
+
+                });
+
+
+            updateSelectionIndicator();
+
+
+            const modalElement =
+                document.getElementById(
+                    'cancelConfirmModal'
+                );
+
+            if (
+                modalElement &&
+                typeof bootstrap !== 'undefined'
+            ) {
+
+                const modal =
+                    bootstrap.Modal.getInstance(
+                        modalElement
+                    );
+
+                if (modal) {
+
+                    modal.hide();
+
+                }
+
+            }
+
+        }
+    );
+
+}
+
+
+/* ============================================================
+   CREATE HIDDEN INPUT
+============================================================ */
+
+function createHiddenInput(
+    form,
+    name,
+    value
+) {
+
+    const input =
+        document.createElement(
+            'input'
+        );
+
+
+    input.type = 'hidden';
+
+    input.name = name;
+
+    input.value = value;
+
+    input.className =
+        'generated-selection-input';
+
+
+    form.appendChild(
+        input
+    );
+
+}
+
+
+/* ============================================================
+   SUBMIT FORM
+============================================================ */
+
+const stokAwalForm =
+    document.getElementById(
+        'stokAwalForm'
+    );
+
+
+if (stokAwalForm) {
+
+    stokAwalForm.addEventListener(
+        'submit',
+        function (event) {
+
+            const form = this;
+
+
+            form
+                .querySelectorAll(
+                    '.generated-selection-input'
+                )
+                .forEach(function (input) {
+
+                    input.remove();
+
+                });
+
+
+            const selectedIds =
+                Object.keys(
+                    selectedProducts
+                );
+
+
+            if (
+                selectedIds.length === 0
+            ) {
+
+                event.preventDefault();
+
+                alert(
+                    'Tidak ada produk yang dipilih.'
+                );
+
+                return;
+
+            }
+
+
+            selectedIds.forEach(
+                function (kodeBarang) {
+
+                    const data =
+                        selectedProducts[
+                            kodeBarang
+                        ];
+
+
+                    createHiddenInput(
+                        form,
+                        'selected_products[]',
+                        kodeBarang
+                    );
+
+
+                    createHiddenInput(
+                        form,
+                        'jumlah[' +
+                        kodeBarang +
+                        ']',
+                        data.jumlah ?? ''
+                    );
+
+
+                    createHiddenInput(
+                        form,
+                        'satuan_terkecil[' +
+                        kodeBarang +
+                        ']',
+                        data.satuan_terkecil ?? ''
+                    );
+
+
+                    createHiddenInput(
+                        form,
+                        'tipe_relasi[' +
+                        kodeBarang +
+                        ']',
+                        data.tipe_relasi ?? ''
+                    );
+
+
+                    createHiddenInput(
+                        form,
+                        'id_suplier_text[' +
+                        kodeBarang +
+                        ']',
+                        data.id_suplier_text ?? ''
+                    );
+
+
+                    createHiddenInput(
+                        form,
+                        'id_pelanggan_text[' +
+                        kodeBarang +
+                        ']',
+                        data.id_pelanggan_text ?? ''
+                    );
+
+                }
+            );
+
+
+            localStorage.removeItem(
+                STORAGE_KEY
+            );
+
+        }
+    );
+
+}
+
+
+/* ============================================================
+   INITIALIZE
+============================================================ */
+
+loadSelectedProducts();
+
+
+$(document).ready(function () {
+
+    $('#table_barang').DataTable({
+
+        responsive: true,
+
+        autoWidth: false,
+
+        paging: false,
+
+        searching: false,
+
+        info: false
 
     });
+
+
+    initPelangganSelect();
+
+    restoreCurrentPage();
+
+});
 
 </script>

@@ -17,9 +17,7 @@ use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
 
 class Pelanggan extends BaseController
-
 {
-
     protected $PhoneModel;
     protected $PelangganModel;
     protected $AuthModel;
@@ -37,14 +35,14 @@ class Pelanggan extends BaseController
 
     public function index()
     {
-        $akun =   $this->AuthModel->getById(session('ID_AKUN'));
-        $data =  array(
+        $akun = $this->AuthModel->getById(session('ID_AKUN'));
+        $data = [
             'akun' => $akun,
             'phone' => $this->PhoneModel->getPhone(),
-            'body'  => 'datamaster/pelanggan',
+            'body' => 'datamaster/pelanggan',
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'provinsi'  => $this->RegionModel->getProvinces()
-        );
+            'provinsi' => $this->RegionModel->getProvinces(),
+        ];
         return view('template', $data);
     }
 
@@ -57,7 +55,6 @@ class Pelanggan extends BaseController
         return $this->response->setJSON($data);
     }
 
-
     public function getKecamatan($kabupaten)
     {
         $kabupaten = urldecode($kabupaten);
@@ -67,33 +64,51 @@ class Pelanggan extends BaseController
         return $this->response->setJSON($data);
     }
 
+    public function searchPelanggan()
+    {
+        $keyword = trim($this->request->getGet('search') ?? $this->request->getGet('q') ?? '');
 
+        if ($keyword === '') {
+            return $this->response->setJSON([]);
+        }
 
+        $pelanggan = $this->PelangganModel->searchPelanggan($keyword, 20);
+        
+        $data = [];
+        foreach ($pelanggan as $row) {
+            $data[] = [
+                'id' => $row->id_pelanggan,
+                'text' => $row->nama
+            ];
+        }
+
+        return $this->response->setJSON($data);
+    }
 
     public function insert_pelanggan()
     {
-        $nik       = $this->request->getPost('nik');
-        $nama      = $this->request->getPost('nama');
-        $alamat    = $this->request->getPost('alamat');
-        $provinsi  = $this->request->getPost('provinsi');
+        $nik = $this->request->getPost('nik');
+        $nama = $this->request->getPost('nama');
+        $alamat = $this->request->getPost('alamat');
+        $provinsi = $this->request->getPost('provinsi');
         $kabupaten = $this->request->getPost('kabupaten');
         $kecamatan = $this->request->getPost('kecamatan');
-        $no_hp     = $this->request->getPost('no_hp');
-        $kategori  = $this->request->getPost('kategori');
-        $mengetahui_dari     = $this->request->getPost('mengetahui_dari');
+        $no_hp = $this->request->getPost('no_hp');
+        $kategori = $this->request->getPost('kategori');
+        $mengetahui_dari = $this->request->getPost('mengetahui_dari');
 
-        $data = array(
-            'nik'       => $nik,
-            'nama'      => $nama,
-            'alamat'    => $alamat,
-            'provinsi'  => $provinsi,
+        $data = [
+            'nik' => $nik,
+            'nama' => $nama,
+            'alamat' => $alamat,
+            'provinsi' => $provinsi,
             'kabupaten' => $kabupaten,
             'kecamatan' => $kecamatan,
-            'no_hp'     => $no_hp,
-            'kategori'  => $kategori,
-            'mengetahui_dari'  => $mengetahui_dari,
-            'deleted'   => '0'
-        );
+            'no_hp' => $no_hp,
+            'kategori' => $kategori,
+            'mengetahui_dari' => $mengetahui_dari,
+            'deleted' => '0',
+        ];
 
         $result = $this->PelangganModel->insert_Pelanggan($data);
         if ($result) {
@@ -102,32 +117,31 @@ class Pelanggan extends BaseController
         }
     }
 
-
     public function update_pelanggan()
     {
         $id_pelanggan = $this->request->getPost('id_pelanggan');
-        $nik          = $this->request->getPost('nik');
-        $nama         = $this->request->getPost('nama');
-        $alamat       = $this->request->getPost('alamat');
-        $provinsi     = $this->request->getPost('provinsi');
-        $kabupaten    = $this->request->getPost('kabupaten');
-        $kecamatan    = $this->request->getPost('kecamatan');
-        $no_hp        = $this->request->getPost('no_hp');
-        $kategori     = $this->request->getPost('kategori');
-        $mengetahui_dari     = $this->request->getPost('mengetahui_dari');
+        $nik = $this->request->getPost('nik');
+        $nama = $this->request->getPost('nama');
+        $alamat = $this->request->getPost('alamat');
+        $provinsi = $this->request->getPost('provinsi');
+        $kabupaten = $this->request->getPost('kabupaten');
+        $kecamatan = $this->request->getPost('kecamatan');
+        $no_hp = $this->request->getPost('no_hp');
+        $kategori = $this->request->getPost('kategori');
+        $mengetahui_dari = $this->request->getPost('mengetahui_dari');
 
-        $data = array(
-            'nik'       => $nik,
-            'nama'      => $nama,
-            'alamat'    => $alamat,
-            'provinsi'  => $provinsi,
+        $data = [
+            'nik' => $nik,
+            'nama' => $nama,
+            'alamat' => $alamat,
+            'provinsi' => $provinsi,
             'kabupaten' => $kabupaten,
             'kecamatan' => $kecamatan,
-            'no_hp'     => $no_hp,
-            'kategori'  => $kategori,
-            'mengetahui_dari'  => $mengetahui_dari,
-            'deleted'   => '0'
-        );
+            'no_hp' => $no_hp,
+            'kategori' => $kategori,
+            'mengetahui_dari' => $mengetahui_dari,
+            'deleted' => '0',
+        ];
 
         $result = $this->PelangganModel->update($id_pelanggan, $data);
         if ($result) {
@@ -136,13 +150,12 @@ class Pelanggan extends BaseController
         }
     }
 
-
     public function delete_pelanggan()
     {
         $id_pelanggan = $this->request->getPost('id_pelanggan');
-        $data = array(
-            'deleted' => '1'
-        );
+        $data = [
+            'deleted' => '1',
+        ];
         $result = $this->PelangganModel->update($id_pelanggan, $data);
         if ($result) {
             session()->setFlashdata('sukses', 'Data Berhasil Di Hapus');
@@ -186,7 +199,11 @@ class Pelanggan extends BaseController
         }
 
         // Border
-        $sheet->getStyle('A1:D' . ($row - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet
+            ->getStyle('A1:D' . ($row - 1))
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
 
         // Freeze header
         $sheet->freezePane('A2');
@@ -201,12 +218,11 @@ class Pelanggan extends BaseController
 
         $writer = new Xlsx($spreadsheet);
         $writer->save('php://output');
-        exit;
+        exit();
     }
 
     public function import_pelanggan()
     {
-
         $file = $this->request->getFile('file');
 
         // Load spreadsheet
@@ -224,8 +240,7 @@ class Pelanggan extends BaseController
             $alamat = addslashes($rows[$i][2]);
             $no_hp = addslashes($rows[$i][3]);
 
-
-            $sql = "INSERT INTO pelanggan (nik, nama, alamat, no_hp, deleted) 
+            $sql = "INSERT INTO pelanggan (nik, nama, alamat, no_hp, deleted)
                     VALUES ('$nik', '$nama', '$alamat', '$no_hp', '0')";
 
             $db->query($sql);
@@ -235,15 +250,14 @@ class Pelanggan extends BaseController
         return redirect()->to(base_url('/pelanggan'));
     }
 
-
     public function simpanPelanggan()
     {
         $data = $this->request->getPost();
 
         $insertData = [
-            'nik'             => $data['nik'], // sesuai permintaan
-            'nama'            => $data['nama'],
-            'no_hp'           => $data['no_hp'],
+            'nik' => $data['nik'], // sesuai permintaan
+            'nama' => $data['nama'],
+            'no_hp' => $data['no_hp'],
         ];
 
         $insertId = $this->PelangganModel->insert_Pelanggan($insertData);
@@ -253,25 +267,25 @@ class Pelanggan extends BaseController
                 'success' => true,
                 'data' => [
                     'id_pelanggan' => $insertId,
-                    'nama'         => $data['nama'],
-                    'no_hp'        => $data['no_hp'],
-                    'deleted'      => 0,
-                ]
+                    'nama' => $data['nama'],
+                    'no_hp' => $data['no_hp'],
+                    'deleted' => 0,
+                ],
             ]);
         }
 
         return $this->response->setJSON([
             'success' => false,
-            'message' => 'Gagal menyimpan data pelanggan'
+            'message' => 'Gagal menyimpan data pelanggan',
         ]);
     }
 
     public function riwayat_transaksi_pelanggan($id)
     {
-        $data = array(
+        $data = [
             'body' => 'riwayat/transaksi_pelanggan',
-            'transaksi' => $this->PenjualanModel->getByIdPelanggan($id)
-        );
+            'transaksi' => $this->PenjualanModel->getByIdPelanggan($id),
+        ];
         return view('template', $data);
     }
 }
