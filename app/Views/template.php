@@ -11,7 +11,6 @@
     <!-- Favicon icon-->
     <link rel="shortcut icon" type="image/png"
         href="<?php echo base_url('template/') ?><?= env('app.logo', 'assets/images/logo.png') ?>" />
-    <!-- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script> -->
 
     <!-- Core Css -->
     <link rel="stylesheet" href="<?php echo base_url('template/') ?>assets/css/styles.css" />
