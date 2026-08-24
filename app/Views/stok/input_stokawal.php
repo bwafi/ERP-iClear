@@ -14,139 +14,105 @@
 >
 
 <style>
-
 /* ==========================================================
-   SELECT2 — SAMAKAN DENGAN BOOTSTRAP .form-select
+   SELECT2 — SAMA DENGAN BOOTSTRAP .form-select
 ========================================================== */
 
-.pelanggan-select-search {
-    --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
-
-    display: block;
-    width: 100%;
-    padding: 8px 48px 8px 16px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    line-height: 1.5;
-    color: var(--bs-body-color);
-
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-
-    background-color: transparent;
-    background-image:
-        var(--bs-form-select-bg-img),
-        var(--bs-form-select-bg-icon, none);
-
-    background-repeat: no-repeat;
-    background-position: right 16px center;
-    background-size: 16px 12px;
-
-    border: var(--bs-border-width) solid #aebcc3;
-    border-radius: 0.5rem;
-
-    box-shadow: unset;
-
-    transition:
-        border-color 0.15s ease-in-out,
-        box-shadow 0.15s ease-in-out;
-}
-
-
-/* ==========================================================
-   SELECT2 CONTAINER
-========================================================== */
-
-.select2-container {
+.pelanggan-select-search + .select2-container {
     width: 100% !important;
 }
 
 
 /* ==========================================================
-   SELECT2 SELECTION
+   CONTAINER
 ========================================================== */
 
-.select2-container .select2-selection--single {
-    height: 38px !important;
+.pelanggan-select-search
+    + .select2-container
+    .select2-selection--single {
+
+    display: block !important;
+
+    width: 100% !important;
     min-height: 38px !important;
 
-    border: 1px solid #dee2e6 !important;
-    border-radius: 6px !important;
+    padding: 8px 48px 8px 16px !important;
 
-    background-color: #fff !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    line-height: 1.5 !important;
 
-    display: flex !important;
-    align-items: center !important;
+    color: var(--bs-body-color) !important;
+
+    background-color: transparent !important;
+
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+
+    background-repeat: no-repeat !important;
+
+    background-position: right 16px center !important;
+
+    background-size: 16px 12px !important;
+
+    border: var(--bs-border-width) solid #aebcc3 !important;
+
+    border-radius: 0.5rem !important;
+
+    box-shadow: unset !important;
+
+    transition:
+        border-color 0.15s ease-in-out,
+        box-shadow 0.15s ease-in-out !important;
 
     box-sizing: border-box !important;
 }
 
 
 /* ==========================================================
-   SELECT2 TEXT
+   RENDERED TEXT
 ========================================================== */
 
-.select2-container
-.select2-selection--single
-.select2-selection__rendered {
+.pelanggan-select-search
+    + .select2-container
+    .select2-selection--single
+    .select2-selection__rendered {
 
-    padding: 0 40px 0 12px !important;
+    display: block !important;
 
-    color: #212529 !important;
+    padding: 0 0 0 14px  !important;
 
-    font-size: 1rem !important;
-    font-weight: 400 !important;
-
-    line-height: 36px !important;
-
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    margin: 0 !important;
 
     width: 100% !important;
+    height: auto;
+
+    color: var(--bs-body-color) !important;
+
+    font-size: 0.9rem !important;
+
+    font-weight: 500 !important;
+
+    line-height: 21px !important;
+
+    white-space: nowrap !important;
+
+    overflow: hidden !important;
+
+    text-overflow: ellipsis !important;
 }
 
 
 /* ==========================================================
-   SELECT2 ARROW
+   HILANGKAN ARROW BAWAAN SELECT2
+   karena kita pakai SVG Bootstrap
 ========================================================== */
 
-.select2-container
-.select2-selection--single
-.select2-selection__arrow {
+.pelanggan-select-search
+    + .select2-container
+    .select2-selection--single
+    .select2-selection__arrow {
 
-    height: 36px !important;
-    width: 36px !important;
-
-    top: 0 !important;
-    right: 4px !important;
-
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-
-.select2-container
-.select2-selection--single
-.select2-selection__arrow b {
-
-    border-color:
-        #6c757d
-        transparent
-        transparent
-        transparent !important;
-
-    border-width:
-        5px
-        4px
-        0
-        4px !important;
-
-    margin: 0 !important;
-
-    position: static !important;
+    display: none !important;
 }
 
 
@@ -154,19 +120,73 @@
    FOCUS
 ========================================================== */
 
-.select2-container--open
-.select2-selection--single,
+.pelanggan-select-search
+    + .select2-container--focus
+    .select2-selection--single,
 
-.select2-container
-.select2-selection--single:focus {
+.pelanggan-select-search
+    + .select2-container--open
+    .select2-selection--single {
 
-    border-color: #86b7fe !important;
+    border-color: #80c2ed !important;
+
+    outline: 0 !important;
 
     box-shadow:
         0 0 0 0.25rem
-        rgba(13, 110, 253, 0.25) !important;
+        rgba(0, 133, 219, 0.25) !important;
+}
 
-    outline: 0 !important;
+
+/* ==========================================================
+   DISABLED
+========================================================== */
+
+.pelanggan-select-search
+    + .select2-container.select2-container--disabled
+    .select2-selection--single {
+
+    background-color:
+        var(--bs-secondary-bg) !important;
+
+    opacity: 1 !important;
+
+    cursor: not-allowed !important;
+}
+
+
+/* ==========================================================
+   CLEAR BUTTON
+========================================================== */
+
+.pelanggan-select-search
+    + .select2-container
+    .select2-selection__clear {
+        
+    position: absolute !important;
+
+    left: 12px !important;
+    right: auto !important;
+
+    top: 50% !important;
+
+    /* naik sedikit dari center */
+    transform: translateY(-65%) !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    font-size: 22px !important;
+
+    line-height: 1 !important;
+
+    color: #6c757d !important;
+
+    z-index: 5 !important;
+
+    /* buang styling bawaan */
+    height: auto !important;
+    width: auto !important;
 }
 
 
@@ -174,52 +194,78 @@
    DROPDOWN
 ========================================================== */
 
-.select2-dropdown {
+.pelanggan-select-search
+    + .select2-container
+    .select2-dropdown {
 
-    border: 1px solid #dee2e6 !important;
+    border:
+        1px solid #aebcc3 !important;
 
-    border-radius: 6px !important;
+    border-radius:
+        0.5rem !important;
 
     overflow: hidden !important;
 
-    z-index: 9999 !important;
-
     box-shadow:
-        0 0.5rem 1rem
-        rgba(0, 0, 0, 0.15) !important;
+        0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+
+    z-index: 9999 !important;
 }
 
 
+/* ==========================================================
+   SEARCH
+========================================================== */
+
 .select2-search--dropdown {
+
     padding: 8px !important;
+
 }
 
 
 .select2-search--dropdown
 .select2-search__field {
 
+    width: 100% !important;
+
     height: 38px !important;
 
-    border: 1px solid #dee2e6 !important;
+    padding: 8px 12px !important;
 
-    border-radius: 6px !important;
+    font-size: 0.9rem !important;
 
-    padding: 6px 12px !important;
+    font-weight: 400 !important;
 
-    font-size: 1rem !important;
+    line-height: 1.5 !important;
 
-    outline: none !important;
+    color: var(--bs-body-color) !important;
+
+    background-color: #fff !important;
+
+    border:
+        1px solid #aebcc3 !important;
+
+    border-radius:
+        0.5rem !important;
+
+    outline: 0 !important;
+
+    box-sizing: border-box !important;
+
 }
 
 
 .select2-search--dropdown
 .select2-search__field:focus {
 
-    border-color: #86b7fe !important;
+    border-color:
+        #80c2ed !important;
 
     box-shadow:
         0 0 0 0.25rem
-        rgba(13, 110, 253, 0.25) !important;
+        rgba(0, 133, 219, 0.25) !important;
+
 }
 
 
@@ -229,82 +275,49 @@
 
 .select2-results__option {
 
-    padding: 8px 12px !important;
+    padding:
+        8px 16px !important;
 
-    font-size: 1rem !important;
+    font-size:
+        0.9rem !important;
 
-    color: #212529 !important;
+    font-weight:
+        400 !important;
+
+    line-height:
+        1.5 !important;
+
+    color:
+        var(--bs-body-color) !important;
+
 }
 
 
 .select2-results__option--highlighted {
 
-    background-color: #0d6efd !important;
+    background-color:
+        #0085db !important;
 
-    color: #fff !important;
+    color:
+        #fff !important;
+
 }
 
 
 /* ==========================================================
-   DISABLED
+   SELECT2 PLACEHOLDER
 ========================================================== */
 
-.select2-container.select2-container--disabled
-.select2-selection--single {
+.pelanggan-select-search
+    + .select2-container
+    .select2-selection__placeholder {
 
-    background-color: #e9ecef !important;
+    color:
+        #6c757d !important;
 
-    border-color: #dee2e6 !important;
+    opacity:
+        1 !important;
 
-    opacity: 1 !important;
-
-    cursor: not-allowed !important;
-}
-
-
-.select2-container.select2-container--disabled
-.select2-selection--single
-.select2-selection__rendered {
-
-    color: #6c757d !important;
-}
-
-
-.select2-container.select2-container--disabled
-.select2-selection--single
-.select2-selection__arrow {
-
-    display: none !important;
-}
-
-
-/* ==========================================================
-   CLEAR BUTTON
-========================================================== */
-
-.select2-container
-.select2-selection--single
-.select2-selection__clear {
-
-    height: 36px !important;
-
-    margin-right: 8px !important;
-
-    font-size: 18px !important;
-
-    color: #6c757d !important;
-
-    position: relative !important;
-
-    z-index: 2 !important;
-}
-
-
-.select2-container
-.select2-selection--single
-.select2-selection__clear:hover {
-
-    color: #dc3545 !important;
 }
 
 </style>
@@ -1879,9 +1892,15 @@ function initPelangganSelect() {
                     cache: true
 
                 }
-
             });
 
+     $(document).on(
+            'mouseenter',
+            '.pelanggan-select-search + .select2-container .select2-selection__clear',
+            function () {
+                $(this).attr('title', 'Hapus pilihan');
+            }
+    );
 
             /* ==================================================
                EVENT SELECT2
