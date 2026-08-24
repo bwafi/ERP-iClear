@@ -1606,7 +1606,9 @@
 ============================================================ */
 
 const STORAGE_KEY =
-    'stokAwalSelectedProducts';
+    'stokAwalSelectedProducts_' +
+    '<?= esc($jenis) ?>_' +
+    '<?= esc(session('ID_UNIT')) ?>';
 
 let selectedProducts = {};
 
@@ -2273,9 +2275,8 @@ function restorePelanggan(
             '<?= base_url(
                 'pelanggan/search'
             ) ?>',
-
+            
         type: 'GET',
-
         dataType: 'json',
 
         data: {
