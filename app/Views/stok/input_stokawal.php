@@ -14,230 +14,301 @@
 >
 
 <style>
-    /* ==========================================================
-       SELECT2 — SAMAKAN DENGAN BOOTSTRAP .form-select
-       ========================================================== */
+
+/* ==========================================================
+   SELECT2 — SAMAKAN DENGAN BOOTSTRAP .form-select
+========================================================== */
+
+.pelanggan-select-search {
+    --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+
+    display: block;
+    width: 100%;
+    padding: 8px 48px 8px 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--bs-body-color);
+
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+
+    background-color: transparent;
+    background-image:
+        var(--bs-form-select-bg-img),
+        var(--bs-form-select-bg-icon, none);
+
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    background-size: 16px 12px;
+
+    border: var(--bs-border-width) solid #aebcc3;
+    border-radius: 0.5rem;
+
+    box-shadow: unset;
+
+    transition:
+        border-color 0.15s ease-in-out,
+        box-shadow 0.15s ease-in-out;
+}
 
 
-       .pelanggan-select-search{
-          --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
-  display: block;
-  width: 100%;
-  padding: 8px 48px 8px 16px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--bs-body-color);
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-color: transparent;
-  background-image: var(--bs-form-select-bg-img),
-    var(--bs-form-select-bg-icon, none);
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  background-size: 16px 12px;
-  border: var(--bs-border-width) solid #aebcc3;
-  border-radius: 0.5rem;
-  box-shadow: unset;
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-       }
+/* ==========================================================
+   SELECT2 CONTAINER
+========================================================== */
 
-    .select2-container {
-        width: 100% !important;
-    }
+.select2-container {
+    width: 100% !important;
+}
 
-    .select2-container .select2-selection--single {
-        height: 38px !important;
-        min-height: 38px !important;
 
-        border: 1px solid #dee2e6 !important;
-        border-radius: 6px !important;
+/* ==========================================================
+   SELECT2 SELECTION
+========================================================== */
 
-        background-color: #fff !important;
+.select2-container .select2-selection--single {
+    height: 38px !important;
+    min-height: 38px !important;
 
-        display: flex !important;
-        align-items: center !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 6px !important;
 
-        box-sizing: border-box !important;
-    }
+    background-color: #fff !important;
 
-    /* Text */
-    .select2-container
-    .select2-selection--single
-    .select2-selection__rendered {
-        padding: 0 40px 0 12px !important;
+    display: flex !important;
+    align-items: center !important;
 
-        color: #212529 !important;
+    box-sizing: border-box !important;
+}
 
-        font-size: 1rem !important;
-        font-weight: 400 !important;
 
-        line-height: 36px !important;
+/* ==========================================================
+   SELECT2 TEXT
+========================================================== */
 
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
+.select2-container
+.select2-selection--single
+.select2-selection__rendered {
 
-        width: 100% !important;
-    }
+    padding: 0 40px 0 12px !important;
 
-    /* Arrow */
-    .select2-container
-    .select2-selection--single
-    .select2-selection__arrow {
-        height: 36px !important;
-        width: 36px !important;
+    color: #212529 !important;
 
-        top: 0 !important;
-        right: 4px !important;
+    font-size: 1rem !important;
+    font-weight: 400 !important;
 
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
+    line-height: 36px !important;
 
-    .select2-container
-    .select2-selection--single
-    .select2-selection__arrow b {
-        border-color: #6c757d transparent transparent transparent !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 
-        border-width: 5px 4px 0 4px !important;
+    width: 100% !important;
+}
 
-        margin: 0 !important;
 
-        position: static !important;
-    }
+/* ==========================================================
+   SELECT2 ARROW
+========================================================== */
 
-    /* ==========================================================
-       FOCUS
-       ========================================================== */
+.select2-container
+.select2-selection--single
+.select2-selection__arrow {
 
-    .select2-container--open
-    .select2-selection--single,
+    height: 36px !important;
+    width: 36px !important;
 
-    .select2-container
-    .select2-selection--single:focus {
-        border-color: #86b7fe !important;
+    top: 0 !important;
+    right: 4px !important;
 
-        box-shadow:
-            0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
 
-        outline: 0 !important;
-    }
 
-    /* ==========================================================
-       DROPDOWN
-       ========================================================== */
+.select2-container
+.select2-selection--single
+.select2-selection__arrow b {
 
-    .select2-dropdown {
-        border: 1px solid #dee2e6 !important;
-        border-radius: 6px !important;
+    border-color:
+        #6c757d
+        transparent
+        transparent
+        transparent !important;
 
-        overflow: hidden !important;
+    border-width:
+        5px
+        4px
+        0
+        4px !important;
 
-        z-index: 9999 !important;
+    margin: 0 !important;
 
-        box-shadow:
-            0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-    }
+    position: static !important;
+}
 
-    .select2-search--dropdown {
-        padding: 8px !important;
-    }
 
-    .select2-search--dropdown
-    .select2-search__field {
-        height: 38px !important;
+/* ==========================================================
+   FOCUS
+========================================================== */
 
-        border: 1px solid #dee2e6 !important;
-        border-radius: 6px !important;
+.select2-container--open
+.select2-selection--single,
 
-        padding: 6px 12px !important;
+.select2-container
+.select2-selection--single:focus {
 
-        font-size: 1rem !important;
+    border-color: #86b7fe !important;
 
-        outline: none !important;
-    }
+    box-shadow:
+        0 0 0 0.25rem
+        rgba(13, 110, 253, 0.25) !important;
 
-    .select2-search--dropdown
-    .select2-search__field:focus {
-        border-color: #86b7fe !important;
+    outline: 0 !important;
+}
 
-        box-shadow:
-            0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
-    }
 
-    /* ==========================================================
-       OPTION
-       ========================================================== */
+/* ==========================================================
+   DROPDOWN
+========================================================== */
 
-    .select2-results__option {
-        padding: 8px 12px !important;
+.select2-dropdown {
 
-        font-size: 1rem !important;
+    border: 1px solid #dee2e6 !important;
 
-        color: #212529 !important;
-    }
+    border-radius: 6px !important;
 
-    .select2-results__option--highlighted {
-        background-color: #0d6efd !important;
-        color: #fff !important;
-    }
+    overflow: hidden !important;
 
-    /* ==========================================================
-       DISABLED
-       ========================================================== */
+    z-index: 9999 !important;
 
-    .select2-container.select2-container--disabled
-    .select2-selection--single {
-        background-color: #e9ecef !important;
+    box-shadow:
+        0 0.5rem 1rem
+        rgba(0, 0, 0, 0.15) !important;
+}
 
-        border-color: #dee2e6 !important;
 
-        opacity: 1 !important;
+.select2-search--dropdown {
+    padding: 8px !important;
+}
 
-        cursor: not-allowed !important;
-    }
 
-    .select2-container.select2-container--disabled
-    .select2-selection--single
-    .select2-selection__rendered {
-        color: #6c757d !important;
-    }
+.select2-search--dropdown
+.select2-search__field {
 
-    .select2-container.select2-container--disabled
-    .select2-selection--single
-    .select2-selection__arrow {
-        display: none !important;
-    }
+    height: 38px !important;
 
-    /* ==========================================================
-       CLEAR BUTTON
-       ========================================================== */
+    border: 1px solid #dee2e6 !important;
 
-    .select2-container
-    .select2-selection--single
-    .select2-selection__clear {
-        height: 36px !important;
+    border-radius: 6px !important;
 
-        margin-right: 8px !important;
+    padding: 6px 12px !important;
 
-        font-size: 18px !important;
+    font-size: 1rem !important;
 
-        color: #6c757d !important;
+    outline: none !important;
+}
 
-        position: relative !important;
 
-        z-index: 2 !important;
-    }
+.select2-search--dropdown
+.select2-search__field:focus {
 
-    .select2-container
-    .select2-selection--single
-    .select2-selection__clear:hover {
-        color: #dc3545 !important;
-    }
+    border-color: #86b7fe !important;
+
+    box-shadow:
+        0 0 0 0.25rem
+        rgba(13, 110, 253, 0.25) !important;
+}
+
+
+/* ==========================================================
+   OPTION
+========================================================== */
+
+.select2-results__option {
+
+    padding: 8px 12px !important;
+
+    font-size: 1rem !important;
+
+    color: #212529 !important;
+}
+
+
+.select2-results__option--highlighted {
+
+    background-color: #0d6efd !important;
+
+    color: #fff !important;
+}
+
+
+/* ==========================================================
+   DISABLED
+========================================================== */
+
+.select2-container.select2-container--disabled
+.select2-selection--single {
+
+    background-color: #e9ecef !important;
+
+    border-color: #dee2e6 !important;
+
+    opacity: 1 !important;
+
+    cursor: not-allowed !important;
+}
+
+
+.select2-container.select2-container--disabled
+.select2-selection--single
+.select2-selection__rendered {
+
+    color: #6c757d !important;
+}
+
+
+.select2-container.select2-container--disabled
+.select2-selection--single
+.select2-selection__arrow {
+
+    display: none !important;
+}
+
+
+/* ==========================================================
+   CLEAR BUTTON
+========================================================== */
+
+.select2-container
+.select2-selection--single
+.select2-selection__clear {
+
+    height: 36px !important;
+
+    margin-right: 8px !important;
+
+    font-size: 18px !important;
+
+    color: #6c757d !important;
+
+    position: relative !important;
+
+    z-index: 2 !important;
+}
+
+
+.select2-container
+.select2-selection--single
+.select2-selection__clear:hover {
+
+    color: #dc3545 !important;
+}
+
 </style>
+
 
 <!-- ==========================================================
      HEADER
@@ -245,7 +316,9 @@
 
 <div class="card shadow-none position-relative overflow-hidden mb-4">
 
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
+    <div
+        class="card-body d-flex align-items-center justify-content-between p-4"
+    >
 
         <h4 class="fw-semibold mb-0">
             Datamaster Stok Awal
@@ -309,9 +382,12 @@
             class="d-flex justify-content-between align-items-center flex-wrap px-4 pt-4 pb-2"
         >
 
+
             <!-- UNIT -->
 
-            <div class="d-flex align-items-center gap-3 mb-2 mb-md-0">
+            <div
+                class="d-flex align-items-center gap-3 mb-2 mb-md-0"
+            >
 
                 <label
                     for="global_unit"
@@ -327,14 +403,19 @@
                         id="global_unit"
                         class="form-select"
                         required
-                        <?= session('ID_UNIT') == 1 ? '' : 'readonly' ?>
+                        <?= session('ID_UNIT') == 1
+                            ? ''
+                            : 'readonly' ?>
                     >
 
                         <?php if (session('ID_UNIT') == 1): ?>
 
                             <?php foreach ($unit as $u): ?>
 
-                                <?php if ($u && isset($u->idunit)): ?>
+                                <?php if (
+                                    $u &&
+                                    isset($u->idunit)
+                                ): ?>
 
                                     <option
                                         value="<?= esc($u->idunit) ?>"
@@ -353,7 +434,8 @@
                                 <?php if (
                                     $u &&
                                     isset($u->idunit) &&
-                                    $u->idunit == session('ID_UNIT')
+                                    $u->idunit ==
+                                        session('ID_UNIT')
                                 ): ?>
 
                                     <option
@@ -404,7 +486,8 @@
 
                         <a
                             href="<?= base_url(
-                                'input_stokawal/' . urlencode($jenis)
+                                'input_stokawal/' .
+                                urlencode($jenis)
                             ) ?>"
                             class="btn btn-light border"
                         >
@@ -436,7 +519,9 @@
                     class="d-flex align-items-center justify-content-between flex-wrap gap-3"
                 >
 
-                    <div class="d-flex align-items-center gap-3">
+                    <div
+                        class="d-flex align-items-center gap-3"
+                    >
 
                         <div
                             class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center"
@@ -475,14 +560,20 @@
                             <p
                                 class="text-muted small mb-0 mt-1"
                             >
-                                <i class="bi bi-info-circle me-1"></i>
-                                Pilihan produk tetap aman tersimpan otomatis
-                                meskipun Anda berpindah halaman.
+
+                                <i
+                                    class="bi bi-info-circle me-1"
+                                ></i>
+
+                                Pilihan produk tetap aman tersimpan
+                                otomatis meskipun Anda berpindah halaman.
+
                             </p>
 
                         </div>
 
                     </div>
+
 
                     <div>
 
@@ -577,9 +668,11 @@
 
                         <?php
 
-                        $kode_barang = $b->kode_barang;
+                        $kode_barang =
+                            $b->kode_barang;
 
-                        $isImeiEmpty = empty($b->imei);
+                        $isImeiEmpty =
+                            empty($b->imei);
 
                         ?>
 
@@ -647,7 +740,8 @@
                                     "
                                 >
                                     <?= esc(
-                                        $b->imei ?? 'tidak ada imei'
+                                        $b->imei ??
+                                        'tidak ada imei'
                                     ) ?>
                                 </p>
 
@@ -665,7 +759,8 @@
                                     "
                                 >
                                     <?= esc(
-                                        $b->harga_beli ?? 'tidak ada HPP'
+                                        $b->harga_beli ??
+                                        'tidak ada HPP'
                                     ) ?>
                                 </p>
 
@@ -801,6 +896,7 @@
                                     disabled
                                     style="min-width: 230px;"
                                 >
+
                                     <option value="">
                                         -- Pilih Pelanggan --
                                     </option>
@@ -920,9 +1016,11 @@
                                 urlencode($jenis)
                             );
 
-                            $searchQuery = !empty($search)
-                                ? '&search=' . urlencode($search)
-                                : '';
+                            $searchQuery =
+                                !empty($search)
+                                    ? '&search=' .
+                                      urlencode($search)
+                                    : '';
 
                             ?>
 
@@ -957,6 +1055,7 @@
 
                             <?php if ($totalPages <= 7): ?>
 
+
                                 <!-- SEMUA PAGE -->
 
                                 <?php for (
@@ -985,6 +1084,7 @@
 
 
                             <?php elseif ($currentPage <= 4): ?>
+
 
                                 <!-- AWAL -->
 
@@ -1047,8 +1147,10 @@
 
 
                             <?php elseif (
-                                $currentPage >= $totalPages - 3
+                                $currentPage >=
+                                $totalPages - 3
                             ): ?>
+
 
                                 <!-- AKHIR -->
 
@@ -1111,6 +1213,7 @@
 
 
                             <?php else: ?>
+
 
                                 <!-- TENGAH -->
 
@@ -1186,7 +1289,8 @@
                             <!-- BERIKUTNYA -->
 
                             <?php if (
-                                $currentPage < $totalPages
+                                $currentPage <
+                                $totalPages
                             ): ?>
 
                                 <li class="page-item">
@@ -1240,7 +1344,9 @@
             <button
                 type="submit"
                 class="btn btn-primary"
+                id="saveStockBtn"
             >
+                <i class="bi bi-check2 me-1"></i>
                 Simpan
             </button>
 
@@ -1257,13 +1363,17 @@
 
 <form
     id="searchForm"
-    action="<?= base_url('input_stokawal/' . urlencode($jenis)) ?>"
+    action="<?= base_url(
+        'input_stokawal/' .
+        urlencode($jenis)
+    ) ?>"
     method="get"
-></form>
+>
+</form>
 
 
 <!-- ==========================================================
-     MODAL
+     MODAL — BATALKAN SEMUA
 =========================================================== -->
 
 <div
@@ -1292,12 +1402,14 @@
 
                 </div>
 
+
                 <h5
                     class="fw-bold mb-2"
                     id="cancelConfirmModalLabel"
                 >
                     Batalkan Semua Pilihan?
                 </h5>
+
 
                 <p class="text-muted small mb-4">
 
@@ -1307,7 +1419,10 @@
 
                 </p>
 
-                <div class="d-flex justify-content-center gap-2">
+
+                <div
+                    class="d-flex justify-content-center gap-2"
+                >
 
                     <button
                         type="button"
@@ -1317,12 +1432,134 @@
                         Tidak, Kembali
                     </button>
 
+
                     <button
                         type="button"
                         id="confirmClearSelectionBtn"
                         class="btn btn-danger px-4"
                     >
                         Ya, Batalkan Semua
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================================
+     MODAL — KONFIRMASI SIMPAN
+=========================================================== -->
+
+<div
+    class="modal fade"
+    id="saveConfirmModal"
+    tabindex="-1"
+    aria-labelledby="saveConfirmModalLabel"
+    aria-hidden="true"
+>
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content border-0 shadow">
+
+            <div class="modal-body text-center p-4">
+
+
+                <!-- ICON -->
+
+                <div
+                    class="text-primary bg-primary-subtle rounded-circle mx-auto d-flex align-items-center justify-content-center mb-3"
+                    style="
+                        width: 60px;
+                        height: 60px;
+                    "
+                >
+
+                    <i class="bi bi-box-seam fs-2"></i>
+
+                </div>
+
+
+                <!-- TITLE -->
+
+                <h5
+                    class="fw-bold mb-2"
+                    id="saveConfirmModalLabel"
+                >
+                    Simpan Stok Awal?
+                </h5>
+
+
+                <!-- DESCRIPTION -->
+
+                <p class="text-muted small mb-2">
+
+                    Anda akan menyimpan data stok awal untuk:
+
+                </p>
+
+
+                <!-- COUNT -->
+
+                <div
+                    class="bg-light rounded-3 py-2 px-3 mb-3"
+                >
+
+                    <strong
+                        id="saveSelectedCount"
+                        class="text-primary"
+                    >
+                        0
+                    </strong>
+
+                    <span class="text-muted">
+                        barang terpilih
+                    </span>
+
+                </div>
+
+
+                <!-- WARNING -->
+
+                <p class="text-muted small mb-4">
+
+                    Pastikan jumlah, satuan, sumber, suplier,
+                    dan pelanggan sudah sesuai sebelum melanjutkan.
+
+                </p>
+
+
+                <!-- BUTTON -->
+
+                <div
+                    class="d-flex justify-content-center gap-2"
+                >
+
+                    <button
+                        type="button"
+                        class="btn btn-light px-4"
+                        data-bs-dismiss="modal"
+                    >
+                        Batal
+                    </button>
+
+
+                    <button
+                        type="button"
+                        id="confirmSaveStockBtn"
+                        class="btn btn-primary px-4"
+                    >
+
+                        <i class="bi bi-check2 me-1"></i>
+
+                        Ya, Simpan
+
                     </button>
 
                 </div>
@@ -1351,7 +1588,12 @@
 
 <script>
 
-const STORAGE_KEY = 'stokAwalSelectedProducts';
+/* ============================================================
+   STORAGE
+============================================================ */
+
+const STORAGE_KEY =
+    'stokAwalSelectedProducts';
 
 let selectedProducts = {};
 
@@ -1365,7 +1607,9 @@ function loadSelectedProducts() {
     try {
 
         const saved =
-            localStorage.getItem(STORAGE_KEY);
+            localStorage.getItem(
+                STORAGE_KEY
+            );
 
         if (saved) {
 
@@ -1384,6 +1628,7 @@ function loadSelectedProducts() {
         selectedProducts = {};
 
     }
+
 }
 
 
@@ -1397,7 +1642,9 @@ function saveSelectedProducts() {
 
         localStorage.setItem(
             STORAGE_KEY,
-            JSON.stringify(selectedProducts)
+            JSON.stringify(
+                selectedProducts
+            )
         );
 
     } catch (error) {
@@ -1410,6 +1657,7 @@ function saveSelectedProducts() {
     }
 
     updateSelectionIndicator();
+
 }
 
 
@@ -1429,14 +1677,21 @@ function updateSelectionIndicator() {
             'selectedCount'
         );
 
+
     if (!indicator || !countElement) {
         return;
     }
 
-    const count =
-        Object.keys(selectedProducts).length;
 
-    countElement.textContent = count;
+    const count =
+        Object.keys(
+            selectedProducts
+        ).length;
+
+
+    countElement.textContent =
+        count;
+
 
     if (count > 0) {
 
@@ -1455,6 +1710,7 @@ function updateSelectionIndicator() {
         );
 
     }
+
 }
 
 
@@ -1462,7 +1718,9 @@ function updateSelectionIndicator() {
    DATA PRODUK
 ============================================================ */
 
-function getProductData(kodeBarang) {
+function getProductData(
+    kodeBarang
+) {
 
     const jumlah =
         document.getElementById(
@@ -1492,25 +1750,30 @@ function getProductData(kodeBarang) {
 
     return {
 
-        jumlah: jumlah
-            ? jumlah.value
-            : '',
+        jumlah:
+            jumlah
+                ? jumlah.value
+                : '',
 
-        satuan_terkecil: satuan
-            ? satuan.value
-            : '',
+        satuan_terkecil:
+            satuan
+                ? satuan.value
+                : '',
 
-        tipe_relasi: sumber
-            ? sumber.value
-            : '',
+        tipe_relasi:
+            sumber
+                ? sumber.value
+                : '',
 
-        id_suplier_text: suplier
-            ? suplier.value
-            : '',
+        id_suplier_text:
+            suplier
+                ? suplier.value
+                : '',
 
-        id_pelanggan_text: pelanggan
-            ? pelanggan.value
-            : ''
+        id_pelanggan_text:
+            pelanggan
+                ? pelanggan.value
+                : ''
 
     };
 
@@ -1521,21 +1784,31 @@ function getProductData(kodeBarang) {
    SAVE DATA PRODUK
 ============================================================ */
 
-function saveProductData(kodeBarang) {
+function saveProductData(
+    kodeBarang
+) {
 
     const checkbox =
         document.getElementById(
             'product_' + kodeBarang
         );
 
-    if (!checkbox || !checkbox.checked) {
+
+    if (
+        !checkbox ||
+        !checkbox.checked
+    ) {
         return;
     }
 
-    selectedProducts[kodeBarang] =
-        getProductData(kodeBarang);
 
-    saveProductDataStorage = saveSelectedProducts();
+    selectedProducts[kodeBarang] =
+        getProductData(
+            kodeBarang
+        );
+
+
+    saveSelectedProducts();
 
 }
 
@@ -1546,88 +1819,97 @@ function saveProductData(kodeBarang) {
 
 function initPelangganSelect() {
 
-    $('.pelanggan-select-search').each(function () {
+    $('.pelanggan-select-search')
+        .each(function () {
 
-        const select = $(this);
+            const select =
+                $(this);
 
-        if (
-            select.hasClass(
-                'select2-hidden-accessible'
-            )
-        ) {
-            return;
-        }
 
-        select.select2({
-            // theme: 'bootstrap-5', 
-            width: '100%',
-
-            placeholder:
-                '-- Pilih Pelanggan --',
-
-            allowClear: true,
-
-            minimumInputLength: 2,
-
-            ajax: {
-
-                url:
-                    '<?= base_url('pelanggan/search') ?>',
-
-                dataType: 'json',
-
-                delay: 300,
-
-                data: function (params) {
-
-                    return {
-                        q: params.term
-                    };
-
-                },
-
-                processResults: function (data) {
-
-                    return {
-                        results: data
-                    };
-
-                },
-
-                cache: true
-
+            if (
+                select.hasClass(
+                    'select2-hidden-accessible'
+                )
+            ) {
+                return;
             }
 
-        });
 
+            select.select2({
 
-        /*
-        ========================================================
-        EVENT SELECT2
-        ========================================================
-        */
+                width: '100%',
 
-        select.on(
-            'change',
-            function () {
+                placeholder:
+                    '-- Pilih Pelanggan --',
 
-                const kodeBarang =
-                    getKodeBarangFromId(
-                        this.id
-                    );
+                allowClear: true,
 
-                if (!kodeBarang) {
-                    return;
+                minimumInputLength: 2,
+
+                ajax: {
+
+                    url:
+                        '<?= base_url(
+                            'pelanggan/search'
+                        ) ?>',
+
+                    dataType: 'json',
+
+                    delay: 300,
+
+                    data: function (
+                        params
+                    ) {
+
+                        return {
+                            q: params.term
+                        };
+
+                    },
+
+                    processResults:
+                        function (data) {
+
+                            return {
+                                results: data
+                            };
+
+                        },
+
+                    cache: true
+
                 }
 
-                saveProductData(
-                    kodeBarang
-                );
+            });
 
-            }
-        );
 
-    });
+            /* ==================================================
+               EVENT SELECT2
+            ================================================== */
+
+            select.on(
+                'change',
+                function () {
+
+                    const kodeBarang =
+                        getKodeBarangFromId(
+                            this.id
+                        );
+
+
+                    if (!kodeBarang) {
+                        return;
+                    }
+
+
+                    saveProductData(
+                        kodeBarang
+                    );
+
+                }
+            );
+
+        });
 
 }
 
@@ -1636,19 +1918,24 @@ function initPelangganSelect() {
    TOGGLE CHECKBOX
 ============================================================ */
 
-function toggleCheckbox(kodeBarang) {
+function toggleCheckbox(
+    kodeBarang
+) {
 
     const checkbox =
         document.getElementById(
             'product_' + kodeBarang
         );
 
+
     if (!checkbox) {
         return;
     }
 
+
     const checked =
         checkbox.checked;
+
 
     const jumlah =
         document.getElementById(
@@ -1682,9 +1969,15 @@ function toggleCheckbox(kodeBarang) {
 
     if (checked) {
 
-        if (!selectedProducts[kodeBarang]) {
+        if (
+            !selectedProducts[
+                kodeBarang
+            ]
+        ) {
 
-            selectedProducts[kodeBarang] = {
+            selectedProducts[
+                kodeBarang
+            ] = {
 
                 jumlah: '',
 
@@ -1708,6 +2001,7 @@ function toggleCheckbox(kodeBarang) {
             jumlah.disabled = false;
         }
 
+
         if (satuan) {
             satuan.disabled = false;
         }
@@ -1721,7 +2015,8 @@ function toggleCheckbox(kodeBarang) {
                 )
             ) {
 
-                sumber.disabled = false;
+                sumber.disabled =
+                    false;
 
             }
 
@@ -1731,6 +2026,7 @@ function toggleCheckbox(kodeBarang) {
         saveProductData(
             kodeBarang
         );
+
 
         toggleSumber(
             kodeBarang
@@ -1754,7 +2050,8 @@ function toggleCheckbox(kodeBarang) {
 
             jumlah.value = '';
 
-            jumlah.disabled = true;
+            jumlah.disabled =
+                true;
 
         }
 
@@ -1763,7 +2060,8 @@ function toggleCheckbox(kodeBarang) {
 
             satuan.value = '';
 
-            satuan.disabled = true;
+            satuan.disabled =
+                true;
 
         }
 
@@ -1778,7 +2076,8 @@ function toggleCheckbox(kodeBarang) {
 
                 sumber.value = '';
 
-                sumber.disabled = true;
+                sumber.disabled =
+                    true;
 
             }
 
@@ -1789,7 +2088,8 @@ function toggleCheckbox(kodeBarang) {
 
             suplier.value = '';
 
-            suplier.disabled = true;
+            suplier.disabled =
+                true;
 
         }
 
@@ -1800,10 +2100,14 @@ function toggleCheckbox(kodeBarang) {
                 .val(null)
                 .trigger('change');
 
-            pelanggan.disabled = true;
+            pelanggan.disabled =
+                true;
 
             $(pelanggan)
-                .prop('disabled', true);
+                .prop(
+                    'disabled',
+                    true
+                );
 
         }
 
@@ -1819,7 +2123,9 @@ function toggleCheckbox(kodeBarang) {
    TOGGLE SUMBER
 ============================================================ */
 
-function toggleSumber(kodeBarang) {
+function toggleSumber(
+    kodeBarang
+) {
 
     const sumber =
         document.getElementById(
@@ -1842,16 +2148,22 @@ function toggleSumber(kodeBarang) {
         );
 
 
-    if (!sumber || !checkbox) {
+    if (
+        !sumber ||
+        !checkbox
+    ) {
         return;
     }
 
 
-    /* Reset */
+    /* ========================================================
+       RESET
+    ======================================================== */
 
     if (suplier) {
 
-        suplier.disabled = true;
+        suplier.disabled =
+            true;
 
     }
 
@@ -1859,7 +2171,10 @@ function toggleSumber(kodeBarang) {
     if (pelanggan) {
 
         $(pelanggan)
-            .prop('disabled', true);
+            .prop(
+                'disabled',
+                true
+            );
 
     }
 
@@ -1869,19 +2184,24 @@ function toggleSumber(kodeBarang) {
     }
 
 
-    /* Supplier */
+    /* ========================================================
+       SUPPLIER
+    ======================================================== */
 
     if (
         sumber.value === 'suplier' &&
         suplier
     ) {
 
-        suplier.disabled = false;
+        suplier.disabled =
+            false;
 
     }
 
 
-    /* Pelanggan */
+    /* ========================================================
+       PELANGGAN
+    ======================================================== */
 
     else if (
         sumber.value === 'pelanggan' &&
@@ -1889,7 +2209,10 @@ function toggleSumber(kodeBarang) {
     ) {
 
         $(pelanggan)
-            .prop('disabled', false);
+            .prop(
+                'disabled',
+                false
+            );
 
     }
 
@@ -1912,8 +2235,10 @@ function restorePelanggan(
 
     const pelanggan =
         document.getElementById(
-            'id_pelanggan_text_' + kodeBarang
+            'id_pelanggan_text_' +
+            kodeBarang
         );
+
 
     if (
         !pelanggan ||
@@ -1926,7 +2251,9 @@ function restorePelanggan(
     $.ajax({
 
         url:
-            '<?= base_url('pelanggan/search') ?>',
+            '<?= base_url(
+                'pelanggan/search'
+            ) ?>',
 
         type: 'GET',
 
@@ -1936,59 +2263,75 @@ function restorePelanggan(
             search: pelangganId
         },
 
-        success: function (data) {
+        success:
+            function (data) {
 
-            const pelangganData =
-                data.find(function (item) {
+                const pelangganData =
+                    data.find(
+                        function (item) {
 
-                    return String(item.id) ===
-                        String(pelangganId);
+                            return String(
+                                item.id
+                            ) ===
+                                String(
+                                    pelangganId
+                                );
 
-                });
-
-
-            if (!pelangganData) {
-                return;
-            }
-
-
-            if (
-                $(pelanggan)
-                    .find(
-                        'option[value="' +
-                        pelangganData.id +
-                        '"]'
-                    ).length === 0
-            ) {
-
-                const option =
-                    new Option(
-                        pelangganData.text,
-                        pelangganData.id,
-                        true,
-                        true
+                        }
                     );
 
+
+                if (!pelangganData) {
+                    return;
+                }
+
+
+                if (
+                    $(pelanggan)
+                        .find(
+                            'option[value="' +
+                            pelangganData.id +
+                            '"]'
+                        )
+                        .length === 0
+                ) {
+
+                    const option =
+                        new Option(
+                            pelangganData.text,
+                            pelangganData.id,
+                            true,
+                            true
+                        );
+
+
+                    $(pelanggan)
+                        .append(
+                            option
+                        );
+
+                }
+
+
                 $(pelanggan)
-                    .append(option);
+                    .val(
+                        pelangganData.id
+                    )
+                    .trigger(
+                        'change'
+                    );
+
+            },
+
+        error:
+            function (xhr) {
+
+                console.error(
+                    'Gagal restore pelanggan:',
+                    xhr.responseText
+                );
 
             }
-
-
-            $(pelanggan)
-                .val(pelangganData.id)
-                .trigger('change');
-
-        },
-
-        error: function (xhr) {
-
-            console.error(
-                'Gagal restore pelanggan:',
-                xhr.responseText
-            );
-
-        }
 
     });
 
@@ -1999,10 +2342,15 @@ function restorePelanggan(
    RESTORE PRODUCT
 ============================================================ */
 
-function restoreProduct(kodeBarang) {
+function restoreProduct(
+    kodeBarang
+) {
 
     const data =
-        selectedProducts[kodeBarang];
+        selectedProducts[
+            kodeBarang
+        ];
+
 
     if (!data) {
         return;
@@ -2021,7 +2369,8 @@ function restoreProduct(kodeBarang) {
 
     const satuan =
         document.getElementById(
-            'satuan_terkecil_' + kodeBarang
+            'satuan_terkecil_' +
+            kodeBarang
         );
 
     const sumber =
@@ -2031,25 +2380,29 @@ function restoreProduct(kodeBarang) {
 
     const suplier =
         document.getElementById(
-            'id_suplier_text_' + kodeBarang
+            'id_suplier_text_' +
+            kodeBarang
         );
 
     const pelanggan =
         document.getElementById(
-            'id_pelanggan_text_' + kodeBarang
+            'id_pelanggan_text_' +
+            kodeBarang
         );
 
 
     if (checkbox) {
 
-        checkbox.checked = true;
+        checkbox.checked =
+            true;
 
     }
 
 
     if (jumlah) {
 
-        jumlah.disabled = false;
+        jumlah.disabled =
+            false;
 
         jumlah.value =
             data.jumlah ?? '';
@@ -2059,10 +2412,12 @@ function restoreProduct(kodeBarang) {
 
     if (satuan) {
 
-        satuan.disabled = false;
+        satuan.disabled =
+            false;
 
         satuan.value =
-            data.satuan_terkecil ?? '';
+            data.satuan_terkecil ??
+            '';
 
     }
 
@@ -2070,7 +2425,8 @@ function restoreProduct(kodeBarang) {
     if (sumber) {
 
         sumber.value =
-            data.tipe_relasi ?? '';
+            data.tipe_relasi ??
+            '';
 
 
         if (
@@ -2079,11 +2435,13 @@ function restoreProduct(kodeBarang) {
             )
         ) {
 
-            sumber.disabled = true;
+            sumber.disabled =
+                true;
 
         } else {
 
-            sumber.disabled = false;
+            sumber.disabled =
+                false;
 
         }
 
@@ -2093,7 +2451,8 @@ function restoreProduct(kodeBarang) {
     if (suplier) {
 
         suplier.value =
-            data.id_suplier_text ?? '';
+            data.id_suplier_text ??
+            '';
 
     }
 
@@ -2121,7 +2480,9 @@ function restoreProduct(kodeBarang) {
    GET KODE BARANG
 ============================================================ */
 
-function getKodeBarangFromId(id) {
+function getKodeBarangFromId(
+    id
+) {
 
     const prefixes = [
 
@@ -2143,7 +2504,9 @@ function getKodeBarangFromId(id) {
     ) {
 
         if (
-            id.startsWith(prefix)
+            id.startsWith(
+                prefix
+            )
         ) {
 
             return id.substring(
@@ -2170,86 +2533,91 @@ function bindProductInputs() {
         .querySelectorAll(
             '.product-input'
         )
-        .forEach(function (input) {
+        .forEach(
+            function (input) {
 
 
-            input.addEventListener(
-                'input',
-                function () {
+                input.addEventListener(
+                    'input',
+                    function () {
 
-                    const kodeBarang =
-                        getKodeBarangFromId(
-                            input.id
-                        );
+                        const kodeBarang =
+                            getKodeBarangFromId(
+                                input.id
+                            );
 
-                    if (kodeBarang) {
+
+                        if (kodeBarang) {
+
+                            saveProductData(
+                                kodeBarang
+                            );
+
+                        }
+
+                    }
+                );
+
+
+                input.addEventListener(
+                    'blur',
+                    function () {
+
+                        const kodeBarang =
+                            getKodeBarangFromId(
+                                input.id
+                            );
+
+
+                        if (kodeBarang) {
+
+                            saveProductData(
+                                kodeBarang
+                            );
+
+                        }
+
+                    }
+                );
+
+
+                input.addEventListener(
+                    'change',
+                    function () {
+
+                        const kodeBarang =
+                            getKodeBarangFromId(
+                                input.id
+                            );
+
+
+                        if (!kodeBarang) {
+                            return;
+                        }
+
 
                         saveProductData(
                             kodeBarang
                         );
 
-                    }
 
-                }
-            );
+                        if (
+                            input.id.startsWith(
+                                'tipe_relasi_'
+                            )
+                        ) {
 
+                            toggleSumber(
+                                kodeBarang
+                            );
 
-            input.addEventListener(
-                'blur',
-                function () {
-
-                    const kodeBarang =
-                        getKodeBarangFromId(
-                            input.id
-                        );
-
-                    if (kodeBarang) {
-
-                        saveProductData(
-                            kodeBarang
-                        );
+                        }
 
                     }
+                );
 
-                }
-            );
-
-
-            input.addEventListener(
-                'change',
-                function () {
-
-                    const kodeBarang =
-                        getKodeBarangFromId(
-                            input.id
-                        );
-
-                    if (!kodeBarang) {
-                        return;
-                    }
-
-
-                    saveProductData(
-                        kodeBarang
-                    );
-
-
-                    if (
-                        input.id.startsWith(
-                            'tipe_relasi_'
-                        )
-                    ) {
-
-                        toggleSumber(
-                            kodeBarang
-                        );
-
-                    }
-
-                }
-            );
-
-        });
+            }
+        );
 
 }
 
@@ -2264,25 +2632,27 @@ function restoreCurrentPage() {
         .querySelectorAll(
             '.product-checkbox'
         )
-        .forEach(function (checkbox) {
+        .forEach(
+            function (checkbox) {
 
-            const kodeBarang =
-                checkbox.value;
+                const kodeBarang =
+                    checkbox.value;
 
 
-            if (
-                selectedProducts[
-                    kodeBarang
-                ]
-            ) {
+                if (
+                    selectedProducts[
+                        kodeBarang
+                    ]
+                ) {
 
-                restoreProduct(
-                    kodeBarang
-                );
+                    restoreProduct(
+                        kodeBarang
+                    );
+
+                }
 
             }
-
-        });
+        );
 
 
     bindProductInputs();
@@ -2318,15 +2688,18 @@ if (openCancelModalBtn) {
                     'cancelConfirmModal'
                 );
 
+
             if (
                 modalElement &&
-                typeof bootstrap !== 'undefined'
+                typeof bootstrap !==
+                    'undefined'
             ) {
 
                 const modal =
                     new bootstrap.Modal(
                         modalElement
                     );
+
 
                 modal.show();
 
@@ -2338,7 +2711,9 @@ if (openCancelModalBtn) {
 }
 
 
-if (confirmClearSelectionBtn) {
+if (
+    confirmClearSelectionBtn
+) {
 
     confirmClearSelectionBtn.addEventListener(
         'click',
@@ -2346,6 +2721,7 @@ if (confirmClearSelectionBtn) {
 
 
             selectedProducts = {};
+
 
             localStorage.removeItem(
                 STORAGE_KEY
@@ -2356,111 +2732,119 @@ if (confirmClearSelectionBtn) {
                 .querySelectorAll(
                     '.product-checkbox'
                 )
-                .forEach(function (checkbox) {
+                .forEach(
+                    function (checkbox) {
 
 
-                    checkbox.checked =
-                        false;
+                        checkbox.checked =
+                            false;
 
 
-                    const kodeBarang =
-                        checkbox.value;
+                        const kodeBarang =
+                            checkbox.value;
 
 
-                    const jumlah =
-                        document.getElementById(
-                            'jumlah_' +
-                            kodeBarang
-                        );
+                        const jumlah =
+                            document.getElementById(
+                                'jumlah_' +
+                                kodeBarang
+                            );
 
-                    const satuan =
-                        document.getElementById(
-                            'satuan_terkecil_' +
-                            kodeBarang
-                        );
+                        const satuan =
+                            document.getElementById(
+                                'satuan_terkecil_' +
+                                kodeBarang
+                            );
 
-                    const sumber =
-                        document.getElementById(
-                            'tipe_relasi_' +
-                            kodeBarang
-                        );
+                        const sumber =
+                            document.getElementById(
+                                'tipe_relasi_' +
+                                kodeBarang
+                            );
 
-                    const suplier =
-                        document.getElementById(
-                            'id_suplier_text_' +
-                            kodeBarang
-                        );
+                        const suplier =
+                            document.getElementById(
+                                'id_suplier_text_' +
+                                kodeBarang
+                            );
 
-                    const pelanggan =
-                        document.getElementById(
-                            'id_pelanggan_text_' +
-                            kodeBarang
-                        );
-
-
-                    if (jumlah) {
-
-                        jumlah.value = '';
-
-                        jumlah.disabled =
-                            true;
-
-                    }
+                        const pelanggan =
+                            document.getElementById(
+                                'id_pelanggan_text_' +
+                                kodeBarang
+                            );
 
 
-                    if (satuan) {
+                        if (jumlah) {
 
-                        satuan.value = '';
+                            jumlah.value =
+                                '';
 
-                        satuan.disabled =
-                            true;
-
-                    }
-
-
-                    if (sumber) {
-
-                        if (
-                            !sumber.hasAttribute(
-                                'data-always-disabled'
-                            )
-                        ) {
-
-                            sumber.value = '';
-
-                            sumber.disabled =
+                            jumlah.disabled =
                                 true;
 
                         }
 
+
+                        if (satuan) {
+
+                            satuan.value =
+                                '';
+
+                            satuan.disabled =
+                                true;
+
+                        }
+
+
+                        if (sumber) {
+
+                            if (
+                                !sumber.hasAttribute(
+                                    'data-always-disabled'
+                                )
+                            ) {
+
+                                sumber.value =
+                                    '';
+
+                                sumber.disabled =
+                                    true;
+
+                            }
+
+                        }
+
+
+                        if (suplier) {
+
+                            suplier.value =
+                                '';
+
+                            suplier.disabled =
+                                true;
+
+                        }
+
+
+                        if (pelanggan) {
+
+                            $(pelanggan)
+                                .val(null)
+                                .trigger(
+                                    'change'
+                                );
+
+                            $(pelanggan)
+                                .prop(
+                                    'disabled',
+                                    true
+                                );
+
+                        }
+
                     }
-
-
-                    if (suplier) {
-
-                        suplier.value = '';
-
-                        suplier.disabled =
-                            true;
-
-                    }
-
-
-                    if (pelanggan) {
-
-                        $(pelanggan)
-                            .val(null)
-                            .trigger('change');
-
-                        $(pelanggan)
-                            .prop(
-                                'disabled',
-                                true
-                            );
-
-                    }
-
-                });
+                );
 
 
             updateSelectionIndicator();
@@ -2471,20 +2855,22 @@ if (confirmClearSelectionBtn) {
                     'cancelConfirmModal'
                 );
 
+
             if (
                 modalElement &&
-                typeof bootstrap !== 'undefined'
+                typeof bootstrap !==
+                    'undefined'
             ) {
 
                 const modal =
-                    bootstrap.Modal.getInstance(
-                        modalElement
-                    );
+                    bootstrap.Modal
+                        .getInstance(
+                            modalElement
+                        );
+
 
                 if (modal) {
-
                     modal.hide();
-
                 }
 
             }
@@ -2511,11 +2897,14 @@ function createHiddenInput(
         );
 
 
-    input.type = 'hidden';
+    input.type =
+        'hidden';
 
-    input.name = name;
+    input.name =
+        name;
 
-    input.value = value;
+    input.value =
+        value;
 
     input.className =
         'generated-selection-input';
@@ -2529,7 +2918,7 @@ function createHiddenInput(
 
 
 /* ============================================================
-   SUBMIT FORM
+   SUBMIT STOK AWAL
 ============================================================ */
 
 const stokAwalForm =
@@ -2538,24 +2927,190 @@ const stokAwalForm =
     );
 
 
+const saveConfirmModalElement =
+    document.getElementById(
+        'saveConfirmModal'
+    );
+
+
+const confirmSaveStockBtn =
+    document.getElementById(
+        'confirmSaveStockBtn'
+    );
+
+
+const saveSelectedCount =
+    document.getElementById(
+        'saveSelectedCount'
+    );
+
+
+let confirmedSave =
+    false;
+
+
+/* ============================================================
+   PROSES SUBMIT SEBENARNYA
+============================================================ */
+
+function submitStokAwal() {
+
+    const form =
+        stokAwalForm;
+
+
+    if (!form) {
+        return;
+    }
+
+
+    /* ========================================================
+       HAPUS HIDDEN INPUT LAMA
+    ======================================================== */
+
+    form
+        .querySelectorAll(
+            '.generated-selection-input'
+        )
+        .forEach(
+            function (input) {
+
+                input.remove();
+
+            }
+        );
+
+
+    const selectedIds =
+        Object.keys(
+            selectedProducts
+        );
+
+
+    /* ========================================================
+       BUAT HIDDEN INPUT
+    ======================================================== */
+
+    selectedIds.forEach(
+        function (kodeBarang) {
+
+            const data =
+                selectedProducts[
+                    kodeBarang
+                ];
+
+
+            createHiddenInput(
+                form,
+                'selected_products[]',
+                kodeBarang
+            );
+
+
+            createHiddenInput(
+                form,
+                'jumlah[' +
+                    kodeBarang +
+                    ']',
+                data.jumlah ?? ''
+            );
+
+
+            createHiddenInput(
+                form,
+                'satuan_terkecil[' +
+                    kodeBarang +
+                    ']',
+                data.satuan_terkecil ??
+                    ''
+            );
+
+
+            createHiddenInput(
+                form,
+                'tipe_relasi[' +
+                    kodeBarang +
+                    ']',
+                data.tipe_relasi ?? ''
+            );
+
+
+            createHiddenInput(
+                form,
+                'id_suplier_text[' +
+                    kodeBarang +
+                    ']',
+                data.id_suplier_text ??
+                    ''
+            );
+
+
+            createHiddenInput(
+                form,
+                'id_pelanggan_text[' +
+                    kodeBarang +
+                    ']',
+                data.id_pelanggan_text ??
+                    ''
+            );
+
+        }
+    );
+
+
+    /* ========================================================
+       HAPUS STORAGE
+    ======================================================== */
+
+    localStorage.removeItem(
+        STORAGE_KEY
+    );
+
+
+    /* ========================================================
+       TANDAI SUDAH DIKONFIRMASI
+    ======================================================== */
+
+    confirmedSave =
+        true;
+
+
+    /* ========================================================
+       SUBMIT NATIVE
+    ======================================================== */
+
+    form.submit();
+
+}
+
+
+/* ============================================================
+   KLIK SIMPAN
+============================================================ */
+
 if (stokAwalForm) {
 
     stokAwalForm.addEventListener(
         'submit',
         function (event) {
 
-            const form = this;
+
+            /* ==================================================
+               JIKA SUDAH DIKONFIRMASI
+            ================================================== */
+
+            if (confirmedSave) {
+
+                return;
+
+            }
 
 
-            form
-                .querySelectorAll(
-                    '.generated-selection-input'
-                )
-                .forEach(function (input) {
+            /* ==================================================
+               STOP SUBMIT LANGSUNG
+            ================================================== */
 
-                    input.remove();
-
-                });
+            event.preventDefault();
 
 
             const selectedIds =
@@ -2564,11 +3119,14 @@ if (stokAwalForm) {
                 );
 
 
-            if (
-                selectedIds.length === 0
-            ) {
+            /* ==================================================
+               CEK PRODUK
+            ================================================== */
 
-                event.preventDefault();
+            if (
+                selectedIds.length ===
+                0
+            ) {
 
                 alert(
                     'Tidak ada produk yang dipilih.'
@@ -2579,72 +3137,106 @@ if (stokAwalForm) {
             }
 
 
-            selectedIds.forEach(
-                function (kodeBarang) {
+            /* ==================================================
+               TAMPILKAN JUMLAH PRODUK
+            ================================================== */
 
-                    const data =
-                        selectedProducts[
-                            kodeBarang
-                        ];
+            if (saveSelectedCount) {
 
+                saveSelectedCount.textContent =
+                    selectedIds.length;
 
-                    createHiddenInput(
-                        form,
-                        'selected_products[]',
-                        kodeBarang
-                    );
+            }
 
 
-                    createHiddenInput(
-                        form,
-                        'jumlah[' +
-                        kodeBarang +
-                        ']',
-                        data.jumlah ?? ''
-                    );
+            /* ==================================================
+               TAMPILKAN MODAL
+            ================================================== */
+
+            if (
+                saveConfirmModalElement &&
+                typeof bootstrap !==
+                    'undefined'
+            ) {
+
+                const modal =
+                    bootstrap.Modal
+                        .getOrCreateInstance(
+                            saveConfirmModalElement
+                        );
 
 
-                    createHiddenInput(
-                        form,
-                        'satuan_terkecil[' +
-                        kodeBarang +
-                        ']',
-                        data.satuan_terkecil ?? ''
-                    );
+                modal.show();
+
+            }
+
+        }
+    );
+
+}
 
 
-                    createHiddenInput(
-                        form,
-                        'tipe_relasi[' +
-                        kodeBarang +
-                        ']',
-                        data.tipe_relasi ?? ''
-                    );
+/* ============================================================
+   KONFIRMASI SIMPAN
+============================================================ */
+
+if (confirmSaveStockBtn) {
+
+    confirmSaveStockBtn.addEventListener(
+        'click',
+        function () {
 
 
-                    createHiddenInput(
-                        form,
-                        'id_suplier_text[' +
-                        kodeBarang +
-                        ']',
-                        data.id_suplier_text ?? ''
-                    );
+            /* ==================================================
+               NONAKTIFKAN TOMBOL
+            ================================================== */
+
+            confirmSaveStockBtn.disabled =
+                true;
 
 
-                    createHiddenInput(
-                        form,
-                        'id_pelanggan_text[' +
-                        kodeBarang +
-                        ']',
-                        data.id_pelanggan_text ?? ''
-                    );
+            confirmSaveStockBtn.innerHTML =
+                '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' +
+                ' Menyimpan...';
+
+
+            /* ==================================================
+               TUTUP MODAL
+            ================================================== */
+
+            if (
+                saveConfirmModalElement &&
+                typeof bootstrap !==
+                    'undefined'
+            ) {
+
+                const modal =
+                    bootstrap.Modal
+                        .getInstance(
+                            saveConfirmModalElement
+                        );
+
+
+                if (modal) {
+
+                    modal.hide();
 
                 }
-            );
+
+            }
 
 
-            localStorage.removeItem(
-                STORAGE_KEY
+            /* ==================================================
+               SUBMIT
+            ================================================== */
+
+            setTimeout(
+                function () {
+
+                    submitStokAwal();
+
+                },
+                150
             );
 
         }
@@ -2660,27 +3252,43 @@ if (stokAwalForm) {
 loadSelectedProducts();
 
 
-$(document).ready(function () {
-
-    $('#table_barang').DataTable({
-
-        responsive: true,
-
-        autoWidth: false,
-
-        paging: false,
-
-        searching: false,
-
-        info: false
-
-    });
+$(document).ready(
+    function () {
 
 
-    initPelangganSelect();
+        /* ======================================================
+           DATATABLE
+        ====================================================== */
 
-    restoreCurrentPage();
+        $('#table_barang').DataTable({
 
-});
+            responsive: true,
+
+            autoWidth: false,
+
+            paging: false,
+
+            searching: false,
+
+            info: false
+
+        });
+
+
+        /* ======================================================
+           SELECT2
+        ====================================================== */
+
+        initPelangganSelect();
+
+
+        /* ======================================================
+           RESTORE SELECTION
+        ====================================================== */
+
+        restoreCurrentPage();
+
+    }
+);
 
 </script>
