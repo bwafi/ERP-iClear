@@ -10,18 +10,27 @@
 
     <!-- Favicon icon-->
     <link rel="shortcut icon" type="image/png"
-        href="<?php echo base_url('template/') ?><?= env('app.logo', 'assets/images/logo.png') ?>" />
+        href="<?php
+        echo base_url("template/");
+        env("app.logo", "assets/images/logo.png");
+        ?>" />
 
     <!-- Core Css -->
-    <link rel="stylesheet" href="<?php echo base_url('template/') ?>assets/css/styles.css" />
-    <link rel="stylesheet" href="<?php echo base_url('template/assets/libs/select2/dist/css/select2.min.css') ?>">
+    <link rel="stylesheet" href="<?php echo base_url(
+        "template/",
+    ); ?>assets/css/styles.css" />
+    <link rel="stylesheet" href="<?php echo base_url(
+        "template/assets/libs/select2/dist/css/select2.min.css",
+    ); ?>">
 
 
 
-    <title><?= env('app.name', 'App ERP') ?></title>
+    <title><?= env("app.name", "App ERP") ?></title>
 
     <!-- jvectormap  -->
-    <link rel="stylesheet" href="<?php echo base_url('template/') ?>assets/libs/jvectormap/jquery-jvectormap.css">
+    <link rel="stylesheet" href="<?php echo base_url(
+        "template/",
+    ); ?>assets/libs/jvectormap/jquery-jvectormap.css">
 
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -43,16 +52,18 @@
 <body>
     <!-- Preloader -->
     <div class="preloader">
-        <img src="<?php echo base_url('template/') ?>assets/images/logos/loader.svg" alt="loader"
+        <img src="<?php echo base_url(
+            "template/",
+        ); ?>assets/images/logos/loader.svg" alt="loader"
             class="lds-ripple img-fluid" />
     </div>
     <div id="main-wrapper">
         <!-- Sidebar Start -->
-        <?php echo view('inc/left_vertical'); ?>
+        <?php echo view("inc/left_vertical"); ?>
         <!--  Sidebar End -->
         <div class="page-wrapper">
 
-            <?php echo view('inc/left_horizontal'); ?>
+            <?php echo view("inc/left_horizontal"); ?>
 
             <div class="body-wrapper">
                 <div class="container-fluid mw-100">
@@ -77,7 +88,7 @@
 
 
                                 <?php
-                                $id_unit = session()->get('ID_UNIT');
+                                $id_unit = session()->get("ID_UNIT");
 
                                 use App\Models\ModelUnit;
 
@@ -85,9 +96,15 @@
                                 $unitLogo = $ModelUnit->getById($id_unit);
                                 ?>
                                 <div class="d-block d-lg-none">
-                                    <img src="<?= base_url('template/assets/images/' . $unitLogo->LOGO) ?>"
+                                    <img src="<?= base_url(
+                                        "template/assets/images/" .
+                                            $unitLogo->LOGO,
+                                    ) ?>"
                                         class="dark-logo" alt="Logo-Dark" style="width: 30px; height: auto;" />
-                                    <img src="<?= base_url('template/assets/images/' . $unitLogo->LOGO) ?>"
+                                    <img src="<?= base_url(
+                                        "template/assets/images/" .
+                                            $unitLogo->LOGO,
+                                    ) ?>"
                                         class="light-logo" alt="Logo-light" style="width: 30px; height: auto;" />
                                 </div>
 
@@ -390,8 +407,14 @@
                                                             class="fs-7 text-dark"></iconify-icon>
 
                                                         <!-- Badge angka kecil -->
-                                                        <?php if (count($stokMinimum) > 0): ?>
-                                                        <span class="notif-count"><?= count($stokMinimum) ?></span>
+                                                        <?php if (
+                                                            count(
+                                                                $stokMinimum,
+                                                            ) > 0
+                                                        ): ?>
+                                                        <span class="notif-count"><?= count(
+                                                            $stokMinimum,
+                                                        ) ?></span>
                                                         <?php endif; ?>
                                                     </div>
 
@@ -403,39 +426,56 @@
                                                     <div style="justify-content: space-around;"
                                                         class="d-flex align-items-center py-3 px-7">
                                                         <h3 class="mb-0 fs-5">Stok Minimum</h3>
-                                                        <span class="badge bg-info ms-3"><?= count($stokMinimum) ?>
+                                                        <span class="badge bg-info ms-3"><?= count(
+                                                            $stokMinimum,
+                                                        ) ?>
                                                             new</span>
                                                     </div>
 
                                                     <div class="message-body" data-simplebar>
-                                                        <?php if (!empty($stokMinimum)) : ?>
-                                                        <?php foreach ($stokMinimum as $item) : ?>
+                                                        <?php if (
+                                                            !empty($stokMinimum)
+                                                        ): ?>
+                                                        <?php foreach (
+                                                            $stokMinimum
+                                                            as $item
+                                                        ): ?>
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?= base_url('template/assets/images/profile/user-2.jpg') ?>"
+                                                                <img src="<?= base_url(
+                                                                    "template/assets/images/profile/user-2.jpg",
+                                                                ) ?>"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
                                                                 <div
                                                                     class="d-flex align-items-center justify-content-between">
                                                                     <h5 class="mb-0 fs-3 fw-normal">
-                                                                        <?= esc($item->nama_barang) ?>
+                                                                        <?= esc(
+                                                                            $item->nama_barang,
+                                                                        ) ?>
                                                                     </h5>
                                                                 </div>
                                                                 <span
                                                                     class="fs-2 text-nowrap d-block fw-normal mt-1 text-muted">
-                                                                    Unit: <?= esc($item->nama_unit) ?>
+                                                                    Unit: <?= esc(
+                                                                        $item->nama_unit,
+                                                                    ) ?>
                                                                 </span>
                                                                 <span
                                                                     class="fs-2 text-nowrap d-block fw-normal mt-1 text-danger">
-                                                                    Sisa <?= esc($item->stok_akhir) ?> (Min:
-                                                                    <?= esc($item->stok_minimum) ?>)
+                                                                    Sisa <?= esc(
+                                                                        $item->stok_akhir,
+                                                                    ) ?> (Min:
+                                                                    <?= esc(
+                                                                        $item->stok_minimum,
+                                                                    ) ?>)
                                                                 </span>
                                                             </div>
                                                         </a>
                                                         <?php endforeach; ?>
-                                                        <?php else : ?>
+                                                        <?php else: ?>
                                                         <div class="px-7 py-6 text-muted">Tidak ada notifikasi stok
                                                             minimum</div>
                                                         <?php endif; ?>
@@ -444,7 +484,9 @@
 
 
                                                     <div class="py-6 px-7 mb-1">
-                                                        <a href="<?php echo base_url('stok_minimum') ?>">
+                                                        <a href="<?php echo base_url(
+                                                            "stok_minimum",
+                                                        ); ?>">
                                                             <button class="btn btn-primary w-100">
                                                                 See All Messages
                                                             </button>
@@ -459,7 +501,10 @@
                                             <!-- ------------------------------- -->
                                             <!-- start proses Service  Dropdown -->
                                             <!-- ------------------------------- -->
-                                            <?php if ($akun_service->apakah_service === "service_oke") : ?>
+                                            <?php if (
+                                                $akun_service->apakah_service ===
+                                                "service_oke"
+                                            ): ?>
                                             <li class="nav-item dropdown">
                                                 <a class="nav-link position-relative nav-icon-hover"
                                                     href="javascript:void(0)" id="drop3" data-bs-toggle="dropdown"
@@ -470,8 +515,14 @@
                                                             class="fs-7 text-dark"></iconify-icon>
 
                                                         <!-- Badge angka kecil -->
-                                                        <?php if (count($proses_service) > 0): ?>
-                                                        <span class="notif-count"><?= count($proses_service) ?></span>
+                                                        <?php if (
+                                                            count(
+                                                                $proses_service,
+                                                            ) > 0
+                                                        ): ?>
+                                                        <span class="notif-count"><?= count(
+                                                            $proses_service,
+                                                        ) ?></span>
                                                         <?php endif; ?>
                                                     </div>
 
@@ -486,35 +537,59 @@
                                                     <div class=" border-bottom"
                                                         style=" display: flex; justify-content: space-around; outline: none; outline-color: transparent;">
                                                         <h3 class="mb-0 fs-5">Proses Service</h3>
-                                                        <span class="badge bg-info ms-3"><?= count($proses_service) ?>
+                                                        <span class="badge bg-info ms-3"><?= count(
+                                                            $proses_service,
+                                                        ) ?>
                                                             new</span>
 
                                                     </div>
                                                     <div class="message-body" data-simplebar>
-                                                        <?php if (!empty($proses_service)) : ?>
-                                                        <?php foreach (array_slice($proses_service, 0, 3) as $item) : ?>
+                                                        <?php if (
+                                                            !empty(
+                                                                $proses_service
+                                                            )
+                                                        ): ?>
+                                                        <?php foreach (
+                                                            array_slice(
+                                                                $proses_service,
+                                                                0,
+                                                                3,
+                                                            )
+                                                            as $item
+                                                        ): ?>
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?= base_url('template/assets/images/profile/user-2.jpg') ?>"
+                                                                <img src="<?= base_url(
+                                                                    "template/assets/images/profile/user-2.jpg",
+                                                                ) ?>"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
                                                                 <div
                                                                     class="d-flex align-items-center justify-content-between">
                                                                     <h5 class="mb-0 fs-3 fw-normal">
-                                                                        <?= esc($item->nama_pelanggan ?? '-') ?></h5>
+                                                                        <?= esc(
+                                                                            $item->nama_pelanggan ??
+                                                                                "-",
+                                                                        ) ?></h5>
                                                                 </div>
                                                                 <span class="fs-2 d-block fw-normal mt-1 text-muted">
-                                                                    Nomor Service: <?= esc($item->no_service ?? '-') ?>
+                                                                    Nomor Service: <?= esc(
+                                                                        $item->no_service ??
+                                                                            "-",
+                                                                    ) ?>
                                                                 </span>
                                                                 <span class="fs-2 d-block fw-normal mt-1 text-primary">
-                                                                    Status: <?= esc($item->status ?? 'Proses') ?>
+                                                                    Status: <?= esc(
+                                                                        $item->status ??
+                                                                            "Proses",
+                                                                    ) ?>
                                                                 </span>
                                                             </div>
                                                         </a>
                                                         <?php endforeach; ?>
-                                                        <?php else : ?>
+                                                        <?php else: ?>
                                                         <div class="px-7 py-6 text-muted">Tidak ada service dalam proses
                                                         </div>
                                                         <?php endif; ?>
@@ -523,7 +598,9 @@
                                                     <!-- Tombol Lihat Semua -->
                                                     <div class="py-6 px-7 mb-1 border-top">
 
-                                                        <a href="<?php echo base_url('proses_service') ?>">
+                                                        <a href="<?php echo base_url(
+                                                            "proses_service",
+                                                        ); ?>">
                                                             <button class="btn btn-primary w-100">Lihat Semua
                                                                 Notifikasi</button>
                                                         </a>
@@ -549,8 +626,14 @@
                                                             class="fs-7 text-dark"></iconify-icon>
 
                                                         <!-- Badge angka kecil -->
-                                                        <?php if (count($bisa_diambil) > 0): ?>
-                                                        <span class="notif-count"><?= count($bisa_diambil) ?></span>
+                                                        <?php if (
+                                                            count(
+                                                                $bisa_diambil,
+                                                            ) > 0
+                                                        ): ?>
+                                                        <span class="notif-count"><?= count(
+                                                            $bisa_diambil,
+                                                        ) ?></span>
                                                         <?php endif; ?>
                                                     </div>
 
@@ -569,27 +652,48 @@
                                                     <div class=" border-bottom"
                                                         style="display: flex; justify-content: space-around; outline: none; outline-color: transparent;">
                                                         <h3 class="mb-0 fs-5">Siap Diambil</h3>
-                                                        <span class="badge bg-info ms-3"><?= count($bisa_diambil) ?>
+                                                        <span class="badge bg-info ms-3"><?= count(
+                                                            $bisa_diambil,
+                                                        ) ?>
                                                             new</span>
 
                                                     </div>
                                                     <div class="message-body" data-simplebar>
-                                                        <?php if (!empty($bisa_diambil)) : ?>
-                                                        <?php foreach (array_slice($bisa_diambil, 0, 3) as $item) : ?>
+                                                        <?php if (
+                                                            !empty(
+                                                                $bisa_diambil
+                                                            )
+                                                        ): ?>
+                                                        <?php foreach (
+                                                            array_slice(
+                                                                $bisa_diambil,
+                                                                0,
+                                                                3,
+                                                            )
+                                                            as $item
+                                                        ): ?>
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?= base_url('template/assets/images/profile/user-3.jpg') ?>"
+                                                                <img src="<?= base_url(
+                                                                    "template/assets/images/profile/user-3.jpg",
+                                                                ) ?>"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
                                                                 <div
                                                                     class="d-flex align-items-center justify-content-between">
                                                                     <h5 class="mb-0 fs-3 fw-normal">
-                                                                        <?= esc($item->nama_pelanggan ?? '-') ?></h5>
+                                                                        <?= esc(
+                                                                            $item->nama_pelanggan ??
+                                                                                "-",
+                                                                        ) ?></h5>
                                                                 </div>
                                                                 <span class="fs-2 d-block fw-normal mt-1 text-muted">
-                                                                    Nomor Service: <?= esc($item->no_service ?? '-') ?>
+                                                                    Nomor Service: <?= esc(
+                                                                        $item->no_service ??
+                                                                            "-",
+                                                                    ) ?>
                                                                 </span>
                                                                 <span class="fs-2 d-block fw-normal mt-1 text-success">
                                                                     Siap Diambil
@@ -597,7 +701,7 @@
                                                             </div>
                                                         </a>
                                                         <?php endforeach; ?>
-                                                        <?php else : ?>
+                                                        <?php else: ?>
                                                         <div class="px-7 py-6 text-muted">Tidak ada service siap diambil
                                                         </div>
                                                         <?php endif; ?>
@@ -609,7 +713,9 @@
                                                     <!-- Tombol Lihat Semua -->
                                                     <div class="py-6 px-7 mb-1 border-top">
 
-                                                        <a href="<?php echo base_url('bisa_diambil') ?>">
+                                                        <a href="<?php echo base_url(
+                                                            "bisa_diambil",
+                                                        ); ?>">
                                                             <button class="btn btn-primary w-100">Lihat Semua
                                                                 Notifikasi</button>
                                                         </a>
@@ -635,8 +741,14 @@
                                                             class="fs-7 text-dark"></iconify-icon>
 
                                                         <!-- Badge angka kecil -->
-                                                        <?php if (count($expired_service) > 0): ?>
-                                                        <span class="notif-count"><?= count($expired_service) ?></span>
+                                                        <?php if (
+                                                            count(
+                                                                $expired_service,
+                                                            ) > 0
+                                                        ): ?>
+                                                        <span class="notif-count"><?= count(
+                                                            $expired_service,
+                                                        ) ?></span>
                                                         <?php endif; ?>
                                                     </div>
 
@@ -651,27 +763,48 @@
                                                     <div class=" border-bottom"
                                                         style="display: flex; justify-content: space-around; outline: none; outline-color: transparent;">
                                                         <h3 class="mb-0 fs-5">Expired Service</h3>
-                                                        <span class="badge bg-info ms-3"><?= count($expired_service) ?>
+                                                        <span class="badge bg-info ms-3"><?= count(
+                                                            $expired_service,
+                                                        ) ?>
                                                             new</span>
 
                                                     </div>
                                                     <div class="message-body" data-simplebar>
-                                                        <?php if (!empty($expired_service)) : ?>
-                                                        <?php foreach (array_slice($expired_service, 0, 3) as $item) : ?>
+                                                        <?php if (
+                                                            !empty(
+                                                                $expired_service
+                                                            )
+                                                        ): ?>
+                                                        <?php foreach (
+                                                            array_slice(
+                                                                $expired_service,
+                                                                0,
+                                                                3,
+                                                            )
+                                                            as $item
+                                                        ): ?>
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?= base_url('template/assets/images/profile/user-4.jpg') ?>"
+                                                                <img src="<?= base_url(
+                                                                    "template/assets/images/profile/user-4.jpg",
+                                                                ) ?>"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
                                                                 <div
                                                                     class="d-flex align-items-center justify-content-between">
                                                                     <h5 class="mb-0 fs-3 fw-normal">
-                                                                        <?= esc($item->nama_pelanggan ?? '-') ?></h5>
+                                                                        <?= esc(
+                                                                            $item->nama_pelanggan ??
+                                                                                "-",
+                                                                        ) ?></h5>
                                                                 </div>
                                                                 <span class="fs-2 d-block fw-normal mt-1 text-muted">
-                                                                    Nomor Service: <?= esc($item->no_service ?? '-') ?>
+                                                                    Nomor Service: <?= esc(
+                                                                        $item->no_service ??
+                                                                            "-",
+                                                                    ) ?>
                                                                 </span>
                                                                 <span class="fs-2 d-block fw-normal mt-1 text-danger">
                                                                     Status: Expired
@@ -679,7 +812,7 @@
                                                             </div>
                                                         </a>
                                                         <?php endforeach; ?>
-                                                        <?php else : ?>
+                                                        <?php else: ?>
                                                         <div class="px-7 py-6 text-muted">Tidak ada service expired
                                                         </div>
                                                         <?php endif; ?>
@@ -687,7 +820,9 @@
 
                                                     <!-- Tombol Lihat Semua -->
                                                     <div class="py-6 px-7 mb-1 border-top">
-                                                        <a href="<?php echo base_url('expired_service') ?>">
+                                                        <a href="<?php echo base_url(
+                                                            "expired_service",
+                                                        ); ?>">
                                                             <button class="btn btn-primary w-100">Lihat Semua
                                                                 Notifikasi</button>
                                                         </a>
@@ -728,7 +863,9 @@
                                                     id="drop1" data-bs-toggle="dropdown" aria-expanded="false">
                                                     <div class="d-flex align-items-center flex-shrink-0">
                                                         <div class="user-profile me-sm-3 me-2">
-                                                            <img src="<?= base_url('template/') ?>assets/images/profile/user-1.jpg"
+                                                            <img src="<?= base_url(
+                                                                "template/",
+                                                            ) ?>assets/images/profile/user-1.jpg"
                                                                 width="45" class="rounded-circle" alt="">
                                                         </div>
                                                         <span class="d-sm-none d-block">
@@ -737,10 +874,14 @@
                                                         </span>
                                                         <div class="d-none d-sm-block">
                                                             <h6 class="fw-bold fs-4 mb-1 profile-name">
-                                                                <?= session('NAMA') ?>
+                                                                <?= session(
+                                                                    "NAMA",
+                                                                ) ?>
                                                             </h6>
                                                             <p class="fs-3 lh-base mb-0 profile-subtext">
-                                                                <?= session('NAMA_JABATAN') ?>
+                                                                <?= session(
+                                                                    "NAMA_JABATAN",
+                                                                ) ?>
                                                             </p>
                                                         </div>
                                                     </div>
@@ -760,18 +901,26 @@
                                                         </div>
 
                                                         <div class="d-flex align-items-center mx-7 py-9 border-bottom">
-                                                            <img src="<?= base_url('template/') ?>assets/images/profile/user-1.jpg"
+                                                            <img src="<?= base_url(
+                                                                "template/",
+                                                            ) ?>assets/images/profile/user-1.jpg"
                                                                 alt="user" width="90" class="rounded-circle" />
                                                             <div class="ms-4">
-                                                                <h4 class="mb-0 fs-5 fw-normal"><?= session('NAMA') ?>
+                                                                <h4 class="mb-0 fs-5 fw-normal"><?= session(
+                                                                    "NAMA",
+                                                                ) ?>
                                                                 </h4>
                                                                 <span
-                                                                    class="text-muted"><?= session('NAMA_JABATAN') ?></span>
+                                                                    class="text-muted"><?= session(
+                                                                        "NAMA_JABATAN",
+                                                                    ) ?></span>
                                                                 <p
                                                                     class="text-muted mb-0 mt-1 d-flex align-items-center">
                                                                     <iconify-icon icon="solar:mailbox-line-duotone"
                                                                         class="fs-4 me-1"></iconify-icon>
-                                                                    <?= session('EMAIL') ?>
+                                                                    <?= session(
+                                                                        "EMAIL",
+                                                                    ) ?>
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -800,7 +949,9 @@
                                                                 <!-- Hidden Password Form -->
                                                                 <div id="password-form" class="d-none mt-3">
                                                                     <form method="post"
-                                                                        action="<?= base_url('auth/changePassword') ?>">
+                                                                        action="<?= base_url(
+                                                                            "auth/changePassword",
+                                                                        ) ?>">
                                                                         <?= csrf_field() ?>
                                                                         <div class="mb-2">
                                                                             <input type="password" name="new_password"
@@ -822,7 +973,9 @@
 
                                                             <!-- Logout -->
                                                             <div class="py-6 px-7 mb-1">
-                                                                <a href="<?= base_url('Logout') ?>"
+                                                                <a href="<?= base_url(
+                                                                    "Logout",
+                                                                ) ?>"
                                                                     class="btn btn-primary w-100">Log Out</a>
                                                             </div>
 
@@ -865,7 +1018,9 @@
                                 tabindex="-1" id="mobilenavbar" aria-labelledby="offcanvasWithBothOptionsLabel">
                                 <nav class="sidebar-nav scroll-sidebar">
                                     <div class="offcanvas-header justify-content-between">
-                                        <img src="<?php echo base_url('template/') ?>assets/images/logos/favicon.png"
+                                        <img src="<?php echo base_url(
+                                            "template/",
+                                        ); ?>assets/images/logos/favicon.png"
                                             alt="" class="img-fluid" />
                                         <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
                                             aria-label="Close"></button>
@@ -884,7 +1039,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-chat.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-chat.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -898,7 +1055,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-invoice.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-invoice.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -912,7 +1071,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-mobile.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-mobile.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -927,7 +1088,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-message-box.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-message-box.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -941,7 +1104,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-cart.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-cart.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -955,7 +1120,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-date.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-date.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -969,7 +1136,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-lifebuoy.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-lifebuoy.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -984,7 +1153,9 @@
                                                         <a href="#" class="d-flex align-items-center">
                                                             <div
                                                                 class="text-bg-light rounded-1 me-3 p-6 d-flex align-items-center justify-content-center">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/svgs/icon-dd-application.svg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/svgs/icon-dd-application.svg"
                                                                     alt="" class="img-fluid" width="24" height="24" />
                                                             </div>
                                                             <div class="d-inline-block">
@@ -1056,9 +1227,13 @@
                                 <ul class="navbar-nav">
                                     <li class="nav-item d-none d-xl-block">
                                         <a href="index.html" class="text-nowrap nav-link">
-                                            <img src="<?php echo base_url('template/') ?>assets/images/logos/logo-light.svg"
+                                            <img src="<?php echo base_url(
+                                                "template/",
+                                            ); ?>assets/images/logos/logo-light.svg"
                                                 class="dark-logo" width="180" alt="" />
-                                            <img src="<?php echo base_url('template/') ?>assets/images/logos/logo-dark.svg"
+                                            <img src="<?php echo base_url(
+                                                "template/",
+                                            ); ?>assets/images/logos/logo-dark.svg"
                                                 class="light-logo" width="180" alt="" />
                                         </a>
                                     </li>
@@ -1376,7 +1551,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-2.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-2.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
@@ -1398,7 +1575,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-3.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-3.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
@@ -1421,7 +1600,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-4.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-4.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
@@ -1444,7 +1625,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-5.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-5.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
@@ -1467,7 +1650,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-7 d-flex align-items-center py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-6.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-6.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-100 d-inline-block v-middle ps-3">
@@ -1525,7 +1710,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-2 d-flex align-items-center px-7 py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-2.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-2.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-75 d-inline-block v-middle ps-3">
@@ -1541,7 +1728,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-2 d-flex align-items-center px-7 py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-3.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-3.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-75 d-inline-block v-middle ps-3">
@@ -1558,7 +1747,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-2 d-flex align-items-center px-7 py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-4.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-4.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-75 d-inline-block v-middle ps-3">
@@ -1575,7 +1766,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-2 d-flex align-items-center px-7 py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-5.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-5.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-75 d-inline-block v-middle ps-3">
@@ -1592,7 +1785,9 @@
                                                         <a href="javascript:void(0)"
                                                             class="dropdown-item px-2 d-flex align-items-center px-7 py-6">
                                                             <span class="flex-shrink-0">
-                                                                <img src="<?php echo base_url('template/') ?>assets/images/profile/user-6.jpg"
+                                                                <img src="<?php echo base_url(
+                                                                    "template/",
+                                                                ); ?>assets/images/profile/user-6.jpg"
                                                                     alt="user" width="45" class="rounded-circle" />
                                                             </span>
                                                             <div class="w-75 d-inline-block v-middle ps-3">
@@ -1625,7 +1820,9 @@
                                                     id="drop1" data-bs-toggle="dropdown" aria-expanded="false">
                                                     <div class="d-flex align-items-center flex-shrink-0">
                                                         <div class="user-profile me-sm-3 me-2">
-                                                            <img src="<?php echo base_url('template/') ?>assets/images/profile/user-1.jpg"
+                                                            <img src="<?php echo base_url(
+                                                                "template/",
+                                                            ); ?>assets/images/profile/user-1.jpg"
                                                                 width="45" class="rounded-circle" alt="">
                                                         </div>
                                                         <span class="d-sm-none d-block">
@@ -1657,7 +1854,9 @@
                                                         </div>
 
                                                         <div class="d-flex align-items-center mx-7 py-9 border-bottom">
-                                                            <img src="<?php echo base_url('template/') ?>assets/images/profile/user-1.jpg"
+                                                            <img src="<?php echo base_url(
+                                                                "template/",
+                                                            ); ?>assets/images/profile/user-1.jpg"
                                                                 alt="user" width="90" class="rounded-circle" />
                                                             <div class="ms-4">
                                                                 <h4 class="mb-0 fs-5 fw-normal">Mike Nielsen</h4>
@@ -1672,7 +1871,9 @@
                                                         </div>
 
                                                         <div class="message-body">
-                                                            <a href="<?php echo base_url('template/') ?>dark/page-user-profile.html"
+                                                            <a href="<?php echo base_url(
+                                                                "template/",
+                                                            ); ?>dark/page-user-profile.html"
                                                                 class="dropdown-item px-7 d-flex align-items-center py-6">
                                                                 <span
                                                                     class="btn px-3 py-2 bg-info-subtle rounded-1 text-info shadow-none">
@@ -1689,7 +1890,9 @@
                                                                 </div>
                                                             </a>
 
-                                                            <a href="<?php echo base_url('template/') ?>dark/app-email.html"
+                                                            <a href="<?php echo base_url(
+                                                                "template/",
+                                                            ); ?>dark/app-email.html"
                                                                 class="dropdown-item px-7 d-flex align-items-center py-6">
                                                                 <span
                                                                     class="btn px-3 py-2 bg-success-subtle rounded-1 text-success shadow-none">
@@ -1705,7 +1908,9 @@
                                                                 </div>
                                                             </a>
 
-                                                            <a href="<?php echo base_url('template/') ?>dark/app-notes.html"
+                                                            <a href="<?php echo base_url(
+                                                                "template/",
+                                                            ); ?>dark/app-notes.html"
                                                                 class="dropdown-item px-7 d-flex align-items-center py-6">
                                                                 <span
                                                                     class="btn px-3 py-2 bg-danger-subtle rounded-1 text-danger shadow-none">
@@ -1723,7 +1928,9 @@
                                                         </div>
 
                                                         <div class="py-6 px-7 mb-1">
-                                                            <a href="<?php echo base_url('template/') ?>dark/authentication-login.html"
+                                                            <a href="<?php echo base_url(
+                                                                "template/",
+                                                            ); ?>dark/authentication-login.html"
                                                                 class="btn btn-primary w-100">Log Out</a>
                                                         </div>
                                                     </div>
@@ -1741,7 +1948,7 @@
                     <!--  Header End -->
 
 
-                    <?= view($body); ?>
+                    <?= view($body) ?>
 
                 </div>
             </div>
@@ -1939,15 +2146,25 @@
                     <?php
                     $uri = \Config\Services::request()->getUri()->getPath();
                     // remove index.php
-                    $uri = str_replace('/index.php/', '', $uri);
-                    $manualbook = db_connect()->table('menu')->where(array("url" => $uri))->get()->getFirstRow();
-                    if (!empty($manualbook) && $manualbook->manualbook != null): ?>
+                    $uri = str_replace("/index.php/", "", $uri);
+                    $manualbook = db_connect()
+                        ->table("menu")
+                        ->where(["url" => $uri])
+                        ->get()
+                        ->getFirstRow();
+                    if (
+                        !empty($manualbook) &&
+                        $manualbook->manualbook != null
+                    ): ?>
                     <h4><?= $manualbook->nama_menu ?></h4>
-                    <embed type="application/pdf" src="<?= base_url() . "/manualbook/" . $manualbook->manualbook ?>"
+                    <embed type="application/pdf" src="<?= base_url() .
+                        "/manualbook/" .
+                        $manualbook->manualbook ?>"
                         width="100%" height="800"></embed>
                     <?php else: ?>
                     <h4>Manual Book Tidak Tersedia</h4>
-                    <?php endif; ?>
+                    <?php endif;
+                    ?>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn bg-danger-subtle text-danger  waves-effect text-start"
@@ -1982,31 +2199,55 @@
 
 
 
-    <script src="<?php echo base_url('template/') ?>assets/js/vendor.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/vendor.min.js"></script>
     <!-- Import Js Files -->
-    <script src="<?php echo base_url('template/') ?>assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/libs/simplebar/dist/simplebar.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/theme/app.dark.init.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/theme/theme.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/theme/app.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/theme/sidebarmenu.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/theme/feather.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/libs/simplebar/dist/simplebar.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/theme/app.dark.init.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/theme/theme.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/theme/app.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/theme/sidebarmenu.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/theme/feather.min.js"></script>
 
     <!-- solar icons -->
     <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/libs/jvectormap/jquery-jvectormap.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/libs/apexcharts/dist/apexcharts.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/extra-libs/jvectormap/jquery-jvectormap-us-aea-en.js">
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/libs/jvectormap/jquery-jvectormap.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/libs/apexcharts/dist/apexcharts.min.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/extra-libs/jvectormap/jquery-jvectormap-us-aea-en.js">
     </script>
-    <script src="<?php echo base_url('template/') ?>assets/js/dashboards/dashboard.js"></script>
+    <script src="<?php echo base_url(
+        "template/",
+    ); ?>assets/js/dashboards/dashboard.js"></script>
 
 
     <!-- js alert -->
-    <?php if (session()->getFlashdata('sukses')) : ?>
+    <?php if (session()->getFlashdata("sukses")): ?>
     <script>
     $(document).ready(function() {
         toastr.success(
-            "<?= session()->getFlashdata('sukses'); ?>",
+            "<?= session()->getFlashdata("sukses") ?>",
             "Berhasil!", {
                 showMethod: "slideDown",
                 hideMethod: "slideUp",
@@ -2018,11 +2259,11 @@
     </script>
     <?php endif; ?>
     <!-- js alert Ends -->
-    <?php if (session()->getFlashdata('gagal')) : ?>
+    <?php if (session()->getFlashdata("gagal")): ?>
     <script>
     $(document).ready(function() {
         toastr.warning(
-            <?= json_encode(session()->getFlashdata('gagal')) ?>,
+            <?= json_encode(session()->getFlashdata("gagal")) ?>,
             "Gagal!", {
                 showMethod: "slideDown",
                 hideMethod: "slideUp",
@@ -2032,7 +2273,7 @@
         );
     });
     </script>
-    <?php endif ?>
+    <?php endif; ?>
 
 
 
@@ -2043,14 +2284,41 @@
 document.documentElement.setAttribute("data-boxed-layout", "full");
 document.getElementById("full-layout").checked = true;
 </script>
-<script src="<?php echo base_url('template/assets/libs/datatables.net/js/jquery.dataTables.min.js') ?>"></script>
-<script src="<?php echo base_url('template/assets/js/datatable/datatable-basic.init.js') ?>"></script>
+<!-- DataTables CSS -->
 <link rel="stylesheet"
-    href="<?php echo base_url('template/assets/libs/datatables.net-bs5/css/dataTables.bootstrap5.min.css') ?>" />
-<script src="<?php echo base_url('template/assets/js/plugins/toastr-init.js') ?>"></script>
-<script src="<?php echo base_url('template/assets/libs/select2/dist/js/select2.full.min.js') ?>"></script>
-<script src="<?php echo base_url('template/assets/libs/select2/dist/js/select2.min.js') ?>"></script>
-<script src="<?php echo base_url('template/assets/js/forms/select2.init.js') ?>"></script>
+    href="<?= base_url(
+        "template/assets/libs/datatables.net-bs5/css/dataTables.bootstrap5.min.css",
+    ) ?>">
+
+<!-- DataTables Core -->
+<script src="<?= base_url(
+    "template/assets/libs/datatables.net/js/jquery.dataTables.min.js",
+) ?>"></script>
+
+<!-- DataTables Bootstrap 5 Adapter -->
+<script src="<?= base_url(
+    "template/assets/libs/datatables.net-bs5/js/dataTables.bootstrap5.min.js",
+) ?>"></script>
+
+<!-- DataTables Init -->
+<script src="<?= base_url(
+    "template/assets/js/datatable/datatable-basic.init.js",
+) ?>"></script>
+
+<script src="<?= base_url(
+    "template/assets/js/plugins/toastr-init.js",
+) ?>"></script>
+
+<script src="<?= base_url(
+    "template/assets/libs/select2/dist/js/select2.full.min.js",
+) ?>"></script>
+<script src="<?= base_url(
+    "template/assets/libs/select2/dist/js/select2.min.js",
+) ?>"></script>
+<script src="<?= base_url(
+    "template/assets/js/forms/select2.init.js",
+) ?>"></script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cleave.js/1.6.0/cleave.min.js"></script>
 
 </html>

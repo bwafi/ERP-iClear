@@ -42,13 +42,6 @@
                 </iconify-icon>
                 Import
             </button>
-            <a href="<?= base_url('format_excell/format_pelanggan.xlsx') ?>">
-                <button type="button" class="btn btn-success" style="display: inline-flex; align-items: center;">
-                    <iconify-icon icon="solar:download-broken" width="24" height="24" style="margin-right: 8px;">
-                    </iconify-icon>
-                    Download Format Excell
-                </button>
-            </a>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#input-pelanggan-modal"
                 style="display: inline-flex; align-items: center;">
                 <iconify-icon icon="solar:password-minimalistic-input-broken" width="24" height="24"
