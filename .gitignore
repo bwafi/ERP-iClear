@@ -79,4 +79,7 @@ yarn.lock
 
 # Cache files
 *.cache
-.cache/ 
+.cache/
+
+# zed editor
+*.zed

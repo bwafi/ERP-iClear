@@ -36,12 +36,26 @@ class Pelanggan extends BaseController
     public function index()
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
+        
+        $perPage = 25;
+        $page = max(1, (int) $this->request->getGet('page'));
+        $search = trim($this->request->getGet('search') ?? '');
+        
+        $total = $this->PelangganModel->countPelanggan($search);
+        $pelanggan = $this->PelangganModel->getPelanggan($perPage, $page, $search);
+        $totalPages = (int) ceil($total / $perPage);
+        
         $data = [
             'akun' => $akun,
             'phone' => $this->PhoneModel->getPhone(),
             'body' => 'datamaster/pelanggan',
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
+            'pelanggan' => $pelanggan,
             'provinsi' => $this->RegionModel->getProvinces(),
+            'currentPage' => $page,
+            'perPage' => $perPage,
+            'total' => $total,
+            'totalPages' => $totalPages,
+            'search' => $search,
         ];
         return view('template', $data);
     }
@@ -113,7 +127,10 @@ class Pelanggan extends BaseController
         $result = $this->PelangganModel->insert_Pelanggan($data);
         if ($result) {
             session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
-            return redirect()->to(base_url('/pelanggan'));
+            $search = trim($this->request->getPost('search') ?? '');
+            $page = max(1, (int) $this->request->getPost('page'));
+            $query = http_build_query(array_filter(['search' => $search, 'page' => $page]));
+            return redirect()->to(base_url('/pelanggan' . ($query ? '?' . $query : '')));
         }
     }
 
@@ -146,7 +163,10 @@ class Pelanggan extends BaseController
         $result = $this->PelangganModel->update($id_pelanggan, $data);
         if ($result) {
             session()->setFlashdata('sukses', 'Data Berhasil Di Update');
-            return redirect()->to(base_url('/pelanggan'));
+            $search = trim($this->request->getPost('search') ?? '');
+            $page = max(1, (int) $this->request->getPost('page'));
+            $query = http_build_query(array_filter(['search' => $search, 'page' => $page]));
+            return redirect()->to(base_url('/pelanggan' . ($query ? '?' . $query : '')));
         }
     }
 
@@ -159,13 +179,16 @@ class Pelanggan extends BaseController
         $result = $this->PelangganModel->update($id_pelanggan, $data);
         if ($result) {
             session()->setFlashdata('sukses', 'Data Berhasil Di Hapus');
-            return redirect()->to(base_url('/pelanggan'));
+            $search = trim($this->request->getPost('search') ?? '');
+            $page = max(1, (int) $this->request->getPost('page'));
+            $query = http_build_query(array_filter(['search' => $search, 'page' => $page]));
+            return redirect()->to(base_url('/pelanggan' . ($query ? '?' . $query : '')));
         }
     }
 
     public function export_pelanggan()
     {
-        $pelanggan = $this->PelangganModel->getPelanggan();
+        $pelanggan = $this->PelangganModel->getPelanggan(0, 1);
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -247,7 +270,9 @@ class Pelanggan extends BaseController
         }
 
         session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
-        return redirect()->to(base_url('/pelanggan'));
+        $search = trim($this->request->getPost('search') ?? $this->request->getGet('search') ?? '');
+        $query = $search !== '' ? '?search=' . urlencode($search) : '';
+        return redirect()->to(base_url('/pelanggan' . $query));
     }
 
     public function simpanPelanggan()

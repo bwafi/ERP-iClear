@@ -19,6 +19,17 @@
 
     <div class="px-4 py-3 border-bottom d-flex justify-content-between">
         <div class="d-flex gap-2">
+            <form method="GET" action="<?= base_url('/pelanggan') ?>" class="d-flex gap-2">
+                <input type="text" name="search" value="<?= esc($search ?? '') ?>" class="form-control" placeholder="Cari nama, NIK, no HP, alamat..." style="width: 280px;">
+                <button type="submit" class="btn btn-secondary">
+                    <iconify-icon icon="solar:magnifer-broken" width="20" height="20"></iconify-icon>
+                </button>
+                <?php if (!empty($search)): ?>
+                    <a href="<?= base_url('/pelanggan') ?>" class="btn btn-outline-secondary">Reset</a>
+                <?php endif; ?>
+            </form>
+        </div>
+        <div class="d-flex gap-2">
             <a href="<?= base_url('export/pelanggan') ?>" class="btn btn-danger"
                 style="display: inline-flex; align-items: center;">
                 <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;">
@@ -38,17 +49,17 @@
                     Download Format Excell
                 </button>
             </a>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#input-pelanggan-modal"
+                style="display: inline-flex; align-items: center;">
+                <iconify-icon icon="solar:password-minimalistic-input-broken" width="24" height="24"
+                    style="margin-right: 8px;"></iconify-icon>
+                Input
+            </button>
         </div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#input-pelanggan-modal"
-            style="display: inline-flex; align-items: center;">
-            <iconify-icon icon="solar:password-minimalistic-input-broken" width="24" height="24"
-                style="margin-right: 8px;"></iconify-icon>
-            Input
-        </button>
     </div>
 
     <div class="table-responsive mb-4 px-4">
-        <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
+        <table class="table border text-nowrap mb-0 align-middle" id="pelanggan_table">
             <thead class="text-dark fs-4">
                 <tr>
                     <th>Nama</th>
@@ -60,7 +71,7 @@
                     <th>Jenis Pelanggan</th>
                     <th>Mengetahui Dari</th>
                     <th>Riwayat Transaksi</th>
-                    <th>Action</th>
+                    <th class="text-center">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -75,32 +86,76 @@
                             <td><?= esc($row->no_hp) ?></td>
                             <td><?= $row->kategori == 0 ? 'Umum' : 'Toko' ?></td>
                             <td><?= esc($row->mengetahui_dari) ?></td>
-                            <td><a href="<?php echo base_url('riwayat_transaksi_pelanggan/' . $row->id_pelanggan) ?>"><button
-                                        class="btn btn-success">Check</button></a></td>
-                            <td>
-                                <button type="button" class="btn btn-warning edit-button" data-bs-toggle="modal"
-                                    data-bs-target="#edit-pelanggan-modal" data-id_pelanggan="<?= esc($row->id_pelanggan) ?>"
-                                    data-nama="<?= esc($row->nama) ?>" data-alamat="<?= esc($row->alamat) ?>"
-                                    data-nik="<?= esc($row->nik) ?>" data-no_hp="<?= esc($row->no_hp) ?>"
-                                    data-kategori="<?= esc($row->kategori) ?>">
-                                    <iconify-icon icon="solar:clapperboard-edit-broken" width="24" height="24"></iconify-icon>
-                                </button>
-                                <button type="button" class="btn btn-danger delete-button" data-bs-toggle="modal"
-                                    data-bs-target="#delete-pelanggan-modal" data-id_pelanggan="<?= esc($row->id_pelanggan) ?>">
-                                    <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="24" height="24">
-                                    </iconify-icon>
-                                </button>
+                            <td><a href="<?= base_url('riwayat_transaksi_pelanggan/' . $row->id_pelanggan) ?>" class="btn btn-sm btn-success">Check</a></td>
+                            <td class="text-center">
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-sm btn-warning edit-button" data-bs-toggle="modal"
+                                        data-bs-target="#edit-pelanggan-modal" data-id_pelanggan="<?= esc($row->id_pelanggan) ?>"
+                                        data-nama="<?= esc($row->nama) ?>" data-alamat="<?= esc($row->alamat) ?>"
+                                        data-nik="<?= esc($row->nik) ?>" data-no_hp="<?= esc($row->no_hp) ?>"
+                                        data-kategori="<?= esc($row->kategori) ?>">
+                                        <iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger delete-button" data-bs-toggle="modal"
+                                        data-bs-target="#delete-pelanggan-modal" data-id_pelanggan="<?= esc($row->id_pelanggan) ?>">
+                                        <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="20" height="20"></iconify-icon>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="6" class="text-center">Tidak ada data</td>
+                        <td colspan="10" class="text-center">Tidak ada data</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
         </table>
     </div>
+
+    <?php if ($totalPages > 1): ?>
+        <div class="d-flex justify-content-between align-items-center px-4 py-3 border-top">
+            <span class="text-muted">
+                Menampilkan <?= ($currentPage - 1) * $perPage + 1 ?> - <?= min($currentPage * $perPage, $total) ?> dari <?= $total ?> pelanggan
+            </span>
+            <nav aria-label="Page navigation">
+                <ul class="pagination mb-0">
+                    <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
+                        <a class="page-link" href="<?= base_url('/pelanggan?page=' . ($currentPage - 1) . ($search ? '&search=' . urlencode($search) : '')) ?>" tabindex="-1">
+                            <iconify-icon icon="solar:arrow-left-broken" width="18" height="18"></iconify-icon>
+                        </a>
+                    </li>
+                    <?php
+                    $window = 2;
+                    $start = max(1, $currentPage - $window);
+                    $end = min($totalPages, $currentPage + $window);
+                    $showStart = $start > 1;
+                    $showEnd = $end < $totalPages;
+                    ?>
+                    <?php if ($showStart): ?>
+                        <li class="page-item"><a class="page-link" href="<?= base_url('/pelanggan?page=1' . ($search ? '&search=' . urlencode($search) : '')) ?>">1</a></li>
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    <?php endif; ?>
+                    <?php for ($i = $start; $i <= $end; $i++): ?>
+                        <li class="page-item <?= $i == $currentPage ? 'active' : '' ?>">
+                            <a class="page-link" href="<?= base_url('/pelanggan?page=' . $i . ($search ? '&search=' . urlencode($search) : '')) ?>">
+                                <?= $i ?>
+                            </a>
+                        </li>
+                    <?php endfor; ?>
+                    <?php if ($showEnd): ?>
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        <li class="page-item"><a class="page-link" href="<?= base_url('/pelanggan?page=' . $totalPages . ($search ? '&search=' . urlencode($search) : '')) ?>"><?= $totalPages ?></a></li>
+                    <?php endif; ?>
+                    <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
+                        <a class="page-link" href="<?= base_url('/pelanggan?page=' . ($currentPage + 1) . ($search ? '&search=' . urlencode($search) : '')) ?>">
+                            <iconify-icon icon="solar:arrow-right-broken" width="18" height="18"></iconify-icon>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    <?php endif; ?>
 </div>
 
 <!-- Modal Input Pelanggan -->
@@ -109,6 +164,8 @@
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <form action="<?= base_url('insert_pelanggan') ?>" method="post">
+                <input type="hidden" name="page" value="<?= esc($currentPage ?? 1) ?>">
+                <input type="hidden" name="search" value="<?= esc($search ?? '') ?>">
                 <div class="modal-header">
                     <h4 class="modal-title" id="inputPelangganModalLabel">
                         Input Data Pelanggan
@@ -207,6 +264,8 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="id_pelanggan" id="edit-id_pelanggan">
+                    <input type="hidden" name="page" value="<?= esc($currentPage ?? 1) ?>">
+                    <input type="hidden" name="search" value="<?= esc($search ?? '') ?>">
                     <div class="mb-3"><label>Nama</label><input type="text" class="form-control" name="nama"
                             id="edit-nama" required></div>
                     <div class="mb-3"><label>Alamat</label><input type="text" class="form-control" name="alamat"
@@ -270,6 +329,8 @@
                 </div>
                 <div class="modal-body">
                     <input id="delete-id_pelanggan" hidden name="id_pelanggan">
+                    <input type="hidden" name="page" value="<?= esc($currentPage ?? 1) ?>">
+                    <input type="hidden" name="search" value="<?= esc($search ?? '') ?>">
                     <p style="font-style: italic;">Apa anda yakin ingin menghapus data ini?</p>
                 </div>
                 <div class="modal-footer">
@@ -310,7 +371,7 @@
 <!-- JavaScript for Edit/Delete Modal -->
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        document.querySelector('#zero_config').addEventListener('click', function(e) {
+        document.querySelector('#pelanggan_table').addEventListener('click', function(e) {
             if (e.target.closest('.edit-button')) {
                 const button = e.target.closest('.edit-button');
                 document.getElementById('edit-id_pelanggan').value = button.getAttribute(
@@ -487,9 +548,3 @@
         $('#edit-pelanggan-modal').modal('show');
     }
 </script>
-
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>

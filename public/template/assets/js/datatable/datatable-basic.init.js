@@ -17,7 +17,9 @@ $(function () {
 /****************************************
  *       Basic Table                   *
  ****************************************/
-$("#zero_config").DataTable();
+if ($("#zero_config").length) {
+  $("#zero_config").DataTable();
+}
 
 /****************************************
  *       Default Order Table           *
