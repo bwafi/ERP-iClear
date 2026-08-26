@@ -66,7 +66,16 @@ class StokOpname extends BaseController
         $draw = (int) $this->request->getGet('draw');
         $start = (int) $this->request->getGet('start');
         $length = (int) $this->request->getGet('length');
-        $search = trim($this->request->getGet('search') ?? '');
+
+        // DataTables mengirim search[value] sebagai nested param
+        $searchParam = $this->request->getGet('search');
+        $search = '';
+        if (is_array($searchParam)) {
+            $search = trim($searchParam['value'] ?? '');
+        } else {
+            $search = trim((string) $searchParam);
+        }
+
         $unitFilter = trim($this->request->getGet('unit') ?? '');
 
         $orderCol = $this->request->getGet('order') ? $this->request->getGet('order')[0]['column'] : 1;
