@@ -26,26 +26,9 @@
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($stok as $index => $row): ?>
                 <tr>
-                    <td>
-                        <input type="checkbox" class="row-check" name="data[<?= $index ?>][checked]" value="1">
-                    </td>
-                    <td>
-                        <?= esc($row->kode_barang) ?>
-                        <input type="hidden" name="data[<?= $index ?>][barang_idbarang]" value="<?= $row->idbarang ?>">
-                        <input type="hidden" name="data[<?= $index ?>][unit_idunit]" value="<?= $row->id_unit ?>">
-                    </td>
-                    <td><?= esc($row->nama_barang) ?></td>
-                    <td><?= esc($row->nama_unit ?? $row->NAMA_UNIT ?? 'N/A') ?></td>
-                    <td><input class="form-control jumlah-komp" name="data[<?= $index ?>][jumlah_komp]"
-                            value="<?= $row->stok_akhir ?>" readonly></td>
-                    <td><input type="number" class="form-control jumlah-real" name="data[<?= $index ?>][jumlah_real]">
-                    </td>
-                    <td><input readonly class="form-control jumlah_selisih" name="data[<?= $index ?>][jumlah_selisih]">
-                    </td>
+                    <td colspan="7" class="text-center">Memuat data...</td>
                 </tr>
-                <?php endforeach; ?>
             </tbody>
         </table>
     </div>
@@ -53,86 +36,136 @@
 </form>
 
 <script>
-// Solusi 1: Gunakan $.fn.dataTable.isDataTable() untuk cek apakah sudah diinisialisasi
 $(document).ready(function() {
-    // 1. Fungsi untuk checkbox select all
+    var $table = $('#zero_config');
+
+    function reloadTable() {
+        if ($.fn.dataTable.isDataTable($table)) {
+            $table.DataTable().ajax.reload(null, false);
+        }
+    }
+
+    if ($.fn.dataTable.isDataTable($table)) {
+        $table = $table.DataTable();
+    } else {
+        $table = $table.DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: '<?= base_url('stokopname/loadtable?table=tabledaraft') ?>',
+                data: function(d) {
+                    d.unit = $('#filterUnit').val();
+                }
+            },
+            columns: [
+                {
+                    data: null,
+                    orderable: false,
+                    className: 'text-center',
+                    render: function(data, type, row) {
+                        var bid = row.barang_idbarang;
+                        var uid = row.unit_idunit;
+                        return ''
+                            + '<input type="checkbox" class="row-check" name="data[' + bid + '][checked]" value="1">'
+                            + '<input type="hidden" name="data[' + bid + '][barang_idbarang]" value="' + bid + '">'
+                            + '<input type="hidden" name="data[' + bid + '][unit_idunit]" value="' + uid + '">';
+                    }
+                },
+                { data: 'kode_barang' },
+                { data: 'nama_barang' },
+                { data: 'NAMA_UNIT', name: 'unit.NAMA_UNIT' },
+                {
+                    data: 'jumlah_komp',
+                    render: function(data, type, row) {
+                        var val = data || 0;
+                        return '<input class="form-control form-control-sm jumlah-komp" readonly name="data[' + row.barang_idbarang + '][jumlah_komp]" value="' + val + '">';
+                    }
+                },
+                {
+                    data: 'jumlah_real',
+                    render: function(data, type, row) {
+                        var val = data || '';
+                        return '<input type="number" class="form-control form-control-sm jumlah-real" name="data[' + row.barang_idbarang + '][jumlah_real]" value="' + val + '">';
+                    }
+                },
+                {
+                    data: 'jumlah_selisih',
+                    render: function(data, type, row) {
+                        var val = data || 0;
+                        return '<input readonly class="form-control form-control-sm jumlah_selisih" name="data[' + row.barang_idbarang + '][jumlah_selisih]" value="' + val + '">';
+                    }
+                },
+            ],
+            columnDefs: [{
+                targets: [0, 4, 5, 6],
+                orderable: false
+            }],
+            pageLength: 25,
+            lengthMenu: [[25, 50, 100], [25, 50, 100]],
+            language: {
+                search: "Cari:",
+                lengthMenu: "Tampilkan _MENU_ data",
+                info: "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
+                emptyTable: "Tidak ada data",
+                zeroRecords: "Tidak ditemukan",
+                paginate: {
+                    first: "Pertama",
+                    last: "Terakhir",
+                    next: "Berikutnya",
+                    previous: "Sebelumnya"
+                }
+            },
+            order: [[2, 'asc']]
+        });
+    }
+
+    // 1. Select all checkbox
     $('#select_all').on('change', function() {
         $('.row-check').prop('checked', this.checked);
     });
 
-    // 2. Fungsi untuk menghitung selisih
-    $(document).on('input', '.jumlah-real', function() {
-        const $tr = $(this).closest('tr');
-        const $checkbox = $tr.find('.row-check');
-        const komp = parseFloat($tr.find('input[name$="[jumlah_komp]"]').val()) || 0;
-        const real = parseFloat($(this).val()) || 0;
+    // 2. Hitung selisih (jumlah_real - jumlah_komp) — per row, client-side
+    $(document).on('input', '.jumlah-real, .jumlah-komp', function() {
+        var $tr = $(this).closest('tr');
+        var $checkbox = $tr.find('.row-check');
 
-        if ($checkbox.is(':checked')) {
-            $tr.find('input[name$="[jumlah_selisih]"]').val(real - komp);
+        if (!$checkbox.is(':checked')) {
+            alert("Silakan centang baris terlebih dahulu sebelum mengisi jumlah real.");
+            $(this).val('');
+            return;
+        }
+
+        var komp = parseFloat($tr.find('.jumlah-komp').val()) || 0;
+        var real = parseFloat($tr.find('.jumlah-real').val()) || 0;
+        var selisih = real - komp;
+
+        $tr.find('.jumlah_selisih').val(selisih);
+    });
+
+    // 3. Individual checkbox enables/disables inputs
+    $(document).on('change', '.row-check', function() {
+        var $tr = $(this).closest('tr');
+        var $kompInput = $tr.find('.jumlah-komp');
+        var $realInput = $tr.find('.jumlah-real');
+
+        if ($(this).is(':checked')) {
+            $kompInput.prop('disabled', false);
+            $realInput.prop('disabled', false);
         } else {
-            alert("Silakan centang kotak ceklis terlebih dahulu sebelum mengisi jumlah real.");
-            $(this).val('').focus();
+            $kompInput.prop('disabled', true);
+            $realInput.prop('disabled', true);
         }
     });
 
-    // 3. Inisialisasi DataTable HANYA JIKA BELUM DIINISIALISASI
-    var table;
-
-    if ($.fn.dataTable.isDataTable('#zero_config')) {
-        // Jika sudah diinisialisasi, gunakan instance yang ada
-        table = $('#zero_config').DataTable();
-        console.log('Menggunakan DataTable yang sudah ada');
-    } else {
-        // Jika belum diinisialisasi, buat baru
-        table = $('#zero_config').DataTable({
-            "columnDefs": [{
-                "orderable": false,
-                "targets": [0, 4, 5, 6]
-            }],
-            "language": {
-                "search": "Cari:",
-                "lengthMenu": "Tampilkan _MENU_ data",
-                "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
-                "paginate": {
-                    "first": "Pertama",
-                    "last": "Terakhir",
-                    "next": "Berikutnya",
-                    "previous": "Sebelumnya"
-                }
-            },
-            "pageLength": 25
-        });
-        console.log('DataTable diinisialisasi baru');
-    }
-
-    // 4. Fungsi untuk filter
-    function applyFilter() {
-        var selectedValue = $('#filterUnit').val();
-
-        // Reset semua filter
-        $.fn.dataTable.ext.search = [];
-
-        if (selectedValue && selectedValue.trim() !== '') {
-            // Tambah filter baru
-            $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-                var unitName = data[3]; // Kolom Nama Unit
-                return unitName === selectedValue;
-            });
-        }
-
-        table.draw();
-    }
-
-    // 5. Event untuk filter dropdown
+    // 4. Filter unit → reload server-side
     $('#filterUnit').on('change', function() {
-        applyFilter();
+        reloadTable();
     });
 
-    // 6. Event untuk reset filter
     $('#resetFilter').on('click', function(e) {
         e.preventDefault();
         $('#filterUnit').val('');
-        applyFilter();
+        reloadTable();
     });
 });
 </script>

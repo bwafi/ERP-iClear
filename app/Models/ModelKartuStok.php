@@ -30,6 +30,57 @@ class ModelKartuStok extends Model
         return $this->findAll();
     }
 
+    /**
+     * Server-side processing untuk DataTables (tabel Draft / Kartu Stok).
+     */
+    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'kode_barang', $orderDir = 'ASC', $unitFilter = '')
+    {
+        $allowedOrder = ['kode_barang', 'nama_barang', 'nama_unit', 'stok_akhir'];
+        if (!in_array($orderCol, $allowedOrder, true)) {
+            $orderCol = 'kode_barang';
+        }
+        $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
+
+        $builder = $this->db->table('stok_barang')
+            ->select('idbarang, id_unit, kode_barang, nama_barang, nama_unit, stok_akhir');
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('kode_barang', $search)
+                ->orLike('nama_barang', $search)
+                ->orLike('nama_unit', $search)
+                ->groupEnd();
+        }
+
+        if ($unitFilter !== '') {
+            $builder->where('nama_unit', $unitFilter);
+        }
+
+        $builder->orderBy($orderCol, $orderDir)
+            ->limit($limit, $offset);
+
+        return $builder->get()->getResult();
+    }
+
+    public function countKartuStokDT($search = '', $unitFilter = '')
+    {
+        $builder = $this->db->table('stok_barang');
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('kode_barang', $search)
+                ->orLike('nama_barang', $search)
+                ->orLike('nama_unit', $search)
+                ->groupEnd();
+        }
+
+        if ($unitFilter !== '') {
+            $builder->where('nama_unit', $unitFilter);
+        }
+
+        return $builder->countAllResults(false);
+    }
+
 
 
     public function insert_getKartuStok($data)

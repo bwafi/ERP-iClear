@@ -59,21 +59,89 @@ class StokOpname extends BaseController
         return view('template', $data);
     }
 
-    // public function loadTable()
-    // {
-    //     $table = $this->request->getGet('table');
+    public function loadTable()
+    {
+        $table = $this->request->getGet('table');
 
-    //     if ($table === 'tabledaraft') {
-    //         $data['stok'] = $this->KartuStokModel->getKartuStok();
-    //         return view('stok/table/stok_opnamedraft_table', $data);
-    //     } elseif ($table === 'tablefix') {
-    //         $data['stok'] = $this->KartuStokModel->getKartuStok();
-    //         $data['stokopname'] = $this->StokOpnameDraftModel->getStokOpnameDraft();
-    //         return view('stok/table/stok_opname_table', $data);
-    //     }
+        $draw = (int) $this->request->getGet('draw');
+        $start = (int) $this->request->getGet('start');
+        $length = (int) $this->request->getGet('length');
+        $search = trim($this->request->getGet('search') ?? '');
+        $unitFilter = trim($this->request->getGet('unit') ?? '');
 
-    //     return 'Invalid table name';
-    // }
+        $orderCol = $this->request->getGet('order') ? $this->request->getGet('order')[0]['column'] : 1;
+        $orderDir = $this->request->getGet('order') ? $this->request->getGet('order')[0]['dir'] : 'desc';
+
+        $columnMap = [
+            0 => null, // checkbox — not orderable
+            1 => 'barang.kode_barang',
+            2 => 'barang.nama_barang',
+            3 => 'unit.NAMA_UNIT',
+            4 => 'jumlah_komp',
+            5 => 'jumlah_real',
+            6 => 'jumlah_selisih',
+        ];
+
+        $orderCol = $columnMap[$orderCol] ?? 'barang.nama_barang';
+        $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
+
+        $totalRecords = 0;
+        $filteredRecords = 0;
+        $data = [];
+
+        if ($table === 'tabledaraft') {
+            $totalRecords = $this->StokOpnameDraftModel->countStokOpnameDraftDT('', '');
+            $filteredRecords = $this->StokOpnameDraftModel->countStokOpnameDraftDT($search, $unitFilter);
+            $results = $this->StokOpnameDraftModel->getStokOpnameDraftDT($length, $start, $search, $orderCol, $orderDir, $unitFilter);
+
+            foreach ($results as $row) {
+                $data[] = [
+                    'idstok_opname' => $row->idstok_opname,
+                    'tanggal' => date('Y-m-d', strtotime($row->tanggal)),
+                    'jumlah_real' => $row->jumlah_real,
+                    'jumlah_komp' => $row->jumlah_komp,
+                    'jumlah_selisih' => $row->jumlah_selisih,
+                    'kode_barang' => $row->kode_barang,
+                    'nama_barang' => $row->nama_barang,
+                    'jenis_hp' => $row->jenis_hp,
+                    'warna' => $row->warna,
+                    'NAMA_UNIT' => $row->NAMA_UNIT,
+                    'barang_idbarang' => $row->barang_idbarang,
+                    'unit_idunit' => $row->unit_idunit,
+                ];
+            }
+        } elseif ($table === 'tablefix') {
+            $totalRecords = $this->StokOpnameModel->countStokOpnameAllDT('', '');
+            $filteredRecords = $this->StokOpnameModel->countStokOpnameAllDT($search, $unitFilter);
+            $results = $this->StokOpnameModel->getStokOpnameAllDT($length, $start, $search, $orderCol, $orderDir, $unitFilter);
+
+            foreach ($results as $row) {
+                $data[] = [
+                    'idstok_opname' => $row->idstok_opname,
+                    'tanggal' => date('Y-m-d', strtotime($row->tanggal)),
+                    'jumlah_real' => $row->jumlah_real,
+                    'jumlah_komp' => $row->jumlah_komp,
+                    'jumlah_selisih' => $row->jumlah_selisih,
+                    'kode_barang' => $row->kode_barang,
+                    'nama_barang' => $row->nama_barang,
+                    'jenis_hp' => $row->jenis_hp,
+                    'warna' => $row->warna,
+                    'NAMA_UNIT' => $row->NAMA_UNIT,
+                    'barang_idbarang' => $row->barang_idbarang,
+                    'unit_idunit' => $row->unit_idunit,
+                ];
+            }
+        } else {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid table name']);
+        }
+
+        return $this->response->setJSON([
+            'draw' => $draw,
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $data,
+        ]);
+    }
 
     public function simpan()
     {

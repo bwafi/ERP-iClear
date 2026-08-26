@@ -49,6 +49,74 @@ class ModelStokOpname extends Model
             ->findAll();
     }
 
+    /**
+     * Server-side processing untuk DataTables (tabel Fixed).
+     */
+    public function getStokOpnameAllDT($limit, $offset, $search = '', $orderCol = 'stok_opname.tanggal', $orderDir = 'DESC', $unitFilter = '')
+    {
+        $allowedOrder = ['stok_opname.tanggal', 'barang.kode_barang', 'barang.nama_barang', 'unit.NAMA_UNIT'];
+        if (!in_array($orderCol, $allowedOrder, true)) {
+            $orderCol = 'stok_opname.tanggal';
+        }
+        $orderDir = strtolower($orderDir) === 'asc' ? 'ASC' : 'DESC';
+
+        $builder = $this->db->table('stok_opname')
+            ->select('
+                stok_opname.idstok_opname,
+                stok_opname.tanggal,
+                stok_opname.jumlah_real,
+                stok_opname.jumlah_komp,
+                stok_opname.jumlah_selisih,
+                barang.kode_barang,
+                barang.nama_barang,
+                barang.jenis_hp,
+                barang.warna,
+                unit.NAMA_UNIT,
+                stok_opname.barang_idbarang,
+                stok_opname.unit_idunit
+            ')
+            ->join('barang', 'barang.idbarang = stok_opname.barang_idbarang')
+            ->join('unit', 'unit.idunit = stok_opname.unit_idunit');
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('barang.kode_barang', $search)
+                ->orLike('barang.nama_barang', $search)
+                ->orLike('unit.NAMA_UNIT', $search)
+                ->groupEnd();
+        }
+
+        if ($unitFilter !== '') {
+            $builder->where('unit.NAMA_UNIT', $unitFilter);
+        }
+
+        $builder->orderBy($orderCol, $orderDir)
+            ->limit($limit, $offset);
+
+        return $builder->get()->getResult();
+    }
+
+    public function countStokOpnameAllDT($search = '', $unitFilter = '')
+    {
+        $builder = $this->db->table('stok_opname')
+            ->join('barang', 'barang.idbarang = stok_opname.barang_idbarang')
+            ->join('unit', 'unit.idunit = stok_opname.unit_idunit');
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('barang.kode_barang', $search)
+                ->orLike('barang.nama_barang', $search)
+                ->orLike('unit.NAMA_UNIT', $search)
+                ->groupEnd();
+        }
+
+        if ($unitFilter !== '') {
+            $builder->where('unit.NAMA_UNIT', $unitFilter);
+        }
+
+        return $builder->countAllResults(false);
+    }
+
 
     public function exportfilter($tanggalAwal = null, $tanggalAkhir = null, $namaUnit = null)
     {
