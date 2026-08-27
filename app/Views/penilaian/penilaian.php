@@ -206,7 +206,7 @@
                                         <option value="seragam">Seragam</option>
                                     <?php endif;?>
                                     
-                                    <?php if (in_array(session()->get('ID_JABATAN'), [40, 1, 43])): ?>
+                                    <?php if (in_array(session()->get('ID_JABATAN'), [40, 1, 43, 47])): ?>
                                         <option value="closing">closing</option>
                                         <option value="follow up">Follow Up</option>
 
@@ -561,8 +561,21 @@ $(document).ready(function () {
 
             }   
 
-            // jabatan 40
+            // jabatan 43 Pengiklan
             else if (idJabatan == 43) {
+
+                aspek.append(`
+                    <option value="kebersihan">Kebersihan</option>
+                    <option value="kepatuhan sop">Kepatuhan SOP</option>
+                    <option value="seragam">Seragam</option>
+                    <option value="budgeting">Budgeting</option>
+                    <option value="ROAS">ROAS</option>
+                `);
+
+            }
+
+            // jabatan 47 Kepala Digital Marketing
+            else if (idJabatan == 47) {
 
                 aspek.append(`
                     <option value="kebersihan">Kebersihan</option>

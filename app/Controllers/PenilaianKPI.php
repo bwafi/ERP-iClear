@@ -612,7 +612,7 @@ class PenilaianKPI extends BaseController
             $batas_kedua   = [1 => 35000000, 2 => 22000000, 3 => 45000000, 4 => 22000000];
             $batas_ketiga  = [1 => 40000000, 2 => 26000000, 3 => 50000000, 4 => 26000000];
             $batas_keempat = [1 => 45000000, 2 => 30000000, 3 => 55000000, 4 => 30000000];
-            $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 35000000];
+            $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 55000000];
         } else {
             $target_unit = [
                 1 => ['customer' => 130, 'atas_customer' => 220, 'bawah_customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
@@ -963,6 +963,57 @@ class PenilaianKPI extends BaseController
                         break;
                 }
             }
+        } elseif (in_array($jabatan, [47, 42, 44, 45], true)) {
+            // ------------------------------------------------------------
+            // SHARED POOL INSENTIF (sementara, mengikuti pedoman internal)
+            // Jabatan: 47 Kepala Digital Marketing, 42 CS, 44 Multimedia, 45 IT
+            // Rumus: (1% × total_omset_semua_cabang) ÷ 4
+            // TIDAK termasuk Pengiklan (43) — tetap di branch elseif 43 sendiri.
+            // TIDAK termasuk Admin (35), Teknisi (36), PIC (46) — tetap di else.
+            // ------------------------------------------------------------
+            $total_omset_semua_cabang = array_sum($aktual_omset_unit);
+            $cabang_aman = 0;
+            foreach ($aktual_omset_unit as $idUnit => $omset) {
+                if ($omset >= $batas_keempat[$idUnit]) {
+                    $cabang_aman++;
+                }
+            }
+            $insentif = ((1 / 100) * $total_omset_semua_cabang) / 4;
+
+            if ($context === 'gaji') {
+                switch ($cabang_aman) {
+                    case 1:
+                        $nilai_omset = 33;
+                        break;
+                    case 2:
+                        $nilai_omset = 66;
+                        break;
+                    case 3:
+                        $nilai_omset = 100;
+                        break;
+                    default:
+                        $nilai_omset = 0;
+                        break;
+                }
+            } else {
+                switch ($cabang_aman) {
+                    case 1:
+                        $nilai_omset = 25;
+                        break;
+                    case 2:
+                        $nilai_omset = 50;
+                        break;
+                    case 3:
+                        $nilai_omset = 75;
+                        break;
+                    case 4:
+                        $nilai_omset = 100;
+                        break;
+                    default:
+                        $nilai_omset = 0;
+                        break;
+                }
+            }
         } else {
             if ($aktual_omset < $batas2) {
                 $nilai_omset = 0;
@@ -1138,6 +1189,23 @@ class PenilaianKPI extends BaseController
                 }
                 break;
 
+            case 47: // KEPALA DIGITAL MARKETING (sementara, sama dengan Pengiklan)
+                if ($context === 'gaji') {
+                    $detail_kpi = [
+                        ['nama' => 'Budgeting', 'bobot' => 15, 'nilai' => $nilai_budgeting],
+                        ['nama' => 'ROAS', 'bobot' => 15, 'nilai' => $nilai_roas],
+                        ['nama' => 'Omset', 'bobot' => 70, 'nilai' => $nilai_omset],
+                    ];
+                } else {
+                    $detail_kpi = [
+                        ['nama' => 'Budgeting', 'bobot' => 15, 'nilai' => $nilai_budgeting],
+                        ['nama' => 'ROAS', 'bobot' => 15, 'nilai' => $nilai_roas],
+                        ['nama' => 'Omset', 'bobot' => 10, 'nilai' => $nilai_omset],
+                        ['nama' => 'Customer', 'bobot' => 60, 'nilai' => $nilai_customer],
+                    ];
+                }
+                break;
+
             case 44: // MULTIMEDIA
                 $cabang_aman = 0;
 
@@ -1217,6 +1285,8 @@ class PenilaianKPI extends BaseController
             $tunjangan_kinerja = $skor_total / 100 * 850000;
         } elseif ($jabatan == 46 && $context !== 'gaji') {
             $tunjangan_kinerja = $skor_total / 100 * 850000;
+        } elseif ($jabatan == 47) {
+            $tunjangan_kinerja = $skor_total / 100 * 1500000;
         } elseif ($jabatan == 40) {
             $tunjangan_kinerja = $skor_total / 100 * 1250000;
         } elseif ($jabatan == 43) {
