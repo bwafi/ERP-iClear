@@ -203,8 +203,8 @@ class CreateKPIConfigurationSchema extends Migration
             'notes'                => ['type' => 'TEXT', 'null' => true],
             'period_year'          => ['type' => 'INT'],
             'period_month'         => ['type' => 'INT'],
-            'created_at'           => ['type' => 'TIMESTAMP', 'default' => 'CURRENT_TIMESTAMP'],
-            'updated_at'           => ['type' => 'TIMESTAMP', 'default' => 'CURRENT_TIMESTAMP', 'on_update' => 'CURRENT_TIMESTAMP'],
+            'created_at'           => ['type' => 'DATETIME', 'null' => true],
+            'updated_at'           => ['type' => 'DATETIME', 'null' => true],
         ]);
         $this->forge->addKey('id', true);
         $this->forge->addForeignKey('employee_id', 'akun', 'ID_AKUN', 'RESTRICT', 'RESTRICT');
@@ -224,8 +224,8 @@ class CreateKPIConfigurationSchema extends Migration
             'is_active'      => ['type' => 'BOOLEAN', 'default' => 1],
             'effective_from' => ['type' => 'DATE'],
             'effective_to'   => ['type' => 'DATE', 'null' => true],
-            'created_at'     => ['type' => 'TIMESTAMP', 'default' => 'CURRENT_TIMESTAMP'],
-            'updated_at'     => ['type' => 'TIMESTAMP', 'default' => 'CURRENT_TIMESTAMP', 'on_update' => 'CURRENT_TIMESTAMP'],
+            'created_at'     => ['type' => 'DATETIME', 'null' => true],
+            'updated_at'     => ['type' => 'DATETIME', 'null' => true],
         ]);
         $this->forge->addKey('id', true);
         $this->forge->addKey('code', false, true);
@@ -240,8 +240,8 @@ class CreateKPIConfigurationSchema extends Migration
             'effective_from'     => ['type' => 'DATE'],
             'effective_to'       => ['type' => 'DATE', 'null' => true],
             'is_active'          => ['type' => 'BOOLEAN', 'default' => 1],
-            'created_at'         => ['type' => 'TIMESTAMP', 'default' => 'CURRENT_TIMESTAMP'],
-            'updated_at'         => ['type' => 'TIMESTAMP', 'default' => 'CURRENT_TIMESTAMP', 'on_update' => 'CURRENT_TIMESTAMP'],
+            'created_at'         => ['type' => 'DATETIME', 'null' => true],
+            'updated_at'         => ['type' => 'DATETIME', 'null' => true],
         ]);
         $this->forge->addKey('id', true);
         $this->forge->addForeignKey('incentive_group_id', 'incentive_groups', 'id', 'RESTRICT', 'RESTRICT');
