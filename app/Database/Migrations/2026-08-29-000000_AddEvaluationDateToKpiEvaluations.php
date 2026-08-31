@@ -35,8 +35,16 @@ class AddEvaluationDateToKpiEvaluations extends Migration
             ],
         ]);
 
-        // 2. Drop obsolete monthly uniqueness
-        $this->db->query('ALTER TABLE `kpi_evaluations` DROP INDEX `uq_emp_kpi_period`');
+        // 2. Drop obsolete monthly uniqueness if exists
+        $indexRows = $this->db->query("SHOW INDEX FROM `kpi_evaluations` WHERE Key_name IN ('uq_emp_kpi_period', 'employee_id_kpi_component_id_period_year_period_month')")->getResultArray();
+        $droppedNames = [];
+        foreach ($indexRows as $idx) {
+            $name = $idx['Key_name'];
+            if (!in_array($name, $droppedNames, true)) {
+                $this->db->query("ALTER TABLE `kpi_evaluations` DROP INDEX `{$name}`");
+                $droppedNames[] = $name;
+            }
+        }
 
         // 3. New daily uniqueness: employee + component + date
         $this->db->query('ALTER TABLE `kpi_evaluations` ADD UNIQUE KEY `uq_emp_kpi_date` (`employee_id`,`kpi_component_id`,`evaluation_date`)');
