@@ -39,7 +39,11 @@ class CreateKPIConfigurationSchema extends Migration
                 'constraint' => 50,
                 'null' => true,
             ],
-            'calculation_method'   => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true],
+            'calculation_strategy' => [
+                'type' => 'VARCHAR',
+                'constraint' => 255,
+                'null' => true,
+            ],
             'is_active' => [
                 'type' => 'BOOLEAN',
                 'default' => 1,
