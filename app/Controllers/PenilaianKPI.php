@@ -602,10 +602,10 @@ class PenilaianKPI extends BaseController
         // ---------------------------------------------------------------
         if ($context === 'gaji') {
             $target_unit = [
-                1 => ['customer' => 130, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
-                2 => ['customer' => 118, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
-                3 => ['customer' => 210, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
-                4 => ['customer' => 1,   'closing' => 1,   'upselling' => 1,  'followup' => 1,   'roas' => 1],
+                1 => ['customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
+                2 => ['customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
+                3 => ['customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
+                4 => ['customer' => 200,   'closing' => 1,   'upselling' => 1,  'followup' => 1,   'roas' => 1],
             ];
 
             $batas_awal    = [1 => 30000000, 2 => 18000000, 3 => 40000000, 4 => 18000000];
@@ -615,10 +615,10 @@ class PenilaianKPI extends BaseController
             $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 35000000];
         } else {
             $target_unit = [
-                1 => ['customer' => 130, 'atas_customer' => 220, 'bawah_customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
-                2 => ['customer' => 118, 'atas_customer' => 180, 'bawah_customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
-                3 => ['customer' => 210, 'atas_customer' => 350, 'bawah_customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
-                4 => ['customer' => 118, 'atas_customer' => 250, 'bawah_customer' => 200, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 5],
+                1 => ['customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
+                2 => ['customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
+                3 => ['customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
+                4 => ['customer' => 200,   'closing' => 1,   'upselling' => 1,  'followup' => 1,   'roas' => 1],
             ];
 
             $batas_awal    = [1 => 35000000, 2 => 18000000, 3 => 40000000, 4 => 35000000];
@@ -639,33 +639,37 @@ class PenilaianKPI extends BaseController
         foreach ([1, 2, 3, 4] as $idUnit) {
             $aktual_omset_unit[$idUnit] = $this->db->table('detail_penjualan')
                 ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-                ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+                ->join(
+                    'penjualan',
+                    'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
+                )
                 ->where('MONTH(penjualan.tanggal)', $bulan)
                 ->where('YEAR(penjualan.tanggal)', $tahun)
-                ->where('penjualan.unit_idunit =', $idUnit)
+                ->where('penjualan.unit_idunit', $idUnit)
                 ->get()
                 ->getRow()
                 ->total ?? 0;
 
-            if ($context === 'gaji') {
-                $aktual_customer_unit[$idUnit] = $this->db->table('penjualan')
-                    ->select('COUNT(idpenjualan) AS total')
-                    ->where('MONTH(tanggal)', $bulan)
-                    ->where('YEAR(tanggal)', $tahun)
-                    ->where('unit_idunit =', $idUnit)
-                    ->get()
-                    ->getRow()
-                    ->total ?? 0;
-            } else {
-                $aktual_customer_unit[$idUnit] = $this->db->table('penjualan')
-                    ->select('COUNT(kode_invoice) AS total')
-                    ->where('MONTH(tanggal)', $bulan)
-                    ->where('YEAR(tanggal)', $tahun)
-                    ->where('unit_idunit', $idUnit)
-                    ->get()
-                    ->getRow()
-                    ->total ?? 0;
-            }
+            $countService = $this->db->table('service')
+                ->select('COUNT(idservice) AS total')
+                ->where('MONTH(tanggal_selesai)', $bulan)
+                ->where('YEAR(tanggal_selesai)', $tahun)
+                ->where('unit_idunit', $idUnit)
+                ->get()
+                ->getRow()
+                ->total ?? 0;
+
+            $countSales = $this->db->table('penjualan')
+                ->select('COUNT(DISTINCT idpenjualan) AS total')
+                ->where('MONTH(tanggal)', $bulan)
+                ->where('YEAR(tanggal)', $tahun)
+                ->where('unit_idunit', $idUnit)
+                ->like('kode_invoice', 'SLL', 'after')
+                ->get()
+                ->getRow()
+                ->total ?? 0;
+
+            $aktual_customer_unit[$idUnit] = $countService + $countSales;
         }
 
         $aktual_omset = $aktual_omset_unit[$unit] ?? 0;
@@ -765,9 +769,19 @@ class PenilaianKPI extends BaseController
 
         // Skor per-pegawai per aspek
         $aspekSumList = [
-            'closing', 'upselling', 'followup', 'budgeting', 'roas',
-            'feed pl', 'video', 'feed mingguan', 'story', 'testimoni',
-            'bug minor', 'operasional', 'ecommerce',
+            'closing',
+            'upselling',
+            'followup',
+            'budgeting',
+            'roas',
+            'feed pl',
+            'video',
+            'feed mingguan',
+            'story',
+            'testimoni',
+            'bug minor',
+            'operasional',
+            'ecommerce',
         ];
 
         // NB: 'followup' vs 'follow up' berbeda di context penilaian_kinerja/slip_gaji
@@ -862,18 +876,45 @@ class PenilaianKPI extends BaseController
 
             if ($context === 'gaji') {
                 switch ($cabang_aman) {
-                    case 1: $nilai_omset = 33; $aktual_operasional = 33; break;
-                    case 2: $nilai_omset = 66; $aktual_operasional = 66; break;
-                    case 3: $nilai_omset = 100; $aktual_operasional = 100; break;
-                    default: $nilai_omset = 0; $aktual_operasional = 0; break;
+                    case 1:
+                        $nilai_omset = 33;
+                        $aktual_operasional = 33;
+                        break;
+                    case 2:
+                        $nilai_omset = 66;
+                        $aktual_operasional = 66;
+                        break;
+                    case 3:
+                        $nilai_omset = 100;
+                        $aktual_operasional = 100;
+                        break;
+                    default:
+                        $nilai_omset = 0;
+                        $aktual_operasional = 0;
+                        break;
                 }
             } else {
                 switch ($cabang_aman) {
-                    case 1: $nilai_omset = 25; $aktual_operasional = 25; break;
-                    case 2: $nilai_omset = 50; $aktual_operasional = 50; break;
-                    case 3: $nilai_omset = 75; $aktual_operasional = 75; break;
-                    case 4: $nilai_omset = 100; $aktual_operasional = 100; break;
-                    default: $nilai_omset = 0; $aktual_operasional = 0; break;
+                    case 1:
+                        $nilai_omset = 25;
+                        $aktual_operasional = 25;
+                        break;
+                    case 2:
+                        $nilai_omset = 50;
+                        $aktual_operasional = 50;
+                        break;
+                    case 3:
+                        $nilai_omset = 75;
+                        $aktual_operasional = 75;
+                        break;
+                    case 4:
+                        $nilai_omset = 100;
+                        $aktual_operasional = 100;
+                        break;
+                    default:
+                        $nilai_omset = 0;
+                        $aktual_operasional = 0;
+                        break;
                 }
             }
         } elseif ($jabatan == 43) {
@@ -889,18 +930,41 @@ class PenilaianKPI extends BaseController
 
             if ($context === 'gaji') {
                 switch ($cabang_aman) {
-                    case 1: $nilai_omset = 33; break;
-                    case 2: $nilai_omset = 66; break;
-                    case 3: $nilai_omset = 100; break;
-                    default: $nilai_omset = 0; break;
+                    case 1:
+                        $nilai_omset = 33;
+                        break;
+                    case 2:
+                        $nilai_omset = 66;
+                        break;
+                    case 3:
+                        $nilai_omset = 100;
+                        break;
+                    default:
+                        $nilai_omset = 0;
+                        break;
                 }
             } else {
                 switch ($cabang_aman) {
-                    case 1: $nilai_omset = 25; $aktual_operasional = 25; break;
-                    case 2: $nilai_omset = 50; $aktual_operasional = 50; break;
-                    case 3: $nilai_omset = 75; $aktual_operasional = 75; break;
-                    case 4: $nilai_omset = 100; $aktual_operasional = 100; break;
-                    default: $nilai_omset = 0; $aktual_operasional = 0; break;
+                    case 1:
+                        $nilai_omset = 25;
+                        $aktual_operasional = 25;
+                        break;
+                    case 2:
+                        $nilai_omset = 50;
+                        $aktual_operasional = 50;
+                        break;
+                    case 3:
+                        $nilai_omset = 75;
+                        $aktual_operasional = 75;
+                        break;
+                    case 4:
+                        $nilai_omset = 100;
+                        $aktual_operasional = 100;
+                        break;
+                    default:
+                        $nilai_omset = 0;
+                        $aktual_operasional = 0;
+                        break;
                 }
             }
         } else {
@@ -930,16 +994,27 @@ class PenilaianKPI extends BaseController
         } else {
             $customer_aman = 0;
             foreach ($aktual_customer_unit as $idUnit => $customer) {
-                if ($customer >= $target['atas_customer']) {
+                $targetAman = $target_unit[$idUnit]['atas_customer'] ?? $target_unit[$idUnit]['customer'];
+                if ($customer >= $targetAman) {
                     $customer_aman++;
                 }
             }
             switch ($customer_aman) {
-                case 1: $nilai_customer = 25; break;
-                case 2: $nilai_customer = 50; break;
-                case 3: $nilai_customer = 75; break;
-                case 4: $nilai_customer = 100; break;
-                default: $nilai_customer = 0; break;
+                case 1:
+                    $nilai_customer = 25;
+                    break;
+                case 2:
+                    $nilai_customer = 50;
+                    break;
+                case 3:
+                    $nilai_customer = 75;
+                    break;
+                case 4:
+                    $nilai_customer = 100;
+                    break;
+                default:
+                    $nilai_customer = 0;
+                    break;
             }
         }
 
