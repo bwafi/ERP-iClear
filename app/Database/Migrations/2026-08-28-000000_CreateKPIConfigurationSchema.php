@@ -218,7 +218,7 @@ class CreateKPIConfigurationSchema extends Migration
         // 4b. incentive_groups
         $this->forge->addField([
             'id'             => ['type' => 'INT', 'auto_increment' => true],
-            'code'           => ['type' => 'VARCHAR', 'constraint' => 50, 'unique' => true],
+            'code'           => ['type' => 'VARCHAR', 'constraint' => 50],
             'name'           => ['type' => 'VARCHAR', 'constraint' => 255],
             'description'    => ['type' => 'TEXT', 'null' => true],
             'is_active'      => ['type' => 'BOOLEAN', 'default' => 1],
