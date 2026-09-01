@@ -612,7 +612,7 @@ class PenilaianKPI extends BaseController
             $batas_kedua   = [1 => 35000000, 2 => 22000000, 3 => 45000000, 4 => 22000000];
             $batas_ketiga  = [1 => 40000000, 2 => 26000000, 3 => 50000000, 4 => 26000000];
             $batas_keempat = [1 => 45000000, 2 => 30000000, 3 => 55000000, 4 => 30000000];
-            $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 35000000];
+            $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 55000000];
         } else {
             $target_unit = [
                 1 => ['customer' => 150, 'atas_customer' => 220, 'bawah_customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
@@ -625,7 +625,7 @@ class PenilaianKPI extends BaseController
             $batas_kedua   = [1 => 40000000, 2 => 22000000, 3 => 45000000, 4 => 40000000];
             $batas_ketiga  = [1 => 45000000, 2 => 26000000, 3 => 50000000, 4 => 45000000];
             $batas_keempat = [1 => 50000000, 2 => 30000000, 3 => 55000000, 4 => 50000000];
-            $target_omset  = [1 => 55000000, 2 => 35000000, 3 => 60000000, 4 => 55000000];
+            $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 55000000];
         }
 
         $target = $target_unit[$unit] ?? $target_unit[1];
@@ -917,7 +917,7 @@ class PenilaianKPI extends BaseController
                         break;
                 }
             }
-        } elseif ($jabatan == 43 || 42) {
+        } elseif ($jabatan == 43 || $jabatan == 42) {
             $cabang_aman = 0;
             foreach ($aktual_omset_unit as $idUnit => $omset) {
                 if ($omset >= $batas_keempat[$idUnit]) {
