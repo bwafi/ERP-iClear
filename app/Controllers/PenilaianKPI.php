@@ -917,7 +917,7 @@ class PenilaianKPI extends BaseController
                         break;
                 }
             }
-        } elseif ($jabatan == 43) {
+        } elseif ($jabatan == 43 || 42) {
             $cabang_aman = 0;
             foreach ($aktual_omset_unit as $idUnit => $omset) {
                 if ($omset >= $batas_keempat[$idUnit]) {
@@ -1019,17 +1019,14 @@ class PenilaianKPI extends BaseController
         } elseif ($jabatan == 41) {
             // KEPALA TOKO: berdasarkan target unitnya sendiri
             // Di bawah batas minimal -> 0%
-            // Mencapai atau di atas target aman -> 100%
-            // Di antara minimal dan aman -> (aktual / target_aman) * 100
+            // Di atas atau sama dengan bawah_customer -> (aktual / atas_customer) * 100
             $targetBawah = $target['bawah_customer'] ?? $target['customer'];
             $targetAtas  = $target['atas_customer'] ?? $target['customer'];
 
             if ($total_customer < $targetBawah) {
                 $nilai_customer = 0;
-            } elseif ($total_customer >= $targetAtas) {
-                $nilai_customer = 100;
             } else {
-                $nilai_customer = min(($total_customer / $targetAtas) * 100, 100);
+                $nilai_customer = ($total_customer / $targetAtas) * 100;
             }
         } else {
             if ($context === 'gaji') {
