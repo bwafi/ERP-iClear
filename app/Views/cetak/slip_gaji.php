@@ -164,7 +164,7 @@
             <tr>
                 <td>
                     <div class="periode">
-                        Periode :<?= ' '.                          $awal_bulan .' - '. $akhir_bulan?>
+                        Periode: <?= '01 '.str_pad($bulan, 2, '0', STR_PAD_LEFT).' - '.date('t', strtotime($tahun.'-'.str_pad($bulan, 2, '0', STR_PAD_LEFT).'-01')).' '.str_pad($bulan, 2, '0', STR_PAD_LEFT).' '.$tahun?>
                     </div>
                 </td>
             </tr>
