@@ -602,10 +602,10 @@ class PenilaianKPI extends BaseController
         // ---------------------------------------------------------------
         if ($context === 'gaji') {
             $target_unit = [
-                1 => ['customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
-                2 => ['customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
-                3 => ['customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
-                4 => ['customer' => 200,   'closing' => 1,   'upselling' => 1,  'followup' => 1,   'roas' => 1],
+                1 => ['customer' => 150, 'atas_customer' => 220, 'bawah_customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
+                2 => ['customer' => 150, 'atas_customer' => 180, 'bawah_customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
+                3 => ['customer' => 250, 'atas_customer' => 350, 'bawah_customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
+                4 => ['customer' => 200, 'atas_customer' => 250, 'bawah_customer' => 200, 'closing' => 1,   'upselling' => 1,  'followup' => 1,   'roas' => 1],
             ];
 
             $batas_awal    = [1 => 30000000, 2 => 18000000, 3 => 40000000, 4 => 18000000];
@@ -615,10 +615,10 @@ class PenilaianKPI extends BaseController
             $target_omset  = [1 => 50000000, 2 => 35000000, 3 => 60000000, 4 => 35000000];
         } else {
             $target_unit = [
-                1 => ['customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
-                2 => ['customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
-                3 => ['customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
-                4 => ['customer' => 200,   'closing' => 1,   'upselling' => 1,  'followup' => 1,   'roas' => 1],
+                1 => ['customer' => 150, 'atas_customer' => 220, 'bawah_customer' => 150, 'closing' => 111, 'upselling' => 14, 'followup' => 100, 'roas' => 5],
+                2 => ['customer' => 150, 'atas_customer' => 180, 'bawah_customer' => 150, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 4],
+                3 => ['customer' => 250, 'atas_customer' => 350, 'bawah_customer' => 250, 'closing' => 188, 'upselling' => 27, 'followup' => 60,  'roas' => 3],
+                4 => ['customer' => 200, 'atas_customer' => 250, 'bawah_customer' => 200, 'closing' => 96,  'upselling' => 14, 'followup' => 80,  'roas' => 5],
             ];
 
             $batas_awal    = [1 => 35000000, 2 => 18000000, 3 => 40000000, 4 => 35000000];
@@ -986,35 +986,65 @@ class PenilaianKPI extends BaseController
 
         // ---------------------------------------------------------------
         // NILAI CUSTOMER
-        // context 'gaji' pakai target['customer'] langsung (persentase capped 100).
-        // context lain pakai skema 'cabang aman' terhadap atas_customer.
         // ---------------------------------------------------------------
-        if ($context === 'gaji') {
-            $nilai_customer = min(($total_customer / $target['customer']) * 100, 100);
-        } else {
-            $customer_aman = 0;
-            foreach ($aktual_customer_unit as $idUnit => $customer) {
-                $targetAman = $target_unit[$idUnit]['atas_customer'] ?? $target_unit[$idUnit]['customer'];
-                if ($customer >= $targetAman) {
-                    $customer_aman++;
-                }
+        // Hitung pencapaian 4 cabang untuk SPV / Kepala Divisi
+        $customer_aman = 0;
+        foreach ($aktual_customer_unit as $idUnit => $customer) {
+            $targetAman = $target_unit[$idUnit]['atas_customer'] ?? $target_unit[$idUnit]['customer'];
+            if ($customer >= $targetAman) {
+                $customer_aman++;
             }
-            switch ($customer_aman) {
-                case 1:
-                    $nilai_customer = 25;
-                    break;
-                case 2:
-                    $nilai_customer = 50;
-                    break;
-                case 3:
-                    $nilai_customer = 75;
-                    break;
-                case 4:
-                    $nilai_customer = 100;
-                    break;
-                default:
+        }
+        switch ($customer_aman) {
+            case 1:
+                $nilai_customer_cabang = 25;
+                break;
+            case 2:
+                $nilai_customer_cabang = 50;
+                break;
+            case 3:
+                $nilai_customer_cabang = 75;
+                break;
+            case 4:
+                $nilai_customer_cabang = 100;
+                break;
+            default:
+                $nilai_customer_cabang = 0;
+                break;
+        }
+
+        if ($jabatan == 40 || $jabatan == 43 || $jabatan == 46) {
+            // SPV / Pengiklan / Kepala Divisi: berdasarkan jumlah cabang yang achieve
+            $nilai_customer = $nilai_customer_cabang;
+        } elseif ($jabatan == 41) {
+            // KEPALA TOKO: berdasarkan target unitnya sendiri
+            // Di bawah batas minimal -> 0%
+            // Mencapai atau di atas target aman -> 100%
+            // Di antara minimal dan aman -> (aktual / target_aman) * 100
+            $targetBawah = $target['bawah_customer'] ?? $target['customer'];
+            $targetAtas  = $target['atas_customer'] ?? $target['customer'];
+
+            if ($total_customer < $targetBawah) {
+                $nilai_customer = 0;
+            } elseif ($total_customer >= $targetAtas) {
+                $nilai_customer = 100;
+            } else {
+                $nilai_customer = min(($total_customer / $targetAtas) * 100, 100);
+            }
+        } else {
+            if ($context === 'gaji') {
+                $nilai_customer = min(($total_customer / $target['customer']) * 100, 100);
+            } else {
+                $targetBawah = $target['bawah_customer'] ?? $target['customer'];
+                $targetAtas  = $target['atas_customer'] ?? $target['customer'];
+
+                if ($total_customer < $targetBawah) {
                     $nilai_customer = 0;
-                    break;
+                } elseif ($total_customer >= $targetAtas) {
+                    $nilai_customer = 100;
+                } else {
+                    $nilai_customer = min(($total_customer / $targetAtas) * 100, 100);
+                }
             }
         }
 
