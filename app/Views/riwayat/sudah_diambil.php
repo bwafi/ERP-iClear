@@ -14,12 +14,12 @@
 
 <div class="card w-100 position-relative overflow-hidden">
     <div class="card-body">
-        <div class="row g-3 mb-4">
-            <div class="col-lg-3 col-md-6">
+        <div class="row g-3 mb-3">
+            <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold mb-2">Tanggal Awal</label>
                 <input type="date" id="startDate" class="form-control">
             </div>
-            <div class="col-lg-3 col-md-6">
+            <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
                 <input type="date" id="endDate" class="form-control">
             </div>
@@ -27,7 +27,7 @@
                 <label class="form-label fw-semibold mb-2">Search</label>
                 <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, atau no HP...">
             </div>
-            <div class="col-lg-2 col-md-6">
+            <div class="col-lg-2 col-md-3">
                 <label class="form-label fw-semibold mb-2">Show</label>
                 <select id="pageLength" class="form-select">
                     <option value="10">10</option>
@@ -36,13 +36,15 @@
                     <option value="100">100</option>
                 </select>
             </div>
+            <div class="col-lg-2 col-md-3 d-flex align-items-end">
+                <button type="button" onclick="resetFilter()" class="btn btn-outline-secondary w-100">
+                    <iconify-icon icon="solar:refresh-linear" width="18" height="18" class="me-1"></iconify-icon>
+                    Reset
+                </button>
+            </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <button type="button" onclick="resetFilter()" class="btn btn-outline-secondary">
-                <iconify-icon icon="solar:refresh-linear" width="18" height="18" class="me-1"></iconify-icon>
-                Reset
-            </button>
+        <div class="d-flex justify-content-end mb-3">
             <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
                 <input type="hidden" name="tanggal_awal" id="exportStartDate">
                 <input type="hidden" name="tanggal_akhir" id="exportEndDate">
