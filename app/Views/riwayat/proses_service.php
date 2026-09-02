@@ -147,7 +147,7 @@
                 <h4 class="modal-title" id="DibatalkanModalLabel">Konfirmasi Pembatalan</h4>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="<?= base_url('dibatalkan/service') ?>" method="post">
+            <form action="<?= base_url('service/dibatalkan') ?>" method="post">
                 <div class="modal-body">
                     <input type="hidden" name="idservice" id="modal-dibatalkan-idservice">
                     <div id="modal-dibatalkan-alert"></div>

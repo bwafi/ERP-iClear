@@ -118,9 +118,21 @@ class Service extends BaseController
     {
         $idservice = $this->request->getPost('idservice');
 
-        if (session()->has('idservice')) {
-            session()->setFlashdata('gagal', 'Gagal! Selesaikan inputan terkini terlebih dahulu untuk input data baru.');
+        if (!empty($idservice)) {
+            session()->setFlashdata('gagal', 'Gagal! Data service sudah ada. Silakan selesaikan atau batalkan transaksi terlebih dahulu.');
             return redirect()->back();
+        }
+
+        if (session()->has('idservice') && !empty(session('idservice'))) {
+            $existingId = session('idservice');
+            $existingService = $this->ServiceModel->find($existingId);
+            
+            if ($existingService && in_array($existingService->status_service, [1, 2, 3])) {
+                session()->setFlashdata('gagal', 'Gagal! Anda masih memiliki transaksi aktif (No: ' . $existingService->no_service . '). Selesaikan terlebih dahulu atau <a href="' . base_url('service/cancel/' . $existingId) . '">batalkan</a>.');
+                return redirect()->back();
+            } else {
+                session()->remove('idservice');
+            }
         }
 
 
@@ -525,6 +537,38 @@ class Service extends BaseController
             ->findAll();
 
         return $this->response->setJSON($pelanggan);
+    }
+
+    public function cancel_service($idservice)
+    {
+        $service = $this->ServiceModel->find($idservice);
+        
+        if (!$service) {
+            session()->setFlashdata('gagal', 'Service tidak ditemukan');
+            return redirect()->to(base_url('service'));
+        }
+
+        if ($service->status_service >= 4) {
+            session()->setFlashdata('gagal', 'Service sudah selesai, tidak dapat dibatalkan');
+            return redirect()->to(base_url('service'));
+        }
+
+        $this->ServiceModel->delete($idservice);
+        
+        $this->ServiceKerusakanModel->where('service_idservice', $idservice)->delete();
+        $this->ServiceSparepartModel->where('service_idservice', $idservice)->delete();
+        
+        session()->remove('idservice');
+        session()->setFlashdata('sukses', 'Transaksi berhasil dibatalkan');
+        
+        return redirect()->to(base_url('service'));
+    }
+
+    public function clear_session()
+    {
+        session()->remove('idservice');
+        session()->setFlashdata('sukses', 'Session berhasil dihapus');
+        return redirect()->to(base_url('service'));
     }
 
     function sanitizeCurrency($value)
