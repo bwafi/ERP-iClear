@@ -359,7 +359,7 @@
             ],
             order: [
                 [0, 'asc'],
-                [3, 'asc']
+                [3, 'desc']
             ],
             columnDefs: [{
                 targets: 0,

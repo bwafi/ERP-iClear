@@ -387,7 +387,14 @@ class ModelService extends Model
             9 => 'service.status_proses'
         ];
 
+        $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
         $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.created_at';
+
+        if ($orderColumnName === 'rank') {
+            $orderByClause = "rank {$orderDir}, service.created_at DESC";
+        } else {
+            $orderByClause = "{$orderColumnName} {$orderDir}";
+        }
 
         $whereConditions = ['service.status_service IN (1, 2)'];
         $params = [];
@@ -440,7 +447,7 @@ class ModelService extends Model
             FROM service
             JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
             WHERE {$whereClause}
-            ORDER BY {$orderColumnName} {$orderDir}
+            ORDER BY {$orderByClause}
             LIMIT ? OFFSET ?";
 
         $params[] = (int)$length;
