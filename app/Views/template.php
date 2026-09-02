@@ -2042,6 +2042,39 @@
 <script>
 document.documentElement.setAttribute("data-boxed-layout", "full");
 document.getElementById("full-layout").checked = true;
+
+// Save and restore sidebar scroll position with SimpleBar support
+(function() {
+    const sidebarWrapper = document.querySelector('.scroll-sidebar');
+    
+    if (sidebarWrapper) {
+        // Wait for SimpleBar to initialize
+        setTimeout(function() {
+            const simplebarContent = sidebarWrapper.querySelector('.simplebar-content-wrapper');
+            const scrollElement = simplebarContent || sidebarWrapper;
+            
+            // Restore scroll position on page load
+            const savedScroll = localStorage.getItem('sidebarScrollPosition');
+            if (savedScroll) {
+                scrollElement.scrollTop = parseInt(savedScroll, 10);
+            }
+            
+            // Save scroll position on scroll
+            let scrollTimeout;
+            scrollElement.addEventListener('scroll', function() {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(function() {
+                    localStorage.setItem('sidebarScrollPosition', scrollElement.scrollTop);
+                }, 100);
+            });
+            
+            // Save scroll position before page unload
+            window.addEventListener('beforeunload', function() {
+                localStorage.setItem('sidebarScrollPosition', scrollElement.scrollTop);
+            });
+        }, 500);
+    }
+})();
 </script>
 <script src="<?php echo base_url('template/assets/libs/datatables.net/js/jquery.dataTables.min.js') ?>"></script>
 <script src="<?php echo base_url('template/assets/js/datatable/datatable-basic.init.js') ?>"></script>
