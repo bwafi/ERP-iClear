@@ -703,10 +703,46 @@ class Riwayat_Service extends BaseController
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->ProsesServiceAktif(),
+            'service' => [],
             'body'  => 'riwayat/proses_service'
         );
         return view('template', $data);
+    }
+
+    public function proses_service_ajax()
+    {
+        $request = \Config\Services::request();
+        
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 3;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+        
+        $startDate = $request->getPost('startDate') ?? '';
+        $endDate = $request->getPost('endDate') ?? '';
+        $unitFilter = $request->getPost('unitFilter') ?? '';
+
+        $result = $this->ServiceModel->ProsesServiceAktifServerSide(
+            $start,
+            $length,
+            $searchValue,
+            $orderColumnIndex,
+            $orderDir,
+            $startDate,
+            $endDate,
+            $unitFilter
+        );
+
+        $recordsTotal = $this->ServiceModel->ProsesServiceAktifTotal();
+
+        return $this->response->setJSON([
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data']
+        ]);
     }
 
     public function togglePrioritas()

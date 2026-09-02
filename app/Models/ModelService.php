@@ -372,6 +372,113 @@ class ModelService extends Model
         return $services;
     }
 
+    public function ProsesServiceAktifServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
+    {
+        $allowedColumns = [
+            0 => 'rank',
+            1 => 'service.no_service',
+            2 => 'service.prioritas',
+            3 => 'service.created_at',
+            4 => 'pelanggan.nama',
+            5 => 'service.no_hp',
+            6 => 'service.tipe_hp',
+            7 => 'service.unit_idunit',
+            8 => 'lama_service_days',
+            9 => 'service.status_proses'
+        ];
+
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.created_at';
+
+        $whereConditions = ['service.status_service IN (1, 2)'];
+        $params = [];
+
+        if (!empty($startDate)) {
+            $whereConditions[] = 'DATE(service.created_at) >= ?';
+            $params[] = $startDate;
+        }
+        if (!empty($endDate)) {
+            $whereConditions[] = 'DATE(service.created_at) <= ?';
+            $params[] = $endDate;
+        }
+        if (!empty($unitFilter)) {
+            $unitMap = ['Probolinggo' => 1, 'Jember' => 2, 'Banyuwangi' => 3, 'Pandaan' => 4];
+            if (isset($unitMap[$unitFilter])) {
+                $whereConditions[] = 'service.unit_idunit = ?';
+                $params[] = $unitMap[$unitFilter];
+            }
+        }
+
+        $searchCondition = '';
+        if (!empty($searchValue)) {
+            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR service.tipe_hp LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+        }
+
+        $whereClause = implode(' AND ', $whereConditions) . $searchCondition;
+
+        $sql = "SELECT 
+                service.idservice,
+                service.no_service,
+                service.prioritas,
+                service.created_at,
+                service.tanggal_claim_garansi,
+                pelanggan.nama as nama_pelanggan,
+                service.no_hp,
+                service.tipe_hp,
+                service.unit_idunit,
+                service.status_proses,
+                service.status_service,
+                DATEDIFF(NOW(), service.created_at) as lama_service_days,
+                (SELECT COUNT(*) FROM service_kerusakan WHERE service_kerusakan.service_idservice = service.idservice) as jumlah_kerusakan,
+                (SELECT COUNT(*) FROM service_sparepart WHERE service_sparepart.service_idservice = service.idservice) as jumlah_sparepart,
+                CASE 
+                    WHEN service.tanggal_claim_garansi IS NOT NULL AND service.tanggal_claim_garansi > '1971-01-01' THEN 0
+                    WHEN service.prioritas = 1 THEN 1
+                    ELSE 2
+                END as rank
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}
+            ORDER BY {$orderColumnName} {$orderDir}
+            LIMIT ? OFFSET ?";
+
+        $params[] = (int)$length;
+        $params[] = (int)$start;
+
+        $query = $this->db->query($sql, $params);
+        $data = $query->getResult();
+
+        $countSql = "SELECT COUNT(*) as total
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}";
+
+        $countQuery = $this->db->query($countSql, array_slice($params, 0, -2));
+        $totalFiltered = $countQuery->getRow()->total;
+
+        foreach ($data as &$row) {
+            if ($row->lama_service_days !== null) {
+                $days = (int)$row->lama_service_days;
+                $hours = 0;
+                $minutes = 0;
+                $row->lama_service = "{$days} hari, {$hours} jam, {$minutes} menit";
+            } else {
+                $row->lama_service = 'Tanggal tidak tersedia';
+            }
+        }
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered
+        ];
+    }
+
+    public function ProsesServiceAktifTotal()
+    {
+        return $this->whereIn('status_service', [1, 2])->countAllResults();
+    }
+
 
     public function ProsesServiceDibatalkan()
     {

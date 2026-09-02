@@ -143,6 +143,7 @@ $routes->get('service_sparepart', 'Service::sparepart_table', ['filter' => 'auth
 $routes->post('insert/pelanggan_service', 'Service::insert_service', ['filter' => 'auth']);
 
 $routes->get('proses_service', 'Riwayat_Service::proses_service', ['filter' => 'auth']);
+$routes->post('proses_service/ajax', 'Riwayat_Service::proses_service_ajax', ['filter' => 'auth']);
 $routes->post('service/toggle_prioritas', 'Riwayat_Service::togglePrioritas', ['filter' => 'auth']);
 $routes->post('update_status_proses', 'Riwayat_Service::update_status_proses', ['filter' => 'auth']);
 $routes->post('service/bisa_diambil', 'Riwayat_Service::update_bisa_diambil', ['filter' => 'auth']);
