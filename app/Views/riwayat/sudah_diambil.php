@@ -37,8 +37,10 @@
                 </select>
             </div>
             <div class="col-lg-2 col-md-3 d-flex align-items-end">
-                <button type="button" onclick="resetFilter()" class="btn btn-outline-secondary w-100">
-                    <iconify-icon icon="solar:refresh-linear" width="18" height="18" class="me-1"></iconify-icon>
+                <button type="button"
+                    onclick="resetFilter()"
+                    class="btn btn-outline-secondary w-100 d-flex justify-content-center align-items-center gap-1">
+                    <iconify-icon icon="solar:refresh-linear" width="18" height="18"></iconify-icon>
                     Reset
                 </button>
             </div>
@@ -58,44 +60,44 @@
         <div class="table-responsive">
             <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
 
-            <thead class="text-dark fs-4">
-                <tr>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">No Service</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Service Masuk</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Diambil</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
-                    </th>
+                <thead class="text-dark fs-4">
+                    <tr>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">No Service</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Tanggal Service Masuk</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Tanggal Diambil</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
+                        </th>
 
-                    <th style="display: flex; justify-content: center;">
-                        <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
-                    </th>
+                        <th style="display: flex; justify-content: center;">
+                            <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
+                        </th>
 
-                    <th>
-                        <h6 style="display: flex; justify-content: center;" class="fs-4 fw-semibold mb-0">Lama Waktu</h6>
-                    </th>
+                        <th>
+                            <h6 style="display: flex; justify-content: center;" class="fs-4 fw-semibold mb-0">Lama Waktu</h6>
+                        </th>
 
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Status garansi</h6>
-                    </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Status garansi</h6>
+                        </th>
 
-                    <th style="display: flex; justify-content: center;">
-                        <h6 class="fs-4 fw-semibold mb-0">Action</h6>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-            </tbody>
-        </table>
+                        <th style="display: flex; justify-content: center;">
+                            <h6 class="fs-4 fw-semibold mb-0">Action</h6>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -133,6 +135,7 @@
             serverSide: true,
             processing: true,
             scrollY: '50vh',
+            scrollX: true,
             scrollCollapse: true,
             searching: false,
             lengthChange: false,
@@ -156,7 +159,9 @@
                 data: function(d) {
                     d.startDate = startDateInput.value;
                     d.endDate = endDateInput.value;
-                    d.search = {value: searchBox.value};
+                    d.search = {
+                        value: searchBox.value
+                    };
                 }
             },
             columns: [{
@@ -254,7 +259,9 @@
                     }
                 }
             ],
-            order: [[2, 'desc']]
+            order: [
+                [2, 'desc']
+            ]
         });
 
         searchBox.addEventListener('input', function() {
