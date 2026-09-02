@@ -891,10 +891,44 @@ class Riwayat_Service extends BaseController
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->ServiceSudahDiambil(),
+            'service' => [],
             'body'  => 'riwayat/sudah_diambil'
         );
         return view('template', $data);
+    }
+
+    public function service_sudah_diambil_ajax()
+    {
+        $request = \Config\Services::request();
+        
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 2;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+        
+        $startDate = $request->getPost('startDate') ?? '';
+        $endDate = $request->getPost('endDate') ?? '';
+
+        $result = $this->ServiceModel->ServiceSudahDiambilServerSide(
+            $start,
+            $length,
+            $searchValue,
+            $orderColumnIndex,
+            $orderDir,
+            $startDate,
+            $endDate
+        );
+
+        $recordsTotal = $this->ServiceModel->ServiceSudahDiambilTotal();
+
+        return $this->response->setJSON([
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data']
+        ]);
     }
 
     function sanitizeCurrency($value)

@@ -13,39 +13,48 @@
 </div>
 
 <div class="card w-100 position-relative overflow-hidden">
-    <div class="px-4 py-3 border-bottom">
-    </div>
-
-    <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data">
-        <button type="submit" class="btn btn-danger"
-            style="margin-left: 20px; display: inline-flex; align-items: center;">
-            <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;"></iconify-icon>
-            Export
-        </button>
-        <br><br>
-
-
-        <!-- Filter Tanggal & Unit -->
-        <div class="mb-3 px-4">
-
-            <label class="ms-3 me-2">Tanggal Awal:</label>
-            <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
-                style="width: auto; display: inline-block;" onchange="filterData()">
-
-            <label class="ms-3 me-2">Tanggal Akhir:</label>
-            <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
-                style="width: auto; display: inline-block;" onchange="filterData()">
-
-            <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
+    <div class="card-body">
+        <div class="row g-3 mb-4">
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label fw-semibold mb-2">Tanggal Awal</label>
+                <input type="date" id="startDate" class="form-control">
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
+                <input type="date" id="endDate" class="form-control">
+            </div>
+            <div class="col-lg-4 col-md-6">
+                <label class="form-label fw-semibold mb-2">Search</label>
+                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, atau no HP...">
+            </div>
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label fw-semibold mb-2">Show</label>
+                <select id="pageLength" class="form-select">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
         </div>
-    </form>
 
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <button type="button" onclick="resetFilter()" class="btn btn-outline-secondary">
+                <iconify-icon icon="solar:refresh-linear" width="18" height="18" class="me-1"></iconify-icon>
+                Reset
+            </button>
+            <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
+                <input type="hidden" name="tanggal_awal" id="exportStartDate">
+                <input type="hidden" name="tanggal_akhir" id="exportEndDate">
+                <button type="submit" class="btn btn-danger">
+                    <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
+                    Export
+                </button>
+            </form>
+        </div>
 
-
-
-
-    <div class="table-responsive mb-4 px-4">
-        <table class="table border text-nowrap mb-0 align-middle" <?= empty($service) ? '' : 'id="zero_config"' ?>>
+        <div class="table-responsive">
+            <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
 
             <thead class="text-dark fs-4">
                 <tr>
@@ -83,122 +92,22 @@
                 </tr>
             </thead>
             <tbody>
-                <?php if (!empty($service)): ?>
-                    <?php foreach ($service as $row): ?>
-                        <tr>
-                            <td><?= esc($row->no_service) ?></td>
-                            <td><?= esc(date('d-m-Y', strtotime($row->created_at))) ?></td>
-                            <td><?= esc(date('d-m-Y', strtotime($row->tanggal_selesai))) ?></td>
-                            <td><?= esc($row->nama_pelanggan) ?></td>
-                            <td><?= esc($row->no_hp) ?></td>
-                            <td>
-                                <?= esc($row->unit_idunit == 1 ? 'Probolinggo' : ($row->unit_idunit == 2 ? 'Jember' : ($row->unit_idunit == 3 ? 'Banyuwangi': ($row->unit_idunit == 4 ? 'Pandaan' : $row->unit_idunit)))) ?>
-                            </td>
-                            <td><?= esc($row->lama_service) ?></td>
-
-
-                            <td>
-                                <?php if ($row->garansi_hari > 0 && !empty($row->tanggal_selesai)): ?>
-                                    <?php
-                                    $tanggal_selesai = new DateTime($row->tanggal_selesai);
-                                    $tanggal_akhir = clone $tanggal_selesai;
-                                    $tanggal_akhir->modify("+{$row->garansi_hari} days");
-
-                                    $today = new DateTime();
-
-                                    if ($today > $tanggal_akhir) {
-                                        // Garansi sudah kadaluarsa
-                                        echo "Kadaluarsa pada " . $tanggal_akhir->format('d-m-Y');
-                                    } else {
-                                        // Garansi masih aktif
-                                        echo esc($row->garansi_hari) . " hari (aktif sampai " . $tanggal_akhir->format('d-m-Y') . ")";
-                                    }
-                                    ?>
-                                <?php else: ?>
-                                    Tidak ada garansi
-                                <?php endif; ?>
-                            </td>
-
-
-                            <td>
-                                <a href="<?php echo base_url('cetak/invoice_service/' . $row->idservice) ?>">
-                                    <button type="button" class="btn btn-sm btn-danger"
-                                        style="display: inline-flex; align-items: center;">
-                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
-                                        </iconify-icon>
-                                        Cetak Struk
-                                    </button>
-                                </a>
-                                
-                                <a href="<?= base_url('cetak/invoice_service/' . $row->idservice . '?mode=thermal') ?>">
-                                    <button type="button" class="btn btn-sm btn-danger"
-                                        style="display: inline-flex; align-items: center;">
-                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
-                                        </iconify-icon>
-                                        Cetak Struk (Thermal)
-                                    </button>
-                                </a>
-                                
-                                <button type="button" class="btn btn-wa"
-                                    data-nohp="<?= esc($row->no_hp) ?>"
-                                    data-nama="<?= esc($row->nama_pelanggan) ?>"
-                                    style="width: 100px; height: 40px; background-color: greenyellow;">
-                                    <iconify-icon icon="solar:phone-bold" width="24" height="24"></iconify-icon>
-                                </button>
-                            </td>
-                        </tr>
-
-                        <!-- modal bsa dimabil -->
-
-                        <div class="modal fade" id="sudahDiambilModal-<?= esc($row->idservice) ?>" tabindex="-1" aria-labelledby="sudahDiambilModalLabel-<?= esc($row->idservice) ?>" aria-hidden="true">
-                            <div class="modal-dialog" role="document">
-                                <div class="modal-content">
-                                    <div class="modal-header d-flex align-items-center">
-                                        <h4 class="modal-title" id="sudahDiambilModalLabel-<?= esc($row->idservice) ?>">Konfirmasi Pengambilan</h4>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-                                    </div>
-                                    <form action="<?= base_url('service/sudah_diambil') ?>" method="post">
-                                        <div class="modal-body">
-                                            <input type="hidden" name="idservice" value="<?= esc($row->idservice) ?>">
-                                            <p>Apakah Anda yakin service ini sudah diambil oleh pelanggan?</p>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                                            <button type="submit" class="btn btn-success">Konfirmasi</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-
-
-
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="3" class="text-center">Tidak ada data</td>
-                    </tr>
-                <?php endif; ?>
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 
 
-
-
-
-
 <script>
     let dataTable;
+    let searchTimeout;
 
     window.onload = function() {
-        // Inisialisasi DataTable (pastikan id tabel kamu benar)
-        dataTable = $('#zero_config').DataTable();
-
         const startDateInput = document.getElementById('startDate');
         const endDateInput = document.getElementById('endDate');
+        const searchBox = document.getElementById('searchBox');
+        const pageLength = document.getElementById('pageLength');
 
         const today = new Date();
         const fifteenDaysAgo = new Date();
@@ -211,77 +120,193 @@
             return `${year}-${month}-${day}`;
         };
 
-        // Set default 15 hari ke belakang
         startDateInput.value = toDateInputValue(fifteenDaysAgo);
         endDateInput.value = toDateInputValue(today);
 
-        // Filter pertama kali
-        filterData();
+        if ($.fn.DataTable.isDataTable('#zero_config')) {
+            $('#zero_config').DataTable().destroy();
+        }
 
-        // Jalankan filter setiap kali tanggal diubah
+        dataTable = $('#zero_config').DataTable({
+            serverSide: true,
+            processing: true,
+            scrollY: '50vh',
+            scrollCollapse: true,
+            searching: false,
+            lengthChange: false,
+            pageLength: 10,
+            language: {
+                processing: '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>',
+                emptyTable: 'Tidak ada data',
+                info: 'Menampilkan _START_ sampai _END_ dari _TOTAL_ data',
+                infoEmpty: 'Menampilkan 0 sampai 0 dari 0 data',
+                infoFiltered: '(difilter dari _MAX_ total data)',
+                paginate: {
+                    first: 'Pertama',
+                    last: 'Terakhir',
+                    next: 'Selanjutnya',
+                    previous: 'Sebelumnya'
+                }
+            },
+            ajax: {
+                url: '<?= base_url('sudah_diambil/ajax') ?>',
+                type: 'POST',
+                data: function(d) {
+                    d.startDate = startDateInput.value;
+                    d.endDate = endDateInput.value;
+                    d.search = {value: searchBox.value};
+                }
+            },
+            columns: [{
+                    data: 'no_service'
+                },
+                {
+                    data: 'created_at',
+                    render: function(data) {
+                        if (!data) return '';
+                        const date = new Date(data);
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        return `${day}-${month}-${year}`;
+                    }
+                },
+                {
+                    data: 'tanggal_selesai',
+                    render: function(data) {
+                        if (!data) return '';
+                        const date = new Date(data);
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        return `${day}-${month}-${year}`;
+                    }
+                },
+                {
+                    data: 'nama_pelanggan'
+                },
+                {
+                    data: 'no_hp'
+                },
+                {
+                    data: 'unit_idunit',
+                    render: function(data) {
+                        const units = {
+                            1: 'Probolinggo',
+                            2: 'Jember',
+                            3: 'Banyuwangi',
+                            4: 'Pandaan'
+                        };
+                        return units[data] || data;
+                    }
+                },
+                {
+                    data: 'lama_service'
+                },
+                {
+                    data: null,
+                    render: function(data, type, row) {
+                        if (row.garansi_hari > 0 && row.tanggal_selesai) {
+                            const tanggalSelesai = new Date(row.tanggal_selesai);
+                            const tanggalAkhir = new Date(tanggalSelesai);
+                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
+                            const today = new Date();
+
+                            const formatDate = (date) => {
+                                const day = String(date.getDate()).padStart(2, '0');
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const year = date.getFullYear();
+                                return `${day}-${month}-${year}`;
+                            };
+
+                            if (today > tanggalAkhir) {
+                                return 'Kadaluarsa pada ' + formatDate(tanggalAkhir);
+                            } else {
+                                return row.garansi_hari + ' hari (aktif sampai ' + formatDate(tanggalAkhir) + ')';
+                            }
+                        }
+                        return 'Tidak ada garansi';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(data, type, row) {
+                        return `
+                            <a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}">
+                                <button type="button" class="btn btn-sm btn-danger" style="display: inline-flex; align-items: center;">
+                                    <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
+                                    Cetak Struk
+                                </button>
+                            </a>
+                            <a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}?mode=thermal">
+                                <button type="button" class="btn btn-sm btn-danger" style="display: inline-flex; align-items: center;">
+                                    <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
+                                    Cetak Struk (Thermal)
+                                </button>
+                            </a>
+                            <button type="button" class="btn btn-wa" data-nohp="${row.no_hp}" data-nama="${row.nama_pelanggan}" style="width: 100px; height: 40px; background-color: greenyellow;">
+                                <iconify-icon icon="solar:phone-bold" width="24" height="24"></iconify-icon>
+                            </button>
+                        `;
+                    }
+                }
+            ],
+            order: [[2, 'desc']]
+        });
+
+        searchBox.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                dataTable.ajax.reload();
+            }, 500);
+        });
+
+        pageLength.addEventListener('change', function() {
+            dataTable.page.len(this.value).draw();
+        });
+
         startDateInput.addEventListener('change', filterData);
         endDateInput.addEventListener('change', filterData);
+
+        $(document).on('click', '.btn-wa', function() {
+            let nomor = $(this).data('nohp').toString().trim();
+            let nama = $(this).data('nama').toString().trim();
+
+            if (nomor.startsWith('0')) {
+                nomor = '62' + nomor.substring(1);
+            } else if (nomor.startsWith('+62')) {
+                nomor = nomor.substring(1);
+            }
+
+            const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent("Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama " + nama);
+            window.open(waUrl, '_blank');
+        });
     };
 
     function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-
-        const startDate = start ? new Date(start) : null;
-        const endDate = end ? new Date(end) : null;
-
-        // Tambahkan custom filter DataTables
-        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-            // Ambil tanggal dari kolom ke-2 (index 1) – ubah jika posisi kolom berbeda
-            const dateText = data[1].trim();
-            const parts = dateText.split('-'); // Asumsi format dd-mm-yyyy
-            if (parts.length !== 3) return true; // kalau format salah, jangan disaring
-
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-
-            if (startDate && rowDate < startDate) return false;
-            if (endDate && rowDate > endDate) return false;
-
-            return true;
-        });
-
-        // Redraw tabel
-        dataTable.draw();
-
-        // Hapus filter supaya tidak menumpuk setiap kali filterData dipanggil
-        $.fn.dataTable.ext.search.pop();
+        dataTable.ajax.reload();
+        document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
+        document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
     }
 
     function resetFilter() {
-        document.getElementById('startDate').value = '';
-        document.getElementById('endDate').value = '';
+        const today = new Date();
+        const fifteenDaysAgo = new Date();
+        fifteenDaysAgo.setDate(today.getDate() - 15);
 
-        filterData();
+        const toDateInputValue = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        document.getElementById('startDate').value = toDateInputValue(fifteenDaysAgo);
+        document.getElementById('endDate').value = toDateInputValue(today);
+        document.getElementById('searchBox').value = '';
+        document.getElementById('exportStartDate').value = toDateInputValue(fifteenDaysAgo);
+        document.getElementById('exportEndDate').value = toDateInputValue(today);
+        dataTable.ajax.reload();
     }
-</script>
-
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const buttons = document.querySelectorAll('.btn-wa');
-
-        buttons.forEach(button => {
-            button.addEventListener('click', function() {
-                let nomor = this.dataset.nohp.trim();
-                let nama = this.dataset.nama.trim();
-
-                // Normalisasi nomor HP
-                if (nomor.startsWith('0')) {
-                    nomor = '62' + nomor.substring(1);
-                } else if (nomor.startsWith('+62')) {
-                    nomor = nomor.substring(1); // hapus +
-                }
-
-                const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent("Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama " + nama);
-
-                // Buka WhatsApp
-                window.open(waUrl, '_blank');
-            });
-        });
-    });
 </script>

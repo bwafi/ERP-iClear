@@ -474,6 +474,80 @@ class ModelService extends Model
         return $services;
     }
 
+    public function ServiceSudahDiambilServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate)
+    {
+        $allowedColumns = [
+            0 => 'service.no_service',
+            1 => 'service.created_at',
+            2 => 'service.tanggal_selesai',
+            3 => 'pelanggan.nama',
+            4 => 'service.no_hp',
+            5 => 'service.unit_idunit',
+            6 => 'lama_service_days',
+            7 => 'service.garansi_hari'
+        ];
+
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.tanggal_selesai';
+
+        $builder = $this->db->table('service')
+            ->select('
+                service.idservice,
+                service.no_service,
+                service.created_at,
+                service.tanggal_selesai,
+                pelanggan.nama as nama_pelanggan,
+                service.no_hp,
+                service.unit_idunit,
+                service.garansi_hari,
+                DATEDIFF(NOW(), service.tanggal_selesai) as lama_service_days
+            ')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
+            ->where('service.status_service', 4);
+
+        if (!empty($startDate)) {
+            $builder->where('DATE(service.created_at) >=', $startDate);
+        }
+        if (!empty($endDate)) {
+            $builder->where('DATE(service.created_at) <=', $endDate);
+        }
+
+        if (!empty($searchValue)) {
+            $builder->groupStart()
+                ->like('service.no_service', $searchValue)
+                ->orLike('pelanggan.nama', $searchValue)
+                ->orLike('service.no_hp', $searchValue)
+                ->groupEnd();
+        }
+
+        $totalFiltered = $builder->countAllResults(false);
+
+        $builder->orderBy($orderColumnName, $orderDir)
+            ->limit($length, $start);
+
+        $data = $builder->get()->getResult();
+
+        foreach ($data as &$row) {
+            if ($row->lama_service_days !== null) {
+                $days = (int)$row->lama_service_days;
+                $hours = 0;
+                $minutes = 0;
+                $row->lama_service = "{$days} hari, {$hours} jam, {$minutes} menit";
+            } else {
+                $row->lama_service = 'Tanggal tidak tersedia';
+            }
+        }
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered
+        ];
+    }
+
+    public function ServiceSudahDiambilTotal()
+    {
+        return $this->where('status_service', 4)->countAllResults();
+    }
+
     public function getTotalPendapatanService($unit_id = null, $per_bulan = false)
     {
         if ($per_bulan) {
