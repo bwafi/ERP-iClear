@@ -72,15 +72,6 @@ class Service extends BaseController
 
         $unitId = session('ID_UNIT');
 
-        $sparepart = $this->StokBarangModel
-            ->where('id_unit', $unitId)
-            ->where('stok_akhir >', 0)
-            ->groupStart()
-                ->like('kode_barang', 'sprt')
-                ->orLike('kode_barang', 'acc')
-            ->groupEnd()
-            ->findAll();
-
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
         $oldsparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
         $data =  array(
@@ -92,8 +83,6 @@ class Service extends BaseController
             'old_service_pelanggan' => $this->ServiceModel->getByIdWithPelanggan($idservice),
             'oldkerusakan' => $oldkerusakan,
             'oldsparepart' => $oldsparepart,
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'sparepart' => $sparepart,
             'unit' => $this->UnitModel->getUnit(),
             'body'  => 'transaksi/service'
         );
@@ -464,8 +453,8 @@ class Service extends BaseController
         $this->ServiceModel->updateService($idservice, $datap);
 
         session()->remove('idservice');
-        session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
-        return redirect()->to(base_url('/service'));
+        session()->setFlashdata('sukses', 'Berhasil Menambahkan Data Service');
+        return redirect()->to(base_url('/proses_service'));
     }
 
 
@@ -476,6 +465,66 @@ class Service extends BaseController
 
 
         return (int) preg_replace('/[^0-9]/', '', $cleaned);
+    }
+
+    public function search_sparepart_ajax()
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setJSON(['error' => 'Invalid request']);
+        }
+
+        $search = $this->request->getPost('search') ?? '';
+        $unitId = session('ID_UNIT');
+
+        $builder = $this->StokBarangModel;
+        
+        if (!empty($search)) {
+            $builder->groupStart()
+                ->like('nama_barang', $search)
+                ->orLike('kode_barang', $search)
+                ->orLike('warna', $search)
+                ->groupEnd();
+        }
+
+        $sparepart = $builder
+            ->where('id_unit', $unitId)
+            ->where('stok_akhir >', 0)
+            ->groupStart()
+                ->like('kode_barang', 'sprt')
+                ->orLike('kode_barang', 'acc')
+            ->groupEnd()
+            ->orderBy('nama_barang', 'ASC')
+            ->limit(50)
+            ->findAll();
+
+        return $this->response->setJSON($sparepart);
+    }
+
+    public function search_pelanggan_ajax()
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setJSON(['error' => 'Invalid request']);
+        }
+
+        $search = $this->request->getPost('search') ?? '';
+
+        $builder = $this->PelangganModel;
+        
+        if (!empty($search)) {
+            $builder->groupStart()
+                ->like('nama', $search)
+                ->orLike('no_hp', $search)
+                ->groupEnd()
+                ->orderBy('nama', 'ASC');
+        } else {
+            $builder->orderBy('id_pelanggan', 'DESC');
+        }
+
+        $pelanggan = $builder
+            ->limit(50)
+            ->findAll();
+
+        return $this->response->setJSON($pelanggan);
     }
 
     function sanitizeCurrency($value)

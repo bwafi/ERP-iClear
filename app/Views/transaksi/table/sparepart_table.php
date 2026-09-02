@@ -14,35 +14,35 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
-                    <table class="table table-bordered" id="sparepartDataTable">
-                        <label class="me-2 ms-4">Nama Unit:</label>
-                        <input type="form-control" id="unit" value="<?= session('NAMA_UNIT') ?>" readonly>
-                        <thead>
-                            <tr>
-                                <th></th>
-                                <th>Nama Sparepart</th>
-                                <th>Warna</th>
-                                <th>Nama Unit</th>
-                                <th>HPP</th>
-                                <th>Harga</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($sparepart as $row) : ?>
-                                <tr data-unit="<?= esc($row->id_unit) ?>">
-                                    <td>
-                                        <input type="checkbox" class="sparepart-check" data-id="<?= esc($row->idbarang) ?>"
-                                            data-nama="<?= esc($row->nama_barang) ?>" data-harga="<?= esc($row->harga) ?>">
-                                    </td>
-                                    <td><?= esc($row->nama_barang) ?></td>
-                                    <td><?= esc($row->warna) ?></td>
-                                    <td><?= esc($row->nama_unit) ?></td>
-                                    <td><?= 'Rp ' . number_format($row->harga_beli, 0, ',', '.') ?></td>
-                                    <td><?= 'Rp ' . number_format($row->harga, 0, ',', '.') ?></td>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nama Unit:</label>
+                            <input type="text" class="form-control" id="unit" value="<?= session('NAMA_UNIT') ?>" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Cari Sparepart:</label>
+                            <input type="text" class="form-control" id="searchSparepartInput" placeholder="Ketik nama, kode, atau warna...">
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-bordered table-hover" id="sparepartDataTable">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th width="40"></th>
+                                    <th>Nama Sparepart</th>
+                                    <th>Warna</th>
+                                    <th>Nama Unit</th>
+                                    <th>HPP</th>
+                                    <th>Harga</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody id="sparepart-modal-body">
+                                <tr>
+                                    <td colspan="6" class="text-center py-3">Ketik untuk mencari sparepart...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" id="add-selected-sparepart" class="btn btn-success"
@@ -114,62 +114,87 @@
 </form>
 
 <script>
-$(document).ready(function() {
-    const table = $('#sparepartDataTable').DataTable();
-
-    $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-        if (settings.nTable.id !== 'sparepartDataTable') return true;
-
-        const unitFilter = $('#unitFilter').val();
-        const rowNode = table.row(dataIndex).node();
-        const unitRow = $(rowNode).data('unit');
-
-        return !unitFilter || unitRow == unitFilter;
-    });
-
-    window.filterKategori = function() {
-        table.draw();
-    };
-});
-</script>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('selanjutnyabtnnya').addEventListener('click', function(e) {
-            const idPela = document.getElementById('idpelabel').value;
-
-            if (!idPela || idPela.trim() === '') {
-                e.preventDefault(); // cegah form submit
-                alert('Silakan pilih pelanggan terlebih dahulu melalui tombol input data pelanggan pada tab pelanggan kemudian tekan tombol simpan!');
-                // Atau bisa pakai SweetAlert jika kamu pakai
-                return false;
-            }
-        });
-    });
-</script>
-
-
-<script>
-    $(document).ready(function() {
-        $('#sparepartDataTable').DataTable();
-    });
-
+    let searchTimeout;
     const oldSpareparts = <?= json_encode($oldsparepart) ?>;
 
     document.addEventListener('DOMContentLoaded', () => {
         const tbody = document.getElementById('sparepart-table-body');
+        const searchInput = document.getElementById('searchSparepartInput');
+        const modalBody = document.getElementById('sparepart-modal-body');
 
-        oldSpareparts.forEach((sp) => {
-            addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
-                parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan));
+        // Load old spareparts if any
+        if (oldSpareparts && oldSpareparts.length > 0) {
+            oldSpareparts.forEach((sp) => {
+                addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
+                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan));
+            });
+            updateTotals();
+        }
 
-            // Centang checkbox lama
-            const checkbox = document.querySelector(
-                `.sparepart-check[data-id="${sp.barang_idbarang}"]`);
-            if (checkbox) checkbox.checked = true;
+        // AJAX search sparepart
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value.trim();
+
+            if (query.length < 2) {
+                modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3">Ketik minimal 2 karakter untuk mencari...</td></tr>';
+                return;
+            }
+
+            modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Mencari...</td></tr>';
+
+            searchTimeout = setTimeout(function() {
+                fetch('<?= base_url('service/search_sparepart') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: 'search=' + encodeURIComponent(query)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Tidak ada sparepart ditemukan</td></tr>';
+                        return;
+                    }
+
+                    let html = '';
+                    data.forEach(item => {
+                        const isChecked = document.getElementById(`row-${item.idbarang}`) ? 'checked' : '';
+                        html += `
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="sparepart-check" 
+                                        data-id="${item.idbarang}" 
+                                        data-nama="${item.nama_barang}" 
+                                        data-harga="${item.harga}"
+                                        ${isChecked}>
+                                </td>
+                                <td>${item.nama_barang}</td>
+                                <td>${item.warna || '-'}</td>
+                                <td>${item.nama_unit || '-'}</td>
+                                <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_beli)}</td>
+                                <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}</td>
+                            </tr>
+                        `;
+                    });
+                    modalBody.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error(err);
+                    modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Gagal memuat data</td></tr>';
+                });
+            }, 300);
         });
 
-        updateTotals();
+        // Load initial data when modal opens
+        $('#sparepartModal').on('shown.bs.modal', function () {
+            searchInput.focus();
+            if (!searchInput.value) {
+                searchInput.dispatchEvent(new Event('input'));
+            }
+        });
     });
 
     // Tambah sparepart dari modal
