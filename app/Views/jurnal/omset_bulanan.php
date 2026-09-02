@@ -34,7 +34,7 @@
         <h5 class="mb-0 fw-semibold">
             Laporan Bulan <?= $bulan[date('n')] ?>
         </h5>
-        <?php if (in_array($id_jabatan, [1, 34, 35])): ?>
+        <?php if (in_array($id_jabatan, [1, 0, 35])): ?>
 
             <div class="row mt-3">
                 <div class="col-md-4">
