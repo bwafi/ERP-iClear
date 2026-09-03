@@ -376,7 +376,8 @@ class Service extends BaseController
             'bayar' => 0,
             'keterangan' => 'Belum Lunas',
             'unit_idunit' => session('ID_UNIT'),
-            'id_pelanggan' => $service->id_pelanggan ?? null,
+            'id_pelanggan' => $service->pelanggan_id_pelanggan ?? null,
+            'service_idservice' => $idservice,
         ];
 
         $this->PenjualanModel->insert_Penjualan($dataPenjualan);

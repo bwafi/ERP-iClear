@@ -173,6 +173,9 @@ $routes->post('update_service/saveSparepart', 'Riwayat_Service::insert_sparepart
 $routes->post('update_insert/service/savePembayaran', 'Riwayat_Service::insert_pembayaran', ['filter' => 'auth']);
 
 $routes->get('sparepart_keluar', 'Riwayat_Service::sparepart', ['filter' => 'auth']);
+$routes->post('sparepart_keluar/ajax', 'Riwayat_Service::sparepart_keluar_ajax', ['filter' => 'auth']);
+$routes->post('sparepart_keluar/edit', 'Riwayat_Service::edit_sparepart_keluar', ['filter' => 'auth']);
+$routes->post('sparepart_keluar/delete', 'Riwayat_Service::delete_sparepart_keluar', ['filter' => 'auth']);
 
 //riwayat service garansi
 $routes->get('riwayat_service_garansi', 'Riwayat_Service::index2', ['filter' => 'auth']);
@@ -195,10 +198,12 @@ $routes->get('status_service/(:num)', 'Status_Service::index/$1');
 // $routes->post('insert/sparepart_service', 'Service::insert_sparepart', ['filter' => 'auth']);
 //riwayat service
 $routes->get('riwayat_service', 'Riwayat_Service::index', ['filter' => 'auth']);
+$routes->post('riwayat_service/ajax', 'Riwayat_Service::riwayat_service_ajax', ['filter' => 'auth']);
 $routes->get('detail/riwayat_service/(:num)', 'Riwayat_Service::detail_service/$1', ['filter' => 'auth']);
 $routes->get('cetak/invoice_service/(:num)', 'Riwayat_Service::cetak_invoice/$1', ['filter' => 'auth']);
 $routes->post('riwayat_service/export', 'Riwayat_Service::export', ['filter' => 'auth']);
 $routes->post('riwayat_service_garansi/export', 'Riwayat_Service::export2', ['filter' => 'auth']);
+$routes->post('delete_service', 'Riwayat_Service::delete_service', ['filter' => 'auth']);
 
 //expired service
 $routes->get('expired_service', 'Expired_service::index', ['filter' => 'auth']);

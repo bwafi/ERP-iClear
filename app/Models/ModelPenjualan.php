@@ -23,6 +23,7 @@ class ModelPenjualan extends Model
         'bayar_bank',
         'bank_idbank',
         'id_pelanggan',
+        'service_idservice',
         'total_ppn',
         'created_on',
         'input_by',
