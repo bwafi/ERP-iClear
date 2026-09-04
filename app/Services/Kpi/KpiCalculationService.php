@@ -42,6 +42,8 @@ class KpiCalculationService
         $this->calculators['customer_count'] = new CustomerCalculator();
         $this->calculators['omset_cabang']   = new OmsetCabangCalculator();
         $this->calculators['omset_teknisi']  = new OmsetTeknisiCalculator();
+        $this->calculators['tutup_kasir']    = new TutupKasirCalculator();
+        $this->calculators['stok_opname']    = new StokOpnameCalculator();
     }
 
     /**
@@ -87,6 +89,23 @@ class KpiCalculationService
                 // OMSET: gunakan tiered scoring jika batas tersedia di target
                 if (in_array($component->code, ['OMSET_TOKO', 'OMSET_TEKNISI', 'OMSET_CABANG'])) {
                     $achievement = $this->omsetTieredAchievement($positionId, $actualValue, $target, $context);
+                } elseif ($component->code === 'CUSTOMER_COUNT') {
+                    // CUSTOMER: Jika ada batas_bawah (batas_awal) & batas_atas (batas_keempat)
+                    // Rule: jika actual >= batas_bawah, maka achievement = (actual / batas_atas) * 100
+                    // Jika actual < batas_bawah, maka 0 (atau proporsional jika batas_bawah tidak ada)
+                    $batasBawah = (float)($target->batas_awal ?? 0);
+                    $batasAtas  = (float)($target->batas_keempat ?? 0);
+
+                    if ($batasBawah > 0 && $batasAtas > 0) {
+                        if ($actualValue >= $batasBawah) {
+                            $achievement = min(($actualValue / $batasAtas) * 100.0, 100.0);
+                        } else {
+                            $achievement = 0.0;
+                        }
+                    } else {
+                        // Fallback jika tidak ada range batas: capped ratio terhadap target_value
+                        $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
+                    }
                 } else {
                     // Other automatic: capped ratio
                     $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);

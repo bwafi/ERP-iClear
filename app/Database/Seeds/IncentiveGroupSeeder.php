@@ -23,9 +23,11 @@ class IncentiveGroupSeeder extends Seeder
         $db = $this->db;
 
         // ===== GROUPS =====
-        $db->table('incentive_groups')->where('code', 'KEPALA_TOKO')->delete();
-        $db->table('incentive_groups')->where('code', 'DIGITAL_DIVISION')->delete();
+        $db->query('SET FOREIGN_KEY_CHECKS = 0');
         $db->table('incentive_members')->truncate();
+        $db->table('incentive_rules')->truncate();
+        $db->table('incentive_groups')->truncate();
+        $db->query('SET FOREIGN_KEY_CHECKS = 1');
 
         $db->table('incentive_groups')->insertBatch([
             [

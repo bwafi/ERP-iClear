@@ -8,6 +8,14 @@ class KPIConfigurationSeeder extends Seeder
 {
     public function run()
     {
+        $this->db->query('SET FOREIGN_KEY_CHECKS = 0');
+        $this->db->table('salary_structures')->truncate();
+        $this->db->table('salary_components')->truncate();
+        $this->db->table('kpi_targets')->truncate();
+        $this->db->table('kpi_weights')->truncate();
+        $this->db->table('kpi_components')->truncate();
+        $this->db->query('SET FOREIGN_KEY_CHECKS = 1');
+
         $this->seedKPIComponents();
         $this->seedKPIWeights();
         $this->seedKPITargets();
@@ -82,20 +90,20 @@ class KPIConfigurationSeeder extends Seeder
                 'code' => 'TUTUP_KASIR',
                 'name' => 'Tutup Kasir',
                 'description' => 'Cash register closing accuracy',
-                'type' => 'manual',
+                'type' => 'automatic',
                 'category' => 'operational',
                 'unit_of_measure' => 'count',
-                'calculation_strategy' => NULL,
+                'calculation_strategy' => 'tutup_kasir',
                 'is_active' => 1,
             ],
             [
                 'code' => 'STOK_OPNAME',
                 'name' => 'Stok Opname',
                 'description' => 'Inventory stock count accuracy',
-                'type' => 'manual',
+                'type' => 'automatic',
                 'category' => 'operational',
                 'unit_of_measure' => 'count',
-                'calculation_strategy' => NULL,
+                'calculation_strategy' => 'stok_opname',
                 'is_active' => 1,
             ],
             [
@@ -371,13 +379,15 @@ class KPIConfigurationSeeder extends Seeder
             ],
         ];
 
-        // Target per KPI per unit (customer/closing/upselling/followup/roas)
+        // Target per KPI per unit (customer/closing/upselling/followup/roas/tutup_kasir/stok_opname)
         $kpiTarget = [
             'CUSTOMER_COUNT' => [1 => 130, 2 => 118, 3 => 210, 4 => 118],
             'CLOSING_RATE'   => [1 => 111, 2 => 96,  3 => 188, 4 => 96],
             'UPSELLING'      => [1 => 14,  2 => 14,  3 => 27,  4 => 14],
             'FOLLOWUP'       => [1 => 100, 2 => 80,  3 => 60,  4 => 80],
             'ROAS'           => [1 => 5,   2 => 4,   3 => 3,   4 => 5],
+            'TUTUP_KASIR'    => [1 => 30,  2 => 30,  3 => 30,  4 => 30],
+            'STOK_OPNAME'    => [1 => 4,   2 => 4,   3 => 4,   4 => 4],
         ];
 
         $data = [];
