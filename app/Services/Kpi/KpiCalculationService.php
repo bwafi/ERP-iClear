@@ -87,8 +87,13 @@ class KpiCalculationService
                 }
                 
                 // OMSET: gunakan tiered scoring jika batas tersedia di target
-                if (in_array($component->code, ['OMSET_TOKO', 'OMSET_TEKNISI', 'OMSET_CABANG'])) {
+                if (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG'])) {
                     $achievement = $this->omsetTieredAchievement($positionId, $actualValue, $target, $context);
+                } elseif ($component->code === 'OMSET_TEKNISI') {
+                    // OMSET TEKNISI: rasio sederhana aktual omset cabang utuh / target per teknisi, di-cap 100
+                    // Kebijakan: jumlah teknisi per cabang = 2 (konstanta), target per teknisi = target cabang / 2
+                    // Target per teknisi sudah disimpan di kpi_targets.target_value oleh seeder
+                    $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
                 } elseif ($component->code === 'CUSTOMER_COUNT') {
                     // CUSTOMER: Jika ada batas_bawah (batas_awal) & batas_atas (batas_keempat)
                     // Rule: jika actual >= batas_bawah, maka achievement = (actual / batas_atas) * 100

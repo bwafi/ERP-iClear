@@ -431,6 +431,43 @@ class KPIConfigurationSeeder extends Seeder
                 'created_by' => NULL,
             ];
 
+            // OMSET_TEKNISI: target per teknisi = target omset cabang / 2
+            // (jumlah teknisi per cabang diasumsikan = 2 konstanta)
+            if (isset($componentMap['OMSET_TEKNISI'])) {
+                $data[] = [
+                    'kpi_component_id' => $componentMap['OMSET_TEKNISI'],
+                    'unit_id' => $uid,
+                    'position_id' => NULL,
+                    'context' => 'gaji',
+                    'target_value' => $t['gaji']['target'] / 2,
+                    'batas_awal' => NULL,
+                    'batas_kedua' => NULL,
+                    'batas_ketiga' => NULL,
+                    'batas_keempat' => NULL,
+                    'period_type' => 'monthly',
+                    'period_month' => NULL,
+                    'effective_from' => '2024-01-01',
+                    'effective_to' => NULL,
+                    'created_by' => NULL,
+                ];
+                $data[] = [
+                    'kpi_component_id' => $componentMap['OMSET_TEKNISI'],
+                    'unit_id' => $uid,
+                    'position_id' => NULL,
+                    'context' => 'penilaian_kinerja',
+                    'target_value' => $t['penilaian']['target'] / 2,
+                    'batas_awal' => NULL,
+                    'batas_kedua' => NULL,
+                    'batas_ketiga' => NULL,
+                    'batas_keempat' => NULL,
+                    'period_type' => 'monthly',
+                    'period_month' => NULL,
+                    'effective_from' => '2024-01-01',
+                    'effective_to' => NULL,
+                    'created_by' => NULL,
+                ];
+            }
+
             // Target KPI lain
             foreach ($kpiTarget as $code => $perUnit) {
                 if (!isset($componentMap[$code])) {
