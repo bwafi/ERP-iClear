@@ -279,16 +279,26 @@ class TutupKasir extends BaseController
         // ==========================
         // TOTAL PELANGGAN
         // ==========================
-        $pelanggan_bulan = $this->db->table('detail_penjualan dp')
-            ->select('COUNT(DISTINCT dp.penjualan_idpenjualan) AS total')
-            ->join('barang b', 'b.idbarang = dp.barang_idbarang')
-            ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-            ->where('MONTH(p.tanggal)', date('m'))
-            ->where('YEAR(p.tanggal)', date('Y'))
-            ->where('p.unit_idunit', $unit)
+        $countService = $this->db->table('service')
+            ->select('COUNT(idservice) AS total')
+            ->where('MONTH(tanggal_selesai)', date('m'))
+            ->where('YEAR(tanggal_selesai)', date('Y'))
+            ->where('unit_idunit', $unit)
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        $countSales = $this->db->table('penjualan')
+            ->select('COUNT(DISTINCT idpenjualan) AS total')
+            ->where('MONTH(tanggal)', date('m'))
+            ->where('YEAR(tanggal)', date('Y'))
+            ->where('unit_idunit', $unit)
+            ->like('kode_invoice', 'SLL', 'after')
+            ->get()
+            ->getRow()
+            ->total ?? 0;
+
+        $pelanggan_bulan = $countService + $countSales;
 
         // ==========================
         // SPAREPART BEST SELLER
@@ -686,59 +696,29 @@ class TutupKasir extends BaseController
         ];
         $aktual_omset = $aktual_omset_unit[$unit] ?? 0;
 
-        $aktual_customer       = [
+        $aktual_customer = [];
+        foreach ([1, 2, 3, 4] as $idUnit) {
+            $countService = $this->db->table('service')
+                ->select('COUNT(idservice) AS total')
+                ->where('MONTH(tanggal_selesai)', date('m'))
+                ->where('YEAR(tanggal_selesai)', date('Y'))
+                ->where('unit_idunit', $idUnit)
+                ->get()
+                ->getRow()
+                ->total ?? 0;
 
-            1 => $this->db->table('detail_penjualan dp')
-                ->select('COUNT(DISTINCT dp.penjualan_idpenjualan) AS total')
-                ->join('barang b', 'b.idbarang = dp.barang_idbarang')
-                ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-                ->where('MONTH(p.tanggal)', date('m'))
-                ->where('YEAR(p.tanggal)', date('Y'))
-                ->where('p.unit_idunit', 1)
+            $countSales = $this->db->table('penjualan')
+                ->select('COUNT(DISTINCT idpenjualan) AS total')
+                ->where('MONTH(tanggal)', date('m'))
+                ->where('YEAR(tanggal)', date('Y'))
+                ->where('unit_idunit', $idUnit)
+                ->like('kode_invoice', 'SLL', 'after')
                 ->get()
                 ->getRow()
-                ->total ?? 0, // Cabang 1
-            2 => $this->db->table('detail_penjualan dp')
-                ->select('COUNT(DISTINCT dp.penjualan_idpenjualan) AS total')
-                ->join('barang b', 'b.idbarang = dp.barang_idbarang')
-                ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-                ->where('MONTH(p.tanggal)', date('m'))
-                ->where('YEAR(p.tanggal)', date('Y'))
-                ->where('p.unit_idunit', 2)
-                ->get()
-                ->getRow()
-                ->total ?? 0,  // Cabang 2
-            3 => $this->db->table('detail_penjualan dp')
-                ->select('COUNT(DISTINCT dp.penjualan_idpenjualan) AS total')
-                ->join('barang b', 'b.idbarang = dp.barang_idbarang')
-                ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-                ->where('MONTH(p.tanggal)', date('m'))
-                ->where('YEAR(p.tanggal)', date('Y'))
-                ->where('p.unit_idunit', 3)
-                ->get()
-                ->getRow()
-                ->total ?? 0,
-            4 => $this->db->table('detail_penjualan dp')
-                ->select('COUNT(DISTINCT dp.penjualan_idpenjualan) AS total')
-                ->join('barang b', 'b.idbarang = dp.barang_idbarang')
-                ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-                ->where('MONTH(p.tanggal)', date('m'))
-                ->where('YEAR(p.tanggal)', date('Y'))
-                ->where('p.unit_idunit', 4)
-                ->get()
-                ->getRow()
-                ->total ?? 0,
-            // 3 => $this->db->table('detail_penjualan')
-            //         ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            //         ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            //         ->where('MONTH(penjualan.tanggal)', date('m'))
-            //         ->where('YEAR(penjualan.tanggal)', date('Y'))
-            //         ->where('penjualan.unit_idunit =', 3)
-            //         ->get()
-            //         ->getRow()
-            //         ->total ?? 0,  // Cabang 3
+                ->total ?? 0;
 
-        ];
+            $aktual_customer[$idUnit] = $countService + $countSales;
+        }
         $aktual_customer = $aktual_customer[$unit] ?? 0;
 
         $aktual_tutup_kasir    = $this->db->table('tutup_kasir')

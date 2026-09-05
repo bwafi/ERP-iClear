@@ -11,7 +11,7 @@
 
         <input hidden type="text" name="idservice" value="<?php echo @$idservice ?>">
         <input hidden type="text" id="created_at" value="<?php echo @$old_service_pelanggan->created_at ?>">
-        <input type="text" hidden name="" id="idpela">
+        <input type="hidden" name="selectedidpelanggan" id="idpela" value="<?php echo @$old_service_pelanggan->id_pelanggan ?>">
 
         <div class="col-md-12">
             <label class="form-label">Nama Staff</label>
@@ -136,24 +136,17 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <select id="pelanggan-select" name="selectedidpelanggan" class="select2 form-control"
-                        style="width: 100%;">
-                        <option disabled selected>Select</option>
-                        <?php foreach ($pelanggan as $p): ?>
-                            <option value="<?= htmlspecialchars($p->id_pelanggan) ?>"
-                                data-pelangganterpilih="<?= htmlspecialchars($p->id_pelanggan) ?>"
-                                data-nama="<?= htmlspecialchars($p->nama) ?>" data-nohp="<?= htmlspecialchars($p->no_hp) ?>"
-                                data-alamat="<?= htmlspecialchars($p->alamat) ?>">
-                                <?= htmlspecialchars($p->nama) ?> : <?= htmlspecialchars($p->no_hp) ?>
-                            </option>
-
-                        <?php endforeach; ?>
-                    </select>
+                    <div class="mb-3">
+                        <label class="form-label">Ketik Nama atau No HP:</label>
+                        <select id="pelanggan-select" name="selectedidpelanggan" class="form-control select2-ajax" style="width: 100%;">
+                            <option value="">Cari pelanggan...</option>
+                        </select>
+                    </div>
 
                     <!-- Tombol di bawah dropdown -->
                     <div style="display: flex; justify-content: right; gap: 10px; margin-top: 20px;">
                         <button id="btnPilihPelanggan" type="button" class="btn btn-primary">Pilih</button>
-                        <button id="btnTambahPelanggan" type="button" class="btn btn-success">Tambah</button>
+                        <button id="btnTambahPelanggan" type="button" class="btn btn-success">Tambah Baru</button>
                     </div>
                 </div>
             </div>
@@ -201,31 +194,63 @@
         const pelangganModal = new bootstrap.Modal(document.getElementById('pelangganModal'));
         const modalTambah = new bootstrap.Modal(document.getElementById('modalTambahPelanggan'));
 
-        // Inisialisasi Select2 dengan dropdownParent agar dropdown muncul di atas modal
-        $('.select2').select2({
-            dropdownParent: $('#pelangganModal')
+        function setSelectedCustomer(id, nama, noHp) {
+            if (!id) return;
+            document.getElementById('idpela').value = id;
+            document.getElementById('nama_pelanggan').value = nama || '';
+            document.getElementById('no_hp').value = noHp || '';
+        }
+
+        // Inisialisasi Select2 dengan AJAX
+        $('#pelanggan-select').select2({
+            dropdownParent: $('#pelangganModal'),
+            placeholder: '-- Pilih atau Cari Pelanggan --',
+            allowClear: true,
+            minimumInputLength: 0,
+            ajax: {
+                url: '<?= base_url('service/search_pelanggan') ?>',
+                type: 'POST',
+                dataType: 'json',
+                delay: 200,
+                data: function(params) {
+                    return {
+                        search: params.term || ''
+                    };
+                },
+                processResults: function(data) {
+                    return {
+                        results: data.map(function(item) {
+                            return {
+                                id: item.id_pelanggan,
+                                text: item.nama + ' (' + item.no_hp + ')',
+                                nama: item.nama,
+                                no_hp: item.no_hp
+                            };
+                        })
+                    };
+                },
+                cache: true
+            }
         });
 
-        // Langsung tampilkan tombol pelanggan saat halaman dimuat
-        const existingBtn = document.getElementById('pelanggan-button');
-        if (!existingBtn) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.id = 'pelanggan-button';
-            btn.className = 'btn btn-warning mt-2';
-            btn.style = 'display: inline-flex; align-items: center; margin-bottom: 4px;';
-            btn.innerHTML = `
-                <iconify-icon icon="mdi:account" width="20" height="20" style="margin-right: 8px;"></iconify-icon>
-                Input Data Pelanggan
-            `;
-
-            btn.onclick = () => pelangganModal.show();
-
-            const container = document.querySelector('.table-responsive.mt-3.mb-4');
-            if (container) {
-                container.appendChild(btn);
+        // Saat opsi di select dipilih langsung update input
+        $('#pelanggan-select').on('select2:select', function(e) {
+            const data = e.params.data;
+            if (data && data.id) {
+                let nama = data.nama || '';
+                let noHp = data.no_hp || '';
+                if (!nama && data.text) {
+                    const parts = data.text.split(' (');
+                    if (parts.length >= 2) {
+                        nama = parts[0].trim();
+                        noHp = parts[1].replace(')', '').trim();
+                    } else {
+                        nama = data.text;
+                    }
+                }
+                setSelectedCustomer(data.id, nama, noHp);
             }
-        }
+        });
 
         // Tombol "Tambah" di bawah dropdown
         document.getElementById('btnTambahPelanggan').addEventListener('click', function() {
@@ -234,24 +259,31 @@
 
         // Saat tombol "Pilih" ditekan
         document.getElementById('btnPilihPelanggan').addEventListener('click', function() {
-            const select = document.getElementById('pelanggan-select');
-            const selectedOption = select.options[select.selectedIndex];
+            const selectedData = $('#pelanggan-select').select2('data')[0];
+            const selectEl = document.getElementById('pelanggan-select');
+            const selectedOption = selectEl.options[selectEl.selectedIndex];
 
-            if (!selectedOption || selectedOption.disabled) {
+            const id = (selectedData && selectedData.id) ? selectedData.id : (selectEl.value || '');
+
+            if (!id) {
                 alert('Silakan pilih pelanggan terlebih dahulu.');
                 return;
             }
 
-            const nama = selectedOption.getAttribute('data-nama');
-            const no_hp = selectedOption.getAttribute('data-nohp');
-            const idpel = selectedOption.getAttribute('data-pelangganterpilih');
+            let nama = (selectedData ? selectedData.nama : '') || (selectedOption ? selectedOption.getAttribute('data-nama') : '') || '';
+            let noHp = (selectedData ? selectedData.no_hp : '') || (selectedOption ? selectedOption.getAttribute('data-nohp') : '') || '';
 
-            // Set nilai ke form input
-            document.getElementById('nama_pelanggan').value = nama;
-            document.getElementById('no_hp').value = no_hp;
-            document.getElementById('idpela').value = idpel;
+            if (!nama && selectedData && selectedData.text) {
+                const parts = selectedData.text.split(' (');
+                if (parts.length >= 2) {
+                    nama = parts[0].trim();
+                    noHp = parts[1].replace(')', '').trim();
+                } else {
+                    nama = selectedData.text;
+                }
+            }
 
-
+            setSelectedCustomer(id, nama, noHp);
             pelangganModal.hide();
         });
 
@@ -271,13 +303,21 @@
                         $('#formTambahPelanggan')[0].reset();
 
                         const newOption = new Option(
-                            response.data.nama + ' : ' + response.data.no_hp,
+                            response.data.nama + ' (' + response.data.no_hp + ')',
                             response.data.id_pelanggan,
                             true,
                             true
                         );
+                        $(newOption).attr('data-nama', response.data.nama);
+                        $(newOption).attr('data-nohp', response.data.no_hp);
+                        
                         $('#pelanggan-select').append(newOption).trigger('change');
-                        alert('Pelanggan berhasil ditambahkan');
+                        
+                        // Set langsung ke form input
+                        setSelectedCustomer(response.data.id_pelanggan, response.data.nama, response.data.no_hp);
+                        
+                        pelangganModal.hide();
+                        alert('Pelanggan berhasil ditambahkan dan dipilih');
                     } else {
                         alert('Error: ' + response.message);
                     }

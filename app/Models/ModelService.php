@@ -59,6 +59,60 @@ class ModelService extends Model
         return $this->findAll();
     }
 
+    public function hardDeleteService($idservice)
+    {
+        $db = \Config\Database::connect();
+
+        try {
+            log_message('info', 'Starting delete service ID: ' . $idservice);
+
+            $spareparts = $db->table('service_sparepart')
+                ->where('service_idservice', $idservice)
+                ->get()->getResult();
+            log_message('info', 'Found ' . count($spareparts) . ' spareparts');
+
+            // Hapus data terkait (tidak pakai transaction karena stok_barang adalah VIEW)
+
+            // Hapus detail_penjualan & penjualan yang terkait service
+            $penjualans = $db->table('penjualan')
+                ->where('service_idservice', $idservice)
+                ->get()->getResult();
+
+            foreach ($penjualans as $p) {
+                $db->table('detail_penjualan')->where('penjualan_idpenjualan', $p->idpenjualan)->delete();
+            }
+
+            $db->table('penjualan')->where('service_idservice', $idservice)->delete();
+            log_message('info', 'Deleted ' . count($penjualans) . ' penjualan terkait service');
+
+            $db->table('service_sparepart')->where('service_idservice', $idservice)->delete();
+
+            $db->table('service_kerusakan')->where('service_idservice', $idservice)->delete();
+
+            $db->table('pembayaran_bank')
+                ->where('id_referensi', $idservice)
+                ->whereIn('tabel_referensi', ['service_baru', 'service_garansi_0', 'service_garansi_1'])
+                ->delete();
+
+            $db->table('jurnal')
+                ->where('id_referensi', $idservice)
+                ->where('tabel_referensi', 'service')
+                ->delete();
+
+            $db->table('proses_service')->where('service_idservice', $idservice)->delete();
+            
+            $db->table('service')->where('idservice', $idservice)->delete();
+
+            log_message('info', 'Successfully deleted service ID: ' . $idservice);
+            return true;
+
+        } catch (\Exception $e) {
+            log_message('error', 'Exception in hardDeleteService: ' . $e->getMessage());
+            log_message('error', 'Service ID: ' . $idservice);
+            return false;
+        }
+    }
+
     public function getServiceById($id)
     {
         return $this->where('idservice', $id)
@@ -81,6 +135,93 @@ class ModelService extends Model
         return $this->select('service.*, pelanggan.nama as nama_pelanggan')
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
             ->findAll();
+    }
+
+    public function getRiwayatServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
+    {
+        $allowedColumns = [
+            0 => 'service.no_service',
+            1 => 'service.created_at',
+            2 => 'pelanggan.nama',
+            3 => 'service.tipe_hp',
+            4 => 'service.keterangan',
+            5 => 'service.no_hp',
+            6 => 'service.unit_idunit',
+            7 => 'service.status_service'
+        ];
+
+        $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.created_at';
+
+        $whereConditions = ['1=1'];
+        $params = [];
+
+        if (!empty($startDate)) {
+            $whereConditions[] = 'DATE(service.created_at) >= ?';
+            $params[] = $startDate;
+        }
+        if (!empty($endDate)) {
+            $whereConditions[] = 'DATE(service.created_at) <= ?';
+            $params[] = $endDate;
+        }
+        if (!empty($unitFilter)) {
+            $unitMap = ['Probolinggo' => 1, 'Jember' => 2, 'Banyuwangi' => 3, 'Pandaan' => 4];
+            if (isset($unitMap[$unitFilter])) {
+                $whereConditions[] = 'service.unit_idunit = ?';
+                $params[] = $unitMap[$unitFilter];
+            }
+        }
+
+        $searchCondition = '';
+        if (!empty($searchValue)) {
+            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR service.tipe_hp LIKE ? OR service.keterangan LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam]);
+        }
+
+        $whereClause = implode(' AND ', $whereConditions) . $searchCondition;
+
+        $sql = "SELECT 
+                service.idservice,
+                service.no_service,
+                service.created_at,
+                service.tipe_hp,
+                service.keterangan,
+                service.no_hp,
+                service.unit_idunit,
+                service.status_service,
+                service.garansi_hari,
+                service.tanggal_selesai,
+                pelanggan.nama as nama_pelanggan
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}
+            ORDER BY {$orderColumnName} {$orderDir}
+            LIMIT ? OFFSET ?";
+
+        $params[] = (int)$length;
+        $params[] = (int)$start;
+
+        $query = $this->db->query($sql, $params);
+        $data = $query->getResult();
+
+        $countSql = "SELECT COUNT(*) as total
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}";
+
+        $countQuery = $this->db->query($countSql, array_slice($params, 0, -2));
+        $totalFiltered = $countQuery->getRow()->total;
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered
+        ];
+    }
+
+    public function getRiwayatServiceTotal()
+    {
+        return $this->countAllResults();
     }
 
     public function getRiwayatServiceTanpaClaimGaransi()
@@ -372,6 +513,120 @@ class ModelService extends Model
         return $services;
     }
 
+    public function ProsesServiceAktifServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
+    {
+        $allowedColumns = [
+            0 => 'rank',
+            1 => 'service.no_service',
+            2 => 'service.prioritas',
+            3 => 'service.created_at',
+            4 => 'pelanggan.nama',
+            5 => 'service.no_hp',
+            6 => 'service.tipe_hp',
+            7 => 'service.unit_idunit',
+            8 => 'lama_service_days',
+            9 => 'service.status_proses'
+        ];
+
+        $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.created_at';
+
+        if ($orderColumnName === 'rank') {
+            $orderByClause = "rank {$orderDir}, service.created_at DESC";
+        } else {
+            $orderByClause = "{$orderColumnName} {$orderDir}";
+        }
+
+        $whereConditions = ['service.status_service IN (1, 2)'];
+        $params = [];
+
+        if (!empty($startDate)) {
+            $whereConditions[] = 'DATE(service.created_at) >= ?';
+            $params[] = $startDate;
+        }
+        if (!empty($endDate)) {
+            $whereConditions[] = 'DATE(service.created_at) <= ?';
+            $params[] = $endDate;
+        }
+        if (!empty($unitFilter)) {
+            $unitMap = ['Probolinggo' => 1, 'Jember' => 2, 'Banyuwangi' => 3, 'Pandaan' => 4];
+            if (isset($unitMap[$unitFilter])) {
+                $whereConditions[] = 'service.unit_idunit = ?';
+                $params[] = $unitMap[$unitFilter];
+            }
+        }
+
+        $searchCondition = '';
+        if (!empty($searchValue)) {
+            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR service.tipe_hp LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+        }
+
+        $whereClause = implode(' AND ', $whereConditions) . $searchCondition;
+
+        $sql = "SELECT 
+                service.idservice,
+                service.no_service,
+                service.prioritas,
+                service.created_at,
+                service.tanggal_claim_garansi,
+                pelanggan.nama as nama_pelanggan,
+                service.no_hp,
+                service.tipe_hp,
+                service.unit_idunit,
+                service.status_proses,
+                service.status_service,
+                DATEDIFF(NOW(), service.created_at) as lama_service_days,
+                (SELECT COUNT(*) FROM service_kerusakan WHERE service_kerusakan.service_idservice = service.idservice) as jumlah_kerusakan,
+                (SELECT COUNT(*) FROM service_sparepart WHERE service_sparepart.service_idservice = service.idservice) as jumlah_sparepart,
+                CASE 
+                    WHEN service.tanggal_claim_garansi IS NOT NULL AND service.tanggal_claim_garansi > '1971-01-01' THEN 0
+                    WHEN service.prioritas = 1 THEN 1
+                    ELSE 2
+                END as rank
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}
+            ORDER BY {$orderByClause}
+            LIMIT ? OFFSET ?";
+
+        $params[] = (int)$length;
+        $params[] = (int)$start;
+
+        $query = $this->db->query($sql, $params);
+        $data = $query->getResult();
+
+        $countSql = "SELECT COUNT(*) as total
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}";
+
+        $countQuery = $this->db->query($countSql, array_slice($params, 0, -2));
+        $totalFiltered = $countQuery->getRow()->total;
+
+        foreach ($data as &$row) {
+            if ($row->lama_service_days !== null) {
+                $days = (int)$row->lama_service_days;
+                $hours = 0;
+                $minutes = 0;
+                $row->lama_service = "{$days} hari, {$hours} jam, {$minutes} menit";
+            } else {
+                $row->lama_service = 'Tanggal tidak tersedia';
+            }
+        }
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered
+        ];
+    }
+
+    public function ProsesServiceAktifTotal()
+    {
+        return $this->whereIn('status_service', [1, 2])->countAllResults();
+    }
+
 
     public function ProsesServiceDibatalkan()
     {
@@ -472,6 +727,80 @@ class ModelService extends Model
 
 
         return $services;
+    }
+
+    public function ServiceSudahDiambilServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate)
+    {
+        $allowedColumns = [
+            0 => 'service.no_service',
+            1 => 'service.created_at',
+            2 => 'service.tanggal_selesai',
+            3 => 'pelanggan.nama',
+            4 => 'service.no_hp',
+            5 => 'service.unit_idunit',
+            6 => 'lama_service_days',
+            7 => 'service.garansi_hari'
+        ];
+
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.tanggal_selesai';
+
+        $builder = $this->db->table('service')
+            ->select('
+                service.idservice,
+                service.no_service,
+                service.created_at,
+                service.tanggal_selesai,
+                pelanggan.nama as nama_pelanggan,
+                service.no_hp,
+                service.unit_idunit,
+                service.garansi_hari,
+                DATEDIFF(NOW(), service.tanggal_selesai) as lama_service_days
+            ')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
+            ->where('service.status_service', 4);
+
+        if (!empty($startDate)) {
+            $builder->where('DATE(service.created_at) >=', $startDate);
+        }
+        if (!empty($endDate)) {
+            $builder->where('DATE(service.created_at) <=', $endDate);
+        }
+
+        if (!empty($searchValue)) {
+            $builder->groupStart()
+                ->like('service.no_service', $searchValue)
+                ->orLike('pelanggan.nama', $searchValue)
+                ->orLike('service.no_hp', $searchValue)
+                ->groupEnd();
+        }
+
+        $totalFiltered = $builder->countAllResults(false);
+
+        $builder->orderBy($orderColumnName, $orderDir)
+            ->limit($length, $start);
+
+        $data = $builder->get()->getResult();
+
+        foreach ($data as &$row) {
+            if ($row->lama_service_days !== null) {
+                $days = (int)$row->lama_service_days;
+                $hours = 0;
+                $minutes = 0;
+                $row->lama_service = "{$days} hari, {$hours} jam, {$minutes} menit";
+            } else {
+                $row->lama_service = 'Tanggal tidak tersedia';
+            }
+        }
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered
+        ];
+    }
+
+    public function ServiceSudahDiambilTotal()
+    {
+        return $this->where('status_service', 4)->countAllResults();
     }
 
     public function getTotalPendapatanService($unit_id = null, $per_bulan = false)

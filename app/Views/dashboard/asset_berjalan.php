@@ -32,9 +32,9 @@
         ?>
 
         <h5 class="mb-0 fw-semibold">
-            Laporan Bulan <?= $bulan[date('n')]?>
+            Laporan Bulan <?= $bulan[date('n')] ?>
         </h5>
-        <?php if(in_array($id_jabatan, [1, 40])): ?>
+        <?php if (in_array($id_jabatan, [1, 0, 34, 40])): ?>
 
             <div class="row mt-3">
                 <div class="col-md-4">
@@ -50,7 +50,7 @@
                             class="form-select"
                             onchange="this.form.submit()">
 
-                            <?php foreach($list_unit as $u): ?>
+                            <?php foreach ($list_unit as $u): ?>
 
                                 <option
                                     value="<?= $u['idunit'] ?>"
@@ -151,15 +151,15 @@
 
                             <h3 class="fw-bold mb-0">
                                 <?php
-                                    $total = 0;
+                                $total = 0;
 
-                                    if ($selected_unit == 4) {
-                                        $total = (($omset_bulan - $pengeluaran - $totalGajiUnit)* 20/ 100);
-                                    } elseif($selected_unit == 3){
-                                        $total = 0;
-                                    }elseif (in_array($selected_unit, [1, 2])) {
-                                        $total = date('d') * 355000;
-                                    }
+                                if ($selected_unit == 4) {
+                                    $total = (($omset_bulan - $pengeluaran - $totalGajiUnit) * 20 / 100);
+                                } elseif ($selected_unit == 3) {
+                                    $total = 0;
+                                } elseif (in_array($selected_unit, [1, 2])) {
+                                    $total = date('d') * 355000;
+                                }
                                 ?>
 
                                 Rp <?= number_format($total, 0, ',', '.') ?>
@@ -212,7 +212,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-4 col-lg-4">
             <div class="card bg-primary-subtle border-0 shadow-none h-100">
                 <div class="card-body">
@@ -224,13 +224,13 @@
 
                             <h3 class="fw-bold mb-0">
                                 <?php
-                                    $total = 0;
+                                $total = 0;
 
-                                    if (in_array($selected_unit, [3, 4])) {
-                                        $total = 60 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
-                                    } elseif (in_array($selected_unit, [1, 2])) {
-                                        $total = 0;
-                                    }
+                                if (in_array($selected_unit, [3, 4])) {
+                                    $total = 60 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
+                                } elseif (in_array($selected_unit, [1, 2])) {
+                                    $total = 0;
+                                }
                                 ?>
 
                                 Rp <?= number_format($total, 0, ',', '.') ?>
@@ -264,13 +264,13 @@
 
                             <h3 class="fw-bold mb-0">
                                 <?php
-                                    $total = 0;
+                                $total = 0;
 
-                                    if (in_array($selected_unit, [3, 4])) {
-                                        $total = 40 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
-                                    } elseif (in_array($selected_unit, [1, 2])) {
-                                        $total = 0;
-                                    }
+                                if (in_array($selected_unit, [3, 4])) {
+                                    $total = 40 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
+                                } elseif (in_array($selected_unit, [1, 2])) {
+                                    $total = 0;
+                                }
                                 ?>
 
                                 Rp <?= number_format($total, 0, ',', '.') ?>
@@ -296,5 +296,5 @@
         <div class="col-md-12 col-lg-12">
         </div>
     </div>
-    
+
 </div>

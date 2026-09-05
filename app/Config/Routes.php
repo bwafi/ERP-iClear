@@ -141,8 +141,13 @@ $routes->get('service', 'Service::index', ['filter' => 'auth']);
 $routes->get('service_kerusakan', 'Service::kerusakan_table', ['filter' => 'auth']);
 $routes->get('service_sparepart', 'Service::sparepart_table', ['filter' => 'auth']);
 $routes->post('insert/pelanggan_service', 'Service::insert_service', ['filter' => 'auth']);
+$routes->post('service/search_sparepart', 'Service::search_sparepart_ajax', ['filter' => 'auth']);
+$routes->post('service/search_pelanggan', 'Service::search_pelanggan_ajax', ['filter' => 'auth']);
+$routes->get('service/cancel/(:num)', 'Service::cancel_service/$1', ['filter' => 'auth']);
+$routes->get('service/clear_session', 'Service::clear_session', ['filter' => 'auth']);
 
 $routes->get('proses_service', 'Riwayat_Service::proses_service', ['filter' => 'auth']);
+$routes->post('proses_service/ajax', 'Riwayat_Service::proses_service_ajax', ['filter' => 'auth']);
 $routes->post('service/toggle_prioritas', 'Riwayat_Service::togglePrioritas', ['filter' => 'auth']);
 $routes->post('update_status_proses', 'Riwayat_Service::update_status_proses', ['filter' => 'auth']);
 $routes->post('service/bisa_diambil', 'Riwayat_Service::update_bisa_diambil', ['filter' => 'auth']);
@@ -151,6 +156,7 @@ $routes->get('list/service/dibatalkan', 'Riwayat_Service::service_dibatalkan', [
 $routes->get('bisa_diambil', 'Riwayat_Service::service_bisa_diambil', ['filter' => 'auth']);
 $routes->post('service/sudah_diambil', 'Riwayat_Service::update_sudah_diambil', ['filter' => 'auth']);
 $routes->get('sudah_diambil', 'Riwayat_Service::service_sudah_diambil', ['filter' => 'auth']);
+$routes->post('sudah_diambil/ajax', 'Riwayat_Service::service_sudah_diambil_ajax', ['filter' => 'auth']);
 
 $routes->post('diambil/dibtalkan', 'Riwayat_Service::dibatalkan_sudah_diambil', ['filter' => 'auth']);
 $routes->post('aktifkan/dibatalkan', 'Riwayat_Service::dibatalkan_aktifkan_lagi', ['filter' => 'auth']);
@@ -167,6 +173,9 @@ $routes->post('update_service/saveSparepart', 'Riwayat_Service::insert_sparepart
 $routes->post('update_insert/service/savePembayaran', 'Riwayat_Service::insert_pembayaran', ['filter' => 'auth']);
 
 $routes->get('sparepart_keluar', 'Riwayat_Service::sparepart', ['filter' => 'auth']);
+$routes->post('sparepart_keluar/ajax', 'Riwayat_Service::sparepart_keluar_ajax', ['filter' => 'auth']);
+$routes->post('sparepart_keluar/edit', 'Riwayat_Service::edit_sparepart_keluar', ['filter' => 'auth']);
+$routes->post('sparepart_keluar/delete', 'Riwayat_Service::delete_sparepart_keluar', ['filter' => 'auth']);
 
 //riwayat service garansi
 $routes->get('riwayat_service_garansi', 'Riwayat_Service::index2', ['filter' => 'auth']);
@@ -189,10 +198,12 @@ $routes->get('status_service/(:num)', 'Status_Service::index/$1');
 // $routes->post('insert/sparepart_service', 'Service::insert_sparepart', ['filter' => 'auth']);
 //riwayat service
 $routes->get('riwayat_service', 'Riwayat_Service::index', ['filter' => 'auth']);
+$routes->post('riwayat_service/ajax', 'Riwayat_Service::riwayat_service_ajax', ['filter' => 'auth']);
 $routes->get('detail/riwayat_service/(:num)', 'Riwayat_Service::detail_service/$1', ['filter' => 'auth']);
 $routes->get('cetak/invoice_service/(:num)', 'Riwayat_Service::cetak_invoice/$1', ['filter' => 'auth']);
 $routes->post('riwayat_service/export', 'Riwayat_Service::export', ['filter' => 'auth']);
 $routes->post('riwayat_service_garansi/export', 'Riwayat_Service::export2', ['filter' => 'auth']);
+$routes->post('delete_service', 'Riwayat_Service::delete_service', ['filter' => 'auth']);
 
 //expired service
 $routes->get('expired_service', 'Expired_service::index', ['filter' => 'auth']);

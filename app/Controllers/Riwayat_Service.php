@@ -78,10 +78,47 @@ class Riwayat_Service extends BaseController
 
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->getRiwayatService(),
+            'service' => [],
+            'is_admin' => session()->get('ID_JABATAN') == 1,
             'body'  => 'riwayat/service'
         );
         return view('template', $data);
+    }
+
+    public function riwayat_service_ajax()
+    {
+        $request = \Config\Services::request();
+        
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 1;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+        
+        $startDate = $request->getPost('startDate') ?? '';
+        $endDate = $request->getPost('endDate') ?? '';
+        $unitFilter = $request->getPost('unitFilter') ?? '';
+
+        $result = $this->ServiceModel->getRiwayatServiceServerSide(
+            $start,
+            $length,
+            $searchValue,
+            $orderColumnIndex,
+            $orderDir,
+            $startDate,
+            $endDate,
+            $unitFilter
+        );
+
+        $recordsTotal = $this->ServiceModel->getRiwayatServiceTotal();
+
+        return $this->response->setJSON([
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data']
+        ]);
     }
 
     public function index2()
@@ -703,10 +740,46 @@ class Riwayat_Service extends BaseController
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->ProsesServiceAktif(),
+            'service' => [],
             'body'  => 'riwayat/proses_service'
         );
         return view('template', $data);
+    }
+
+    public function proses_service_ajax()
+    {
+        $request = \Config\Services::request();
+        
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 3;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+        
+        $startDate = $request->getPost('startDate') ?? '';
+        $endDate = $request->getPost('endDate') ?? '';
+        $unitFilter = $request->getPost('unitFilter') ?? '';
+
+        $result = $this->ServiceModel->ProsesServiceAktifServerSide(
+            $start,
+            $length,
+            $searchValue,
+            $orderColumnIndex,
+            $orderDir,
+            $startDate,
+            $endDate,
+            $unitFilter
+        );
+
+        $recordsTotal = $this->ServiceModel->ProsesServiceAktifTotal();
+
+        return $this->response->setJSON([
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data']
+        ]);
     }
 
     public function togglePrioritas()
@@ -891,10 +964,75 @@ class Riwayat_Service extends BaseController
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->ServiceSudahDiambil(),
+            'service' => [],
             'body'  => 'riwayat/sudah_diambil'
         );
         return view('template', $data);
+    }
+
+    public function service_sudah_diambil_ajax()
+    {
+        $request = \Config\Services::request();
+        
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 2;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+        
+        $startDate = $request->getPost('startDate') ?? '';
+        $endDate = $request->getPost('endDate') ?? '';
+
+        $result = $this->ServiceModel->ServiceSudahDiambilServerSide(
+            $start,
+            $length,
+            $searchValue,
+            $orderColumnIndex,
+            $orderDir,
+            $startDate,
+            $endDate
+        );
+
+        $recordsTotal = $this->ServiceModel->ServiceSudahDiambilTotal();
+
+        return $this->response->setJSON([
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data']
+        ]);
+    }
+
+    public function delete_service()
+    {
+        $idJabatan = session()->get('ID_JABATAN');
+        if ($idJabatan != 1) {
+            session()->setFlashdata('gagal', 'Akses ditolak. Hanya admin root yang dapat menghapus service.');
+            return redirect()->to(base_url('riwayat_service'));
+        }
+
+        $idservice = $this->request->getPost('idservice');
+        
+        if (empty($idservice)) {
+            session()->setFlashdata('gagal', 'ID service tidak valid.');
+            return redirect()->to(base_url('riwayat_service'));
+        }
+
+        try {
+            $result = $this->ServiceModel->hardDeleteService($idservice);
+
+            if ($result) {
+                session()->setFlashdata('sukses', 'Data service berhasil dihapus. Stok sparepart telah dikembalikan.');
+            } else {
+                session()->setFlashdata('gagal', 'Gagal menghapus data service. Transaksi gagal.');
+            }
+        } catch (\Exception $e) {
+            log_message('error', 'Error delete service: ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Error: ' . $e->getMessage());
+        }
+        
+        return redirect()->to(base_url('riwayat_service'));
     }
 
     function sanitizeCurrency($value)
@@ -911,43 +1049,221 @@ class Riwayat_Service extends BaseController
         $selected_unit = $this->request->getGet('unit') ?? 1;
         $selected_day  = $this->request->getGet('day');
 
-        $builder = $db->table('detail_penjualan dp')
-            ->select('
-                p.kode_invoice,
-                dp.iddetail_penjualan,
-                dp.sub_total,
-                dp.hpp_penjualan,
-                b.nama_barang,
-                p.tanggal,
-                u.NAMA_UNIT
-            ')
-            ->join('barang b', 'b.idbarang = dp.barang_idbarang')
-            ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-            ->join('unit u', 'u.idunit = p.unit_idunit')
-            ->where('p.unit_idunit', $selected_unit)
-            ->where('YEAR(p.tanggal)', date('Y'));
-
-        // Jika tanggal dipilih
-        if (!empty($selected_day)) {
-            $builder->where('DATE(p.tanggal)', $selected_day);
-        }
-
-        $data_pen = $builder->get()->getResultArray();
-
-        // Dropdown unit
         $list_unit = $db->table('unit')
             ->orderBy('NAMA_UNIT', 'ASC')
             ->get()
             ->getResultArray();
 
         $data = [
-            'data_penjualan' => $data_pen,
             'list_unit'      => $list_unit,
             'selected_unit'  => $selected_unit,
             'selected_day'   => $selected_day,
+            'is_admin'       => session('ID_JABATAN') == 1,
             'body'           => 'riwayat/sparepart_keluar'
         ];
 
         return view('template', $data);
+    }
+
+    public function sparepart_keluar_ajax()
+    {
+        $request = \Config\Services::request();
+        
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 1;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+        
+        $selected_unit = $request->getPost('unit') ?? 1;
+        $selected_day = $request->getPost('day') ?? '';
+        $year = date('Y');
+
+        return $this->response->setJSON($this->sparepartKeluarServerSide(
+            $start, $length, $searchValue, $orderColumnIndex, $orderDir, $selected_unit, $selected_day, $year, $draw
+        ));
+    }
+
+    private function sparepartKeluarServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $selected_unit, $selected_day, $year, $draw)
+    {
+        $db = \Config\Database::connect();
+
+        $allowedColumns = [
+            0 => 'p.kode_invoice',
+            1 => 'p.tanggal',
+            2 => 'b.nama_barang',
+            3 => 'u.NAMA_UNIT',
+            4 => 'dp.hpp_penjualan',
+            5 => 'dp.sub_total'
+        ];
+
+        $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'p.tanggal';
+
+        $where = ['p.unit_idunit = ?'];
+        $params = [(int)$selected_unit];
+
+        $where[] = 'YEAR(p.tanggal) = ?';
+        $params[] = (int)$year;
+
+        if (!empty($selected_day)) {
+            $where[] = 'DATE(p.tanggal) = ?';
+            $params[] = $selected_day;
+        }
+
+        $searchCondition = '';
+        if (!empty($searchValue)) {
+            $searchCondition = ' AND (p.kode_invoice LIKE ? OR b.nama_barang LIKE ? OR u.NAMA_UNIT LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam]);
+        }
+
+        $whereClause = implode(' AND ', $where) . $searchCondition;
+
+        $sql = "SELECT 
+                p.kode_invoice,
+                p.idpenjualan,
+                dp.iddetail_penjualan,
+                dp.jumlah,
+                dp.harga_penjualan,
+                dp.diskon_penjualan,
+                dp.sub_total,
+                dp.hpp_penjualan,
+                dp.barang_idbarang,
+                b.nama_barang,
+                p.tanggal,
+                u.NAMA_UNIT
+            FROM detail_penjualan dp
+            JOIN barang b ON b.idbarang = dp.barang_idbarang
+            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
+            JOIN unit u ON u.idunit = p.unit_idunit
+            WHERE {$whereClause}
+            ORDER BY {$orderColumnName} {$orderDir}
+            LIMIT ? OFFSET ?";
+
+        $params[] = (int)$length;
+        $params[] = (int)$start;
+
+        $query = $db->query($sql, $params);
+        $data = $query->getResultArray();
+
+        $countSql = "SELECT COUNT(*) as total
+            FROM detail_penjualan dp
+            JOIN barang b ON b.idbarang = dp.barang_idbarang
+            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
+            JOIN unit u ON u.idunit = p.unit_idunit
+            WHERE {$whereClause}";
+
+        $countQuery = $db->query($countSql, array_slice($params, 0, -2));
+        $totalFiltered = (int)$countQuery->getRow()->total;
+
+        // Total records (tanpa search, dengan filter unit/day)
+        $totalSql = "SELECT COUNT(*) as total
+            FROM detail_penjualan dp
+            JOIN barang b ON b.idbarang = dp.barang_idbarang
+            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
+            JOIN unit u ON u.idunit = p.unit_idunit
+            WHERE " . implode(' AND ', $where);
+        $totalQuery = $db->query($totalSql, array_slice($params, 0, count($where)));
+        $recordsTotal = (int)$totalQuery->getRow()->total;
+
+        return [
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $totalFiltered,
+            'data' => $data
+        ];
+    }
+
+    public function edit_sparepart_keluar()
+    {
+        // hanya admin root (jabatan 1)
+        if (session('ID_JABATAN') != 1) {
+            session()->setFlashdata('gagal', 'Tidak punya hak akses');
+            return redirect()->to(base_url('sparepart_keluar'));
+        }
+        $idDetail = $this->request->getPost('iddetail_penjualan');
+        $qtyNew = (int) $this->request->getPost('jumlah');
+        $hargaNew = $this->rupiahToInt($this->request->getPost('harga_penjualan'));
+        $hppNew = $this->rupiahToInt($this->request->getPost('hpp_penjualan'));
+        $diskon = $this->rupiahToInt($this->request->getPost('diskon_penjualan'));
+        $subTotalNew = $hargaNew * $qtyNew - $diskon;
+
+        // ambil data lama
+        $detailOld = $this->DetailPenjualanModel->getById($idDetail);
+        if (!$detailOld) {
+            session()->setFlashdata('gagal', 'Detail tidak ditemukan');
+            return redirect()->to(base_url('sparepart_keluar'));
+        }
+
+        // update detail penjualan
+        $dataDetail = [
+            'jumlah' => $qtyNew,
+            'harga_penjualan' => $hargaNew,
+            'hpp_penjualan' => $hppNew,
+            'diskon_penjualan' => $diskon,
+            'sub_total' => $subTotalNew,
+        ];
+        $this->DetailPenjualanModel->updateDetail($dataDetail, $idDetail);
+
+        // Update total pada tabel penjualan (induk) agar tetap sinkron
+        $db = \Config\Database::connect();
+        $recalc = $db->table('detail_penjualan')
+            ->selectSum('sub_total', 'total_sub')
+            ->where('penjualan_idpenjualan', $detailOld->penjualan_idpenjualan)
+            ->get()
+            ->getRow();
+
+        $newTotal = (int) ($recalc->total_sub ?? 0);
+
+        $db->table('penjualan')
+            ->where('idpenjualan', $detailOld->penjualan_idpenjualan)
+            ->update([
+                'total_penjualan' => $newTotal,
+                'harus_dibayar'   => $newTotal,
+            ]);
+
+        session()->setFlashdata('sukses', 'Data sparepart berhasil diperbarui. Total penjualan & stok otomatis disesuaikan.');
+        return redirect()->to(base_url('sparepart_keluar'));
+    }
+
+    public function delete_sparepart_keluar()
+    {
+        if (session('ID_JABATAN') != 1) {
+            session()->setFlashdata('gagal', 'Tidak punya hak akses');
+            return redirect()->to(base_url('sparepart_keluar'));
+        }
+        $idDetail = $this->request->getPost('iddetail_penjualan');
+        $detail = $this->DetailPenjualanModel->getById($idDetail);
+        if (!$detail) {
+            session()->setFlashdata('gagal', 'Data tidak ditemukan');
+            return redirect()->to(base_url('sparepart_keluar'));
+        }
+
+        $idPenjualan = $detail->penjualan_idpenjualan;
+
+        // hapus detail penjualan (stok VIEW otomatis menyesuaikan)
+        $this->DetailPenjualanModel->deleteDetail($idDetail);
+
+        // Update total pada tabel penjualan (induk)
+        $db = \Config\Database::connect();
+        $recalc = $db->table('detail_penjualan')
+            ->selectSum('sub_total', 'total_sub')
+            ->where('penjualan_idpenjualan', $idPenjualan)
+            ->get()
+            ->getRow();
+
+        $newTotal = (int) ($recalc->total_sub ?? 0);
+
+        $db->table('penjualan')
+            ->where('idpenjualan', $idPenjualan)
+            ->update([
+                'total_penjualan' => $newTotal,
+                'harus_dibayar'   => $newTotal,
+            ]);
+
+        session()->setFlashdata('sukses', 'Data sparepart berhasil dihapus. Stok & total penjualan otomatis disesuaikan.');
+        return redirect()->to(base_url('sparepart_keluar'));
     }
 }

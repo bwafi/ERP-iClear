@@ -27,34 +27,33 @@
                 <a class="nav-link d-flex flex-column align-items-center active" id="pelanggan-tab" data-bs-toggle="tab" href="#pelanggan"
                     role="tab" aria-controls="pelanggan" aria-selected="true">
                     <i class="bi bi-pencil-square fs-5"></i>
-                    <span class="ms-2 mt-1">Pelanggan</span>
+                    <span class="ms-2 mt-1">1. Pelanggan</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link d-flex flex-column align-items-center" id="kerusakan-tab" data-bs-toggle="tab" href="#kerusakan"
+                <a class="nav-link d-flex flex-column align-items-center <?= empty($idservice) ? 'disabled-tab' : '' ?>" id="kerusakan-tab" data-bs-toggle="tab" href="#kerusakan"
                     role="tab" aria-controls="kerusakan" aria-selected="false">
                     <i class="bi bi-clipboard-check fs-5"></i>
-                    <span class="ms-2 mt-1">Kerusakan</span>
+                    <span class="ms-2 mt-1">2. Kerusakan</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link d-flex flex-column align-items-center <?= session('ID_JABATAN') == 36 ? 'disabled-tab' : '' ?>"
+                <a class="nav-link d-flex flex-column align-items-center <?= (empty($idservice) || session('ID_JABATAN') == JABATAN_KASIR) ? 'disabled-tab' : '' ?>"
                     id="sparepart-tab"
                     data-bs-toggle="tab"
                     href="#sparepart"
                     role="tab"
                     aria-controls="sparepart"
-                    aria-selected="false"
-                    <?= session('ID_JABATAN') == 36 ? 'tabindex="-1" aria-disabled="true"' : '' ?>>
+                    aria-selected="false">
                     <i class="bi bi-clipboard-check fs-5"></i>
-                    <span class="ms-2 mt-1">Sparepart</span>
+                    <span class="ms-2 mt-1">3. Sparepart</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link d-flex flex-column align-items-center" id="pembayaran-tab" data-bs-toggle="tab" href="#pembayaran"
+                <a class="nav-link d-flex flex-column align-items-center <?= empty($idservice) ? 'disabled-tab' : '' ?>" id="pembayaran-tab" data-bs-toggle="tab" href="#pembayaran"
                     role="tab" aria-controls="pembayaran" aria-selected="false">
                     <i class="bi bi-clipboard-check fs-5"></i>
-                    <span class="ms-2 mt-1">Pembayaran</span>
+                    <span class="ms-2 mt-1">4. Pembayaran</span>
                 </a>
             </li>
         </ul>

@@ -32,9 +32,9 @@
         ?>
 
         <h5 class="mb-0 fw-semibold">
-            Laporan Bulan <?= $bulan[date('n')]?>
+            Laporan Bulan <?= $bulan[date('n')] ?>
         </h5>
-        <?php if(in_array($id_jabatan, [1, 40])): ?>
+        <?php if (in_array($id_jabatan, [1, 0, 34, 40])): ?>
 
             <div class="row mt-3">
                 <div class="col-md-4">
@@ -50,7 +50,7 @@
                             class="form-select"
                             onchange="this.form.submit()">
 
-                            <?php foreach($list_unit as $u): ?>
+                            <?php foreach ($list_unit as $u): ?>
 
                                 <option
                                     value="<?= $u['idunit'] ?>"
@@ -87,11 +87,11 @@
                             <h6 class="mb-1">Product Service Fast Moving</h6>
 
                             <h3 class="fw-bold mb-0">
-                                <?= ($bestsellerproduct->keyword_hp)?>
+                                <?= ($bestsellerproduct->keyword_hp) ?>
                             </h3>
 
                             <small class="text-muted">
-                                Total Terjual : <?=number_format($bestsellerproduct->total ?? 0, 0, ',', '.')?>
+                                Total Terjual : <?= number_format($bestsellerproduct->total ?? 0, 0, ',', '.') ?>
                             </small>
                         </div>
 
@@ -99,11 +99,11 @@
                             <h6 class="mb-1">Sparepart Best Seller</h6>
 
                             <h3 class="fw-bold mb-0">
-                                <?= ($bestseller->nama_barang)?>
+                                <?= ($bestseller->nama_barang) ?>
                             </h3>
 
                             <small class="text-muted">
-                                Total Terjual : <?=number_format($bestseller->total_penjualan ?? 0, 0, ',', '.')?>
+                                Total Terjual : <?= number_format($bestseller->total_penjualan ?? 0, 0, ',', '.') ?>
                             </small>
                         </div>
 
@@ -239,7 +239,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-6 col-lg-6">
             <div class="card bg-primary-subtle border-0 shadow-none h-100">
                 <div class="card-body">
@@ -334,7 +334,7 @@
     </div>
 
     <div class="card mt-4 border-0 shadow-sm">
-        
+
 
         <div class="card-body">
 
@@ -367,102 +367,102 @@
     <div class="card mt-4 border-0 shadow-sm">
         <div class="card border-0 shadow-sm mt-4">
 
-    <div class="card-body">
+            <div class="card-body">
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
 
-            <div>
-                <h5 class="fw-semibold mb-1">
-                    Detail Omset Harian
-                </h5>
+                    <div>
+                        <h5 class="fw-semibold mb-1">
+                            Detail Omset Harian
+                        </h5>
 
-                <small class="text-muted">
-                    Omset per hari bulan <?= date('F Y') ?>
-                </small>
+                        <small class="text-muted">
+                            Omset per hari bulan <?= date('F Y') ?>
+                        </small>
+                    </div>
+
+                    <iconify-icon
+                        icon="solar:bill-list-bold"
+                        width="30"
+                        class="text-primary">
+                    </iconify-icon>
+
+                </div>
+
+                <div class="table-responsive">
+
+                    <table class="table align-middle table-bordered" id="tableOmset">
+
+                        <thead class="table-light">
+
+                            <tr>
+                                <th width="10%">No</th>
+                                <th>Tanggal</th>
+                                <th class="text-end">Omset</th>
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                            <?php $no = 1; ?>
+                            <?php foreach ($listHari as $hari): ?>
+
+                                <tr>
+
+                                    <td><?= $no++ ?></td>
+
+                                    <td>
+                                        <?= date('d F Y', strtotime($hari['tanggal'])) ?>
+                                    </td>
+
+                                    <td class="text-end fw-semibold">
+
+                                        <?php if ($hari['total'] != 0): ?>
+
+                                            <span class="<?= $hari['total'] > 0 ? 'text-success' : 'text-danger' ?>">
+                                                <?= $hari['total'] < 0 ? '-Rp ' . number_format(abs($hari['total']), 0, ',', '.') : 'Rp ' . number_format($hari['total'], 0, ',', '.') ?>
+                                            </span>
+
+                                        <?php else: ?>
+
+                                            <span class="text-muted">
+                                                Rp 0
+                                            </span>
+
+                                        <?php endif; ?>
+
+                                    </td>
+
+                                </tr>
+
+                            <?php endforeach; ?>
+
+                        </tbody>
+
+                        <tfoot class="table-light">
+
+                            <tr>
+
+                                <th colspan="2" class="text-end">
+                                    Total Bulan Ini
+                                </th>
+
+                                <th class="text-end text-primary" id="totalOmset">
+                                    Rp <?= number_format($omset_bulan ?? 0, 0, ',', '.') ?>
+                                </th>
+
+                            </tr>
+
+                        </tfoot>
+
+                    </table>
+
+                </div>
+
             </div>
 
-            <iconify-icon
-                icon="solar:bill-list-bold"
-                width="30"
-                class="text-primary">
-            </iconify-icon>
-
         </div>
-
-        <div class="table-responsive">
-
-            <table class="table align-middle table-bordered" id="tableOmset">
-
-                <thead class="table-light">
-
-                    <tr>
-                        <th width="10%">No</th>
-                        <th>Tanggal</th>
-                        <th class="text-end">Omset</th>
-                    </tr>
-
-                </thead>
-
-                <tbody>
-
-                    <?php $no = 1; ?>
-                    <?php foreach ($listHari as $hari): ?>
-
-                        <tr>
-
-                            <td><?= $no++ ?></td>
-
-                            <td>
-                                <?= date('d F Y', strtotime($hari['tanggal'])) ?>
-                            </td>
-
-                            <td class="text-end fw-semibold">
-
-                                <?php if ($hari['total'] != 0): ?>
-
-                                    <span class="<?= $hari['total'] > 0 ? 'text-success' : 'text-danger' ?>">
-                                        <?= $hari['total'] < 0 ? '-Rp ' . number_format(abs($hari['total']), 0, ',', '.') : 'Rp ' . number_format($hari['total'], 0, ',', '.') ?>
-                                    </span>
-                                
-                                <?php else: ?>
-                                
-                                    <span class="text-muted">
-                                        Rp 0
-                                    </span>
-                                
-                                <?php endif; ?>
-
-                            </td>
-
-                        </tr>
-
-                    <?php endforeach; ?>
-
-                </tbody>
-
-                <tfoot class="table-light">
-
-                    <tr>
-
-                        <th colspan="2" class="text-end">
-                            Total Bulan Ini
-                        </th>
-
-                        <th class="text-end text-primary" id="totalOmset">
-                            Rp <?= number_format($omset_bulan ?? 0, 0, ',', '.') ?>
-                        </th>
-
-                    </tr>
-
-                </tfoot>
-
-            </table>
-
-        </div>
-
-    </div>
-
-</div>
     </div>
 
 </div>
@@ -470,132 +470,126 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
+    // ==============================
+    // DATA DARI PHP
+    // ==============================
 
-// ==============================
-// DATA DARI PHP
-// ==============================
+    const rawData = [
+        <?php foreach ($listHari as $item): ?> {
+                tanggal: "<?= $item['tanggal'] ?>",
+                label: "<?= date('d', strtotime($item['tanggal'])) ?>",
+                total: <?= $item['total'] ?? 0 ?>
+            },
+        <?php endforeach; ?>
+    ];
 
-const rawData = [
-    <?php foreach($listHari as $item): ?>
-    {
-        tanggal: "<?= $item['tanggal'] ?>",
-        label: "<?= date('d', strtotime($item['tanggal'])) ?>",
-        total: <?= $item['total'] ?? 0 ?>
-    },
-    <?php endforeach; ?>
-];
+    // ==============================
+    // CHART
+    // ==============================
 
-// ==============================
-// CHART
-// ==============================
+    const ctx = document.getElementById('chartOmset');
 
-const ctx = document.getElementById('chartOmset');
+    let chartOmset = new Chart(ctx, {
 
-let chartOmset = new Chart(ctx, {
+        type: 'line',
 
-    type: 'line',
-
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'Omset',
-            data: [],
-            tension: 0.4,
-            fill: true,
-            borderWidth: 3,
-            pointRadius: 4
-        }]
-    },
-
-    options: {
-
-        responsive: true,
-
-        plugins: {
-            legend: {
-                display: false
-            }
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Omset',
+                data: [],
+                tension: 0.4,
+                fill: true,
+                borderWidth: 3,
+                pointRadius: 4
+            }]
         },
 
-        scales: {
-            y: {
-                ticks: {
-                    callback: function(value) {
-                        return 'Rp ' +
-                            new Intl.NumberFormat('id-ID').format(value);
+        options: {
+
+            responsive: true,
+
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+
+            scales: {
+                y: {
+                    ticks: {
+                        callback: function(value) {
+                            return 'Rp ' +
+                                new Intl.NumberFormat('id-ID').format(value);
+                        }
                     }
                 }
             }
         }
-    }
-});
+    });
 
-// ==============================
-// RENDER AWAL
-// ==============================
+    // ==============================
+    // RENDER AWAL
+    // ==============================
 
-renderChart(rawData);
+    renderChart(rawData);
 
-// ==============================
-// FUNCTION RENDER CHART
-// ==============================
+    // ==============================
+    // FUNCTION RENDER CHART
+    // ==============================
 
-function renderChart(data)
-{
-    chartOmset.data.labels = data.map(item => item.label);
+    function renderChart(data) {
+        chartOmset.data.labels = data.map(item => item.label);
 
-    chartOmset.data.datasets[0].data =
-        data.map(item => item.total);
+        chartOmset.data.datasets[0].data =
+            data.map(item => item.total);
 
-    chartOmset.update();
-}
-
-// ==============================
-// FILTER DATA
-// ==============================
-
-function filterData()
-{
-    const startDate =
-        document.getElementById('startDate').value;
-
-    const endDate =
-        document.getElementById('endDate').value;
-
-    let filtered = rawData;
-
-    if(startDate && endDate)
-    {
-        filtered = rawData.filter(item => {
-
-            return item.tanggal >= startDate
-                && item.tanggal <= endDate;
-
-        });
+        chartOmset.update();
     }
 
-    // UPDATE CHART
-    renderChart(filtered);
+    // ==============================
+    // FILTER DATA
+    // ==============================
 
-    // UPDATE TABEL
-    updateTable(filtered);
-}
+    function filterData() {
+        const startDate =
+            document.getElementById('startDate').value;
 
-// ==============================
-// UPDATE TABLE
-// ==============================
+        const endDate =
+            document.getElementById('endDate').value;
 
-function updateTable(data)
-{
-    let tbody = '';
+        let filtered = rawData;
 
-    let totalBulan = 0;
+        if (startDate && endDate) {
+            filtered = rawData.filter(item => {
 
-    data.forEach((item, index) => {
+                return item.tanggal >= startDate &&
+                    item.tanggal <= endDate;
 
-        totalBulan += parseInt(item.total);
+            });
+        }
 
-        tbody += `
+        // UPDATE CHART
+        renderChart(filtered);
+
+        // UPDATE TABEL
+        updateTable(filtered);
+    }
+
+    // ==============================
+    // UPDATE TABLE
+    // ==============================
+
+    function updateTable(data) {
+        let tbody = '';
+
+        let totalBulan = 0;
+
+        data.forEach((item, index) => {
+
+            totalBulan += parseInt(item.total);
+
+            tbody += `
             <tr>
                 <td>${index + 1}</td>
 
@@ -615,16 +609,15 @@ function updateTable(data)
                 </td>
             </tr>
         `;
-    });
+        });
 
-    document.querySelector('#tableOmset tbody')
-        .innerHTML = tbody;
+        document.querySelector('#tableOmset tbody')
+            .innerHTML = tbody;
 
-    document.getElementById('totalOmset')
-        .innerHTML =
+        document.getElementById('totalOmset')
+            .innerHTML =
             'Rp ' +
             new Intl.NumberFormat('id-ID')
             .format(totalBulan);
-}
-
+    }
 </script>

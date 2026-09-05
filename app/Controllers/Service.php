@@ -72,15 +72,6 @@ class Service extends BaseController
 
         $unitId = session('ID_UNIT');
 
-        $sparepart = $this->StokBarangModel
-            ->where('id_unit', $unitId)
-            ->where('stok_akhir >', 0)
-            ->groupStart()
-                ->like('kode_barang', 'sprt')
-                ->orLike('kode_barang', 'acc')
-            ->groupEnd()
-            ->findAll();
-
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
         $oldsparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
         $data =  array(
@@ -92,8 +83,6 @@ class Service extends BaseController
             'old_service_pelanggan' => $this->ServiceModel->getByIdWithPelanggan($idservice),
             'oldkerusakan' => $oldkerusakan,
             'oldsparepart' => $oldsparepart,
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'sparepart' => $sparepart,
             'unit' => $this->UnitModel->getUnit(),
             'body'  => 'transaksi/service'
         );
@@ -129,9 +118,21 @@ class Service extends BaseController
     {
         $idservice = $this->request->getPost('idservice');
 
-        if (session()->has('idservice')) {
-            session()->setFlashdata('gagal', 'Gagal! Selesaikan inputan terkini terlebih dahulu untuk input data baru.');
+        if (!empty($idservice)) {
+            session()->setFlashdata('gagal', 'Gagal! Data service sudah ada. Silakan selesaikan atau batalkan transaksi terlebih dahulu.');
             return redirect()->back();
+        }
+
+        if (session()->has('idservice') && !empty(session('idservice'))) {
+            $existingId = session('idservice');
+            $existingService = $this->ServiceModel->find($existingId);
+            
+            if ($existingService && in_array($existingService->status_service, [1, 2, 3])) {
+                session()->setFlashdata('gagal', 'Gagal! Anda masih memiliki transaksi aktif (No: ' . $existingService->no_service . '). Selesaikan terlebih dahulu atau <a href="' . base_url('service/cancel/' . $existingId) . '">batalkan</a>.');
+                return redirect()->back();
+            } else {
+                session()->remove('idservice');
+            }
         }
 
 
@@ -375,7 +376,8 @@ class Service extends BaseController
             'bayar' => 0,
             'keterangan' => 'Belum Lunas',
             'unit_idunit' => session('ID_UNIT'),
-            'id_pelanggan' => $service->id_pelanggan ?? null,
+            'id_pelanggan' => $service->pelanggan_id_pelanggan ?? null,
+            'service_idservice' => $idservice,
         ];
 
         $this->PenjualanModel->insert_Penjualan($dataPenjualan);
@@ -464,8 +466,8 @@ class Service extends BaseController
         $this->ServiceModel->updateService($idservice, $datap);
 
         session()->remove('idservice');
-        session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
-        return redirect()->to(base_url('/service'));
+        session()->setFlashdata('sukses', 'Berhasil Menambahkan Data Service');
+        return redirect()->to(base_url('/proses_service'));
     }
 
 
@@ -476,6 +478,98 @@ class Service extends BaseController
 
 
         return (int) preg_replace('/[^0-9]/', '', $cleaned);
+    }
+
+    public function search_sparepart_ajax()
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setJSON(['error' => 'Invalid request']);
+        }
+
+        $search = $this->request->getPost('search') ?? '';
+        $unitId = session('ID_UNIT');
+
+        $builder = $this->StokBarangModel;
+        
+        if (!empty($search)) {
+            $builder->groupStart()
+                ->like('nama_barang', $search)
+                ->orLike('kode_barang', $search)
+                ->orLike('warna', $search)
+                ->groupEnd();
+        }
+
+        $sparepart = $builder
+            ->where('id_unit', $unitId)
+            ->where('stok_akhir >', 0)
+            ->groupStart()
+                ->like('kode_barang', 'sprt')
+                ->orLike('kode_barang', 'acc')
+            ->groupEnd()
+            ->orderBy('nama_barang', 'ASC')
+            ->limit(50)
+            ->findAll();
+
+        return $this->response->setJSON($sparepart);
+    }
+
+    public function search_pelanggan_ajax()
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setJSON(['error' => 'Invalid request']);
+        }
+
+        $search = $this->request->getPost('search') ?? '';
+
+        $builder = $this->PelangganModel;
+        
+        if (!empty($search)) {
+            $builder->groupStart()
+                ->like('nama', $search)
+                ->orLike('no_hp', $search)
+                ->groupEnd()
+                ->orderBy('nama', 'ASC');
+        } else {
+            $builder->orderBy('id_pelanggan', 'DESC');
+        }
+
+        $pelanggan = $builder
+            ->limit(50)
+            ->findAll();
+
+        return $this->response->setJSON($pelanggan);
+    }
+
+    public function cancel_service($idservice)
+    {
+        $service = $this->ServiceModel->find($idservice);
+        
+        if (!$service) {
+            session()->setFlashdata('gagal', 'Service tidak ditemukan');
+            return redirect()->to(base_url('service'));
+        }
+
+        if ($service->status_service >= 4) {
+            session()->setFlashdata('gagal', 'Service sudah selesai, tidak dapat dibatalkan');
+            return redirect()->to(base_url('service'));
+        }
+
+        $this->ServiceModel->delete($idservice);
+        
+        $this->ServiceKerusakanModel->where('service_idservice', $idservice)->delete();
+        $this->ServiceSparepartModel->where('service_idservice', $idservice)->delete();
+        
+        session()->remove('idservice');
+        session()->setFlashdata('sukses', 'Transaksi berhasil dibatalkan');
+        
+        return redirect()->to(base_url('service'));
+    }
+
+    public function clear_session()
+    {
+        session()->remove('idservice');
+        session()->setFlashdata('sukses', 'Session berhasil dihapus');
+        return redirect()->to(base_url('service'));
     }
 
     function sanitizeCurrency($value)

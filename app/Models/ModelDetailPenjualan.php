@@ -37,6 +37,16 @@ class ModelDetailPenjualan extends Model
         return $this->where(['iddetail_penjualan' => $id])->first();
     }
 
+    public function updateDetail($data, $id)
+    {
+        return $this->where('iddetail_penjualan', $id)->set($data)->update();
+    }
+
+    public function deleteDetail($id)
+    {
+        return $this->where('iddetail_penjualan', $id)->delete();
+    }
+
 
 
     public function getDetailPenjualan()
