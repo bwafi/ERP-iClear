@@ -123,6 +123,16 @@
                     </div>
 
                     <div class="mb-3">
+                        <label>Unit / Cabang Toko</label>
+                        <select class="form-control select2" name="unit" required>
+                            <option value="">Pilih Unit</option>
+                            <?php if (!empty($unit)): foreach ($unit as $u): ?>
+                                <option value="<?= $u->idunit ?>"><?= $u->JALAN_UNIT ?? ('Unit ' . $u->idunit) ?></option>
+                            <?php endforeach; endif; ?>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
                         <label>Nama Asset</label>
                         <input type="text" class="form-control" name="asset" required>
                     </div>

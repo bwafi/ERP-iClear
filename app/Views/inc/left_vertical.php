@@ -15,9 +15,9 @@
             <img src="<?= base_url('template/assets/images/' . $unitLogo->LOGO) ?>" alt="Logo"
                 class="dark-logo w-100 h-auto" style="max-width: 100px;" />
         </a>
- <h5 class="mt-2 text-center hide-menu">
-    <?= session()->get('NAMA_UNIT'); ?>
-</h5>
+        <h5 class="mt-2 text-center hide-menu">
+            <?= session()->get('NAMA_UNIT'); ?>
+        </h5>
         <a href="javascript:void(0)" class="sidebartoggler ms-auto text-decoration-none fs-5 d-block d-xl-none">
             <i class="ti ti-x"></i>
         </a>
@@ -49,7 +49,7 @@
                                     <iconify-icon icon="solar:menu-dots-bold-duotone" class="nav-small-cap-icon fs-5"></iconify-icon>
                                     <span class="hide-menu"><?= $mymenu['nama'] ?></span>
                                 </li>
-                            <?php else: ?>
+<?php else: ?>
                                 <li class="sidebar-item">
                                     <a class="sidebar-link sidebar-link primary-hover-bg" href="<?= base_url() . $mymenu['url'] ?>"
                                         aria-expanded="false">
@@ -58,6 +58,10 @@
                                             <!-- <iconify-icon icon="solar:screencast-2-line-duotone" class="fs-6"></iconify-icon> -->
                                         </span>
                                         <span class="hide-menu ps-1"><?= $mymenu['nama'] ?></span>
+                                        <?php if ($mymenu['id'] == 101) : ?>
+                                            <span class="sidebar-deprecated"
+                                                title="Modul lama, dialihkan ke Penilaian Absensi">Deprecated</span>
+                                        <?php endif; ?>
                                     </a>
                                 </li>
                             <?php endif; ?>

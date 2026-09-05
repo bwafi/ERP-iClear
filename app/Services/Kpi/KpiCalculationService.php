@@ -42,6 +42,9 @@ class KpiCalculationService
         $this->calculators['customer_count'] = new CustomerCalculator();
         $this->calculators['omset_cabang']   = new OmsetCabangCalculator();
         $this->calculators['omset_teknisi']  = new OmsetTeknisiCalculator();
+        $this->calculators['tutup_kasir']    = new TutupKasirCalculator();
+        $this->calculators['stok_opname']    = new StokOpnameCalculator();
+        $this->calculators['produktivitas_team'] = new ProduktivitasTeamCalculator();
     }
 
     /**
@@ -85,8 +88,30 @@ class KpiCalculationService
                 }
                 
                 // OMSET: gunakan tiered scoring jika batas tersedia di target
-                if (in_array($component->code, ['OMSET_TOKO', 'OMSET_TEKNISI', 'OMSET_CABANG'])) {
+                if (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG'])) {
                     $achievement = $this->omsetTieredAchievement($positionId, $actualValue, $target, $context);
+                } elseif ($component->code === 'OMSET_TEKNISI') {
+                    // OMSET TEKNISI: rasio sederhana aktual omset cabang utuh / target per teknisi, di-cap 100
+                    // Kebijakan: jumlah teknisi per cabang = 2 (konstanta), target per teknisi = target cabang / 2
+                    // Target per teknisi sudah disimpan di kpi_targets.target_value oleh seeder
+                    $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
+                } elseif ($component->code === 'CUSTOMER_COUNT') {
+                    // CUSTOMER: Jika ada batas_bawah (batas_awal) & batas_atas (batas_keempat)
+                    // Rule: jika actual >= batas_bawah, maka achievement = (actual / batas_atas) * 100
+                    // Jika actual < batas_bawah, maka 0 (atau proporsional jika batas_bawah tidak ada)
+                    $batasBawah = (float)($target->batas_awal ?? 0);
+                    $batasAtas  = (float)($target->batas_keempat ?? 0);
+
+                    if ($batasBawah > 0 && $batasAtas > 0) {
+                        if ($actualValue >= $batasBawah) {
+                            $achievement = min(($actualValue / $batasAtas) * 100.0, 100.0);
+                        } else {
+                            $achievement = 0.0;
+                        }
+                    } else {
+                        // Fallback jika tidak ada range batas: capped ratio terhadap target_value
+                        $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
+                    }
                 } else {
                     // Other automatic: capped ratio
                     $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
@@ -121,6 +146,11 @@ class KpiCalculationService
                         $targetContext,
                         $date
                     );
+                } elseif ($component->code === 'KONTROL_ASET') {
+                    // Kontrol Aset = OTOMATIS dari data aset per unit.
+                    // = (jumlah aset kondisi "Baik" di unit) / (total aset unit) * 100
+                    // Aset tanpa unit dianggap milik HO (di luar scope unit cabang).
+                    $achievement = $this->kontrolAsetScore((int)$unitId);
                 } else {
                     // Manual non-attendance: gunakan ManualKpiScorer
                     $scorer = new ManualKpiScorer();
@@ -341,6 +371,36 @@ class KpiCalculationService
             FROM akun WHERE ID_AKUN = ?
         ", [$employeeId]);
         return $query->getRow();
+    }
+
+    /**
+     * Kontrol Aset (otomatis) per unit.
+     *
+     * = (jumlah aset kondisi "Baik" di unit) / (total aset unit) * 100
+     * - kondisi "Baik" dibanding case-insensitive (free-text kolom).
+     * - Aset tanpa unit dianggap milik HO → di luar scope unit cabang.
+     * - Total unit 0 → 0 (belum ada aset tercatat utk unit tsb).
+     */
+    protected function kontrolAsetScore(int $unitId): float
+    {
+        $db = \Config\Database::connect();
+
+        $total = (int) $db->table('asset')
+            ->where('unit', $unitId)
+            ->where('deleted', 0)
+            ->countAllResults();
+
+        if ($total <= 0) {
+            return 0.0;
+        }
+
+        $baik = (int) $db->table('asset')
+            ->where('unit', $unitId)
+            ->where('deleted', 0)
+            ->where('LOWER(kondisi)', 'baik')
+            ->countAllResults();
+
+        return round(min($baik / $total * 100.0, 100.0), 4);
     }
 
     /**

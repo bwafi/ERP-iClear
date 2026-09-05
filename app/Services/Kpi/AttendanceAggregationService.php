@@ -70,6 +70,11 @@ class AttendanceAggregationService
             $componentMap[$c->code] = $c->id;
         }
 
+        // Komponen non-Kehadi  ran utk MANAGER dihitung otomatis dari rata-rata
+        // skor komponen tsb milik SPV, Kepala Divisi, IT, dan Admin Center.
+        $isManager = ($positionId === 34);
+        $managerTeamCodes = $isManager ? ['KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'] : [];
+
         $results = [];
         $attendanceScore = 0.0;
         $componentsRaw = [];
@@ -77,22 +82,48 @@ class AttendanceAggregationService
         foreach ($componentCodes as $code) {
             $componentId = $componentMap[$code] ?? null;
 
+            if (in_array($code, $managerTeamCodes, true)) {
+                $normalized = $this->managerTeamAverage($componentId, $month, $year);
+                $normalized = min($normalized, 100.0);
+
+                $weight = self::ATTENDANCE_COMPONENTS[$code]['weight'] ?? 0;
+                $weighted = ($normalized / 100.0) * $weight;
+
+                $results[$code] = [
+                    'normalized' => round($normalized, 4),
+                    'weighted' => round($weighted, 4),
+                ];
+                $componentsRaw[$code] = [
+                    'sum' => round($normalized * 130.0 / 100.0, 4),
+                    'count' => 0,
+                    'normalized' => round($normalized, 4),
+                ];
+                $attendanceScore += $weighted;
+                continue;
+            }
+
             if (!$componentId) {
                 $componentsRaw[$code] = ['sum' => 0.0, 'count' => 0, 'normalized' => 0.0];
                 $normalized = 0.0;
                 $weighted = 0.0;
             } else {
-                // Get daily evaluations for this employee/component/month
-                $sumResult = $this->evaluationModel
-                    ->select('SUM(raw_score) as sum_raw, COUNT(*) as cnt')
+                // Get daily evaluations for this employee/component/month.
+                // Per tanggal bisa dinilai oleh lebih dari satu evaluator (kasus rata-rata)
+                // → skor harian = AVG(raw_score) dari semua evaluator pada tanggal tsb.
+                $rows = $this->evaluationModel
+                    ->select('evaluation_date, AVG(raw_score) as day_avg')
                     ->where('employee_id', $employeeId)
                     ->where('kpi_component_id', $componentId)
                     ->where('period_year', $year)
                     ->where('period_month', $month)
-                    ->first();
+                    ->groupBy('evaluation_date')
+                    ->findAll();
 
-                $sumRaw = (float) ($sumResult->sum_raw ?? 0);
-                $count = (int) ($sumResult->cnt ?? 0);
+                $sumRaw = 0.0;
+                foreach ($rows as $r) {
+                    $sumRaw += (float)$r->day_avg;
+                }
+                $count = count($rows);
 
                 // Formula: SUM / (26 * 5) * 100 = SUM / 130 * 100
                 $normalized = $sumRaw / 130.0 * 100.0;
@@ -124,6 +155,63 @@ class AttendanceAggregationService
             'attendance_score' => round($attendanceScore, 4),
             'components_raw' => $componentsRaw,
         ];
+    }
+
+    /**
+     * Rata-rata skor absen per komponen utk MANAGER.
+     *
+     * Skor non-kehadiran Manager TIDAK diinput manual — dihitung sebagai
+     * rata-rata skor komponen yang SAMA (monthly normalized) dari pegawai
+     * SPV(40), Kepala Divisi(43), Team IT(45), dan Admin Center(0).
+     *
+     * Tiap jabatan diberi bobot rata-rata yang sama: rata-rata per jabatan,
+     * lalu dirata-ratakan antar 4 jabatan (jabatan tanpa data dilewati).
+     *
+     * @param int|string $componentId id komponen absensi
+     * @param string $month MM
+     * @param string $year  YYYY
+     * @return float normalized 0..100
+     */
+    protected function managerTeamAverage($componentId, string $month, string $year): float
+    {
+        $roles = [40, 43, 45, 0];
+        $authModel = new \App\Models\ModelAuth();
+
+        $roleAverages = [];
+
+        foreach ($roles as $roleJabatan) {
+            $employees = $authModel->where('ID_JABATAN', $roleJabatan)
+                ->where('STATUS_PEGAWAI', 1)
+                ->findAll();
+
+            $employeeScores = [];
+            foreach ($employees as $emp) {
+                $rows = $this->evaluationModel
+                    ->select('evaluation_date, AVG(raw_score) as day_avg')
+                    ->where('employee_id', (int)$emp->ID_AKUN)
+                    ->where('kpi_component_id', (int)$componentId)
+                    ->where('period_year', (int)$year)
+                    ->where('period_month', (int)$month)
+                    ->groupBy('evaluation_date')
+                    ->findAll();
+
+                $sumRaw = 0.0;
+                foreach ($rows as $r) {
+                    $sumRaw += (float)$r->day_avg;
+                }
+                $employeeScores[] = min($sumRaw / 130.0 * 100.0, 100.0);
+            }
+
+            if (!empty($employeeScores)) {
+                $roleAverages[] = array_sum($employeeScores) / count($employeeScores);
+            }
+        }
+
+        if (empty($roleAverages)) {
+            return 0.0;
+        }
+
+        return array_sum($roleAverages) / count($roleAverages);
     }
 
     /**
