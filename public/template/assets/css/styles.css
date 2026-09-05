@@ -28232,3 +28232,38 @@ body div:where(.swal2-icon).swal2-success [class^="swal2-success-line"] {
   height: 200%;
   margin: 10px 0;
 }
+
+/* Pita diagonal utk menu lama "Checklist Pekerjaan" (deprecated) */
+.sidebar-nav ul .sidebar-item .sidebar-link .sidebar-deprecated {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-20deg);
+  transform-origin: center center;
+  background: #ffb000;
+  color: #212529;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  line-height: 1.1;
+  padding: 3px 10px 3px 8px;
+  border-radius: 2px 6px 6px 2px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
+  white-space: nowrap;
+  z-index: 7;
+  pointer-events: none;
+}
+.sidebar-nav ul .sidebar-item .sidebar-link .sidebar-deprecated::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -5px;
+  border-left: 5px solid transparent;
+  border-top: 0 solid transparent;
+  border-bottom: 14px solid #a85e00;
+  transform: none;
+}
+[data-layout="vertical"] body[data-sidebartype="mini-sidebar"] .left-sidebar .sidebar-deprecated {
+  display: none;
+}

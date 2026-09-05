@@ -44,6 +44,10 @@ class Penilaian extends BaseController
 
 public function index()
 {
+    // DEPRECATED: modul checklist pekerjaan lama. Tidak dihapus, tapi akses
+    // dialihkan ke /penilaian/absen yang baru.
+    return redirect()->to('/penilaian/absen');
+
     $jumlahData = $this->PenilaianModel->getJumlahByTemplatePenilaian();
     $jumlahMap = [];
     foreach ($jumlahData as $row) {
