@@ -146,10 +146,12 @@ class ModelKpiEvaluation extends Model
      */
     public function upsertEvaluation($data)
     {
-        // Daily uniqueness: employee + component + evaluation_date.
-        // Same employee+component+date → update; different date → new row.
+        // Daily uniqueness: employee + component + EVALUATOR + evaluation_date.
+        // Memungkinkan beberapa evaluator menilai pegawai/komponen/tanggal yang sama
+        // (utk kasus rata-rata, mis. Manager dinilai SPV+Kadiv+IT+Admin Center).
         $existing = $this->where('employee_id', $data['employee_id'])
                          ->where('kpi_component_id', $data['kpi_component_id'])
+                         ->where('evaluator_id', $data['evaluator_id'] ?? null)
                          ->where('evaluation_date', $data['evaluation_date'] ?? null)
                          ->first();
 

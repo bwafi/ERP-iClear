@@ -61,6 +61,117 @@ public function index()
     return view('template', $data);
 }
 
+/**
+ * SPV mengisi Kualitas Pelayanan & Kontrol Aset Kepala Toko
+ * pada unit milik SPV (hanya unit sendiri).
+ *
+ * Data disimpan ke kpi_evaluations via KpiEvaluationService
+ * (normalized_score = persentase 0-100).
+ */
+public function spv_kpi_index()
+{
+    $session = session();
+    $myUnit  = (int)$session->get('ID_UNIT');
+    $myRole  = (int)$session->get('ID_JABATAN');
+
+    $bulan = $this->request->getGet('bulan') ?: date('m');
+    $tahun = $this->request->getGet('tahun') ?: date('Y');
+
+    // Kepala Toko (41) pada unit SPV
+    $kepalaTokos = $this->AuthModel
+        ->where('ID_JABATAN', 41)
+        ->where('ID_UNIT', $myUnit)
+        ->where('STATUS_PEGAWAI', 1)
+        ->findAll();
+
+    // Ambil nilai evaluasi yang sudah ada utk periode tsb (raw_score 1-5)
+    $evaluationModel = new \App\Models\ModelKpiEvaluation();
+    $kualitas = [];
+    foreach ($kepalaTokos as $kt) {
+        $kualitas[$kt->ID_AKUN] = $this->getRawScore($evaluationModel, $kt->ID_AKUN, 'KUALITAS_PELAYANAN', $bulan, $tahun);
+    }
+
+    return view('template', [
+        'myRole'       => $myRole,
+        'myUnit'       => $myUnit,
+        'bulan'        => $bulan,
+        'tahun'        => $tahun,
+        'kepalaTokos'  => $kepalaTokos,
+        'kualitas'     => $kualitas,
+        'body'         => 'penilaian/spv_kpi',
+    ]);
+}
+
+protected function getRawScore($model, int $employeeId, string $code, string $month, string $year): ?int
+{
+    $componentModel = new \App\Models\ModelKpiComponent();
+    $component = $componentModel->where('code', $code)->first();
+    if (!$component) {
+        return null;
+    }
+    $row = $model->where('employee_id', $employeeId)
+        ->where('kpi_component_id', (int)$component->id)
+        ->where('period_year', (int)$year)
+        ->where('period_month', (int)$month)
+        ->orderBy('evaluation_date', 'DESC')
+        ->first();
+    return $row ? (int)$row->raw_score : null;
+}
+
+public function save_spv_kpi()
+{
+    $session = session();
+    $evaluatorId = (int)$session->get('ID_AKUN');
+    $myUnit      = (int)$session->get('ID_UNIT');
+
+    $employeeId = (int)$this->request->getPost('employee_id');
+    $kualitas   = (int)$this->request->getPost('kualitas_pelayanan'); // 1 - 5
+    $bulan      = $this->request->getPost('bulan') ?: date('m');
+    $tahun      = $this->request->getPost('tahun') ?: date('Y');
+    $evaluationDate = sprintf('%04d-%02d-15', (int)$tahun, (int)$bulan);
+
+    // Hanya boleh menilai Kepala Toko di UNIT SENDIRI
+    $employee = (new ModelAuth())->where('ID_AKUN', $employeeId)->first();
+    if (!$employee || (int)$employee->ID_UNIT !== $myUnit) {
+        return redirect()->to('/penilaian/spv_kpi')->with('error', 'Anda tidak berhak menilai di unit lain.');
+    }
+
+    // Hanya evaluator yang berhak (SPV -> Kepala Toko) yang boleh mengisi.
+    if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluate($evaluatorId, $employeeId)) {
+        return redirect()->to('/penilaian/spv_kpi')->with('error', 'Anda tidak berwenang menilai KPI ini.');
+    }
+
+    $evaluationService = new \App\Services\Kpi\KpiEvaluationService();
+    $componentModel = new \App\Models\ModelKpiComponent();
+    $errors = [];
+
+    if ($kualitas >= 1 && $kualitas <= 5) {
+        $kualitasComponent = $componentModel->where('code', 'KUALITAS_PELAYANAN')->first();
+        if ($kualitasComponent) {
+            $result = $evaluationService->recordEvaluation([
+                'employee_id'      => $employeeId,
+                'kpi_component_id' => (int)$kualitasComponent->id,
+                'evaluator_id'     => $evaluatorId,
+                'evaluation_date'  => $evaluationDate,
+                'raw_score'        => $kualitas,
+                'max_score'        => 5,
+                'notes'            => 'Kualitas Pelayanan (Skor: ' . $kualitas . '/5)',
+            ]);
+            if (!$result['success']) {
+                $errors[] = 'Kualitas Pelayanan: ' . implode(', ', $result['errors']);
+            }
+        }
+    }
+
+    if (!empty($errors)) {
+        return redirect()->to('/penilaian/spv_kpi?bulan=' . $bulan . '&tahun=' . $tahun)
+            ->with('error', implode(' | ', $errors));
+    }
+
+    return redirect()->to('/penilaian/spv_kpi?bulan=' . $bulan . '&tahun=' . $tahun)
+        ->with('success', 'Penilaian Kualitas Pelayanan Kepala Toko berhasil disimpan.');
+}
+
 public function get_template_by_jabatan($idjabatan)
 {
     $template = $this->TemplatePenilaianModel

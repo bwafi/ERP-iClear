@@ -44,6 +44,7 @@ class KpiCalculationService
         $this->calculators['omset_teknisi']  = new OmsetTeknisiCalculator();
         $this->calculators['tutup_kasir']    = new TutupKasirCalculator();
         $this->calculators['stok_opname']    = new StokOpnameCalculator();
+        $this->calculators['produktivitas_team'] = new ProduktivitasTeamCalculator();
     }
 
     /**
@@ -145,6 +146,11 @@ class KpiCalculationService
                         $targetContext,
                         $date
                     );
+                } elseif ($component->code === 'KONTROL_ASET') {
+                    // Kontrol Aset = OTOMATIS dari data aset per unit.
+                    // = (jumlah aset kondisi "Baik" di unit) / (total aset unit) * 100
+                    // Aset tanpa unit dianggap milik HO (di luar scope unit cabang).
+                    $achievement = $this->kontrolAsetScore((int)$unitId);
                 } else {
                     // Manual non-attendance: gunakan ManualKpiScorer
                     $scorer = new ManualKpiScorer();
@@ -365,6 +371,36 @@ class KpiCalculationService
             FROM akun WHERE ID_AKUN = ?
         ", [$employeeId]);
         return $query->getRow();
+    }
+
+    /**
+     * Kontrol Aset (otomatis) per unit.
+     *
+     * = (jumlah aset kondisi "Baik" di unit) / (total aset unit) * 100
+     * - kondisi "Baik" dibanding case-insensitive (free-text kolom).
+     * - Aset tanpa unit dianggap milik HO → di luar scope unit cabang.
+     * - Total unit 0 → 0 (belum ada aset tercatat utk unit tsb).
+     */
+    protected function kontrolAsetScore(int $unitId): float
+    {
+        $db = \Config\Database::connect();
+
+        $total = (int) $db->table('asset')
+            ->where('unit', $unitId)
+            ->where('deleted', 0)
+            ->countAllResults();
+
+        if ($total <= 0) {
+            return 0.0;
+        }
+
+        $baik = (int) $db->table('asset')
+            ->where('unit', $unitId)
+            ->where('deleted', 0)
+            ->where('LOWER(kondisi)', 'baik')
+            ->countAllResults();
+
+        return round(min($baik / $total * 100.0, 100.0), 4);
     }
 
     /**

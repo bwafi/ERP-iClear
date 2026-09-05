@@ -98,9 +98,42 @@ class ManualKpiScorer
                 return isset($ctx['omset_branch_nilai']) ? (float)$ctx['omset_branch_nilai'] : 0.0;
             case 'DIVISI':
                 return $this->metrics->avgScoreDivisional($month, $year) * 20;
+            case 'KUALITAS_PELAYANAN':
+                return $this->manualEvaluationScore($emp, $ctx, 'KUALITAS_PELAYANAN');
+            case 'KONTROL_ASET':
+                return $this->manualEvaluationScore($emp, $ctx, 'KONTROL_ASET');
             default:
                 return 0.0;
         }
+    }
+
+    /**
+     * Baca skor manual (0-100) dari kpi_evaluations utk periode yg sama.
+     * Nilai yang disimpan evaluator (normalized_score) = persentase KPI.
+     * Jika lebih dari satu evaluator (kasus rata-rata), gunakan AVG.
+     */
+    protected function manualEvaluationScore(int $emp, array $ctx, string $code): float
+    {
+        $componentModel = new \App\Models\ModelKpiComponent();
+        $component = $componentModel->where('code', $code)->first();
+        if (!$component) {
+            return 0.0;
+        }
+
+        $evaluationModel = new \App\Models\ModelKpiEvaluation();
+        $row = $evaluationModel
+            ->select('AVG(normalized_score) as avg_norm')
+            ->where('employee_id', $emp)
+            ->where('kpi_component_id', (int)$component->id)
+            ->where('period_year', (int)$ctx['year'])
+            ->where('period_month', (int)$ctx['month'])
+            ->first();
+
+        if (!$row || $row->avg_norm === null) {
+            return 0.0;
+        }
+
+        return (float) $row->avg_norm;
     }
 
     protected function feedTotal(int $emp, int $month, int $year): float

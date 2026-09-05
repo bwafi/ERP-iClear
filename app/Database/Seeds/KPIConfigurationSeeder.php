@@ -276,6 +276,46 @@ class KPIConfigurationSeeder extends Seeder
                 'calculation_strategy' => NULL,
                 'is_active' => 1,
             ],
+            [
+                'code' => 'OMSET_CABANG',
+                'name' => 'Omzet Cabang',
+                'description' => 'Gross profit cabang/toko (legacy omset cabang)',
+                'type' => 'automatic',
+                'category' => 'sales',
+                'unit_of_measure' => 'IDR',
+                'calculation_strategy' => 'omset_cabang',
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'PRODUKTIVITAS_TEAM',
+                'name' => 'Produktivitas Team',
+                'description' => 'Rata-rata skor KPI Teknisi & Admin pada unit yang sama',
+                'type' => 'automatic',
+                'category' => 'team',
+                'unit_of_measure' => 'percent',
+                'calculation_strategy' => 'produktivitas_team',
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'KUALITAS_PELAYANAN',
+                'name' => 'Kualitas Pelayanan',
+                'description' => 'Penilaian manual oleh SPV Area',
+                'type' => 'manual',
+                'category' => 'service',
+                'unit_of_measure' => 'percent',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'KONTROL_ASET',
+                'name' => 'Kontrol Aset',
+                'description' => 'Aset sesuai / total aset wajib x 100, diaudit oleh SPV',
+                'type' => 'manual',
+                'category' => 'operational',
+                'unit_of_measure' => 'percent',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
         ];
 
         $this->db->table('kpi_components')->insertBatch($data);
@@ -300,9 +340,11 @@ class KPIConfigurationSeeder extends Seeder
             ['kpi_component_id' => $componentMap['CUSTOMER_COUNT'], 'position_id' => 36, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
 
             // Kepala Toko (41)
-            ['kpi_component_id' => $componentMap['OMSET_TOKO'], 'position_id' => 41, 'weight' => 70, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['OMSET_CABANG'], 'position_id' => 41, 'weight' => 45, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
             ['kpi_component_id' => $componentMap['CUSTOMER_COUNT'], 'position_id' => 41, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
-            ['kpi_component_id' => $componentMap['TUTUP_KASIR'], 'position_id' => 41, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['PRODUKTIVITAS_TEAM'], 'position_id' => 41, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['KUALITAS_PELAYANAN'], 'position_id' => 41, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['KONTROL_ASET'], 'position_id' => 41, 'weight' => 5, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
             ['kpi_component_id' => $componentMap['STOK_OPNAME'], 'position_id' => 41, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
 
             // SPV (40)
@@ -388,6 +430,7 @@ class KPIConfigurationSeeder extends Seeder
             'ROAS'           => [1 => 5,   2 => 4,   3 => 3,   4 => 5],
             'TUTUP_KASIR'    => [1 => 30,  2 => 30,  3 => 30,  4 => 30],
             'STOK_OPNAME'    => [1 => 4,   2 => 4,   3 => 4,   4 => 4],
+            'PRODUKTIVITAS_TEAM' => [1 => 100, 2 => 100, 3 => 100, 4 => 100],
         ];
 
         $data = [];
@@ -416,6 +459,40 @@ class KPIConfigurationSeeder extends Seeder
             // OMSET_TOKO context penilaian_kinerja/slip_gaji
             $data[] = [
                 'kpi_component_id' => $componentMap['OMSET_TOKO'],
+                'unit_id' => $uid,
+                'position_id' => NULL,
+                'context' => 'penilaian_kinerja',
+                'target_value' => $t['penilaian']['target'],
+                'batas_awal' => $t['penilaian']['batas_awal'],
+                'batas_kedua' => $t['penilaian']['batas_kedua'],
+                'batas_ketiga' => $t['penilaian']['batas_ketiga'],
+                'batas_keempat' => $t['penilaian']['batas_keempat'],
+                'period_type' => 'monthly',
+                'period_month' => NULL,
+                'effective_from' => '2024-01-01',
+                'effective_to' => NULL,
+                'created_by' => NULL,
+            ];
+
+            // OMSET_CABANG: sama dgn OMSET_TOKO (omzet cabang/toko sendiri)
+            $data[] = [
+                'kpi_component_id' => $componentMap['OMSET_CABANG'],
+                'unit_id' => $uid,
+                'position_id' => NULL,
+                'context' => 'gaji',
+                'target_value' => $t['gaji']['target'],
+                'batas_awal' => $t['gaji']['batas_awal'],
+                'batas_kedua' => $t['gaji']['batas_kedua'],
+                'batas_ketiga' => $t['gaji']['batas_ketiga'],
+                'batas_keempat' => $t['gaji']['batas_keempat'],
+                'period_type' => 'monthly',
+                'period_month' => NULL,
+                'effective_from' => '2024-01-01',
+                'effective_to' => NULL,
+                'created_by' => NULL,
+            ];
+            $data[] = [
+                'kpi_component_id' => $componentMap['OMSET_CABANG'],
                 'unit_id' => $uid,
                 'position_id' => NULL,
                 'context' => 'penilaian_kinerja',

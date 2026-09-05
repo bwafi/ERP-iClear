@@ -170,6 +170,295 @@ class PenilaianKPI extends BaseController
         return view('template', $data);
     }
 
+    /**
+     * Halaman Penilaian KPI (modern, config-driven).
+     *
+     * Menentukan scope pegawai berdasarkan role yang login, lalu
+     * menampilkan daftar pegawai yang berada dalam scope tsb.
+     */
+    public function kpi_index()
+    {
+        $me      = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myRole  = (int)($me->ID_JABATAN ?? 0);
+        $myUnit  = (int)($me->ID_UNIT ?? 0);
+        $myId    = (int)($me->ID_AKUN ?? 0);
+
+        $bulan = (int)($this->request->getGet('bulan') ?: date('m'));
+        $tahun = (int)($this->request->getGet('tahun') ?: date('Y'));
+
+        // Scope unit (role yang bisa lintas unit => null = semua unit)
+        $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
+        $allowedUnits = $this->getAllowedUnits($myRole, $myUnit);
+
+        // Daftar pegawai dalam scope
+        $builder = $this->db->table('akun a')
+            ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
+            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
+            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
+            ->where('a.STATUS_PEGAWAI', 1)
+            ->groupStart()
+            ->where('a.deleted', null)
+            ->orWhere('a.deleted', 0)
+            ->groupEnd();
+
+        // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+
+        if (in_array($myRole, [1, 2], true)) {
+            // Admin root / Direktur: semua pegawai, semua unit.
+        } elseif (!empty($allowedTargets)) {
+            $builder->whereIn('a.ID_JABATAN', $allowedTargets);
+
+            if ($scopeUnits !== null) {
+                $hqTargets = array_values(array_filter(
+                    $allowedTargets,
+                    fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
+                ));
+
+                if (!empty($hqTargets)) {
+                    $builder->groupStart()
+                        ->whereIn('a.ID_UNIT', $scopeUnits)
+                        ->orWhereIn('a.ID_JABATAN', $hqTargets)
+                        ->groupEnd();
+                } else {
+                    $builder->whereIn('a.ID_UNIT', $scopeUnits);
+                }
+            }
+        } else {
+            // Pegawai/team tanpa target evaluasi: hanya dirinya sendiri.
+            $builder->where('a.ID_AKUN', (int)session()->get('ID_AKUN'));
+        }
+
+        $list_karyawan = $builder->orderBy('a.ID_UNIT', 'ASC')->orderBy('a.ID_JABATAN', 'ASC')->get()->getResultArray();
+
+        $units = $this->db->table('unit')->orderBy('idunit', 'ASC')->get()->getResultArray();
+
+        return view('template', [
+            'list_karyawan' => $list_karyawan,
+            'units'         => $units,
+            'bulan'         => $bulan,
+            'tahun'         => $tahun,
+            'myRole'        => $myRole,
+            'myUnit'        => $myUnit,
+            'body'          => 'penilaian/kpi_index',
+        ]);
+    }
+
+    /**
+     * Detail KPI pegawai (server-side authorization).
+     * Memastikan pegawai berada dalam scope evaluator yang login.
+     */
+    public function kpi_detail(int $id)
+    {
+        $me     = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myRole = (int)($me->ID_JABATAN ?? 0);
+        $myUnit = (int)($me->ID_UNIT ?? 0);
+
+        $target = $this->AuthModel->getById((int)$id);
+        if (!$target || (int)$target->STATUS_PEGAWAI !== 1) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Pegawai tidak ditemukan.');
+        }
+
+        // Authorization: apakah pegawai dalam scope evaluator
+        if (!$this->isInScope($me, $target)) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengakses KPI pegawai tersebut.');
+        }
+
+        $bulan = (int)($this->request->getGet('bulan') ?: date('m'));
+        $tahun = (int)($this->request->getGet('tahun') ?: date('Y'));
+
+        $kpiService = new \App\Services\Kpi\KpiCalculationService();
+        $kpi = $kpiService->calculateForSalary((int)$target->ID_AKUN, (string)$bulan, (string)$tahun, 'penilaian_kinerja');
+
+        $jabatanRow = $this->db->table('jabatan')
+            ->where('ID_JABATAN', (int)$target->ID_JABATAN)->get()->getRow();
+        $namaJabatan = $jabatanRow ? $jabatanRow->NAMA_JABATAN : 'Pegawai';
+
+        // Kualitas Pelayanan (manual 1-5) — prefill raw score existing
+        $kualitasRaw = $this->getKualitasRaw((int)$target->ID_AKUN, $bulan, $tahun);
+
+        // Tandai komponen manual vs otomatis berdasarkan kpi_components.
+        // KONTROL_ASET kini dihitung OTOMATIS dari data aset (bukan input manual).
+        $manualCodes = (new \App\Models\ModelKpiComponent())
+            ->where('type', 'manual')->findAll();
+        $manualNameSet = [];
+        foreach ($manualCodes as $c) {
+            if ($c->code === 'KONTROL_ASET') {
+                continue;
+            }
+            $manualNameSet[$c->name] = true;
+        }
+
+        $canEvaluate = \App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+            (int)$me->ID_AKUN,
+            (int)$target->ID_AKUN,
+            'KUALITAS_PELAYANAN'
+        );
+
+        return view('template', [
+            'target'        => $target,
+            'namaJabatan'   => $namaJabatan,
+            'jabatan'       => $kpi['jabatan'],
+            'kpi'           => $kpi,
+            'manualNameSet' => $manualNameSet,
+            'kualitasRaw'   => $kualitasRaw,
+            'canEvaluate'   => $canEvaluate,
+            'bulan'         => $bulan,
+            'tahun'         => $tahun,
+            'body'          => 'penilaian/kpi_detail',
+        ]);
+    }
+
+    /**
+     * Simpan skor Kualitas Pelayanan (1-5) via KpiEvaluationService.
+     * Server-side authorization: hanya evaluator berwenang (SPV -> KT, unit sama).
+     */
+    public function save_kualitas()
+    {
+        $evaluatorId = (int)session()->get('ID_AKUN');
+        $employeeId  = (int)$this->request->getPost('employee_id');
+        $score       = (int)$this->request->getPost('skor_kualitas');
+        $bulan       = (int)($this->request->getPost('bulan') ?: date('m'));
+        $tahun       = (int)($this->request->getPost('tahun') ?: date('Y'));
+
+        if ($score < 1 || $score > 5) {
+            return redirect()->to('/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun)
+                ->with('error', 'Skor Kualitas Pelayanan harus antara 1 s/d 5.');
+        }
+
+        // Validasi evaluator + target + KOMPONEN (Kualitas Pelayanan) secara server-side
+        if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+            $evaluatorId,
+            $employeeId,
+            'KUALITAS_PELAYANAN'
+        )) {
+            return redirect()->to('/penilaian/kpi/detail/' . $employeeId)
+                ->with('error', 'Anda tidak berwenang menilai KPI pegawai ini.');
+        }
+
+        $component = (new \App\Models\ModelKpiComponent())->where('code', 'KUALITAS_PELAYANAN')->first();
+        if (!$component) {
+            return redirect()->to('/penilaian/kpi/detail/' . $employeeId)
+                ->with('error', 'Komponen KPI Kualitas Pelayanan tidak ditemukan.');
+        }
+
+        $svc = new \App\Services\Kpi\KpiEvaluationService();
+        $result = $svc->recordEvaluation([
+            'employee_id'      => $employeeId,
+            'kpi_component_id' => (int)$component->id,
+            'evaluator_id'     => $evaluatorId,
+            'evaluation_date'  => sprintf('%04d-%02d-15', $tahun, $bulan),
+            'raw_score'        => $score,
+            'max_score'        => 5,
+            'notes'            => 'Kualitas Pelayanan (Skor: ' . $score . '/5)',
+        ]);
+
+        if (!$result['success']) {
+            return redirect()->to('/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun)
+                ->with('error', 'Gagal menyimpan: ' . implode(', ', $result['errors']));
+        }
+
+        return redirect()->to('/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun)
+            ->with('success', 'Skor Kualitas Pelayanan berhasil disimpan.');
+    }
+
+    /**
+     * Scope unit: null = semua unit (lintas unit). Array = hanya unit tsb.
+     */
+    /**
+     * Scope unit: null = semua unit (lintas unit). Array = hanya unit tsb.
+     * Untuk SPV: baca dari spv_units mapping, fallback ke ID_UNIT jika tidak ada mapping.
+     */
+    private function getScopeUnits(int $myRole, int $myUnit, int $myId = null): ?array
+    {
+        // Role dengan akses lintas unit
+        if (in_array($myRole, [0, 1, 2, 34], true)) {
+            return null;
+        }
+        
+        // SPV: baca dari spv_units mapping
+        if ($myRole === 40 && $myId) {
+            $mappings = $this->db->table('spv_units')
+                ->where('spv_id', $myId)
+                ->get()
+                ->getResultArray();
+            
+            if (!empty($mappings)) {
+                return array_column($mappings, 'unit_id');
+            }
+            
+            // Fallback ke ID_UNIT untuk backward compatibility
+            return [$myUnit];
+        }
+        
+        return [$myUnit];
+    }
+
+    /**
+     * Daftar unit yang boleh dilihat untuk filter UI.
+     */
+    private function getAllowedUnits(int $myRole, int $myUnit): array
+    {
+        if (in_array($myRole, [0, 1, 2, 34], true)) {
+            $rows = $this->db->table('unit')->orderBy('idunit', 'ASC')->get()->getResultArray();
+            return array_column($rows, 'idunit');
+        }
+        return [$myUnit];
+    }
+
+    /**
+     * Cek apakah $employee berada dalam scope $evaluator.
+     */
+    private function isInScope($evaluator, $employee): bool
+    {
+        $myRole = (int)($evaluator->ID_JABATAN ?? 0);
+        $myUnit = (int)($evaluator->ID_UNIT ?? 0);
+        $myId   = (int)($evaluator->ID_AKUN ?? 0);
+
+        // Admin root & Direktur: akses penuh
+        if (in_array($myRole, [1, 2], true)) {
+            return true;
+        }
+
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+
+        if (!empty($allowedTargets) && in_array((int)$employee->ID_JABATAN, $allowedTargets, true)) {
+            // Jabatan pusat (HQ) boleh dinilai lintas unit; selain itu wajib dalam scope unit.
+            if (!\App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$employee->ID_JABATAN)) {
+                $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
+                $targetUnit = (int)($employee->ID_UNIT ?? 0);
+                if ($scopeUnits !== null && !in_array($targetUnit, array_map('intval', $scopeUnits), true)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Role lain (pegawai/team) hanya melihat dirinya sendiri
+        return (int)$employee->ID_AKUN === $myId;
+    }
+
+    /**
+     * Ambil raw score Kualitas Pelayanan (skala 1-5) untuk periode.
+     */
+    private function getKualitasRaw(int $employeeId, int $bulan, int $tahun): ?int
+    {
+        $component = (new \App\Models\ModelKpiComponent())->where('code', 'KUALITAS_PELAYANAN')->first();
+        if (!$component) {
+            return null;
+        }
+        // Setiap evaluator melihat nilai yang dia isi sendiri (bukan rata-rata).
+        $row = (new \App\Models\ModelKpiEvaluation())
+            ->where('employee_id', $employeeId)
+            ->where('kpi_component_id', (int)$component->id)
+            ->where('evaluator_id', (int)session()->get('ID_AKUN'))
+            ->where('period_year', $tahun)
+            ->where('period_month', $bulan)
+            ->orderBy('evaluation_date', 'DESC')
+            ->first();
+        return $row ? (int)$row->raw_score : null;
+    }
+
     public function insert_penilaian()
     {
         $kpiList        = $this->request->getPost('kpi_utama');
@@ -630,6 +919,294 @@ class PenilaianKPI extends BaseController
             'tahun'                => $tahun,
             'body'                 => 'penilaian/penilaian_kinerja'
         ]);
+    }
+
+    public function penilaian_absen()
+    {
+        $bulan = (int)($this->request->getGet('bulan') ?: date('m'));
+        $tahun = (int)($this->request->getGet('tahun') ?: date('Y'));
+
+        $me      = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myRole  = (int)($me->ID_JABATAN ?? 0);
+        $myUnit  = (int)($me->ID_UNIT ?? 0);
+        $myId    = (int)($me->ID_AKUN ?? 0);
+
+        $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
+
+        $builder = $this->db->table('akun a')
+            ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
+            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
+            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
+            ->where('a.STATUS_PEGAWAI', 1)
+            ->groupStart()
+            ->where('a.deleted', null)
+            ->orWhere('a.deleted', 0)
+            ->groupEnd();
+
+        // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+
+        if (in_array($myRole, [1, 2], true)) {
+            // Admin root / Direktur: semua pegawai, semua unit.
+        } elseif (!empty($allowedTargets)) {
+            $builder->whereIn('a.ID_JABATAN', $allowedTargets);
+
+            if ($scopeUnits !== null) {
+                $hqTargets = array_values(array_filter(
+                    $allowedTargets,
+                    fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
+                ));
+
+                if (!empty($hqTargets)) {
+                    $builder->groupStart()
+                        ->whereIn('a.ID_UNIT', $scopeUnits)
+                        ->orWhereIn('a.ID_JABATAN', $hqTargets)
+                        ->groupEnd();
+                } else {
+                    $builder->whereIn('a.ID_UNIT', $scopeUnits);
+                }
+            }
+        } else {
+            // Pegawai/team tanpa target evaluasi: hanya dirinya sendiri.
+            $builder->where('a.ID_AKUN', (int)session()->get('ID_AKUN'));
+        }
+
+        $list_karyawan = $builder->orderBy('a.ID_UNIT', 'ASC')->get()->getResultArray();
+
+        $selected_karyawan = (int)($this->request->getGet('karyawan') ?: 0);
+        if (!$selected_karyawan && !empty($list_karyawan)) {
+            $selected_karyawan = (int)$list_karyawan[0]['ID_AKUN'];
+        }
+
+        $target = null;
+        $targetUnitName = null;
+        if ($selected_karyawan) {
+            $target = $this->AuthModel->getById($selected_karyawan);
+            // Otorisasi: pegawai harus dalam scope evaluator
+            if ($target && !$this->isInScope($me, $target)) {
+                $target = null;
+            }
+            
+            // Ambil nama unit untuk ditampilkan
+            if ($target) {
+                $unitRow = $this->db->table('unit')
+                    ->select('NAMA_UNIT')
+                    ->where('idunit', (int)$target->ID_UNIT)
+                    ->get()
+                    ->getRow();
+                $targetUnitName = $unitRow ? $unitRow->NAMA_UNIT : 'Unit ' . $target->ID_UNIT;
+            }
+        }
+
+        $kpi = null;
+        $existing = [];
+        $attendanceComponents = [];
+        $allowedComponentCodes = [];
+        if ($target) {
+            $kpiService = new \App\Services\Kpi\KpiCalculationService();
+            $kpi = $kpiService->calculateForSalary((int)$target->ID_AKUN, (string)$bulan, (string)$tahun, 'penilaian_kinerja');
+
+            // Komponen absen (urut sesuai detail_absen)
+            $attendanceCodes = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
+            $attendanceComponents = (new \App\Models\ModelKpiComponent())
+                ->whereIn('code', $attendanceCodes)->findAll();
+
+            // Komponen yang boleh dinilai evaluator utk target ini (server-side)
+            foreach ($attendanceComponents as $comp) {
+                if (\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+                    (int)$me->ID_AKUN,
+                    (int)$target->ID_AKUN,
+                    (string)$comp->code
+                )) {
+                    $allowedComponentCodes[] = (string)$comp->code;
+                }
+            }
+
+            // Ambil skor harian existing utk periode (rata-rata antar evaluator per hari)
+            $evals = (new \App\Models\ModelKpiEvaluation())
+                ->where('employee_id', (int)$target->ID_AKUN)
+                ->where('period_year', $tahun)
+                ->where('period_month', $bulan)
+                ->findAll();
+
+            foreach ($evals as $e) {
+                $day = (int)date('j', strtotime($e->evaluation_date));
+                $cid = (int)$e->kpi_component_id;
+                if (!isset($existing[$cid][$day])) {
+                    $existing[$cid][$day] = ['sum' => 0.0, 'count' => 0];
+                }
+                $existing[$cid][$day]['sum'] += (float)$e->raw_score;
+                $existing[$cid][$day]['count']++;
+            }
+
+            foreach ($existing as $cid => &$days) {
+                foreach ($days as $d => &$v) {
+                    $v = round($v['sum'] / $v['count'], 2);
+                }
+                unset($d, $v);
+            }
+            unset($cid, $days);
+        }
+
+        return view('template', [
+            'list_karyawan'         => $list_karyawan,
+            'selected_karyawan'     => $selected_karyawan,
+            'target'                => $target,
+            'targetUnitName'        => $targetUnitName,
+            'allowedComponentCodes' => $allowedComponentCodes,
+            'kpi'                   => $kpi,
+            'detail_absen'          => $kpi['detail_absen'] ?? [],
+            'skor_total2'           => $kpi['skor_total2'] ?? 0,
+            'attendanceComponents'  => $attendanceComponents,
+            'existing'              => $existing,
+            'bulan'                 => $bulan,
+            'tahun'                 => $tahun,
+            'body'                  => 'penilaian/penilaian_absen'
+        ]);
+    }
+
+    public function save_absen()
+    {
+        $me      = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myRole  = (int)($me->ID_JABATAN ?? 0);
+
+        $employeeId = (int)$this->request->getPost('employee_id');
+        $bulan      = (int)($this->request->getPost('bulan') ?: date('m'));
+        $tahun      = (int)($this->request->getPost('tahun') ?: date('Y'));
+
+        $target = $this->AuthModel->getById($employeeId);
+        if (!$target || !$this->isInScope($me, $target)) {
+            return redirect()->to('/penilaian/absen')
+                ->with('error', 'Pegawai tidak ditemukan / tidak dalam lingkup Anda.');
+        }
+
+        $attendanceCodes = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
+        $components = (new \App\Models\ModelKpiComponent())
+            ->whereIn('code', $attendanceCodes)->findAll();
+        $codeToComponent = [];
+        foreach ($components as $c) {
+            $codeToComponent[$c->code] = $c;
+        }
+
+        // Form mengirim: tanggal + 4 aspek sekaligus (skor_kehadiran, skor_kebersihan, dll)
+        $tanggal = $this->request->getPost('tanggal');
+        $confirm = (int)$this->request->getPost('confirm'); // 1 = user sudah konfirmasi
+
+        if (empty($tanggal)) {
+            return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
+                ->with('error', 'Tanggal wajib diisi.');
+        }
+
+        // Validasi tanggal berada dalam bulan/tahun yang sedang dipilih
+        if ((int)date('m', strtotime($tanggal)) !== $bulan || (int)date('Y', strtotime($tanggal)) !== $tahun) {
+            return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
+                ->with('error', 'Tanggal harus berada dalam bulan/tahun yang dipilih.');
+        }
+
+        // Collect input values — HANYA komponen yang diotorisasi untuk evaluator+target ini.
+        $savedAnyAllowed = false;
+        $inputValues = [];
+        foreach ($codeToComponent as $code => $comp) {
+            if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+                (int)$me->ID_AKUN,
+                $employeeId,
+                (string)$code
+            )) {
+                continue; // lewati komponen yang tidak berwenang (server-side).
+            }
+
+            $savedAnyAllowed = true;
+            $fieldName = 'skor_' . strtolower($code);
+            $skor = (int)$this->request->getPost($fieldName);
+            if ($skor >= 1 && $skor <= 5) {
+                $inputValues[$code] = ['skor' => $skor, 'comp' => $comp];
+            }
+        }
+
+        if (!$savedAnyAllowed) {
+            return redirect()->to('/penilaian/absen')
+                ->with('error', 'Anda tidak berwenang menilai komponen absensi pegawai ini.');
+        }
+
+        if (empty($inputValues)) {
+            return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
+                ->with('error', 'Tidak ada skor yang valid untuk disimpan (harus 1-5).');
+        }
+
+        // Cek apakah tanggal ini sudah memiliki data (untuk konfirmasi)
+        if ($confirm !== 1) {
+            // Extract component IDs from inputValues
+            $componentIds = array_map(function($item) {
+                return (int)$item['comp']->id;
+            }, $inputValues);
+
+            $existingData = $this->db->table('kpi_evaluations')
+                ->select('kpi_component_id, raw_score')
+                ->where('employee_id', $employeeId)
+                ->where('evaluator_id', (int)$me->ID_AKUN)
+                ->where('evaluation_date', $tanggal)
+                ->whereIn('kpi_component_id', $componentIds)
+                ->get()
+                ->getResultArray();
+
+            if (!empty($existingData)) {
+                // Ada data existing → butuh konfirmasi
+                $existingByComponentId = [];
+                foreach ($existingData as $row) {
+                    $existingByComponentId[(int)$row['kpi_component_id']] = (float)$row['raw_score'];
+                }
+
+                // Build comparison data
+                $comparisons = [];
+                foreach ($inputValues as $code => $data) {
+                    $compId = (int)$data['comp']->id;
+                    if (isset($existingByComponentId[$compId])) {
+                        $oldScore = (int)$existingByComponentId[$compId];
+                        $newScore = $data['skor'];
+                        if ($oldScore !== $newScore) {
+                            $comparisons[] = [
+                                'name' => $data['comp']->name,
+                                'old' => $oldScore,
+                                'new' => $newScore,
+                            ];
+                        }
+                    }
+                }
+
+                if (!empty($comparisons)) {
+                    // Set session data untuk modal konfirmasi
+                    session()->setFlashdata('require_confirmation', [
+                        'tanggal' => $tanggal,
+                        'comparisons' => $comparisons,
+                        'post_data' => $this->request->getPost(),
+                    ]);
+                    return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun);
+                }
+            }
+        }
+
+        // Proceed to save (either no existing data, or user confirmed)
+        $svc = new \App\Services\Kpi\KpiEvaluationService();
+        $saved = 0;
+
+        foreach ($inputValues as $code => $data) {
+            $result = $svc->recordEvaluation([
+                'employee_id'      => $employeeId,
+                'kpi_component_id' => (int)$data['comp']->id,
+                'evaluator_id'     => (int)$me->ID_AKUN,
+                'evaluation_date'  => $tanggal,
+                'raw_score'        => $data['skor'],
+                'max_score'        => 5,
+                'notes'            => 'Absensi: ' . $data['comp']->name . ' (Skor: ' . $data['skor'] . '/5)',
+            ]);
+
+            if ($result['success']) {
+                $saved++;
+            }
+        }
+
+        return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
+            ->with('success', 'Skor absensi ' . date('d M Y', strtotime($tanggal)) . ' tersimpan (' . $saved . ' komponen).');
     }
 
     public function slip_gaji($idakun)

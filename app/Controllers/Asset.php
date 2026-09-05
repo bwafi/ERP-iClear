@@ -40,11 +40,13 @@ class Asset extends BaseController
 
     public function index()
     {
+        $db = \Config\Database::connect();
         $data = array(
             'body' => 'datamaster/asset',
             'asset' => $this->AssetModel->getAsset(),
             'asset_lama' => $this->AssetModel->getAssetLama(),
             'kategori_asset' => $this->KategoriAssetModel->getKategoriAsset(),
+            'unit' => $db->table('unit')->get()->getResult(),
         );
         return view('template', $data);
     }
@@ -84,6 +86,7 @@ class Asset extends BaseController
 
 
         $data = [
+            'unit' => $this->request->getPost('unit') ?: (session()->get('ID_UNIT') ?: 1),
             'asset_code' => $asset_code,
             'asset' => $asset,
             'tanggal_perolehan' => $tanggal_perolehan,
@@ -166,11 +169,11 @@ class Asset extends BaseController
 
 
         $data = [
+            'unit' => $this->request->getPost('unit') ?: null,
             'jangka_waktu' => $jangka_waktu,
             'penyusutan_bulanan' => $penyusutan_bulanan,
             'kondisi' => $kondisi,
             'keterangan' => $keterangan,
-
         ];
 
         $result = $this->AssetModel->update($idnya, $data);

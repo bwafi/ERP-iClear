@@ -11,6 +11,7 @@ class ModelAsset extends Model
     protected $returnType = 'object';
     protected $allowedFields = [
         'idasset',
+        'unit',
         'asset_code',
         'asset',
         'tanggal_perolehan',

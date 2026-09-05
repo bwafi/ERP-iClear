@@ -36,11 +36,27 @@ class KpiEvaluationService
         // Evaluator authorization check (fixed mapping)
         $evaluatorId  = (int)($data['evaluator_id'] ?? 0);
         $employeeId   = (int)($data['employee_id'] ?? 0);
+        $componentId  = (int)($data['kpi_component_id'] ?? 0);
+
+        $component = $this->componentModel->find($componentId);
+        if (!$component) {
+            return [
+                'success' => false,
+                'errors'  => ['kpi component not found'],
+            ];
+        }
+
+        $componentCode = (string)$component->code;
         if ($evaluatorId > 0 && $employeeId > 0) {
-            if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluate($evaluatorId, $employeeId)) {
+            // Otorisasi spesifik: evaluator + target + KOMPONEN + scope unit.
+            if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+                $evaluatorId,
+                $employeeId,
+                $componentCode
+            )) {
                 return [
                     'success' => false,
-                    'errors'  => ['evaluator not authorized for this employee'],
+                    'errors'  => ['evaluator not authorized for this component'],
                 ];
             }
         }

@@ -37,7 +37,7 @@ class ModelKpiTarget extends Model
     {
         $date = $date ?? date('Y-m-d');
 
-        return $this->where('kpi_component_id', $kpi_component_id)
+        $target = $this->where('kpi_component_id', $kpi_component_id)
                     ->where('unit_id', $unit_id)
                     ->where('context', $context)
                     ->where('effective_from <=', $date)
@@ -46,6 +46,23 @@ class ModelKpiTarget extends Model
                         ->orWhere('effective_to IS NULL')
                     ->groupEnd()
                     ->first();
+
+        // Fallback ke context 'default' bila target utk context spesifik
+        // (mis. 'gaji'/'penilaian_kinerja') tidak ditemukan.
+        // Menjaga komponen yg targetnya hanya disimpan dgn context 'default'.
+        if (!$target && $context !== 'default') {
+            $target = $this->where('kpi_component_id', $kpi_component_id)
+                        ->where('unit_id', $unit_id)
+                        ->where('context', 'default')
+                        ->where('effective_from <=', $date)
+                        ->groupStart()
+                            ->where('effective_to >=', $date)
+                            ->orWhere('effective_to IS NULL')
+                        ->groupEnd()
+                        ->first();
+        }
+
+        return $target;
     }
 
     public function getTargetsByUnit($unit_id, $date = null)

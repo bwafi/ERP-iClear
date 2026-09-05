@@ -410,6 +410,8 @@ $routes->post('update_penilaian', 'Penilaian::update_penilaian', ['filter' => 'a
 $routes->post('delete_penilaian', 'Penilaian::delete_penilaian', ['filter' => 'auth']);
 $routes->post('export_penilaian', 'Penilaian::export_penilaian', ['filter' => 'auth']);
 $routes->get('penilaian/get_template_by_jabatan/(:num)', 'Penilaian::get_template_by_jabatan/$1');
+$routes->get('penilaian/spv_kpi', 'Penilaian::spv_kpi_index', ['filter' => 'auth']);
+$routes->post('penilaian/save_spv_kpi', 'Penilaian::save_spv_kpi', ['filter' => 'auth']);
 
 //payroll
 $routes->get('payroll2', 'Payroll::index', ['filter' => 'auth']);
@@ -421,6 +423,11 @@ $routes->post('unlock_payroll2', 'Payroll::unlockPayroll', ['filter' => 'auth'])
 
 //penilaian kpi
 $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);
+$routes->get('penilaian/kpi', 'PenilaianKPI::kpi_index', ['filter' => 'auth']);
+$routes->get('penilaian/kpi/detail/(:num)', 'PenilaianKPI::kpi_detail/$1', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 'auth']);
+$routes->get('penilaian/absen', 'PenilaianKPI::penilaian_absen', ['filter' => 'auth']);
+$routes->post('penilaian/absen/save', 'PenilaianKPI::save_absen', ['filter' => 'auth']);
 $routes->post('insert_penilaian_KPI', 'PenilaianKPI::insert_penilaian', ['filter' => 'auth']);
 $routes->post('update_penilaian_KPI', 'PenilaianKPI::update_penilaian', ['filter' => 'auth']);
 $routes->post('delete_penilaian_KPI', 'PenilaianKPI::delete_penilaian', ['filter' => 'auth']);
