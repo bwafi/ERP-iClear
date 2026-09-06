@@ -14,6 +14,7 @@ class KPIConfigurationSeeder extends Seeder
         $this->db->table('kpi_targets')->truncate();
         $this->db->table('kpi_weights')->truncate();
         $this->db->table('kpi_components')->truncate();
+        $this->db->table('spv_units')->truncate();
         $this->db->query('SET FOREIGN_KEY_CHECKS = 1');
 
         $this->seedKPIComponents();
@@ -21,6 +22,7 @@ class KPIConfigurationSeeder extends Seeder
         $this->seedKPITargets();
         $this->seedSalaryComponents();
         $this->seedSalaryStructures();
+        $this->seedSpvUnits();
     }
 
     private function seedKPIComponents()
@@ -652,5 +654,41 @@ class KPIConfigurationSeeder extends Seeder
         }
 
         $this->db->table('salary_structures')->insertBatch($data);
+    }
+
+    /**
+     * Area SPV → unit yang diawasi (tabel spv_units).
+     * Dipakai getScopeUnits/isInScope agar SPV menilai KT di SELURUH area-nya,
+     * bukan hanya unit tempat akun SPV tercatat.
+     */
+    private function seedSpvUnits()
+    {
+        $area = [
+            49 => [2, 3],   // Mario R: ICLEAR Jember & Banyuwangi
+            56 => [1, 4],   // Bima:    ICLEAR Probolinggo & Pandaan
+        ];
+
+        $spvRows = $this->db->table('akun')
+            ->select('ID_AKUN')
+            ->where('ID_JABATAN', 40)
+            ->where('STATUS_PEGAWAI', 1)
+            ->get()
+            ->getResultArray();
+        $activeSpv = array_map('strval', array_column($spvRows, 'ID_AKUN'));
+
+        $now = date('Y-m-d H:i:s');
+        foreach ($area as $spvId => $unitIds) {
+            if (!in_array((string)$spvId, $activeSpv, true)) {
+                continue;
+            }
+            foreach ($unitIds as $unitId) {
+                $this->db->table('spv_units')->insert([
+                    'spv_id'     => (int)$spvId,
+                    'unit_id'    => (int)$unitId,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+        }
     }
 }

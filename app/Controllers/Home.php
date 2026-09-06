@@ -130,7 +130,7 @@ public function index()
         'stok' => $this->KartuStokModel->getKartuStokWithKategori(),
         'penjualan' => $this->PenjualanModel->getPendapatan($unit_id),
         'pendapatan_service' => $this->ServiceModel->getTotalPendapatanService($unit_id),
-        'pelanggan' => count($this->PelangganModel->getPelanggan()),
+        'pelanggan' => $this->PelangganModel->countPelanggan(),
         'pelanggan_service' => count($this->PelangganModel->getPelangganWithService()),
         'pelanggan_baru' => count($this->PelangganModel->getPelangganBaruBulanIni()),
         'months' => $months,
