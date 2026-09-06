@@ -28233,12 +28233,15 @@ body div:where(.swal2-icon).swal2-success [class^="swal2-success-line"] {
   margin: 10px 0;
 }
 
-/* Pita diagonal utk menu lama "Checklist Pekerjaan" (deprecated) */
+/* Pita diagonal utk menu lama "Checklist Pekerjaan" (deprecated)
+   Diposisikan di kanan & vertical-center (translateY saja) supaya konsisten
+   lintas browser — menghindari perhitungan lebar badge (letter-spacing) yang
+   membuat Chrome & Firefox merender posisi/pusat horizontal secara berbeda. */
 .sidebar-nav ul .sidebar-item .sidebar-link .sidebar-deprecated {
   position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%) rotate(-20deg);
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-10deg);
   transform-origin: center center;
   background: #ffb000;
   color: #212529;
@@ -28246,9 +28249,9 @@ body div:where(.swal2-icon).swal2-success [class^="swal2-success-line"] {
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  line-height: 1.1;
-  padding: 3px 10px 3px 8px;
-  border-radius: 2px 6px 6px 2px;
+  line-height: 1.2;
+  padding: 3px 9px;
+  border-radius: 3px 7px 7px 3px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
   white-space: nowrap;
   z-index: 7;

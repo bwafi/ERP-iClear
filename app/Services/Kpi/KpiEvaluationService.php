@@ -71,7 +71,7 @@ class KpiEvaluationService
 
         // Per-event normalized/weighted (kept NOT NULL for compatibility).
         // NOTE: for attendance components this is NOT the monthly score;
-        // monthly attendance uses SUM(raw)/(26*5)*100 computed at aggregation.
+        // monthly attendance uses SUM(raw)/(hari_efektif*5)*100 computed at aggregation.
         $normalized = $this->normalizeScore($data['raw_score'], $data['max_score'] ?? self::MAX_SCORE);
         $weight = $this->getComponentWeight($data['kpi_component_id'], $data['employee_id']);
         $weighted = $this->calculateWeightedScore($normalized, $weight);

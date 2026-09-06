@@ -2,7 +2,7 @@
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <div>
             <h4 class="fw-semibold mb-0">Penilaian Absensi</h4>
-            <small class="text-muted">Input skor harian (0 = off, 1-5) per komponen absensi. Nilai = actual / (hari efektif x 5) x 100, hari efektif = 26 - jumlah hari OFF.</small>
+            <small class="text-muted">Input skor harian (0 = OFF, 1-5) per komponen absensi. Nilai = SUM / (hari efektif x 5) x 100, dengan hari efektif = jumlah hari dalam bulan - jumlah hari OFF.</small>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
@@ -145,7 +145,7 @@
                     </div>
                 </div>
                 <div class="text-muted small mt-2">
-                    Pilih tanggal, isi skor 1-5 untuk aspek yang ditampilkan (0 = off), lalu klik <strong>Simpan Semua</strong>. Aspek yang dikosongkan (-) tidak diubah. Nilai bulanan = SUM / (hari efektif x 5) x 100, hari efektif = 26 - jumlah hari OFF.
+                    Pilih tanggal, isi skor 1-5 untuk aspek yang ditampilkan (0 = OFF), lalu klik <strong>Simpan Semua</strong>. Aspek yang dikosongkan (-) tidak diubah. Nilai bulanan = SUM / (hari efektif × 5) × 100, dengan hari efektif = jumlah hari dalam bulan − jumlah hari OFF.
                 </div>
             </div>
         </form>
@@ -166,12 +166,33 @@
                         width: 38px;
                         text-align: center;
                         overflow: hidden;
+                        padding-left: 0;
+                        padding-right: 0;
                     }
                     .riwayat-absen .badge {
                         white-space: nowrap;
                         font-size: .7rem;
                         padding: .28em .5em;
                     }
+                    /* Color coding cell skor harian (rapid scanning manager).
+                   Lebar pill SERAGAM (bukan min-width) + text-align center agar
+                   angka & "OFF" sama-sama tepat di tengah kolom. */
+                    .skor-cell {
+                        border-radius: .25rem;
+                        font-weight: 600;
+                        font-size: .72rem;
+                        line-height: 1.5;
+                        padding: .1rem .15rem;
+                        display: inline-block;
+                        width: 2rem;
+                        text-align: center;
+                        box-sizing: border-box;
+                    }
+                    .skor-cell.skor-off   { background: var(--bs-secondary-bg-subtle); color: var(--bs-secondary-color); }
+                    .skor-cell.skor-low   { background: var(--bs-danger-bg-subtle);   color: var(--bs-danger); }
+                    .skor-cell.skor-mid   { background: var(--bs-warning-bg-subtle);  color: var(--bs-warning-text-emphasis); }
+                    .skor-cell.skor-good  { background: var(--bs-success-bg-subtle);  color: var(--bs-success); }
+                    .skor-cell.skor-empty { color: var(--bs-secondary-color); }
                 </style>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered align-middle text-center riwayat-absen">
@@ -191,10 +212,15 @@
                                     <?php for ($d = 1; $d <= $jumlahHari; $d++) : ?>
                                         <td class="riwayat-date">
                                             <?php if (isset($existing[$c->id][$d])) : ?>
-                                                <?php if ((int)$existing[$c->id][$d] === 0) : ?>
-                                                    <span class="badge bg-danger-subtle text-danger">OFF</span>
+                                                <?php $skorValue = (int)$existing[$c->id][$d]; ?>
+                                                <?php if ($skorValue === 0) : ?>
+                                                    <span class="skor-cell skor-off">OFF</span>
+                                                <?php elseif ($skorValue <= 2) : ?>
+                                                    <span class="skor-cell skor-low"><?= $skorValue ?></span>
+                                                <?php elseif ($skorValue === 3) : ?>
+                                                    <span class="skor-cell skor-mid"><?= $skorValue ?></span>
                                                 <?php else : ?>
-                                                    <span class="badge bg-primary-subtle text-primary"><?= $existing[$c->id][$d] ?></span>
+                                                    <span class="skor-cell skor-good"><?= $skorValue ?></span>
                                                 <?php endif; ?>
                                             <?php else : ?>
                                                 <span class="text-muted">-</span>
@@ -205,6 +231,13 @@
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2 text-muted small mt-2 mb-1">
+                    <span class="me-1">Legenda:</span>
+                    <span><span class="skor-cell skor-off">OFF</span> OFF</span>
+                    <span><span class="skor-cell skor-low">1–2</span> Rendah</span>
+                    <span><span class="skor-cell skor-mid">3</span> Sedang</span>
+                    <span><span class="skor-cell skor-good">4–5</span> Baik</span>
                 </div>
                 <div class="text-muted small mt-2">
                     Angka = skor harian (1-5) yang sudah tersimpan. <span class="text-danger fw-semibold">OFF</span> = hari off (skor 0, tidak dihitung sebagai hari efektif). Kosong (-) = belum dinilai.

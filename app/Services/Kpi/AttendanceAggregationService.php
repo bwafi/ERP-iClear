@@ -18,16 +18,6 @@ class AttendanceAggregationService
         'KEPATUHAN_SOP' => ['weight' => 20, 'name' => 'Kepatuhan SOP'],
     ];
 
-    /**
-     * Hari kerja standar per bulan. Hari efektif = 26 - jumlah tanggal unik OFF.
-     */
-    private const WORKING_DAYS = 26;
-
-    /**
-     * Denominator default: 26 working days * 5 (max score) — dipakai bila tidak ada data OFF.
-     */
-    private const DENOMINATOR = 26 * 5; // 130
-
     private const CAP = 100;
 
     protected $evaluationModel;
@@ -42,13 +32,16 @@ class AttendanceAggregationService
     }
 
     /**
-     * Jumlah hari efektif = WORKING_DAYS - jumlah tanggal unik berstatus OFF (raw_score=0).
+     * Jumlah hari efektif = Jumlah hari kalender dalam bulan - jumlah tanggal unik OFF.
      *
      * Satu tanggal dihitung SEKALI meski ada beberapa komponen absen yang OFF pada tanggal
      * yang sama (OFF tidak dihitung berkali-kali per komponen).
      */
     protected function getEffectiveDayCount(int $employeeId, string $month, string $year): int
     {
+        // Jumlah hari kalender sebenarnya untuk bulan & tahun ini (bukan hardcode 26).
+        $totalDaysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', (int)$year, (int)$month)));
+
         $components = $this->componentModel
             ->whereIn('code', array_keys(self::ATTENDANCE_COMPONENTS))
             ->findAll();
@@ -59,7 +52,7 @@ class AttendanceAggregationService
         }
 
         if (empty($componentIds)) {
-            return self::WORKING_DAYS;
+            return $totalDaysInMonth;
         }
 
         $offDates = $this->evaluationModel
@@ -74,7 +67,7 @@ class AttendanceAggregationService
 
         $offCount = count($offDates);
 
-        return max(self::WORKING_DAYS - $offCount, 0);
+        return max($totalDaysInMonth - $offCount, 0);
     }
 
     /**
@@ -132,7 +125,7 @@ class AttendanceAggregationService
         $isManager = ($positionId === 34);
         $managerTeamCodes = $isManager ? ['KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'] : [];
 
-        // Hari efektif = 26 - jumlah tanggal unik OFF (0 = tanpa OFF → 26, backward compatible).
+        // Hari efektif = jumlah hari kalender bulan - jumlah tanggal unik OFF.
         $effectiveDays = $this->getEffectiveDayCount($employeeId, $month, $year);
 
         $results = [];
@@ -153,8 +146,9 @@ class AttendanceAggregationService
                     'normalized' => round($normalized, 4),
                     'weighted' => round($weighted, 4),
                 ];
+                // 'sum' rekonstruksi: empirical max skor = effectiveDays * 5.
                 $componentsRaw[$code] = [
-                    'sum' => round($normalized * 130.0 / 100.0, 4),
+                    'sum' => round($normalized / 100.0 * ($effectiveDays * 5.0), 4),
                     'count' => 0,
                     'normalized' => round($normalized, 4),
                 ];
@@ -186,7 +180,7 @@ class AttendanceAggregationService
                 $count = count($rows);
 
                 // Formula: sumRaw / (hari_efektif x 5) x 100.
-                // Tanpa data OFF, hari_efektif = 26 → denominator 130 (backward compatible).
+                // Hari efektif = jumlah hari kalender bulan - jumlah hari OFF.
                 $normalized = $this->normalizeAttendanceScore($sumRaw, $effectiveDays);
 
                 $weight = self::ATTENDANCE_COMPONENTS[$code]['weight'] ?? 0;
@@ -425,7 +419,7 @@ class AttendanceAggregationService
         $attendanceScore = 0.0;
         $componentsRaw = [];
 
-        // Hari efektif = 26 - jumlah tanggal unik OFF.
+        // Hari efektif = jumlah hari kalender bulan - jumlah tanggal unik OFF.
         $effectiveDays = $this->getEffectiveDayCount($employeeId, $month, $year);
 
         foreach ($componentCodes as $code) {
