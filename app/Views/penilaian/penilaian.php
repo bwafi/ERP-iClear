@@ -13,6 +13,25 @@
     </div>
 </div>
 
+<!-- Peringatan modul deprecated -->
+<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+        <iconify-icon icon="solar:info-circle-bold" width="26" height="26"></iconify-icon>
+        <div>
+            <strong>Modul Checklist Pekerjaan sudah digantikan Penilaian Absensi.</strong>
+            <span class="d-block text-muted" style="font-size: 0.85rem;">
+                Halaman ini tetap tersedia untuk melihat data checklist lama. Untuk input penilaian
+                absen yang baru, gunakan tombol di samping.
+            </span>
+        </div>
+    </div>
+    <a href="<?= base_url('penilaian/absen') ?>" class="btn btn-primary">
+        <iconify-icon icon="solar:dollar-minimalistic-broken" width="20" height="20"
+            style="margin-right: 6px;"></iconify-icon>
+        Buka Penilaian Absensi
+    </a>
+</div>
+
 <!-- Main Card -->
 <div class="card w-100 position-relative overflow-hidden">
     <div class="px-4 py-3 border-bottom"></div>

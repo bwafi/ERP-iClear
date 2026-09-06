@@ -49,7 +49,7 @@
                                     <iconify-icon icon="solar:menu-dots-bold-duotone" class="nav-small-cap-icon fs-5"></iconify-icon>
                                     <span class="hide-menu"><?= $mymenu['nama'] ?></span>
                                 </li>
-<?php else: ?>
+                            <?php else: ?>
                                 <li class="sidebar-item">
                                     <a class="sidebar-link sidebar-link primary-hover-bg" href="<?= base_url() . $mymenu['url'] ?>"
                                         aria-expanded="false">

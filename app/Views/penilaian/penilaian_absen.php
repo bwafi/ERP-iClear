@@ -118,8 +118,13 @@
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label class="form-label">Tanggal</label>
+                        <?php
+                        $defaultTanggal = (date('Y') == $tahun && (int)date('m') == $bulan)
+                            ? date('Y-m-d')
+                            : sprintf('%04d-%02d-%02d', $tahun, $bulan, 1);
+                        ?>
                         <input type="date" class="form-control" name="tanggal"
-                            value="<?= sprintf('%04d-%02d-%02d', $tahun, $bulan, 1) ?>" required>
+                            value="<?= $defaultTanggal ?>" required onchange="resetSkorInput()">
                     </div>
                     <div class="col-md-9">
                         <div class="row g-3">
@@ -130,10 +135,7 @@
                                     <select class="form-select" name="skor_<?= strtolower($c->code) ?>">
                                         <option value="">-</option>
                                         <?php foreach ([5 => 'SB', 4 => 'Baik', 3 => 'Cukup', 2 => 'Kurang', 1 => 'Sangat Kurang'] as $v => $label) : ?>
-                                            <option value="<?= $v ?>"
-                                                <?= isset($existing[$c->id][(int)date('j', strtotime(sprintf('%04d-%02d-%02d', $tahun, $bulan, 1)))]) && $existing[$c->id][(int)date('j', strtotime(sprintf('%04d-%02d-%02d', $tahun, $bulan, 1)))] == $v ? 'selected' : '' ?>>
-                                                <?= $v ?> (<?= $label ?>)
-                                            </option>
+                                            <option value="<?= $v ?>"><?= $v ?> (<?= $label ?>)</option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
@@ -265,3 +267,13 @@
         });
     </script>
 <?php endif; ?>
+
+<script>
+    // Reset input skor ke "-" saat tanggal/karyawan diganti.
+    function resetSkorInput() {
+        var selects = document.querySelectorAll('select[name^="skor_"]');
+        selects.forEach(function (el) {
+            el.value = '';
+        });
+    }
+</script>

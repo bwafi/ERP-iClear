@@ -215,6 +215,14 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
+                // CS (42) hanya boleh dilihat/diisi Admin/Kasir Unit 1.
+                if ($myRole === 35 && $myUnit !== 1) {
+                    $hqTargets = array_values(array_filter(
+                        $hqTargets,
+                        fn($j) => (int)$j !== 42
+                    ));
+                }
+
                 if (!empty($hqTargets)) {
                     $builder->groupStart()
                         ->whereIn('a.ID_UNIT', $scopeUnits)
@@ -423,6 +431,11 @@ class PenilaianKPI extends BaseController
         $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
 
         if (!empty($allowedTargets) && in_array((int)$employee->ID_JABATAN, $allowedTargets, true)) {
+            // Kasus khusus: CS (42) KEHADIRAN hanya diisi Admin/Kasir yang berada di Unit 1.
+            if ($myRole === 35 && (int)$employee->ID_JABATAN === 42 && $myUnit !== 1) {
+                return false;
+            }
+
             // Jabatan pusat (HQ) boleh dinilai lintas unit; selain itu wajib dalam scope unit.
             if (!\App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$employee->ID_JABATAN)) {
                 $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
@@ -956,6 +969,14 @@ class PenilaianKPI extends BaseController
                     $allowedTargets,
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
+
+                // CS (42) hanya boleh dilihat/diisi Admin/Kasir Unit 1.
+                if ($myRole === 35 && $myUnit !== 1) {
+                    $hqTargets = array_values(array_filter(
+                        $hqTargets,
+                        fn($j) => (int)$j !== 42
+                    ));
+                }
 
                 if (!empty($hqTargets)) {
                     $builder->groupStart()
