@@ -437,6 +437,7 @@ $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);
 $routes->get('penilaian/kpi', 'PenilaianKPI::kpi_index', ['filter' => 'auth']);
 $routes->get('penilaian/kpi/detail/(:num)', 'PenilaianKPI::kpi_detail/$1', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/save_daily', 'PenilaianKPI::save_manual_daily', ['filter' => 'auth']);
 $routes->get('penilaian/absen', 'PenilaianKPI::penilaian_absen', ['filter' => 'auth']);
 $routes->post('penilaian/absen/save', 'PenilaianKPI::save_absen', ['filter' => 'auth']);
 $routes->post('insert_penilaian_KPI', 'PenilaianKPI::insert_penilaian', ['filter' => 'auth']);

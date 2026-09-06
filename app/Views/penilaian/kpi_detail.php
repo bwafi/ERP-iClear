@@ -104,11 +104,8 @@
                             </td>
                             <td class="text-center">
                                 <?php if ($isManual && $canEvaluate) : ?>
-                                    <a href="#formKualitas" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal"
-                                        data-bs-target="#modalKualitas"
-                                        data-nama="<?= esc($item['nama']) ?>"
-                                        data-current="<?= $item['nilai'] ?>">
-                                        Beri Nilai
+                                    <a href="#manualGridSection" class="btn btn-sm btn-outline-warning">
+                                        Input Harian
                                     </a>
                                 <?php elseif ($isManual) : ?>
                                     <span class="text-muted small">Tidak berwenang</span>
@@ -122,42 +119,18 @@
             </table>
         </div>
 
-        <?php if ($canEvaluate) : ?>
-            <div class="mt-3 border-top pt-3">
-                <h6 class="mb-2">Input Manual — Kualitas Pelayanan (skor 1–5)</h6>
-                <form method="post" action="<?= base_url('/penilaian/kpi/save') ?>">
-                    <input type="hidden" name="employee_id" value="<?= $target->ID_AKUN ?>">
-                    <input type="hidden" name="bulan" value="<?= $bulan ?>">
-                    <input type="hidden" name="tahun" value="<?= $tahun ?>">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label">Skor</label>
-                            <select class="form-select" name="skor_kualitas" required>
-                                <option value="">-- Pilih --</option>
-                                <?php foreach ([5 => 'Sangat Baik', 4 => 'Baik', 3 => 'Cukup', 2 => 'Kurang', 1 => 'Sangat Kurang'] as $v => $label) : ?>
-                                    <option value="<?= $v ?>" <?= $kualitasRaw == $v ? 'selected' : '' ?>>
-                                        <?= $v ?> (<?= $label ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label d-block text-transparent">.</label>
-                            <button type="submit" class="btn btn-primary w-100">
-                                <iconify-icon icon="solar:diskette-bold" class="me-1"></iconify-icon>Simpan
-                            </button>
-                        </div>
-                    </div>
-                </form>
-                <div class="text-muted small mt-2">
-                    Skala: 5 = 100%, 4 = 80%, 3 = 60%, 2 = 40%, 1 = 20%
-                </div>
-            </div>
-        <?php else : ?>
-            <div class="alert alert-light border mt-3 mb-0 small">
-                Anda tidak berwenang memberikan nilai manual untuk pegawai ini.
-            </div>
-        <?php endif; ?>
+        <div id="manualGridSection" class="mt-4">
+            <?= view('penilaian/_manual_grid', [
+                'pegawai'        => $target,
+                'jabatanRingkas' => $namaJabatan,
+                'manualGrid'     => $manualGrid ?? [],
+                'bulan'          => $bulan,
+                'tahun'          => $tahun,
+                'jumlahHari'     => (int)date('t', strtotime("$tahun-$bulan-01")),
+                'saveUrl'        => 'penilaian/kpi/save_daily',
+                'editable'       => $canEvaluate,
+            ]) ?>
+        </div>
     </div>
 </div>
 

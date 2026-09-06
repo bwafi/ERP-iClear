@@ -110,7 +110,8 @@ class ManualKpiScorer
     /**
      * Baca skor manual (0-100) dari kpi_evaluations utk periode yg sama.
      * Nilai yang disimpan evaluator (normalized_score) = persentase KPI.
-     * Jika lebih dari satu evaluator (kasus rata-rata), gunakan AVG.
+     * Kualitas Pelayanan: SUM(normalized_score) / jumlah hari kalender bulan
+     * (denominator tetap = 30/31 karena dinilai tiap hari, tanpa konsep OFF).
      */
     protected function manualEvaluationScore(int $emp, array $ctx, string $code): float
     {
@@ -122,18 +123,27 @@ class ManualKpiScorer
 
         $evaluationModel = new \App\Models\ModelKpiEvaluation();
         $row = $evaluationModel
-            ->select('AVG(normalized_score) as avg_norm')
+            ->select('COALESCE(SUM(IF(raw_score > 0, normalized_score, 0)), 0) as sum_norm')
             ->where('employee_id', $emp)
             ->where('kpi_component_id', (int)$component->id)
             ->where('period_year', (int)$ctx['year'])
             ->where('period_month', (int)$ctx['month'])
             ->first();
 
-        if (!$row || $row->avg_norm === null) {
+        if (!$row || $row->sum_norm === null) {
             return 0.0;
         }
 
-        return (float) $row->avg_norm;
+        // Kualitas Pelayanan dinilai SETIAP hari (tanpa OFF), jadi denominator =
+        // jumlah hari kalender bulan (mis. 30/31). Hari yang belum dinilai
+        // ikut sebagai 0. Konversi: sum_norm / jumlahHari (normalized = raw*20).
+        $totalDays = (int)date('t', strtotime(sprintf('%04d-%02d-01', (int)$ctx['year'], (int)$ctx['month'])));
+
+        if ($totalDays <= 0) {
+            return 0.0;
+        }
+
+        return round((float)$row->sum_norm / $totalDays, 2);
     }
 
     protected function feedTotal(int $emp, int $month, int $year): float

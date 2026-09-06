@@ -74,8 +74,8 @@ public function spv_kpi_index()
     $myUnit  = (int)$session->get('ID_UNIT');
     $myRole  = (int)$session->get('ID_JABATAN');
 
-    $bulan = $this->request->getGet('bulan') ?: date('m');
-    $tahun = $this->request->getGet('tahun') ?: date('Y');
+    $bulan = str_pad((int)($this->request->getGet('bulan') ?: date('m')), 2, '0', STR_PAD_LEFT);
+    $tahun = (int)($this->request->getGet('tahun') ?: date('Y'));
 
     // Kepala Toko (41) pada unit SPV
     $kepalaTokos = $this->AuthModel
@@ -84,11 +84,11 @@ public function spv_kpi_index()
         ->where('STATUS_PEGAWAI', 1)
         ->findAll();
 
-    // Ambil nilai evaluasi yang sudah ada utk periode tsb (raw_score 1-5)
-    $evaluationModel = new \App\Models\ModelKpiEvaluation();
-    $kualitas = [];
+    // Grid harian Kualitas Pelayanan per Kepala Toko (sumber: ManualGridService).
+    $gridSvc = new \App\Services\Kpi\ManualGridService();
+    $grids = [];
     foreach ($kepalaTokos as $kt) {
-        $kualitas[$kt->ID_AKUN] = $this->getRawScore($evaluationModel, $kt->ID_AKUN, 'KUALITAS_PELAYANAN', $bulan, $tahun);
+        $grids[$kt->ID_AKUN] = $gridSvc->components((int)$kt->ID_AKUN, (int)session()->get('ID_AKUN'), (int)$bulan, (int)$tahun);
     }
 
     return view('template', [
@@ -97,7 +97,7 @@ public function spv_kpi_index()
         'bulan'        => $bulan,
         'tahun'        => $tahun,
         'kepalaTokos'  => $kepalaTokos,
-        'kualitas'     => $kualitas,
+        'grids'        => $grids,
         'body'         => 'penilaian/spv_kpi',
     ]);
 }

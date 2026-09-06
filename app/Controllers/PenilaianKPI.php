@@ -282,8 +282,9 @@ class PenilaianKPI extends BaseController
             ->where('ID_JABATAN', (int)$target->ID_JABATAN)->get()->getRow();
         $namaJabatan = $jabatanRow ? $jabatanRow->NAMA_JABATAN : 'Pegawai';
 
-        // Kualitas Pelayanan (manual 1-5) — prefill raw score existing
-        $kualitasRaw = $this->getKualitasRaw((int)$target->ID_AKUN, $bulan, $tahun);
+        // Komponen manual harian (generik, >1 KPI manual didukung) utk grid input harian.
+        $manualGrid = (new \App\Services\Kpi\ManualGridService())
+            ->components((int)$target->ID_AKUN, (int)$me->ID_AKUN, $bulan, $tahun);
 
         // Tandai komponen manual vs otomatis berdasarkan kpi_components.
         // KONTROL_ASET kini dihitung OTOMATIS dari data aset (bukan input manual).
@@ -297,11 +298,7 @@ class PenilaianKPI extends BaseController
             $manualNameSet[$c->name] = true;
         }
 
-        $canEvaluate = \App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
-            (int)$me->ID_AKUN,
-            (int)$target->ID_AKUN,
-            'KUALITAS_PELAYANAN'
-        );
+        $canEvaluate = !empty($manualGrid);
 
         return view('template', [
             'target'        => $target,
@@ -309,12 +306,53 @@ class PenilaianKPI extends BaseController
             'jabatan'       => $kpi['jabatan'],
             'kpi'           => $kpi,
             'manualNameSet' => $manualNameSet,
-            'kualitasRaw'   => $kualitasRaw,
+            'manualGrid'    => $manualGrid,
             'canEvaluate'   => $canEvaluate,
             'bulan'         => $bulan,
             'tahun'         => $tahun,
             'body'          => 'penilaian/kpi_detail',
         ]);
+    }
+
+    /**
+     * Simpan skor harian KPI manual (1-5) per tanggal — endpoint grid harian.
+     * Mendukung banyak komponen manual sekaligus (>1 KPI manual).
+     * Otorisasi: target dalam scope + evaluator berwenang per komponen.
+     */
+    public function save_manual_daily()
+    {
+        $evaluatorId = (int)session()->get('ID_AKUN');
+        $employeeId  = (int)$this->request->getPost('employee_id');
+        $bulan       = (int)($this->request->getPost('bulan') ?: date('m'));
+        $tahun       = (int)($this->request->getPost('tahun') ?: date('Y'));
+        $tanggal     = (int)($this->request->getPost('tanggal') ?? 0);
+        $scores      = (array)$this->request->getPost('komponen');
+
+        $back = '/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun;
+
+        $me     = $this->AuthModel->getById($evaluatorId);
+        $target = $this->AuthModel->getById($employeeId);
+
+        if (!$target || (int)$target->STATUS_PEGAWAI !== 1) {
+            return redirect()->to($back)->with('error', 'Pegawai tidak ditemukan.');
+        }
+
+        if (!$me || !$this->isInScope($me, $target)) {
+            return redirect()->to($back)->with('error', 'Anda tidak berhak menilai KPI pegawai tersebut.');
+        }
+
+        $result = (new \App\Services\Kpi\ManualGridService())
+            ->saveDailyRatings($evaluatorId, $employeeId, $bulan, $tahun, $tanggal, $scores);
+
+        if (!empty($result['errors'])) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+
+        if ($result['saved'] > 0) {
+            return redirect()->to($back)->with('success', $result['saved'] . ' skor harian berhasil disimpan.');
+        }
+
+        return redirect()->to($back)->with('error', 'Tidak ada nilai yang dipilih untuk disimpan.');
     }
 
     /**
