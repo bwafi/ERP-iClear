@@ -162,8 +162,11 @@ class KpiEvaluationService
 
         if (!isset($data['raw_score'])) {
             $errors[] = 'raw_score is required';
-        } elseif ($data['raw_score'] < 1 || $data['raw_score'] > ($data['max_score'] ?? self::MAX_SCORE)) {
-            $errors[] = 'raw_score must be between 1 and ' . ($data['max_score'] ?? self::MAX_SCORE);
+        } elseif (!is_numeric($data['raw_score'])) {
+            $errors[] = 'raw_score must be numeric';
+        } elseif ((float)$data['raw_score'] < 0 || (float)$data['raw_score'] > (float)($data['max_score'] ?? self::MAX_SCORE)) {
+            // 0 (off) diperbolehkan sebagai nilai khusus; selain itu 1..max_score.
+            $errors[] = 'raw_score must be between 0 and ' . ($data['max_score'] ?? self::MAX_SCORE);
         }
 
         $component = $this->componentModel->where('id', $data['kpi_component_id'])->first();

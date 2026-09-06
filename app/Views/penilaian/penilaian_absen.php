@@ -2,7 +2,7 @@
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <div>
             <h4 class="fw-semibold mb-0">Penilaian Absensi</h4>
-            <small class="text-muted">Input skor harian (1-5) per komponen absensi. Skor = SUM / (26 x 5) x 100.</small>
+            <small class="text-muted">Input skor harian (0 = off, 1-5) per komponen absensi. Nilai = actual / (hari efektif x 5) x 100, hari efektif = 26 - jumlah hari OFF.</small>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
@@ -134,6 +134,7 @@
                                     <label class="form-label"><?= esc($c->name) ?></label>
                                     <select class="form-select" name="skor_<?= strtolower($c->code) ?>">
                                         <option value="">-</option>
+                                        <option value="0">off</option>
                                         <?php foreach ([5 => 'SB', 4 => 'Baik', 3 => 'Cukup', 2 => 'Kurang', 1 => 'Sangat Kurang'] as $v => $label) : ?>
                                             <option value="<?= $v ?>"><?= $v ?> (<?= $label ?>)</option>
                                         <?php endforeach; ?>
@@ -144,7 +145,7 @@
                     </div>
                 </div>
                 <div class="text-muted small mt-2">
-                    Pilih tanggal, isi skor 1-5 untuk aspek yang ditampilkan, lalu klik <strong>Simpan Semua</strong>. Aspek yang dikosongkan tidak diubah. Skor bulanan otomatis = SUM / (26 x 5) x 100.
+                    Pilih tanggal, isi skor 1-5 untuk aspek yang ditampilkan (0 = off), lalu klik <strong>Simpan Semua</strong>. Aspek yang dikosongkan (-) tidak diubah. Nilai bulanan = SUM / (hari efektif x 5) x 100, hari efektif = 26 - jumlah hari OFF.
                 </div>
             </div>
         </form>
@@ -154,25 +155,47 @@
                 <h5 class="mb-0">Riwayat Nilai Bulanan</h5>
             </div>
             <div class="card-body">
+                <style>
+                    .riwayat-absen { table-layout: fixed; width: 100%; }
+                    .riwayat-absen thead th,
+                    .riwayat-absen tbody td { vertical-align: middle; }
+                    .riwayat-absen th.riwayat-komponen,
+                    .riwayat-absen td.riwayat-komponen { width: 220px; }
+                    .riwayat-absen th.riwayat-date,
+                    .riwayat-absen td.riwayat-date {
+                        width: 38px;
+                        text-align: center;
+                        overflow: hidden;
+                    }
+                    .riwayat-absen .badge {
+                        white-space: nowrap;
+                        font-size: .7rem;
+                        padding: .28em .5em;
+                    }
+                </style>
                 <div class="table-responsive">
-                    <table class="table table-sm table-bordered align-middle text-center">
+                    <table class="table table-sm table-bordered align-middle text-center riwayat-absen">
                         <thead class="table-light">
                             <tr>
-                                <th class="text-start">Komponen</th>
+                                <th class="text-start riwayat-komponen">Komponen</th>
                                 <?php $jumlahHari = (int)date('t', strtotime("$tahun-$bulan-01")); ?>
                                 <?php for ($d = 1; $d <= $jumlahHari; $d++) : ?>
-                                    <th style="min-width:15px;"><?= $d ?></th>
+                                    <th class="riwayat-date"><?= $d ?></th>
                                 <?php endfor; ?>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($attendanceComponents as $c) : ?>
                                 <tr>
-                                    <td class="text-start fw-semibold"><?= esc($c->name) ?></td>
+                                    <td class="text-start fw-semibold riwayat-komponen"><?= esc($c->name) ?></td>
                                     <?php for ($d = 1; $d <= $jumlahHari; $d++) : ?>
-                                        <td>
+                                        <td class="riwayat-date">
                                             <?php if (isset($existing[$c->id][$d])) : ?>
-                                                <span class="badge bg-primary-subtle text-primary"><?= $existing[$c->id][$d] ?></span>
+                                                <?php if ((int)$existing[$c->id][$d] === 0) : ?>
+                                                    <span class="badge bg-danger-subtle text-danger">OFF</span>
+                                                <?php else : ?>
+                                                    <span class="badge bg-primary-subtle text-primary"><?= $existing[$c->id][$d] ?></span>
+                                                <?php endif; ?>
                                             <?php else : ?>
                                                 <span class="text-muted">-</span>
                                             <?php endif; ?>
@@ -184,7 +207,7 @@
                     </table>
                 </div>
                 <div class="text-muted small mt-2">
-                    Angka = skor harian (1-5) yang sudah tersimpan. Kosong (-) = belum dinilai.
+                    Angka = skor harian (1-5) yang sudah tersimpan. <span class="text-danger fw-semibold">OFF</span> = hari off (skor 0, tidak dihitung sebagai hari efektif). Kosong (-) = belum dinilai.
                 </div>
             </div>
         </div>

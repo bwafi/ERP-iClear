@@ -1138,9 +1138,15 @@ class PenilaianKPI extends BaseController
 
             $savedAnyAllowed = true;
             $fieldName = 'skor_' . strtolower($code);
-            $skor = (int)$this->request->getPost($fieldName);
-            if ($skor >= 1 && $skor <= 5) {
-                $inputValues[$code] = ['skor' => $skor, 'comp' => $comp];
+            $raw = $this->request->getPost($fieldName);
+            $skor = (int)$raw;
+            // "off" = 0 tersimpan sebagai raw_score 0; kosong ("-"/null) = tidak diubah.
+            if ($raw !== null && $raw !== '' && $skor >= 0 && $skor <= 5) {
+                $inputValues[$code] = [
+                    'skor' => $skor,
+                    'comp' => $comp,
+                    'isOff' => ($skor === 0),
+                ];
             }
         }
 
