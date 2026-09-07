@@ -26,11 +26,13 @@ class StokOpname extends BaseController
     protected $KartuStokModel;
     protected $StokOpnameModel;
     protected $StokOpnameDraftModel;
+    protected $PeriodeModel;
     protected $StokAwalModel;
     protected $BarangModel;
     protected $StokBarangModel;
     protected $HppBarangModel;
     protected $UnitModel;
+    protected $svc;
 
     public function __construct()
     {
@@ -38,25 +40,208 @@ class StokOpname extends BaseController
         $this->KartuStokModel = new ModelKartuStok();
         $this->StokOpnameModel = new ModelStokOpname();
         $this->StokOpnameDraftModel = new ModelStokOpnameDraft();
+        $this->PeriodeModel = new \App\Models\ModelStokOpnamePeriode();
         $this->StokAwalModel = new ModelStokAwal();
         $this->BarangModel = new ModelBarang();
         $this->StokBarangModel = new ModelStokBarang();
         $this->HppBarangModel = new ModelHppBarang();
         $this->UnitModel = new ModelUnit();
+        $this->svc = new \App\Services\StokOpnameService();
     }
 
     public function index()
     {
-        $akun =   $this->AuthModel->getById(session('ID_AKUN'));
-        $data =  array(
-            'akun' => $akun,
-            'stok' => $this->KartuStokModel->getKartuStok(),
-            'stokopname' => $this->StokOpnameDraftModel->getStokOpnameDraft(),
-            'stokopnamedraft' => $this->StokOpnameDraftModel->getStokOpname(),
-            'unit' => $this->UnitModel->getUnit(),
-            'body'  => 'stok/stok_opname'
-        );
-        return view('template', $data);
+        $akun = $this->AuthModel->getById(session('ID_AKUN'));
+
+        // Hanya Admin Center/Root, Direktur, dan Manager yang boleh memilih unit & tanggal.
+        // Operator/input stok opname mengikuti unit & tanggal miliknya sendiri (hari ini),
+        // sehingga tidak ada tanggal/unit yang membingungkan saat input.
+        $myJabatan = (int)session('ID_JABATAN');
+        $isCrossUnit = in_array($myJabatan, [0, 1, 2, 34], true);
+        $canPickUnit = (bool)$isCrossUnit;
+
+        // Filter selisih disediakan untuk role pengawas:
+        // Admin Center/Root, Direktur, Manager, dan SPV.
+        $canFilterSelisih = (bool)in_array($myJabatan, [0, 1, 2, 34, 40], true);
+
+        // Role pengawas HANYA boleh melihat (tidak boleh mulai/simpan/finalisasi/reopen).
+        $supervisorRoles = [0, 1, 2, 34, 40];
+        $canMutate = (bool)!in_array($myJabatan, $supervisorRoles, true);
+
+        $myUnit = (int)session('ID_UNIT');
+        $unit = $isCrossUnit ? (int)($this->request->getGet('unit') ?: $myUnit) : $myUnit;
+        if ($unit <= 0) {
+            $unitList0 = $this->UnitModel->getUnit();
+            $unit = !empty($unitList0) ? (int)($unitList0[0]->idunit ?? 1) : 1;
+        }
+
+        $tanggal = $isCrossUnit && $this->request->getGet('tanggal') !== null
+            ? (string)$this->request->getGet('tanggal')
+            : date('Y-m-d');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+            $tanggal = date('Y-m-d');
+        }
+
+        return view('template', [
+            'akun'             => $akun,
+            'unitList'         => $this->UnitModel->getUnit(),
+            'unit'             => $unit,
+            'myUnit'           => $myUnit,
+            'tanggal'          => $tanggal,
+            'canPickUnit'      => $canPickUnit,
+            'canFilterSelisih' => $canFilterSelisih,
+            'canMutate'        => $canMutate,
+            'periode'          => $this->svc->periode($unit, $tanggal),
+            'items'            => $this->svc->periodeItems($unit, $tanggal),
+            'historis'         => $this->PeriodeModel->getByUnit($unit, 20),
+            'body'             => 'stok/stok_opname',
+        ]);
+    }
+
+    /**
+     * Role pengawas (Admin Center/Root, Direktur, Manager, SPV) hanya boleh melihat.
+     * Guard dipakai di semua aksi mutasi (mulai/simpan/finalisasi/reopen).
+     */
+    private function isSupervisorOnly(): bool
+    {
+        return in_array((int)session('ID_JABATAN'), [0, 1, 2, 34, 40], true);
+    }
+
+    /**
+     * Mulai stok opname: buat periode DRAFT + seed daftar barang.
+     */
+    public function mulai()
+    {
+        if ($this->isSupervisorOnly()) {
+            return redirect()->to(base_url('stok_opname'))->with('gagal', 'Mode lihat: pengawas tidak dapat memulai stok opname.');
+        }
+
+        $isCrossUnit = in_array((int)session('ID_JABATAN'), [0, 1, 2, 34], true);
+        $unit = (int)$this->request->getPost('unit');
+        $tanggal = (string)($this->request->getPost('tanggal') ?: date('Y-m-d'));
+
+        // Operator dibatasi unit & tanggal sendiri, tidak bisa memaksa unit lain.
+        if (!$isCrossUnit) {
+            $unit = (int)session('ID_UNIT');
+            $tanggal = date('Y-m-d');
+        }
+
+        $url = base_url("stok_opname?unit=$unit&tanggal=$tanggal");
+
+        $r = $this->svc->createPeriode($unit, $tanggal, (int)session('ID_AKUN'));
+        if ($r['success']) {
+            return redirect()->to($url)->with('sukses', 'Stok opname dimulai sebagai DRAFT. Silakan isi jumlah real secara bertahap.');
+        }
+        return redirect()->to($url)->with('gagal', implode(' ', $r['errors']));
+    }
+
+    /**
+     * Simpan DRAFT: update jumlah_real (boleh dicicil/parsial).
+     * Jika aksi = finalisasi, simpan dulu lalu finalisasi (validasi lengkap).
+     */
+    public function simpan()
+    {
+        if ($this->isSupervisorOnly()) {
+            return redirect()->to(base_url('stok_opname'))->with('gagal', 'Mode lihat: pengawas tidak dapat menyimpan draft stok opname.');
+        }
+
+        $isCrossUnit = in_array((int)session('ID_JABATAN'), [0, 1, 2, 34], true);
+        $unit = (int)$this->request->getPost('unit');
+        $tanggal = (string)($this->request->getPost('tanggal') ?: date('Y-m-d'));
+        if (!$isCrossUnit) {
+            $unit = (int)session('ID_UNIT');
+            $tanggal = date('Y-m-d');
+        }
+        $aksi = (string)($this->request->getPost('aksi') ?: 'simpan');
+        $url = base_url("stok_opname?unit=$unit&tanggal=$tanggal");
+        $userId = (int)session('ID_AKUN');
+
+        $rows = (array)($this->request->getPost('items') ?: []);
+        $realRows = [];
+        foreach ($rows as $bid => $v) {
+            if (is_array($v) && isset($v['jumlah_real'])) {
+                $realRows[(int)$bid] = $v['jumlah_real'];
+            }
+        }
+        if (empty($realRows) && $aksi !== 'finalisasi') {
+            return redirect()->to($url)->with('gagal', 'Tidak ada data jumlah real yang disimpan.');
+        }
+
+        $r = $this->svc->saveDraft($unit, $tanggal, $realRows, $userId);
+        if (!$r['success']) {
+            return redirect()->to($url)->with('gagal', implode(' ', $r['errors']));
+        }
+
+        if ($aksi === 'finalisasi') {
+            $rf = $this->svc->finalize($unit, $tanggal, $userId);
+            if (!$rf['success']) {
+                return redirect()->to($url)->with('gagal', implode(' ', $rf['errors']) . ' Draft tetap tersimpan.');
+            }
+            $msg = 'Stok opname berhasil disimpan & difinalisasi (FINAL).';
+            if (!empty($rf['warning'])) {
+                $msg .= ' ' . $rf['warning'];
+            }
+            return redirect()->to($url)->with('sukses', $msg);
+        }
+
+        $msg = count($r['errors']) > 0
+            ? implode(' ', $r['errors'])
+            : 'Draft stok opname berhasil disimpan (' . (int)$r['saved'] . ' barang ter-update).';
+        return redirect()->to($url)->with('sukses', $msg);
+    }
+
+    /**
+     * Finalisasi: semua barang wajib terisi, salin ke stok_opname & kunci FINAL.
+     */
+    public function finalisasi()
+    {
+        if ($this->isSupervisorOnly()) {
+            return redirect()->to(base_url('stok_opname'))->with('gagal', 'Mode lihat: pengawas tidak dapat memfinalisasi stok opname.');
+        }
+
+        $isCrossUnit = in_array((int)session('ID_JABATAN'), [0, 1, 2, 34], true);
+        $unit = (int)$this->request->getPost('unit');
+        $tanggal = (string)($this->request->getPost('tanggal') ?: date('Y-m-d'));
+        if (!$isCrossUnit) {
+            $unit = (int)session('ID_UNIT');
+            $tanggal = date('Y-m-d');
+        }
+        $url = base_url("stok_opname?unit=$unit&tanggal=$tanggal");
+
+        $r = $this->svc->finalize($unit, $tanggal, (int)session('ID_AKUN'));
+        if ($r['success']) {
+            $msg = 'Stok opname berhasil difinalisasi. Data tercatat di riwayat & KPI.';
+            if (!empty($r['warning'])) {
+                $msg .= ' ' . $r['warning'];
+            }
+            return redirect()->to($url)->with('sukses', $msg);
+        }
+        return redirect()->to($url)->with('gagal', implode(' ', $r['errors']));
+    }
+
+    /**
+     * Reopen: koreksi hasil final -> kembali DRAFT.
+     */
+    public function reopen()
+    {
+        if ($this->isSupervisorOnly()) {
+            return redirect()->to(base_url('stok_opname'))->with('gagal', 'Mode lihat: pengawas tidak dapat membuka kembali (koreksi) stok opname.');
+        }
+
+        $isCrossUnit = in_array((int)session('ID_JABATAN'), [0, 1, 2, 34], true);
+        $unit = (int)$this->request->getPost('unit');
+        $tanggal = (string)($this->request->getPost('tanggal') ?: date('Y-m-d'));
+        if (!$isCrossUnit) {
+            $unit = (int)session('ID_UNIT');
+            $tanggal = date('Y-m-d');
+        }
+        $url = base_url("stok_opname?unit=$unit&tanggal=$tanggal");
+
+        $r = $this->svc->reopen($unit, $tanggal, (int)session('ID_AKUN'));
+        if ($r['success']) {
+            return redirect()->to($url)->with('sukses', 'Stok opname dibuka kembali (DRAFT). Koreksi jumlah real lalu finalisasi ulang.');
+        }
+        return redirect()->to($url)->with('gagal', implode(' ', $r['errors']));
     }
 
     public function loadTable()
@@ -151,116 +336,5 @@ class StokOpname extends BaseController
             'data' => $data,
         ]);
     }
-
-    public function simpan()
-    {
-        $data = $this->request->getPost('data');
-
-        if ($data && is_array($data)) {
-
-            foreach ($data as $row) {
-
-                if (!isset($row['checked']) || $row['checked'] != '1') {
-                    continue;
-                }
-
-                $datastokawal = $this->StokAwalModel->getByIdBarang($row['barang_idbarang']);
-                $databarang = $this->BarangModel->getById($row['barang_idbarang']);
-                $namaproduk = $databarang->nama_barang ?? 'Tidak diketahui';
-
-                if (!$datastokawal || $datastokawal->satuan_terkecil == null) {
-                    session()->setFlashdata(
-                        'gagal',
-                        'Barang "' . $namaproduk . '" belum memiliki data satuan di stok awal.'
-                    );
-                    return redirect()->back();
-                }
-
-                $satuanterkecil = $datastokawal->satuan_terkecil;
-
-                $datahppbarang = $this->HppBarangModel->getById($row['barang_idbarang']);
-                $hppbarang = $datahppbarang->hpp ?? 0;
-
-                $exists = $this->StokOpnameDraftModel
-                            ->existsForToday(
-                                $row['barang_idbarang'],
-                                $row['unit_idunit']
-                            );
-
-                if ($exists) {
-                    continue; // lewati jika sudah ada
-                }
-
-                $insertData = [
-                    'tanggal'           => date('Y-m-d'),
-                    'hpp'               => $hppbarang,
-                    'jumlah_real'       => $row['jumlah_real'],
-                    'jumlah_komp'       => $row['jumlah_komp'],
-                    'jumlah_selisih'    => $row['jumlah_selisih'],
-                    'satuan_terkecil'   => $satuanterkecil,
-                    'barang_idbarang'   => $row['barang_idbarang'],
-                    'unit_idunit'       => $row['unit_idunit']
-                ];
-
-                $this->StokOpnameDraftModel->insert_StokOpnameDraft($insertData);
-            }
-
-            return redirect()->to(base_url('stok_opname'))
-                            ->with('sukses', 'Data stok opname berhasil disimpan.');
-        }
-
-        return redirect()->back()
-                        ->with('gagal', 'Tidak ada data yang dipilih.');
-    }
-
-
-
-    public function simpanFix()
-    {
-        $data = $this->request->getPost('data');
-
-        if ($data && is_array($data)) {
-            foreach ($data as $row) {
-
-                if (!isset($row['checked']) || $row['checked'] != '1') {
-                    continue;
-                }
-
-                $datastokawal = $this->StokAwalModel->getByIdBarang($row['barang_idbarang']);
-                $databarang = $this->BarangModel->getById($row['barang_idbarang']);
-                $namaproduk = $databarang->nama_barang ?? 'Tidak diketahui';
-
-                if (!$datastokawal || $datastokawal->satuan_terkecil == null) {
-                    session()->setFlashdata('gagal', 'Barang "' . $namaproduk . '" belum memiliki data satuan di stok awal.');
-                    return redirect()->back();
-                }
-
-                $satuanterkecil = $datastokawal->satuan_terkecil;
-                $datahppbarang = $this->HppBarangModel->getById($row['barang_idbarang']);
-                $hppbarang = $datahppbarang->hpp ?? 0;
-
-                $exists = $this->StokOpnameModel->existsForToday($row['barang_idbarang'], $row['unit_idunit']);
-
-                if ($exists) {
-                    session()->setFlashdata('gagal', 'Barang "' . $namaproduk . '" dari unit yang sama sudah ada di draft stok opname hari ini.');
-                    return redirect()->back();
-                }
-
-                $data = array(
-                    'tanggal' => date('Y-m-d'),
-                    'hpp' => $hppbarang,
-                    'jumlah_real' => $row['jumlah_real'],
-                    'jumlah_komp' => $row['jumlah_komp'],
-                    'jumlah_selisih' => $row['jumlah_selisih'],
-                    'satuan_terkecil' => $satuanterkecil,
-                    'barang_idbarang' => $row['barang_idbarang'],
-                    'unit_idunit' => $row['unit_idunit']
-                );
-                $result = $this->StokOpnameModel->insert_StokOpnameFix($data);
-                if ($result) {
-                    return redirect()->to(base_url('stok_opname'))->with('sukses', 'Data stok opname berhasil disimpan.');
-                }
-            }
-        }
-    }
 }
+
