@@ -222,8 +222,12 @@ $routes->get('stok', 'StokAwal::stok', ['filter' => 'auth']);
 
 //stokopname
 $routes->get('stok_opname', 'StokOpname::index', ['filter' => 'auth']);
+$routes->post('stok_opname/mulai', 'StokOpname::mulai', ['filter' => 'auth']);
+$routes->post('stok_opname/simpan', 'StokOpname::simpan', ['filter' => 'auth']);
+$routes->post('stok_opname/finalisasi', 'StokOpname::finalisasi', ['filter' => 'auth']);
+$routes->post('stok_opname/reopen', 'StokOpname::reopen', ['filter' => 'auth']);
 $routes->post('insert/stokopname', 'StokOpname::simpan', ['filter' => 'auth']);
-$routes->post('insert/stokopnamefix', 'StokOpname::simpanFix', ['filter' => 'auth']);
+$routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => 'auth']);
 $routes->get('stokopname/loadtable', 'StokOpname::loadTable');
 
 
