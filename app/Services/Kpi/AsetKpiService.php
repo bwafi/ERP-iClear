@@ -89,7 +89,7 @@ class AsetKpiService
     /**
      * Seluruh aset master sebuah unit (aktif & nonaktif).
      *
-     * @return array each: id, unit, asset, kode_aset, quantity, is_active, keterangan
+     * @return array each: id, unit, asset, kode_aset, quantity, harga, is_active, keterangan
      */
     public function masterAssets(int $unit): array
     {
@@ -104,9 +104,66 @@ class AsetKpiService
             'asset'      => (string)$a->asset,
             'kode_aset'  => (string)$a->kode_aset,
             'quantity'   => (int)$a->quantity,
+            'harga'      => $a->harga !== null ? (float)$a->harga : null,
             'is_active'  => (int)$a->is_active === 1,
             'keterangan' => (string)$a->keterangan,
         ], $rows);
+    }
+
+    /**
+     * Seluruh aset master + info audit terakhir (untuk halaman Asset Master).
+     *
+     * Untuk setiap aset dicari audit FINAL TERBARU yang memuat aset tsb
+     * (aset nonaktif tetap menampilkan audit terakhir saat masih aktif).
+     *
+     * @return array each: id, unit, asset, kode_aset, quantity, harga, is_active, keterangan,
+     *                     last_audit => [periode_id, bulan, tahun, tanggal_audit, status,
+     *                                   quantity_ditemukan, hilang, kondisi, perawatan] | null
+     */
+    public function masterAssetsWithLastAudit(int $unit): array
+    {
+        $assets = $this->masterAssets($unit);
+
+        // Semua periode FINAL unit ini (terbaru dulu).
+        $periodes = $this->periodeModel()
+            ->where('unit', $unit)
+            ->where('status', 'FINAL')
+            ->orderBy('tahun', 'DESC')
+            ->orderBy('bulan', 'DESC')
+            ->findAll();
+
+        // Cache items per periode.
+        $itemsByPeriode = [];
+        foreach ($periodes as $p) {
+            $itemsByPeriode[(int)$p->id] = $this->itemModel()->itemsByPeriode((int)$p->id);
+        }
+
+        foreach ($assets as &$a) {
+            $asetId = $a['id'];
+            $a['last_audit'] = null;
+
+            foreach ($periodes as $p) {
+                $periodeId = (int)$p->id;
+                $item = $itemsByPeriode[$periodeId][$asetId] ?? null;
+                if ($item && $item->quantity_ditemukan !== null) {
+                    $ditemukan = (int)$item->quantity_ditemukan;
+                    $a['last_audit'] = [
+                        'periode_id'         => $periodeId,
+                        'bulan'              => (int)$p->bulan,
+                        'tahun'              => (int)$p->tahun,
+                        'tanggal_audit'      => (string)$p->tanggal_audit,
+                        'status'             => (string)$p->status,
+                        'quantity_ditemukan' => $ditemukan,
+                        'hilang'             => $a['quantity'] - $ditemukan,
+                        'kondisi'            => (string)$item->kondisi,
+                        'perawatan'          => (string)$item->perawatan,
+                    ];
+                    break;
+                }
+            }
+        }
+
+        return $assets;
     }
 
     /**
@@ -114,7 +171,7 @@ class AsetKpiService
      *
      * @return array ['success'=>bool, 'errors'=>string[], 'data'=>object|null]
      */
-    public function addMaster(int $unit, string $asset, int $quantity, int $createdBy, string $keterangan = '', ?string $kodeAset = null): array
+    public function addMaster(int $unit, string $asset, int $quantity, int $createdBy, string $keterangan = '', ?float $harga = null, ?string $kodeAset = null): array
     {
         $asset = trim($asset);
         if ($asset === '') {
@@ -135,6 +192,7 @@ class AsetKpiService
             'asset'      => $asset,
             'kode_aset'  => $kode,
             'quantity'   => $quantity,
+            'harga'      => $harga,
             'is_active'  => 1,
             'keterangan' => trim($keterangan) === '' ? null : trim($keterangan),
             'created_by' => $createdBy,
@@ -148,7 +206,7 @@ class AsetKpiService
     /**
      * Update master (field MASTER saja — tidak menyentuh hasil audit).
      */
-    public function updateMaster(int $id, int $unit, string $asset, string $kodeAset, int $quantity, string $keterangan = '', ?bool $isActive = null): array
+    public function updateMaster(int $id, int $unit, string $asset, string $kodeAset, int $quantity, string $keterangan = '', ?float $harga = null, ?bool $isActive = null): array
     {
         $model = $this->asetModel();
         $row = $model->find($id);
@@ -171,10 +229,11 @@ class AsetKpiService
         }
 
         $payload = [
-            'unit'      => $unit,
-            'asset'     => $asset,
-            'kode_aset' => $kode,
-            'quantity'  => $quantity,
+            'unit'       => $unit,
+            'asset'      => $asset,
+            'kode_aset'  => $kode,
+            'quantity'   => $quantity,
+            'harga'      => $harga,
             'keterangan' => trim($keterangan) === '' ? null : trim($keterangan),
         ];
         if ($isActive !== null) {
@@ -277,7 +336,7 @@ class AsetKpiService
                 $ditemukan += $ditemukanRow;
                 $hilangTotal += max(0, $selisih);
                 $auditedCount++;
-                
+
                 // Maintenance = qty terawat / baseline
                 if ((string)$item->perawatan === 'TERAWAT') {
                     $terawatQty += $ditemukanRow;
@@ -514,7 +573,7 @@ class AsetKpiService
                 return null;
             }
             $ditemukan += (int)$item->quantity_ditemukan;
-            
+
             // Maintenance = jumlah QUANTITY aset TERAWAT / baseline × 100
             if ((string)$item->perawatan === 'TERAWAT') {
                 $terawatQty += (int)$item->quantity_ditemukan;
@@ -562,3 +621,4 @@ class AsetKpiService
         return sprintf('AST%d-%04d', $unit, (int)date('His') % 10000);
     }
 }
+

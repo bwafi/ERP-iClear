@@ -401,7 +401,7 @@ class PenilaianKPI extends BaseController
             $unitId = $scope === null ? (int)array_key_first($unitList) : ($scope[0] ?? 0);
         }
 
-        $assets = $unitId ? $svc->masterAssets($unitId) : [];
+        $assets = $unitId ? $svc->masterAssetsWithLastAudit($unitId) : [];
 
         return view('template', [
             'myRole' => $myRole,
@@ -438,6 +438,7 @@ class PenilaianKPI extends BaseController
             (int)($this->request->getPost('quantity') ?: 1),
             $myId,
             (string)($this->request->getPost('keterangan') ?: ''),
+            $this->request->getPost('harga') !== '' ? (float)$this->request->getPost('harga') : null,
             (string)($this->request->getPost('kode_aset') ?: '')
         );
 
@@ -472,7 +473,8 @@ class PenilaianKPI extends BaseController
             (string)$this->request->getPost('asset'),
             (string)$this->request->getPost('kode_aset'),
             (int)($this->request->getPost('quantity') ?: 1),
-            (string)($this->request->getPost('keterangan') ?: '')
+            (string)($this->request->getPost('keterangan') ?: ''),
+            $this->request->getPost('harga') !== '' ? (float)$this->request->getPost('harga') : null
         );
 
         $back = '/penilaian/kpi/aset_master?unit=' . $unitId;

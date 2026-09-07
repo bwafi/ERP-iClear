@@ -14,6 +14,7 @@ class ModelAsetKpi extends Model
         'asset',
         'kode_aset',
         'quantity',
+        'harga',
         'is_active',
         'keterangan',
         'created_by',
