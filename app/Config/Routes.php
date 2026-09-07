@@ -438,6 +438,19 @@ $routes->get('penilaian/kpi', 'PenilaianKPI::kpi_index', ['filter' => 'auth']);
 $routes->get('penilaian/kpi/detail/(:num)', 'PenilaianKPI::kpi_detail/$1', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_daily', 'PenilaianKPI::save_manual_daily', ['filter' => 'auth']);
+
+// Asset Master (Admin Center/Root/Direktur/Manager: 0,1,2,34)
+$routes->get('penilaian/kpi/aset_master', 'PenilaianKPI::aset_master_index', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/aset_master/insert', 'PenilaianKPI::aset_master_insert', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/aset_master/update', 'PenilaianKPI::aset_master_update', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/aset_master/toggle', 'PenilaianKPI::aset_master_toggle', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/aset_master/delete', 'PenilaianKPI::aset_master_delete', ['filter' => 'auth']);
+
+// Kontrol Aset (SPV: 40)
+$routes->get('penilaian/kpi/kontrol_aset', 'PenilaianKPI::kontrol_aset_index', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/kontrol_aset/save', 'PenilaianKPI::kontrol_aset_save', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/kontrol_aset/finalize', 'PenilaianKPI::kontrol_aset_finalize', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/kontrol_aset/reopen', 'PenilaianKPI::kontrol_aset_reopen', ['filter' => 'auth']);
 $routes->get('penilaian/absen', 'PenilaianKPI::penilaian_absen', ['filter' => 'auth']);
 $routes->post('penilaian/absen/save', 'PenilaianKPI::save_absen', ['filter' => 'auth']);
 $routes->post('insert_penilaian_KPI', 'PenilaianKPI::insert_penilaian', ['filter' => 'auth']);

@@ -355,6 +355,335 @@ class PenilaianKPI extends BaseController
         return redirect()->to($back)->with('error', 'Tidak ada nilai yang dipilih untuk disimpan.');
     }
 
+    /*
+     * ─────────────────────────────────────────────────────────────────────────
+     * ASSET MASTER — Baseline Aset (Admin Center / Root / Direktur / Manager)
+     * ─────────────────────────────────────────────────────────────────────────
+     * CRUD baseline aset (unit, nama, kode, quantity, aktif/nonaktif, keterangan).
+     * Quantity master TIDAK pernah berubah otomatis hasil audit.
+     */
+
+    private function isAssetMasterManager(): bool
+    {
+        return in_array((int)session()->get('ID_JABATAN'), [0, 1, 2, 34], true);
+    }
+
+    public function aset_master_index()
+    {
+        if (!$this->isAssetMasterManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengakses Asset Master.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $myId = (int)session()->get('ID_AKUN');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $db = \Config\Database::connect();
+        $units = $db->table('unit')
+            ->select('idunit, NAMA_UNIT AS unit_name')
+            ->orderBy('idunit', 'ASC')
+            ->get()
+            ->getResultObject();
+        $unitList = [];
+
+        foreach ($units as $u) {
+            $unitId = (int) $u->idunit;
+
+            if ($scope === null || in_array($unitId, $scope, true)) {
+                $unitList[$unitId] = $u->unit_name ?? ('Unit ' . $unitId);
+            }
+        }
+
+        $unitId = (int)($this->request->getGet('unit') ?: $myUnit);
+        if (!isset($unitList[$unitId])) {
+            $unitId = $scope === null ? (int)array_key_first($unitList) : ($scope[0] ?? 0);
+        }
+
+        $assets = $unitId ? $svc->masterAssets($unitId) : [];
+
+        return view('template', [
+            'myRole' => $myRole,
+            'myUnit' => $myUnit,
+            'scope' => $scope,
+            'unitList' => $unitList,
+            'unitId' => $unitId,
+            'assets' => $assets,
+            'canDelete' => in_array($myRole, [0, 1, 2], true),
+            'body' => 'penilaian/aset_master',
+        ]);
+    }
+
+    public function aset_master_insert()
+    {
+        if (!$this->isAssetMasterManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Asset Master.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myId = (int)session()->get('ID_AKUN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $unitId = (int)$this->request->getPost('unit');
+        if ($unitId < 1 || ($scope !== null && !in_array($unitId, $scope, true))) {
+            return redirect()->to('/penilaian/kpi/aset_master')->with('error', 'Unit tidak valid / di luar scope Anda.');
+        }
+
+        $result = $svc->addMaster(
+            $unitId,
+            (string)$this->request->getPost('asset'),
+            (int)($this->request->getPost('quantity') ?: 1),
+            $myId,
+            (string)($this->request->getPost('keterangan') ?: ''),
+            (string)($this->request->getPost('kode_aset') ?: '')
+        );
+
+        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+        return redirect()->to($back)->with('success', 'Aset master ' . $result['data']->kode_aset . ' (' . $result['data']->asset . ') berhasil ditambahkan.');
+    }
+
+    public function aset_master_update()
+    {
+        if (!$this->isAssetMasterManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Asset Master.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myId = (int)session()->get('ID_AKUN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $id = (int)$this->request->getPost('id');
+        $unitId = (int)$this->request->getPost('unit');
+        if ($unitId < 1 || ($scope !== null && !in_array($unitId, $scope, true))) {
+            return redirect()->to('/penilaian/kpi/aset_master')->with('error', 'Unit tidak valid / di luar scope Anda.');
+        }
+
+        $result = $svc->updateMaster(
+            $id,
+            $unitId,
+            (string)$this->request->getPost('asset'),
+            (string)$this->request->getPost('kode_aset'),
+            (int)($this->request->getPost('quantity') ?: 1),
+            (string)($this->request->getPost('keterangan') ?: '')
+        );
+
+        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+        return redirect()->to($back)->with('success', 'Aset master berhasil diperbarui.');
+    }
+
+    public function aset_master_toggle()
+    {
+        if (!$this->isAssetMasterManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Asset Master.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $id = (int)$this->request->getPost('id');
+        $active = (int)$this->request->getPost('active') === 1;
+        $unitId = (int)$this->request->getPost('unit');
+
+        $result = $svc->toggleMaster($id, $active);
+        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+        return redirect()->to($back)->with('success', 'Status aset berhasil diubah.');
+    }
+
+    public function aset_master_delete()
+    {
+        if (!$this->isAssetMasterManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Asset Master.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $id = (int)$this->request->getPost('id');
+        $unitId = (int)$this->request->getPost('unit');
+
+        // Hanya Admin Center / root / Direktur yang boleh hapus.
+        if (!in_array($myRole, [0, 1, 2], true)) {
+            return redirect()->to('/penilaian/kpi/aset_master?unit=' . $unitId)->with('error', 'Hanya Admin Center yang dapat menghapus aset master.');
+        }
+
+        $result = $svc->deleteMaster($id);
+        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+        return redirect()->to($back)->with('success', 'Aset master berhasil dihapus.');
+    }
+
+    /*
+     * ─────────────────────────────────────────────────────────────────────────
+     * KONTROL ASET — Audit Bulanan (Admin/Root/Direktur/SPV)
+     * ─────────────────────────────────────────────────────────────────────────
+     * Audit per unit per bulan: quantity_ditemukan, kondisi (informasi),
+     * perawatan (TERAWAT/TIDAK_TERAWAT), keterangan. Wajib lengkap + FINAL.
+     */
+
+    private function isKontrolManager(): bool
+    {
+        return in_array((int)session()->get('ID_JABATAN'), [0, 1, 2, 40], true);
+    }
+
+    public function kontrol_aset_index()
+    {
+        if (!$this->isKontrolManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengakses Kontrol Aset.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $myId = (int)session()->get('ID_AKUN');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $bulan = (int)($this->request->getGet('bulan') ?: date('m'));
+        $tahun = (int)($this->request->getGet('tahun') ?: date('Y'));
+
+        $db = \Config\Database::connect();
+        $units = $db->table('unit')
+            ->select('idunit, NAMA_UNIT AS unit_name')
+            ->orderBy('idunit', 'ASC')
+            ->get()
+            ->getResultObject();
+        $unitList = [];
+        foreach ($units as $u) {
+            $unitId = (int) $u->idunit;
+
+            if ($scope === null || in_array($unitId, $scope, true)) {
+                $unitList[$unitId] = $u->unit_name ?? ('Unit ' . $unitId);
+            }
+        }
+
+        $unitId = (int)($this->request->getGet('unit') ?: $myUnit);
+        if (!isset($unitList[$unitId])) {
+            $unitId = $scope[0] ?? 0;
+        }
+
+        $data = $unitId ? $svc->controlData($unitId, $bulan, $tahun) : ['assets' => [], 'periode' => null, 'summary' => []];
+
+        return view('template', [
+            'myUnit' => $myUnit,
+            'scope' => $scope,
+            'unitList' => $unitList,
+            'unitId' => $unitId,
+            'bulan' => str_pad((string)$bulan, 2, '0', STR_PAD_LEFT),
+            'tahun' => $tahun,
+            'assets' => $data['assets'],
+            'periode' => $data['periode'],
+            'summary' => $data['summary'],
+            'kondisiList' => \App\Services\Kpi\AsetKpiService::KONDISI_LIST,
+            'perawatanList' => \App\Services\Kpi\AsetKpiService::PERAWATAN_LIST,
+            'body' => 'penilaian/kontrol_aset',
+        ]);
+    }
+
+    public function kontrol_aset_save()
+    {
+        if (!$this->isKontrolManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Kontrol Aset.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myId = (int)session()->get('ID_AKUN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $unitId = (int)$this->request->getPost('unit');
+        if ($unitId < 1 || ($scope !== null && !in_array($unitId, $scope, true))) {
+            return redirect()->to('/penilaian/kpi/kontrol_aset')->with('error', 'Unit tidak valid / di luar scope Anda.');
+        }
+
+        $bulan = (int)$this->request->getPost('bulan');
+        $tahun = (int)$this->request->getPost('tahun');
+        $tanggal = (string)($this->request->getPost('tanggal_audit') ?: sprintf('%04d-%02d-%02d', $tahun, $bulan, min(date('j'), cal_days_in_month(CAL_GREGORIAN, $bulan, $tahun))));
+        $rows = (array)$this->request->getPost('aset');
+
+        $result = $svc->saveControl($unitId, $bulan, $tahun, $tanggal, $myId, $rows);
+        $back = '/penilaian/kpi/kontrol_aset?unit=' . $unitId . '&bulan=' . str_pad((string)$bulan, 2, '0', STR_PAD_LEFT) . '&tahun=' . $tahun;
+
+        if (!empty($result['errors'])) {
+            return redirect()->to($back)->with('error', implode(' ', array_slice($result['errors'], 0, 3)));
+        }
+        if ($result['saved'] > 0) {
+            return redirect()->to($back)->with('success', 'Draft audit ' . $result['saved'] . ' aset berhasil disimpan.');
+        }
+        return redirect()->to($back)->with('error', 'Tidak ada aset yang disimpan.');
+    }
+
+    public function kontrol_aset_finalize()
+    {
+        if (!$this->isKontrolManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Kontrol Aset.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myId = (int)session()->get('ID_AKUN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $unitId = (int)$this->request->getPost('unit');
+        if ($unitId < 1 || ($scope !== null && !in_array($unitId, $scope, true))) {
+            return redirect()->to('/penilaian/kpi/kontrol_aset')->with('error', 'Unit tidak valid / di luar scope Anda.');
+        }
+
+        $bulan = (int)$this->request->getPost('bulan');
+        $tahun = (int)$this->request->getPost('tahun');
+        $tanggal = (string)($this->request->getPost('tanggal_audit') ?: sprintf('%04d-%02d-%02d', $tahun, $bulan, min(date('j'), cal_days_in_month(CAL_GREGORIAN, $bulan, $tahun))));
+
+        $result = $svc->finalizeControl($unitId, $bulan, $tahun, $tanggal, $myId);
+        $back = '/penilaian/kpi/kontrol_aset?unit=' . $unitId . '&bulan=' . str_pad((string)$bulan, 2, '0', STR_PAD_LEFT) . '&tahun=' . $tahun;
+
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+        return redirect()->to($back)->with('success', 'Audit berhasil FINAL — KPI KONTROL_ASET akan dihitung.');
+    }
+
+    public function kontrol_aset_reopen()
+    {
+        if (!$this->isKontrolManager()) {
+            return redirect()->to('/penilaian/kpi')->with('error', 'Anda tidak berhak mengoperasikan Kontrol Aset.');
+        }
+
+        $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $myId = (int)session()->get('ID_AKUN');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
+
+        $unitId = (int)$this->request->getPost('unit');
+        if ($unitId < 1 || ($scope !== null && !in_array($unitId, $scope, true))) {
+            return redirect()->to('/penilaian/kpi/kontrol_aset')->with('error', 'Unit tidak valid / di luar scope Anda.');
+        }
+
+        $bulan = (int)$this->request->getPost('bulan');
+        $tahun = (int)$this->request->getPost('tahun');
+
+        $result = $svc->reopenControl($unitId, $bulan, $tahun);
+        $back = '/penilaian/kpi/kontrol_aset?unit=' . $unitId . '&bulan=' . str_pad((string)$bulan, 2, '0', STR_PAD_LEFT) . '&tahun=' . $tahun;
+
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(' ', $result['errors']));
+        }
+        return redirect()->to($back)->with('success', 'Audit dibuka kembali (DRAFT) — dapat diedit & finalisasi ulang.');
+    }
+
     /**
      * Simpan skor Kualitas Pelayanan (1-5) via KpiEvaluationService.
      * Server-side authorization: hanya evaluator berwenang (SPV -> KT, unit sama).
@@ -421,22 +750,22 @@ class PenilaianKPI extends BaseController
         if (in_array($myRole, [0, 1, 2, 34], true)) {
             return null;
         }
-        
+
         // SPV: baca dari spv_units mapping
         if ($myRole === 40 && $myId) {
             $mappings = $this->db->table('spv_units')
                 ->where('spv_id', $myId)
                 ->get()
                 ->getResultArray();
-            
+
             if (!empty($mappings)) {
                 return array_column($mappings, 'unit_id');
             }
-            
+
             // Fallback ke ID_UNIT untuk backward compatibility
             return [$myUnit];
         }
-        
+
         return [$myUnit];
     }
 
@@ -1045,7 +1374,7 @@ class PenilaianKPI extends BaseController
             if ($target && !$this->isInScope($me, $target)) {
                 $target = null;
             }
-            
+
             // Ambil nama unit untuk ditampilkan
             if ($target) {
                 $unitRow = $this->db->table('unit')
@@ -1201,7 +1530,7 @@ class PenilaianKPI extends BaseController
         // Cek apakah tanggal ini sudah memiliki data (untuk konfirmasi)
         if ($confirm !== 1) {
             // Extract component IDs from inputValues
-            $componentIds = array_map(function($item) {
+            $componentIds = array_map(function ($item) {
                 return (int)$item['comp']->id;
             }, $inputValues);
 

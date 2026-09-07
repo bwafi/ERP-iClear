@@ -87,7 +87,8 @@
                     <?php foreach (($kpi['detail_kpi'] ?? []) as $item) : ?>
                         <?php
                         $isManual  = isset($manualNameSet[$item['nama']]);
-                        $badge     = $item['nilai'] >= 90 ? 'success' : ($item['nilai'] >= 75 ? 'warning' : 'danger');
+                        $nilaiNull = ($item['nilai'] ?? null) === null;
+                        $badge     = $nilaiNull ? 'secondary' : ($item['nilai'] >= 90 ? 'success' : ($item['nilai'] >= 75 ? 'warning' : 'danger'));
                         ?>
                         <tr>
                             <td class="fw-semibold"><?= esc($item['nama']) ?></td>
@@ -100,7 +101,11 @@
                                 <?php endif; ?>
                             </td>
                             <td class="text-center">
-                                <span class="badge bg-<?= $badge ?>"><?= $item['nilai'] ?></span>
+                                <?php if ($nilaiNull) : ?>
+                                    <span class="badge bg-secondary">Belum ada audit</span>
+                                <?php else : ?>
+                                    <span class="badge bg-<?= $badge ?>"><?= $item['nilai'] ?></span>
+                                <?php endif; ?>
                             </td>
                             <td class="text-center">
                                 <?php if ($isManual && $canEvaluate) : ?>

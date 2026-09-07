@@ -67,6 +67,11 @@ class KpiScoreService
     {
         $total = 0.0;
         foreach ($items as $item) {
+            // Komponen bernilai null (mis. KONTROL_ASET "belum ada audit")
+            // TIDAK dianggap 0 — dikecualikan dari total.
+            if (($item['nilai'] ?? null) === null) {
+                continue;
+            }
             $total += ($item['nilai'] * $item['bobot']) / 100.0;
         }
         return $total;

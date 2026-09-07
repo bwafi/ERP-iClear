@@ -166,9 +166,11 @@ class Core extends Model
         foreach ($menu as $value) {
             array_push($response, $value->idmenu);
             array_push($response, $value->parent);
-            if ($value->sub == 1) {
+            if ($value->sub == 1 && $value->parent > 0) {
                 $parent = db_connect()->table("menu")->where("idmenu", $value->parent)->get()->getRowArray();
-                array_push($response, $parent['parent']);
+                if ($parent) {
+                    array_push($response, $parent['parent']);
+                }
             }
         }
         return $response;

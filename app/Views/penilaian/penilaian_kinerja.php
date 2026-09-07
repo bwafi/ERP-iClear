@@ -318,7 +318,11 @@
 
                                     <?php
 
-                                    if($kpi['nilai'] >= 90){
+                                    if($kpi['nilai'] === null){
+
+                                        $badge = 'secondary';
+
+                                    } elseif($kpi['nilai'] >= 90){
 
                                         $badge = 'success';
 
@@ -335,7 +339,7 @@
                                     ?>
 
                                     <span class="badge bg-<?= $badge ?>">
-                                        <?= $kpi['nilai'] ?>
+                                        <?= $kpi['nilai'] ?? 'Belum ada nilai' ?>
                                     </span>
 
                                 </td>

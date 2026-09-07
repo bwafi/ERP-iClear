@@ -147,10 +147,9 @@ class KpiCalculationService
                         $date
                     );
                 } elseif ($component->code === 'KONTROL_ASET') {
-                    // Kontrol Aset = OTOMATIS dari data aset per unit.
-                    // = (jumlah aset kondisi "Baik" di unit) / (total aset unit) * 100
-                    // Aset tanpa unit dianggap milik HO (di luar scope unit cabang).
-                    $achievement = $this->kontrolAsetScore((int)$unitId);
+                    // Kontrol Aset = hasil audit bulanan SPV FINAL + lengkap (AsetKpiService).
+                    // null = Belum Diaudit (belum final atau belum lengkap, tanpa fallback).
+                    $achievement = $this->kontrolAsetScore((int)$unitId, (int)$month, (int)$year);
                 } else {
                     // Manual non-attendance: gunakan ManualKpiScorer
                     $scorer = new ManualKpiScorer();
@@ -166,6 +165,9 @@ class KpiCalculationService
                 }
             }
 
+            $achievementVal = ($achievement === null) ? null : round($achievement, 4);
+            $weightedVal    = ($achievement === null) ? null : round(($achievement / 100) * (float)$w->weight, 4);
+
             $items[] = [
                 'kpi_component_id'    => $component->id,
                 'code'                => $component->code,
@@ -173,8 +175,8 @@ class KpiCalculationService
                 'type'                => $component->type,
                 'calculation_strategy' => $component->calculation_strategy,
                 'weight'              => (float)$w->weight,
-                'achievement'         => round($achievement, 4),
-                'weighted_score'      => round(($achievement / 100) * (float)$w->weight, 4),
+                'achievement'         => $achievementVal,
+                'weighted_score'      => $weightedVal,
             ];
         }
 
@@ -381,26 +383,13 @@ class KpiCalculationService
      * - Aset tanpa unit dianggap milik HO → di luar scope unit cabang.
      * - Total unit 0 → 0 (belum ada aset tercatat utk unit tsb).
      */
-    protected function kontrolAsetScore(int $unitId): float
+    /**
+     * Skor KONTROL_ASET dari audit bulanan SPV FINAL (AsetKpiService).
+     * null = Belum Diaudit (belum final/lengkap, tanpa fallback).
+     */
+    protected function kontrolAsetScore(int $unitId, int $bulan, int $tahun): ?float
     {
-        $db = \Config\Database::connect();
-
-        $total = (int) $db->table('asset')
-            ->where('unit', $unitId)
-            ->where('deleted', 0)
-            ->countAllResults();
-
-        if ($total <= 0) {
-            return 0.0;
-        }
-
-        $baik = (int) $db->table('asset')
-            ->where('unit', $unitId)
-            ->where('deleted', 0)
-            ->where('LOWER(kondisi)', 'baik')
-            ->countAllResults();
-
-        return round(min($baik / $total * 100.0, 100.0), 4);
+        return (new \App\Services\Kpi\AsetKpiService())->kpiScore($unitId, $bulan, $tahun);
     }
 
     /**
