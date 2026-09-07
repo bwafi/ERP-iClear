@@ -300,6 +300,21 @@ class PenilaianKPI extends BaseController
 
         $canEvaluate = !empty($manualGrid);
 
+        // Customer Satisfaction Supervisor (manual 0-100) — opsi input bulanan.
+        $supervisorSvc = new \App\Services\Kpi\SupervisorKpiService();
+        $canEvaluateCs = (int)($target->ID_JABATAN ?? 0) === 40
+            && \App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+                (int)$me->ID_AKUN,
+                (int)$target->ID_AKUN,
+                'CUSTOMER_SATISFACTION'
+            );
+        $csCodeSet = [];
+        $csComp = (new \App\Models\ModelKpiComponent())->where('code', 'CUSTOMER_SATISFACTION')->first();
+        if ($csComp) {
+            $csCodeSet[$csComp->code] = $csComp->name;
+        }
+        $csValue = $canEvaluateCs ? $supervisorSvc->customerSatisfaction((int)$target->ID_AKUN, (int)$bulan, (int)$tahun) : null;
+
         return view('template', [
             'target'        => $target,
             'namaJabatan'   => $namaJabatan,
@@ -308,6 +323,10 @@ class PenilaianKPI extends BaseController
             'manualNameSet' => $manualNameSet,
             'manualGrid'    => $manualGrid,
             'canEvaluate'   => $canEvaluate,
+            'canEvaluateCs' => $canEvaluateCs,
+            'csCodeSet'     => $csCodeSet,
+            'csNameSet'     => array_flip($csCodeSet),
+            'csValue'       => $csValue,
             'bulan'         => $bulan,
             'tahun'         => $tahun,
             'body'          => 'penilaian/kpi_detail',
@@ -737,6 +756,34 @@ class PenilaianKPI extends BaseController
 
         return redirect()->to('/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun)
             ->with('success', 'Skor Kualitas Pelayanan berhasil disimpan.');
+    }
+
+    /**
+     * Simpan Customer Satisfaction (manual 0-100) untuk periode Supervisor.
+     */
+    public function save_customer_satisfaction()
+    {
+        $evaluatorId = (int)session()->get('ID_AKUN');
+        $employeeId  = (int)$this->request->getPost('employee_id');
+        $bulan       = (int)($this->request->getPost('bulan') ?: date('m'));
+        $tahun       = (int)($this->request->getPost('tahun') ?: date('Y'));
+        $nilai       = (float)$this->request->getPost('nilai');
+
+        $back = '/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun;
+
+        $target = $this->AuthModel->getById($employeeId);
+        if (!$target || (int)$target->STATUS_PEGAWAI !== 1) {
+            return redirect()->to($back)->with('error', 'Pegawai tidak ditemukan.');
+        }
+
+        $result = (new \App\Services\Kpi\SupervisorKpiService())
+            ->saveCustomerSatisfaction($employeeId, $evaluatorId, $bulan, $tahun, $nilai);
+
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(', ', $result['errors']));
+        }
+
+        return redirect()->to($back)->with('success', 'Customer Satisfaction berhasil disimpan.');
     }
 
     /**

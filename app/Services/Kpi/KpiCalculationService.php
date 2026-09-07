@@ -75,8 +75,19 @@ class KpiCalculationService
                 continue;
             }
 
-            // ==== AUTOMATIC: pakai calculator strategy ====
-            if ($component->type === 'automatic' && $component->calculation_strategy) {
+            // ==== SUPERVISOR / SPV (jabatan 40): 7 komponen area (dihitung di SupervisorKpiService) ====
+            if ($positionId === 40 && in_array($component->code, SupervisorKpiService::CODES, true)) {
+                $achievement = $this->supervisorService()->achievement(
+                    $component->code,
+                    $employeeId,
+                    $unitId,
+                    (int)$month,
+                    (int)$year,
+                    $context,
+                    $targetContext,
+                    $date
+                );
+            } elseif ($component->type === 'automatic' && $component->calculation_strategy) {
                 $calculator = $this->calculators[$component->calculation_strategy] ?? null;
                 if ($calculator === null) {
                     continue; // strategy belum terdaftar
@@ -216,6 +227,11 @@ class KpiCalculationService
     public function scoreService(): KpiScoreService
     {
         return new KpiScoreService();
+    }
+
+    public function supervisorService(): SupervisorKpiService
+    {
+        return new SupervisorKpiService();
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int

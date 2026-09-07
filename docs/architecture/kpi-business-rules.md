@@ -74,12 +74,28 @@ Context `gaji` memakai `customer` polos.
 | 35 Admin | Omset 70, Tutup Kasir 10, Stok Opname 10, Absensi 10 | 40/20/20/20 |
 | 36 Teknisi | Omset 70, Omset Teknisi 15 (=omset), Customer 15 | 40/20/20/20 |
 | 41 Kepala Toko | Omset 70, Customer 10, Tutup Kasir 10, Opname 10 | 40/20/20/20 |
-| 40 SPV | gaji: omset 70/cust 10; non: omset 10/cust 70; + Operasional 10, Divisi 10 | SPV pakai RATA (divisi) |
+| 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | — (tanpa absen) |
 | 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 40/20/20/20 |
 | 43 Pengiklan | gaji: Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 | 40/20/20/20 |
 | 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 40/20/20/20 |
 | 45 IT | Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20 | 40/20/20/20 |
 | 46 PIC (non-gaji) | Budget Toko 20, Budget Global 30, Omset Cabang 50 | 40/20/20/20 |
+
+### Area Supervisor (SPV) — KPI Kini (Kode 40)
+
+| Komponen | Sumber data | Status |
+|---|---|---|
+| OMZET_WILAYAH | `SUM(actual omset cabang) / SUM(target omset cabang) × 100`, target dari `kpi_targets` (`OMSET_CABANG`) | config DB + calculator existing |
+| TARGET_CABANG | avg `(actual/target) × 100` per cabang; target dari `kpi_targets` (`OMSET_CABANG`) | config DB + calculator existing |
+| PRODUKTIVITAS_CABANG | unique customer bulan berjalan / bulan sebelumnya × 100; sumber `penjualan.id_pelanggan` | config DB + calculator existing |
+| SOP | avg nilai KPI "Kepatuhan SOP" Kepala Toko (sudah dihitung sistem); **bukan** checklist SOP baru | ambil nilai existing (kpi_evaluations) |
+| KINERJA_KEPALA_TOKO | avg total KPI Kepala Toko (tanpa absensi/kedisiplinan); ambil dari `KpiCalculationService` | ambil nilai existing |
+| KEDISIPLINAN_TEAM | avg attendance_score seluruh team cabang (Kepala Toko + Teknisi + Admin + team lainnya) | ambil nilai existing (attendance_score) |
+| CUSTOMER_SATISFACTION | manual input 0–100 per bulan; disimpan di `kpi_evaluations` (saat ini); siap migrasi ke `GOOGLE_BUSINESS_PROFILE` | input manual / siap dikembangkan |
+
+- Bobot total kpi-group = 100% (`kpi_weights.weight_group = 'kpi'`).
+- Tidak ada komponen absen (attendance group) untuk SPV.
+- Scope area = `spv_units (spv_id = ID_AKUN)` → daftar unit cabang, fallback unit sendiri jika tidak ada mapping.
 
 ### Tunjangan
 
