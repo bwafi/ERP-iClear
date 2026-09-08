@@ -72,7 +72,7 @@ $codes = \App\Services\Kpi\SupervisorKpiService::CODES;
 ok('SupervisorKpiService::CODES = 7', count($codes) === 7);
 
 $row = $db->query(
-    "SELECT w.kpi_component_id, c.code, w.weight
+    "SELECT w.kpi_component_id, c.code, w.weight, w.weight_group
      FROM kpi_weights w JOIN kpi_components c ON c.id = w.kpi_component_id
      WHERE w.position_id = 40 AND w.weight_group = 'kpi'"
 )->getResultArray();
@@ -81,6 +81,19 @@ $sum = array_sum($weightMap);
 ok('Bobot jabatan 40 (kpi group) total = 100', near($sum, 100), "sum={$sum}");
 foreach ($codes as $c) {
     ok("Bobot komponen {$c} terpasang di jabatan 40", isset($weightMap[$c]), var_export($weightMap[$c] ?? null, true));
+}
+
+// Grup absen SPV = 40/20/20/20 (Detail Absensi tampil seperti team)
+$absenRows = $db->query(
+    "SELECT c.code, w.weight FROM kpi_weights w
+     JOIN kpi_components c ON c.id = w.kpi_component_id
+     WHERE w.position_id = 40 AND w.weight_group = 'absen'"
+)->getResultArray();
+$absenMap = array_column($absenRows, 'weight', 'code');
+$absenSum = array_sum($absenMap);
+ok('Bobot jabatan 40 (absen group) total = 100', near($absenSum, 100), "sum={$absenSum}");
+foreach (['KEHADIRAN' => 40, 'KEBERSIHAN' => 20, 'SERAGAM' => 20, 'KEPATUHAN_SOP' => 20] as $c => $w) {
+    ok("Bobot absen {$c} = {$w}", isset($absenMap[$c]) && near($absenMap[$c], $w), var_export($absenMap[$c] ?? null, true));
 }
 
 // ── 2. Siapkan data uji (satu transaction) ───────────────────────
@@ -261,6 +274,16 @@ foreach ($kpi['detail_kpi'] as $d) {
 ok('skor_total = Σ (nilai×bobot/100)', near($kpi['skor_total'], round($weightedSum, 2)), "total={$kpi['skor_total']} vs {$weightedSum}");
 ok('Detail nilai Omzet Wilayah cocok', near($detail['Omzet Wilayah'], $ow), var_export($detail['Omzet Wilayah'], true));
 ok('Detail nilai Customer Satisfaction = 92', near($detail['Customer Satisfaction'], 92), var_export($detail['Customer Satisfaction'], true));
+
+// Detail Absensi SPV ikut tampil (bobot sama dgn team)
+$detailAbsen = array_column($kpi['detail_absen'] ?? [], 'bobot', 'nama');
+ok('Detail Absensi SPV = 4 kriteria', count($kpi['detail_absen'] ?? []) === 4, json_encode($kpi['detail_absen'] ?? []));
+$absenWeightsOk =
+    near($detailAbsen['Kehadiran'] ?? null, 40)
+    && near($detailAbsen['Kebersihan'] ?? null, 20)
+    && near($detailAbsen['Seragam'] ?? null, 20)
+    && near($detailAbsen['Kepatuhan SOP'] ?? null, 20);
+ok('Detail Absensi SPV bobot = 40/20/20/20', $absenWeightsOk, json_encode($detailAbsen));
 
 // ── 6. Session scope berbeda (SPV 56, scope [1,4]) ───────────────
 $ow56 = $svc->achievement('OMZET_WILAYAH', $SPV56, 4, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);

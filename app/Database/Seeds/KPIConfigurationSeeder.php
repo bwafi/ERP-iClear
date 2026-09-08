@@ -429,6 +429,11 @@ class KPIConfigurationSeeder extends Seeder
             ['kpi_component_id' => $componentMap['KINERJA_KEPALA_TOKO'],    'position_id' => 40, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
             ['kpi_component_id' => $componentMap['KEDISIPLINAN_TEAM'],      'position_id' => 40, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
             ['kpi_component_id' => $componentMap['CUSTOMER_SATISFACTION'],  'position_id' => 40, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            // SPV absen (40) — grup absen utk tampilan Detail Absensi, bobot MIRIP team (40/20/20/20).
+            ['kpi_component_id' => $componentMap['KEHADIRAN'],     'position_id' => 40, 'weight' => 40, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['KEBERSIHAN'],    'position_id' => 40, 'weight' => 20, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['SERAGAM'],       'position_id' => 40, 'weight' => 20, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['KEPATUHAN_SOP'], 'position_id' => 40, 'weight' => 20, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
 
             // Customer Service (42)
             ['kpi_component_id' => $componentMap['OMSET_TOKO'], 'position_id' => 42, 'weight' => 70, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],

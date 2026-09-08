@@ -129,5 +129,31 @@ class SupervisorKpiSeeder extends Seeder
                 'created_by'       => null,
             ]);
         }
+
+        // Ganti mapping grup absen jabatan 40 — bobot SAMA dengan team (40/20/20/20)
+        // agar Detail Absensi SPV ikut tampil (skor_absen tetap dari calculateSPVAttendance).
+        $weights->where('position_id', 40)->where('weight_group', 'absen')->delete();
+
+        $absen = [
+            'KEHADIRAN'     => 40,
+            'KEBERSIHAN'    => 20,
+            'SERAGAM'       => 20,
+            'KEPATUHAN_SOP' => 20,
+        ];
+        foreach ($absen as $code => $weight) {
+            $row = $components->where('code', $code)->get()->getRow();
+            if (!$row) {
+                continue;
+            }
+            $weights->upsert([
+                'kpi_component_id' => (int)$row->id,
+                'position_id'      => 40,
+                'weight'           => $weight,
+                'weight_group'     => 'absen',
+                'effective_from'   => '2024-01-01',
+                'effective_to'     => null,
+                'created_by'       => null,
+            ]);
+        }
     }
 }

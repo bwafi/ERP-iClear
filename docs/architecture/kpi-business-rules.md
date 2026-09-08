@@ -74,7 +74,7 @@ Context `gaji` memakai `customer` polos.
 | 35 Admin | Omset 70, Tutup Kasir 10, Stok Opname 10, Absensi 10 | 40/20/20/20 |
 | 36 Teknisi | Omset 70, Omset Teknisi 15 (=omset), Customer 15 | 40/20/20/20 |
 | 41 Kepala Toko | Omset 70, Customer 10, Tutup Kasir 10, Opname 10 | 40/20/20/20 |
-| 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | — (tanpa absen) |
+| 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | 40/20/20/20 |
 | 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 40/20/20/20 |
 | 43 Pengiklan | gaji: Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 | 40/20/20/20 |
 | 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 40/20/20/20 |
@@ -94,7 +94,7 @@ Context `gaji` memakai `customer` polos.
 | CUSTOMER_SATISFACTION | manual input 0–100 per bulan; disimpan di `kpi_evaluations` (saat ini); siap migrasi ke `GOOGLE_BUSINESS_PROFILE` | input manual / siap dikembangkan |
 
 - Bobot total kpi-group = 100% (`kpi_weights.weight_group = 'kpi'`).
-- Tidak ada komponen absen (attendance group) untuk SPV.
+- Grup absen (`weight_group = 'absen'`) SPV = 40/20/20/20 (Kehadiran/Kebersihan/Seragam/Kepatuhan SOP) — SAMA dengan team, agar Detail Absensi tampil di kartu KPI. Nilai per-kriteria tetap dari `AttendanceAggregationService::calculateSPVAttendance` (kehadiran SPV sendiri + rata-rata KT/Kadiv), bukan memengaruhi 7 komponen KPI.
 - Scope area = `spv_units (spv_id = ID_AKUN)` → daftar unit cabang, fallback unit sendiri jika tidak ada mapping.
 
 ### Tunjangan
