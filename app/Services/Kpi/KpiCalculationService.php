@@ -4,6 +4,7 @@ namespace App\Services\Kpi;
 use App\Models\ModelKpiComponent;
 use App\Models\ModelKpiTarget;
 use App\Models\ModelKpiWeight;
+use App\Services\Konten\ContentKpiService;
 use App\Services\Kpi\AttendanceAggregationService;
 
 /**
@@ -86,6 +87,13 @@ class KpiCalculationService
                     $context,
                     $targetContext,
                     $date
+                );
+            // ==== MULTIMEDIA / CREATIVE (jabatan 44): Digital Marketing (ContentKpiService) ====
+            } elseif ($positionId === 44 && in_array($component->code, ContentKpiService::COMPONENT_CODES, true)) {
+                $achievement = $this->kontenService()->scoreByCode(
+                    $component->code,
+                    (int)$month,
+                    (int)$year
                 );
             } elseif ($component->type === 'automatic' && $component->calculation_strategy) {
                 $calculator = $this->calculators[$component->calculation_strategy] ?? null;
@@ -232,6 +240,11 @@ class KpiCalculationService
     public function supervisorService(): SupervisorKpiService
     {
         return new SupervisorKpiService();
+    }
+
+    public function kontenService(): ContentKpiService
+    {
+        return new ContentKpiService();
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int
