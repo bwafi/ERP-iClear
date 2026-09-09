@@ -69,6 +69,77 @@
 </div>
 
 <div class="card shadow-sm border-0 mt-3">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-0">Pertumbuhan Channel (<?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?>)</h5>
+            <small class="text-muted">Growth vs periode sebelumnya. Achievement = Growth / Target Growth × 100.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <?php if (($kpi['channel']['kpi_achievement'] ?? null) !== null) : ?>
+                <span class="badge text-bg-primary fs-6 py-2">
+                    Rata-rata Achievement KPI: <?= number_format($kpi['channel']['kpi_achievement'], 2, ',', '.') ?>%
+                </span>
+            <?php endif; ?>
+            <a href="<?= base_url('konten/channel') ?>" class="btn btn-light btn-sm">Input Performa Channel</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <?php if (empty($kpi['channel']['rows'])) : ?>
+            <div class="text-muted small">Belum ada data performa channel untuk periode ini.</div>
+        <?php else : ?>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Channel</th>
+                            <th>Metric</th>
+                            <th class="text-end">Previous</th>
+                            <th class="text-end">Actual</th>
+                            <th class="text-center">Growth</th>
+                            <th class="text-center">Target</th>
+                            <th class="text-center">Achievement</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($kpi['channel']['rows'] as $c) : ?>
+                            <tr>
+                                <td class="fw-semibold"><?= esc($c['channel_name']) ?></td>
+                                <td><?= esc($c['metric_name']) ?>
+                                    <?php if ($c['is_kpi']) : ?>
+                                        <span class="badge bg-success-subtle text-success ms-1">KPI</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-end"><?= $c['previous'] !== null ? number_format($c['previous'], 0, ',', '.') : '<span class="text-muted">N/A</span>' ?></td>
+                                <td class="text-end fw-semibold"><?= number_format($c['actual'], 0, ',', '.') ?></td>
+                                <td class="text-center">
+                                    <?php if ($c['growth'] === null) : ?>
+                                        <span class="badge text-bg-secondary">N/A</span>
+                                    <?php else : ?>
+                                        <span class="badge <?= $c['growth'] >= 0 ? 'text-bg-success' : 'text-bg-danger' ?>">
+                                            <?= $c['growth'] > 0 ? '+' : '' ?><?= number_format($c['growth'], 2, ',', '.') ?>%
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center"><?= $c['target'] !== null ? number_format($c['target'], 2, ',', '.') . '%' : '-' ?></td>
+                                <td class="text-center">
+                                    <?php if ($c['achievement'] === null) : ?>
+                                        <span class="text-muted">-</span>
+                                    <?php else : ?>
+                                        <span class="badge <?= $c['achievement'] >= 100 ? 'text-bg-success' : ($c['achievement'] >= 80 ? 'text-bg-warning' : 'text-bg-danger') ?>">
+                                            <?= number_format($c['achievement'], 2, ',', '.') ?>%
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mt-3">
     <div class="card-header bg-white">
         <h5 class="mb-0">Ringkasan KPI Creative (<?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?>)</h5>
         <small class="text-muted">Achievement &amp; bobot sesuai engine KPI existing. Satu content dihitung satu kali.</small>

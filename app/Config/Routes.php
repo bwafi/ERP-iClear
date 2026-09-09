@@ -546,6 +546,9 @@ $routes->group('konten', ['filter' => 'auth'], function ($routes) {
     $routes->post('publication/delete', 'Konten::hapus_publication');
     $routes->post('performance/save', 'Konten::save_performance');
     $routes->post('performance/delete', 'Konten::hapus_performance');
+    $routes->get('channel', 'Konten::channel');
+    $routes->post('channel/simpan', 'Konten::channel_simpan');
+    $routes->post('channel/hapus', 'Konten::channel_hapus');
 });
 
 //Barang Rusak1
