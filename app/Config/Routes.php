@@ -551,6 +551,18 @@ $routes->group('konten', ['filter' => 'auth'], function ($routes) {
     $routes->post('channel/hapus', 'Konten::channel_hapus');
 });
 
+// Marketing Digital (KPI Kepala Divisi)
+$routes->group('marketing', ['filter' => 'auth'], function ($routes) {
+    $routes->get('', 'Marketing::index');
+    $routes->get('leads', 'Marketing::leads');
+    $routes->post('leads/simpan', 'Marketing::leads_simpan');
+    $routes->post('leads/status', 'Marketing::leads_status');
+    $routes->post('leads/hapus', 'Marketing::leads_hapus');
+    $routes->get('ads', 'Marketing::ads');
+    $routes->post('ads/simpan', 'Marketing::ads_simpan');
+    $routes->post('ads/hapus', 'Marketing::ads_hapus');
+});
+
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);
 $routes->get('input_barang_rusak', 'BarangRusak::input', ['filter' => 'auth']);
