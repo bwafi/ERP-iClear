@@ -23,7 +23,7 @@ use App\Models\ModelAuth;
 class ManualGridService
 {
     private const ATTENDANCE_CODES = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
-    private const EXCLUDED_CODES = ['KONTROL_ASET'];
+    private const EXCLUDED_CODES = ['KONTROL_ASET', 'CUSTOMER_SATISFACTION'];
 
     /**
      * Komponen manual harian yang valid untuk target + evaluator pada periode.

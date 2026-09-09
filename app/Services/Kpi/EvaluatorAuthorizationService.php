@@ -100,7 +100,7 @@ class EvaluatorAuthorizationService
         // Manager (34): non-Kehadiran utk Admin Center, SPV, Kadiv, IT.
         34 => [
             0  => self::NON_HADIR,
-            40 => self::NON_HADIR,
+            40 => ['KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP', 'KUALITAS_PELAYANAN', 'CUSTOMER_SATISFACTION'],
             43 => self::NON_HADIR,
             45 => self::NON_HADIR,
         ],

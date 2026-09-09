@@ -438,6 +438,7 @@ $routes->get('penilaian/kpi', 'PenilaianKPI::kpi_index', ['filter' => 'auth']);
 $routes->get('penilaian/kpi/detail/(:num)', 'PenilaianKPI::kpi_detail/$1', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_daily', 'PenilaianKPI::save_manual_daily', ['filter' => 'auth']);
+$routes->post('penilaian/kpi/save_customer_satisfaction', 'PenilaianKPI::save_customer_satisfaction', ['filter' => 'auth']);
 
 // Asset Master (Admin Center/Root/Direktur/Manager: 0,1,2,34)
 $routes->get('penilaian/kpi/aset_master', 'PenilaianKPI::aset_master_index', ['filter' => 'auth']);
@@ -528,6 +529,24 @@ $routes->post('update_namahandphone', 'NamaHandphone::udpateNamaHandphone', ['fi
 $routes->post('delete_namahandphone', 'NamaHandphone::deleteNamaHandphone', ['filter' => 'auth']);
 $routes->get('nama_handphone/export', 'NamaHandphone::export_handphone', ['filter' => 'auth']);
 $routes->post('nama_handphone/import', 'NamaHandphone::import_handphone', ['filter' => 'auth']);
+//Digital Marketing — Dashboard Content Management (KPI Multimedia/Creative)
+$routes->group('konten', ['filter' => 'auth'], function ($routes) {
+    $routes->get('dashboard', 'Konten::dashboard');
+    $routes->get('/', 'Konten::index');
+    $routes->get('dt', 'Konten::dt');
+    $routes->get('tambah', 'Konten::form');
+    $routes->get('edit/(:num)', 'Konten::form/$1');
+    $routes->get('detail/(:num)', 'Konten::detail/$1');
+    $routes->get('delete/(:num)', 'Konten::hapus/$1');
+    $routes->post('simpan', 'Konten::simpan');
+    $routes->post('status', 'Konten::setStatus');
+    $routes->post('qc', 'Konten::qc');
+    $routes->post('checklist', 'Konten::checklist');
+    $routes->post('publication/save', 'Konten::save_publication');
+    $routes->post('publication/delete', 'Konten::hapus_publication');
+    $routes->post('performance/save', 'Konten::save_performance');
+    $routes->post('performance/delete', 'Konten::hapus_performance');
+});
 
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);

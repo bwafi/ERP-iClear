@@ -87,6 +87,7 @@
                     <?php foreach (($kpi['detail_kpi'] ?? []) as $item) : ?>
                         <?php
                         $isManual  = isset($manualNameSet[$item['nama']]);
+                        $isCs      = isset($csNameSet[$item['nama']]);
                         $nilaiNull = ($item['nilai'] ?? null) === null;
                         $badge     = $nilaiNull ? 'secondary' : ($item['nilai'] >= 90 ? 'success' : ($item['nilai'] >= 75 ? 'warning' : 'danger'));
                         ?>
@@ -108,7 +109,15 @@
                                 <?php endif; ?>
                             </td>
                             <td class="text-center">
-                                <?php if ($isManual && $canEvaluate) : ?>
+                                <?php if ($isCs) : ?>
+                                    <?php if ($canEvaluateCs) : ?>
+                                        <a href="#csInputSection" class="btn btn-sm btn-outline-warning">
+                                            Input Bulanan
+                                        </a>
+                                    <?php else : ?>
+                                        <span class="text-muted small">Tidak berwenang</span>
+                                    <?php endif; ?>
+                                <?php elseif ($isManual && $canEvaluate) : ?>
                                     <a href="#manualGridSection" class="btn btn-sm btn-outline-warning">
                                         Input Harian
                                     </a>
@@ -135,6 +144,34 @@
                 'saveUrl'        => 'penilaian/kpi/save_daily',
                 'editable'       => $canEvaluate,
             ]) ?>
+        </div>
+
+        <div id="csInputSection" class="mt-4 card border-0 bg-light">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-1">Customer Satisfaction (0-100)</h6>
+                <small class="text-muted d-block mb-3">
+                    Input manual bulanan untuk periode <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?>.
+                    Sumber data saat ini: MANUAL.
+                </small>
+                <?php if ($canEvaluateCs) : ?>
+                    <form method="post" action="<?= base_url('penilaian/kpi/save_customer_satisfaction') ?>" class="row g-2 align-items-center">
+                        <div class="col-auto">
+                            <input type="number" step="0.01" min="0" max="100" class="form-control" name="nilai"
+                                   value="<?= esc($csValue ?? '') ?>" placeholder="0 - 100" required>
+                        </div>
+                        <div class="col-auto">
+                            <input type="hidden" name="employee_id" value="<?= (int)$target->ID_AKUN ?>">
+                            <input type="hidden" name="bulan" value="<?= (int)$bulan ?>">
+                            <input type="hidden" name="tahun" value="<?= (int)$tahun ?>">
+                            <button type="submit" class="btn btn-warning">
+                                <iconify-icon icon="solar:upload-bold" class="me-1"></iconify-icon>Simpan
+                            </button>
+                        </div>
+                    </form>
+                <?php else : ?>
+                    <small class="text-muted">Anda tidak berwenang mengisi Customer Satisfaction pegawai ini.</small>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 </div>
