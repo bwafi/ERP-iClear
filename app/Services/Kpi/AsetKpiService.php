@@ -12,7 +12,8 @@ use App\Models\ModelAuditAsetItem;
  * Dua bagian yang benar-benar terpisah:
  *
  * 1. ASSET MASTER (Admin Center / Root / Direktur / Manager)
- *    - Mengelola baseline aset: unit, nama, kode (AST{unit}-XXXX), quantity,
+ *    - Mengelola baseline aset: lokasi (unit), asal (dari_unit), nama,
+ *      kode otomatis AST-{KODE_UNIT}-XXXX (mengikuti asal), quantity,
  *      is_active (aktif/nonaktif), keterangan.
  *    - Quantity master TIDAK PERNAH berubah karena hasil audit.
  *
@@ -89,18 +90,54 @@ class AsetKpiService
     /**
      * Seluruh aset master sebuah unit (aktif & nonaktif).
      *
-     * @return array each: id, unit, asset, kode_aset, quantity, harga, is_active, keterangan
+     * @return array each: id, unit, dari_unit, asset, kode_aset, quantity, harga,
+     *                     is_active, keterangan, asal_name, asal_code, unit_name
      */
     public function masterAssets(int $unit): array
     {
-        $rows = $this->asetModel()
-            ->where('unit', $unit)
-            ->orderBy('kode_aset', 'ASC')
-            ->findAll();
+        return $this->masterAssetsFiltered($unit, 0);
+    }
+
+    /**
+     * Aset master difilter oleh lokasi (unit) dan/atau asal (dari_unit).
+     * 0 = semua.
+     *
+     * @return array each: id, unit, unit_name, dari_unit, asal_name, asal_code,
+     *                     asset, kode_aset, quantity, harga, is_active, keterangan
+     */
+    public function masterAssetsFiltered(int $unit = 0, int $dari = 0): array
+    {
+        $builder = $this->asetModel();
+        if ($unit > 0) {
+            $builder->where('unit', $unit);
+        }
+        if ($dari > 0) {
+            $builder->where('dari_unit', $dari);
+        }
+        $rows = $builder->orderBy('kode_aset', 'ASC')->findAll();
+
+        $unitNames = [];
+        $unitCodes = $this->unitCodes();
+        $unitRows = \Config\Database::connect()
+            ->table('unit')
+            ->select('idunit, NAMA_UNIT')
+            ->whereIn('idunit', array_unique(array_merge(
+                array_map(fn($a) => (int)$a->unit, $rows),
+                array_map(fn($a) => (int)$a->dari_unit, $rows)
+            )))
+            ->get()
+            ->getResultObject();
+        foreach ($unitRows as $u) {
+            $unitNames[(int)$u->idunit] = (string)$u->NAMA_UNIT;
+        }
 
         return array_map(fn($a) => [
             'id'         => (int)$a->id,
             'unit'       => (int)$a->unit,
+            'unit_name'  => $unitNames[(int)$a->unit] ?? ('Unit ' . (int)$a->unit),
+            'dari_unit'  => (int)$a->dari_unit,
+            'asal_name'  => $unitNames[(int)$a->dari_unit] ?? ('Unit ' . (int)$a->dari_unit),
+            'asal_code'  => $unitCodes[(int)$a->dari_unit] ?? 'XXX',
             'asset'      => (string)$a->asset,
             'kode_aset'  => (string)$a->kode_aset,
             'quantity'   => (int)$a->quantity,
@@ -120,29 +157,34 @@ class AsetKpiService
      *                     last_audit => [periode_id, bulan, tahun, tanggal_audit, status,
      *                                   quantity_ditemukan, hilang, kondisi, perawatan] | null
      */
-    public function masterAssetsWithLastAudit(int $unit): array
+    public function masterAssetsWithLastAudit(int $unit = 0, int $dari = 0): array
     {
-        $assets = $this->masterAssets($unit);
+        $assets = $this->masterAssetsFiltered($unit, $dari);
 
-        // Semua periode FINAL unit ini (terbaru dulu).
-        $periodes = $this->periodeModel()
-            ->where('unit', $unit)
-            ->where('status', 'FINAL')
-            ->orderBy('tahun', 'DESC')
-            ->orderBy('bulan', 'DESC')
-            ->findAll();
-
-        // Cache items per periode.
+        // Lokasi aset yang tampil (untuk pencarian periode FINAL per unit).
+        $units = array_values(array_unique(array_map(fn($a) => $a['unit'], $assets)));
+        $periodes = [];
         $itemsByPeriode = [];
-        foreach ($periodes as $p) {
-            $itemsByPeriode[(int)$p->id] = $this->itemModel()->itemsByPeriode((int)$p->id);
+        foreach ($units as $u) {
+            $perUnit = $this->periodeModel()
+                ->where('unit', $u)
+                ->where('status', 'FINAL')
+                ->orderBy('tahun', 'DESC')
+                ->orderBy('bulan', 'DESC')
+                ->findAll();
+            foreach ($perUnit as $p) {
+                $periodes[$u][] = $p;
+                if (!isset($itemsByPeriode[(int)$p->id])) {
+                    $itemsByPeriode[(int)$p->id] = $this->itemModel()->itemsByPeriode((int)$p->id);
+                }
+            }
         }
 
         foreach ($assets as &$a) {
             $asetId = $a['id'];
             $a['last_audit'] = null;
 
-            foreach ($periodes as $p) {
+            foreach ($periodes[$a['unit']] ?? [] as $p) {
                 $periodeId = (int)$p->id;
                 $item = $itemsByPeriode[$periodeId][$asetId] ?? null;
                 if ($item && $item->quantity_ditemukan !== null) {
@@ -167,11 +209,12 @@ class AsetKpiService
     }
 
     /**
-     * Tambah aset MASTER baru. Kode otomatis AST{unit}-{4 digit acak unik}.
+     * Tambah aset MASTER baru. Kode otomatis AST-{KODE_UNIT}-{4 digit acak unik}
+     * mengikuti unit asal (dariUnit). Lokasi aset = unit.
      *
      * @return array ['success'=>bool, 'errors'=>string[], 'data'=>object|null]
      */
-    public function addMaster(int $unit, string $asset, int $quantity, int $createdBy, string $keterangan = '', ?float $harga = null, ?string $kodeAset = null): array
+    public function addMaster(int $unit, int $dariUnit, string $asset, int $quantity, int $createdBy, string $keterangan = '', ?float $harga = null, ?string $kodeAset = null): array
     {
         $asset = trim($asset);
         if ($asset === '') {
@@ -180,15 +223,19 @@ class AsetKpiService
         if ($quantity < 1) {
             return ['success' => false, 'errors' => ['Quantity master minimal 1.'], 'data' => null];
         }
+        if ($dariUnit < 1) {
+            return ['success' => false, 'errors' => ['Asal barang (dari unit) harus dipilih.'], 'data' => null];
+        }
 
         $kode = trim((string)$kodeAset);
         if ($kode === '') {
-            $kode = $this->generateKode($unit);
+            $kode = $this->generateKode($dariUnit);
         }
 
         $model = $this->asetModel();
         if (!$model->insert([
             'unit'       => $unit,
+            'dari_unit'  => $dariUnit,
             'asset'      => $asset,
             'kode_aset'  => $kode,
             'quantity'   => $quantity,
@@ -205,8 +252,11 @@ class AsetKpiService
 
     /**
      * Update master (field MASTER saja — tidak menyentuh hasil audit).
+     *
+     * Kode aset ikut asal (dari_unit): jika asal berubah, kode otomatis
+     * digenerate ulang dengan prefix baru.
      */
-    public function updateMaster(int $id, int $unit, string $asset, string $kodeAset, int $quantity, string $keterangan = '', ?float $harga = null, ?bool $isActive = null): array
+    public function updateMaster(int $id, int $unit, int $dariUnit, string $asset, ?string $kodeAset, int $quantity, string $keterangan = '', ?float $harga = null, ?bool $isActive = null): array
     {
         $model = $this->asetModel();
         $row = $model->find($id);
@@ -215,21 +265,31 @@ class AsetKpiService
         }
 
         $asset = trim($asset);
-        $kode  = trim($kodeAset);
-        if ($asset === '' || $kode === '') {
-            return ['success' => false, 'errors' => ['Nama aset dan kode wajib diisi.']];
+        if ($asset === '' || $dariUnit < 1) {
+            return ['success' => false, 'errors' => ['Nama aset dan asal (dari unit) wajib diisi.']];
         }
         if ($quantity < 1) {
             return ['success' => false, 'errors' => ['Quantity master minimal 1.']];
         }
 
-        // Kode harus unik (selain milik sendiri).
-        if ($model->where('kode_aset', $kode)->where('id !=', $id)->countAllResults() > 0) {
-            return ['success' => false, 'errors' => ['Kode aset sudah dipakai aset lain.']];
+        $kode = trim((string)$kodeAset);
+        if ($kode !== '') {
+            // Kode custom: wajib unik (selain milik sendiri).
+            if ($model->where('kode_aset', $kode)->where('id !=', $id)->countAllResults() > 0) {
+                return ['success' => false, 'errors' => ['Kode aset sudah dipakai aset lain.']];
+            }
+        } else {
+            // Kode otomatis: pertahankan bila asal tetap; regenerate bila asal berubah.
+            $kode = trim((string)$row->kode_aset);
+            $prefix = 'AST-' . $this->unitCode($dariUnit) . '-';
+            if (strpos($kode, $prefix) !== 0) {
+                $kode = $this->generateKode($dariUnit);
+            }
         }
 
         $payload = [
             'unit'       => $unit,
+            'dari_unit'  => $dariUnit,
             'asset'      => $asset,
             'kode_aset'  => $kode,
             'quantity'   => $quantity,
@@ -606,19 +666,47 @@ class AsetKpiService
     }
 
     /**
-     * Generate kode aset unik: AST{unit}-{4 digit acak}.
+     * Kode singkat unit (HO, PRO, JBR, BYW, PDN, ...) untuk kode aset.
+     *
+     * @return array<int,string> idunit => kode_unit
      */
-    protected function generateKode(int $unit): string
+    public function unitCodes(): array
     {
+        $rows = \Config\Database::connect()
+            ->table('unit')
+            ->select('idunit, kode_unit')
+            ->where("kode_unit IS NOT NULL AND kode_unit <> ''", null, false)
+            ->get()
+            ->getResultObject();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int)$r->idunit] = strtoupper((string)$r->kode_unit);
+        }
+        return $map;
+    }
+
+    /**
+     * Generate kode aset unik mengikuti asal: AST-{KODE_UNIT}-{4 digit acak}.
+     */
+    protected function generateKode(int $dariUnit): string
+    {
+        $prefix = 'AST-' . $this->unitCode($dariUnit) . '-';
         $model = $this->asetModel();
         for ($i = 0; $i < 20; $i++) {
-            $kode = sprintf('AST%d-%04d', $unit, random_int(0, 9999));
+            $kode = $prefix . sprintf('%04d', random_int(0, 9999));
             if ($model->where('kode_aset', $kode)->countAllResults() === 0) {
                 return $kode;
             }
         }
 
-        return sprintf('AST%d-%04d', $unit, (int)date('His') % 10000);
+        return $prefix . sprintf('%04d', (int)date('His') % 10000);
+    }
+
+    protected function unitCode(int $unitId): string
+    {
+        $codes = $this->unitCodes();
+        return $codes[$unitId] ?? 'XXX';
     }
 }
 

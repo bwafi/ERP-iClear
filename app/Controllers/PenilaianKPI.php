@@ -415,12 +415,19 @@ class PenilaianKPI extends BaseController
             }
         }
 
-        $unitId = (int)($this->request->getGet('unit') ?: $myUnit);
-        if (!isset($unitList[$unitId])) {
+        $unitGet = $this->request->getGet('unit');
+        $unitId = ($unitGet !== null && $unitGet !== '') ? (int)$unitGet : $myUnit;
+        if ($unitId !== 0 && !isset($unitList[$unitId])) {
             $unitId = $scope === null ? (int)array_key_first($unitList) : ($scope[0] ?? 0);
         }
 
-        $assets = $unitId ? $svc->masterAssetsWithLastAudit($unitId) : [];
+        $dariGet = $this->request->getGet('dari');
+        $dariId = ($dariGet !== null && $dariGet !== '') ? (int)$dariGet : 0;
+        if ($dariId !== 0 && !isset($unitList[$dariId])) {
+            $dariId = 0;
+        }
+
+        $assets = $svc->masterAssetsWithLastAudit($unitId, $dariId);
 
         return view('template', [
             'myRole' => $myRole,
@@ -428,7 +435,9 @@ class PenilaianKPI extends BaseController
             'scope' => $scope,
             'unitList' => $unitList,
             'unitId' => $unitId,
+            'dariId' => $dariId,
             'assets' => $assets,
+            'unitCodes' => $svc->unitCodes(),
             'canDelete' => in_array($myRole, [0, 1, 2], true),
             'body' => 'penilaian/aset_master',
         ]);
@@ -451,8 +460,15 @@ class PenilaianKPI extends BaseController
             return redirect()->to('/penilaian/kpi/aset_master')->with('error', 'Unit tidak valid / di luar scope Anda.');
         }
 
+        $dariUnit = (int)$this->request->getPost('dari');
+        $unitCodes = $svc->unitCodes();
+        if ($dariUnit < 1 || !isset($unitCodes[$dariUnit])) {
+            return redirect()->to('/penilaian/kpi/aset_master')->with('error', 'Asal barang (dari unit) tidak valid.');
+        }
+
         $result = $svc->addMaster(
             $unitId,
+            $dariUnit,
             (string)$this->request->getPost('asset'),
             (int)($this->request->getPost('quantity') ?: 1),
             $myId,
@@ -486,11 +502,18 @@ class PenilaianKPI extends BaseController
             return redirect()->to('/penilaian/kpi/aset_master')->with('error', 'Unit tidak valid / di luar scope Anda.');
         }
 
+        $dariUnit = (int)$this->request->getPost('dari');
+        $unitCodes = $svc->unitCodes();
+        if ($dariUnit < 1 || !isset($unitCodes[$dariUnit])) {
+            return redirect()->to('/penilaian/kpi/aset_master')->with('error', 'Asal barang (dari unit) tidak valid.');
+        }
+
         $result = $svc->updateMaster(
             $id,
             $unitId,
+            $dariUnit,
             (string)$this->request->getPost('asset'),
-            (string)$this->request->getPost('kode_aset'),
+            (string)($this->request->getPost('kode_aset') ?: ''),
             (int)($this->request->getPost('quantity') ?: 1),
             (string)($this->request->getPost('keterangan') ?: ''),
             $this->request->getPost('harga') !== '' ? (float)$this->request->getPost('harga') : null

@@ -34,10 +34,20 @@ endif; ?>
     <div class="card-body">
         <form method="get" action="<?= base_url('penilaian/kpi/aset_master') ?>" class="row g-2 align-items-end">
             <div class="col-md-4">
-                <label class="form-label fw-semibold">Unit</label>
+                <label class="form-label fw-semibold">Lokasi — Di Mana</label>
                 <select name="unit" class="form-select">
+                    <option value="0" <?= $unitId === 0 ? 'selected' : '' ?>>Semua Lokasi</option>
                     <?php foreach ($unitList as $uid => $nama) : ?>
                         <option value="<?= $uid ?>" <?= $uid === $unitId ? 'selected' : '' ?>><?= esc($nama) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Asal — Dari Mana</label>
+                <select name="dari" class="form-select">
+                    <option value="0" <?= $dariId === 0 ? 'selected' : '' ?>>Semua Asal</option>
+                    <?php foreach ($unitList as $uid => $nama) : ?>
+                        <option value="<?= $uid ?>" <?= $uid === $dariId ? 'selected' : '' ?>><?= esc($nama) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -60,10 +70,27 @@ endif; ?>
     </div>
     <div class="card-body">
         <form method="post" action="<?= base_url('penilaian/kpi/aset_master/insert') ?>" class="row g-2 align-items-end">
-            <input type="hidden" name="unit" value="<?= $unitId ?>">
+            <input type="hidden" name="kode_aset" value="">
             <div class="col-md-3">
                 <label class="form-label mb-1">Nama Aset</label>
                 <input type="text" name="asset" class="form-control form-control-sm" placeholder="contoh: Laptop Admin" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label mb-1">Asal — Dari Mana</label>
+                <select name="dari" class="form-select form-select-sm" id="addDari">
+                    <?php foreach ($unitList as $uid => $nama) : ?>
+                        <option value="<?= $uid ?>" <?= ($uid === 5 && isset($unitList[5])) || $uid === $unitId ? 'selected' : '' ?>><?= esc($nama) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label mb-1">Lokasi — Ada di Mana <span class="text-danger">*</span></label>
+                <select name="unit" class="form-select form-select-sm" required>
+                    <option value="" selected disabled>— Pilih Lokasi —</option>
+                    <?php foreach ($unitList as $uid => $nama) : ?>
+                        <option value="<?= $uid ?>"><?= esc($nama) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-md-2">
                 <label class="form-label mb-1">Quantity Baseline</label>
@@ -81,23 +108,30 @@ endif; ?>
                         autocomplete="off">
                 </div>
             </div>
-            <div class="col-md-2">
-                <label class="form-label mb-1">Keterangan <span class="text-muted">(opsional)</span></label>
-                <input type="text" name="keterangan" class="form-control form-control-sm" placeholder="catatan aset">
-            </div>
             <div class="col-md-1">
                 <button type="submit" class="btn btn-success btn-sm w-100">
                     <iconify-icon icon="solar:add-circle-bold" class="me-1"></iconify-icon>Tambah
                 </button>
             </div>
-            <div class="col-12 text-muted small">Kode otomatis: AST<?= $unitId ?>-4digit-acak. Harga opsional untuk tracking investasi aset.</div>
+            <div class="col-md-10">
+                <label class="form-label mb-1">Keterangan <span class="text-muted">(opsional)</span></label>
+                <input type="text" name="keterangan" class="form-control form-control-sm" placeholder="catatan aset">
+            </div>
+            <div class="col-12 text-muted small">
+                Kode otomatis mengikuti asal: <span class="fw-semibold" id="previewKodeAdd">AST-<?= esc($unitCodes[5] ?? 'HO') ?>-4digit</span> (mis. barang dari HO dan ada di Probolinggo → <span class="fw-semibold">AST-HO-8124</span>). Lokasi wajib dipilih manual — tidak ikut filter unit di atas.
+            </div>
         </form>
     </div>
 </div>
 
 <div class="card shadow-sm border-0">
     <div class="card-header">
-        <h5 class="mb-0">Daftar Aset Master — Unit <?= $unitId ?></h5>
+        <h5 class="mb-0">
+            Daftar Aset Master —
+            <?= $unitId === 0 ? 'Semua Lokasi' : esc($unitList[$unitId] ?? ('Unit ' . $unitId)) ?>
+            ·
+            <?= $dariId === 0 ? 'Semua Asal' : 'Dari ' . esc($unitList[$dariId] ?? ('Unit ' . $dariId)) ?>
+        </h5>
     </div>
     <div class="card-body">
         <?php if (empty($assets)) : ?>
@@ -109,6 +143,8 @@ endif; ?>
                         <tr>
                             <th rowspan="2" class="align-middle">Kode</th>
                             <th rowspan="2" class="align-middle">Nama Aset</th>
+                            <th rowspan="2" class="align-middle">Asal (Dari)</th>
+                            <th rowspan="2" class="align-middle">Lokasi (Di)</th>
                             <th colspan="2" class="text-center">Master</th>
                             <th colspan="6" class="text-center bg-info-subtle">Audit Terakhir</th>
                             <th rowspan="2" class="text-center align-middle">Status</th>
@@ -139,6 +175,8 @@ endif; ?>
                                         <br><small class="text-muted"><?= esc($a['keterangan']) ?></small>
                                     <?php endif; ?>
                                 </td>
+                                <td><small><?= esc($a['asal_name']) ?> <span class="badge bg-light border"><?= esc($a['asal_code']) ?></span></small></td>
+                                <td><small><?= esc($a['unit_name']) ?></small></td>
                                 <td class="text-center fw-bold"><?= $a['quantity'] ?></td>
                                 <td class="text-end">
                                     <?php if ($a['harga'] !== null) : ?>
@@ -251,15 +289,32 @@ endif; ?>
                         <input type="text" name="asset" id="editAsset" class="form-control" required>
                     </div>
                     <div class="row">
-                        <div class="col-6 mb-2">
-                            <label class="form-label">Kode Aset</label>
-                            <input type="text" name="kode_aset" id="editKode" class="form-control" required>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Asal — Dari Mana</label>
+                            <select name="dari" id="editDari" class="form-select">
+                                <?php foreach ($unitList as $uid => $nama) : ?>
+                                    <option value="<?= $uid ?>"><?= esc($nama) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
-                        <div class="col-3 mb-2">
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Lokasi — Ada di Mana</label>
+                            <select name="unit" id="editUnit" class="form-select">
+                                <?php foreach ($unitList as $uid => $nama) : ?>
+                                    <option value="<?= $uid ?>"><?= esc($nama) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Kode Aset <small class="text-muted">(ikuti asal)</small></label>
+                            <input type="text" id="editKodePreview" class="form-control" readonly>
+                            <input type="hidden" name="kode_aset" id="editKode">
+                        </div>
+                        <div class="col-md-3 mb-2">
                             <label class="form-label">Quantity Baseline</label>
                             <input type="number" name="quantity" id="editQty" class="form-control" min="1" value="1" required>
                         </div>
-                        <div class="col-3 mb-2">
+                        <div class="col-md-3 mb-2">
                             <label class="form-label">Harga <small class="text-muted">(opsional)</small></label>
                             <div class="input-group">
                                 <span class="input-group-text">Rp</span>
@@ -288,6 +343,13 @@ endif; ?>
 </div>
 
 <script>
+    var ASSET_UNIT_CODES = <?= json_encode($unitCodes, JSON_UNESCAPED_UNICODE) ?>;
+
+    function asetKodePreview(dariId, suffix) {
+        var code = ASSET_UNIT_CODES[dariId] || 'XXX';
+        return 'AST-' + code + (suffix ? '-' + suffix : '-XXXX');
+    }
+
     function formatRupiah(value) {
         value = value.replace(/\D/g, '');
 
@@ -317,8 +379,13 @@ endif; ?>
             var d = JSON.parse(btn.getAttribute('data-aset'));
             document.getElementById('editId').value = d.id;
             document.getElementById('editUnit').value = d.unit;
+            document.getElementById('editDari').value = d.dari_unit;
             document.getElementById('editAsset').value = d.asset;
             document.getElementById('editKode').value = d.kode_aset;
+            var suffix = String(d.kode_aset).replace(/^AST-[A-Z0-9]+-/, '');
+            var preview = document.getElementById('editKodePreview');
+            preview.value = asetKodePreview(d.dari_unit, suffix);
+            preview.classList.remove('text-warning');
             document.getElementById('editQty').value = d.quantity;
             document.getElementById('editHarga').value =
                 d.harga !== null && d.harga !== '' ?
@@ -328,4 +395,18 @@ endif; ?>
             new bootstrap.Modal(document.getElementById('modalEditMaster')).show();
         });
     });
+
+    // Ubah asal → kode otomatis digenerate ulang dengan prefix baru.
+    document.getElementById('editDari').addEventListener('change', function() {
+        document.getElementById('editKode').value = '';
+        var preview = document.getElementById('editKodePreview');
+        preview.value = asetKodePreview(this.value);
+        preview.classList.add('text-warning');
+    });
+    var addDari = document.getElementById('addDari');
+    if (addDari) {
+        addDari.addEventListener('change', function() {
+            document.getElementById('previewKodeAdd').textContent = asetKodePreview(this.value);
+        });
+    }
 </script>

@@ -11,6 +11,7 @@ class ModelAsetKpi extends Model
     protected $returnType = 'object';
     protected $allowedFields = [
         'unit',
+        'dari_unit',
         'asset',
         'kode_aset',
         'quantity',
