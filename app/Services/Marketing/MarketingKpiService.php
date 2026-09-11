@@ -71,25 +71,16 @@ class MarketingKpiService
 
     // ── Data operasional ──────────────────────────────────────────
 
-    /** Jumlah lead masuk dalam periode (tanggal lead). */
+    /** Jumlah lead masuk dalam periode. SUMBER = rekap manual harian CS. */
     public function countLeads(int $month, int $year): int
     {
-        $m = sprintf('%04d-%02d', $year, $month);
-        return (int)$this->db->query(
-            "SELECT COUNT(*) c FROM marketing_lead WHERE DATE_FORMAT(tanggal, '%Y-%m') = ?",
-            [$m]
-        )->getRow()->c;
+        return (new MarketingRekapService())->monthlyLeadTotal($month, $year);
     }
 
-    /** Lead berbayar (ADS) dalam periode. */
+    /** Lead berbayar (Iklan) dalam periode. SUMBER = rekap manual harian CS. */
     public function paidLeads(int $month, int $year): int
     {
-        $m = sprintf('%04d-%02d', $year, $month);
-        return (int)$this->db->query(
-            "SELECT COUNT(*) c FROM marketing_lead
-             WHERE ads_organic = 'ADS' AND DATE_FORMAT(tanggal, '%Y-%m') = ?",
-            [$m]
-        )->getRow()->c;
+        return (new MarketingRekapService())->monthlyPaidTotal($month, $year);
     }
 
     /** Customer hasil conversion: lead WON + tertaut customer dalam periode (tanggal_won). */
@@ -99,7 +90,7 @@ class MarketingKpiService
         return (int)$this->db->query(
             "SELECT COUNT(*) c FROM marketing_lead
              WHERE status = 'WON' AND customer_id IS NOT NULL
-               AND DATE_FORMAT(tanggal_won, '%Y-%m') = ?",
+               AND DATE_FORMAT(tanggal_won, '%Y-%m') = ? AND kommo_deleted_at IS NULL",
             [$m]
         )->getRow()->c;
     }
@@ -331,6 +322,82 @@ class MarketingKpiService
             'cost'          => $costInfo,
             'channel'       => $channel,
             'weightsum'     => array_sum(self::BOBOT),
+        ];
+    }
+
+    // ── Data chart (ApexCharts) ───────────────────────────────────
+
+    /** Jumlah lead per status dalam periode (untuk donut chart). */
+    public function leadsByStatus(int $month, int $year): array
+    {
+        $m    = sprintf('%04d-%02d', $year, $month);
+        $rows = $this->db->query(
+            "SELECT status, COUNT(*) c FROM marketing_lead
+             WHERE DATE_FORMAT(tanggal, '%Y-%m') = ?
+             GROUP BY status",
+            [$m]
+        )->getResult();
+
+        $result = ['NEW' => 0, 'FOLLOW_UP' => 0, 'WON' => 0, 'LOST' => 0];
+        foreach ($rows as $r) {
+            if (isset($result[$r->status])) {
+                $result[$r->status] = (int)$r->c;
+            }
+        }
+
+        return $result;
+    }
+
+    /** Total biaya iklan per channel dalam periode (untuk bar chart). */
+    public function adsCostByChannel(int $month, int $year): array
+    {
+        $rows = $this->db->query(
+            "SELECT COALESCE(ch.name, 'Umum') channel_name, COALESCE(SUM(ad.amount),0) total
+             FROM marketing_ads_cost ad
+             LEFT JOIN channel ch ON ch.id = ad.channel_id
+             WHERE ad.period_month = ? AND ad.period_year = ?
+             GROUP BY ad.channel_id, ch.name
+             ORDER BY total DESC",
+            [$month, $year]
+        )->getResult();
+
+        return array_map(
+            fn($r) => ['channel' => $r->channel_name, 'amount' => (float)$r->total],
+            $rows
+        );
+    }
+
+    /**
+     * Deret tren beberapa bulan terakhir (termasuk periode terpilih):
+     * leads masuk, won, biaya iklan, omzet marketing.
+     */
+    public function trendSeries(int $month, int $year, int $months = 6): array
+    {
+        $months = max(2, min(12, $months));
+        $time   = new \DateTime(sprintf('%04d-%02d-01', $year, $month));
+        $labels = [];
+        $leads  = [];
+        $won    = [];
+        $ads    = [];
+        $omzet  = [];
+
+        for ($i = $months - 1; $i >= 0; $i--) {
+            $p       = (clone $time)->modify("-{$i} month");
+            $m       = (int)$p->format('n');
+            $y       = (int)$p->format('Y');
+            $labels[] = $p->format('M y');
+            $leads[]  = $this->countLeads($m, $y);
+            $won[]    = $this->countCustomers($m, $y);
+            $ads[]    = round($this->adsCost($m, $y));
+            $omzet[]  = round($this->marketingRevenue($m, $y));
+        }
+
+        return [
+            'labels' => $labels,
+            'leads'  => $leads,
+            'won'    => $won,
+            'ads'    => $ads,
+            'omzet'  => $omzet,
         ];
     }
 }

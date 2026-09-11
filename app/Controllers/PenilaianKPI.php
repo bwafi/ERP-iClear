@@ -48,7 +48,20 @@ class PenilaianKPI extends BaseController
 
     public function index()
     {
-        $pegawai_id = $this->request->getGet('pegawai_idpegawai');
+        // Otorisasi: hanya pegawai dalam scope yang bisa dilihat/dievaluasi.
+        // Pegawai biasa hanya melihat/mengisi KPI-nya sendiri (read-only).
+        $me       = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myId     = (int)($me->ID_AKUN ?? 0);
+        $akunList = $this->scopedEmployeeList($me);
+
+        $pegawai_id = (int)($this->request->getGet('pegawai_idpegawai') ?: $myId);
+
+        // Validasi scope: kalau target di luar jangkauan, arahkan ke diri sendiri.
+        $pegawaiTarget = $this->AuthModel->getById($pegawai_id);
+        if (!$pegawaiTarget || (int)$pegawaiTarget->STATUS_PEGAWAI !== 1 || !$this->isInScope($me, $pegawaiTarget)) {
+            $pegawai_id = $myId;
+        }
+
         $templatekpi = [];
         $skorMap = [];
         $isUpdate = false;
@@ -153,7 +166,7 @@ class PenilaianKPI extends BaseController
 
         $data = [
             'penilaiankpi' => $penilaianKPIList,
-            'akun' => $this->AuthModel->getdataakun(),
+            'akun' => $akunList,
             'pegawai_idpegawai' => $pegawai_id,
             'unit_idunit' => $unitId,
             'templatekpi' => $templatekpi,
@@ -816,6 +829,70 @@ class PenilaianKPI extends BaseController
      * Scope unit: null = semua unit (lintas unit). Array = hanya unit tsb.
      * Untuk SPV: baca dari spv_units mapping, fallback ke ID_UNIT jika tidak ada mapping.
      */
+    /**
+     * Daftar pegawai yang boleh DILIHAT/DIEVALUASI oleh evaluator yang login,
+     * berbasis matriks EvaluatorAuthorizationService (berlaku juga untuk halaman
+     * legacy penilaian_kpi agar tidak semua pegawai terlihat).
+     *
+     * @return array
+     */
+    private function scopedEmployeeList($me): array
+    {
+        $myRole = (int)($me->ID_JABATAN ?? 0);
+        $myUnit = (int)($me->ID_UNIT ?? 0);
+        $myId   = (int)($me->ID_AKUN ?? 0);
+
+        $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
+
+        $builder = $this->db->table('akun a')
+            ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
+            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
+            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
+            ->where('a.STATUS_PEGAWAI', 1)
+            ->groupStart()
+            ->where('a.deleted', null)
+            ->orWhere('a.deleted', 0)
+            ->groupEnd();
+
+        // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+
+        if (in_array($myRole, [1, 2], true)) {
+            // Admin root / Direktur: semua pegawai, semua unit.
+        } elseif (!empty($allowedTargets)) {
+            $builder->whereIn('a.ID_JABATAN', $allowedTargets);
+
+            if ($scopeUnits !== null) {
+                $hqTargets = array_values(array_filter(
+                    $allowedTargets,
+                    fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
+                ));
+
+                // CS (42) hanya boleh dilihat/diisi Admin/Kasir Unit 1.
+                if ($myRole === 35 && $myUnit !== 1) {
+                    $hqTargets = array_values(array_filter(
+                        $hqTargets,
+                        fn($j) => (int)$j !== 42
+                    ));
+                }
+
+                if (!empty($hqTargets)) {
+                    $builder->groupStart()
+                        ->whereIn('a.ID_UNIT', $scopeUnits)
+                        ->orWhereIn('a.ID_JABATAN', $hqTargets)
+                        ->groupEnd();
+                } else {
+                    $builder->whereIn('a.ID_UNIT', $scopeUnits);
+                }
+            }
+        } else {
+            // Pegawai/team tanpa target evaluasi: hanya dirinya sendiri (read-only).
+            $builder->where('a.ID_AKUN', $myId);
+        }
+
+        return $builder->orderBy('a.ID_UNIT', 'ASC')->orderBy('a.ID_JABATAN', 'ASC')->get()->getResultArray();
+    }
+
     private function getScopeUnits(int $myRole, int $myUnit, int $myId = null): ?array
     {
         // Role dengan akses lintas unit
@@ -913,6 +990,12 @@ class PenilaianKPI extends BaseController
 
     public function insert_penilaian()
     {
+        $pegawai_id = (int)$this->request->getPost('pegawai_idpegawai');
+        if (!$this->guardLegacyPenilaian($pegawai_id)) {
+            session()->setFlashdata('error', 'Anda tidak berhak menginput penilaian KPI pegawai tersebut.');
+            return redirect()->to(base_url('penilaian_kpi'));
+        }
+
         $kpiList        = $this->request->getPost('kpi_utama');
         $bobotList      = $this->request->getPost('bobot');
         $targetList     = $this->request->getPost('target');
@@ -953,6 +1036,12 @@ class PenilaianKPI extends BaseController
 
     public function update_penilaian()
     {
+        $pegawai_id = (int)$this->request->getPost('pegawai_idpegawai');
+        if (!$this->guardLegacyPenilaian($pegawai_id)) {
+            session()->setFlashdata('error', 'Anda tidak berhak mengubah penilaian KPI pegawai tersebut.');
+            return redirect()->to(base_url('penilaian_kpi'));
+        }
+
         $ids           = $this->request->getPost('idpenilaian_kpi');
         $kpiList       = $this->request->getPost('kpi_utama');
         $bobotList     = $this->request->getPost('bobot');
@@ -1007,10 +1096,37 @@ class PenilaianKPI extends BaseController
 
     public function delete_penilaian()
     {
-        $id = $this->request->getPost('idpenilaian_kpi');
+        $id = (int)$this->request->getPost('idpenilaian_kpi');
+        $row = $this->PenilaianKPIModel->find($id);
+        $targetId = $row ? (int)($row->pegawai_idpegawai ?? 0) : 0;
+
+        if (!$targetId || !$this->guardLegacyPenilaian($targetId)) {
+            session()->setFlashdata('error', 'Anda tidak berhak menghapus penilaian KPI pegawai tersebut.');
+            return redirect()->to(base_url('penilaian'));
+        }
+
         $this->PenilaianKPIModel->delete($id);
         session()->setFlashdata('sukses', 'Data Berhasil Dihapus');
         return redirect()->to(base_url('penilaian'));
+    }
+
+    /**
+     * Proses otorisasi untuk aksi insert/update/delete penilaian KPI legacy.
+     * Cek apakah pegawai target masih dalam scope evaluator yang login.
+     *
+     * @param int $pegawaiId ID pegawai yang dinilai.
+     * @return bool
+     */
+    private function guardLegacyPenilaian(int $pegawaiId): bool
+    {
+        if (!$pegawaiId) {
+            return false;
+        }
+
+        $me      = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $pegawai = $this->AuthModel->getById($pegawaiId);
+
+        return $me && $pegawai && $this->isInScope($me, $pegawai);
     }
 
     public function index_riwayat()
@@ -1506,6 +1622,38 @@ class PenilaianKPI extends BaseController
                 unset($d, $v);
             }
             unset($cid, $days);
+
+            // Ambil detail jam masuk & keterlambatan untuk KEHADIRAN (hover tooltip)
+            $kehadiranComp = null;
+            foreach ($attendanceComponents as $comp) {
+                if ($comp->code === 'KEHADIRAN') {
+                    $kehadiranComp = $comp;
+                    break;
+                }
+            }
+
+            $attendanceDetails = [];
+            if ($kehadiranComp && $target) {
+                $monthStart = sprintf('%04d-%02d-01', $tahun, $bulan);
+                $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+                $details = $this->db->table('kpi_evaluations e')
+                    ->select('e.evaluation_date, e.raw_score, d.shift, d.session, d.attendance_type, d.scheduled_time, d.actual_time, d.late_minutes, d.auto_score')
+                    ->join('kpi_attendance_detail d', 'd.evaluation_id = e.id', 'left')
+                    ->where('e.employee_id', (int)$target->ID_AKUN)
+                    ->where('e.kpi_component_id', (int)$kehadiranComp->id)
+                    ->where('e.evaluation_date >=', $monthStart)
+                    ->where('e.evaluation_date <=', $monthEnd)
+                    ->get()->getResult();
+
+                foreach ($details as $det) {
+                    $day = (int)date('j', strtotime($det->evaluation_date));
+                    if (!isset($attendanceDetails[$day])) {
+                        $attendanceDetails[$day] = [];
+                    }
+                    $attendanceDetails[$day][] = $det;
+                }
+            }
         }
 
         return view('template', [
@@ -1519,6 +1667,7 @@ class PenilaianKPI extends BaseController
             'skor_total2'           => $kpi['skor_total2'] ?? 0,
             'attendanceComponents'  => $attendanceComponents,
             'existing'              => $existing,
+            'attendanceDetails'     => $attendanceDetails ?? [],
             'bulan'                 => $bulan,
             'tahun'                 => $tahun,
             'body'                  => 'penilaian/penilaian_absen'
@@ -1566,6 +1715,19 @@ class PenilaianKPI extends BaseController
         // Collect input values — HANYA komponen yang diotorisasi untuk evaluator+target ini.
         $savedAnyAllowed = false;
         $inputValues = [];
+        
+        // Auto-scoring KEHADIRAN dari jam masuk aktual.
+        // - Shift PAGI/SIANG: field jam_masuk
+        // - Shift PS: dua field sekaligus — jam_masuk_pagi + jam_masuk_sore
+        $attendanceSvc   = new \App\Services\Kpi\AttendanceInputService();
+        $jamMasuk        = $this->request->getPost('jam_masuk');
+        $jamMasukPagi    = $this->request->getPost('jam_masuk_pagi');
+        $jamMasukSore    = $this->request->getPost('jam_masuk_sore');
+        $shift           = (string)$this->request->getPost('shift');
+        $attendanceType  = (string)($this->request->getPost('attendance_type') ?: 'NORMAL');
+        $statusKehadiran = (string)($this->request->getPost('kehadiran_status') ?: 'HADIR');
+        $pendingKehadiran = null; // [sessions] yang akan disimpan setelah konfirmasi
+
         foreach ($codeToComponent as $code => $comp) {
             if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
                 (int)$me->ID_AKUN,
@@ -1576,6 +1738,54 @@ class PenilaianKPI extends BaseController
             }
 
             $savedAnyAllowed = true;
+
+            if ($code === 'KEHADIRAN' && $statusKehadiran === 'OFF') {
+                // Tandai OFF: hari libur/istirahat tidak dihitung.
+                // Simpan raw_score 0 (perhitungan hari efektif mengabaikannya)
+                // dan bersihkan detail jam masuk lama untuk tanggal ini.
+                $attendanceSvc->resetDay($employeeId, $tanggal, (int)$me->ID_AKUN);
+                $inputValues['KEHADIRAN'] = [
+                    'skor' => 0,
+                    'comp' => $comp,
+                    'isOff' => true,
+                    'isAuto' => false,
+                ];
+                continue;
+            }
+
+            // KEHADIRAN: input jam masuk → auto-score (tidak disimpan di sini,
+            // hanya dihitung sebagai preview; persist dilakukan setelah gate konfirmasi).
+            if ($code === 'KEHADIRAN' && $shift !== '') {
+                $sessions = [];
+                if ($shift === 'PS') {
+                    if ($jamMasukPagi !== null && $jamMasukPagi !== '') {
+                        $sessions[] = ['shift' => 'PS', 'session' => 'PAGI', 'attendance_type' => $attendanceType, 'actual_time' => $jamMasukPagi];
+                    }
+                    if ($jamMasukSore !== null && $jamMasukSore !== '') {
+                        $sessions[] = ['shift' => 'PS', 'session' => 'SORE', 'attendance_type' => $attendanceType, 'actual_time' => $jamMasukSore];
+                    }
+                } elseif ($jamMasuk !== null && $jamMasuk !== '') {
+                    $sessions[] = ['shift' => $shift, 'session' => 'FULL', 'attendance_type' => $attendanceType, 'actual_time' => $jamMasuk];
+                }
+
+                if (!empty($sessions)) {
+                    try {
+                        $preview = $attendanceSvc->preview($sessions);
+                        $pendingKehadiran = $sessions;
+                        $inputValues['KEHADIRAN'] = [
+                            'skor' => (int)round($preview['auto_score']),
+                            'comp' => $comp,
+                            'isOff' => false,
+                            'isAuto' => true,
+                        ];
+                        continue; // JANGAN proses sebagai input manual
+                    } catch (\Exception $e) {
+                        // Gagal kalkulasi → biarkan jalur manual lama mengambil alih
+                    }
+                }
+            }
+
+            // Manual input (existing logic) — komponen lain, atau fallback
             $fieldName = 'skor_' . strtolower($code);
             $raw = $this->request->getPost($fieldName);
             $skor = (int)$raw;
@@ -1654,8 +1864,33 @@ class PenilaianKPI extends BaseController
         // Proceed to save (either no existing data, or user confirmed)
         $svc = new \App\Services\Kpi\KpiEvaluationService();
         $saved = 0;
+        $autoDetail = '';
+
+        // Persist auto-scoring KEHADIRAN (jam masuk aktual → nilai otomatis).
+        if (!empty($pendingKehadiran)) {
+            try {
+                $attResult = $attendanceSvc->saveDailyAttendance(
+                    $employeeId,
+                    $tanggal,
+                    (int)$me->ID_AKUN,
+                    $pendingKehadiran
+                );
+                $saved++;
+                $autoDetail = sprintf(
+                    ' | KEHADIRAN (auto): nilai %s, telat %d menit',
+                    $attResult['auto_score'],
+                    $attResult['late_minutes']
+                );
+            } catch (\Exception $e) {
+                $autoDetail = ' | KEHADIRAN (auto) gagal: ' . $e->getMessage();
+            }
+        }
 
         foreach ($inputValues as $code => $data) {
+            if ($code === 'KEHADIRAN' && !empty($pendingKehadiran)) {
+                continue; // sudah disimpan otomatis lewat saveDailyAttendance
+            }
+
             $result = $svc->recordEvaluation([
                 'employee_id'      => $employeeId,
                 'kpi_component_id' => (int)$data['comp']->id,
@@ -1663,7 +1898,11 @@ class PenilaianKPI extends BaseController
                 'evaluation_date'  => $tanggal,
                 'raw_score'        => $data['skor'],
                 'max_score'        => 5,
-                'notes'            => 'Absensi: ' . $data['comp']->name . ' (Skor: ' . $data['skor'] . '/5)',
+                'notes'            => ($code === 'KEHADIRAN')
+                    ? (($data['isOff'] ?? false)
+                        ? 'Absensi: ' . $data['comp']->name . ' (OFF, tidak dihitung)'
+                        : 'Absensi: ' . $data['comp']->name . ' (Auto-scoring, Skor: ' . $data['skor'] . '/5)')
+                    : 'Absensi: ' . $data['comp']->name . ' (Skor: ' . $data['skor'] . '/5)',
             ]);
 
             if ($result['success']) {
@@ -1672,7 +1911,7 @@ class PenilaianKPI extends BaseController
         }
 
         return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
-            ->with('success', 'Skor absensi ' . date('d M Y', strtotime($tanggal)) . ' tersimpan (' . $saved . ' komponen).');
+            ->with('success', 'Skor absensi ' . date('d M Y', strtotime($tanggal)) . ' tersimpan (' . $saved . ' komponen).' . $autoDetail);
     }
 
     public function slip_gaji($idakun)
@@ -1840,5 +2079,139 @@ class PenilaianKPI extends BaseController
             'tahun'                => $tahun,
             'body'                 => 'penilaian/gaji'
         ]);
+    }
+
+    /**
+     * UI Input Absensi Modern: jam masuk → auto-scoring.
+     * GET: tampilkan form + list absensi bulan ini.
+     * 
+     * @return string
+     */
+    public function attendance_input()
+    {
+        $me = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myRole = (int)($me->ID_JABATAN ?? 0);
+        $myUnit = (int)($me->ID_UNIT ?? 0);
+        $myId = (int)($me->ID_AKUN ?? 0);
+
+        $date = $this->request->getGet('date') ?: date('Y-m-d');
+        $targetId = (int)($this->request->getGet('target_id') ?: 0);
+
+        // Scope employees yang boleh diinput absensinya
+        $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+
+        $builder = $this->db->table('akun a')
+            ->select('a.ID_AKUN, a.NAMA_AKUN, a.ID_JABATAN, j.NAMA_JABATAN, a.ID_UNIT, u.NAMA_UNIT')
+            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
+            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
+            ->where('a.STATUS_PEGAWAI', 1)
+            ->groupStart()
+                ->where('a.deleted', null)
+                ->orWhere('a.deleted', 0)
+            ->groupEnd();
+
+        if (!in_array($myRole, [1, 2], true) && !empty($allowedTargets)) {
+            // Filter hanya target yang boleh dinilai KEHADIRAN
+            $kehadiranTargets = [];
+            foreach ($allowedTargets as $j) {
+                if (\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent($myId, 0, 'KEHADIRAN')) {
+                    $kehadiranTargets[] = $j;
+                }
+            }
+            if (!empty($kehadiranTargets)) {
+                $builder->whereIn('a.ID_JABATAN', $kehadiranTargets);
+            }
+
+            if ($scopeUnits !== null) {
+                $builder->whereIn('a.ID_UNIT', $scopeUnits);
+            }
+        }
+
+        $employees = $builder->orderBy('a.NAMA_AKUN', 'ASC')->get()->getResult();
+
+        // Jika targetId dipilih, ambil data absensi existing
+        $attendanceData = null;
+        $target = null;
+        if ($targetId > 0) {
+            $target = $this->AuthModel->getById($targetId);
+            $svc = new \App\Services\Kpi\AttendanceInputService();
+            $attendanceData = $svc->getDailyScore($targetId, $date);
+        }
+
+        // List absensi bulan ini untuk target
+        $monthlyList = [];
+        if ($targetId > 0) {
+            $period = explode('-', $date);
+            $year = (int)$period[0];
+            $month = (int)$period[1];
+            
+            $kehadiranComp = $this->db->table('kpi_components')
+                ->where('code', 'KEHADIRAN')
+                ->get()->getRow();
+            
+            if ($kehadiranComp) {
+                $monthStart = sprintf('%04d-%02d-01', $year, $month);
+                $monthEnd = date('Y-m-t', strtotime($monthStart));
+                
+                $monthlyList = $this->db->table('kpi_evaluations e')
+                    ->select('e.evaluation_date, e.raw_score, d.shift, d.session, d.attendance_type, d.actual_time, d.late_minutes, d.auto_score')
+                    ->join('kpi_attendance_detail d', 'd.evaluation_id = e.id', 'left')
+                    ->where('e.employee_id', $targetId)
+                    ->where('e.kpi_component_id', (int)$kehadiranComp->id)
+                    ->where('e.evaluation_date >=', $monthStart)
+                    ->where('e.evaluation_date <=', $monthEnd)
+                    ->orderBy('e.evaluation_date', 'DESC')
+                    ->get()->getResult();
+            }
+        }
+
+        return view('template', [
+            'akun' => $me,
+            'body' => 'penilaian_kpi/attendance_input',
+            'employees' => $employees,
+            'target' => $target,
+            'targetId' => $targetId,
+            'date' => $date,
+            'attendanceData' => $attendanceData,
+            'monthlyList' => $monthlyList,
+        ]);
+    }
+
+    /**
+     * POST: simpan absensi (jam masuk → auto-score).
+     * 
+     * @return \CodeIgniter\HTTP\RedirectResponse
+     */
+    public function attendance_save()
+    {
+        $targetId = (int)$this->request->getPost('target_id');
+        $date = $this->request->getPost('date');
+        $shift = $this->request->getPost('shift');
+        $session = $this->request->getPost('session') ?: 'FULL';
+        $attendanceType = $this->request->getPost('attendance_type') ?: 'NORMAL';
+        $actualTime = $this->request->getPost('actual_time');
+
+        $me = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+        $myId = (int)($me->ID_AKUN ?? 0);
+
+        try {
+            $svc = new \App\Services\Kpi\AttendanceInputService();
+            $result = $svc->saveAttendance(
+                $targetId,
+                $date,
+                $shift,
+                $session,
+                $attendanceType,
+                $actualTime,
+                $myId
+            );
+
+            session()->setFlashdata('success', 'Absensi berhasil disimpan. Nilai otomatis: ' . $result['auto_score'] . ', Telat: ' . $result['late_minutes'] . ' menit.');
+        } catch (\Exception $e) {
+            session()->setFlashdata('error', 'Gagal menyimpan absensi: ' . $e->getMessage());
+        }
+
+        return redirect()->to(base_url('penilaian-kpi/attendance-input?target_id=' . $targetId . '&date=' . $date));
     }
 }

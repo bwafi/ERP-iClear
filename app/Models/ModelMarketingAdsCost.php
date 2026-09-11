@@ -12,7 +12,7 @@ class ModelMarketingAdsCost extends Model
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
-    protected $allowedFields = ['period_month', 'period_year', 'channel_id', 'campaign', 'amount', 'note', 'created_by'];
+    protected $allowedFields = ['period_month', 'period_year', 'tanggal', 'channel_id', 'campaign', 'amount', 'note', 'created_by'];
 
     public function findByPeriod(int $month, int $year): array
     {

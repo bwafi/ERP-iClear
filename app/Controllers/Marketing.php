@@ -7,7 +7,10 @@ use App\Models\ModelMarketingAdsCost;
 use App\Models\ModelMarketingSource;
 use App\Models\ModelPelanggan;
 use App\Models\ModelChannel;
+use App\Models\ModelUnit;
+use App\Models\ModelMarketingPlatform;
 use App\Services\Marketing\MarketingKpiService;
+use App\Services\Marketing\MarketingRekapService;
 
 /**
  * KPI Digital Marketing / Kepala Divisi (jabatan 43).
@@ -100,8 +103,114 @@ class Marketing extends BaseController
             'bulan'   => $bulan,
             'tahun'   => $tahun,
             'summary' => $summary,
+            'rekap'   => (new MarketingRekapService())->monthlySummary($bulan, $tahun),
+            'rekapByUnit' => (new MarketingRekapService())->monthlySummaryByUnit($bulan, $tahun),
+            'leadsByStatus' => $this->Service->leadsByStatus($bulan, $tahun),
+            'trend'         => $this->Service->trendSeries($bulan, $tahun, 6),
             'canWrite' => $this->canWrite(),
         ]);
+    }
+
+    // ── Rekap Marketing Harian (source of truth KPI) ──────────────
+
+    /** Cabang aktif (HO / kantor pusat dikecualikan). */
+    private function units()
+    {
+        return (new ModelUnit())
+            ->where('jenis !=', 'Kantor')
+            ->orderBy('NAMA_UNIT', 'ASC')
+            ->findAll();
+    }
+
+    public function rekap()
+    {
+        if ($r = $this->readOrRedirect()) {
+            return $r;
+        }
+
+        $tanggal = trim((string)$this->request->getGet('tanggal') ?: date('Y-m-d'));
+        $unitId  = (int)$this->request->getGet('unit_id');
+
+        $bulanR = (int)($this->request->getGet('bulan') ?? (int)date('n'));
+        $tahunR = (int)($this->request->getGet('tahun') ?? (int)date('Y'));
+        if (!$this->validPeriod($bulanR, $tahunR)) {
+            $bulanR = (int)date('n');
+            $tahunR = (int)date('Y');
+        }
+
+        $data = null;
+        if ($unitId > 0) {
+            try {
+                $data = (new MarketingRekapService())->getByDate($unitId, $tanggal);
+            } catch (\InvalidArgumentException $e) {
+                $tanggal = date('Y-m-d');
+            }
+        }
+        if (!is_array($data)) {
+            $data = ['header' => null, 'details' => []];
+        }
+
+        return view('template', [
+            'body'    => 'marketing/rekap',
+            'akun'    => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'tanggal' => $tanggal,
+            'unitId'  => $unitId,
+            'units'   => $this->units(),
+            'rekap'   => $data,
+            'platforms' => (new ModelMarketingPlatform())->active(),
+            'bulanR'  => $bulanR,
+            'tahunR'  => $tahunR,
+            'rekaps'  => (new MarketingRekapService())->listByMonth($bulanR, $tahunR),
+            'canWrite' => $this->canWrite(),
+        ]);
+    }
+
+    public function rekap_simpan()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/rekap'));
+        }
+
+        $unitId   = (int)$this->request->getPost('unit_id');
+        $tanggal  = trim((string)$this->request->getPost('tanggal'));
+        $leadIklanDash = (int)$this->request->getPost('lead_total_iklan_dashboard');
+
+        $platforms = (array)$this->request->getPost('platform');
+        $nonIklans = (array)$this->request->getPost('non_iklan');
+        $iklans    = (array)$this->request->getPost('iklan');
+        $prospeks  = (array)$this->request->getPost('prospek');
+        $datangs   = (array)$this->request->getPost('datang');
+
+        $n = max(count($platforms), count($nonIklans), count($iklans), count($prospeks), count($datangs));
+        $details = [];
+        for ($i = 0; $i < $n; $i++) {
+            $details[] = [
+                'platform'  => (string)($platforms[$i] ?? ''),
+                'non_iklan' => (int)($nonIklans[$i] ?? 0),
+                'iklan'     => (int)($iklans[$i] ?? 0),
+                'prospek'   => (int)($prospeks[$i] ?? 0),
+                'datang'    => (int)($datangs[$i] ?? 0),
+            ];
+        }
+
+        try {
+            (new MarketingRekapService())->save(
+                $unitId,
+                $tanggal,
+                $details,
+                $leadIklanDash,
+                $this->currentAkun()
+            );
+            return redirect()->back()->with('success', 'Rekap marketing harian tersimpan.');
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            log_message('error', '[Rekap] Gagal simpan: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal menyimpan rekap. Silakan coba lagi.');
+        }
     }
 
     // ── Lead Marketing ────────────────────────────────────────────
@@ -123,17 +232,31 @@ class Marketing extends BaseController
             $status = '';
         }
 
-        $rows = $this->LeaderModel->findByPeriod($bulan, $tahun, $status !== '' ? $status : null);
+        // Pagination daftar lead per bulan.
+        $perPage = 25;
+        $page    = max(1, (int)$this->request->getGet('page'));
+        $statusFilter = $status !== '' ? $status : null;
+        $total   = $this->LeaderModel->countByPeriod($bulan, $tahun, $statusFilter);
+        $totalPages = (int)ceil($total / $perPage);
+        if ($page > $totalPages && $totalPages > 0) {
+            $page = $totalPages;
+        }
+        $rows = $this->LeaderModel->findByPeriod($bulan, $tahun, $statusFilter, $perPage, ($page - 1) * $perPage);
         // Isi nama source & customer terkait.
-        $sourceIds = array_map('intval', array_column(array_map(fn($l) => (array)$l, $rows), 'source_id'));
-        $sources = [];
-        if (!empty($sourceIds)) {
-            foreach ($this->SourceModel->findAll() as $s) {
-                $sources[(int)$s->id] = $s;
+        $sourceMap  = [];
+        $customerMap = [];
+        foreach ($this->SourceModel->active() as $s) {
+            $sourceMap[(int)$s->id] = $s;
+        }
+        $customerIds = array_unique(array_values(array_filter(array_map(fn($l) => (int)$l->customer_id, $rows), fn($v) => $v > 0)));
+        if (!empty($customerIds)) {
+            foreach ($this->CustomerModel->whereIn('id_pelanggan', $customerIds)->findAll() as $c) {
+                $customerMap[(int)$c->id_pelanggan] = $c;
             }
         }
 
         $customers = $this->CustomerModel->orderBy('id_pelanggan', 'DESC')->findAll(300);
+        $csPeoples = (new \App\Models\ModelAuth())->getCsKadiv();
 
         return view('template', [
             'body'      => 'marketing/leads',
@@ -142,9 +265,16 @@ class Marketing extends BaseController
             'tahun'     => $tahun,
             'status'    => $status,
             'rows'      => $rows,
+            'currentPage' => $page,
+            'perPage'     => $perPage,
+            'total'       => $total,
+            'totalPages'  => $totalPages,
             'sources'   => $this->SourceModel->active(),
-            'sourceMap' => $sources,
+            'sourceMap' => $sourceMap,
+            'customerMap' => $customerMap,
             'customers' => $customers,
+            'csPeoples' => $csPeoples,
+            'leadsByStatus' => $this->Service->leadsByStatus($bulan, $tahun),
             'canWrite'  => $this->canWrite(),
         ]);
     }
@@ -289,6 +419,7 @@ class Marketing extends BaseController
             'tahun'   => $tahun,
             'rows'    => $rows,
             'channels' => $this->ChannelModel->active(),
+            'adsByChannel' => $this->Service->adsCostByChannel($bulan, $tahun),
             'canWrite' => $this->canWrite(),
         ]);
     }
@@ -303,6 +434,7 @@ class Marketing extends BaseController
         }
 
         $id        = (int)($this->request->getPost('id') ?? 0);
+        $tanggal   = trim((string)$this->request->getPost('tanggal') ?: '');
         $bulan     = (int)$this->request->getPost('period_month');
         $tahun     = (int)$this->request->getPost('period_year');
         $channelId = (int)$this->request->getPost('channel_id');
@@ -312,6 +444,16 @@ class Marketing extends BaseController
 
         if (!$this->validPeriod($bulan, $tahun)) {
             return redirect()->back()->with('error', 'Periode biaya iklan tidak valid.');
+        }
+        // Bila tanggal diisi, bulan/tahun mengikuti tanggal.
+        if ($tanggal !== '') {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+                return redirect()->back()->with('error', 'Format tanggal tidak valid.');
+            }
+            $bulan = (int)date('n', strtotime($tanggal));
+            $tahun = (int)date('Y', strtotime($tanggal));
+        } else {
+            $tanggal = null;
         }
         if (!is_numeric($amountRaw) || (float)$amountRaw < 0) {
             return redirect()->back()->with('error', 'Nominal biaya iklan harus angka valid.');
@@ -327,6 +469,7 @@ class Marketing extends BaseController
         $data = [
             'period_month' => $bulan,
             'period_year'  => $tahun,
+            'tanggal'      => $tanggal,
             'channel_id'   => $channelId > 0 ? $channelId : null,
             'campaign'     => $campaign,
             'amount'       => $amount,

@@ -78,7 +78,7 @@ try {
     $ctrl->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
 
     $html = (string)$ctrl->dashboard();
-    ok('dashboard() render — judul Dashboard Digital Marketing', strpos($html, 'Dashboard Digital Marketing') !== false);
+    ok('dashboard() render — judul Dashboard Multimedia', strpos($html, 'Dashboard Multimedia') !== false);
     ok('dashboard() render — breadcrumb Digital Marketing', strpos($html, 'Digital Marketing') !== false);
     ok('dashboard() render — ada kartu Total Content', strpos($html, 'Total Content') !== false, substr($html, 0, 80));
     ok('dashboard() render — ada Ringkasan KPI', strpos($html, 'Ringkasan KPI Creative') !== false);
@@ -87,7 +87,7 @@ try {
     ok('dashboard() render — KPI table memuat bobot 10%', strpos($html, 'Pertumbuhan Channel') !== false);
 
     $html = (string)$ctrl->channel();
-    ok('channel() render — judul Input Performa Channel', strpos($html, 'Input Performa Channel') !== false);
+    ok('channel() render — judul Performa Channel', strpos($html, 'Performa Channel') !== false);
     ok('channel() render — form Tambah Performa (Channel/Metric/Actual)', strpos($html, 'name="channel_id"') !== false && strpos($html, 'name="metric_id"') !== false && strpos($html, 'name="actual"') !== false);
     ok('channel() render — dropdown metric per channel', strpos($html, 'CHANNEL_METRICS') !== false);
 

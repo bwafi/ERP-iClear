@@ -127,8 +127,26 @@ $lead4 = $Lead->insert([
     'created_by'   => 55,
 ]);
 ok('Lead 10/2026 = 4 (Budi, Siti, Rudi, Dewi)', $lead1 && $lead2 && $lead3 && $lead4);
-ok("countLeads({$M},{$Y}) = 4", $Mkt->countLeads($M, $Y) === 4, $Mkt->countLeads($M, $Y));
-ok("Paid lead (ADS) = 3 (Budi, Siti, Dewi)", $Mkt->paidLeads($M, $Y) === 3, $Mkt->paidLeads($M, $Y));
+
+// KPI Lead/Iklan kini dari REKAP MANUAL HARIAN (source of truth), bukan
+// marketing_lead (yang bisa tercampur dengan baris sinkronisasi Kommo).
+// 4 lead di atas tetap ada untuk CRM: Won → Customer, Omzet, leadsByStatus.
+$RekapSvc = new \App\Services\Marketing\MarketingRekapService();
+$rekapSave = $RekapSvc->save(1, '2026-10-20', [
+    ['platform' => 'WhatsApp',  'non_iklan' => 1, 'iklan' => 2, 'prospek' => 1, 'datang' => 1],
+    ['platform' => 'Instagram', 'non_iklan' => 0, 'iklan' => 1, 'prospek' => 1, 'datang' => 1],
+], 5, 55);
+ok('Rekap harian tersimpan (total_lead_wa_dm = 4)', $rekapSave['total_lead_wa_dm'] === 4, json_encode($rekapSave));
+$rkDet = $RekapSvc->getByDate(1, '2026-10-20');
+ok('Rate WhatsApp = 33.33% (1/3 datang)', $rkDet && count($rkDet['details']) === 2 && near((float)$rkDet['details'][0]->rate, 33.33), (string)($rkDet['details'][0]->rate ?? '-'));
+ok('Rate Instagram = 100% (1/1 datang)', $rkDet && near((float)$rkDet['details'][1]->rate, 100), (string)($rkDet['details'][1]->rate ?? '-'));
+$totalAll = $RekapSvc->monthlyLeadTotal($M, $Y);
+$paidAll  = $RekapSvc->monthlyPaidTotal($M, $Y);
+ok("Rekap monthlyLeadTotal = 4 (WhatsApp 3 + Instagram 1)", $totalAll === 4, (string)$totalAll);
+ok("Rekap monthlyPaidTotal = 3 (iklan)", $paidAll === 3, (string)$paidAll);
+
+ok("countLeads({$M},{$Y}) = 4 (dari rekap)", $Mkt->countLeads($M, $Y) === 4, $Mkt->countLeads($M, $Y));
+ok("Paid lead (Iklan) = 3 (dari rekap)", $Mkt->paidLeads($M, $Y) === 3, $Mkt->paidLeads($M, $Y));
 
 // WON → link customer hasil conversion.
 $custBudi = (new ModelPelanggan())->insert([
@@ -288,7 +306,26 @@ ok('Summary Lead menampilkan actual otomatis (4 lead)', strpos($leadSum['actual_
 $cplSum = $sum['items'][3];
 ok('Summary CPL actual Rp 250.000', strpos($cplSum['actual_label'], '250') !== false);
 
+echo "\n== DATA CHART (ApexCharts) ==\n";
+$lb = $Mkt->leadsByStatus($M, $Y);
+ok('leadsByStatus total 4 (NEW/WON/LOST)', array_sum($lb) === 4 && $lb['NEW'] === 1 && $lb['FOLLOW_UP'] === 0 && $lb['WON'] === 2 && $lb['LOST'] === 1);
+$adsByCh = $Mkt->adsCostByChannel($M, $Y);
+ok('adsCostByChannel total 750.000', near(array_sum(array_map(fn($c) => $c['amount'], $adsByCh)), 750000));
+$trend = $Mkt->trendSeries($M, $Y, 6);
+ok('trendSeries 6 label & bulan terakhir = periode uji', count($trend['labels']) === 6 && end($trend['leads']) === 4 && abs(end($trend['ads']) - 750000) < 1);
+$trend3 = $Mkt->trendSeries($M, $Y, 3);
+ok('trendSeries 3 min bulan', count($trend3['labels']) === 3);
+
+echo "\n== REKAP UNIQUE (1 cabang 1 rekap per tanggal) ==\n";
+$hdrBefore = (int)$db->query("SELECT COUNT(*) c FROM marketing_rekap_harian WHERE unit_id=1 AND tanggal='2026-10-20'")->getRow()->c;
+$RekapSvc->save(1, '2026-10-20', [['platform' => 'WhatsApp', 'non_iklan' => 2, 'iklan' => 3, 'prospek' => 2, 'datang' => 2]], 7, 55);
+$hdrAfter = (int)$db->query("SELECT COUNT(*) c FROM marketing_rekap_harian WHERE unit_id=1 AND tanggal='2026-10-20'")->getRow()->c;
+ok('Upsert tidak menambah baris header (unique unit+tanggal)', $hdrBefore === 1 && $hdrAfter === 1, "before=$hdrBefore after=$hdrAfter");
+$upd = $RekapSvc->getByDate(1, '2026-10-20');
+ok('Rekap ter-update (total_lead_wa_dm=5, iklan_dash=7)', $upd && (int)$upd['header']->total_lead_wa_dm === 5 && (int)$upd['header']->lead_total_iklan_dashboard === 7);
+
 echo "\n== ROLLBACK DATA UJI ==\n";
+$db->query("DELETE FROM marketing_rekap_harian WHERE created_by=55 AND unit_id=1 AND tanggal='2026-10-20'");
 $db->query("DELETE FROM marketing_ads_cost WHERE note='[TEST]'");
 $db->query("DELETE FROM channel_performance WHERE note='[TEST]'");
 $prevIds = array_map('intval', array_column($db->query("SELECT idpenjualan FROM penjualan WHERE keterangan='[TEST]'")->getResult(), 'idpenjualan'));

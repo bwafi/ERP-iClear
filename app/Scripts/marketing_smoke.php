@@ -55,7 +55,7 @@ try {
     $ctrl->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
 
     $html = (string)$ctrl->index();
-    ok('marketing dashboard render — judul KPI Digital Marketing', strpos($html, 'KPI Digital Marketing') !== false);
+    ok('marketing dashboard render — judul Dashboard Digital Marketing', strpos($html, 'Dashboard Digital Marketing') !== false);
     ok('marketing dashboard render — tabel 7 KPI', strpos($html, 'Ringkasan KPI Digital Marketing') !== false);
     ok('marketing dashboard render — item Lead/Customer/Conversion', strpos($html, '>Lead<') !== false && strpos($html, '>Customer<') !== false && strpos($html, '>Conversion<') !== false);
     ok('marketing dashboard render — item CPL/Omzet/ROAS', strpos($html, 'Cost Per Lead') !== false && strpos($html, 'Omzet Marketing') !== false && strpos($html, 'ROI/ROAS') !== false);
@@ -66,6 +66,14 @@ try {
     ok('leads render — judul Lead Marketing', strpos($html, 'Lead Marketing') !== false);
     ok('leads render — form tambah lead (nama/no_hp/source/ads)', strpos($html, 'name="nama"') !== false && strpos($html, 'name="no_hp"') !== false && strpos($html, 'name="ads_organic"') !== false);
     ok('leads render — input tanggal tambah lead', strpos($html, 'name="tanggal"') !== false);
+
+    $html = (string)$ctrl->rekap();
+    ok('rekap render — judul Rekap Marketing Harian', strpos($html, 'Rekap Marketing Harian') !== false);
+    ok('rekap render — form tanggal & cabang', strpos($html, 'name="tanggal"') !== false && strpos($html, 'name="unit_id"') !== false);
+    ok('rekap render — default platform WhatsApp/Instagram/TikTok', strpos($html, 'WhatsApp') !== false && strpos($html, 'Instagram') !== false && strpos($html, 'TikTok') !== false);
+    ok('rekap render — kolom Non Iklan/Iklan/Prospek/Datang', strpos($html, 'Non Iklan') !== false && strpos($html, 'Prospek') !== false && strpos($html, 'Datang') !== false);
+    ok('rekap render — simpan memakai POST rekap/simpan', strpos($html, 'marketing/rekap/simpan') !== false);
+    ok('rekap render — daftar rekap bulanan tampil', strpos($html, 'Daftar Rekap Marketing') !== false && strpos($html, 'name="bulan"') !== false);
 
     $html = (string)$ctrl->ads();
     ok('ads render — judul Biaya Iklan', strpos($html, 'Biaya Iklan (Ads Cost)') !== false);
