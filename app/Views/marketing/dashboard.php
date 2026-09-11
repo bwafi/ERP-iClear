@@ -88,7 +88,7 @@ $statIcons = [
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white">
-                <h5 class="mb-0"><iconify-icon icon="solar:chart-bold" class="text-primary me-1"></iconify-icon>Tren Lead &amp; Won</h5>
+                <h5 class="mb-0"><iconify-icon icon="solar:chart-bold" class="text-primary me-1"></iconify-icon>Tren Lead &amp; Closed</h5>
                 <small class="text-muted">6 bulan terakhir — lead masuk vs customer hasil conversion.</small>
             </div>
             <div class="card-body">
@@ -353,24 +353,24 @@ $statIcons = [
         dataLabels: { enabled: false },
     };
 
-    // Donut komposisi lead
+    // Donut komposisi detail prospek (manual, non-Kommo)
     var lbStatus = <?= json_encode(array_values($leadsByStatus)) ?>;
     new ApexCharts(document.querySelector('#chartLeadsStatus'), {
         chart: { type: 'pie', fontFamily: 'inherit', toolbar: { show: false }, width: '100%', height: 300 },
-        labels: ['NEW', 'FOLLOW_UP', 'WON', 'LOST'],
+        labels: ['PROSPEK', 'BOOKING', 'DATANG', 'CLOSED', 'BATAL'],
         series: lbStatus,
-        colors: ['#adb5bd', '#ffc107', '#198754', '#dc3545'],
+        colors: ['#0d6efd', '#6f42c1', '#20c997', '#198754', '#dc3545'],
         legend: { position: 'bottom' },
         stroke: { width: 0 },
         dataLabels: { enabled: true, formatter: function(v) { return Math.round(v) + '%'; } },
     }).render();
 
-    // Column tren lead & won
+    // Column tren lead & closed
     new ApexCharts(document.querySelector('#chartLeadTrend'), Object.assign({}, chartCommon, {
         chart: Object.assign({}, chartCommon.chart, { type: 'bar', height: 300 }),
         series: [
             { name: 'Lead', data: <?= json_encode($trend['leads']) ?> },
-            { name: 'Won', data: <?= json_encode($trend['won']) ?> },
+            { name: 'Closed', data: <?= json_encode($trend['won']) ?> },
         ],
         xaxis: { categories: <?= json_encode($trend['labels']) ?> },
         plotOptions: { bar: { columnWidth: '55%', borderRadius: 3 } },

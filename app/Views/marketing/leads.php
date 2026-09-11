@@ -2,13 +2,14 @@
     style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <div class="text-white">
-            <h4 class="fw-semibold mb-1 text-white">Lead Marketing</h4>
-            <small class="text-white-50">Lead masuk → Follow Up → Won (tertaut Customer) / Lost. Customer WON menjadi dasar KPI Customer, Conversion &amp; Omzet Marketing.</small>
+            <h4 class="fw-semibold mb-1 text-white">Detail Prospek</h4>
+            <small class="text-white-50">Prospek dihubungkan ke service — omset dihitung otomatis dari penjualan service. KPI Marketing tetap dari Rekap Harian CS.</small>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('marketing') ?>">Marketing KPI</a></li>
-                <li class="breadcrumb-item active text-white">Lead Marketing</li>
+                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('marketing/rekap') ?>">Rekap Harian</a></li>
+                <li class="breadcrumb-item active text-white">Detail Prospek</li>
             </ol>
         </nav>
     </div>
@@ -25,497 +26,658 @@
     </div>
 <?php endif; ?>
 
-<div class="col-md-12 mb-3">
-    <?php
-    $counts = ['TOTAL' => count($rows), 'NEW' => 0, 'FOLLOW_UP' => 0, 'WON' => 0, 'LOST' => 0];
-    foreach ($rows as $r) {
-        $counts[$r->status] = ($counts[$r->status] ?? 0) + 1;
-    }
-    ?>
-    <div class="row g-2">
-        <div class="col">
-            <div class="card border-0 shadow-sm text-center py-2">
-                <div class="fs-4 fw-bold text-dark"><?= $counts['TOTAL'] ?></div>
-                <div class="text-muted small">Total Lead</div>
-            </div>
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <form method="get" action="<?= base_url('marketing/leads') ?>" class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label class="form-label mb-1 small text-muted">Bulan</label>
+            <select name="bulan" class="form-select">
+                <?php for ($i = 1; $i <= 12; $i++) : ?>
+                    <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>><?= date('F', mktime(0, 0, 0, $i, 1)) ?></option>
+                <?php endfor; ?>
+            </select>
         </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm text-center py-2">
-                <div class="fs-4 fw-bold text-secondary"><?= $counts['NEW'] ?></div>
-                <div class="text-muted small">New</div>
-            </div>
+        <div class="col-auto">
+            <label class="form-label mb-1 small text-muted">Tahun</label>
+            <select name="tahun" class="form-select">
+                <?php for ($i = date('Y') - 2; $i <= date('Y') + 1; $i++) : ?>
+                    <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>><?= $i ?></option>
+                <?php endfor; ?>
+            </select>
         </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm text-center py-2">
-                <div class="fs-4 fw-bold text-warning"><?= $counts['FOLLOW_UP'] ?></div>
-                <div class="text-muted small">Follow Up</div>
-            </div>
+        <div class="col-auto">
+            <label class="form-label mb-1 small text-muted">Unit</label>
+            <select name="unit_id" class="form-select">
+                <option value="">Semua Unit</option>
+                <?php foreach ($units as $u) : ?>
+                    <option value="<?= (int)$u->idunit ?>" <?= $unitId === (int)$u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm text-center py-2">
-                <div class="fs-4 fw-bold text-success"><?= $counts['WON'] ?></div>
-                <div class="text-muted small">Won</div>
-            </div>
+        <div class="col-auto">
+            <label class="form-label mb-1 small text-muted">Platform</label>
+            <select name="platform" class="form-select">
+                <option value="">Semua Platform</option>
+                <?php foreach ($platforms as $pf) : ?>
+                    <option value="<?= esc($pf->name) ?>" <?= $platform === $pf->name ? 'selected' : '' ?>><?= esc($pf->name) ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
-        <div class="col">
-            <div class="card border-0 shadow-sm text-center py-2">
-                <div class="fs-4 fw-bold text-danger"><?= $counts['LOST'] ?></div>
-                <div class="text-muted small">Lost</div>
-            </div>
+        <div class="col-auto">
+            <label class="form-label mb-1 small text-muted">Status</label>
+            <select name="status" class="form-select">
+                <option value="">Semua Status</option>
+                <?php foreach ($statuses as $st) : ?>
+                    <option value="<?= $st ?>" <?= $status === $st ? 'selected' : '' ?>><?= $st ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Tampilkan</button>
+        </div>
+    </form>
+    <div class="d-flex gap-2">
+        <a href="<?= base_url('marketing/rekap') ?>" class="btn btn-light">
+            <iconify-icon icon="solar:clipboard-list-bold" class="me-1"></iconify-icon>Rekap Harian
+        </a>
     </div>
 </div>
-
-<div class="row g-3 mb-3">
-    <div class="col-lg-5">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><iconify-icon icon="solar:pie-chart-2-bold" class="text-primary me-1"></iconify-icon>Komposisi Lead</h5>
-                <small class="text-muted"><?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></small>
-            </div>
-            <div class="card-body">
-                <div id="chartLeadsStatus"></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-7">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0"><iconify-icon icon="solar:chart-bold" class="text-primary me-1"></iconify-icon>Komposisi per Source</h5>
-                <small class="text-muted">Jumlah lead per channel/source period ini.</small>
-            </div>
-            <div class="card-body">
-                <div id="chartLeadsSource"></div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card shadow-sm border-0 mb-3">
-    <div class="card-body">
-        <div class="d-flex flex-wrap gap-2 align-items-end justify-content-between">
-            <form method="get" class="row g-2 align-items-end">
-                <div class="col-auto">
-                    <label class="form-label mb-1 small text-muted">Bulan</label>
-                    <select name="bulan" class="form-select">
-                        <?php for ($i = 1; $i <= 12; $i++) : ?>
-                            <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>><?= date('F', mktime(0, 0, 0, $i, 1)) ?></option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <label class="form-label mb-1 small text-muted">Tahun</label>
-                    <select name="tahun" class="form-select">
-                        <?php for ($i = date('Y') - 2; $i <= date('Y') + 1; $i++) : ?>
-                            <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>><?= $i ?></option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <label class="form-label mb-1 small text-muted">Status</label>
-                    <select name="status" class="form-select">
-                        <option value="">Semua Status</option>
-                        <?php foreach (['NEW', 'FOLLOW_UP', 'WON', 'LOST'] as $st) : ?>
-                            <option value="<?= $st ?>" <?= $status === $st ? 'selected' : '' ?>><?= $st ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Tampilkan</button>
-                </div>
-            </form>
-            <div class="d-flex gap-2">
-                <a href="<?= base_url('marketing') ?>" class="btn btn-light">
-                    <iconify-icon icon="solar:chart-2-bold" class="me-1"></iconify-icon>Dashboard Digital Marketing
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-
-<?php if ($canWrite) : ?>
-<div class="card shadow-sm border-0 mb-3">
-    <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-            <h5 class="mb-0">
-                <iconify-icon icon="solar:user-plus-bold" class="text-primary me-1"></iconify-icon> Tambah Lead
-            </h5>
-        </div>
-        <form method="post" action="<?= base_url('marketing/leads/simpan') ?>" class="row g-2 align-items-end">
-            <div class="col-md-2">
-                <label class="form-label mb-1 small text-muted">Tanggal</label>
-                <input type="date" name="tanggal" class="form-control" value="<?= date('Y-m-d') ?>" required>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label mb-1 small text-muted">Nama / Customer</label>
-                <input type="text" name="nama" class="form-control" placeholder="Nama lead" required>
-            </div>
-            <div class="col-md-1">
-                <label class="form-label mb-1 small text-muted">No HP</label>
-                <input type="text" name="no_hp" class="form-control" inputmode="numeric" placeholder="08xx">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label mb-1 small text-muted">Channel / Source</label>
-                <select name="source_id" class="form-select">
-                    <option value="">— Pilih source —</option>
-                    <?php foreach ($sources as $s) : ?>
-                        <option value="<?= $s->id ?>"><?= esc($s->name) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-md-1">
-                <label class="form-label mb-1 small text-muted">Tipe</label>
-                <select name="ads_organic" class="form-select">
-                    <option value="ORGANIC">Organic</option>
-                    <option value="ADS">Ads</option>
-                </select>
-            </div>
-            <div class="col-md-1">
-                <label class="form-label mb-1 small text-muted">CS</label>
-                <select name="cs" class="form-select">
-                    <option value="">— Pilih CS / Kepala —</option>
-                    <?php foreach ($csPeoples as $cp) : ?>
-                        <option value="<?= esc($cp->NAMA_AKUN) ?>"><?= esc($cp->NAMA_AKUN) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-md-1">
-                <label class="form-label mb-1 small text-muted">Status</label>
-                <select name="status" class="form-select">
-                    <option>NEW</option>
-                    <option>FOLLOW_UP</option>
-                    <option>WON</option>
-                    <option>LOST</option>
-                </select>
-            </div>
-            <div class="col-md-1">
-                <button type="submit" class="btn btn-success w-100 h-100 d-inline-flex align-items-center justify-content-center gap-1">
-                    <iconify-icon icon="solar:add-circle-bold"></iconify-icon> Simpan
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-<?php endif; ?>
 
 <div class="card shadow-sm border-0">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-0">Data Lead</h5>
-            <small class="text-muted"><?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?> — klik ⋮ pada baris untuk Follow Up / Won / Lost.</small>
+            <h5 class="mb-0">Data Prospek — <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></h5>
+            <small class="text-muted"><?= $total ?> prospek manual (data dari Kommo tidak ditampilkan di sini).</small>
         </div>
+        <?php if ($canWrite) : ?>
+            <button type="button" class="btn btn-primary" onclick="openProspekModal()">
+                <iconify-icon icon="solar:add-circle-bold" class="me-1"></iconify-icon>+ Tambah Prospek
+            </button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <?php if (empty($rows)) : ?>
             <div class="text-center py-5">
                 <iconify-icon icon="solar:inbox-line-bold" class="text-muted fs-1"></iconify-icon>
-                <p class="text-muted mt-2 mb-0">Belum ada lead untuk periode ini.</p>
+                <p class="text-muted mt-2 mb-0">Belum ada prospek untuk periode ini.</p>
             </div>
         <?php else : ?>
             <div class="table-responsive">
-                <table class="table align-middle table-hover" id="leadsTable">
+                <table class="table align-middle table-hover" id="prospekTable">
                     <thead class="table-light">
                         <tr>
-                            <th>Tanggal</th>
-                            <th>Nama &amp; Kontak</th>
-                            <th>Source</th>
-                            <th class="text-center">Tipe</th>
-                            <th>CS</th>
+                            <th class="text-center" style="width:50px;">No</th>
+                            <th class="text-nowrap">Tanggal</th>
+                            <th>Nama/Akun</th>
+                            <th>Unit</th>
+                            <th>Platform</th>
+                            <th>No Telp (WA)</th>
+                            <th>Keterangan Servis</th>
                             <th class="text-center">Status</th>
-                            <th>Customer</th>
-                            <th class="text-end">Aksi</th>
+                            <th class="text-nowrap">Tgl Booking</th>
+                            <th class="text-end">Omset</th>
+                            <th>Catatan</th>
+                            <?php if ($canWrite) : ?><th class="text-center">Aksi</th><?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($rows as $lead) :
-                            $src = isset($sourceMap[(int)$lead->source_id]) ? $sourceMap[(int)$lead->source_id] : null;
-                            $cust = (isset($customerMap[(int)$lead->customer_id]) && $lead->customer_id) ? $customerMap[(int)$lead->customer_id] : null;
+                        <?php
+                        $nomorAwal = ($currentPage - 1) * $perPage;
+                        $badgeCls = 'bg-light border text-dark';
+                        foreach ($rows as $i => $lead) :
+                            $nomor = $lead->nomor ?: ($nomorAwal + $i + 1);
+                            $svcNo = $lead->service_id ? (isset($serviceMap[(int)$lead->service_id]) ? $serviceMap[(int)$lead->service_id] : '') : '';
+                            $unitName = $lead->unit_id ? ($unitMap[(int)$lead->unit_id] ?? '-') : '-';
                         ?>
                             <tr>
+                                <td class="text-center text-muted small"><?= (int)$nomor ?></td>
                                 <td class="text-nowrap text-muted small"><?= date('d M Y', strtotime($lead->tanggal)) ?></td>
                                 <td>
                                     <div class="fw-semibold"><?= esc($lead->nama) ?></div>
-                                    <?php if ($lead->kommo_lead_id) : ?>
-                                        <div class="small text-muted"><i class="bi bi-diagram-3 me-1"></i>Kommo #<?= (int)$lead->kommo_lead_id ?></div>
-                                    <?php endif; ?>
-                                    <div class="small text-muted"><i class="bi bi-telephone me-1"></i><?= esc($lead->no_hp ?: '-') ?></div>
                                 </td>
+                                <td class="small text-nowrap"><?= esc($unitName) ?></td>
                                 <td>
-                                    <?php if ($src) : ?>
-                                        <span class="badge rounded-pill bg-light border text-dark">
-                                            <i class="bi bi-globe2 me-1"></i><?= esc($src->name) ?>
-                                        </span>
+                                    <?php if ($lead->platform) : ?>
+                                        <span class="badge rounded-pill <?= $badgeCls ?>"><?= esc($lead->platform) ?></span>
                                     <?php else : ?>
                                         <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
+                                <td class="text-nowrap small"><?= esc($lead->no_telp_wa ?: '-') ?></td>
+                                <td class="small"><?= esc($lead->keterangan ?: '-') ?></td>
                                 <td class="text-center">
-                                    <?php if ($lead->ads_organic === 'ADS') : ?>
-                                        <span class="badge rounded-pill text-bg-primary"><i class="bi bi-megaphone me-1"></i>ADS</span>
-                                    <?php else : ?>
-                                        <span class="badge rounded-pill text-bg-light text-dark border"><i class="bi bi-tree me-1"></i>ORGANIC</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><span class="badge bg-white text-dark border fw-normal"><?= esc($lead->cs ?: '-') ?></span></td>
-                                <td class="text-center">
-                                    <?php
-                                    $st = $lead->status;
-                                    $stBadge = $st === 'WON' ? 'text-bg-success'
-                                        : ($st === 'LOST' ? 'text-bg-danger'
-                                        : ($st === 'FOLLOW_UP' ? 'text-bg-warning' : 'text-bg-secondary'));
-                                    $stIcon = $st === 'WON' ? 'check-circle' : ($st === 'LOST' ? 'x-circle' : ($st === 'FOLLOW_UP' ? 'arrow-repeat' : 'plus-circle'));
-                                    ?>
-                                    <span class="badge rounded-pill <?= $stBadge ?> text-nowrap">
-                                        <i class="bi bi-<?= $stIcon ?> me-1"></i><?= $st ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <?php if ($cust) : ?>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="avatar avatar-sm bg-success-subtle text-success rounded-circle d-inline-flex align-items-center justify-content-center fw-bold">
-                                                <?= strtoupper(substr($cust->nama, 0, 1)) ?>
-                                            </span>
-                                            <div>
-                                                <div class="fw-semibold small"><?= esc($cust->nama) ?></div>
-                                                <div class="small text-muted">#<?= (int)$cust->id_pelanggan ?></div>
-                                            </div>
-                                        </div>
-                                    <?php elseif ($lead->status === 'WON') : ?>
-                                        <span class="text-danger small"><i class="bi bi-broken-link"></i> Customer dihapus</span>
-                                    <?php else : ?>
-                                        <span class="text-muted small">Belum Won</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-end">
                                     <?php if ($canWrite) : ?>
-                                        <?php if (in_array($lead->status, ['NEW', 'FOLLOW_UP'], true)) : ?>
-                                            <div class="btn-group">
-                                                <button type="button" class="btn btn-sm btn-outline-primary"
-                                                    data-bs-toggle="modal" data-bs-target="#wonModal"
-                                                    data-lead-id="<?= $lead->id ?>"
-                                                    data-lead-nama="<?= esc($lead->nama) ?>"
-                                                    data-lead-hp="<?= esc($lead->no_hp) ?>">
-                                                    <i class="bi bi-check2-circle me-1"></i>Won
-                                                </button>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
-                                                    <span class="visually-hidden">Menu</span>
-                                                </button>
-                                                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                                                    <li>
-                                                        <form method="post" action="<?= base_url('marketing/leads/status') ?>" class="m-0">
-                                                            <input type="hidden" name="id" value="<?= $lead->id ?>">
-                                                            <input type="hidden" name="status" value="FOLLOW_UP">
-                                                            <button type="submit" class="dropdown-item">
-                                                                <i class="bi bi-arrow-repeat me-2"></i>Follow Up
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                    <li>
-                                                        <form method="post" action="<?= base_url('marketing/leads/status') ?>" class="m-0" onsubmit="return confirm('Tandai lead sebagai LOST?');">
-                                                            <input type="hidden" name="id" value="<?= $lead->id ?>">
-                                                            <input type="hidden" name="status" value="LOST">
-                                                            <button type="submit" class="dropdown-item text-danger">
-                                                                <i class="bi bi-x-circle me-2"></i>Lost
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                    <li><hr class="dropdown-divider"></li>
-                                                    <li>
-                                                        <form method="post" action="<?= base_url('marketing/leads/hapus') ?>" class="m-0" onsubmit="return confirm('Hapus lead ini?');">
-                                                            <input type="hidden" name="id" value="<?= $lead->id ?>">
-                                                            <button type="submit" class="dropdown-item text-danger">
-                                                                <i class="bi bi-trash me-2"></i>Hapus
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                        <?php else : ?>
-                                            <div class="btn-group">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-                                                    <i class="bi bi-three-dots"></i>
-                                                </button>
-                                                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                                                    <?php if ($lead->status === 'LOST') : ?>
-                                                        <li>
-                                                            <form method="post" action="<?= base_url('marketing/leads/status') ?>" class="m-0">
-                                                                <input type="hidden" name="id" value="<?= $lead->id ?>">
-                                                                <input type="hidden" name="status" value="FOLLOW_UP">
-                                                                <button type="submit" class="dropdown-item">
-                                                                    <i class="bi bi-arrow-repeat me-2"></i>Buka Kembali (Follow Up)
-                                                                </button>
-                                                            </form>
-                                                        </li>
-                                                    <?php endif; ?>
-                                                    <li>
-                                                        <form method="post" action="<?= base_url('marketing/leads/hapus') ?>" class="m-0" onsubmit="return confirm('Hapus lead ini?');">
-                                                            <input type="hidden" name="id" value="<?= $lead->id ?>">
-                                                            <button type="submit" class="dropdown-item text-danger">
-                                                                <i class="bi bi-trash me-2"></i>Hapus
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                        <?php endif; ?>
+                                        <button type="button" class="btn btn-sm p-0 border-0 bg-transparent st-change"
+                                            data-id="<?= (int)$lead->id ?>"
+                                            data-status="<?= esc($lead->status) ?>"
+                                            data-service="<?= (int)$lead->service_id ?>"
+                                            data-svc="<?= esc($svcNo, 'attr') ?>"
+                                            data-unit="<?= (int)$lead->unit_id ?>"
+                                            data-tanggal="<?= esc($lead->tanggal) ?>"
+                                            data-bs-toggle="modal" data-bs-target="#modalStatusProspek"
+                                            title="Ubah status">
+                                            <span class="badge rounded-pill <?= $badgeCls ?>">
+                                                <?= esc($lead->status) ?> <i class="bi bi-pencil-square ms-1" style="font-size:.6rem;"></i>
+                                            </span>
+                                        </button>
+                                    <?php else : ?>
+                                        <span class="badge rounded-pill <?= $badgeCls ?>"><?= esc($lead->status) ?></span>
                                     <?php endif; ?>
                                 </td>
+                                <td class="text-nowrap small"><?= $lead->tanggal_booking ? date('d M Y', strtotime($lead->tanggal_booking)) : '-' ?></td>
+                                <td class="text-end fw-semibold text-nowrap">
+                                    <?= $lead->omset !== null && $lead->omset > 0 ? 'Rp ' . number_format((float)$lead->omset, 0, ',', '.') : '-' ?>
+                                    <?php if ($svcNo !== '') : ?>
+                                        <div class="small fw-normal text-muted"><?= esc($svcNo) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="small text-muted"><?= esc($lead->catatan ?: '-') ?></td>
+                                <?php if ($canWrite) : ?>
+                                <td class="text-center text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-edit"
+                                        data-id="<?= (int)$lead->id ?>"
+                                        data-tanggal="<?= esc($lead->tanggal) ?>"
+                                        data-nama="<?= esc($lead->nama, 'attr') ?>"
+                                        data-unit="<?= (int)$lead->unit_id ?>"
+                                        data-platform="<?= esc($lead->platform ?? '', 'attr') ?>"
+                                        data-no_telp_wa="<?= esc($lead->no_telp_wa ?? '', 'attr') ?>"
+                                        data-keterangan="<?= esc($lead->keterangan ?? '', 'attr') ?>"
+                                        data-status="<?= esc($lead->status) ?>"
+                                        data-tanggal_booking="<?= esc($lead->tanggal_booking ?? '', 'attr') ?>"
+                                        data-omset="<?= esc((float)($lead->omset ?? 0), 'attr') ?>"
+                                        data-service="<?= (int)$lead->service_id ?>"
+                                        data-svc="<?= esc($svcNo, 'attr') ?>"
+                                        data-catatan="<?= esc($lead->catatan ?? '', 'attr') ?>"
+                                        title="Edit"><i class="bi bi-pencil"></i></button>
+                                    <form method="post" action="<?= base_url('marketing/leads/hapus') ?>" class="d-inline"
+                                        onsubmit="return confirm('Hapus prospek ini?');">
+                                        <input type="hidden" name="id" value="<?= (int)$lead->id ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
 
-            <?php if ($totalPages > 1): ?>
-                <?php
-                $qs = 'bulan=' . $bulan . '&tahun=' . $tahun . ($status !== '' ? '&status=' . $status : '');
-                $window = 2;
-                $start = max(1, $currentPage - $window);
-                $end = min($totalPages, $currentPage + $window);
-                $showStart = $start > 1;
-                $showEnd = $end < $totalPages;
-                ?>
-                <div class="d-flex justify-content-between align-items-center px-4 py-3 border-top">
-                    <span class="text-muted small">
-                        Menampilkan <?= ($currentPage - 1) * $perPage + 1 ?> - <?= min($currentPage * $perPage, $total) ?> dari <?= $total ?> lead
-                    </span>
-                    <nav aria-label="Paginasi lead">
-                        <ul class="pagination pagination-sm mb-0">
-                            <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
-                                <a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=' . ($currentPage - 1)) ?>" tabindex="-1">
-                                    <iconify-icon icon="solar:arrow-left-broken" width="18" height="18"></iconify-icon>
-                                </a>
+            <?php if ($totalPages > 1) : ?>
+                <nav class="mt-3">
+                    <ul class="pagination pagination-sm justify-content-end mb-0">
+                        <?php
+                        $qs = 'bulan=' . $bulan . '&tahun=' . $tahun . '&status=' . urlencode($status) . '&platform=' . urlencode($platform) . '&unit_id=' . (int)$unitId;
+                        for ($p = 1; $p <= $totalPages; $p++) : ?>
+                            <li class="page-item <?= $p === $currentPage ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=' . $p) ?>"><?= $p ?></a>
                             </li>
-                            <?php if ($showStart): ?>
-                                <li class="page-item"><a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=1') ?>">1</a></li>
-                                <li class="page-item disabled"><span class="page-link">...</span></li>
-                            <?php endif; ?>
-                            <?php for ($i = $start; $i <= $end; $i++): ?>
-                                <li class="page-item <?= $i === $currentPage ? 'active' : '' ?>">
-                                    <a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=' . $i) ?>"><?= $i ?></a>
-                                </li>
-                            <?php endfor; ?>
-                            <?php if ($showEnd): ?>
-                                <li class="page-item disabled"><span class="page-link">...</span></li>
-                                <li class="page-item"><a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=' . $totalPages) ?>"><?= $totalPages ?></a></li>
-                            <?php endif; ?>
-                            <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
-                                <a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=' . ($currentPage + 1)) ?>">
-                                    <iconify-icon icon="solar:arrow-right-broken" width="18" height="18"></iconify-icon>
-                                </a>
-                            </li>
-                        </ul>
-                    </nav>
-                </div>
+                        <?php endfor; ?>
+                    </ul>
+                </nav>
             <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
 
-<!-- Modal: Mark Won -->
-<div class="modal fade" id="wonModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <form method="post" action="<?= base_url('marketing/leads/status') ?>" class="modal-content shadow-lg">
-            <input type="hidden" name="id" id="wonLeadId" value="">
-            <input type="hidden" name="status" value="WON">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-trophy text-warning me-2"></i>Tandai Lead Menjadi WON</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="rounded-3 border mb-3 py-3 px-3" style="background:#f1f6fc;">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="avatar avatar-sm bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center fw-bold">
-                            <i class="bi bi-person-fill"></i>
-                        </span>
-                        <div>
-                            <div class="fw-semibold text-dark" id="wonLeadNama" style="color:#111c2d !important;">-</div>
-                            <div class="small" id="wonLeadHp" style="color:#7c8fac !important;">-</div>
+<?php if ($canWrite) : ?>
+<!-- Modal Tambah / Edit Prospek -->
+<div class="modal fade" id="modalProspek" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form method="post" action="<?= base_url('marketing/leads/simpan') ?>" id="prospekForm">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" id="pp_id" value="">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <iconify-icon icon="solar:user-plus-bold" class="text-primary me-1"></iconify-icon>
+                        <span id="pp_title">Tambah Prospek</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Tanggal</label>
+                            <input type="date" name="tanggal" id="pp_tanggal" class="form-control form-control-sm"
+                                value="<?= date('Y-m-d') ?>" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Platform</label>
+                            <select name="platform" id="pp_platform" class="form-select form-select-sm" required>
+                                <option value="">— Pilih —</option>
+                                <?php foreach ($platforms as $pf) : ?>
+                                    <option value="<?= esc($pf->name) ?>"><?= esc($pf->name) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3" id="pp_unit_col">
+                            <label class="form-label small text-muted mb-1">Unit</label>
+                            <select name="unit_id" id="pp_unit" class="form-select form-select-sm" required>
+                                <option value="">— Pilih Unit —</option>
+                                <?php foreach ($units as $u) : ?>
+                                    <option value="<?= (int)$u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Status</label>
+                            <select name="status" id="pp_status" class="form-select form-select-sm">
+                                <?php foreach ($statuses as $st) : ?>
+                                    <option value="<?= $st ?>"><?= $st ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                     </div>
+
+                    <!-- Area Service (CLOSED wajib / terpilih) -->
+                    <div id="pp_svc_area">
+                        <div class="mt-3 position-relative">
+                            <label class="form-label small text-muted mb-1">
+                                Service <span class="text-danger" id="pp_svc_req">*</span>
+                                <span class="text-muted" id="pp_svc_hint_ctx"></span>
+                            </label>
+                            <input type="text" id="pp_service_search" class="form-control form-control-sm"
+                                placeholder="Cari service: ketik ID / no service / nama pelanggan..." autocomplete="off">
+                            <input type="hidden" name="service_id" id="pp_service_id" value="">
+                            <div class="list-group position-absolute w-100 shadow d-none serv-results"
+                                style="z-index:1060;max-height:240px;overflow:auto;" id="pp_service_results"></div>
+                        </div>
+
+                        <!-- Preview service (read only) -->
+                        <div id="pp_preview" class="d-none mt-2">
+                            <div class="border rounded-3 p-3">
+                                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                    <strong>Detail Service</strong>
+                                    <span class="badge rounded-pill bg-light border text-dark" id="pp_svc_no">-</span>
+                                    <span class="badge rounded-pill bg-light border text-dark" id="pp_svc_status">-</span>
+                                    <button type="button" class="btn btn-sm btn-link p-0 ms-auto text-muted"
+                                        onclick="clearServiceSelection()" title="Hapus pilihan service">
+                                        <i class="bi bi-x-circle me-1"></i>Hapus pilihan
+                                    </button>
+                                </div>
+                                <div class="row g-2 small">
+                                    <div class="col-md-4"><span class="text-muted">Nama Customer:</span><div><strong id="pp_svc_nama">-</strong></div></div>
+                                    <div class="col-md-3"><span class="text-muted">No HP:</span><div><strong id="pp_svc_hp">-</strong></div></div>
+                                    <div class="col-md-2"><span class="text-muted">Unit:</span><div><strong id="pp_svc_unit">-</strong></div></div>
+                                    <div class="col-md-3"><span class="text-muted">Tgl Service:</span><div><strong id="pp_svc_tgl">-</strong></div></div>
+                                    <div class="col-12"><span class="text-muted">Keterangan Service:</span> <span id="pp_svc_ket">-</span></div>
+                                    <div class="col-md-4 d-none" id="pp_omset_row">
+                                        <span class="text-muted">Omset:</span><div class="fw-semibold" id="pp_svc_omset">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Area data manual (selain CLOSED & belum terhubung service) -->
+                    <div id="pp_manual_area" class="d-none">
+                        <hr>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Nama / Akun <span class="text-danger">*</span></label>
+                                <input type="text" name="nama" id="pp_nama" class="form-control form-control-sm"
+                                    placeholder="Nama customer / akun">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">No Telp (WA)</label>
+                                <input type="text" name="no_telp_wa" id="pp_no_telp" class="form-control form-control-sm" placeholder="08xx">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Keterangan Servis</label>
+                                <input type="text" name="keterangan" id="pp_keterangan" class="form-control form-control-sm"
+                                    placeholder="Perbaikan yang dibutuhkan">
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="row g-2">
+                        <div class="col-md-4" id="pp_tgl_booking_col">
+                            <label class="form-label small text-muted mb-1">Tanggal Booking</label>
+                            <input type="date" name="tanggal_booking" id="pp_tgl_booking" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small text-muted mb-1">Catatan</label>
+                            <input type="text" name="catatan" id="pp_catatan" class="form-control form-control-sm">
+                        </div>
+                    </div>
+                    <p class="form-text text-muted mt-2 mb-0" id="pp_hint"></p>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Customer Hasil Conversion <span class="text-danger">*</span></label>
-                    <select name="customer_id" id="wonCustomerSelect" class="form-select select2" required>
-                        <option value="">— Pilih customer hasil conversion —</option>
-                        <?php foreach ($customers as $cust) : ?>
-                            <option value="<?= $cust->id_pelanggan ?>"><?= esc($cust->nama) ?> (<?= esc($cust->no_hp) ?>)</option>
-                        <?php endforeach; ?>
-                    </select>
-                    <div class="form-text">Customer harus sudah terdaftar di master pelanggan (Won → link customer).</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary" id="ppSubmit"><i class="bi bi-check-lg me-1"></i>Simpan</button>
                 </div>
-                <div class="mb-1">
-                    <label class="form-label fw-semibold">Tanggal Won</label>
-                    <input type="date" name="tanggal_won" class="form-control" value="<?= date('Y-m-d') ?>">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                <button type="submit" class="btn btn-success"><i class="bi bi-trophy me-1"></i>Konfirmasi Won</button>
             </div>
         </form>
     </div>
 </div>
 
-<style>
-    .modal {
-        z-index: 1056 !important;
-    }
-    .modal-backdrop {
-        z-index: 1055 !important;
-    }
-    .modal .select2-container {
-        z-index: 1075 !important;
-    }
-    .select2-dropdown,
-    .select2-container--open .select2-dropdown {
-        z-index: 1075 !important;
-    }
-</style>
+<!-- Modal Ubah Status Cepat -->
+<div class="modal fade" id="modalStatusProspek" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="<?= base_url('marketing/leads/status') ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="id" id="ms_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <iconify-icon icon="solar:refresh-circle-bold" class="text-primary me-1"></iconify-icon>
+                        Ubah Status Prospek
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">
+                        Status saat ini: <span class="fw-semibold" id="ms_current">-</span>
+                    </p>
+                    <div class="d-flex flex-column gap-2">
+                        <?php
+                        $stDesc = [
+                            'PROSPEK' => 'Prospek baru, belum ada janji.',
+                            'BOOKING' => 'Sudah ada janji booking.',
+                            'DATANG'  => 'Prospek datang (sudah jadi service).',
+                            'CLOSED'  => 'Selesai — wajib pilih service selesai, omset otomatis (sum sub total).',
+                            'BATAL'   => 'Prospek dibatalkan.',
+                        ];
+                        foreach ($statuses as $st) :
+                            $desc = $stDesc[$st] ?? '';
+                        ?>
+                            <label class="form-check p-3 border rounded-3 d-flex gap-3 align-items-start mb-0 st-option">
+                                <input class="form-check-input mt-1" type="radio" name="status" value="<?= $st ?>">
+                                <span class="d-block">
+                                    <span class="fw-semibold"><?= $st ?></span>
+                                    <span class="d-block small text-muted mt-1"><?= $desc ?></span>
+                                </span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="mt-3 d-none" id="msServiceWrap">
+                        <label class="form-label small text-muted mb-1">Service Selesai <span class="text-danger">*</span> <span class="text-muted">(per tanggal prospek, semua cabang)</span></label>
+                        <div class="position-relative">
+                            <input type="text" id="ms_service_search" class="form-control form-control-sm"
+                                placeholder="Ketik ID / no service / nama..." autocomplete="off">
+                            <input type="hidden" name="service_id" id="ms_service_id" value="">
+                            <div class="list-group position-absolute w-100 shadow d-none serv-results"
+                                style="z-index:1060;max-height:200px;overflow:auto;" id="ms_service_results"></div>
+                        </div>
+                        <p class="small text-muted mt-1 mb-0" id="ms_omset_info"></p>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Untuk <strong>CLOSED</strong>, service selesai wajib dipilih agar omset terhitung otomatis (sum sub total); tanggal_won otomatis hari ini bila belum terisi.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Simpan Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <script>
-    var wonModal = document.getElementById('wonModal');
-    if (wonModal) {
-        wonModal.addEventListener('show.bs.modal', function(event) {
-            var btn = event.relatedTarget;
-            if (!btn) return;
-            document.getElementById('wonLeadId').value = btn.getAttribute('data-lead-id');
-            document.getElementById('wonLeadNama').textContent = btn.getAttribute('data-lead-nama') || '-';
-            document.getElementById('wonLeadHp').textContent = '+' + (btn.getAttribute('data-lead-hp') || '-');
+    var PROSPEK_STATUSES = <?= json_encode(array_values($statuses)) ?>;
+    var UNITS_MAP = {};
+    <?php foreach ($units as $u) : ?>
+        UNITS_MAP[<?= (int)$u->idunit ?>] = <?= json_encode($u->NAMA_UNIT) ?>;
+    <?php endforeach; ?>
+
+    // ── Service search AJAX ──────────────────────────────────────────
+    function initServiceSearch(opts) {
+        var input = opts.input, hidden = opts.hidden, resultsEl = opts.results;
+        var timer = null;
+
+        function close() { resultsEl.classList.add('d-none'); resultsEl.innerHTML = ''; }
+
+        function render(items) {
+            resultsEl.innerHTML = '';
+            if (!items.length) {
+                resultsEl.innerHTML = '<div class="list-group-item text-muted small">Tidak ditemukan.</div>';
+                resultsEl.classList.remove('d-none');
+                return;
+            }
+            items.forEach(function(it) {
+                var a = document.createElement('button');
+                a.type = 'button';
+                a.className = 'list-group-item list-group-item-action text-start py-2';
+                a.innerHTML =
+                    '<div class="fw-semibold small"><span class="badge rounded-pill bg-light border text-dark me-1">' + it.status_label + '</span>' + it.text +
+                    (it.unit_name ? ' <span class="text-muted fw-normal">· ' + it.unit_name + '</span>' : '') + '</div>' +
+                    '<div class="small text-muted">Selesai: ' + it.service_date + (it.status_label === 'SELESAI' && it.omset > 0 ? ' · Omset: <strong>Rp ' + Number(it.omset).toLocaleString('id-ID') + '</strong>' : '') + '</div>';
+                a.addEventListener('click', function() {
+                    hidden.value = it.id;
+                    input.value = it.text;
+                    if (opts.onSelect) { opts.onSelect(it); }
+                    close();
+                });
+                resultsEl.appendChild(a);
+            });
+            resultsEl.classList.remove('d-none');
+        }
+
+        input.addEventListener('input', function() {
+            clearTimeout(timer);
+            close();
+            var q = input.value.trim();
+            if (q.length < 1) { hidden.value = ''; if (opts.onClear) { opts.onClear(); } return; }
+            timer = setTimeout(function() {
+                var p = opts.params ? opts.params() : {};
+                var qs = new URLSearchParams({ q: q });
+                if (p.s) qs.set('s', p.s);
+                if (p.unit_id) qs.set('unit_id', p.unit_id);
+                fetch('<?= base_url('marketing/search_service') ?>?' + qs.toString(), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) { render(d.results || []); })
+                    .catch(function() { close(); });
+            }, 300);
         });
+
+        document.addEventListener('click', function(e) {
+            if (e.target !== input && !resultsEl.contains(e.target)) { close(); }
+        });
+        input.addEventListener('keydown', function(e) { if (e.key === 'Escape') { close(); } });
+
+        return { clear: close };
     }
 
-    // Donut komposisi lead
-    if (window.ApexCharts && document.querySelector('#chartLeadsStatus')) {
-        var lb = <?= json_encode($leadsByStatus) ?>;
-        new ApexCharts(document.querySelector('#chartLeadsStatus'), {
-            chart: { type: 'pie', fontFamily: 'inherit', toolbar: { show: false }, height: 260 },
-            labels: ['NEW', 'FOLLOW_UP', 'WON', 'LOST'],
-            series: [lb.NEW, lb.FOLLOW_UP, lb.WON, lb.LOST],
-            colors: ['#adb5bd', '#ffc107', '#198754', '#dc3545'],
-            legend: { position: 'bottom' },
-            stroke: { width: 0 },
-            dataLabels: { enabled: true, formatter: function(v) { return Math.round(v) + '%'; } },
-        }).render();
+    // ── Modal Tambah / Edit ──────────────────────────────────────────
+    var unitName = function(id) { return UNITS_MAP[id] || '-'; };
+    var ppClosed = function() { return document.getElementById('pp_status').value === 'CLOSED'; };
+    var ppHasService = function() { return !!document.getElementById('pp_service_id').value; };
+    var ppSvcData = null;
+
+    function setText(id, v) { document.getElementById(id).textContent = v === null || v === undefined || v === '' ? '-' : v; }
+
+    function renderPreview(it) {
+        ppSvcData = it;
+        setText('pp_svc_no', it.text.split('\u00B7')[0].trim());
+        setText('pp_svc_status', it.status_label);
+        setText('pp_svc_nama', it.nama);
+        setText('pp_svc_hp', it.no_hp);
+        setText('pp_svc_unit', unitName(it.unit_id));
+        setText('pp_svc_tgl', it.service_date);
+        setText('pp_svc_ket', it.keterangan);
+        if (it.status_label === 'SELESAI') {
+            document.getElementById('pp_omset_row').classList.remove('d-none');
+            document.getElementById('pp_svc_omset').textContent = 'Rp ' + Number(it.omset || 0).toLocaleString('id-ID');
+        } else {
+            document.getElementById('pp_omset_row').classList.add('d-none');
+        }
     }
 
-    // Bar komposisi per source
-    if (window.ApexCharts && document.querySelector('#chartLeadsSource')) {
-        <?php $srcCount = [];
-        foreach ($rows as $rl) {
-            $sn = isset($sourceMap[(int)$rl->source_id]) ? $sourceMap[(int)$rl->source_id]->name : 'Tanpa Source';
-            $srcCount[$sn] = ($srcCount[$sn] ?? 0) + 1;
-        } ?>
-        var srcLabels = <?= json_encode(array_keys($srcCount)) ?>;
-        var srcData = <?= json_encode(array_values($srcCount)) ?>;
-        new ApexCharts(document.querySelector('#chartLeadsSource'), {
-            chart: { type: 'bar', fontFamily: 'inherit', toolbar: { show: false }, height: 260 },
-            series: [{ name: 'Lead', data: srcData }],
-            xaxis: { categories: srcLabels },
-            plotOptions: { bar: { columnWidth: '50%', borderRadius: 3 } },
-            colors: ['#1d4e89'],
-            dataLabels: { enabled: true },
-            legend: { show: false },
-        }).render();
+    function clearServiceSelection() {
+        ppSvcData = null;
+        document.getElementById('pp_service_id').value = '';
+        document.getElementById('pp_service_search').value = '';
+        syncProspekMode();
     }
+
+    function syncProspekMode() {
+        var closed = ppClosed();
+        var hasSvc = ppHasService();
+        var manualArea = document.getElementById('pp_manual_area');
+        var preview = document.getElementById('pp_preview');
+        var submit = document.getElementById('ppSubmit');
+        var hint = document.getElementById('pp_hint');
+
+        // Unit hanya dipakai utk non-CLOSED; CLOSED diambil dari service.
+        document.getElementById('pp_unit_col').classList.toggle('d-none', closed);
+        document.getElementById('pp_unit').required = !closed;
+
+        // Tanggal booking tidak relevan saat CLOSED.
+        document.getElementById('pp_tgl_booking_col').classList.toggle('d-none', closed);
+        if (closed) { document.getElementById('pp_tgl_booking').value = ''; }
+
+        // Manual: hanya saat bukan CLOSED dan belum ada service terpilih.
+        manualArea.classList.toggle('d-none', closed || hasSvc);
+        preview.classList.toggle('d-none', !hasSvc);
+
+        if (hasSvc)      { hint.innerHTML = 'Detail prospek diambil dari service. Anda dapat menyesuaikan Status & Catatan.'; }
+        else if (closed) { hint.innerHTML = 'Status <strong>CLOSED</strong> wajib memilih <strong>Service</strong> <strong>SELESAI</strong> per tanggal prospek (semua cabang). Omset otomatis = sum sub total penjualan service.'; }
+        else             { hint.innerHTML = 'Belum ada service? Isi <strong>Nama/Akun</strong> secara manual. Service boleh dipilih bila sudah tersedia (opsional).'; }
+
+        submit.disabled = closed && !hasSvc;
+        submit.title = (closed && !hasSvc) ? 'Pilih service selesai dahulu' : '';
+        document.getElementById('pp_svc_hint_ctx').textContent = closed ? '(wajib, service selesai)' : '(opsional)';
+    }
+
+    function fillManualFromService(it) {
+        document.getElementById('pp_unit').value = it.unit_id ? String(it.unit_id) : '';
+        if (!document.getElementById('pp_tanggal').value && it.service_date) {
+            document.getElementById('pp_tanggal').value = it.service_date;
+        }
+    }
+
+    initServiceSearch({
+        input: document.getElementById('pp_service_search'),
+        hidden: document.getElementById('pp_service_id'),
+        results: document.getElementById('pp_service_results'),
+        params: function() {
+            // CLOSED → cari per tanggal prospek, SEMUA unit (cabang tampil di hasil).
+            if (ppClosed()) {
+                return { s: 1, sdate: document.getElementById('pp_tanggal').value || '' };
+            }
+            return { s: 0, unit_id: document.getElementById('pp_unit').value || 0 };
+        },
+        onSelect: function(it) {
+            renderPreview(it);
+            fillManualFromService(it);
+            syncProspekMode();
+        },
+        onClear: function() { syncProspekMode(); }
+    });
+
+    document.getElementById('pp_status').addEventListener('change', function() {
+        // Status berpindah: jika CLOSED tanpa service → submit terkunci; jika keluar CLOSED → omset tak relevan.
+        syncProspekMode();
+    });
+    document.getElementById('pp_tanggal').addEventListener('change', function() {
+        // Ganti tanggal → pilihan service (per tanggal) tidak relevan lagi.
+        if (ppClosed()) { clearServiceSelection(); }
+    });
+    document.getElementById('pp_unit').addEventListener('change', function() {
+        clearServiceSelection();
+    });
+
+    function openProspekModal() {
+        document.getElementById('pp_id').value = '';
+        document.getElementById('prospekForm').reset();
+        document.getElementById('pp_tanggal').value = '<?= date('Y-m-d') ?>';
+        document.getElementById('pp_title').textContent = 'Tambah Prospek';
+        document.getElementById('pp_service_search').value = '';
+        document.getElementById('pp_service_id').value = '';
+        ppSvcData = null;
+        syncProspekMode();
+        var modal = new bootstrap.Modal(document.getElementById('modalProspek'));
+        modal.show();
+    }
+
+    document.querySelectorAll('.btn-edit').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('pp_title').textContent = 'Edit Prospek';
+            document.getElementById('pp_id').value = this.dataset.id;
+            document.getElementById('pp_tanggal').value = this.dataset.tanggal;
+            document.getElementById('pp_platform').value = this.dataset.platform;
+            document.getElementById('pp_unit').value = this.dataset.unit;
+            document.getElementById('pp_status').value = this.dataset.status;
+            document.getElementById('pp_tgl_booking').value = this.dataset.tanggal_booking;
+            document.getElementById('pp_catatan').value = this.dataset.catatan;
+            document.getElementById('pp_nama').value = this.dataset.nama;
+            document.getElementById('pp_no_telp').value = this.dataset.no_telp_wa;
+            document.getElementById('pp_keterangan').value = this.dataset.keterangan;
+
+            var svcId = this.dataset.service ? parseInt(this.dataset.service, 10) : 0;
+            document.getElementById('pp_service_id').value = svcId > 0 ? String(svcId) : '';
+            document.getElementById('pp_service_search').value = this.dataset.svc || '';
+            if (svcId > 0) {
+                renderPreview({
+                    text: this.dataset.svc,
+                    status_label: this.dataset.status === 'CLOSED' ? 'SELESAI' : 'PROSES',
+                    nama: this.dataset.nama,
+                    no_hp: this.dataset.no_telp_wa,
+                    keterangan: this.dataset.keterangan,
+                    unit_id: parseInt(this.dataset.unit || '0', 10),
+                    service_date: this.dataset.tanggal,
+                    omset: parseFloat(this.dataset.omset || '0')
+                });
+            } else {
+                ppSvcData = null;
+            }
+            syncProspekMode();
+            var modal = new bootstrap.Modal(document.getElementById('modalProspek'));
+            modal.show();
+        });
+    });
+
+    // ── Modal Ubah Status Cepat ──────────────────────────────────────
+    var msDate = '';
+    document.querySelectorAll('.st-change').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('ms_id').value = this.dataset.id;
+            var cur = this.dataset.status;
+            msDate = this.dataset.tanggal || '';
+            document.querySelectorAll('#modalStatusProspek input[name="status"]').forEach(function(r) {
+                r.checked = (r.value === cur);
+                r.closest('label').classList.toggle('border-primary', r.value === cur);
+                r.closest('label').classList.toggle('shadow-sm', r.value === cur);
+            });
+            document.getElementById('ms_current').textContent = cur;
+            document.getElementById('ms_service_id').value = this.dataset.service || '';
+            document.getElementById('ms_service_search').value = this.dataset.svc || '';
+            toggleMsService(cur);
+        });
+    });
+
+    function toggleMsService(status) {
+        var wrap = document.getElementById('msServiceWrap');
+        var isClosed = (status === 'CLOSED');
+        wrap.classList.toggle('d-none', !isClosed);
+        document.getElementById('ms_omset_info').textContent = isClosed
+            ? ('Cari service SELESAI tanggal ' + (msDate || '-') + ' (semua cabang).' +
+               (document.getElementById('ms_service_id').value ? ' Service terpilih: ganti hanya bila perlu.' : ''))
+            : '';
+    }
+
+    initServiceSearch({
+        input: document.getElementById('ms_service_search'),
+        hidden: document.getElementById('ms_service_id'),
+        results: document.getElementById('ms_service_results'),
+        params: function() { return { s: 1, sdate: msDate }; },
+        onSelect: function(it) {
+            document.getElementById('ms_omset_info').textContent = 'Omset otomatis: Rp ' + Number(it.omset).toLocaleString('id-ID') + (it.unit_name ? ' · Cabang: ' + it.unit_name : '');
+        }
+    });
+
+    document.querySelectorAll('#modalStatusProspek input[name="status"]').forEach(function(r) {
+        r.addEventListener('change', function() {
+            document.querySelectorAll('#modalStatusProspek input[name="status"]').forEach(function(x) {
+                x.closest('label').classList.toggle('border-primary', x.checked);
+                x.closest('label').classList.toggle('shadow-sm', x.checked);
+            });
+            toggleMsService(this.value);
+        });
+    });
 </script>

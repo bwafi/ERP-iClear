@@ -213,7 +213,157 @@ class Marketing extends BaseController
         }
     }
 
-    // ── Lead Marketing ────────────────────────────────────────────
+    // ── Detail Prospek Marketing ──────────────────────────────────
+
+    private function db()
+    {
+        return \Config\Database::connect();
+    }
+
+    /** Map idservice → no_service (untuk menampilkan tautan service di tabel). */
+    private function serviceMap(): array
+    {
+        $rows = $this->db()->query(
+            "SELECT idservice, no_service FROM service WHERE status_service = 4"
+        )->getResultArray();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int)$r['idservice']] = (string)$r['no_service'];
+        }
+        return $map;
+    }
+
+    /** Omset service selesai = sum(service_sparepart.sub_total). */
+    /**
+     * Omset service selesai = sum(service_sparepart.sub_total).
+     * HPP TIDAK dikurangkan (laba terpisah: laba = sub_total - hpp).
+     */
+    private function serviceOmset(int $serviceId): float
+    {
+        $row = $this->db()->query(
+            "SELECT COALESCE(SUM(sp.sub_total), 0) AS t
+             FROM service_sparepart sp
+             WHERE sp.service_idservice = ?",
+            [$serviceId]
+        )->getRow();
+        return round((float)$row->t, 0);
+    }
+
+    /** Cari service via AJAX. Param `s=1` hanya service SELESAI (utk CLOSED). */
+    public function search_service()
+    {
+        if ($r = $this->readOrRedirect()) {
+            return $r;
+        }
+
+        $q          = trim((string)$this->request->getGet('q'));
+        $unitId     = (int)$this->request->getGet('unit_id');
+        $sdate      = trim((string)$this->request->getGet('sdate'));
+        $selesaiOnly = (int)$this->request->getGet('s') === 1;
+
+        // CLOSED → hanya service selesai; selain itu semua kecuali dibatalkan.
+        $where = $selesaiOnly ? 's.status_service = 4' : 's.status_service != 5';
+        $param = [];
+        if ($q !== '') {
+            $where .= " AND (CAST(s.idservice AS CHAR) = ? OR s.no_service LIKE ? OR p.nama LIKE ?)";
+            $like  = '%' . $q . '%';
+            array_push($param, $q, $like, $like);
+        }
+        // CLOSED (closing) → cari per TANGGAL, semua unit (cabang tampil di list).
+        if ($selesaiOnly && preg_match('/^\d{4}-\d{2}-\d{2}$/', $sdate)) {
+            $where .= ' AND DATE(s.tanggal_selesai) = ?';
+            $param[] = $sdate;
+        }
+        // Filter unit hanya untuk non-CLOSED / saat unit dikirim & valid.
+        if ($unitId > 0 && !$selesaiOnly && in_array($unitId, array_map(fn($u) => (int)$u->idunit, $this->units()), true)) {
+            $where .= ' AND s.unit_idunit = ?';
+            $param[] = $unitId;
+        }
+
+        $rows = $this->db()->query(
+            "SELECT s.idservice, s.no_service, s.unit_idunit,
+                    s.pelanggan_id_pelanggan, s.keluhan, s.keterangan,
+                    DATE_FORMAT(COALESCE(s.tanggal_selesai, s.created_at), '%Y-%m-%d') AS service_date,
+                    CASE WHEN s.status_service = 4 THEN 'SELESAI' ELSE 'PROSES' END AS status_label,
+                    COALESCE(u.NAMA_UNIT, '') AS unit_name,
+                    COALESCE(p.nama, '') AS nama_pelanggan,
+                    COALESCE(p.no_hp, '') AS no_hp_pelanggan,
+                    COALESCE(SUM(sp.sub_total), 0) AS sub_total,
+                    COALESCE(SUM(sp.hpp_penjualan * sp.jumlah), 0) AS total_hpp
+             FROM service s
+             LEFT JOIN service_sparepart sp ON sp.service_idservice = s.idservice
+             LEFT JOIN pelanggan p ON p.id_pelanggan = s.pelanggan_id_pelanggan
+             LEFT JOIN unit u ON u.idunit = s.unit_idunit
+             WHERE {$where}
+             GROUP BY s.idservice, s.no_service, s.unit_idunit, s.pelanggan_id_pelanggan,
+                      s.keluhan, s.keterangan, s.tanggal_selesai, s.created_at,
+                      p.nama, p.no_hp, u.NAMA_UNIT
+             ORDER BY s.tanggal_selesai DESC, s.created_at DESC
+             LIMIT 30",
+            $param
+        )->getResultArray();
+
+        $result = array_map(function ($r) {
+            $omset = max(0, (int)$r['sub_total']);
+            return [
+                'id'           => (int)$r['idservice'],
+                'text'         => trim($r['no_service'] . ' · ' . $r['nama_pelanggan']),
+                'status_label' => $r['status_label'],
+                'service_date' => $r['service_date'],
+                'omset'        => $omset,
+                'nama'         => $r['nama_pelanggan'],
+                'no_hp'        => $r['no_hp_pelanggan'],
+                'keterangan'   => trim(trim((string)$r['keluhan']) . ' ' . trim((string)$r['keterangan'])),
+                'unit_id'      => (int)$r['unit_idunit'],
+                'unit_name'    => $r['unit_name'],
+            ];
+        }, $rows);
+
+        return $this->response->setContentType('application/json')->setJSON([
+            'results' => $result,
+            'count'   => count($result),
+        ]);
+    }
+
+    /** Data service lengkap + pelanggan untuk pengisian otomatis prospek. */
+    private function serviceDetail(int $serviceId): ?object
+    {
+        return $this->db()->query(
+            "SELECT s.idservice, s.no_service, s.keluhan, s.keterangan,
+                    s.unit_idunit, s.status_service, s.pelanggan_id_pelanggan,
+                    s.tanggal_selesai,
+                    COALESCE(p.nama, '') AS nama_pelanggan,
+                    COALESCE(p.no_hp, '') AS no_hp_pelanggan
+             FROM service s
+             LEFT JOIN pelanggan p ON p.id_pelanggan = s.pelanggan_id_pelanggan
+             WHERE s.idservice = ?",
+            [$serviceId]
+        )->getRow();
+    }
+
+    /**
+     * Field CLOSED yang SELALU diambil dari service (source of truth).
+     * Omset dihitung server-side: SUM(service_sparepart.sub_total).
+     * Tidak mempercayai kiriman frontend utk nama/noHP/keterangan/omset.
+     */
+    private function closedFieldsFromService(object $svc, int $serviceId): array
+    {
+        $keterangan = trim(trim((string)$svc->keluhan) . ' ' . trim((string)$svc->keterangan));
+        $omset      = $this->serviceOmset($serviceId);
+        $serviceDate = !empty($svc->tanggal_selesai)
+            ? date('Y-m-d', strtotime($svc->tanggal_selesai))
+            : null;
+
+        return [
+            'service_id'  => $serviceId,
+            'nama'        => mb_substr(trim($svc->nama_pelanggan), 0, 150),
+            'no_telp_wa'  => trim($svc->no_hp_pelanggan) !== '' ? mb_substr(trim($svc->no_hp_pelanggan), 0, 30) : null,
+            'keterangan'  => $keterangan !== '' ? mb_substr($keterangan, 0, 255) : null,
+            'unit_id'     => (int)$svc->unit_idunit,
+            'omset'       => $omset > 0 ? $omset : null,
+            'tanggal'     => $serviceDate,
+        ];
+    }
 
     public function leads()
     {
@@ -224,39 +374,37 @@ class Marketing extends BaseController
         $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
         $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
         $status = strtoupper(trim((string)$this->request->getGet('status') ?: ''));
+        $platform = trim((string)$this->request->getGet('platform') ?: '');
+        $unitId = (int)$this->request->getGet('unit_id');
         if (!$this->validPeriod($bulan, $tahun)) {
             $bulan = (int)date('n');
             $tahun = (int)date('Y');
         }
-        if (!in_array($status, ['', 'NEW', 'FOLLOW_UP', 'WON', 'LOST'], true)) {
+        if ($status !== '' && !in_array($status, \App\Models\ModelMarketingLead::PROSPEK_STATUSES, true)) {
             $status = '';
         }
+        if ($unitId > 0 && !in_array($unitId, array_map(fn($u) => (int)$u->idunit, $this->units()), true)) {
+            $unitId = 0;
+        }
 
-        // Pagination daftar lead per bulan.
+        // Pagination daftar detail prospek manual (baris non-Kommo).
         $perPage = 25;
         $page    = max(1, (int)$this->request->getGet('page'));
-        $statusFilter = $status !== '' ? $status : null;
-        $total   = $this->LeaderModel->countByPeriod($bulan, $tahun, $statusFilter);
+        $statusFilter   = $status !== '' ? $status : null;
+        $platformFilter = $platform !== '' ? $platform : null;
+        $unitFilter     = $unitId > 0 ? $unitId : null;
+        $total   = $this->LeaderModel->countDetailProspek($bulan, $tahun, $statusFilter, $platformFilter, $unitFilter);
         $totalPages = (int)ceil($total / $perPage);
         if ($page > $totalPages && $totalPages > 0) {
             $page = $totalPages;
         }
-        $rows = $this->LeaderModel->findByPeriod($bulan, $tahun, $statusFilter, $perPage, ($page - 1) * $perPage);
-        // Isi nama source & customer terkait.
-        $sourceMap  = [];
-        $customerMap = [];
-        foreach ($this->SourceModel->active() as $s) {
-            $sourceMap[(int)$s->id] = $s;
-        }
-        $customerIds = array_unique(array_values(array_filter(array_map(fn($l) => (int)$l->customer_id, $rows), fn($v) => $v > 0)));
-        if (!empty($customerIds)) {
-            foreach ($this->CustomerModel->whereIn('id_pelanggan', $customerIds)->findAll() as $c) {
-                $customerMap[(int)$c->id_pelanggan] = $c;
-            }
-        }
+        $rows = $this->LeaderModel->findDetailProspek($bulan, $tahun, $statusFilter, $platformFilter, $unitFilter, $perPage, ($page - 1) * $perPage);
 
-        $customers = $this->CustomerModel->orderBy('id_pelanggan', 'DESC')->findAll(300);
-        $csPeoples = (new \App\Models\ModelAuth())->getCsKadiv();
+        $unitList = $this->units();
+        $unitMap  = [];
+        foreach ($unitList as $u) {
+            $unitMap[(int)$u->idunit] = $u->NAMA_UNIT;
+        }
 
         return view('template', [
             'body'      => 'marketing/leads',
@@ -264,17 +412,18 @@ class Marketing extends BaseController
             'bulan'     => $bulan,
             'tahun'     => $tahun,
             'status'    => $status,
+            'platform'  => $platform,
+            'statuses'  => \App\Models\ModelMarketingLead::PROSPEK_STATUSES,
+            'platforms' => (new ModelMarketingPlatform())->active(),
+            'units'     => $unitList,
+            'unitId'    => $unitId,
+            'unitMap'   => $unitMap,
+            'serviceMap'=> $this->serviceMap(),
             'rows'      => $rows,
             'currentPage' => $page,
             'perPage'     => $perPage,
             'total'       => $total,
             'totalPages'  => $totalPages,
-            'sources'   => $this->SourceModel->active(),
-            'sourceMap' => $sourceMap,
-            'customerMap' => $customerMap,
-            'customers' => $customers,
-            'csPeoples' => $csPeoples,
-            'leadsByStatus' => $this->Service->leadsByStatus($bulan, $tahun),
             'canWrite'  => $this->canWrite(),
         ]);
     }
@@ -288,49 +437,132 @@ class Marketing extends BaseController
             return redirect()->to(base_url('marketing/leads'));
         }
 
-        $id       = (int)($this->request->getPost('id') ?? 0);
-        $tanggal  = trim((string)$this->request->getPost('tanggal'));
-        $nama     = trim((string)$this->request->getPost('nama'));
-        $noHp     = trim((string)$this->request->getPost('no_hp'));
-        $sourceId = (int)$this->request->getPost('source_id');
-        $adsOrg   = strtoupper(trim((string)$this->request->getPost('ads_organic') ?: 'ORGANIC'));
-        $cs       = trim((string)$this->request->getPost('cs'));
-        $status   = strtoupper(trim((string)$this->request->getPost('status') ?: 'NEW'));
+        $id             = (int)($this->request->getPost('id') ?? 0);
+        $tanggal        = trim((string)$this->request->getPost('tanggal'));
+        $nama           = trim((string)$this->request->getPost('nama'));
+        $platform       = trim((string)$this->request->getPost('platform'));
+        $unitId         = (int)$this->request->getPost('unit_id');
+        $noTelp         = trim((string)$this->request->getPost('no_telp_wa'));
+        $keterangan     = trim((string)$this->request->getPost('keterangan'));
+        $status         = strtoupper(trim((string)$this->request->getPost('status') ?: \App\Models\ModelMarketingLead::STATUS_PROSPEK));
+        $tanggalBooking = trim((string)$this->request->getPost('tanggal_booking'));
+        $serviceId      = (int)$this->request->getPost('service_id');
+        $catatan        = trim((string)$this->request->getPost('catatan'));
 
-        if ($tanggal === '' || $nama === '') {
-            return redirect()->back()->with('error', 'Tanggal dan nama lead wajib diisi.');
+        if ($tanggal === '') {
+            return redirect()->back()->with('error', 'Tanggal wajib diisi.');
         }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
             return redirect()->back()->with('error', 'Format tanggal tidak valid.');
         }
-        if (!in_array($adsOrg, ['ADS', 'ORGANIC'], true)) {
-            $adsOrg = 'ORGANIC';
+        if ($platform === '') {
+            return redirect()->back()->with('error', 'Platform wajib dipilih.');
         }
-        if (!in_array($status, ['NEW', 'FOLLOW_UP', 'WON', 'LOST'], true)) {
-            $status = 'NEW';
+        if (!in_array($status, \App\Models\ModelMarketingLead::PROSPEK_STATUSES, true)) {
+            $status = \App\Models\ModelMarketingLead::STATUS_PROSPEK;
         }
-        if ($sourceId > 0 && !$this->SourceModel->find($sourceId)) {
-            $sourceId = null;
+        if ($tanggalBooking !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalBooking)) {
+            $tanggalBooking = '';
+        }
+
+        // ── Ambil / validasi service ─────────────────────────────────
+        $svc = null;
+        if ($serviceId > 0) {
+            $svc = $this->serviceDetail($serviceId);
+            if (!$svc) {
+                return redirect()->back()->with('error', 'Service tidak ditemukan.');
+            }
+            // CLOSED → wajib service SELESAI (omset otomatis).
+            if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED && (int)$svc->status_service !== 4) {
+                return redirect()->back()->with('error', 'Status CLOSED wajib memilih service yang sudah SELESAI.');
+            }
+            // Selain CLOSED → service boleh dipilih asal tidak dibatalkan.
+            if ($status !== \App\Models\ModelMarketingLead::STATUS_CLOSED && (int)$svc->status_service === 5) {
+                return redirect()->back()->with('error', 'Service yang dibatalkan tidak dapat dipilih.');
+            }
+        }
+
+        // Baris manual (detail prospek) yang boleh diedit / menjadi basis existing.
+        $existing = null;
+        if ($id > 0) {
+            $existing = $this->LeaderModel->findManualById($id);
+            if (!$existing) {
+                return redirect()->back()->with('error', 'Prospek tidak ditemukan.');
+            }
+        }
+
+        $omset = 0.0;
+        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+            // CLOSED → service adalah source of truth. Semua field diambil
+            // ulang DARI SERVICE, termasuk nama/no HP/keterangan/unit/tanggal.
+            // Data manual (mis. nama lama dari DATANG) TIDAK dipertahankan.
+            if (!$svc) {
+                return redirect()->back()->with('error', 'Status CLOSED wajib memilih service yang sudah SELESAI.');
+            }
+            $closed = $this->closedFieldsFromService($svc, $serviceId);
+            $tanggal        = $closed['tanggal'] ?: $tanggal;
+            $nama           = $closed['nama'];
+            $noTelp         = (string)$closed['no_telp_wa'];
+            $keterangan     = (string)$closed['keterangan'];
+            $unitId         = $closed['unit_id'];
+            $omset          = (float)$closed['omset'];
+            // Tanggal booking tidak relevan untuk CLOSED.
+            $tanggalBooking = '';
+        } else {
+            // Non-CLOSED → data prospek MEMAKAI input manual yang ada.
+            // Service hanya tautan opsional, bukan sumber data.
+            if ($nama === '') {
+                $nama = $existing ? trim((string)$existing->nama) : ($svc ? trim($svc->nama_pelanggan) : '');
+            }
+            if ($nama === '') {
+                return redirect()->back()->with('error', 'Nama/Akun wajib diisi bila belum ada service.');
+            }
+            if ($noTelp === '') {
+                $noTelp = $existing ? trim((string)$existing->no_telp_wa) : ($svc ? trim($svc->no_hp_pelanggan) : '');
+            }
+            if ($keterangan === '') {
+                $keterangan = $existing
+                    ? trim((string)$existing->keterangan)
+                    : ($svc ? trim(trim((string)$svc->keluhan) . ' ' . trim((string)$svc->keterangan)) : '');
+            }
+            if ($unitId <= 0) {
+                $unitId = $existing ? (int)$existing->unit_id : ($svc ? (int)$svc->unit_idunit : 0);
+            }
+        }
+
+        // Unit harus valid (dari pilihan manual / existing / service).
+        $unitList   = $this->units();
+        $validUnits = array_map(fn($u) => (int)$u->idunit, $unitList);
+        if (!in_array($unitId, $validUnits, true)) {
+            return redirect()->back()->with('error', 'Unit/cabang tidak valid.');
         }
 
         $data = [
-            'tanggal'     => $tanggal,
-            'nama'        => $nama,
-            'no_hp'       => $noHp !== '' ? $noHp : null,
-            'source_id'   => $sourceId > 0 ? $sourceId : null,
-            'ads_organic' => $adsOrg,
-            'cs'          => $cs !== '' ? $cs : null,
-            'status'      => $status,
-            'created_by'  => $this->currentAkun(),
+            'tanggal'         => $tanggal,
+            'nama'            => mb_substr($nama, 0, 150),
+            'platform'        => mb_substr($platform, 0, 50),
+            'unit_id'         => $unitId,
+            'no_telp_wa'      => $noTelp !== '' ? mb_substr($noTelp, 0, 30) : null,
+            'keterangan'      => $keterangan !== '' ? mb_substr($keterangan, 0, 255) : null,
+            'status'          => $status,
+            'tanggal_booking' => $tanggalBooking !== '' ? $tanggalBooking : null,
+            'omset'           => $omset > 0 ? $omset : null,
+            'service_id'      => $serviceId > 0 ? $serviceId : null,
+            'catatan'         => $catatan !== '' ? $catatan : null,
+            // tanggal_won = tanggal tercatat saat CLOSED → sumber KPI customer/omzet
+            // (baris Kommo tetap dikeluarkan dari KPI lewat kommo_lead_id IS NULL).
+            'tanggal_won'     => $status === \App\Models\ModelMarketingLead::STATUS_CLOSED ? $tanggal : null,
+            'created_by'      => $this->currentAkun(),
         ];
 
-        if ($id > 0 && $this->LeaderModel->find($id)) {
+        if ($id > 0) {
             $this->LeaderModel->update($id, $data);
         } else {
+            $data['nomor'] = $this->LeaderModel->nextNomorForDate($tanggal);
             $this->LeaderModel->insert($data);
         }
 
-        return redirect()->back()->with('success', 'Lead marketing tersimpan.');
+        return redirect()->back()->with('success', 'Detail prospek tersimpan.');
     }
 
     public function leads_status()
@@ -342,41 +574,60 @@ class Marketing extends BaseController
             return redirect()->to(base_url('marketing/leads'));
         }
 
-        $id       = (int)$this->request->getPost('id');
-        $status   = strtoupper(trim((string)$this->request->getPost('status')));
-        $lead     = $this->LeaderModel->find($id);
+        $id     = (int)$this->request->getPost('id');
+        $status = strtoupper(trim((string)$this->request->getPost('status')));
+        $serviceId = (int)$this->request->getPost('service_id');
+        $lead   = $this->LeaderModel->findManualById($id);
         if (!$lead) {
-            return redirect()->back()->with('error', 'Lead tidak ditemukan.');
+            return redirect()->back()->with('error', 'Prospek tidak ditemukan.');
         }
-
-        if ($status === 'WON') {
-            $customerId = (int)$this->request->getPost('customer_id');
-            $customer   = $customerId > 0 ? $this->CustomerModel->find($customerId) : null;
-            if (!$customer) {
-                return redirect()->back()->with('error', 'Pilih customer hasil conversion untuk menjadikan WON.');
+        if (!in_array($status, \App\Models\ModelMarketingLead::PROSPEK_STATUSES, true)) {
+            return redirect()->back()->with('error', 'Status tidak valid.');
+        }
+        // CLOSED wajib memilih service yang SUDAH SELESAI (omset otomatis).
+        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+            $svc = $serviceId > 0 ? $this->serviceDetail($serviceId) : null;
+            if (!$svc || (int)$svc->status_service !== 4) {
+                return redirect()->back()->with('error', 'Status CLOSED wajib memilih service yang sudah SELESAI.');
             }
-            $tanggalWon = trim((string)$this->request->getPost('tanggal_won') ?: '');
-            if ($tanggalWon === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggalWon)) {
-                $tanggalWon = date('Y-m-d');
+        } else {
+            $svc = null;
+        }
+
+        $update = [
+            'status'      => $status,
+            'tanggal_won' => $status === \App\Models\ModelMarketingLead::STATUS_CLOSED
+                ? (trim((string)$lead->tanggal_won) !== '' ? $lead->tanggal_won : date('Y-m-d'))
+                : null,
+        ];
+
+        // Keluar dari CLOSED → omset tidak lagi berlaku (KPI hanya hitung CLOSED).
+        if ($status !== \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+            $update['omset'] = null;
+        }
+
+        // Menjadi CLOSED → service menjadi source of truth: seluruh field
+        // data prospek (nama/noHP/keterangan/unit/tanggal/omset) disinkronkan
+        // dari service. Data manual status lama (mis. nama dari DATANG) TIDAK
+        // dipertahankan. Tanggal booking dikosongkan (tidak relevan saat CLOSED).
+        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+            $closed = $this->closedFieldsFromService($svc, $serviceId);
+            if ($closed['tanggal'] !== null) {
+                $update['tanggal'] = $closed['tanggal'];
+                $update['tanggal_won'] = $closed['tanggal'];
             }
-            $this->LeaderModel->update($id, [
-                'status'      => 'WON',
-                'customer_id' => $customerId,
-                'tanggal_won' => $tanggalWon,
-            ]);
-            return redirect()->back()->with('success', 'Lead ditandai WON dan tertaut ke customer.');
+            if ($closed['nama'] !== '')          { $update['nama'] = $closed['nama']; }
+            if ($closed['no_telp_wa'] !== null)  { $update['no_telp_wa'] = $closed['no_telp_wa']; }
+            if ($closed['keterangan'] !== null)  { $update['keterangan'] = $closed['keterangan']; }
+            if ($closed['unit_id'] > 0)          { $update['unit_id'] = $closed['unit_id']; }
+            $update['omset']        = $closed['omset'];
+            $update['service_id']   = $serviceId;
+            $update['tanggal_booking'] = null;
         }
 
-        if (in_array($status, ['NEW', 'FOLLOW_UP', 'LOST'], true)) {
-            $this->LeaderModel->update($id, [
-                'status'      => $status,
-                'customer_id' => $status === 'LOST' ? null : $lead->customer_id,
-                'tanggal_won' => $status === 'LOST' ? null : $lead->tanggal_won,
-            ]);
-            return redirect()->back()->with('success', 'Status lead diperbarui.');
-        }
+        $this->LeaderModel->update($id, $update);
 
-        return redirect()->back()->with('error', 'Status tidak valid.');
+        return redirect()->back()->with('success', 'Status prospek diperbarui.');
     }
 
     public function leads_hapus()
@@ -388,11 +639,11 @@ class Marketing extends BaseController
             return redirect()->to(base_url('marketing/leads'));
         }
         $id = (int)$this->request->getPost('id');
-        if (!$this->LeaderModel->find($id)) {
-            return redirect()->back()->with('error', 'Lead tidak ditemukan.');
+        if (!$this->LeaderModel->findManualById($id)) {
+            return redirect()->back()->with('error', 'Prospek tidak ditemukan.');
         }
         $this->LeaderModel->delete($id);
-        return redirect()->back()->with('success', 'Lead dihapus.');
+        return redirect()->back()->with('success', 'Detail prospek dihapus.');
     }
 
     // ── Biaya Iklan ───────────────────────────────────────────────

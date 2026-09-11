@@ -564,6 +564,7 @@ $routes->group('marketing', ['filter' => 'auth'], function ($routes) {
     $routes->post('leads/simpan', 'Marketing::leads_simpan');
     $routes->post('leads/status', 'Marketing::leads_status');
     $routes->post('leads/hapus', 'Marketing::leads_hapus');
+    $routes->get('search_service', 'Marketing::search_service');
     $routes->get('ads', 'Marketing::ads');
     $routes->post('ads/simpan', 'Marketing::ads_simpan');
     $routes->post('ads/hapus', 'Marketing::ads_hapus');

@@ -33,7 +33,7 @@ class AddMarketingLeadCrmKpi extends Migration
 
     protected const MENUS = [
         ['idmenu' => 10044, 'urutan' => 113, 'nama_menu' => 'Marketing KPI',  'roles' => 'marketing_kpi', 'url' => 'marketing'],
-        ['idmenu' => 10045, 'urutan' => 114, 'nama_menu' => 'Lead Marketing',  'roles' => 'marketing_lead', 'url' => 'marketing/leads'],
+        ['idmenu' => 10045, 'urutan' => 114, 'nama_menu' => 'Detail Prospek',  'roles' => 'marketing_lead', 'url' => 'marketing/leads'],
         ['idmenu' => 10046, 'urutan' => 115, 'nama_menu' => 'Biaya Iklan',     'roles' => 'marketing_ads',  'url' => 'marketing/ads'],
     ];
 

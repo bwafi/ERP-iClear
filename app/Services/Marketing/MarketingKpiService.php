@@ -83,23 +83,28 @@ class MarketingKpiService
         return (new MarketingRekapService())->monthlyPaidTotal($month, $year);
     }
 
-    /** Customer hasil conversion: lead WON + tertaut customer dalam periode (tanggal_won). */
+    /**
+     * Customer hasil closing: detail prospek manual (non-Kommo) dengan
+     * status CLOSED dalam periode (berdasarkan tanggal_won).
+     * SUMBER = Detail Prospek (manual); baris Kommo dikeluarkan.
+     */
     public function countCustomers(int $month, int $year): int
     {
         $m = sprintf('%04d-%02d', $year, $month);
         return (int)$this->db->query(
             "SELECT COUNT(*) c FROM marketing_lead
-             WHERE status = 'WON' AND customer_id IS NOT NULL
-               AND DATE_FORMAT(tanggal_won, '%Y-%m') = ? AND kommo_deleted_at IS NULL",
+             WHERE status = 'CLOSED' AND kommo_lead_id IS NULL
+               AND DATE_FORMAT(tanggal_won, '%Y-%m') = ?",
             [$m]
         )->getRow()->c;
     }
 
-    /** ID customer yang berasal dari lead marketing (tanpa batas periode). */
+    /** ID customer asal detail prospek manual CLOSED (tanpa batas periode). */
     public function marketingCustomerIds(): array
     {
         $rows = $this->db->query(
-            "SELECT DISTINCT customer_id FROM marketing_lead WHERE customer_id IS NOT NULL"
+            "SELECT DISTINCT customer_id FROM marketing_lead
+             WHERE status = 'CLOSED' AND kommo_lead_id IS NULL AND customer_id IS NOT NULL"
         )->getResult();
 
         return array_values(array_unique(array_map('intval', array_column($rows, 'customer_id'))));
@@ -116,36 +121,21 @@ class MarketingKpiService
     }
 
     /**
-     * Omzet Marketing: transaksi (penjualan + service) customer asal lead
-     * pada periode. TIDAK memakai total omzet perusahaan.
+     * Omzet Marketing: TOTAL omzet dari detail prospek manual (non-Kommo)
+     * yang berstatus CLOSED pada periode (berdasarkan tanggal_won).
+     * TIDAK memakai transaksi customer; TIDAK memakai data Kommo.
      */
     public function marketingRevenue(int $month, int $year): float
     {
-        $ids = $this->marketingCustomerIds();
-        if (empty($ids)) {
-            return 0.0;
-        }
-        $idsList = implode(',', $ids);
-        $from    = sprintf('%04d-%02d-01 00:00:00', $year, $month);
-        $next    = new \DateTime(sprintf('%04d-%02d-01', $year, $month));
-        $next->modify('+1 month');
-        $to      = $next->format('Y-m-d') . ' 00:00:00';
+        $m = sprintf('%04d-%02d', $year, $month);
+        $row = $this->db->query(
+            "SELECT COALESCE(SUM(omset),0) t FROM marketing_lead
+             WHERE status = 'CLOSED' AND kommo_lead_id IS NULL
+               AND DATE_FORMAT(tanggal_won, '%Y-%m') = ?",
+            [$m]
+        )->getRow();
 
-        $penjualan = (float)$this->db->query(
-            "SELECT COALESCE(SUM(p.total_penjualan - p.diskon),0) t
-             FROM penjualan p
-             WHERE p.id_pelanggan IN ({$idsList})
-               AND p.tanggal >= '{$from}' AND p.tanggal < '{$to}'"
-        )->getRow()->t;
-
-        $service = (float)$this->db->query(
-            "SELECT COALESCE(SUM(s.total_service - s.total_diskon),0) t
-             FROM service s
-             WHERE s.pelanggan_id_pelanggan IN ({$idsList})
-               AND s.created_at >= '{$from}' AND s.created_at < '{$to}'"
-        )->getRow()->t;
-
-        return round($penjualan + $service, 2);
+        return round((float)$row->t, 2);
     }
 
     /** Conversion % = customer / lead × 100 (null aman). */
@@ -327,18 +317,28 @@ class MarketingKpiService
 
     // ── Data chart (ApexCharts) ───────────────────────────────────
 
-    /** Jumlah lead per status dalam periode (untuk donut chart). */
+    /**
+     * Jumlah detail prospek manual per status dalam periode (donut chart).
+     * Hanya baris manual (non-Kommo).
+     */
     public function leadsByStatus(int $month, int $year): array
     {
         $m    = sprintf('%04d-%02d', $year, $month);
         $rows = $this->db->query(
             "SELECT status, COUNT(*) c FROM marketing_lead
-             WHERE DATE_FORMAT(tanggal, '%Y-%m') = ?
+             WHERE kommo_lead_id IS NULL
+               AND DATE_FORMAT(tanggal, '%Y-%m') = ?
              GROUP BY status",
             [$m]
         )->getResult();
 
-        $result = ['NEW' => 0, 'FOLLOW_UP' => 0, 'WON' => 0, 'LOST' => 0];
+        $result = [
+            'PROSPEK' => 0,
+            'BOOKING' => 0,
+            'DATANG'  => 0,
+            'CLOSED'  => 0,
+            'BATAL'   => 0,
+        ];
         foreach ($rows as $r) {
             if (isset($result[$r->status])) {
                 $result[$r->status] = (int)$r->c;
