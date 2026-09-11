@@ -6,6 +6,7 @@ use App\Models\ModelKpiTarget;
 use App\Models\ModelKpiWeight;
 use App\Services\Konten\ContentKpiService;
 use App\Services\Kpi\AttendanceAggregationService;
+use App\Services\Marketing\MarketingKpiService;
 
 /**
  * KpiCalculationService — FINAL SERVICE (config-driven)
@@ -26,6 +27,7 @@ class KpiCalculationService
     protected $weightModel;
     protected $calculators = [];
     protected $attendanceAggregationService;
+    protected $marketingService;
 
     public function __construct()
     {
@@ -87,6 +89,13 @@ class KpiCalculationService
                     $context,
                     $targetContext,
                     $date
+                );
+            // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): marketing KPI (Lead/Customer/CPL/Omzet/ROAS/Channel) ====
+            } elseif ($positionId === 43 && in_array($component->code, MarketingKpiService::COMPONENT_CODES, true)) {
+                $achievement = $this->marketingService()->scoreByCode(
+                    $component->code,
+                    (int)$month,
+                    (int)$year
                 );
             // ==== MULTIMEDIA / CREATIVE (jabatan 44): Digital Marketing (ContentKpiService) ====
             } elseif ($positionId === 44 && in_array($component->code, ContentKpiService::COMPONENT_CODES, true)) {
@@ -245,6 +254,14 @@ class KpiCalculationService
     public function kontenService(): ContentKpiService
     {
         return new ContentKpiService();
+    }
+
+    public function marketingService(): MarketingKpiService
+    {
+        if ($this->marketingService === null) {
+            $this->marketingService = new MarketingKpiService();
+        }
+        return $this->marketingService;
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int

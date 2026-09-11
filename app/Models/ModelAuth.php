@@ -39,6 +39,15 @@ class ModelAuth extends Model
         return $this->where('ID_JABATAN', $id_jabatan)->findAll();
     }
 
+    /** CS (jabatan 42) & Kepala Divisi (43) untuk dropdown PIC lead. */
+    public function getCsKadiv()
+    {
+        return $this->whereIn('ID_JABATAN', [42, 43])
+            ->where('STATUS_PEGAWAI', 1)
+            ->orderBy('NAMA_AKUN', 'ASC')
+            ->findAll();
+    }
+
 
     public function cekUsername($username)
     {

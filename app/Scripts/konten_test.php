@@ -31,6 +31,9 @@ use App\Models\ModelContentPerson;
 use App\Models\ModelContentUnit;
 use App\Models\ModelPublication;
 use App\Models\ModelPublicationPerformance;
+use App\Models\ModelChannel;
+use App\Models\ModelChannelMetric;
+use App\Models\ModelChannelPerformance;
 use App\Services\Konten\ContentKpiService;
 use App\Services\Konten\ContentScopeService;
 use App\Services\Konten\ContentWorkflowService;
@@ -244,8 +247,12 @@ ok('Deadline = 1/3×100 (1 tepat waktu)', near($kpi['items'][1]['achievement'], 
 ok('Kualitas = 1/3×100 (1 lolos QC)', near($kpi['items'][2]['achievement'], 33.33), json_encode($kpi['items'][2]));
 ok('Brand = 5/(6+6)×100', near($kpi['items'][3]['achievement'], 41.67), json_encode($kpi['items'][3]));
 ok('Performa = 2600/3500×100', near($kpi['items'][4]['achievement'], 74.29), json_encode($kpi['items'][4]));
-$expectedWeighted = 3.3333 * 0.20 + 33.3333 * 0.20 + 33.3333 * 0.25 + 41.6667 * 0.15 + 74.2857 * 0.20;
+$expectedWeighted = 3.3333 * 0.15 + 33.3333 * 0.15 + 33.3333 * 0.25 + 41.6667 * 0.15 + 74.2857 * 0.20;
 ok('Skor tertimbang sesuai bobot engine', near($kpi['weighted_total'], $expectedWeighted), "{$kpi['weighted_total']} vs {$expectedWeighted}");
+ok('KPI engine: 6 komponen (maksimal bobot total 100)', count($Kpi::KPI_DEFS) === 6);
+$bobotSum = array_sum(array_column($Kpi::KPI_DEFS, 'bobot'));
+ok('Total bobot KPI konten = 100 (termasuk Pertumbuhan 10)', $bobotSum === 100, "sum={$bobotSum}");
+ok('KPI engine: komponen PERTUMBUHAN_CHANNEL ada & bobot 10', $kpi['items'][5]['key'] === 'PERTUMBUHAN_CHANNEL' && $kpi['items'][5]['bobot'] === 10);
 
 // KPI Performa hanya menilai konten ADS: publikasi C2 (REGULAR) berperforma tinggi
 // TIDAK boleh mengubah achievement performa.
@@ -256,6 +263,116 @@ ok('Performa tetap bisa diinput pada konten REGULAR', $perfC2 !== null && (float
 $kpiPost = $Kpi->monthlyKpi(9, 2026, "c.judul LIKE '[TEST]%'");
 ok('Performa KPI tidak terpengaruh konten REGULAR (tetap 74.29)', near($kpiPost['items'][4]['achievement'], 74.29), json_encode($kpiPost['items'][4]));
 ok('Jenis konten default REGULAR', $ContentModel->find((int)$c2)->jenis_konten === 'REGULAR');
+
+echo "\n== PERTUMBUHAN CHANNEL (KPI 10%) ==\n";
+$ChModel      = new ModelChannel();
+$ChMetric     = new ModelChannelMetric();
+$ChPerf       = new ModelChannelPerformance();
+$channelIg    = $ChModel->where('code', 'IG')->get()->getRow();
+$channelTt    = $ChModel->where('code', 'TIKTOK')->get()->getRow();
+$channelFb    = $ChModel->where('code', 'FB')->get()->getRow();
+$channelYt    = $ChModel->where('code', 'YT')->get()->getRow();
+ok('Master channel ada (IG/TikTok/FB/YT)', $channelIg && $channelTt && $channelFb && $channelYt);
+$mIgFollow    = $ChMetric->where('channel_id', $channelIg->id)->where('code', 'IG_FOLLOWERS')->get()->getRow();
+$mTtFollow    = $ChMetric->where('channel_id', $channelTt->id)->where('code', 'TT_FOLLOWERS')->get()->getRow();
+$mFbFollow    = $ChMetric->where('channel_id', $channelFb->id)->where('code', 'FB_FOLLOWERS')->get()->getRow();
+$mYtSub       = $ChMetric->where('channel_id', $channelYt->id)->where('code', 'YT_SUBSCRIBERS')->get()->getRow();
+ok('Metric KPI default tersedia (Followers tiap channel + Subscribers YT)', $mIgFollow && $mTtFollow && $mFbFollow && $mYtSub);
+
+$savePerf = function (int $channelId, int $metricId, int $m, int $y, float $actual, ?float $target = null) use ($ChPerf) {
+    $existing = $ChPerf->getByUnique($channelId, $metricId, $m, $y);
+    $data = [
+        'channel_id'    => $channelId,
+        'metric_id'     => $metricId,
+        'period_month'  => $m,
+        'period_year'   => $y,
+        'actual'        => $actual,
+        'target_growth' => $target,
+        'note'          => '[TEST]',
+        'created_by'    => 999,
+    ];
+    if ($existing) {
+        $ChPerf->update($existing->id, $data);
+    } else {
+        $ChPerf->insert($data);
+    }
+};
+
+// ── Bulan pertama (Agustus 2026): New Data, prev = null ──
+$savePerf((int)$channelIg->id, (int)$mIgFollow->id, 8, 2026, 5000, 8);
+$savePerf((int)$channelTt->id, (int)$mTtFollow->id, 8, 2026, 8000, 10);
+$savePerf((int)$channelFb->id, (int)$mFbFollow->id, 8, 2026, 3000, 8);
+$savePerf((int)$channelYt->id, (int)$mYtSub->id, 8, 2026, 0, 10); // previous = 0
+
+$aug = $Kpi->channelGrowthSummary(8, 2026);
+$igAug = null;
+foreach ($aug['rows'] as $r) {
+    if ($r['metric_name'] === 'Followers' && $r['channel_name'] === 'Instagram') $igAug = $r;
+}
+ok('Bulan pertama: previous = null & growth New Data (bukan 0 palsu)', $igAug !== null && $igAug['previous'] === null && $igAug['growth'] === null, json_encode($igAug));
+
+// ── Bulan berikutnya (September): previous otomatis dari bulan lalu ──
+$savePerf((int)$channelIg->id, (int)$mIgFollow->id, 9, 2026, 5500, 8);
+$savePerf((int)$channelTt->id, (int)$mTtFollow->id, 9, 2026, 9200, 10);
+$savePerf((int)$channelFb->id, (int)$mFbFollow->id, 9, 2026, 3150, 8);
+$savePerf((int)$channelYt->id, (int)$mYtSub->id, 9, 2026, 500, 10);
+
+$sep = $Kpi->channelGrowthSummary(9, 2026);
+$sepRows = [];
+foreach ($sep['rows'] as $r) {
+    $sepRows[$r['channel_name'] . '|' . $r['metric_name']] = $r;
+}
+$ig = $sepRows['Instagram|Followers'] ?? null;
+$tt = $sepRows['TikTok|Followers'] ?? null;
+$fb = $sepRows['Facebook|Followers'] ?? null;
+$yt = $sepRows['YouTube|Subscribers'] ?? null;
+
+ok('Previous Actual: Instagram Sept = 5000 (dari Agustus)', $ig !== null && near($ig['previous'], 5000), json_encode($ig));
+ok('Previous tidak tertukar channel lain (TT prev=8000, FB prev=3000)', $tt !== null && $fb !== null && near($tt['previous'], 8000) && near($fb['previous'], 3000));
+ok('Growth Instagram = (5500-5000)/5000×100 = 10%', $ig !== null && near($ig['growth'], 10), json_encode($ig));
+ok('Growth TikTok = 15%, Facebook = 5%', $tt && $fb && near($tt['growth'], 15) && near($fb['growth'], 5));
+ok('Achievement IG = 10/8×100 = 125%', $ig !== null && near($ig['achievement'], 125), json_encode($ig));
+ok('Achievement TT = 15/10×100 = 150%, FB = 5/8×100 = 62.5%', $tt !== null && $fb !== null && near($tt['achievement'], 150) && near($fb['achievement'], 62.5));
+ok('Previous Actual = 0 → growth N/A (tanpa division by zero)', $yt !== null && near($yt['previous'], 0) && $yt['growth'] === null && $yt['achievement'] === null, json_encode($yt));
+ok('KPI tidak menjumlahkan growth mentah (TT 15% tidak menambah IG 10%)', $sep['kpi_achievement'] !== null && near($sep['kpi_achievement'], (125 + 150 + 62.5) / 3), $sep['kpi_achievement']);
+
+// ── Duplicate period: tidak boleh ada duplikat, nilai terbaru menang ──
+$dup = $ChPerf->findAll();
+$dupCount = 0;
+foreach ($dup as $d) {
+    if ($d->note === '[TEST]' && $d->period_year == 2026 && in_array((int)$d->period_month, [8, 9], true)) $dupCount++;
+}
+ok('Tidak ada duplicate (8 baris bulan uji)', $dupCount === 8, "rows={$dupCount}");
+$savePerf((int)$channelIg->id, (int)$mIgFollow->id, 9, 2026, 5600, 8); // upsert periode yang sama
+$dupAfter = (int)$db->query("SELECT COUNT(*) c FROM channel_performance WHERE note='[TEST]' AND period_month=9 AND period_year=2026 AND channel_id={$channelIg->id} AND metric_id={$mIgFollow->id}")->getRow()->c;
+$ig2 = null;
+foreach ($Kpi->channelGrowthSummary(9, 2026)['rows'] as $r) {
+    if ($r['metric_name'] === 'Followers' && $r['channel_name'] === 'Instagram') $ig2 = $r;
+}
+ok('Upsert periode yang sama → tetap 1 baris', $dupAfter === 1, "count={$dupAfter}");
+ok('Nilai terbaru dipakai: growth = (5600-5000)/5000 = 12%', $ig2 !== null && near($ig2['growth'], 12), json_encode($ig2));
+
+// ── Data bulan sebelumnya berubah → periode berikutnya pakai nilai terbaru ──
+$savePerf((int)$channelIg->id, (int)$mIgFollow->id, 8, 2026, 5500, 8); // update Agustus
+$ig3 = null;
+foreach ($Kpi->channelGrowthSummary(9, 2026)['rows'] as $r) {
+    if ($r['metric_name'] === 'Followers' && $r['channel_name'] === 'Instagram') $ig3 = $r;
+}
+ok('Previous Aktual Agustus ter-update → IG Sept growth = (5600-5500)/5500 = 1.82%', $ig3 !== null && near($ig3['previous'], 5500) && near($ig3['growth'], 1.82), json_encode($ig3));
+
+// ── Integrasi dengan engine KPI 10% ──
+$kpiCh = $Kpi->monthlyKpi(9, 2026, "c.judul LIKE '[TEST]%'");
+$gItem = $kpiCh['items'][5];
+$expectedAvg = round((125 + 150 + 62.5) / 3, 2); // nilai awal sebelum Agustus diubah
+ok('Items ke-6 = Pertumbuhan Channel (bobot 10, bukan manual)', $gItem['key'] === 'PERTUMBUHAN_CHANNEL' && $gItem['bobot'] === 10, json_encode($gItem));
+ok('Achievement Pertumbuhan Channel = agregasi (avg achievement per metric)', $gItem['achievement'] !== null && near($gItem['achievement'], (22.75 + 150 + 62.5) / 3), json_encode($gItem));
+ok('scoreByCode engine = achievement komponen (posisi 44)', near($Kpi->scoreByCode('CHANNEL_GROWTH', 9, 2026), (float)$gItem['achievement']), $Kpi->scoreByCode('CHANNEL_GROWTH', 9, 2026));
+ok('Skor tertimbang menyertakan Pertumbuhan 10%', near($kpiCh['weighted_total'], 3.3333 * 0.15 + 33.3333 * 0.15 + 33.3333 * 0.25 + 41.6667 * 0.15 + 74.2857 * 0.20 + (float)$gItem['achievement'] * 0.10), $kpiCh['weighted_total']);
+ok('KPI tanpa data (misal hanya 1 bulan) → achievement KPI null (N/A)', $Kpi->channelGrowthSummary(8, 2026)['kpi_achievement'] === null);
+
+// Bersihkan data uji channel.
+$db->query("DELETE FROM channel_performance WHERE note='[TEST]'");
+ok('Data uji channel dibersihkan', (int)$db->query("SELECT COUNT(*) c FROM channel_performance WHERE note='[TEST]'")->getRow()->c === 0);
 
 echo "\n== SCOPE PER ROLE ==\n";
 ok('Role 1/2/34 → scope null (semua)', $Scope->scopeSql(1, 1, 63) === null && $Scope->scopeSql(2, 1, 63) === null && $Scope->scopeSql(34, 3, 55) === null);

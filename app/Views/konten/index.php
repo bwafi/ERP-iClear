@@ -1,38 +1,44 @@
 <style>
     #kontenTable_wrapper .dt-buttons { margin-bottom: 8px; }
+    #kontenTable_filter { margin-bottom: 8px; }
 </style>
-<div class="card shadow-none position-relative overflow-hidden mb-4">
+<div class="card shadow-none position-relative overflow-hidden mb-4"
+    style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div>
-            <h4 class="fw-semibold mb-0">Manajemen Konten</h4>
-            <small class="text-muted">Daftar content KPI Multimedia/Creative.</small>
+        <div class="text-white">
+            <h4 class="fw-semibold mb-1 text-white">Manajemen Konten</h4>
+            <small class="text-white-50">Daftar content KPI Multimedia/Creative.</small>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('konten/dashboard') ?>">Digital Marketing</a></li>
-                <li class="breadcrumb-item active">Manajemen Konten</li>
+                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('konten/dashboard') ?>">Digital Marketing</a></li>
+                <li class="breadcrumb-item active text-white">Manajemen Konten</li>
             </ol>
         </nav>
     </div>
 </div>
 
-<div class="card shadow-sm border-0">
+<div class="card shadow-sm border-0 mb-3">
     <div class="card-body">
-        <?php if ($canWrite) : ?>
-            <div class="mb-3">
-                <a href="<?= base_url('konten/tambah') ?>" class="btn btn-primary">+ Tambah Konten</a>
-            </div>
-        <?php endif; ?>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h5 class="mb-0">
+                <iconify-icon icon="solar:filter-bold" class="text-primary me-1"></iconify-icon> Filter &amp; Pencarian
+            </h5>
+            <?php if ($canWrite) : ?>
+                <a href="<?= base_url('konten/tambah') ?>" class="btn btn-success">
+                    <iconify-icon icon="solar:add-circle-bold" class="me-1"></iconify-icon>Tambah Konten
+                </a>
+            <?php endif; ?>
+        </div>
 
-        <form class="mb-3" id="filterForm">
+        <form class="mb-0" id="filterForm">
             <div class="row g-2 align-items-end">
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Tanggal</label>
+                    <label class="form-label small mb-1 text-muted">Tanggal</label>
                     <input type="date" class="form-control form-control-sm" name="periode" id="filterPeriode">
                 </div>
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Unit</label>
+                    <label class="form-label small mb-1 text-muted">Unit</label>
                     <select name="unit" id="filterUnit" class="form-select form-select-sm">
                         <option value="">Semua</option>
                         <?php foreach ($units as $u) : if (!in_array((int)$u->idunit, array_map('intval', $allowedUnits), true)) continue; ?>
@@ -41,7 +47,7 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Multimedia</label>
+                    <label class="form-label small mb-1 text-muted">Multimedia</label>
                     <select name="multimedia" id="filterMultimedia" class="form-select form-select-sm">
                         <option value="">Semua</option>
                         <?php foreach ($multimediaPeoples as $p) : ?>
@@ -50,7 +56,7 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Talent</label>
+                    <label class="form-label small mb-1 text-muted">Talent</label>
                     <select name="talent" id="filterTalent" class="form-select form-select-sm">
                         <option value="">Semua</option>
                         <?php foreach ($allPeoples as $p) : ?>
@@ -59,7 +65,7 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Status</label>
+                    <label class="form-label small mb-1 text-muted">Status</label>
                     <select name="status" id="filterStatus" class="form-select form-select-sm">
                         <option value="">Semua</option>
                         <?php foreach ($statuses as $s) : ?>
@@ -68,7 +74,7 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Platform</label>
+                    <label class="form-label small mb-1 text-muted">Platform</label>
                     <select name="platform" id="filterPlatform" class="form-select form-select-sm">
                         <option value="">Semua</option>
                         <?php foreach ($platforms as $pf) : ?>
@@ -77,7 +83,7 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-6">
-                    <label class="form-label small mb-1">Content Type</label>
+                    <label class="form-label small mb-1 text-muted">Content Type</label>
                     <select name="content_type" id="filterContentType" class="form-select form-select-sm">
                         <option value="">Semua</option>
                         <?php foreach ($contentTypes as $ct) : ?>
@@ -86,18 +92,28 @@
                     </select>
                 </div>
                 <div class="col-md-3 col-12">
-                    <label class="form-label small mb-1">Cari</label>
-                    <input type="text" class="form-control form-control-sm" name="search" id="filterSearch" placeholder="Cari judul konten…">
+                    <label class="form-label small mb-1 text-muted">Cari Judul</label>
+                    <input type="text" class="form-control form-control-sm" name="search" id="filterSearch" placeholder="Ketik judul konten…">
                 </div>
                 <div class="col-auto d-flex gap-1">
-                    <button type="button" class="btn btn-primary btn-sm" id="btnFilter">Terapkan</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnFilter">
+                        <iconify-icon icon="solar:filter-bold" class="me-1"></iconify-icon>Terapkan
+                    </button>
                     <button type="button" class="btn btn-light btn-sm" id="btnResetFilter">Reset</button>
                 </div>
             </div>
         </form>
+    </div>
+</div>
 
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white">
+        <h5 class="mb-0">Daftar Konten</h5>
+        <small class="text-muted">Terapkan filter untuk memperbarui daftar.</small>
+    </div>
+    <div class="card-body">
         <div class="table-responsive">
-            <table id="kontenTable" class="table table-bordered table-hover table-striped" style="width:100%">
+            <table id="kontenTable" class="table table-hover align-middle" style="width:100%">
                 <thead class="table-light">
                     <tr>
                         <th>Judul</th>
@@ -120,6 +136,10 @@
 $badgeMap = [
     'DRAFT' => 'secondary', 'PRODUCTION' => 'info', 'QC' => 'warning',
     'APPROVED' => 'primary', 'PUBLISHED' => 'success', 'COMPLETED' => 'success', 'REVISION' => 'danger',
+];
+$badgeIcon = [
+    'DRAFT' => 'bi-pencil-square', 'PRODUCTION' => 'bi-gear', 'QC' => 'bi-clipboard-check',
+    'APPROVED' => 'bi-check2-circle', 'PUBLISHED' => 'bi-cloud-upload', 'COMPLETED' => 'bi-check2-all', 'REVISION' => 'bi-arrow-counterclockwise',
 ];
 ?>
 
@@ -150,33 +170,46 @@ $badgeMap = [
                 [10, 25, 50, 100]
             ],
             columns: [
-                { data: 'judul' },
+                {
+                    data: 'judul',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return data;
+                        return '<div class="fw-semibold">' + data + '</div>';
+                    }
+                },
                 {
                     data: null,
                     orderable: false,
                     render: function(data) {
                         var badge = data.jenis_konten === 'ADS'
-                            ? '<span class="badge text-bg-warning">Iklan</span>'
-                            : '<span class="badge text-bg-light border">Regular</span>';
-                        return (data.content_type_name || '-') + ' ' + badge;
+                            ? '<span class="badge rounded-pill text-bg-warning">Iklan</span>'
+                            : '<span class="badge rounded-pill bg-light text-dark border">Regular</span>';
+                        return '<div class="text-nowrap"><span class="badge rounded-pill bg-white text-dark border">' + (data.content_type_name || '-') + '</span><br>' + badge + '</div>';
                     }
                 },
                 { data: 'target_scope' },
-                { data: 'deadline' },
+                {
+                    data: 'deadline',
+                    render: function(data) {
+                        if (!data) return '-';
+                        return '<div class="text-nowrap">' + data + '</div>';
+                    }
+                },
                 {
                     data: 'created_at',
                     orderable: true,
                     render: function(data) {
                         if (!data) return '-';
                         var p = data.split(' ');
-                        return p[0] + '<br><small class="text-muted">' + (p[1] || '') + '</small>';
+                        return '<div class="text-nowrap">' + p[0] + '<br><small class="text-muted">' + (p[1] || '') + '</small></div>';
                     }
                 },
                 {
                     data: 'status',
                     render: function(data) {
                         var badge = <?= json_encode($badgeMap) ?>[data] || 'secondary';
-                        return '<span class="badge text-bg-' + badge + '">' + data + '</span>';
+                        var icon = <?= json_encode($badgeIcon) ?>[data] || 'bi-tag';
+                        return '<span class="badge rounded-pill text-bg-' + badge + ' text-nowrap"><i class="bi ' + icon + ' me-1"></i>' + data + '</span>';
                     }
                 },
                 {
@@ -184,22 +217,23 @@ $badgeMap = [
                     orderable: false,
                     render: function(data) {
                         var s = '';
-                        if (data.creative_names) s += '<small class="d-block text-muted">Multimedia: ' + data.creative_names + '</small>';
-                        if (data.talent_names) s += '<small class="d-block">Talent: ' + data.talent_names + '</small>';
-                        return s || '-';
+                        if (data.creative_names) s += '<small class="d-block text-muted"><i class="bi bi-people me-1"></i>' + data.creative_names + '</small>';
+                        if (data.talent_names) s += '<small class="d-block"><i class="bi bi-person-video3 me-1"></i>' + data.talent_names + '</small>';
+                        return s || '<span class="text-muted small">-</span>';
                     }
                 },
                 {
                     data: null,
                     orderable: false,
-                    className: 'text-end',
+                    className: 'text-end text-nowrap',
                     render: function(data) {
                         var base = '<?= base_url('konten') ?>';
-                        return '<a href="' + base + '/detail/' + data.id + '" class="btn btn-sm btn-outline-primary">Detail</a> ' +
-                            '<?php if ($canWrite) : ?>' +
-                            '<a href="' + base + '/edit/' + data.id + '" class="btn btn-sm btn-outline-secondary">Edit</a> ' +
-                            '<a href="#" onclick="event.preventDefault(); if(confirm(\'Hapus konten ini?\')) location.href=\'' + base + '/delete/' + data.id + '\';" class="btn btn-sm btn-outline-danger">Hapus</a>' +
-                            '<?php endif; ?>';
+                        var s = '<a href="' + base + '/detail/' + data.id + '" class="btn btn-sm btn-outline-primary" title="Detail"><i class="bi bi-eye"></i> Detail</a> ';
+                        <?php if ($canWrite) : ?>
+                            s += '<a href="' + base + '/edit/' + data.id + '" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i> Edit</a> ';
+                            s += '<a href="#" onclick="event.preventDefault(); if(confirm(\'Hapus konten ini?\')) location.href=\'' + base + '/delete/' + data.id + '\';" class="btn btn-sm btn-outline-danger" title="Hapus"><i class="bi bi-trash"></i> Hapus</a>';
+                        <?php endif; ?>
+                        return s;
                     }
                 }
             ],

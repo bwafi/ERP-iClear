@@ -454,6 +454,10 @@ $routes->post('penilaian/kpi/kontrol_aset/finalize', 'PenilaianKPI::kontrol_aset
 $routes->post('penilaian/kpi/kontrol_aset/reopen', 'PenilaianKPI::kontrol_aset_reopen', ['filter' => 'auth']);
 $routes->get('penilaian/absen', 'PenilaianKPI::penilaian_absen', ['filter' => 'auth']);
 $routes->post('penilaian/absen/save', 'PenilaianKPI::save_absen', ['filter' => 'auth']);
+
+$routes->get('penilaian-kpi/attendance-input', 'PenilaianKPI::attendance_input', ['filter' => 'auth']);
+$routes->post('penilaian-kpi/attendance-save', 'PenilaianKPI::attendance_save', ['filter' => 'auth']);
+
 $routes->post('insert_penilaian_KPI', 'PenilaianKPI::insert_penilaian', ['filter' => 'auth']);
 $routes->post('update_penilaian_KPI', 'PenilaianKPI::update_penilaian', ['filter' => 'auth']);
 $routes->post('delete_penilaian_KPI', 'PenilaianKPI::delete_penilaian', ['filter' => 'auth']);
@@ -546,7 +550,27 @@ $routes->group('konten', ['filter' => 'auth'], function ($routes) {
     $routes->post('publication/delete', 'Konten::hapus_publication');
     $routes->post('performance/save', 'Konten::save_performance');
     $routes->post('performance/delete', 'Konten::hapus_performance');
+    $routes->get('channel', 'Konten::channel');
+    $routes->post('channel/simpan', 'Konten::channel_simpan');
+    $routes->post('channel/hapus', 'Konten::channel_hapus');
 });
+
+// Marketing Digital (KPI Kepala Divisi)
+$routes->group('marketing', ['filter' => 'auth'], function ($routes) {
+    $routes->get('', 'Marketing::index');
+    $routes->get('rekap', 'Marketing::rekap');
+    $routes->post('rekap/simpan', 'Marketing::rekap_simpan');
+    $routes->get('leads', 'Marketing::leads');
+    $routes->post('leads/simpan', 'Marketing::leads_simpan');
+    $routes->post('leads/status', 'Marketing::leads_status');
+    $routes->post('leads/hapus', 'Marketing::leads_hapus');
+    $routes->get('search_service', 'Marketing::search_service');
+    $routes->get('ads', 'Marketing::ads');
+    $routes->post('ads/simpan', 'Marketing::ads_simpan');
+    $routes->post('ads/hapus', 'Marketing::ads_hapus');
+});
+
+$routes->post('api/kommo/webhook', 'KommoWebhook::handle');
 
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);

@@ -23,11 +23,12 @@ class ContentKpiService
     public const TARGET_KONTEN_PER_BULAN = 30;
 
     public const KPI_DEFS = [
-        ['key' => 'JUMLAH_KONTEN', 'name' => 'Jumlah Konten',   'bobot' => 20, 'target' => '30/bulan'],
-        ['key' => 'DEADLINE',      'name' => 'Deadline',        'bobot' => 20, 'target' => '≥95%'],
-        ['key' => 'KUALITAS',      'name' => 'Kualitas Konten', 'bobot' => 25, 'target' => '≥90%'],
-        ['key' => 'BRAND',         'name' => 'Konsistensi Brand', 'bobot' => 15, 'target' => '≥95%'],
-        ['key' => 'PERFORMA',      'name' => 'Performa Konten', 'bobot' => 20, 'target' => 'sesuai target'],
+        ['key' => 'JUMLAH_KONTEN',      'name' => 'Jumlah Konten',         'bobot' => 15, 'target' => '30/bulan'],
+        ['key' => 'DEADLINE',           'name' => 'Deadline',              'bobot' => 15, 'target' => '≥95%'],
+        ['key' => 'KUALITAS',           'name' => 'Kualitas Konten',       'bobot' => 25, 'target' => '≥90%'],
+        ['key' => 'BRAND',              'name' => 'Konsistensi Brand',     'bobot' => 15, 'target' => '≥95%'],
+        ['key' => 'PERFORMA',           'name' => 'Performa Konten',       'bobot' => 20, 'target' => 'sesuai target'],
+        ['key' => 'PERTUMBUHAN_CHANNEL','name' => 'Pertumbuhan Channel',   'bobot' => 10, 'target' => 'sesuai target growth'],
     ];
 
     /**
@@ -39,6 +40,7 @@ class ContentKpiService
         'KONTEN_KUALITAS',
         'KONTEN_BRAND',
         'KONTEN_PERFORMA',
+        'CHANNEL_GROWTH',
     ];
 
     public const COMPONENT_CODE_MAP = [
@@ -47,6 +49,7 @@ class ContentKpiService
         'KONTEN_KUALITAS' => 'KUALITAS',
         'KONTEN_BRAND'    => 'BRAND',
         'KONTEN_PERFORMA' => 'PERFORMA',
+        'CHANNEL_GROWTH'  => 'PERTUMBUHAN_CHANNEL',
     ];
 
     private $db;
@@ -161,6 +164,9 @@ class ContentKpiService
         // Performa publikasi: sum actual / sum target periode tsb (scope content).
         $perf = $this->performanceSummary($month, $year, $scopeSql);
 
+        // Pertumbuhan channel social media (per channel+metric).
+        $channel = $this->channelGrowthSummary($month, $year);
+
         $items = [];
         foreach (self::KPI_DEFS as $def) {
             $achievement = null;
@@ -180,10 +186,14 @@ class ContentKpiService
                 case 'PERFORMA':
                     $achievement = $perf['target'] > 0 ? $perf['actual'] / $perf['target'] * 100 : null;
                     break;
+                case 'PERTUMBUHAN_CHANNEL':
+                    $achievement = $channel['kpi_achievement'];
+                    break;
             }
 
             // Achievement KPI maksimal 100 (tidak boleh tembus 100%).
-            if ($achievement !== null) {
+            // PERTUMBUHAN_CHANNEL sengaja TIDAK di-cap: reward pertumbuhan > target.
+            if ($achievement !== null && $def['key'] !== 'PERTUMBUHAN_CHANNEL') {
                 $achievement = min(100.0, $achievement);
             }
 
@@ -193,7 +203,7 @@ class ContentKpiService
                 'bobot'       => $def['bobot'],
                 'target'      => $def['target'],
                 'achievement' => $achievement === null ? null : round($achievement, 2),
-                'realisasi'   => $this->realisasiLabel($def['key'], $total, $completed, $onTime, $qcPass, $brand, $perf),
+                'realisasi'   => $this->realisasiLabel($def['key'], $total, $completed, $onTime, $qcPass, $brand, $perf, $channel),
             ];
         }
 
@@ -211,6 +221,7 @@ class ContentKpiService
             'qc_pass'        => $qcPass,
             'brand'          => $brand,
             'perf'           => $perf,
+            'channel'        => $channel,
             'items'          => $items,
             'weighted_total' => round($weightedTotal, 2),
         ];
@@ -281,7 +292,104 @@ class ContentKpiService
         return ['actual' => round($actual, 2), 'target' => round($target, 2)];
     }
 
-    private function realisasiLabel(string $key, int $total, int $completed, int $onTime, int $qcPass, array $brand, array $perf): string
+    /**
+     * Pertumbuhan channel social media per periode.
+     *
+     * Previous Actual diambil OTOMATIS dari periode terbaru SEBELUM periode ini
+     * untuk channel+metric yang sama. Growth & Achievement dihitung sistem:
+     *   growth     = (actual - previous) / previous × 100
+     *   achievement= growth / target_growth × 100
+     *
+     * Hanya metric dengan is_kpi = 1 yang diagregasi menjadi achievement
+     * komponen KPI PERTUMBUHAN_CHANNEL (rata-rata achievement per metric).
+     * Tanpa data sebelumnya → growth = null (New Data / N/A), bukan 0 palsu.
+     *
+     * @return array{rows: array<int,array>, kpi_achievement: ?float, kpi_metrics: int}
+     */
+    public function channelGrowthSummary(int $month, int $year): array
+    {
+        $periodIdx = $year * 100 + $month;
+
+        $rows = $this->db->query(
+            "SELECT cp.id, cp.channel_id, cp.metric_id, cp.actual, cp.target_growth, cp.note,
+                    ch.name AS channel_name, ch.code AS channel_code,
+                    m.name AS metric_name, m.code AS metric_code, m.is_kpi, m.target_growth AS default_target_growth
+             FROM channel_performance cp
+             JOIN channel ch ON ch.id = cp.channel_id
+             JOIN channel_metric m ON m.id = cp.metric_id
+             WHERE cp.period_month = ? AND cp.period_year = ?
+             ORDER BY ch.name ASC, m.name ASC",
+            [$month, $year]
+        )->getResult();
+
+        $kpiSummary = [];
+        $out = [];
+
+        foreach ($rows as $r) {
+            $previous = $this->previousActual((int)$r->channel_id, (int)$r->metric_id, $periodIdx);
+
+            $actual = (float)$r->actual;
+            $growth = null;
+            if ($previous !== null && $previous > 0) {
+                $growth = round(($actual - $previous) / $previous * 100, 2);
+            }
+
+            $target = (float)($r->target_growth !== null ? $r->target_growth : $r->default_target_growth);
+            $achievement = null;
+            if ($growth !== null && $target > 0) {
+                $achievement = round($growth / $target * 100, 2);
+            }
+
+            $out[] = [
+                'id'           => (int)$r->id,
+                'channel_id'   => (int)$r->channel_id,
+                'channel_name' => (string)$r->channel_name,
+                'metric_name'  => (string)$r->metric_name,
+                'is_kpi'       => (int)$r->is_kpi === 1,
+                'previous'     => $previous,
+                'actual'       => round($actual, 2),
+                'growth'       => $growth,
+                'target'       => $target > 0 ? $target : null,
+                'achievement'  => $achievement,
+                'note'         => (string)$r->note,
+            ];
+
+            if ((int)$r->is_kpi === 1 && $achievement !== null) {
+                $kpiSummary[] = $achievement;
+            }
+        }
+
+        $kpiAchievement = null;
+        if (!empty($kpiSummary)) {
+            $kpiAchievement = round(array_sum($kpiSummary) / count($kpiSummary), 2);
+        }
+
+        return [
+            'rows'          => $out,
+            'kpi_achievement' => $kpiAchievement,
+            'kpi_metrics'   => count($kpiSummary),
+        ];
+    }
+
+    /**
+     * Actual periode sebelumnya (terbaru < periode ini) untuk channel+metric yang sama.
+     */
+    private function previousActual(int $channelId, int $metricId, int $currentPeriodIdx): ?float
+    {
+        $row = $this->db->query(
+            "SELECT actual
+             FROM channel_performance
+             WHERE channel_id = ? AND metric_id = ?
+               AND (period_year * 100 + period_month) < ?
+             ORDER BY period_year DESC, period_month DESC
+             LIMIT 1",
+            [$channelId, $metricId, $currentPeriodIdx]
+        )->getRow();
+
+        return $row ? (float)$row->actual : null;
+    }
+
+    private function realisasiLabel(string $key, int $total, int $completed, int $onTime, int $qcPass, array $brand, array $perf, array $channel): string
     {
         switch ($key) {
             case 'JUMLAH_KONTEN':
@@ -294,6 +402,8 @@ class ContentKpiService
                 return "{$brand['checked_items']} / {$brand['total_items']} item";
             case 'PERFORMA':
                 return number_format($perf['actual'], 0, ',', '.') . ' / ' . number_format($perf['target'], 0, ',', '.');
+            case 'PERTUMBUHAN_CHANNEL':
+                return $channel['kpi_metrics'] > 0 ? $channel['kpi_metrics'] . ' metric KPI terisi' : '-';
         }
 
         return '';

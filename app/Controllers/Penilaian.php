@@ -44,21 +44,113 @@ class Penilaian extends BaseController
 
 public function index()
 {
+    [$allowed, $myRole, $myId] = $this->userScope();
+
     $jumlahData = $this->PenilaianModel->getJumlahByTemplatePenilaian();
     $jumlahMap = [];
     foreach ($jumlahData as $row) {
         $jumlahMap[$row->idtemplate_penilaian] = $row->jumlah;
     }
 
+    $penilaianAll = $this->PenilaianModel->where('MONTH(tanggal_penilaian)', date('m'))->where('YEAR(tanggal_penilaian)', date('Y'))->getPenilaian();
+    $akunList = $this->AuthModel->getdataakun();
+
+    // Batasi scope: non-admin hanya melihat data pegawai yang boleh dinilai/dirinya sendiri.
+    if ($allowed !== null) {
+        $penilaianAll = array_values(array_filter(
+            $penilaianAll,
+            fn($p) => in_array((int)($p->pegawai_idpegawai ?? 0), $allowed, true)
+        ));
+        $akunList = array_values(array_filter(
+            $akunList,
+            fn($a) => in_array((int)$a->ID_AKUN, $allowed, true)
+        ));
+    }
+
     $data = array(
         'template'   => $this->TemplatePenilaianModel->getTemplatePenilaian(),
-        'penilaian'  => $this->PenilaianModel->where('MONTH(tanggal_penilaian)', date('m'))->where('YEAR(tanggal_penilaian)', date('Y'))->getPenilaian(),
+        'penilaian'  => $penilaianAll,
         'jumlahMap'  => $jumlahMap,
-        'akun'       => $this->AuthModel->getdataakun(),
+        'akun'       => $akunList,
         'body'       => 'penilaian/penilaian',
     );
 
     return view('template', $data);
+}
+
+/**
+ * Scope pegawai yang boleh dilihat/dievaluasi oleh user yang login.
+ * @return array [int[]|null $allowedIds, int $myRole, int $myId] — null = semua.
+ */
+private function userScope()
+{
+    $me = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
+    $myRole = (int)($me->ID_JABATAN ?? 0);
+    $myUnit = (int)($me->ID_UNIT ?? 0);
+    $myId   = (int)($me->ID_AKUN ?? 0);
+
+    // Admin root / Direktur: akses penuh.
+    if (in_array($myRole, [1, 2], true)) {
+        return [null, $myRole, $myId];
+    }
+
+    $allowed = [$myId];
+    $targets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+    if (!empty($targets)) {
+        $db = Database::connect();
+
+        if (in_array($myRole, [0, 34], true)) {
+            $scopeUnits = null;
+        } elseif ($myRole === 40) {
+            $maps = $db->table('spv_units')->where('spv_id', $myId)->get()->getResultArray();
+            $scopeUnits = !empty($maps) ? array_map('intval', array_column($maps, 'unit_id')) : [$myUnit];
+        } else {
+            $scopeUnits = [$myUnit];
+        }
+
+        $b = $db->table('akun')
+            ->select('ID_AKUN, ID_JABATAN, ID_UNIT')
+            ->where('STATUS_PEGAWAI', 1)
+            ->whereIn('ID_JABATAN', $targets);
+
+        if ($scopeUnits !== null) {
+            $hq = array_values(array_filter(
+                $targets,
+                fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
+            ));
+
+            // CS (42) hanya boleh dilihat Admin/Kasir Unit 1.
+            if ($myRole === 35 && $myUnit !== 1) {
+                $hq = array_values(array_filter($hq, fn($j) => (int)$j !== 42));
+            }
+
+            $b->groupStart()
+                ->whereIn('ID_UNIT', $scopeUnits)
+                ->orWhereIn('ID_JABATAN', $hq)
+                ->groupEnd();
+        }
+
+        foreach ($b->get()->getResultArray() as $r) {
+            $allowed[] = (int)$r['ID_AKUN'];
+        }
+        $allowed = array_unique($allowed);
+    }
+
+    return [$allowed, $myRole, $myId];
+}
+
+/**
+ * Cek apakah user yang login boleh menilai/menghapus data pegawai tertentu.
+ * @param int $pegawaiId
+ * @return bool
+ */
+private function canAssess(int $pegawaiId): bool
+{
+    if (!$pegawaiId) {
+        return false;
+    }
+    [$allowed, , ] = $this->userScope();
+    return $allowed === null || in_array($pegawaiId, $allowed, true);
 }
 
 /**
@@ -217,6 +309,12 @@ public function insert_penilaian()
 {
     $akun = session('ID_AKUN');
     $pegawai_idpegawai = $this->request->getPost('pegawai_idpegawai');
+
+    if (!$this->canAssess((int)$pegawai_idpegawai)) {
+        session()->setFlashdata('error', 'Anda tidak berhak menginput penilaian pegawai tersebut.');
+        return redirect()->to(base_url('penilaian'));
+    }
+
     $tanggal_penilaian = $this->request->getPost('tanggal_penilaian');
     
     $skor3 = $this->request->getPost('skor3');
@@ -416,6 +514,14 @@ if (!empty($detailData)) {
         $idpenilaian = $this->request->getPost('idpenilaian');
 
         $db = \Config\Database::connect();
+        $row = $db->table('penilaian')->where('idpenilaian', $idpenilaian)->get()->getRow();
+        $targetId = $row ? (int)($row->pegawai_idpegawai ?? 0) : 0;
+
+        if (!$targetId || !$this->canAssess($targetId)) {
+            session()->setFlashData('error', 'Anda tidak berhak menghapus penilaian pegawai tersebut.');
+            return redirect()->to(base_url('penilaian'));
+        }
+
         $db->table('penilaian')
             ->where('idpenilaian', $idpenilaian)
             ->delete();
@@ -433,6 +539,14 @@ if (!empty($detailData)) {
 
         $penilaianModel = new ModelPenilaian();
         $datapenilaian = $penilaianModel->getPenilaianByTanggal($tanggal_awal, $tanggal_akhir);
+
+        [$allowed, , ] = $this->userScope();
+        if ($allowed !== null) {
+            $datapenilaian = array_values(array_filter(
+                $datapenilaian,
+                fn($p) => in_array((int)($p->pegawai_idpegawai ?? 0), $allowed, true)
+            ));
+        }
 
         // Set Header Excel
         $headers = [

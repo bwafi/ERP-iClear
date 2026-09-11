@@ -13,6 +13,9 @@ use App\Models\ModelPerformanceMetric;
 use App\Models\ModelPlatform;
 use App\Models\ModelPublication;
 use App\Models\ModelPublicationPerformance;
+use App\Models\ModelChannel;
+use App\Models\ModelChannelMetric;
+use App\Models\ModelChannelPerformance;
 use App\Models\ModelUnit;
 use App\Services\Konten\ContentKpiService;
 use App\Services\Konten\ContentScopeService;
@@ -37,6 +40,9 @@ class Konten extends BaseController
     protected $PlatformModel;
     protected $PublicationModel;
     protected $PublicationPerformanceModel;
+    protected $ChannelModel;
+    protected $ChannelMetricModel;
+    protected $ChannelPerformanceModel;
     protected $UnitModel;
 
     protected $KpiService;
@@ -54,9 +60,12 @@ class Konten extends BaseController
         $this->ContentUnitModel         = new ModelContentUnit();
         $this->PerformanceMetricModel   = new ModelPerformanceMetric();
         $this->PlatformModel            = new ModelPlatform();
-        $this->PublicationModel         = new ModelPublication();
+$this->PublicationModel          = new ModelPublication();
         $this->PublicationPerformanceModel = new ModelPublicationPerformance();
-        $this->UnitModel                = new ModelUnit();
+        $this->ChannelModel              = new ModelChannel();
+        $this->ChannelMetricModel        = new ModelChannelMetric();
+        $this->ChannelPerformanceModel   = new ModelChannelPerformance();
+        $this->UnitModel                 = new ModelUnit();
 
         $this->KpiService      = new ContentKpiService();
         $this->WorkflowService = new ContentWorkflowService();
@@ -654,6 +663,130 @@ class Konten extends BaseController
 
         $this->PublicationPerformanceModel->delete($perfId);
         return redirect()->back()->with('success', 'Performa publikasi dihapus.');
+    }
+
+    // ── Pertumbuhan Channel (KPI 10%) ─────────────────────────────
+
+    public function channel()
+    {
+        if ($r = $this->assertRead()) {
+            return $r;
+        }
+
+        $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
+        $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
+        if ($bulan < 1 || $bulan > 12 || $tahun < 2000 || $tahun > 2100) {
+            $bulan = (int)date('n');
+            $tahun = (int)date('Y');
+        }
+
+        $channels = $this->ChannelModel->active();
+        $metrics = [];
+        foreach ($channels as $ch) {
+            $metrics[(int)$ch->id] = array_map(function ($m) {
+                return [
+                    'id'            => (int)$m->id,
+                    'name'          => (string)$m->name,
+                    'is_kpi'        => (int)$m->is_kpi === 1,
+                    'target_growth' => $m->target_growth !== null ? (float)$m->target_growth : null,
+                ];
+            }, $this->ChannelMetricModel->byChannel((int)$ch->id));
+        }
+
+        $summary = $this->KpiService->channelGrowthSummary($bulan, $tahun);
+
+        return view('template', [
+            'body'         => 'konten/channel',
+            'akun'         => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'bulan'        => $bulan,
+            'tahun'        => $tahun,
+            'channels'     => $channels,
+            'metrics'      => $metrics,
+            'rows'         => $summary['rows'],
+            'kpiAchievement' => $summary['kpi_achievement'],
+            'canWrite'     => ContentScopeService::canWrite($this->currentRole()),
+            'scopeLabel'   => $this->scopeLabel(),
+        ]);
+    }
+
+    public function channel_simpan()
+    {
+        if ($r = $this->assertWrite()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/channel'));
+        }
+
+        $channelId = (int)$this->request->getPost('channel_id');
+        $metricId  = (int)$this->request->getPost('metric_id');
+        $bulan     = (int)$this->request->getPost('period_month');
+        $tahun     = (int)$this->request->getPost('period_year');
+        $actualRaw = trim((string)$this->request->getPost('actual'));
+        $targetRaw = trim((string)$this->request->getPost('target_growth'));
+        $note      = trim((string)$this->request->getPost('note') ?: '');
+
+        if ($bulan < 1 || $bulan > 12 || $tahun < 2000 || $tahun > 2100) {
+            return redirect()->back()->with('error', 'Periode performa channel tidak valid.');
+        }
+        if ($channelId < 1 || !$this->ChannelModel->find($channelId)) {
+            return redirect()->back()->with('error', 'Channel tidak valid.');
+        }
+        $metric = $this->ChannelMetricModel
+            ->where('id', $metricId)
+            ->where('channel_id', $channelId)
+            ->first();
+        if (!$metric) {
+            return redirect()->back()->with('error', 'Metric tidak sesuai dengan channel yang dipilih.');
+        }
+        if (!is_numeric($actualRaw) || (float)$actualRaw < 0) {
+            return redirect()->back()->with('error', 'Actual harus berupa angka valid.');
+        }
+        $target = $targetRaw !== '' ? (float)$targetRaw : null;
+        if ($target !== null && $target < 0) {
+            return redirect()->back()->with('error', 'Target Growth tidak boleh negatif.');
+        }
+
+        $data = [
+            'channel_id'    => $channelId,
+            'metric_id'     => $metricId,
+            'period_month'  => $bulan,
+            'period_year'   => $tahun,
+            'actual'        => (float)$actualRaw,
+            'target_growth' => $target,
+            'note'          => $note !== '' ? $note : null,
+            'created_by'    => $this->currentAkun(),
+        ];
+
+        $existing = $this->ChannelPerformanceModel->getByUnique($channelId, $metricId, $bulan, $tahun);
+        if ($existing) {
+            $this->ChannelPerformanceModel->update($existing->id, $data);
+            $msg = 'Data performa channel periode ini sudah ada, diperbarui.';
+        } else {
+            $this->ChannelPerformanceModel->insert($data);
+            $msg = 'Performa channel tersimpan.';
+        }
+
+        return redirect()->to(base_url('konten/channel?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $msg);
+    }
+
+    public function channel_hapus()
+    {
+        if ($r = $this->assertWrite()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/channel'));
+        }
+
+        $id = (int)$this->request->getPost('id');
+        $row = $this->ChannelPerformanceModel->find($id);
+        if (!$row) {
+            return redirect()->back()->with('error', 'Data performa channel tidak ditemukan.');
+        }
+
+        $this->ChannelPerformanceModel->delete($id);
+        return redirect()->back()->with('success', 'Performa channel dihapus.');
     }
 
     // ── Lainnya ────────────────────────────────────────────────────
