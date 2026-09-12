@@ -5,7 +5,7 @@
             <div class="col-9">
                 <h4 class="fw-semibold mb-2">Penilaian Absensi Karyawan</h4>
                 <p class="text-muted mb-0 fs-3">
-                    Input skor harian (0 = OFF, 1-5) per komponen. Rumus Nilai = $\frac{\text{SUM}}{\text{Hari Efektif} \times 5} \times 100$
+                    Input skor harian (1-5) per komponen; hari OFF (libur/istirahat) ditandai lewat status Kehadiran dan tidak dihitung. Rumus Nilai = $\frac{\text{SUM}}{\text{Hari Efektif} \times 5} \times 100$
                 </p>
             </div>
             <div class="col-3 text-end">
@@ -229,8 +229,7 @@
                                     <label class="form-label fw-semibold fs-3"><?= esc($c->name) ?></label>
                                     <select class="form-select form-select-sm" name="skor_<?= strtolower($c->code) ?>">
                                         <option value="">- Tidak Diubah -</option>
-                                        <option value="0">0 (OFF / Libur)</option>
-                                        <?php foreach ([5 => 'Sangat Baik (5)', 4 => 'Baik (4)', 3 => 'Cukup (3)', 2 => 'Kurang (2)', 1 => 'Sangat Kurang (1)'] as $v => $label) : ?>
+                                        <?php foreach ([5 => 'Sangat Baik (5)', 4 => 'Baik (4)', 3 => 'Cukup (3)', 2 => 'Kurang (2)', 1 => 'Sangat Kurang (1)', 0 => 'Buruk (0)'] as $v => $label) : ?>
                                             <option value="<?= $v ?>"><?= $label ?></option>
                                         <?php endforeach; ?>
                                     </select>
@@ -242,29 +241,39 @@
             </div>
             <div class="card-footer bg-light py-2 text-muted fs-2">
                 <iconify-icon icon="solar:info-circle-bold" class="me-1 align-text-bottom text-info"></iconify-icon>
-                Aspek yang dikosongkan (-) nilainya tidak akan diubah pada tanggal tersebut. Masukkan skor 0 untuk mencatat status OFF/Libur.
+                Aspek yang dikosongkan (-) nilainya tidak akan diubah pada tanggal tersebut. Hari OFF/Libur: pilih status <strong>OFF (Libur)</strong> pada Kehadiran — hari itu tidak dihitung &amp; tidak mengubah nilai.
             </div>
         </form>
 
         <!-- Riwayat Nilai Bulanan Matrix -->
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h5 class="mb-0 fw-semibold d-flex align-items-center">
                     <iconify-icon icon="solar:calendar-mark-bold" class="text-primary fs-5 me-2"></iconify-icon>
                     Riwayat Nilai & Matriks Bulanan
                 </h5>
-                <?php if ($target && !empty($attendanceDetails)) : ?>
-                    <?php
-                    $totalLateMonth = 0;
-                    foreach ($attendanceDetails as $dayDetails) {
-                        foreach ($dayDetails as $det) {
-                            $totalLateMonth += (int)($det->late_minutes ?? 0);
-                        }
-                    }
-                    ?>
-                    <span class="badge bg-danger-subtle text-danger px-3 py-2">
-                        <iconify-icon icon="solar:clock-circle-bold" class="me-1"></iconify-icon> Total Akumulasi Telat: <strong><?= $totalLateMonth ?> menit</strong>
-                    </span>
+                <?php if ($target) : ?>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="badge bg-primary-subtle text-primary px-3 py-2">
+                            <iconify-icon icon="solar:calendar-check-bold" class="me-1"></iconify-icon> Hari Efektif: <strong><?= (int)$hariEfektif ?></strong> dari <?= (int)$jumlahHari ?> hari
+                        </span>
+                        <span class="badge bg-secondary-subtle text-secondary px-3 py-2">
+                            <iconify-icon icon="solar:calendar-date-bold" class="me-1"></iconify-icon> Libur/OFF: <strong><?= (int)$hariLibur ?> hari</strong>
+                        </span>
+                        <?php if (!empty($attendanceDetails)) : ?>
+                            <?php
+                            $totalLateMonth = 0;
+                            foreach ($attendanceDetails as $dayDetails) {
+                                foreach ($dayDetails as $det) {
+                                    $totalLateMonth += (int)($det->late_minutes ?? 0);
+                                }
+                            }
+                            ?>
+                            <span class="badge bg-danger-subtle text-danger px-3 py-2">
+                                <iconify-icon icon="solar:clock-circle-bold" class="me-1"></iconify-icon> Total Akumulasi Telat: <strong><?= $totalLateMonth ?> menit</strong>
+                            </span>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
 
@@ -348,7 +357,9 @@
                                     <td class="text-start fw-semibold riwayat-komponen ps-3"><?= esc($c->name) ?></td>
                                     <?php for ($d = 1; $d <= $jumlahHari; $d++) : ?>
                                         <td class="riwayat-date">
-                                            <?php if (isset($existing[$c->id][$d])) : ?>
+                                            <?php if (isset($offDays[$d])) : ?>
+                                                <span class="skor-cell skor-off" data-bs-toggle="tooltip" data-bs-placement="top" title="OFF — hari libur/istirahat, tidak dihitung">OFF</span>
+                                            <?php elseif (isset($existing[$c->id][$d])) : ?>
                                                 <?php
                                                 $skorValue = (int)$existing[$c->id][$d];
                                                 $tooltipContent = '';
@@ -382,9 +393,7 @@
                                                     }
                                                 }
                                                 ?>
-                                                <?php if ($skorValue === 0) : ?>
-                                                    <span class="skor-cell skor-off" <?= $tooltipContent ? 'data-bs-toggle="tooltip" data-bs-placement="top" title="' . esc($tooltipContent) . '"' : '' ?>>OFF</span>
-                                                <?php elseif ($skorValue <= 2) : ?>
+                                                <?php if ($skorValue <= 2) : ?>
                                                     <span class="skor-cell skor-low" <?= $tooltipContent ? 'data-bs-toggle="tooltip" data-bs-placement="top" title="' . esc($tooltipContent) . '"' : '' ?>><?= $skorValue ?></span>
                                                 <?php elseif ($skorValue === 3) : ?>
                                                     <span class="skor-cell skor-mid" <?= $tooltipContent ? 'data-bs-toggle="tooltip" data-bs-placement="top" title="' . esc($tooltipContent) . '"' : '' ?>><?= $skorValue ?></span>
@@ -449,7 +458,7 @@
                 </div>
                 <div class="modal-body">
                     <p class="mb-3 text-dark">
-                        Tanggal <strong><?= date('d F Y', strtotime($confirmData['tanggal'])) ?></strong> sudah memiliki data penilaian sebelumnya. Apakah Anda ingin menimpanya dengan data baru?
+                        Tanggal <strong><?= date('d F Y', strtotime($confirmData['tanggal'])) ?></strong> sudah memiliki data penilaian / status (termasuk OFF) sebelumnya. Apakah Anda ingin menimpanya dengan data baru?
                     </p>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0 align-middle text-center">

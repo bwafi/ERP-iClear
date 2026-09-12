@@ -565,9 +565,10 @@ $routes->group('marketing', ['filter' => 'auth'], function ($routes) {
     $routes->post('leads/status', 'Marketing::leads_status');
     $routes->post('leads/hapus', 'Marketing::leads_hapus');
     $routes->get('search_service', 'Marketing::search_service');
-    $routes->get('ads', 'Marketing::ads');
-    $routes->post('ads/simpan', 'Marketing::ads_simpan');
-    $routes->post('ads/hapus', 'Marketing::ads_hapus');
+    $routes->get('ads_performa', 'Marketing::ads_performa');
+    $routes->post('ads_performa/simpan', 'Marketing::ads_performa_simpan');
+    $routes->post('ads_performa/hapus', 'Marketing::ads_performa_hapus');
+    $routes->get('laporan', 'Marketing::laporan');
 });
 
 $routes->post('api/kommo/webhook', 'KommoWebhook::handle');
