@@ -3,7 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\ModelMarketingLead;
-use App\Models\ModelMarketingAdsCost;
+use App\Models\ModelMarketingAdsPerf;
 use App\Models\ModelMarketingSource;
 use App\Models\ModelPelanggan;
 use App\Models\ModelChannel;
@@ -23,7 +23,7 @@ use App\Services\Marketing\MarketingRekapService;
 class Marketing extends BaseController
 {
     protected $LeaderModel;
-    protected $AdsModel;
+    protected $AdsPerfModel;
     protected $SourceModel;
     protected $CustomerModel;
     protected $ChannelModel;
@@ -32,7 +32,7 @@ class Marketing extends BaseController
     public function __construct()
     {
         $this->LeaderModel   = new ModelMarketingLead();
-        $this->AdsModel      = new ModelMarketingAdsCost();
+        $this->AdsPerfModel  = new ModelMarketingAdsPerf();
         $this->SourceModel   = new ModelMarketingSource();
         $this->CustomerModel = new ModelPelanggan();
         $this->ChannelModel  = new ModelChannel();
@@ -646,9 +646,12 @@ class Marketing extends BaseController
         return redirect()->back()->with('success', 'Detail prospek dihapus.');
     }
 
-    // ── Biaya Iklan ───────────────────────────────────────────────
+    // ── Performa Ads (sumber tunggal data iklan) ────────────────
+    // Source of truth spending & metrik Laporan Digital Marketing:
+    // PPN, Biaya Harian (spending), Daily Budget, Objective, Reach,
+    // Impression, Klik, Hasil per (tanggal, campaign, cabang ± channel).
 
-    public function ads()
+    public function ads_performa()
     {
         if ($r = $this->readOrRedirect()) {
             return $r;
@@ -660,97 +663,599 @@ class Marketing extends BaseController
             $bulan = (int)date('n');
             $tahun = (int)date('Y');
         }
-
-        $rows = $this->AdsModel->findByPeriod($bulan, $tahun);
+        $kampanye = trim((string)$this->request->getGet('campaign'));
 
         return view('template', [
-            'body'    => 'marketing/ads',
-            'akun'    => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
-            'bulan'   => $bulan,
-            'tahun'   => $tahun,
-            'rows'    => $rows,
+            'body'     => 'marketing/ads_performa',
+            'akun'     => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'bulan'    => $bulan,
+            'tahun'    => $tahun,
+            'kampanye' => $kampanye,
+            'rows'     => $this->AdsPerfModel->findByPeriod($bulan, $tahun, $kampanye),
+            'campaigns' => $this->AdsPerfModel->campaigns($bulan, $tahun),
             'channels' => $this->ChannelModel->active(),
-            'adsByChannel' => $this->Service->adsCostByChannel($bulan, $tahun),
+            'units'    => $this->units(),
             'canWrite' => $this->canWrite(),
         ]);
     }
 
-    public function ads_simpan()
+    public function ads_performa_simpan()
     {
         if ($r = $this->writeOrRedirect()) {
             return $r;
         }
         if (!$this->request->is('post')) {
-            return redirect()->to(base_url('marketing/ads'));
+            return redirect()->to(base_url('marketing/ads_performa'));
         }
 
-        $id        = (int)($this->request->getPost('id') ?? 0);
-        $tanggal   = trim((string)$this->request->getPost('tanggal') ?: '');
-        $bulan     = (int)$this->request->getPost('period_month');
-        $tahun     = (int)$this->request->getPost('period_year');
-        $channelId = (int)$this->request->getPost('channel_id');
-        $campaign  = trim((string)$this->request->getPost('campaign'));
-        $amountRaw = trim((string)$this->request->getPost('amount'));
-        $note      = trim((string)$this->request->getPost('note') ?: '');
+        $id           = (int)($this->request->getPost('id') ?? 0);
+        $tanggal      = trim((string)$this->request->getPost('tanggal') ?: '');
+        $bulan        = (int)$this->request->getPost('period_month');
+        $tahun        = (int)$this->request->getPost('period_year');
+        $channelIds   = $this->request->getPost('channel_id') ?? [];
+        $unitId       = (int)($this->request->getPost('unit_id') ?? 0);
+        $campaign     = trim((string)$this->request->getPost('campaign'));
+        $amountRaw    = trim((string)$this->request->getPost('amount') ?: '');
+        $budgetRaw    = trim((string)$this->request->getPost('daily_budget') ?: '');
+        $ppnRaw       = trim((string)$this->request->getPost('ppn') ?: '');
+        $objective    = trim((string)$this->request->getPost('objective') ?: '');
+        $reach        = trim((string)$this->request->getPost('reach') ?: '');
+        $impression   = trim((string)$this->request->getPost('impression') ?: '');
+        $klik         = trim((string)$this->request->getPost('klik') ?: '');
+        $hasil        = trim((string)$this->request->getPost('hasil') ?: '');
+        $note         = trim((string)$this->request->getPost('note') ?: '');
 
         if (!$this->validPeriod($bulan, $tahun)) {
-            return redirect()->back()->with('error', 'Periode biaya iklan tidak valid.');
+            return redirect()->back()->with('error', 'Periode performa Ads tidak valid.');
         }
-        // Bila tanggal diisi, bulan/tahun mengikuti tanggal.
         if ($tanggal !== '') {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
                 return redirect()->back()->with('error', 'Format tanggal tidak valid.');
             }
-            $bulan = (int)date('n', strtotime($tanggal));
-            $tahun = (int)date('Y', strtotime($tanggal));
+            if ((int)date('n', strtotime($tanggal)) !== $bulan || (int)date('Y', strtotime($tanggal)) !== $tahun) {
+                return redirect()->back()->with('error', 'Tanggal harus berada dalam bulan/tahun yang dipilih.');
+            }
         } else {
             $tanggal = null;
         }
-        if (!is_numeric($amountRaw) || (float)$amountRaw < 0) {
-            return redirect()->back()->with('error', 'Nominal biaya iklan harus angka valid.');
-        }
-        $amount = (float)$amountRaw;
-        if ($channelId > 0 && !$this->ChannelModel->find($channelId)) {
-            $channelId = null;
-        }
         if ($campaign === '') {
-            $campaign = 'General';
+            return redirect()->back()->with('error', 'Nama campaign wajib diisi.');
+        }
+
+        // Validasi & normalisasi channel ganda.
+        if (!is_array($channelIds)) {
+            $channelIds = [];
+        }
+        $channelIds = array_values(array_unique(array_filter(array_map('intval', $channelIds))));
+        $validCh = [];
+        foreach ($channelIds as $cid) {
+            if ($cid > 0 && $this->ChannelModel->find($cid)) {
+                $validCh[] = $cid;
+            }
+        }
+        $channelIdsJson = !empty($validCh) ? json_encode($validCh) : null;
+        $channelIdFallback = !empty($validCh) ? $validCh[0] : null;
+
+        if ($unitId > 0 && !(new ModelUnit())->find($unitId)) {
+            $unitId = null;
+        }
+
+        $toNum = function ($raw) {
+            if ($raw === '' || $raw === null) {
+                return null;
+            }
+            $s = trim((string)$raw);
+            $s = preg_replace('/[^0-9.,\-]/', '', $s);
+            if ($s === '' || $s === '-') {
+                return null;
+            }
+
+            $hasComma = strpos($s, ',') !== false;
+            $hasDot   = strpos($s, '.') !== false;
+
+            if ($hasComma && $hasDot) {
+                $lastComma = strrpos($s, ',');
+                $lastDot   = strrpos($s, '.');
+                if ($lastDot > $lastComma) {
+                    // Format US: 87,679.00 -> buang koma
+                    $s = str_replace(',', '', $s);
+                } else {
+                    // Format ID/EU: 87.679,00 -> buang titik, koma jadi titik
+                    $s = str_replace('.', '', $s);
+                    $s = str_replace(',', '.', $s);
+                }
+            } elseif ($hasComma) {
+                if (substr_count($s, ',') > 1) {
+                    $s = str_replace(',', '', $s);
+                } elseif (preg_match('/,\d{3}$/', $s)) {
+                    // 87,679 ribuan
+                    $s = str_replace(',', '', $s);
+                } else {
+                    // 11,5 desimal
+                    $s = str_replace(',', '.', $s);
+                }
+            } elseif ($hasDot) {
+                if (substr_count($s, '.') > 1) {
+                    $s = str_replace('.', '', $s);
+                } elseif (preg_match('/\.\d{3}$/', $s)) {
+                    // 87.679 ribuan
+                    $s = str_replace('.', '', $s);
+                }
+            }
+
+            $v = (float)$s;
+            return $v < 0 ? -1 : $v;
+        };
+        $toCount = function ($raw) {
+            if ($raw === '' || $raw === null) {
+                return null;
+            }
+            $s = trim((string)$raw);
+            // Bersihkan format ribuan
+            if (preg_match('/\.\d{3}$/', $s) || substr_count($s, '.') > 1) {
+                $s = str_replace('.', '', $s);
+            }
+            if (preg_match('/,\d{3}$/', $s) || substr_count($s, ',') > 1) {
+                $s = str_replace(',', '', $s);
+            }
+            $s = trim((string)preg_replace('/\D/', '', $s));
+            return $s !== '' ? max((int)$s, 0) : null;
+        };
+
+        $amount = $toNum($amountRaw);
+        $budget = $toNum($budgetRaw);
+        $ppn    = $toNum($ppnRaw);
+        if ($amount !== null && $amount < 0) {
+            return redirect()->back()->with('error', 'Biaya Harian harus angka valid.');
+        }
+        if ($budget !== null && $budget < 0) {
+            return redirect()->back()->with('error', 'Daily Budget harus angka valid.');
+        }
+        if ($ppn !== null && $ppn < 0) {
+            return redirect()->back()->with('error', 'PPN harus angka valid.');
         }
 
         $data = [
             'period_month' => $bulan,
             'period_year'  => $tahun,
             'tanggal'      => $tanggal,
-            'channel_id'   => $channelId > 0 ? $channelId : null,
+            'channel_id'   => $channelIdFallback,
+            'channel_ids'  => $channelIdsJson,
+            'unit_id'      => $unitId > 0 ? $unitId : null,
             'campaign'     => $campaign,
             'amount'       => $amount,
+            'daily_budget' => $budget,
+            'ppn'          => $ppn,
+            'objective'    => $objective !== '' ? $objective : null,
+            'reach'        => $toCount($reach),
+            'impression'   => $toCount($impression),
+            'klik'         => $toCount($klik),
+            'hasil'        => $toCount($hasil),
             'note'         => $note !== '' ? $note : null,
             'created_by'   => $this->currentAkun(),
         ];
 
-        $existing = $this->AdsModel->getByUnique($bulan, $tahun, $channelId, $campaign);
-        if ($existing) {
-            $this->AdsModel->update($existing->id, $data);
+        // Bila id dikirim → update baris tertentu (bukan upsert by-unique).
+        if ($id > 0 && $this->AdsPerfModel->find($id)) {
+            $this->AdsPerfModel->update($id, $data);
+            $msg = 'Performa Ads berhasil diperbarui.';
         } else {
-            $this->AdsModel->insert($data);
+            $existing = $this->AdsPerfModel->getByUnique($bulan, $tahun, $campaign, $tanggal ?? '', $channelIdFallback ?? 0, $unitId);
+            if ($existing) {
+                $this->AdsPerfModel->update($existing->id, $data);
+                $msg = 'Performa Ads periode ini sudah ada, diperbarui.';
+            } else {
+                $this->AdsPerfModel->insert($data);
+                $msg = 'Performa Ads tersimpan.';
+            }
         }
 
-        return redirect()->back()->with('success', 'Biaya iklan tersimpan.');
+        return redirect()->to(base_url('marketing/ads_performa?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $msg);
     }
 
-    public function ads_hapus()
+    public function ads_performa_hapus()
     {
         if ($r = $this->writeOrRedirect()) {
             return $r;
         }
         if (!$this->request->is('post')) {
-            return redirect()->to(base_url('marketing/ads'));
+            return redirect()->to(base_url('marketing/ads_performa'));
         }
         $id = (int)$this->request->getPost('id');
-        if (!$this->AdsModel->find($id)) {
-            return redirect()->back()->with('error', 'Biaya iklan tidak ditemukan.');
+        if (!$this->AdsPerfModel->find($id)) {
+            return redirect()->back()->with('error', 'Data performa Ads tidak ditemukan.');
         }
-        $this->AdsModel->delete($id);
-        return redirect()->back()->with('success', 'Biaya iklan dihapus.');
+        $this->AdsPerfModel->delete($id);
+        return redirect()->back()->with('success', 'Performa Ads dihapus.');
+    }
+
+    // ── Laporan Digital Marketing (read-only) ──────────────────────
+    // Source of truth: marketing_ads_performance (source TUNGGAL data iklan —
+    // spending/biaya harian + PPN + budget + objective + metrik, input lewat
+    // menu Performa Ads). Modul ini TIDAK mencampur data Kommo /
+    // Detail Prospek / Rekap Harian / Performa Channel.
+
+    public function laporan()
+    {
+        if ($r = $this->readOrRedirect()) {
+            return $r;
+        }
+
+        $bulan   = (int)($this->request->getGet('bulan') ?? date('n'));
+        $tahun   = (int)($this->request->getGet('tahun') ?? date('Y'));
+        if (!$this->validPeriod($bulan, $tahun)) {
+            $bulan = (int)date('n');
+            $tahun = (int)date('Y');
+        }
+        $kampanye = trim((string)$this->request->getGet('campaign'));
+
+        $db = $this->db();
+
+        // ── Data spending per (tanggal, kampanye, channel, unit) ────
+        $where  = 'a.period_month = ? AND a.period_year = ?';
+        $params = [$bulan, $tahun];
+        if ($kampanye !== '') {
+            $where  .= ' AND a.campaign = ?';
+            $params[] = $kampanye;
+        }
+
+        $raw = $db->query(
+            "SELECT a.tanggal, a.campaign, a.channel_id, a.channel_ids, a.unit_id, a.amount, a.note
+             FROM marketing_ads_performance a
+             WHERE {$where}
+             ORDER BY a.tanggal ASC, a.campaign ASC, a.id ASC",
+            $params
+        )->getResultArray();
+
+        // Daftar kampanye utk filter (semua periode, tanpa filter).
+        $allCampaigns = $db->query(
+            'SELECT DISTINCT campaign FROM marketing_ads_performance
+             WHERE period_month = ? AND period_year = ? AND campaign <> \'\'
+             ORDER BY campaign ASC',
+            [$bulan, $tahun]
+        )->getResultArray();
+
+        $channels = $this->ChannelModel->active();
+        $chName   = [];
+        foreach ($channels as $ch) {
+            $chName[(int)$ch->id] = $ch->name;
+        }
+        $unitName = [];
+        foreach ($this->units() as $u) {
+            $unitName[(int)$u->idunit] = $u->NAMA_UNIT;
+        }
+
+        // ── Performa Ads per (tanggal, campaign) ─────────────────────
+        // Sumber metrik: marketing_ads_performance (menu Performa Ads).
+        $perfWhere  = 'p.period_month = ? AND p.period_year = ?';
+        $perfParams = [$bulan, $tahun];
+        if ($kampanye !== '') {
+            $perfWhere  .= ' AND p.campaign = ?';
+            $perfParams[] = $kampanye;
+        }
+
+        $perfRows = $db->query(
+            "SELECT DATE_FORMAT(p.tanggal, '%Y-%m-%d') AS tgl, p.campaign,
+                    COALESCE(SUM(p.daily_budget), 0) AS daily_budget,
+                    COALESCE(MAX(p.ppn), 0) AS ppn,
+                    MIN(NULLIF(p.objective, '')) AS objective,
+                    COALESCE(SUM(p.reach), 0) AS reach,
+                    COALESCE(SUM(p.impression), 0) AS impression,
+                    COALESCE(SUM(p.klik), 0) AS klik,
+                    COALESCE(SUM(p.hasil), 0) AS hasil
+             FROM marketing_ads_performance p
+             WHERE {$perfWhere}
+             GROUP BY tgl, p.campaign",
+            $perfParams
+        )->getResultArray();
+
+        $perfMap = [];
+        foreach ($perfRows as $pr) {
+            $tglKey = $pr['tgl'] ?: '';
+            $perfMap[$tglKey . '|' . $pr['campaign']] = [
+                'daily_budget' => (float)$pr['daily_budget'],
+                'ppn'          => (float)$pr['ppn'],
+                'objective'    => trim((string)$pr['objective']),
+                'reach'        => (float)$pr['reach'],
+                'impression'   => (float)$pr['impression'],
+                'klik'         => (float)$pr['klik'],
+                'hasil'        => (float)$pr['hasil'],
+            ];
+        }
+
+        // ── Agregat harian per (tanggal, kampanye) ──────────────────
+        $daily = [];      // key: tanggal|campaign
+        $perTgl = [];     // key: tanggal → spending (chart)
+        $perCampaign = []; // key: campaign → spending
+        foreach ($raw as $row) {
+            $tglKey  = $row['tanggal'] ?: '';
+            $tglShow = $tglKey !== '' ? date('Y-m-d', strtotime($tglKey)) : '';
+            $key     = $tglShow . '|' . $row['campaign'];
+
+            if (!isset($daily[$key])) {
+                $chIds = !empty($row['channel_ids']) ? json_decode($row['channel_ids'], true) : [];
+                if (empty($chIds) && $row['channel_id'] > 0) {
+                    $chIds = [(int)$row['channel_id']];
+                }
+                $channelsUsed = [];
+                foreach ($chIds as $cid) {
+                    if ($cid > 0 && !empty($chName[$cid])) {
+                        $channelsUsed[] = $chName[$cid];
+                    }
+                }
+                $unitsUsed = $row['unit_id'] > 0 && !empty($unitName[$row['unit_id']])
+                    ? [$unitName[$row['unit_id']]]
+                    : [];
+                $daily[$key] = [
+                    'tanggal'    => $tglShow,
+                    'campaign'   => $row['campaign'],
+                    'spending'   => 0.0,
+                    'entri'      => 0,
+                    'keterangan' => trim((string)$row['note']),
+                    'channels'   => $channelsUsed,
+                    'units'      => $unitsUsed,
+                    'budget'     => 0.0,
+                    'ppn'        => 0.0,
+                    'objective'  => '',
+                    'reach'      => 0.0,
+                    'impression' => 0.0,
+                    'klik'       => 0.0,
+                    'hasil'      => 0.0,
+                ];
+            } else {
+                $chIds = !empty($row['channel_ids']) ? json_decode($row['channel_ids'], true) : [];
+                if (empty($chIds) && $row['channel_id'] > 0) {
+                    $chIds = [(int)$row['channel_id']];
+                }
+                foreach ($chIds as $cid) {
+                    if ($cid > 0 && !empty($chName[$cid])) {
+                        $c = $chName[$cid];
+                        if (!in_array($c, $daily[$key]['channels'], true)) {
+                            $daily[$key]['channels'][] = $c;
+                        }
+                    }
+                }
+                if ($row['unit_id'] > 0 && !empty($unitName[$row['unit_id']])) {
+                    $u = $unitName[$row['unit_id']];
+                    if (!in_array($u, $daily[$key]['units'], true)) {
+                        $daily[$key]['units'][] = $u;
+                    }
+                }
+                if (trim((string)$daily[$key]['keterangan']) === '' && trim((string)$row['note']) !== '') {
+                    $daily[$key]['keterangan'] = trim((string)$row['note']);
+                }
+            }
+
+            $daily[$key]['spending'] += (float)$row['amount'];
+            $daily[$key]['entri']    += 1;
+
+            if (isset($perfMap[$key])) {
+                $daily[$key]['budget']     = $perfMap[$key]['daily_budget'];
+                $daily[$key]['ppn']        = $perfMap[$key]['ppn'];
+                $daily[$key]['objective']  = $perfMap[$key]['objective'];
+                $daily[$key]['reach']      = $perfMap[$key]['reach'];
+                $daily[$key]['impression'] = $perfMap[$key]['impression'];
+                $daily[$key]['klik']       = $perfMap[$key]['klik'];
+                $daily[$key]['hasil']      = $perfMap[$key]['hasil'];
+            }
+
+            if ($tglShow !== '') {
+                $perTgl[$tglShow] = ($perTgl[$tglShow] ?? 0.0) + (float)$row['amount'];
+            }
+            $perCampaign[$row['campaign']] = ($perCampaign[$row['campaign']] ?? 0.0) + (float)$row['amount'];
+        }
+
+        // Hari tanpa tanggal → grouping "Periode" (tidak masuk chart harian).
+        usort($daily, function ($a, $b) {
+            if ($a['tanggal'] === $b['tanggal']) {
+                return strcmp($a['campaign'], $b['campaign']);
+            }
+            if ($a['tanggal'] === '') {
+                return 1;
+            }
+            if ($b['tanggal'] === '') {
+                return -1;
+            }
+            return strcmp($a['tanggal'], $b['tanggal']);
+        });
+
+// ── Metrik Ads + rasio per baris harian ─────────────────────
+        $totReach = 0.0;
+        $totImp   = 0.0;
+        $totKlik  = 0.0;
+        $totHasil = 0.0;
+        $totPpn   = 0.0;
+        foreach ($daily as &$row) {
+            $row['ctr']  = $row['impression'] > 0 ? ($row['klik'] / $row['impression'] * 100) : null;
+            $row['cpc']  = $row['klik'] > 0 ? ($row['spending'] / $row['klik']) : null;
+            $row['cpm']  = $row['impression'] > 0 ? ($row['spending'] / $row['impression'] * 1000) : null;
+            $row['freq'] = $row['reach'] > 0 ? ($row['impression'] / $row['reach']) : null;
+            $row['cpr']  = $row['hasil'] > 0 ? ($row['spending'] / $row['hasil']) : null;
+
+            if ($row['ppn'] > 0) {
+                $totPpn += $row['spending'] * $row['ppn'] / 100;
+            }
+            $totReach += $row['reach'];
+            $totImp   += $row['impression'];
+            $totKlik  += $row['klik'];
+            $totHasil += $row['hasil'];
+        }
+        unset($row);
+
+        // Agregat per tanggal (untuk best/worst day) — metrik dijumlah per hari.
+        $dailyByTgl = [];
+        foreach ($daily as $dRow) {
+            if ($dRow['tanggal'] === '') {
+                continue;
+            }
+            $t = $dRow['tanggal'];
+            if (!isset($dailyByTgl[$t])) {
+                $dailyByTgl[$t] = ['spending' => 0.0, 'klik' => 0.0, 'impression' => 0.0, 'reach' => 0.0, 'hasil' => 0.0, 'ctr' => null, 'cpc' => null];
+            }
+            $dailyByTgl[$t]['spending']   += $dRow['spending'];
+            $dailyByTgl[$t]['klik']       += $dRow['klik'];
+            $dailyByTgl[$t]['impression'] += $dRow['impression'];
+            $dailyByTgl[$t]['reach']      += $dRow['reach'];
+            $dailyByTgl[$t]['hasil']      += $dRow['hasil'];
+        }
+        foreach ($dailyByTgl as $t => &$dRow) {
+            $dRow['ctr'] = $dRow['impression'] > 0 ? ($dRow['klik'] / $dRow['impression'] * 100) : null;
+            $dRow['cpc'] = $dRow['klik'] > 0 ? ($dRow['spending'] / $dRow['klik']) : null;
+        }
+        unset($dRow);
+
+        // ── Summary agregat ─────────────────────────────────────────
+        $totalSpending = array_sum(array_map(fn($r) => $r['spending'], $daily));
+        $metricAvailable = $totReach > 0 || $totImp > 0 || $totKlik > 0 || $totHasil > 0;
+        $totalBiaya = $totalSpending + $totPpn;
+
+        $summary = [
+            'spending' => $totalSpending,
+            'ppn'      => $totPpn > 0 ? $totPpn : null,
+            'biaya'    => $totalBiaya,
+            'reach'    => $totReach > 0 ? $totReach : null,
+            'impression' => $totImp > 0 ? $totImp : null,
+            'klik'     => $totKlik > 0 ? $totKlik : null,
+            'ctr'      => $totImp > 0 ? ($totKlik / $totImp * 100) : null,
+            'cpc'      => $totKlik > 0 ? ($totalSpending / $totKlik) : null,
+            'cpm'      => $totImp > 0 ? ($totalSpending / $totImp * 1000) : null,
+            'freq'     => $totReach > 0 ? ($totImp / $totReach) : null,
+            'hasil'    => $totHasil > 0 ? $totHasil : null,
+            'cpr'      => $totHasil > 0 ? ($totalSpending / $totHasil) : null,
+            'metricAvailable' => $metricAvailable,
+        ];
+
+        // ── Insight & Evaluasi (bersumber dari data terfilter) ──────
+        $topCampaignSpend = null;
+        foreach ($perCampaign as $name => $spent) {
+            if ($name === '') {
+                continue;
+            }
+            if ($topCampaignSpend === null || $spent > $topCampaignSpend['spending']) {
+                $topCampaignSpend = ['campaign' => $name, 'spending' => $spent];
+            }
+        }
+
+        $bestDay = null;
+        $worstDay = null;
+        $days = [];
+        foreach ($dailyByTgl as $tgl => $row) {
+            $days[] = [
+                'tanggal'  => $tgl,
+                'spending' => $row['spending'],
+                'klik'     => $row['klik'],
+                'ctr'      => $row['ctr'],
+                'cpc'      => $row['cpc'],
+                'hasil'    => $row['hasil'],
+            ];
+        }
+        if (!empty($days)) {
+            usort($days, fn($a, $b) => $b['spending'] <=> $a['spending']);
+            $bestDay = $days[0];
+            $worstDay = $days[count($days) - 1];
+        }
+
+        // Insight dari metrik saluran (bila tersedia): per-channel ratios.
+        $metricsPerChannel = null;
+        if ($metricAvailable) {
+            // Spending per saluran dari data iklan terfilter (penting utk CPC/CPM).
+            $spendPerChannel = [];
+            foreach ($raw as $row) {
+                $chIds = !empty($row['channel_ids']) ? json_decode($row['channel_ids'], true) : [];
+                if (empty($chIds) && $row['channel_id'] > 0) {
+                    $chIds = [(int)$row['channel_id']];
+                }
+                $amt = (float)$row['amount'];
+                $share = count($chIds) > 0 ? $amt / count($chIds) : $amt;
+                foreach ($chIds as $cid) {
+                    if ($cid > 0) {
+                        $spendPerChannel[$cid] = ($spendPerChannel[$cid] ?? 0.0) + $share;
+                    }
+                }
+            }
+
+            $perChannelRows = $db->query(
+                "SELECT c.id AS channel_id, c.name AS nama_channel,
+                        COALESCE(SUM(p.reach), 0) AS reach,
+                        COALESCE(SUM(p.impression), 0) AS impression,
+                        COALESCE(SUM(p.klik), 0) AS klik,
+                        COALESCE(SUM(p.hasil), 0) AS hasil,
+                        COALESCE(SUM(p.daily_budget), 0) AS daily_budget,
+                        COALESCE(MAX(p.ppn), 0) AS ppn
+                 FROM marketing_ads_performance p
+                 JOIN channel c ON c.id = p.channel_id
+                 WHERE {$perfWhere}
+                 GROUP BY c.id, c.name
+                 ORDER BY c.name ASC",
+                $perfParams
+            )->getResultArray();
+            foreach ($perChannelRows as &$pc) {
+                $spend = (float)($spendPerChannel[(int)$pc['channel_id']] ?? 0);
+                $imp   = (float)$pc['impression'];
+                $klik  = (float)$pc['klik'];
+                $hasil = (float)$pc['hasil'];
+                $reach = (float)$pc['reach'];
+                $pc['spending'] = $spend;
+                $pc['ctr'] = $imp > 0 ? $klik / $imp * 100 : null;
+                $pc['cpc'] = $klik > 0 ? $spend / $klik : null;
+                $pc['cpm'] = $imp > 0 ? $spend / $imp * 1000 : null;
+                $pc['freq'] = $reach > 0 ? $imp / $reach : null;
+                $pc['cpr'] = $hasil > 0 ? $spend / $hasil : null;
+            }
+            unset($pc);
+            $metricsPerChannel = $perChannelRows;
+        }
+
+        // Performa per cabang (unit) — data Ads.
+        $metricsPerUnit = null;
+        if ($metricAvailable) {
+            $perUnitRows = $db->query(
+                "SELECT u.idunit AS unit_id, u.NAMA_UNIT AS nama_unit,
+                        COALESCE(SUM(p.amount), 0) AS spending,
+                        COALESCE(SUM(p.daily_budget), 0) AS daily_budget,
+                        COALESCE(MAX(p.ppn), 0) AS ppn,
+                        COALESCE(SUM(p.reach), 0) AS reach,
+                        COALESCE(SUM(p.impression), 0) AS impression,
+                        COALESCE(SUM(p.klik), 0) AS klik,
+                        COALESCE(SUM(p.hasil), 0) AS hasil
+                 FROM marketing_ads_performance p
+                 JOIN unit u ON u.idunit = p.unit_id
+                 WHERE {$perfWhere}
+                 GROUP BY u.idunit, u.NAMA_UNIT
+                 ORDER BY u.NAMA_UNIT ASC",
+                $perfParams
+            )->getResultArray();
+            foreach ($perUnitRows as &$pu) {
+                $spend = (float)$pu['spending'];
+                $imp   = (float)$pu['impression'];
+                $klik  = (float)$pu['klik'];
+                $hasil = (float)$pu['hasil'];
+                $reach = (float)$pu['reach'];
+                $pu['ctr'] = $imp > 0 ? $klik / $imp * 100 : null;
+                $pu['cpc'] = $klik > 0 ? $spend / $klik : null;
+                $pu['cpm'] = $imp > 0 ? $spend / $imp * 1000 : null;
+                $pu['freq'] = $reach > 0 ? $imp / $reach : null;
+                $pu['cpr'] = $hasil > 0 ? $spend / $hasil : null;
+            }
+            unset($pu);
+            $metricsPerUnit = $perUnitRows;
+        }
+
+        return view('template', [
+            'body'       => 'marketing/laporan',
+            'akun'       => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'bulan'      => $bulan,
+            'tahun'      => $tahun,
+            'kampanye'   => $kampanye,
+            'campaigns'  => array_map(fn($c) => $c['campaign'], $allCampaigns),
+            'sum'        => $summary,
+            'daily'      => array_values($daily),
+            'perTgl'     => $perTgl,
+            'topCampaignSpend' => $topCampaignSpend,
+            'bestDay'    => $bestDay,
+            'worstDay'   => $worstDay,
+            'metricsPerChannel' => $metricsPerChannel,
+            'metricsPerUnit' => $metricsPerUnit,
+        ]);
     }
 }

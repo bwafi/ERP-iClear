@@ -1576,6 +1576,9 @@ class PenilaianKPI extends BaseController
 
         $kpi = null;
         $existing = [];
+        $hariEfektif = 0;
+        $hariLibur = 0;
+        $jumlahHari = 0;
         $attendanceComponents = [];
         $allowedComponentCodes = [];
         if ($target) {
@@ -1598,7 +1601,39 @@ class PenilaianKPI extends BaseController
                 }
             }
 
-            // Ambil skor harian existing utk periode (rata-rata antar evaluator per hari)
+            // Hari-hari OFF (marker eksplisit) + legacy (raw_score 0 tanpa detail sesi).
+            // Hari OFF TIDAK diisi skor (null) — persis interpretasi "OFF = null".
+            $offDays = [];
+            foreach ((new \App\Models\ModelKpiAttendanceOff())->offDatesForPeriod(
+                (int)$target->ID_AKUN,
+                $bulan,
+                $tahun
+            ) as $od) {
+                $offDays[(int)date('j', strtotime($od))] = true;
+            }
+            $legacyOff = $this->db->table('kpi_evaluations e')
+                ->select('e.evaluation_date')
+                ->distinct()
+                ->join('kpi_attendance_detail d', 'd.evaluation_id = e.id', 'left')
+                ->join('kpi_components c', 'c.id = e.kpi_component_id', 'inner')
+                ->where('e.employee_id', (int)$target->ID_AKUN)
+                ->whereIn('c.code', $attendanceCodes)
+                ->where('e.raw_score', 0)
+                ->where('e.period_year', $tahun)
+                ->where('e.period_month', $bulan)
+                ->where('d.id', null)
+                ->get()->getResultArray();
+            foreach ($legacyOff as $lo) {
+                $offDays[(int)date('j', strtotime($lo->evaluation_date))] = true;
+            }
+
+            // Ringkasan hari efektif & hari libur/OFF periode berjalan.
+            $jumlahHari = (int)date('t', strtotime(sprintf('%04d-%02d-01', $tahun, $bulan)));
+            $hariLibur  = count($offDays);
+            $hariEfektif = max($jumlahHari - $hariLibur, 0);
+
+            // Ambil skor harian existing utk periode (rata-rata antar evaluator per hari).
+            // Tanggal OFF TIDAK dimasukkan (renders sebagai "-"). 
             $evals = (new \App\Models\ModelKpiEvaluation())
                 ->where('employee_id', (int)$target->ID_AKUN)
                 ->where('period_year', $tahun)
@@ -1607,6 +1642,9 @@ class PenilaianKPI extends BaseController
 
             foreach ($evals as $e) {
                 $day = (int)date('j', strtotime($e->evaluation_date));
+                if (isset($offDays[$day])) {
+                    continue; // hari OFF: tidak punya nilai (null)
+                }
                 $cid = (int)$e->kpi_component_id;
                 if (!isset($existing[$cid][$day])) {
                     $existing[$cid][$day] = ['sum' => 0.0, 'count' => 0];
@@ -1667,6 +1705,10 @@ class PenilaianKPI extends BaseController
             'skor_total2'           => $kpi['skor_total2'] ?? 0,
             'attendanceComponents'  => $attendanceComponents,
             'existing'              => $existing,
+            'offDays'               => $offDays ?? [],
+            'hariEfektif'           => $hariEfektif,
+            'hariLibur'             => $hariLibur,
+            'jumlahHari'            => $jumlahHari,
             'attendanceDetails'     => $attendanceDetails ?? [],
             'bulan'                 => $bulan,
             'tahun'                 => $tahun,
@@ -1715,7 +1757,7 @@ class PenilaianKPI extends BaseController
         // Collect input values — HANYA komponen yang diotorisasi untuk evaluator+target ini.
         $savedAnyAllowed = false;
         $inputValues = [];
-        
+
         // Auto-scoring KEHADIRAN dari jam masuk aktual.
         // - Shift PAGI/SIANG: field jam_masuk
         // - Shift PS: dua field sekaligus — jam_masuk_pagi + jam_masuk_sore
@@ -1727,6 +1769,9 @@ class PenilaianKPI extends BaseController
         $attendanceType  = (string)($this->request->getPost('attendance_type') ?: 'NORMAL');
         $statusKehadiran = (string)($this->request->getPost('kehadiran_status') ?: 'HADIR');
         $pendingKehadiran = null; // [sessions] yang akan disimpan setelah konfirmasi
+        $savedOff = false;  // hari ini ditandai OFF (libur/istirahat)
+        $markOff  = false;  // permintaan menandai OFF (dieksekusi setelah gate konfirmasi)
+        $kehadiranActual = false; // ada evaluasi KEHADIRAN nyata (bukan OFF) tersimpan
 
         foreach ($codeToComponent as $code => $comp) {
             if (!\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
@@ -1741,15 +1786,11 @@ class PenilaianKPI extends BaseController
 
             if ($code === 'KEHADIRAN' && $statusKehadiran === 'OFF') {
                 // Tandai OFF: hari libur/istirahat tidak dihitung.
-                // Simpan raw_score 0 (perhitungan hari efektif mengabaikannya)
-                // dan bersihkan detail jam masuk lama untuk tanggal ini.
-                $attendanceSvc->resetDay($employeeId, $tanggal, (int)$me->ID_AKUN);
-                $inputValues['KEHADIRAN'] = [
-                    'skor' => 0,
-                    'comp' => $comp,
-                    'isOff' => true,
-                    'isAuto' => false,
-                ];
+                // Nilai absensi TIDAK disimpan sebagai 0 (null) supaya tidak
+                // tertukar dengan skor 0 (telat ≥15 menit). Pembersihan data
+                // lama + penandaan dilakukan setelah gate konfirmasi.
+                $savedOff = true;
+                $markOff  = true;
                 continue;
             }
 
@@ -1804,26 +1845,37 @@ class PenilaianKPI extends BaseController
                 ->with('error', 'Anda tidak berwenang menilai komponen absensi pegawai ini.');
         }
 
-        if (empty($inputValues)) {
+        if (empty($inputValues) && !$savedOff) {
             return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
                 ->with('error', 'Tidak ada skor yang valid untuk disimpan (harus 1-5).');
         }
 
-        // Cek apakah tanggal ini sudah memiliki data (untuk konfirmasi)
-        if ($confirm !== 1) {
-            // Extract component IDs from inputValues
-            $componentIds = array_map(function ($item) {
+        // Cek apakah tanggal ini sudah memiliki data (untuk konfirmasi).
+        // Penandaan OFF & pembatalan OFF juga perlu konfirmasi bila tanggal
+        // sudah ada data / memang sedang ditandai OFF.
+        if ($confirm !== 1 && ($markOff || !empty($inputValues))) {
+            // Component IDs yang tersentuh: skor yang diubah + KEHADIRAN (bila OFF).
+            $checkIds = array_map(function ($item) {
                 return (int)$item['comp']->id;
             }, $inputValues);
+
+            $kehadiranForOff = null;
+            if ($markOff && isset($codeToComponent['KEHADIRAN'])) {
+                $kehadiranForOff = $codeToComponent['KEHADIRAN'];
+                $checkIds[] = (int)$kehadiranForOff->id;
+            }
+            $checkIds = array_values(array_unique($checkIds));
 
             $existingData = $this->db->table('kpi_evaluations')
                 ->select('kpi_component_id, raw_score')
                 ->where('employee_id', $employeeId)
                 ->where('evaluator_id', (int)$me->ID_AKUN)
                 ->where('evaluation_date', $tanggal)
-                ->whereIn('kpi_component_id', $componentIds)
+                ->whereIn('kpi_component_id', $checkIds)
                 ->get()
                 ->getResultArray();
+
+            $comparisons = [];
 
             if (!empty($existingData)) {
                 // Ada data existing → butuh konfirmasi
@@ -1833,7 +1885,6 @@ class PenilaianKPI extends BaseController
                 }
 
                 // Build comparison data
-                $comparisons = [];
                 foreach ($inputValues as $code => $data) {
                     $compId = (int)$data['comp']->id;
                     if (isset($existingByComponentId[$compId])) {
@@ -1849,15 +1900,40 @@ class PenilaianKPI extends BaseController
                     }
                 }
 
-                if (!empty($comparisons)) {
-                    // Set session data untuk modal konfirmasi
-                    session()->setFlashdata('require_confirmation', [
-                        'tanggal' => $tanggal,
-                        'comparisons' => $comparisons,
-                        'post_data' => $this->request->getPost(),
-                    ]);
-                    return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun);
+                if ($kehadiranForOff && isset($existingByComponentId[(int)$kehadiranForOff->id])) {
+                    $comparisons[] = [
+                        'name' => $kehadiranForOff->name,
+                        'old' => (int)$existingByComponentId[(int)$kehadiranForOff->id],
+                        'new' => 'OFF (Libur)',
+                    ];
                 }
+            }
+
+            // Hari ini sedang ditandai OFF oleh evaluator ini → konfirmasi pembatalan
+            // sebelum menimpanya dengan data nyata.
+            if (!$markOff) {
+                $offExists = (new \App\Models\ModelKpiAttendanceOff())
+                    ->where('employee_id', $employeeId)
+                    ->where('evaluation_date', $tanggal)
+                    ->where('evaluator_id', (int)$me->ID_AKUN)
+                    ->countAllResults() > 0;
+                if ($offExists) {
+                    $comparisons[] = [
+                        'name' => 'Status Kehadiran',
+                        'old' => 'OFF (Libur)',
+                        'new' => 'Hadir / Dinilai',
+                    ];
+                }
+            }
+
+            if (!empty($comparisons)) {
+                // Set session data untuk modal konfirmasi
+                session()->setFlashdata('require_confirmation', [
+                    'tanggal' => $tanggal,
+                    'comparisons' => $comparisons,
+                    'post_data' => $this->request->getPost(),
+                ]);
+                return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun);
             }
         }
 
@@ -1865,6 +1941,15 @@ class PenilaianKPI extends BaseController
         $svc = new \App\Services\Kpi\KpiEvaluationService();
         $saved = 0;
         $autoDetail = '';
+
+        // Hari ditandai OFF: buang data absensi lama & catat marker OFF
+        // (nilai KEHADIRAN menjadi null — tidak tersimpan 0).
+        $offModel = new \App\Models\ModelKpiAttendanceOff();
+        if ($markOff) {
+            $attendanceSvc->resetDay($employeeId, $tanggal, (int)$me->ID_AKUN);
+            $offModel->markOff($employeeId, $tanggal, (int)$me->ID_AKUN);
+            $saved++;
+        }
 
         // Persist auto-scoring KEHADIRAN (jam masuk aktual → nilai otomatis).
         if (!empty($pendingKehadiran)) {
@@ -1876,6 +1961,7 @@ class PenilaianKPI extends BaseController
                     $pendingKehadiran
                 );
                 $saved++;
+                $kehadiranActual = true;
                 $autoDetail = sprintf(
                     ' | KEHADIRAN (auto): nilai %s, telat %d menit',
                     $attResult['auto_score'],
@@ -1898,20 +1984,28 @@ class PenilaianKPI extends BaseController
                 'evaluation_date'  => $tanggal,
                 'raw_score'        => $data['skor'],
                 'max_score'        => 5,
-                'notes'            => ($code === 'KEHADIRAN')
-                    ? (($data['isOff'] ?? false)
-                        ? 'Absensi: ' . $data['comp']->name . ' (OFF, tidak dihitung)'
-                        : 'Absensi: ' . $data['comp']->name . ' (Auto-scoring, Skor: ' . $data['skor'] . '/5)')
-                    : 'Absensi: ' . $data['comp']->name . ' (Skor: ' . $data['skor'] . '/5)',
+                'notes'            => 'Absensi: ' . $data['comp']->name . ' (Skor: ' . $data['skor'] . '/5)',
             ]);
 
             if ($result['success']) {
                 $saved++;
+                if ($code === 'KEHADIRAN') {
+                    $kehadiranActual = true;
+                }
             }
         }
 
+        // Ada evaluasi KEHADIRAN nyata tersimpan → batalkan penandaan OFF.
+        if ($kehadiranActual) {
+            $offModel->clearOff($employeeId, $tanggal, (int)$me->ID_AKUN);
+        }
+
+        $message = $savedOff && $saved === 1
+            ? 'Tanggal ' . date('d M Y', strtotime($tanggal)) . ' ditandai OFF — hari libur tidak dihitung dalam absensi.'
+            : 'Skor absensi ' . date('d M Y', strtotime($tanggal)) . ' tersimpan (' . $saved . ' komponen).' . $autoDetail;
+
         return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
-            ->with('success', 'Skor absensi ' . date('d M Y', strtotime($tanggal)) . ' tersimpan (' . $saved . ' komponen).' . $autoDetail);
+            ->with('success', $message);
     }
 
     public function slip_gaji($idakun)
@@ -2107,8 +2201,8 @@ class PenilaianKPI extends BaseController
             ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
             ->where('a.STATUS_PEGAWAI', 1)
             ->groupStart()
-                ->where('a.deleted', null)
-                ->orWhere('a.deleted', 0)
+            ->where('a.deleted', null)
+            ->orWhere('a.deleted', 0)
             ->groupEnd();
 
         if (!in_array($myRole, [1, 2], true) && !empty($allowedTargets)) {
@@ -2145,15 +2239,15 @@ class PenilaianKPI extends BaseController
             $period = explode('-', $date);
             $year = (int)$period[0];
             $month = (int)$period[1];
-            
+
             $kehadiranComp = $this->db->table('kpi_components')
                 ->where('code', 'KEHADIRAN')
                 ->get()->getRow();
-            
+
             if ($kehadiranComp) {
                 $monthStart = sprintf('%04d-%02d-01', $year, $month);
                 $monthEnd = date('Y-m-t', strtotime($monthStart));
-                
+
                 $monthlyList = $this->db->table('kpi_evaluations e')
                     ->select('e.evaluation_date, e.raw_score, d.shift, d.session, d.attendance_type, d.actual_time, d.late_minutes, d.auto_score')
                     ->join('kpi_attendance_detail d', 'd.evaluation_id = e.id', 'left')

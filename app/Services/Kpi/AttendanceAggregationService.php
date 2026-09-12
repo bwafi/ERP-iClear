@@ -36,12 +36,32 @@ class AttendanceAggregationService
      *
      * Satu tanggal dihitung SEKALI meski ada beberapa komponen absen yang OFF pada tanggal
      * yang sama (OFF tidak dihitung berkali-kali per komponen).
+     *
+     * Sumber hari OFF: tabel kpi_attendance_off (marker eksplisit) + legacy
+     * (evaluasi raw_score=0 TANPA detail sesi — marker OFF versi lama). Skor 0
+     * yang berasal dari keterlambatan ≥15 menit (memiliki kpi_attendance_detail)
+     * TIDAK dianggap OFF.
      */
     protected function getEffectiveDayCount(int $employeeId, string $month, string $year): int
     {
         // Jumlah hari kalender sebenarnya untuk bulan & tahun ini (bukan hardcode 26).
         $totalDaysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', (int)$year, (int)$month)));
 
+        $offDates = [];
+
+        // 1) Marker OFF modern: kpi_attendance_off.
+        $offRows = (new \App\Models\ModelKpiAttendanceOff())
+            ->select('evaluation_date')
+            ->distinct()
+            ->where('employee_id', $employeeId)
+            ->where('period_month', (int)$month)
+            ->where('period_year', (int)$year)
+            ->findAll();
+        foreach ($offRows as $o) {
+            $offDates[$o->evaluation_date] = true;
+        }
+
+        // 2) Legacy: evaluasi komponen absen raw_score=0 tanpa detail sesi.
         $components = $this->componentModel
             ->whereIn('code', array_keys(self::ATTENDANCE_COMPONENTS))
             ->findAll();
@@ -51,19 +71,24 @@ class AttendanceAggregationService
             $componentIds[] = (int)$c->id;
         }
 
-        if (empty($componentIds)) {
-            return $totalDaysInMonth;
+        if (!empty($componentIds)) {
+            $legacyRows = $this->evaluationModel
+                ->select('kpi_evaluations.evaluation_date')
+                ->distinct()
+                ->join('kpi_attendance_detail d', 'd.evaluation_id = kpi_evaluations.id', 'left')
+                ->where('employee_id', $employeeId)
+                ->whereIn('kpi_component_id', $componentIds)
+                ->where('raw_score', 0)
+                ->where('period_year', $year)
+                ->where('period_month', $month)
+                ->groupStart()
+                    ->where('d.id', null)
+                ->groupEnd()
+                ->findAll();
+            foreach ($legacyRows as $lr) {
+                $offDates[$lr->evaluation_date] = true;
+            }
         }
-
-        $offDates = $this->evaluationModel
-            ->select('evaluation_date')
-            ->distinct()
-            ->where('employee_id', $employeeId)
-            ->whereIn('kpi_component_id', $componentIds)
-            ->where('raw_score', 0)
-            ->where('period_year', $year)
-            ->where('period_month', $month)
-            ->findAll();
 
         $offCount = count($offDates);
 

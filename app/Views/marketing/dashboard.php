@@ -50,8 +50,8 @@
                 <a href="<?= base_url('marketing/leads') ?>" class="btn btn-primary">
                     <iconify-icon icon="solar:users-group-rounded-bold" class="me-1"></iconify-icon>Lead
                 </a>
-                <a href="<?= base_url('marketing/ads') ?>" class="btn btn-primary">
-                    <iconify-icon icon="solar:wallet-bold" class="me-1"></iconify-icon>Biaya Iklan
+                <a href="<?= base_url('marketing/ads_performa') ?>" class="btn btn-primary">
+                    <iconify-icon icon="solar:chart-2-bold" class="me-1"></iconify-icon>Performa Ads
                 </a>
                 <a href="<?= base_url('konten/channel') ?>" class="btn btn-light">
                     <iconify-icon icon="solar:chart-2-bold" class="me-1"></iconify-icon>Performa Channel

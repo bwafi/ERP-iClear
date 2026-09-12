@@ -9,7 +9,7 @@ use App\Services\Konten\ContentKpiService;
  * KPI Digital Marketing / Kepala Divisi (jabatan 43).
  *
  * MENGULANGI BUKAN engine KPI: service ini menghitung achievement tiap komponen
- * dari DATA OPERASIONAL (marketing_lead, marketing_ads_cost, transaksi pelanggan
+ * dari DATA OPERASIONAL (marketing_lead, marketing_ads_performance, transaksi pelanggan
  * hasil lead) lalu diserahkan ke engine KPI existing via KpiCalculationService.
  *
  * Rumus (seluruh actual dihitung otomatis, bukan input manual):
@@ -113,7 +113,7 @@ class MarketingKpiService
     public function adsCost(int $month, int $year): float
     {
         $row = $this->db->query(
-            "SELECT COALESCE(SUM(amount),0) t FROM marketing_ads_cost WHERE period_month = ? AND period_year = ?",
+            "SELECT COALESCE(SUM(amount),0) t FROM marketing_ads_performance WHERE period_month = ? AND period_year = ?",
             [$month, $year]
         )->getRow();
 
@@ -353,7 +353,7 @@ class MarketingKpiService
     {
         $rows = $this->db->query(
             "SELECT COALESCE(ch.name, 'Umum') channel_name, COALESCE(SUM(ad.amount),0) total
-             FROM marketing_ads_cost ad
+             FROM marketing_ads_performance ad
              LEFT JOIN channel ch ON ch.id = ad.channel_id
              WHERE ad.period_month = ? AND ad.period_year = ?
              GROUP BY ad.channel_id, ch.name
