@@ -31,6 +31,12 @@ class CustomerSatisfaction extends BaseController
         $myUnit   = (int)($me->ID_UNIT ?? 0);
         $myId     = (int)($me->ID_AKUN ?? 0);
 
+        // Hanya role pemegang akses menu Customer Satisfaction yang boleh buka halaman ini.
+        $viewRoles = [0, 1, 2, 34, 35, 40, 41, 42, 43, 45];
+        if (!in_array($myRole, $viewRoles, true)) {
+            return redirect()->to('/')->with('error', 'Anda tidak berhak mengakses fitur Customer Satisfaction.');
+        }
+
         // Filter: hanya Bulan & Tahun (tanggal dihapus dari filter; tanggal input di bawah).
         $bulan    = (int)($this->request->getGet('bulan') ?: date('m'));
         $tahun    = (int)($this->request->getGet('tahun') ?: date('Y'));
@@ -126,7 +132,7 @@ class CustomerSatisfaction extends BaseController
         $jumlahReview = (int)$this->request->getPost('jumlah_review');
 
         // Otorisasi input.
-        if (!in_array($myRole, [1, 2, 41], true)) {
+        if (!in_array($myRole, [1, 2, 41, 42], true)) {
             return redirect()->to('/penilaian/customer_satisfaction')
                 ->with('error', 'Anda tidak berwenang menginput Customer Satisfaction.');
         }
@@ -173,7 +179,7 @@ class CustomerSatisfaction extends BaseController
             $all = $this->service->allUnits();
             return [$all, true, $all ? (int)$all[0] : 0];
         }
-        if ($myRole === 41) {
+        if (in_array($myRole, [41, 42], true)) {
             return [[$myUnit], true, $myUnit];
         }
         if ($myRole === 40) {

@@ -51,7 +51,7 @@ class Marketing extends BaseController
 
     private function canView(): bool
     {
-        return in_array($this->currentRole(), [0, 1, 2, 34, 43, 44], true);
+        return in_array($this->currentRole(), [0, 1, 2, 34, 40, 41, 42, 43], true);
     }
 
     private function canWrite(): bool
