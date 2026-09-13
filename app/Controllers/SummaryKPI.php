@@ -59,6 +59,9 @@ class SummaryKPI extends BaseController
                 $db = \Config\Database::connect();
 
                 $scopeUnits = ($myRole === 40 && $myId) ? $allowedUnitIds : [$myUnit];
+                if (empty($scopeUnits)) {
+                    $scopeUnits = [$myUnit];
+                }
 
                 $b = $db->table('akun')
                     ->select('ID_AKUN, ID_JABATAN, ID_UNIT')
@@ -75,10 +78,14 @@ class SummaryKPI extends BaseController
                     $hq = array_values(array_filter($hq, fn($j) => (int)$j !== 42));
                 }
 
-                $b->groupStart()
-                    ->whereIn('ID_UNIT', $scopeUnits)
-                    ->orWhereIn('ID_JABATAN', $hq)
-                    ->groupEnd();
+                if (!empty($hq)) {
+                    $b->groupStart()
+                        ->whereIn('ID_UNIT', $scopeUnits)
+                        ->orWhereIn('ID_JABATAN', $hq)
+                        ->groupEnd();
+                } else {
+                    $b->whereIn('ID_UNIT', $scopeUnits);
+                }
 
                 foreach ($b->get()->getResultArray() as $r) {
                     $allowedIds[] = (int)$r['ID_AKUN'];

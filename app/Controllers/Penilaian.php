@@ -124,10 +124,14 @@ private function userScope()
                 $hq = array_values(array_filter($hq, fn($j) => (int)$j !== 42));
             }
 
-            $b->groupStart()
-                ->whereIn('ID_UNIT', $scopeUnits)
-                ->orWhereIn('ID_JABATAN', $hq)
-                ->groupEnd();
+            if (!empty($hq)) {
+                $b->groupStart()
+                    ->whereIn('ID_UNIT', $scopeUnits)
+                    ->orWhereIn('ID_JABATAN', $hq)
+                    ->groupEnd();
+            } else {
+                $b->whereIn('ID_UNIT', $scopeUnits);
+            }
         }
 
         foreach ($b->get()->getResultArray() as $r) {
