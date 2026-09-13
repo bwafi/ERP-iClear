@@ -13,7 +13,8 @@ use App\Models\ModelAuth;
  * ATURAN CABANG:
  *   - Admin Cabang (35): KEHADIRAN utk Teknisi(36), Kepala Toko(41), dirinya(35),
  *                        dan CS(42) — khusus Admin/Kasir yang berada di Unit 1.
- *   - Kepala Toko (41): non-Kehadiran utk Admin Cabang(35) & Teknisi(36).
+ *   - Kepala Toko (41): non-Kehadiran utk Admin Cabang(35), Teknisi(36),
+ *                       serta CS(42) — khusus Kepala Toko yang berada di Unit 1.
  *   - SPV (40)        : non-Kehadiran utk Kepala Toko(41).
  *
  * ATURAN PUSAT (HQ):
@@ -78,10 +79,11 @@ class EvaluatorAuthorizationService
             41 => self::HADIR,      // Kepala Toko
             42 => self::HADIR,      // CS (khusus Admin/Kasir Unit 1)
         ],
-        // Kepala Toko (41): non-Kehadiran utk Admin & Teknisi.
+        // Kepala Toko (41): non-Kehadiran utk Admin, Teknisi, dan CS (Unit 1).
         41 => [
             35 => self::NON_HADIR,
             36 => self::NON_HADIR,
+            42 => self::NON_HADIR,
         ],
         // SPV (40): non-Kehadiran utk Kepala Toko.
         40 => [
@@ -160,7 +162,19 @@ class EvaluatorAuthorizationService
 
         $allowed = self::allowedTargetJabatans($evaluatorJabatan);
 
-        return in_array($employeeJabatan, $allowed, true);
+        if (!in_array($employeeJabatan, $allowed, true)) {
+            return false;
+        }
+
+        // CS (42) KEHADIRAN dinilai Admin/Kasir (35) di UNIT 1;
+        // CS (42) non-Kehadiran dinilai Kepala Toko (41) yang berada di UNIT 1.
+        if ($employeeJabatan === 42) {
+            if (($evaluatorJabatan === 35 || $evaluatorJabatan === 41) && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -205,8 +219,12 @@ class EvaluatorAuthorizationService
             return false;
         }
 
-        // Kasus khusus: CS dinilai KEHADIRAN oleh Admin/Kasir di UNIT 1.
+        // Kasus khusus: CS (42) KEHADIRAN dinilai Admin/Kasir (35) di UNIT 1;
+        // CS (42) non-Kehadiran dinilai Kepala Toko (41) yang berada di UNIT 1.
         if ($evaluatorJabatan === 35 && $employeeJabatan === 42 && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
+            return false;
+        }
+        if ($evaluatorJabatan === 41 && $employeeJabatan === 42 && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
             return false;
         }
 

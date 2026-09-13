@@ -119,8 +119,8 @@ private function userScope()
                 fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
             ));
 
-            // CS (42) hanya boleh dilihat Admin/Kasir Unit 1.
-            if ($myRole === 35 && $myUnit !== 1) {
+            // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
+            if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
                 $hq = array_values(array_filter($hq, fn($j) => (int)$j !== 42));
             }
 

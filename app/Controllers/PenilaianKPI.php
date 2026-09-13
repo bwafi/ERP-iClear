@@ -228,8 +228,8 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
-                // CS (42) hanya boleh dilihat/diisi Admin/Kasir Unit 1.
-                if ($myRole === 35 && $myUnit !== 1) {
+                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
+                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
                     $hqTargets = array_values(array_filter(
                         $hqTargets,
                         fn($j) => (int)$j !== 42
@@ -868,8 +868,8 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
-                // CS (42) hanya boleh dilihat/diisi Admin/Kasir Unit 1.
-                if ($myRole === 35 && $myUnit !== 1) {
+                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
+                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
                     $hqTargets = array_values(array_filter(
                         $hqTargets,
                         fn($j) => (int)$j !== 42
@@ -947,8 +947,8 @@ class PenilaianKPI extends BaseController
         $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
 
         if (!empty($allowedTargets) && in_array((int)$employee->ID_JABATAN, $allowedTargets, true)) {
-            // Kasus khusus: CS (42) KEHADIRAN hanya diisi Admin/Kasir yang berada di Unit 1.
-            if ($myRole === 35 && (int)$employee->ID_JABATAN === 42 && $myUnit !== 1) {
+            // Kasus khusus: CS (42) KEHADIRAN diisi Admin/Kasir, non-Kehadiran diisi Kepala Toko — keduanya hanya di Unit 1.
+            if (in_array($myRole, [35, 41], true) && (int)$employee->ID_JABATAN === 42 && $myUnit !== 1) {
                 return false;
             }
 
@@ -1525,8 +1525,8 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
-                // CS (42) hanya boleh dilihat/diisi Admin/Kasir Unit 1.
-                if ($myRole === 35 && $myUnit !== 1) {
+                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
+                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
                     $hqTargets = array_values(array_filter(
                         $hqTargets,
                         fn($j) => (int)$j !== 42
