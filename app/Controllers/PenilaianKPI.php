@@ -1624,7 +1624,7 @@ class PenilaianKPI extends BaseController
                 ->where('d.id', null)
                 ->get()->getResultArray();
             foreach ($legacyOff as $lo) {
-                $offDays[(int)date('j', strtotime($lo->evaluation_date))] = true;
+                $offDays[(int)date('j', strtotime($lo['evaluation_date']))] = true;
             }
 
             // Ringkasan hari efektif & hari libur/OFF periode berjalan.
