@@ -26,7 +26,7 @@ use App\Models\ModelKpiEvaluation;
  *   SOP                     avg(KPI Kepatuhan SOP Kepala Toko) — nilai existing
  *   KINERJA_KEPALA_TOKO     avg(total KPI Kepala Toko, tanpa absensi)
  *   KEDISIPLINAN_TEAM       avg(nilai kedisiplinan seluruh team cabang)
- *   CUSTOMER_SATISFACTION   manual input 0-100 (kpi_evaluations)
+ *   CUSTOMER_SATISFACTION   SUM(review)/SUM(total customer) harian per unit area
  */
 class SupervisorKpiService
 {
@@ -114,7 +114,7 @@ class SupervisorKpiService
             case 'KEDISIPLINAN_TEAM':
                 return $this->kedisiplinanTeam($supervisorId, $ownUnit, $month, $year, $context);
             case 'CUSTOMER_SATISFACTION':
-                return $this->customerSatisfaction($supervisorId, $month, $year);
+                return $this->customerSatisfaction($supervisorId, $ownUnit, $month, $year);
         }
 
         return null;
@@ -333,14 +333,29 @@ class SupervisorKpiService
         return $n > 0 ? round($sum / $n, 4) : null;
     }
 
-    /* ════════════════════ 7. CUSTOMER SATISFACTION (MANUAL) ════════════════════ */
+    /* ════════════════════ 7. CUSTOMER SATISFACTION ════════════════════ */
 
     /**
-     * Nilai manual 0-100 dari kpi_evaluations (source MANUAL saat ini;
-     * struktur tetap bisa diganti GOOGLE_BUSINESS_PROFILE nanti).
+     * Customer Satisfaction KPI dalam periode.
+     *
+     * - Sumber utama: input harian review Google Maps per unit area
+     *   (CustomerSatisfactionService) — SUM(review)/SUM(total_customer) x 100.
+     * - Fallback: nilai manual existing di kpi_evaluations bila tidak ada
+     *   data harian (struktur tetap bisa diganti GOOGLE_BUSINESS_PROFILE nanti).
      */
-    public function customerSatisfaction(int $supervisorId, int $month, int $year): ?float
+    public function customerSatisfaction(int $supervisorId, int $ownUnit, int $month, int $year): ?float
     {
+        $svc = new CustomerSatisfactionService();
+        $score = $svc->spvSatisfaction(
+            $supervisorId,
+            $ownUnit,
+            str_pad((string)$month, 2, '0', STR_PAD_LEFT),
+            (string)$year
+        );
+        if ($score !== null) {
+            return $score;
+        }
+
         $comp = $this->component('CUSTOMER_SATISFACTION');
         if (!$comp) {
             return null;

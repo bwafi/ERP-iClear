@@ -326,7 +326,7 @@ class PenilaianKPI extends BaseController
         if ($csComp) {
             $csCodeSet[$csComp->code] = $csComp->name;
         }
-        $csValue = $canEvaluateCs ? $supervisorSvc->customerSatisfaction((int)$target->ID_AKUN, (int)$bulan, (int)$tahun) : null;
+        $csValue = $canEvaluateCs ? $supervisorSvc->customerSatisfaction((int)$target->ID_AKUN, (int)$target->ID_UNIT, (int)$bulan, (int)$tahun) : null;
 
         return view('template', [
             'target'        => $target,

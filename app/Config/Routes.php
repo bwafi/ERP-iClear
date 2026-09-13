@@ -455,6 +455,10 @@ $routes->post('penilaian/kpi/kontrol_aset/reopen', 'PenilaianKPI::kontrol_aset_r
 $routes->get('penilaian/absen', 'PenilaianKPI::penilaian_absen', ['filter' => 'auth']);
 $routes->post('penilaian/absen/save', 'PenilaianKPI::save_absen', ['filter' => 'auth']);
 
+// Customer Satisfaction (Kepala Toko input review Google Maps, SPV lihat area)
+$routes->get('penilaian/customer_satisfaction', 'CustomerSatisfaction::index', ['filter' => 'auth']);
+$routes->post('penilaian/customer_satisfaction/save', 'CustomerSatisfaction::save', ['filter' => 'auth']);
+
 $routes->get('penilaian-kpi/attendance-input', 'PenilaianKPI::attendance_input', ['filter' => 'auth']);
 $routes->post('penilaian-kpi/attendance-save', 'PenilaianKPI::attendance_save', ['filter' => 'auth']);
 
