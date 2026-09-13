@@ -337,8 +337,10 @@ class AttendanceAggregationService
 
     /**
      * Calculate SPV attendance using hybrid logic:
-     * - KEHADIRAN: From SPV's own evaluations by Admin Probolinggo
-     * - KEBERSIHAN, SERAGAM, KEPATUHAN_SOP: AVG of Kepala Toko + Kepala Divisi values
+     * - KEHADIRAN: Dari penilaian KEHADIRAN ke SPV sendiri
+     *   (diinput Admin Center via penilaian absen).
+     * - KEBERSIHAN, SERAGAM, KEPATUHAN_SOP: penilaian eksplisit ke SPV
+     *   (diinput Manager), bila belum ada fallback ke AVG Kepala Toko + Kadiv.
      * 
      * @param int $spvEmployeeId
      * @param int $unitId
@@ -382,9 +384,11 @@ class AttendanceAggregationService
         $ktAttendance = $this->calculateMonthlyAttendanceBase($ktEmpId, $ktUnit, $month, $year, $context);
         $kdAttendance = $this->calculateMonthlyAttendanceBase($kdEmpId, $kdUnit, $month, $year, $context);
         
-        $kebersihan = ($ktAttendance['components']['KEBERSIHAN']['normalized'] + $kdAttendance['components']['KEBERSIHAN']['normalized']) / 2;
-        $seragam = ($ktAttendance['components']['SERAGAM']['normalized'] + $kdAttendance['components']['SERAGAM']['normalized']) / 2;
-        $sop = ($ktAttendance['components']['KEPATUHAN_SOP']['normalized'] + $kdAttendance['components']['KEPATUHAN_SOP']['normalized']) / 2;
+        // Non-Kehadiran SPV: utamakan penilaian eksplisit ke SPV (mis. dari Manager
+        // lewat penilaian absen); bila tidak ada, fallback rata-rata Kepala Toko + Kadiv.
+        $kebersihan = $this->spvOwnOrTeam($spvEmployeeId, 'KEBERSIHAN', $month, $year, $ktAttendance, $kdAttendance);
+        $seragam = $this->spvOwnOrTeam($spvEmployeeId, 'SERAGAM', $month, $year, $ktAttendance, $kdAttendance);
+        $sop = $this->spvOwnOrTeam($spvEmployeeId, 'KEPATUHAN_SOP', $month, $year, $ktAttendance, $kdAttendance);
         
         $results = [
             'KEHADIRAN' => [
@@ -498,6 +502,31 @@ class AttendanceAggregationService
     /**
      * Get normalized score for a single component
      */
+    /**
+     * Skor non-Kehadiran SPV: prioritas penilaian eksplisit ke SPV, fallback
+     * rata-rata nilai komponen yang sama milik Kepala Toko & Kepala Divisi.
+     */
+    protected function spvOwnOrTeam(int $spvEmployeeId, string $componentCode, string $month, string $year, array $ktAttendance, array $kdAttendance): float
+    {
+        $component = $this->componentModel->where('code', $componentCode)->first();
+        if ($component) {
+            $count = $this->evaluationModel
+                ->where('employee_id', $spvEmployeeId)
+                ->where('kpi_component_id', $component->id)
+                ->where('period_year', $year)
+                ->where('period_month', $month)
+                ->countAllResults();
+
+            if ($count > 0) {
+                return $this->getComponentScore($spvEmployeeId, $componentCode, $month, $year);
+            }
+        }
+
+        $team = $ktAttendance['components'][$componentCode]['normalized'] ?? 0;
+        $divisi = $kdAttendance['components'][$componentCode]['normalized'] ?? 0;
+        return ($team + $divisi) / 2;
+    }
+
     protected function getComponentScore(int $employeeId, string $componentCode, string $month, string $year): float
     {
         $component = $this->componentModel->where('code', $componentCode)->first();
