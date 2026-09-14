@@ -116,19 +116,23 @@ class AsetKpiService
         }
         $rows = $builder->orderBy('kode_aset', 'ASC')->findAll();
 
-        $unitNames = [];
+        $unitIds = array_unique(array_merge(
+            array_map(fn($a) => (int)$a->unit, $rows),
+            array_map(fn($a) => (int)$a->dari_unit, $rows)
+        ));
         $unitCodes = $this->unitCodes();
-        $unitRows = \Config\Database::connect()
-            ->table('unit')
-            ->select('idunit, NAMA_UNIT')
-            ->whereIn('idunit', array_unique(array_merge(
-                array_map(fn($a) => (int)$a->unit, $rows),
-                array_map(fn($a) => (int)$a->dari_unit, $rows)
-            )))
-            ->get()
-            ->getResultObject();
-        foreach ($unitRows as $u) {
-            $unitNames[(int)$u->idunit] = (string)$u->NAMA_UNIT;
+
+        $unitNames = [];
+        if (!empty($unitIds)) {
+            $unitRows = \Config\Database::connect()
+                ->table('unit')
+                ->select('idunit, NAMA_UNIT')
+                ->whereIn('idunit', $unitIds)
+                ->get()
+                ->getResultObject();
+            foreach ($unitRows as $u) {
+                $unitNames[(int)$u->idunit] = (string)$u->NAMA_UNIT;
+            }
         }
 
         return array_map(fn($a) => [
