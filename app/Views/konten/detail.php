@@ -189,9 +189,15 @@ $statusBadge = [
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="kn-label">Target Performa</div>
+                    <div class="kn-label">Metric Performa</div>
                     <div class="kn-value">
-                        <?= $content->performance_metric_name ? esc($content->performance_metric_name) . ' — ' : '' ?><?= $content->performance_target !== null ? number_format((float)$content->performance_target, 2, ',', '.') : '-' ?>
+                        <?php if (empty($performanceTargets)) : ?>
+                            —
+                        <?php else : ?>
+                            <?php $metricNames = array_map(fn($pt) => esc($pt->metric_name), $performanceTargets); ?>
+                            <span class="d-block"><?= implode(', ', $metricNames) ?></span>
+                            <small class="text-muted">Target: <?= isset($performanceTargets[0]->target) && $performanceTargets[0]->target !== null ? number_format((float)$performanceTargets[0]->target, 2, ',', '.') : '-' ?></small>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="col-md-4">

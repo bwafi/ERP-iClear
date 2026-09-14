@@ -67,18 +67,26 @@
                         </label>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-12">
                     <label class="form-label">Metric Performa (target)</label>
-                    <select name="performance_metric_id" class="form-select">
-                        <option value="">— Pilih —</option>
+                    <?php
+                        $perfTargets = $performanceTargets ?? [];
+                        if (!is_array($perfTargets)) {
+                            $perfTargets = [];
+                        }
+                        $perfSelectedIds = array_map(fn($pt) => (int)$pt->metric_id, $perfTargets);
+                        $perfTargetValue = $perfTargets ? ((float)$perfTargets[0]->target) : '';
+                    ?>
+                    <select name="performance_metric_id[]" class="form-select" multiple size="5">
                         <?php foreach ($metrics as $m) : ?>
-                            <option value="<?= $m->id ?>" <?= ($content->performance_metric_id ?? null) == $m->id ? 'selected' : '' ?>><?= esc($m->name) ?></option>
+                            <option value="<?= $m->id ?>" <?= in_array((int)$m->id, $perfSelectedIds, true) ? 'selected' : '' ?>><?= esc($m->name) ?></option>
                         <?php endforeach; ?>
                     </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Target Performa</label>
-                    <input type="number" step="0.01" min="0" name="performance_target" class="form-control" value="<?= esc($content->performance_target ?? '') ?>">
+                    <div class="form-text">Pilih beberapa metric sekaligus (tahan Ctrl/Cmd untuk multi-pilih).</div>
+                    <div class="mt-2">
+                        <label class="form-label d-block">Target Performa</label>
+                        <input type="number" step="0.01" min="0" name="performance_target" class="form-control" style="max-width: 200px;" value="<?= esc($perfTargetValue) ?>">
+                    </div>
                 </div>
             </div>
 

@@ -7,6 +7,7 @@ use App\Models\ModelContentChecklist;
 use App\Models\ModelContentPerson;
 use App\Models\ModelContentQc;
 use App\Models\ModelContentType;
+use App\Models\ModelContentPerformanceTarget;
 use App\Models\ModelBrandChecklistItem;
 use App\Models\ModelContentUnit;
 use App\Models\ModelPerformanceMetric;
@@ -36,6 +37,7 @@ class Konten extends BaseController
     protected $ContentPersonModel;
     protected $ContentQcModel;
     protected $ContentUnitModel;
+    protected $PerformanceTargetModel;
     protected $PerformanceMetricModel;
     protected $PlatformModel;
     protected $PublicationModel;
@@ -58,6 +60,7 @@ class Konten extends BaseController
         $this->ContentPersonModel       = new ModelContentPerson();
         $this->ContentQcModel           = new ModelContentQc();
         $this->ContentUnitModel         = new ModelContentUnit();
+        $this->PerformanceTargetModel   = new ModelContentPerformanceTarget();
         $this->PerformanceMetricModel   = new ModelPerformanceMetric();
         $this->PlatformModel            = new ModelPlatform();
 $this->PublicationModel          = new ModelPublication();
@@ -301,6 +304,7 @@ $this->PublicationModel          = new ModelPublication();
             'selectedUnits' => $selectedUnits,
             'talentIds'   => $talentIds,
             'creativeIds' => $creativeIds,
+            'performanceTargets' => $id !== null ? $this->PerformanceTargetModel->forContent((int)$id) : [],
         ]);
     }
 
@@ -337,9 +341,39 @@ $this->PublicationModel          = new ModelPublication();
         }
 
         $contentTypeId = $this->request->getPost('content_type_id') ? (int)$this->request->getPost('content_type_id') : null;
-        $metricId = $this->request->getPost('performance_metric_id') ? (int)$this->request->getPost('performance_metric_id') : null;
-        $perfTargetPost = $this->request->getPost('performance_target');
-        $perfTarget = ($perfTargetPost !== null && $perfTargetPost !== '') ? (float)$perfTargetPost : null;
+
+        // Target performa multi-metric: banyak metric dipilih, memakai SATU nilai target.
+        $metricIds  = $this->request->getPost('performance_metric_id');
+        $metricIds  = is_array($metricIds) ? $metricIds : [];
+
+        $activeMetrics = [];
+        foreach ($this->PerformanceMetricModel->optionsActive() as $m) {
+            $activeMetrics[(int)$m->id] = $m;
+        }
+
+        $perfRows = [];
+        foreach ($metricIds as $mid) {
+            $metricId = (int)$mid;
+            if ($metricId <= 0 || !isset($activeMetrics[$metricId])) {
+                continue;
+            }
+            $perfRows[$metricId] = null;
+        }
+
+        $perfTargetRaw = $this->request->getPost('performance_target');
+        if ($perfTargetRaw !== null && trim((string)$perfTargetRaw) !== '') {
+            if (!is_numeric($perfTargetRaw) || (float)$perfTargetRaw < 0) {
+                $errors[] = 'Target performa tidak valid (angka ≥ 0).';
+            } else {
+                $perfTarget = (float)$perfTargetRaw;
+                foreach (array_keys($perfRows) as $metricId) {
+                    $perfRows[$metricId] = $perfTarget;
+                }
+            }
+        }
+        if (!empty($errors)) {
+            return redirect()->back()->with('error', implode(' ', $errors));
+        }
 
         $jenis = strtoupper(trim((string)$this->request->getPost('jenis_konten')));
         $jenis = in_array($jenis, ['REGULAR', 'ADS'], true) ? $jenis : 'REGULAR';
@@ -351,8 +385,6 @@ $this->PublicationModel          = new ModelPublication();
             'jenis_konten'        => $jenis,
             'target_scope'        => $targetScope,
             'deadline'            => $deadline,
-            'performance_metric_id' => $metricId ?: null,
-            'performance_target'  => $perfTarget,
         ];
 
         if ($id > 0) {
@@ -375,6 +407,9 @@ $this->PublicationModel          = new ModelPublication();
             : [];
         $unitIds = is_array($unitIds) ? $unitIds : [];
         $this->ContentUnitModel->replaceForContent((int)$contentId, $unitIds);
+
+        // Target performa multi-metric.
+        $this->PerformanceTargetModel->replaceForContent((int)$contentId, $perfRows);
 
         // People (Talent & Creative).
         $talentIds = $this->request->getPost('talent_ids') ?: [];
@@ -437,6 +472,7 @@ $this->PublicationModel          = new ModelPublication();
             'checklistItems'=> $this->BrandChecklistItemModel->optionsActive(),
             'qcHistory'     => $this->ContentModel->qcHistory((int)$id),
             'publications'  => $publications,
+            'performanceTargets' => $this->PerformanceTargetModel->forContent((int)$id),
             'platforms'     => $this->PlatformModel->optionsActive(),
             'metrics'       => $this->PerformanceMetricModel->optionsActive(),
             'units'         => $this->UnitModel->orderBy('idunit', 'ASC')->findAll(),
