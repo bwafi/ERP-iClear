@@ -35,6 +35,10 @@ class ModelStokOpnameDraft extends Model
 
     public function getStokOpnameDraft()
     {
+        $latestSub = $this->db->table('stok_opname_draft')
+            ->selectMax('idstok_opname')
+            ->groupBy(['barang_idbarang', 'unit_idunit']);
+
         return $this->select('
             stok_opname_draft.*, 
             barang.kode_barang, 
@@ -45,6 +49,7 @@ class ModelStokOpnameDraft extends Model
         ')
             ->join('barang', 'barang.idbarang = stok_opname_draft.barang_idbarang')
             ->join('unit', 'unit.idunit = stok_opname_draft.unit_idunit')
+            ->whereIn('stok_opname_draft.idstok_opname', $latestSub, false)
             ->orderBy('stok_opname_draft.tanggal', 'DESC')
             ->findAll();
     }
@@ -78,6 +83,12 @@ class ModelStokOpnameDraft extends Model
             ->join('barang', 'barang.idbarang = stok_opname_draft.barang_idbarang')
             ->join('unit', 'unit.idunit = stok_opname_draft.unit_idunit');
 
+        // Hanya draft terbaru per barang+unit (hindari duplikat antar tanggal).
+        $latestSub = $this->db->table('stok_opname_draft')
+            ->selectMax('idstok_opname')
+            ->groupBy(['barang_idbarang', 'unit_idunit']);
+        $builder->whereIn('stok_opname_draft.idstok_opname', $latestSub, false);
+
         if ($search !== '') {
             $builder->groupStart()
                 ->like('barang.kode_barang', $search)
@@ -101,6 +112,12 @@ class ModelStokOpnameDraft extends Model
         $builder = $this->db->table('stok_opname_draft')
             ->join('barang', 'barang.idbarang = stok_opname_draft.barang_idbarang')
             ->join('unit', 'unit.idunit = stok_opname_draft.unit_idunit');
+
+        // Konsisten dengan getStokOpnameDraftDT: hanya draft terbaru per barang+unit.
+        $latestSub = $this->db->table('stok_opname_draft')
+            ->selectMax('idstok_opname')
+            ->groupBy(['barang_idbarang', 'unit_idunit']);
+        $builder->whereIn('stok_opname_draft.idstok_opname', $latestSub, false);
 
         if ($search !== '') {
             $builder->groupStart()
