@@ -108,7 +108,7 @@ class EvaluatorAuthorizationService
         ],
         // Kepala Divisi (43): non-Kehadiran utk CS, Multimedia.
         43 => [
-            42 => self::NON_HADIR,
+            42 => ['KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP', 'KUALITAS_PELAYANAN', 'UPSELLING', 'FOLLOWUP'],
             44 => self::NON_HADIR,
         ],
     ];
