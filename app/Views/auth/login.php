@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id" dir="ltr" data-bs-theme="light" data-color-theme="Blue_Theme" data-layout="vertical">
+
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -18,6 +19,7 @@
             justify-content: center;
             overflow: hidden;
         }
+
         .login-split-card {
             width: 100%;
             max-width: 1020px;
@@ -29,6 +31,7 @@
             overflow: hidden;
             position: relative;
         }
+
         .login-form-side {
             flex: 1;
             padding: 55px 54px;
@@ -38,17 +41,20 @@
             background: #FFFFFF;
             z-index: 2;
         }
+
         .login-brand {
             display: flex;
             justify-content: center;
             align-items: center;
             margin-bottom: 38px;
         }
+
         .login-brand img {
             max-width: 150px;
             max-height: 55px;
             object-fit: contain;
         }
+
         .login-title {
             color: #0F172A;
             font-size: 2rem;
@@ -56,28 +62,34 @@
             letter-spacing: -0.03em;
             margin-bottom: 4px;
         }
+
         .login-subtitle {
             color: #64748B;
             font-size: 0.9rem;
             margin-bottom: 30px;
         }
+
         .login-subtitle a {
             color: #2563EB;
             font-weight: 600;
             text-decoration: none;
         }
+
         .login-subtitle a:hover {
             color: #1D4ED8;
         }
+
         .login-label {
             color: #475569;
             font-size: 0.82rem;
             font-weight: 500;
             margin-bottom: 7px;
         }
+
         .form-floating-custom {
             position: relative;
         }
+
         .form-floating-custom .form-control {
             width: 100%;
             height: 48px;
@@ -89,18 +101,22 @@
             color: #0F172A;
             transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
+
         .form-floating-custom .form-control::placeholder {
             color: #94A3B8;
         }
+
         .form-floating-custom .form-control:focus {
             background-color: #FFFFFF;
             border-color: #2563EB;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
             outline: none;
         }
+
         .password-input {
             padding-right: 48px !important;
         }
+
         .password-toggle {
             position: absolute;
             top: 50%;
@@ -118,17 +134,21 @@
             cursor: pointer;
             transition: color 0.2s ease;
         }
+
         .password-toggle:hover {
             color: #2563EB;
         }
+
         .password-toggle:focus {
             outline: none;
             box-shadow: none;
         }
+
         .password-toggle i {
             font-size: 17px;
             line-height: 1;
         }
+
         .forgot-password {
             color: #64748B;
             font-size: 0.78rem;
@@ -136,15 +156,18 @@
             text-decoration: none;
             transition: color 0.2s ease;
         }
+
         .forgot-password:hover {
             color: #2563EB;
         }
+
         .remember-wrapper {
             display: flex;
             align-items: center;
             margin-top: 18px;
             margin-bottom: 26px;
         }
+
         .remember-wrapper .form-check {
             display: flex;
             align-items: center;
@@ -152,6 +175,7 @@
             margin: 0;
             padding-left: 0;
         }
+
         .remember-wrapper .form-check-input {
             width: 16px;
             height: 16px;
@@ -160,15 +184,18 @@
             border-radius: 3px;
             cursor: pointer;
         }
+
         .remember-wrapper .form-check-input:checked {
             background-color: #2563EB;
             border-color: #2563EB;
         }
+
         .remember-wrapper .form-check-label {
             color: #64748B;
             font-size: 0.82rem;
             cursor: pointer;
         }
+
         .btn-custom-primary {
             width: 100%;
             height: 48px;
@@ -180,6 +207,7 @@
             font-weight: 600;
             transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
         }
+
         .btn-custom-primary:hover {
             background-color: #1D4ED8;
             border-color: #1D4ED8;
@@ -187,9 +215,11 @@
             transform: translateY(-1px);
             box-shadow: 0 7px 15px rgba(37, 99, 235, 0.20);
         }
+
         .btn-custom-primary:active {
             transform: translateY(0);
         }
+
         .login-error {
             background-color: #FEF2F2;
             border: 1px solid #FECACA;
@@ -199,11 +229,13 @@
             padding: 9px 12px;
             margin-bottom: 18px;
         }
+
         .field-error {
             color: #DC2626;
             font-size: 0.75rem;
             margin-top: 5px;
         }
+
         .login-banner-side {
             flex: 1;
             position: relative;
@@ -215,6 +247,7 @@
             padding: 36px 40px;
             color: #FFFFFF;
         }
+
         .login-banner-side::before {
             content: '';
             position: absolute;
@@ -222,10 +255,14 @@
             background: linear-gradient(180deg, rgba(15, 23, 42, 0.25) 0%, rgba(15, 23, 42, 0.48) 45%, rgba(15, 23, 42, 0.90) 100%);
             z-index: 1;
         }
-        .banner-content, .banner-top, .banner-footer {
+
+        .banner-content,
+        .banner-top,
+        .banner-footer {
             position: relative;
             z-index: 2;
         }
+
         .support-badge {
             display: inline-flex;
             align-items: center;
@@ -240,14 +277,17 @@
             backdrop-filter: blur(8px);
             transition: background-color 0.2s ease, border-color 0.2s ease;
         }
+
         .support-badge:hover {
             background: rgba(255, 255, 255, 0.22);
             border-color: rgba(255, 255, 255, 0.28);
             color: #FFFFFF;
         }
+
         .support-badge i {
             font-size: 13px;
         }
+
         .erp-status {
             display: inline-flex;
             align-items: center;
@@ -262,6 +302,7 @@
             backdrop-filter: blur(8px);
             margin-bottom: 15px;
         }
+
         .status-dot {
             width: 7px;
             height: 7px;
@@ -270,11 +311,13 @@
             background-color: #22C55E;
             box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14), 0 0 9px rgba(34, 197, 94, 0.40);
         }
+
         .banner-content {
             max-width: 430px;
             margin-top: auto;
-            margin-bottom: auto;
+            margin-bottom: 24px;
         }
+
         .banner-content h2 {
             color: #FFFFFF;
             font-size: 2rem;
@@ -283,12 +326,14 @@
             letter-spacing: -0.025em;
             margin-bottom: 14px;
         }
+
         .banner-content p {
             color: rgba(255, 255, 255, 0.68);
             font-size: 0.84rem;
             line-height: 1.55;
             margin-bottom: 0;
         }
+
         .banner-footer {
             display: flex;
             justify-content: space-between;
@@ -296,16 +341,19 @@
             padding-top: 20px;
             border-top: 1px solid rgba(255, 255, 255, 0.15);
         }
+
         .banner-footer-brand {
             color: rgba(255, 255, 255, 0.72);
             font-size: 0.75rem;
             font-weight: 500;
         }
+
         .banner-indicators {
             display: flex;
             align-items: center;
             gap: 5px;
         }
+
         .banner-indicator {
             display: block;
             width: 6px;
@@ -313,44 +361,54 @@
             background: rgba(255, 255, 255, 0.35);
             border-radius: 3px;
         }
+
         .banner-indicator.active {
             width: 19px;
             background: #FFFFFF;
         }
+
         @media (max-width: 991px) {
             body {
                 overflow: auto;
                 padding: 20px;
             }
+
             .login-split-card {
                 max-width: 480px;
                 height: auto;
                 min-height: auto;
                 border-radius: 22px;
             }
+
             .login-banner-side {
                 display: none;
             }
+
             .login-form-side {
                 padding: 45px 35px;
             }
+
             .login-brand {
                 margin-bottom: 30px;
             }
         }
+
         @media (max-width: 480px) {
             body {
                 padding: 12px;
             }
+
             .login-form-side {
                 padding: 35px 25px;
             }
+
             .login-title {
                 font-size: 1.75rem;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="preloader">
         <img src="<?php echo base_url('template/') ?>assets/images/logos/loader.svg" alt="Memuat..." class="lds-ripple img-fluid" />
@@ -441,7 +499,7 @@
         const toggleIcon = document.querySelector('#toggleIcon');
 
         if (togglePassword && password && toggleIcon) {
-            togglePassword.addEventListener('click', function () {
+            togglePassword.addEventListener('click', function() {
                 const isPassword = password.getAttribute('type') === 'password';
                 if (isPassword) {
                     password.setAttribute('type', 'text');
@@ -469,4 +527,5 @@
     <script src="<?php echo base_url('template/') ?>assets/js/theme/feather.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
 </body>
+
 </html>
