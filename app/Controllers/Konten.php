@@ -639,12 +639,15 @@ $this->PublicationModel          = new ModelPublication();
         }
 
         $publicationId = (int)$this->request->getPost('publication_id');
-        $metricId      = (int)$this->request->getPost('metric_id');
-        $month         = (int)$this->request->getPost('period_month');
-        $year          = (int)$this->request->getPost('period_year');
-        $target        = (float)($this->request->getPost('target') ?: 0);
-        $actual        = (float)($this->request->getPost('actual') ?: 0);
-        $perfId        = (int)($this->request->getPost('id') ?? 0);
+        $month        = (int)$this->request->getPost('period_month');
+        $year         = (int)$this->request->getPost('period_year');
+        $targetRaw    = $this->request->getPost('target');
+        $actualRaw    = $this->request->getPost('actual');
+        $perfId       = (int)($this->request->getPost('id') ?? 0);
+
+        // Banyak metric, satu target, satu value actual (sama seperti pola konten).
+        $metricIds = $this->request->getPost('metric_id');
+        $metricIds = is_array($metricIds) ? $metricIds : [];
 
         if ($month < 1 || $month > 12 || $year < 2000 || $year > 2100) {
             return redirect()->back()->with('error', 'Periode performa tidak valid.');
@@ -655,27 +658,70 @@ $this->PublicationModel          = new ModelPublication();
             return redirect()->back()->with('error', 'Publikasi tidak ditemukan.');
         }
 
-        $achievement = $target > 0 ? round($actual / $target * 100, 2) : null;
+        $errors = [];
+        if ($targetRaw !== '' && (!is_numeric($targetRaw) || (float)$targetRaw < 0)) {
+            $errors[] = 'Target performa tidak valid (angka ≥ 0).';
+        }
+        $target = $targetRaw === '' ? 0 : (float)$targetRaw;
 
-        $data = [
-            'publication_id' => $publicationId,
-            'metric_id'      => $metricId,
-            'period_month'   => $month,
-            'period_year'    => $year,
-            'target'         => $target,
-            'actual'         => $actual,
-            'achievement'    => $achievement,
-        ];
+        if ($actualRaw === '' || !is_numeric($actualRaw) || (float)$actualRaw < 0) {
+            $errors[] = 'Value actual tidak valid (angka ≥ 0).';
+        }
+        $actual = (float)$actualRaw;
+
+        $activeMetrics = [];
+        foreach ($this->PerformanceMetricModel->optionsActive() as $m) {
+            $activeMetrics[(int)$m->id] = $m;
+        }
+
+        $validMetricIds = [];
+        foreach ($metricIds as $mid) {
+            $metricId = (int)$mid;
+            if ($metricId <= 0 || !isset($activeMetrics[$metricId])) {
+                $errors[] = 'Metric performa tidak valid.';
+                continue;
+            }
+            $validMetricIds[$metricId] = $metricId;
+        }
+
+        if (empty($validMetricIds)) {
+            $errors[] = 'Pilih minimal satu metric.';
+        }
+
+        if (!empty($errors)) {
+            return redirect()->back()->with('error', implode(' ', $errors));
+        }
 
         if ($perfId > 0 && $this->PublicationPerformanceModel->find($perfId)) {
-            // Mode edit: ubah baris yang diklik (field form terisi-ulang dari data row tsb).
-            $this->PublicationPerformanceModel->update($perfId, $data);
+            // Mode edit: hanya ubah baris yang diklik (form terisi-ulang dari data baris tsb).
+            $firstMetricId = reset($validMetricIds);
+            $achievement = $target > 0 ? round($actual / $target * 100, 2) : null;
+            $this->PublicationPerformanceModel->update($perfId, [
+                'metric_id'      => $firstMetricId,
+                'period_month'   => $month,
+                'period_year'    => $year,
+                'target'         => $target,
+                'actual'         => $actual,
+                'achievement'    => $achievement,
+            ]);
         } else {
-            $existing = $this->PublicationPerformanceModel->getByUnique($publicationId, $metricId, $month, $year);
-            if ($existing) {
-                $this->PublicationPerformanceModel->update($existing->id, $data);
-            } else {
-                $this->PublicationPerformanceModel->insert($data);
+            foreach ($validMetricIds as $metricId) {
+                $achievement = $target > 0 ? round($actual / $target * 100, 2) : null;
+                $data = [
+                    'publication_id' => $publicationId,
+                    'metric_id'      => $metricId,
+                    'period_month'   => $month,
+                    'period_year'    => $year,
+                    'target'         => $target,
+                    'actual'         => $actual,
+                    'achievement'    => $achievement,
+                ];
+                $existing = $this->PublicationPerformanceModel->getByUnique($publicationId, $metricId, $month, $year);
+                if ($existing) {
+                    $this->PublicationPerformanceModel->update($existing->id, $data);
+                } else {
+                    $this->PublicationPerformanceModel->insert($data);
+                }
             }
         }
 

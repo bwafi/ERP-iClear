@@ -499,15 +499,6 @@ $statusBadge = [
                         </select>
                         <?php if (empty($publications)) : ?><small class="text-danger d-block mt-1">Tambahkan publikasi terlebih dahulu.</small><?php endif; ?>
                     </div>
-                    <div class="col-12">
-                        <label class="form-label small">Metric</label>
-                        <select name="metric_id" id="perfMetric" class="form-select" required>
-                            <option value="">— Pilih —</option>
-                            <?php foreach ($metrics as $m) : ?>
-                                <option value="<?= $m->id ?>"><?= esc($m->name) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
                     <div class="col-6">
                         <label class="form-label small">Periode Bulan</label>
                         <select name="period_month" id="perfMonth" class="form-select">
@@ -524,12 +515,21 @@ $statusBadge = [
                             <?php endfor; ?>
                         </select>
                     </div>
+                    <div class="col-12">
+                        <label class="form-label small">Metric Performa</label>
+                        <select name="metric_id[]" id="perfMetric" class="form-select" multiple size="5" required>
+                            <?php foreach ($metrics as $m) : ?>
+                                <option value="<?= $m->id ?>"><?= esc($m->name) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Pilih beberapa metric sekaligus (tahan Ctrl/Cmd untuk multi-pilih).</small>
+                    </div>
                     <div class="col-6">
-                        <label class="form-label small">Target</label>
+                        <label class="form-label small">Target (satu nilai)</label>
                         <input type="number" step="0.01" min="0" name="target" id="perfTarget" class="form-control" value="0" required>
                     </div>
                     <div class="col-6">
-                        <label class="form-label small">Actual</label>
+                        <label class="form-label small">Value (actual)</label>
                         <input type="number" step="0.01" min="0" name="actual" id="perfActual" class="form-control" value="0" required>
                     </div>
                     <div class="col-12 d-grid gap-2 mt-1">
@@ -600,7 +600,7 @@ $statusBadge = [
         var d = $(this).data('perf');
         $('#perfId').val(d.id);
         $('#perfPublication').val(d.publication_id);
-        $('#perfMetric').val(d.metric_id);
+        $('#perfMetric').val([String(d.metric_id)]);
         $('#perfMonth').val(d.period_month);
         $('#perfYear').val(d.period_year);
         $('#perfTarget').val(d.target);
