@@ -357,7 +357,7 @@ $statIcons = [
     var lbStatus = <?= json_encode(array_values($leadsByStatus)) ?>;
     new ApexCharts(document.querySelector('#chartLeadsStatus'), {
         chart: { type: 'pie', fontFamily: 'inherit', toolbar: { show: false }, width: '100%', height: 300 },
-        labels: ['PROSPEK', 'BOOKING', 'DATANG', 'CLOSED', 'BATAL'],
+        labels: ['PROSPEK', 'DATANG', 'CLOSING', 'BATAL'],
         series: lbStatus,
         colors: ['#0d6efd', '#6f42c1', '#20c997', '#198754', '#dc3545'],
         legend: { position: 'bottom' },

@@ -249,7 +249,7 @@ class Marketing extends BaseController
         return round((float)$row->t, 0);
     }
 
-    /** Cari service via AJAX. Param `s=1` hanya service SELESAI (utk CLOSED). */
+    /** Cari service via AJAX. Param `s=1` hanya service SELESAI (utk CLOSING). */
     public function search_service()
     {
         if ($r = $this->readOrRedirect()) {
@@ -261,7 +261,7 @@ class Marketing extends BaseController
         $sdate      = trim((string)$this->request->getGet('sdate'));
         $selesaiOnly = (int)$this->request->getGet('s') === 1;
 
-        // CLOSED → hanya service selesai; selain itu semua kecuali dibatalkan.
+        // CLOSING → hanya service selesai; selain itu semua kecuali dibatalkan.
         $where = $selesaiOnly ? 's.status_service = 4' : 's.status_service != 5';
         $param = [];
         if ($q !== '') {
@@ -269,12 +269,12 @@ class Marketing extends BaseController
             $like  = '%' . $q . '%';
             array_push($param, $q, $like, $like);
         }
-        // CLOSED (closing) → cari per TANGGAL, semua unit (cabang tampil di list).
+        // CLOSING (closing) → cari per TANGGAL, semua unit (cabang tampil di list).
         if ($selesaiOnly && preg_match('/^\d{4}-\d{2}-\d{2}$/', $sdate)) {
             $where .= ' AND DATE(s.tanggal_selesai) = ?';
             $param[] = $sdate;
         }
-        // Filter unit hanya untuk non-CLOSED / saat unit dikirim & valid.
+        // Filter unit hanya untuk non-CLOSING / saat unit dikirim & valid.
         if ($unitId > 0 && !$selesaiOnly && in_array($unitId, array_map(fn($u) => (int)$u->idunit, $this->units()), true)) {
             $where .= ' AND s.unit_idunit = ?';
             $param[] = $unitId;
@@ -342,7 +342,7 @@ class Marketing extends BaseController
     }
 
     /**
-     * Field CLOSED yang SELALU diambil dari service (source of truth).
+     * Field CLOSING yang SELALU diambil dari service (source of truth).
      * Omset dihitung server-side: SUM(service_sparepart.sub_total).
      * Tidak mempercayai kiriman frontend utk nama/noHP/keterangan/omset.
      */
@@ -472,12 +472,12 @@ class Marketing extends BaseController
             if (!$svc) {
                 return redirect()->back()->with('error', 'Service tidak ditemukan.');
             }
-            // CLOSED → wajib service SELESAI (omset otomatis).
-            if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED && (int)$svc->status_service !== 4) {
-                return redirect()->back()->with('error', 'Status CLOSED wajib memilih service yang sudah SELESAI.');
+            // CLOSING → wajib service SELESAI (omset otomatis).
+            if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSING && (int)$svc->status_service !== 4) {
+                return redirect()->back()->with('error', 'Status CLOSING wajib memilih service yang sudah SELESAI.');
             }
-            // Selain CLOSED → service boleh dipilih asal tidak dibatalkan.
-            if ($status !== \App\Models\ModelMarketingLead::STATUS_CLOSED && (int)$svc->status_service === 5) {
+            // Selain CLOSING → service boleh dipilih asal tidak dibatalkan.
+            if ($status !== \App\Models\ModelMarketingLead::STATUS_CLOSING && (int)$svc->status_service === 5) {
                 return redirect()->back()->with('error', 'Service yang dibatalkan tidak dapat dipilih.');
             }
         }
@@ -492,12 +492,12 @@ class Marketing extends BaseController
         }
 
         $omset = 0.0;
-        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED) {
-            // CLOSED → service adalah source of truth. Semua field diambil
+        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSING) {
+            // CLOSING → service adalah source of truth. Semua field diambil
             // ulang DARI SERVICE, termasuk nama/no HP/keterangan/unit/tanggal.
             // Data manual (mis. nama lama dari DATANG) TIDAK dipertahankan.
             if (!$svc) {
-                return redirect()->back()->with('error', 'Status CLOSED wajib memilih service yang sudah SELESAI.');
+                return redirect()->back()->with('error', 'Status CLOSING wajib memilih service yang sudah SELESAI.');
             }
             $closed = $this->closedFieldsFromService($svc, $serviceId);
             $tanggal        = $closed['tanggal'] ?: $tanggal;
@@ -506,10 +506,10 @@ class Marketing extends BaseController
             $keterangan     = (string)$closed['keterangan'];
             $unitId         = $closed['unit_id'];
             $omset          = (float)$closed['omset'];
-            // Tanggal booking tidak relevan untuk CLOSED.
+            // Tanggal booking tidak relevan untuk CLOSING.
             $tanggalBooking = '';
         } else {
-            // Non-CLOSED → data prospek MEMAKAI input manual yang ada.
+            // Non-CLOSING → data prospek MEMAKAI input manual yang ada.
             // Service hanya tautan opsional, bukan sumber data.
             if ($nama === '') {
                 $nama = $existing ? trim((string)$existing->nama) : ($svc ? trim($svc->nama_pelanggan) : '');
@@ -549,9 +549,9 @@ class Marketing extends BaseController
             'omset'           => $omset > 0 ? $omset : null,
             'service_id'      => $serviceId > 0 ? $serviceId : null,
             'catatan'         => $catatan !== '' ? $catatan : null,
-            // tanggal_won = tanggal tercatat saat CLOSED → sumber KPI customer/omzet
+            // tanggal_won = tanggal tercatat saat CLOSING → sumber KPI customer/omzet
             // (baris Kommo tetap dikeluarkan dari KPI lewat kommo_lead_id IS NULL).
-            'tanggal_won'     => $status === \App\Models\ModelMarketingLead::STATUS_CLOSED ? $tanggal : null,
+            'tanggal_won'     => $status === \App\Models\ModelMarketingLead::STATUS_CLOSING ? $tanggal : null,
             'created_by'      => $this->currentAkun(),
         ];
 
@@ -584,11 +584,11 @@ class Marketing extends BaseController
         if (!in_array($status, \App\Models\ModelMarketingLead::PROSPEK_STATUSES, true)) {
             return redirect()->back()->with('error', 'Status tidak valid.');
         }
-        // CLOSED wajib memilih service yang SUDAH SELESAI (omset otomatis).
-        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+        // CLOSING wajib memilih service yang SUDAH SELESAI (omset otomatis).
+        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSING) {
             $svc = $serviceId > 0 ? $this->serviceDetail($serviceId) : null;
             if (!$svc || (int)$svc->status_service !== 4) {
-                return redirect()->back()->with('error', 'Status CLOSED wajib memilih service yang sudah SELESAI.');
+                return redirect()->back()->with('error', 'Status CLOSING wajib memilih service yang sudah SELESAI.');
             }
         } else {
             $svc = null;
@@ -596,21 +596,21 @@ class Marketing extends BaseController
 
         $update = [
             'status'      => $status,
-            'tanggal_won' => $status === \App\Models\ModelMarketingLead::STATUS_CLOSED
+            'tanggal_won' => $status === \App\Models\ModelMarketingLead::STATUS_CLOSING
                 ? (trim((string)$lead->tanggal_won) !== '' ? $lead->tanggal_won : date('Y-m-d'))
                 : null,
         ];
 
-        // Keluar dari CLOSED → omset tidak lagi berlaku (KPI hanya hitung CLOSED).
-        if ($status !== \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+        // Keluar dari CLOSING → omset tidak lagi berlaku (KPI hanya hitung CLOSING).
+        if ($status !== \App\Models\ModelMarketingLead::STATUS_CLOSING) {
             $update['omset'] = null;
         }
 
-        // Menjadi CLOSED → service menjadi source of truth: seluruh field
+        // Menjadi CLOSING → service menjadi source of truth: seluruh field
         // data prospek (nama/noHP/keterangan/unit/tanggal/omset) disinkronkan
         // dari service. Data manual status lama (mis. nama dari DATANG) TIDAK
-        // dipertahankan. Tanggal booking dikosongkan (tidak relevan saat CLOSED).
-        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSED) {
+        // dipertahankan. Tanggal booking dikosongkan (tidak relevan saat CLOSING).
+        if ($status === \App\Models\ModelMarketingLead::STATUS_CLOSING) {
             $closed = $this->closedFieldsFromService($svc, $serviceId);
             if ($closed['tanggal'] !== null) {
                 $update['tanggal'] = $closed['tanggal'];

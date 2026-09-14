@@ -22,17 +22,15 @@ class ModelMarketingLead extends Model
     ];
 
     public const STATUS_PROSPEK = 'PROSPEK';
-    public const STATUS_BOOKING = 'BOOKING';
     public const STATUS_DATANG  = 'DATANG';
-    public const STATUS_CLOSED  = 'CLOSED';
+    public const STATUS_CLOSING = 'CLOSING';
     public const STATUS_BATAL   = 'BATAL';
 
     /** Status Detail Prospek operasional (CS / marketing harian). */
     public const PROSPEK_STATUSES = [
         self::STATUS_PROSPEK,
-        self::STATUS_BOOKING,
         self::STATUS_DATANG,
-        self::STATUS_CLOSED,
+        self::STATUS_CLOSING,
         self::STATUS_BATAL,
     ];
 

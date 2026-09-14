@@ -85,7 +85,7 @@ class MarketingKpiService
 
     /**
      * Customer hasil closing: detail prospek manual (non-Kommo) dengan
-     * status CLOSED dalam periode (berdasarkan tanggal_won).
+     * status CLOSING dalam periode (berdasarkan tanggal_won).
      * SUMBER = Detail Prospek (manual); baris Kommo dikeluarkan.
      */
     public function countCustomers(int $month, int $year): int
@@ -93,18 +93,18 @@ class MarketingKpiService
         $m = sprintf('%04d-%02d', $year, $month);
         return (int)$this->db->query(
             "SELECT COUNT(*) c FROM marketing_lead
-             WHERE status = 'CLOSED' AND kommo_lead_id IS NULL
+             WHERE status = 'CLOSING' AND kommo_lead_id IS NULL
                AND DATE_FORMAT(tanggal_won, '%Y-%m') = ?",
             [$m]
         )->getRow()->c;
     }
 
-    /** ID customer asal detail prospek manual CLOSED (tanpa batas periode). */
+    /** ID customer asal detail prospek manual CLOSING (tanpa batas periode). */
     public function marketingCustomerIds(): array
     {
         $rows = $this->db->query(
             "SELECT DISTINCT customer_id FROM marketing_lead
-             WHERE status = 'CLOSED' AND kommo_lead_id IS NULL AND customer_id IS NOT NULL"
+             WHERE status = 'CLOSING' AND kommo_lead_id IS NULL AND customer_id IS NOT NULL"
         )->getResult();
 
         return array_values(array_unique(array_map('intval', array_column($rows, 'customer_id'))));
@@ -122,7 +122,7 @@ class MarketingKpiService
 
     /**
      * Omzet Marketing: TOTAL omzet dari detail prospek manual (non-Kommo)
-     * yang berstatus CLOSED pada periode (berdasarkan tanggal_won).
+     * yang berstatus CLOSING pada periode (berdasarkan tanggal_won).
      * TIDAK memakai transaksi customer; TIDAK memakai data Kommo.
      */
     public function marketingRevenue(int $month, int $year): float
@@ -130,7 +130,7 @@ class MarketingKpiService
         $m = sprintf('%04d-%02d', $year, $month);
         $row = $this->db->query(
             "SELECT COALESCE(SUM(omset),0) t FROM marketing_lead
-             WHERE status = 'CLOSED' AND kommo_lead_id IS NULL
+             WHERE status = 'CLOSING' AND kommo_lead_id IS NULL
                AND DATE_FORMAT(tanggal_won, '%Y-%m') = ?",
             [$m]
         )->getRow();
@@ -334,9 +334,9 @@ class MarketingKpiService
 
         $result = [
             'PROSPEK' => 0,
-            'BOOKING' => 0,
+            
             'DATANG'  => 0,
-            'CLOSED'  => 0,
+            'CLOSING' => 0,
             'BATAL'   => 0,
         ];
         foreach ($rows as $r) {
