@@ -104,6 +104,10 @@ class KpiCalculationService
                     (int)$month,
                     (int)$year
                 );
+            // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
+            } elseif ($component->code === 'CLOSING_RATE') {
+                $achievement = (new \App\Services\Kpi\Calculators\ClosingRateCalculator())
+                    ->calculate($employeeId, $unitId, (int)$month, (int)$year);
             } elseif ($component->type === 'automatic' && $component->calculation_strategy) {
                 $calculator = $this->calculators[$component->calculation_strategy] ?? null;
                 if ($calculator === null) {
