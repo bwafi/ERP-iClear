@@ -22,11 +22,13 @@ class ManualKpiScorer
 {
     protected $metrics;
     protected $targetModel;
+    protected $db;
 
     public function __construct()
     {
         $this->metrics = new Calculators\MetricCalculator();
         $this->targetModel = new \App\Models\ModelKpiTarget();
+        $this->db = \Config\Database::connect();
     }
 
     /**
@@ -45,10 +47,10 @@ class ManualKpiScorer
 
         switch ($code) {
             case 'CLOSING_RATE':
-                return $this->cappedRatio(
-                    $this->metrics->sumAspekScore($emp, 'closing', $month, $year),
-                    $this->targetValue(4, $unit, $context, $date)
-                );
+                // Closing Rate = jumlah prospek lead manual berstatus CLOSING pada
+                // bulan tsb (kommo_lead_id IS NULL) dibagi jumlah prospek dari
+                // rekap harian (SEMUA cabang) sebagai pembanding, di-cap 100.
+                return $this->marketingClosingRate($month, $year);
             case 'UPSELLING':
                 return $this->cappedRatio(
                     $this->metrics->sumAspekScore($emp, 'upselling', $month, $year),
@@ -167,5 +169,38 @@ class ManualKpiScorer
             $target = $this->targetModel->getTargetByKpiAndUnit($componentId, $unit, 'default', $date);
         }
         return $target ? (float)$target->target_value : 0.0;
+    }
+
+    /**
+     * Closing rate berbasis data marketing:
+     *   pembilang = prospek lead manual (kommo_lead_id IS NULL) berstatus CLOSING
+     *               pada bulan tsb (berdasarkan tanggal_won).
+     *   penyebut  = jumlah prospek dari rekap harian SEMUA cabang (pembanding).
+     * = CLOSING ÷ prospek(rekap) × 100, di-cap 100.
+     */
+    protected function marketingClosingRate(int $month, int $year): float
+    {
+        $periode = sprintf('%04d-%02d', $year, $month);
+
+        $closing = (int)$this->db->table('marketing_lead')
+            ->where('status', 'CLOSING')
+            ->where('kommo_lead_id', null)
+            ->where("DATE_FORMAT(tanggal_won, '%Y-%m') = '{$periode}'")
+            ->countAllResults();
+
+        $rekap = $this->db->query(
+            "SELECT COALESCE(SUM(d.prospek), 0) AS t
+             FROM marketing_rekap_harian h
+             JOIN marketing_rekap_harian_detail d ON d.rekap_id = h.id
+             WHERE DATE_FORMAT(h.tanggal, '%Y-%m') = ?",
+            [$periode]
+        )->getRow();
+        $prospek = (float)($rekap->t ?? 0);
+
+        if ($prospek <= 0) {
+            return 0.0;
+        }
+
+        return min($closing / $prospek * 100.0, 100.0);
     }
 }
