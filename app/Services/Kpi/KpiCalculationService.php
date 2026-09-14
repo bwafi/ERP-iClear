@@ -150,17 +150,23 @@ class KpiCalculationService
                 $attendanceCodes = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
                 
                 if (in_array($component->code, $attendanceCodes)) {
-                    // Attendance: dari kpi_evaluations via AttendanceAggregationService
-                    $attendanceResult = $this->attendanceAggregationService->calculateMonthlyAttendance(
-                        $employeeId,
-                        $unitId,
-                        $month,
-                        $year,
-                        $context
-                    );
-                    
-                    if (isset($attendanceResult['components'][$component->code])) {
-                        $achievement = $attendanceResult['components'][$component->code]['normalized'];
+                    if ($positionId === 35 && $component->code === 'KEHADIRAN') {
+                        // ADMIN/KASIR: KPI "Kehadiran" = kelengkapan input absen harian
+                        // untuk dirinya, Teknisi, Kepala Toko, & CS (satu unit).
+                        $achievement = $this->adminAttendanceInputCoverage($employeeId, $unitId, $month, $year);
+                    } else {
+                        // Attendance: dari kpi_evaluations via AttendanceAggregationService
+                        $attendanceResult = $this->attendanceAggregationService->calculateMonthlyAttendance(
+                            $employeeId,
+                            $unitId,
+                            $month,
+                            $year,
+                            $context
+                        );
+
+                        if (isset($attendanceResult['components'][$component->code])) {
+                            $achievement = $attendanceResult['components'][$component->code]['normalized'];
+                        }
                     }
                 } elseif ($component->code === 'OPERASIONAL' && $positionId === 40) {
                     // OPERASIONAL: SPV uses cabang-aman logic (count units meeting threshold)
@@ -525,6 +531,80 @@ class KpiCalculationService
         }
 
         return $pool / $memberCount;
+    }
+
+    /**
+     * Skor kelengkapan input absen harian ADMIN/KASIR (jabatan 35).
+     *
+     * Tanggungan: jabatan yang boleh dinilai admin KEHADIRAN sesuai matriks
+     * EvaluatorAuthorizationService (35, 36, 41, 42) pada unit yang sama.
+     * Coverage = jumlah pasangan (pegawai, tanggal) yang SUDAH di-input admin
+     * dibagi jumlah hari penuh bulan × jumlah pegawai tanggungan, lalu ×100.
+     */
+    protected function adminAttendanceInputCoverage(int $employeeId, int $unitId, string $month, string $year): float
+    {
+        $db = \Config\Database::connect();
+
+        $allowed = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans(35);
+        if (empty($allowed)) {
+            return 100.0;
+        }
+
+        $responsible = $db->table('akun')
+            ->select('ID_AKUN')
+            ->where('STATUS_PEGAWAI', 1)
+            ->where('ID_UNIT', $unitId)
+            ->whereIn('ID_JABATAN', $allowed)
+            ->get()
+            ->getResultArray();
+        $responsibleIds = array_column($responsible, 'ID_AKUN');
+        if (empty($responsibleIds)) {
+            return 100.0;
+        }
+
+        $daysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', (int)$year, (int)$month)));
+        $expected    = $daysInMonth * count($responsibleIds);
+
+        $kehadiran = $this->componentModel->where('code', 'KEHADIRAN')->first();
+        $kiid      = $kehadiran ? (int)$kehadiran->id : -1;
+
+        $covered = [];
+
+        // Input nyata (raw_score) yang tercatat atas nama admin sebagai evaluator.
+        $evals = $db->table('kpi_evaluations')
+            ->select('employee_id, evaluation_date')
+            ->distinct()
+            ->where('evaluator_id', $employeeId)
+            ->whereIn('employee_id', $responsibleIds)
+            ->where('kpi_component_id', $kiid)
+            ->where('period_year', (int)$year)
+            ->where('period_month', (int)$month)
+            ->get()
+            ->getResultArray();
+        foreach ($evals as $r) {
+            $covered[(int)$r['employee_id'] . '|' . $r['evaluation_date']] = true;
+        }
+
+        // Hari yang ditandai OFF oleh admin (input lengkap tanpa nilai harian).
+        $offs = $db->table('kpi_attendance_off')
+            ->select('employee_id, evaluation_date')
+            ->distinct()
+            ->where('evaluator_id', $employeeId)
+            ->whereIn('employee_id', $responsibleIds)
+            ->where('period_year', (int)$year)
+            ->where('period_month', (int)$month)
+            ->get()
+            ->getResultArray();
+        foreach ($offs as $r) {
+            $covered[(int)$r['employee_id'] . '|' . $r['evaluation_date']] = true;
+        }
+
+        $actual = count($covered);
+        if ($expected <= 0) {
+            return 100.0;
+        }
+
+        return min(round($actual / $expected * 100, 2), 100.0);
     }
 
     /** GAJI_POKOK from salary_structures. */
