@@ -189,7 +189,7 @@
         jQuery('#searchBox').on('input', function() {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(function() {
-                dt.ajax.reload();
+                dt.search(jQuery('#searchBox').val()).draw();
             }, 500);
         });
 
