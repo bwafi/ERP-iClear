@@ -499,8 +499,24 @@ class KpiCalculationService
 
         // =========================================================
         // DEFAULT: Group Pool (KT, Digital, etc.)
+        // Wajib mencapai minimal capaian target (minimum_achievement).
         // =========================================================
         $omsetToko   = $omsetCalc->calculate($employeeId, $unit, $month, $year);
+        $minAch      = (float)($rule->minimum_achievement ?? 0);
+
+        if ($minAch > 0) {
+            $target = $this->targetModel->getTargetByKpiAndUnit((int)$rule->kpi_component_id, $unit, 'gaji', $date);
+            if (!$target || (float)$target->target_value <= 0) {
+                return 0.0;
+            }
+            $achievement = ($omsetToko / (float)$target->target_value) * 100;
+            if ($achievement < $minAch) {
+                return 0.0;
+            }
+        } elseif ($omsetToko <= 0) {
+            return 0.0;
+        }
+
         $pool        = ((float)$rule->base_value / 100.0) * $omsetToko;
         $memberCount = $memberModel->countActiveMembers((int)$group->id, $unit, $date);
 
