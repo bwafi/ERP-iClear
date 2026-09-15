@@ -77,11 +77,13 @@ class EvaluatorAuthorizationService
             35 => self::HADIR,      // dirinya sendiri
             36 => self::HADIR,      // Teknisi
             41 => self::HADIR,      // Kepala Toko
+            42 => self::HADIR,      // CS (khusus Admin/Kasir Unit 1)
         ],
-        // Kepala Toko (41): non-Kehadiran utk Admin dan Teknisi.
+        // Kepala Toko (41): non-Kehadiran utk Admin, Teknisi, dan CS (Unit 1).
         41 => [
             35 => self::NON_HADIR,
             36 => self::NON_HADIR,
+            42 => self::NON_HADIR,
         ],
         // SPV (40): non-Kehadiran utk Kepala Toko.
         40 => [
@@ -93,7 +95,6 @@ class EvaluatorAuthorizationService
             0  => self::HADIR,                          // Admin Center (self)
             34 => self::HADIR,                          // Manager (hanya Kehadiran)
             40 => self::HADIR,                          // SPV
-            42 => self::HADIR,                          // CS (di HO)
             43 => self::HADIR,                          // Kepala Divisi
             44 => self::HADIR,                          // Multimedia
             45 => self::HADIR,                          // Team IT
@@ -163,6 +164,14 @@ class EvaluatorAuthorizationService
 
         if (!in_array($employeeJabatan, $allowed, true)) {
             return false;
+        }
+
+        // CS (42) KEHADIRAN dinilai Admin/Kasir (35) di UNIT 1;
+        // CS (42) non-Kehadiran dinilai Kepala Toko (41) yang berada di UNIT 1.
+        if ($employeeJabatan === 42) {
+            if (($evaluatorJabatan === 35 || $evaluatorJabatan === 41) && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
+                return false;
+            }
         }
 
         return true;
