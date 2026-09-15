@@ -8,8 +8,9 @@ use App\Services\Kpi\CustomerSatisfactionService;
 /**
  * Customer Satisfaction KPI — input harian review Google Maps.
  *
- * Hanya Kepala Toko (41) yang berhak mengakses & menginput review
- * unit masing-masing.
+ * - Admin root / Direktur (1, 2): input semua unit.
+ * - Manager (34): melihat semua unit, read-only.
+ * - Kepala Toko (41): input review unit sendiri.
  */
 class CustomerSatisfaction extends BaseController
 {
@@ -29,8 +30,8 @@ class CustomerSatisfaction extends BaseController
         $myUnit   = (int)($me->ID_UNIT ?? 0);
         $myId     = (int)($me->ID_AKUN ?? 0);
 
-        // Hanya Kepala Toko (41) yang boleh membuka halaman ini.
-        $viewRoles = [41];
+        // Hanya Admin root (1), Direktur (2), Manager (34), dan Kepala Toko (41).
+        $viewRoles = [1, 2, 34, 41];
         if (!in_array($myRole, $viewRoles, true)) {
             return redirect()->to('/')->with('error', 'Anda tidak berhak mengakses fitur Customer Satisfaction.');
         }
@@ -129,8 +130,8 @@ class CustomerSatisfaction extends BaseController
         $idUnit       = (int)$this->request->getPost('id_unit');
         $jumlahReview = (int)$this->request->getPost('jumlah_review');
 
-        // Otorisasi input: hanya Kepala Toko (41).
-        if (!in_array($myRole, [41], true)) {
+        // Otorisasi input: Admin root / Direktur & Kepala Toko; Manager read-only.
+        if (!in_array($myRole, [1, 2, 41], true)) {
             return redirect()->to('/penilaian/customer_satisfaction')
                 ->with('error', 'Anda tidak berwenang menginput Customer Satisfaction.');
         }
@@ -177,7 +178,12 @@ class CustomerSatisfaction extends BaseController
             $all = $this->service->allUnits();
             return [$all, true, $all ? (int)$all[0] : 0];
         }
-        if (in_array($myRole, [41, 42], true)) {
+        if ($myRole === 34) {
+            // Manager: melihat semua unit, read-only.
+            $all = $this->service->allUnits();
+            return [$all, false, $all ? (int)$all[0] : 0];
+        }
+        if ($myRole === 41) {
             return [[$myUnit], true, $myUnit];
         }
         if ($myRole === 40) {
