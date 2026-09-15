@@ -1,10 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>Error &mdash; Terjadi Kesalahan</title>
+    <title>500 &mdash; Terjadi Kesalahan Sistem</title>
     <link rel="shortcut icon" type="image/png" href="<?= base_url('template/assets/images/logo_iclear.png') ?>">
     <link rel="stylesheet" href="<?= base_url('template/assets/css/styles.css') ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
@@ -23,10 +23,20 @@
             font-weight: 800;
             line-height: 1;
             letter-spacing: -4px;
-            color: #6c757d;
+            color: #dc3545;
         }
         .error-icon {
             font-size: 3.5rem;
+            color: #dc3545;
+        }
+        .error-url {
+            word-break: break-all;
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: .5rem;
+            padding: .6rem 1rem;
+            font-family: SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .85rem;
             color: #6c757d;
         }
         .error-box {
@@ -46,25 +56,26 @@
 </head>
 <body>
     <div class="text-center p-4 error-box">
-        <?php $status = (int)($code ?? 500); ?>
+        <?php $uri = function_exists('current_url') ? current_url() : ''; ?>
 
-        <div class="error-code"><?= $status ?></div>
-        <div class="error-icon"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="error-code"><?= (int) $code ?></div>
+        <div class="error-icon"><i class="bi bi-tools"></i></div>
 
-        <h1 class="h3 fw-bold mt-3 mb-2">Terjadi Kesalahan</h1>
+        <h1 class="h3 fw-bold mt-3 mb-2">Terjadi Kesalahan Sistem</h1>
         <p class="text-muted mb-3">
-            Permintaan kamu tidak dapat diproses saat ini. Silakan kembali ke beranda atau coba lagi.
+            Sepertinya ada yang tidak beres di server. Silakan coba lagi beberapa saat.
+            Jika masalah berlanjut, hubungi administrator.
         </p>
 
-        <?php if (!empty($message)) : ?>
-            <div class="alert alert-light border text-start small"><?= esc($message) ?></div>
+        <?php if (!empty($uri)) : ?>
+            <div class="error-url mb-3"><?= esc($uri) ?></div>
         <?php endif; ?>
 
         <?php if (ENVIRONMENT !== 'production') : ?>
             <div class="text-start mb-3">
                 <details class="dev-info">
                     <summary>Informasi teknis (hanya tampil di lingkungan development)</summary>
-                    <pre class="p-3 bg-white border rounded mt-2"><?= esc($title ?? 'Unknown error') ?></pre>
+                    <pre class="p-3 bg-white border rounded mt-2"><?= esc(!empty($message) ? $message : ($title ?? 'Unknown error')) ?></pre>
                     <?php if (!empty($file)) : ?>
                         <pre class="p-3 bg-white border rounded"><?= esc($file) ?> : <?= (int) ($line ?? 0) ?></pre>
                     <?php endif; ?>
@@ -73,11 +84,11 @@
         <?php endif; ?>
 
         <div class="d-flex flex-wrap justify-content-center gap-2">
-            <a href="<?= base_url() ?>" class="btn btn-primary">
-                <i class="bi bi-house-door me-1"></i> Kembali ke Beranda
-            </a>
-            <a href="<?= base_url('login') ?>" class="btn btn-outline-secondary">
-                <i class="bi bi-box-arrow-in-right me-1"></i> Halaman Login
+            <button type="button" onclick="location.reload()" class="btn btn-primary">
+                <i class="bi bi-arrow-clockwise me-1"></i> Muat Ulang
+            </button>
+            <a href="<?= base_url() ?>" class="btn btn-outline-secondary">
+                <i class="bi bi-house-door me-1"></i> Beranda
             </a>
         </div>
     </div>

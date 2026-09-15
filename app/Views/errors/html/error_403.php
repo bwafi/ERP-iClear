@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>404 &mdash; Halaman Tidak Ditemukan</title>
+    <title>403 &mdash; Akses Ditolak</title>
     <link rel="shortcut icon" type="image/png" href="<?= base_url('template/assets/images/logo_iclear.png') ?>">
     <link rel="stylesheet" href="<?= base_url('template/assets/css/styles.css') ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
@@ -23,11 +23,11 @@
             font-weight: 800;
             line-height: 1;
             letter-spacing: -4px;
-            color: #2f80ed;
+            color: #e67e22;
         }
         .error-icon {
             font-size: 3.5rem;
-            color: #2f80ed;
+            color: #e67e22;
         }
         .error-url {
             word-break: break-all;
@@ -42,16 +42,6 @@
         .error-box {
             max-width: 620px;
         }
-        details.dev-info summary {
-            cursor: pointer;
-            font-size: .8rem;
-            color: #adb5bd;
-        }
-        details.dev-info pre {
-            max-height: 220px;
-            overflow: auto;
-            font-size: .75rem;
-        }
     </style>
 </head>
 <body>
@@ -59,11 +49,11 @@
         <?php $uri = function_exists('current_url') ? current_url() : ''; ?>
 
         <div class="error-code"><?= (int) $code ?></div>
-        <div class="error-icon"><i class="bi bi-compass"></i></div>
+        <div class="error-icon"><i class="bi bi-shield-lock"></i></div>
 
-        <h1 class="h3 fw-bold mt-3 mb-2">Halaman Tidak Ditemukan</h1>
+        <h1 class="h3 fw-bold mt-3 mb-2">Akses Ditolak</h1>
         <p class="text-muted mb-3">
-            Alamat yang kamu tuju tidak ada, sudah dipindahkan, atau link yang kamu buka tidak valid.
+            Akun kamu tidak memiliki izin untuk membuka halaman ini. Hubungi admin jika kamu merasa seharusnya bisa mengaksesnya.
         </p>
 
         <?php if (!empty($uri)) : ?>
@@ -71,20 +61,15 @@
         <?php endif; ?>
 
         <?php if (ENVIRONMENT !== 'production' && !empty($message)) : ?>
-            <div class="text-start mb-3">
-                <details class="dev-info">
-                    <summary>Informasi teknis (hanya tampil di lingkungan development)</summary>
-                    <pre class="p-3 bg-white border rounded mt-2"><?= esc($message) ?></pre>
-                </details>
-            </div>
+            <div class="alert alert-warning text-start small"><?= esc($message) ?></div>
         <?php endif; ?>
 
         <div class="d-flex flex-wrap justify-content-center gap-2">
-            <a href="<?= base_url() ?>" class="btn btn-primary">
-                <i class="bi bi-house-door me-1"></i> Kembali ke Beranda
+            <a href="javascript:history.back()" class="btn btn-primary">
+                <i class="bi bi-arrow-left me-1"></i> Kembali
             </a>
-            <a href="<?= base_url('login') ?>" class="btn btn-outline-secondary">
-                <i class="bi bi-box-arrow-in-right me-1"></i> Halaman Login
+            <a href="<?= base_url() ?>" class="btn btn-outline-secondary">
+                <i class="bi bi-house-door me-1"></i> Beranda
             </a>
         </div>
     </div>
