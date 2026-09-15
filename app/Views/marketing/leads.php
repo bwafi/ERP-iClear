@@ -114,7 +114,7 @@
                             <th>Keterangan Servis</th>
                             <th class="text-center">Status</th>
                             <th class="text-nowrap">Tgl Booking</th>
-                            <th class="text-end">Omset</th>
+                            <th class="text-end">Omset − HPP</th>
                             <th>Catatan</th>
                             <?php if ($canWrite) : ?><th class="text-center">Aksi</th><?php endif; ?>
                         </tr>
@@ -165,7 +165,20 @@
                                 </td>
                                 <td class="text-nowrap small"><?= $lead->tanggal_booking ? date('d M Y', strtotime($lead->tanggal_booking)) : '-' ?></td>
                                 <td class="text-end fw-semibold text-nowrap">
-                                    <?= $lead->omset !== null && $lead->omset > 0 ? 'Rp ' . number_format((float)$lead->omset, 0, ',', '.') : '-' ?>
+                                    <?php
+                                    $omset = (float)($lead->omset ?? 0);
+                                    $hpp   = (float)($lead->hpp ?? 0);
+                                    $margin = $omset - $hpp;
+                                    ?>
+                                    <?php if ($omset > 0) : ?>
+                                        Rp <?= number_format($margin, 0, ',', '.') ?>
+                                        <div class="small fw-normal text-muted" title="Omset &minus; HPP">
+                                            Omset Rp <?= number_format($omset, 0, ',', '.') ?>
+                                            &middot; HPP Rp <?= number_format($hpp, 0, ',', '.') ?>
+                                        </div>
+                                    <?php else : ?>
+                                        -
+                                    <?php endif; ?>
                                     <?php if ($svcNo !== '') : ?>
                                         <div class="small fw-normal text-muted"><?= esc($svcNo) ?></div>
                                     <?php endif; ?>

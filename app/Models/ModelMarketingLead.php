@@ -40,6 +40,13 @@ class ModelMarketingLead extends Model
     public function findDetailProspek(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null, ?int $limit = null, ?int $offset = 0): array
     {
         $builder = $this->detailProspekWhere($month, $year, $status, $platform, $unitId)
+            ->select('marketing_lead.*, COALESCE(hpp_s.hpp, 0) AS hpp')
+            ->join(
+                '(SELECT service_idservice, SUM(hpp_penjualan) AS hpp
+                  FROM service_sparepart GROUP BY service_idservice) hpp_s',
+                'hpp_s.service_idservice = marketing_lead.service_id',
+                'left'
+            )
             ->orderBy('tanggal', 'DESC')
             ->orderBy('id', 'DESC');
 
