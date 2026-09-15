@@ -228,13 +228,8 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
-                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
-                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
-                    $hqTargets = array_values(array_filter(
-                        $hqTargets,
-                        fn($j) => (int)$j !== 42
-                    ));
-                }
+                // CS (42) kini target HQ: dinilai Admin Center (0) utk Kehadiran,
+                // Kadiv (43) utk non-Kehadiran — tidak lagi dibatasi unit 1.
 
                 if (!empty($hqTargets)) {
                     $builder->groupStart()
@@ -868,13 +863,8 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
-                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
-                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
-                    $hqTargets = array_values(array_filter(
-                        $hqTargets,
-                        fn($j) => (int)$j !== 42
-                    ));
-                }
+                // CS (42) kini target HQ: dinilai Admin Center (0) utk Kehadiran,
+                // Kadiv (43) utk non-Kehadiran — tidak lagi dibatasi unit 1.
 
                 if (!empty($hqTargets)) {
                     $builder->groupStart()
@@ -1525,13 +1515,8 @@ class PenilaianKPI extends BaseController
                     fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
                 ));
 
-                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
-                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
-                    $hqTargets = array_values(array_filter(
-                        $hqTargets,
-                        fn($j) => (int)$j !== 42
-                    ));
-                }
+                // CS (42) kini target HQ: dinilai Admin Center (0) utk Kehadiran,
+                // Kadiv (43) utk non-Kehadiran — tidak lagi dibatasi unit 1.
 
                 if (!empty($hqTargets)) {
                     $builder->groupStart()

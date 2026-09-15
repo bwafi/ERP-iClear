@@ -78,6 +78,7 @@ class LegacyKpiCalculationService
                     WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 1 THEN 1
                     WHEN ALAMAT = 'Jember' AND ID_UNIT = 2 THEN 1
                     WHEN ALAMAT = 'Banyuwangi' AND ID_UNIT = 3 THEN 1
+                    WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 50 THEN 1
                     ELSE 0
                 END AS penempatan
             FROM akun
