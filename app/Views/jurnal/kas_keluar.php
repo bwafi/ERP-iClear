@@ -380,6 +380,13 @@
                 placeholder: '-- Pilih No Rekening --'
             });
 
+            $(row).find('.akun-no').select2({
+                dropdownParent: $('#input-kas-modal'),
+                width: '100%',
+                placeholder: 'Cari akun (mis. Piutang)',
+                allowClear: true
+            });
+
             const gl = row.querySelector('.akun-jenis-transaksi');
             const rek = row.querySelector('.akun-rekening');
             gl.addEventListener('change', function() {
