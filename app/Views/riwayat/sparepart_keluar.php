@@ -137,6 +137,7 @@
                 data: function(d) {
                     d.unit = jQuery('#unitFilter').val();
                     d.day = jQuery('#dayFilter').val();
+                    d.search = { value: jQuery('#searchBox').val() || '' };
                 }
             },
             columns: [{
@@ -189,7 +190,7 @@
         jQuery('#searchBox').on('input', function() {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(function() {
-                dt.search(jQuery('#searchBox').val()).draw();
+                dt.ajax.reload();
             }, 500);
         });
 
