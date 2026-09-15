@@ -8,10 +8,8 @@ use App\Services\Kpi\CustomerSatisfactionService;
 /**
  * Customer Satisfaction KPI — input harian review Google Maps.
  *
- * - Kepala Toko (41): input jumlah review unit sendiri.
- * - Admin root / Direktur (1, 2): input semua unit.
- * - SPV (40): melihat agregasi area (spv_units), read-only.
- * - Lainnya: melihat unit sendiri, read-only.
+ * Hanya Kepala Toko (41) yang berhak mengakses & menginput review
+ * unit masing-masing.
  */
 class CustomerSatisfaction extends BaseController
 {
@@ -31,8 +29,8 @@ class CustomerSatisfaction extends BaseController
         $myUnit   = (int)($me->ID_UNIT ?? 0);
         $myId     = (int)($me->ID_AKUN ?? 0);
 
-        // Hanya role pemegang akses menu Customer Satisfaction yang boleh buka halaman ini.
-        $viewRoles = [0, 1, 2, 34, 35, 40, 41, 42, 43, 45];
+        // Hanya Kepala Toko (41) yang boleh membuka halaman ini.
+        $viewRoles = [41];
         if (!in_array($myRole, $viewRoles, true)) {
             return redirect()->to('/')->with('error', 'Anda tidak berhak mengakses fitur Customer Satisfaction.');
         }
@@ -131,8 +129,8 @@ class CustomerSatisfaction extends BaseController
         $idUnit       = (int)$this->request->getPost('id_unit');
         $jumlahReview = (int)$this->request->getPost('jumlah_review');
 
-        // Otorisasi input.
-        if (!in_array($myRole, [1, 2, 41, 42], true)) {
+        // Otorisasi input: hanya Kepala Toko (41).
+        if (!in_array($myRole, [41], true)) {
             return redirect()->to('/penilaian/customer_satisfaction')
                 ->with('error', 'Anda tidak berwenang menginput Customer Satisfaction.');
         }
