@@ -42,7 +42,6 @@ class Kas_Keluar extends BaseController
 
         $data = [
             'akun' => $akun,
-            'kas_keluar' => $this->KasKeluarModel->getKasKeluar(),
             'kategori_kas' => $this->KategoriKasModel->getKategoriKas(),
             'no_akun' =>  $this->NoAkunModel->getAkun(),
             'bank' => $this->BankModel->getBank(),
@@ -51,6 +50,92 @@ class Kas_Keluar extends BaseController
         ];
 
         return view('template', $data);
+    }
+
+    /** DataTables server-side untuk daftar kas keluar. */
+    public function datatable()
+    {
+        $draw   = (int)$this->request->getGet('draw');
+        $start  = (int)$this->request->getGet('start');
+        $length = (int)$this->request->getGet('length');
+
+        $search = $this->request->getGet('search');
+        $search = is_array($search) ? trim((string)($search['value'] ?? '')) : trim((string)$search);
+
+        $order = $this->request->getGet('order');
+        $orderColIdx = isset($order[0]['column']) ? (int)$order[0]['column'] : 0;
+        $orderDir    = isset($order[0]['dir']) ? strtoupper($order[0]['dir']) : 'DESC';
+
+        $columnMap = [
+            0 => 'kas_keluar.tanggal',
+            1 => 'unit.NAMA_UNIT',
+            2 => 'no_akun.no_akun',
+            3 => 'kategori_kas.kategori',
+            4 => 'kas_keluar.deskripsi',
+            5 => 'bank.nama_bank',
+            6 => 'kas_keluar.penerima',
+            7 => 'bank.norek',
+            8 => 'kas_keluar.jumlah',
+            9 => 'kas_keluar.jenis',
+            10 => null, // aksi — tidak urutkan
+        ];
+        $orderCol = $columnMap[$orderColIdx] ?? 'kas_keluar.tanggal';
+
+        $startDate = trim((string)$this->request->getGet('tanggal_awal'));
+        $endDate   = trim((string)$this->request->getGet('tanggal_akhir'));
+        $unitId    = (int)$this->request->getGet('unit_id');
+
+        $total    = $this->KasKeluarModel->countAllKasKeluar();
+        $filtered = $this->KasKeluarModel->countKasKeluarFiltered($search, $startDate ?: null, $endDate ?: null, $unitId ?: null);
+        $rows     = $this->KasKeluarModel->getKasKeluarDataTable(
+            $length,
+            $start,
+            $search,
+            $orderCol,
+            $orderDir,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null
+        );
+
+        $data = [];
+        foreach ($rows as $r) {
+            $data[] = [
+                'tanggal'    => date('d-m-Y', strtotime($r->tanggal)),
+                'unit'       => $r->NAMA_UNIT,
+                'no_akun'    => esc($r->no_akun ?? '', 'attr') . ($r->nama_akun ? ' <small class="text-muted">' . esc($r->nama_akun) . '</small>' : ''),
+                'kategori'   => esc($r->kategori ?? ''),
+                'deskripsi'  => esc($r->deskripsi ?? ''),
+                'bank'       => esc($r->nama_bank ?? '-'),
+                'penerima'   => esc($r->penerima ?? '-'),
+                'norek'      => esc($r->norek ?? '-'),
+                'jumlah'     => (float)$r->jumlah,
+                'jenis'      => ucfirst(esc($r->jenis ?? '-')),
+                'aksi'       => '<div class="d-flex justify-content-center gap-1">'
+                    . '<button type="button" class="btn btn-sm btn-outline-primary edit-button" title="Edit" '
+                    . 'data-id="' . (int)$r->idkas_keluar . '" '
+                    . 'data-tanggal="' . esc($r->tanggal, 'attr') . '" '
+                    . 'data-kategori="' . (int)($r->kategori_idkategori ?? 0) . '" '
+                    . 'data-deskripsi="' . esc($r->deskripsi ?? '', 'attr') . '" '
+                    . 'data-jumlah="' . (float)$r->jumlah . '" '
+                    . 'data-jenis="' . esc($r->jenis ?? '', 'attr') . '" '
+                    . 'data-idbank="' . (int)($r->idbank ?? 0) . '" '
+                    . 'data-penerima="' . esc($r->penerima ?? '', 'attr') . '" '
+                    . 'data-bs-toggle="modal" data-bs-target="#edit-kas-modal">'
+                    . '<i class="bi bi-pencil-square"></i></button>'
+                    . '<button type="button" class="btn btn-sm btn-outline-danger delete-button" title="Hapus" '
+                    . 'data-id="' . (int)$r->idkas_keluar . '" '
+                    . 'data-bs-toggle="modal" data-bs-target="#delete-kas-modal">'
+                    . '<i class="bi bi-trash"></i></button></div>',
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $filtered,
+            'data'            => $data,
+        ]);
     }
 
     public function insert_kas_keluar()
@@ -168,11 +253,12 @@ class Kas_Keluar extends BaseController
         $sheet = $spreadsheet->getActiveSheet();
 
         $unit = $this->request->getPost('nama_unit');
+        $unitId = (int)$this->request->getPost('unit_id');
         $tanggal_awal = $this->request->getPost('tanggal_awal');
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
 
 
-        $kasKeluarData = $this->KasKeluarModel->getKasKeluarFiltered($tanggal_awal, $tanggal_akhir, $unit);
+        $kasKeluarData = $this->KasKeluarModel->getKasKeluarFiltered($tanggal_awal, $tanggal_akhir, $unit, $unitId ?: null);
 
 
         $headers = [

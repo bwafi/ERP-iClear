@@ -379,7 +379,8 @@ $routes->post('update_kategori', 'Kategori_Kas::update_kategori', ['filter' => '
 $routes->post('delete_kategori', 'Kategori_Kas::delete_kategori', ['filter' => 'auth']);
 
 //kas keluar
-$routes->get('/kas_keluar', 'Kas_Keluar::index');
+$routes->get('/kas_keluar', 'Kas_Keluar::index', ['filter' => 'auth']);
+$routes->get('kas_keluar/datatables', 'Kas_Keluar::datatable', ['filter' => 'auth']);
 $routes->post('insert_kas_keluar', 'Kas_Keluar::insert_kas_keluar', ['filter' => 'auth']);
 $routes->post('update_kas_keluar', 'Kas_Keluar::update_kas_keluar', ['filter' => 'auth']);
 $routes->post('delete_kas_keluar', 'Kas_Keluar::delete_kas_keluar', ['filter' => 'auth']);
