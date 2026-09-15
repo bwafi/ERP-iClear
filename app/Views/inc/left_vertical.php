@@ -1,22 +1,28 @@
+<?php
+if (session()->get('logged_in') !== true) {
+    header("Location:" . base_url('login'));
+    exit;
+}
+use App\Models\ModelUnit;
+
+$id_unit = session()->get('ID_UNIT');
+
+$ModelUnit = new ModelUnit();
+$unitLogo  = $id_unit ? $ModelUnit->getById($id_unit) : null;
+$logoFile  = ($unitLogo && $unitLogo->LOGO) ? $unitLogo->LOGO : 'logo_iclear.png';
+$namaUnit  = session()->get('NAMA_UNIT') ?: '';
+?>
 <aside class="left-sidebar with-vertical">
     <!-- ---------------------------------- -->
     <!-- Start Vertical Layout Sidebar -->
     <!-- ---------------------------------- -->
     <div class="brand-logo d-flex flex-column justify-content-center align-items-center py-3">
-        <?php
-        $id_unit = session()->get('ID_UNIT');
-
-        use App\Models\ModelUnit;
-
-        $ModelUnit = new ModelUnit();
-        $unitLogo = $ModelUnit->getById($id_unit);
-        ?>
         <a href="<?= base_url() ?>" class="text-nowrap logo-img mb-2">
-            <img src="<?= base_url('template/assets/images/' . $unitLogo->LOGO) ?>" alt="Logo"
+            <img src="<?= base_url('template/assets/images/' . $logoFile) ?>" alt="Logo"
                 class="dark-logo w-100 h-auto" style="max-width: 100px;" />
         </a>
         <h5 class="mt-2 text-center hide-menu">
-            <?= session()->get('NAMA_UNIT'); ?>
+            <?= esc($namaUnit) ?>
         </h5>
         <a href="javascript:void(0)" class="sidebartoggler ms-auto text-decoration-none fs-5 d-block d-xl-none">
             <i class="ti ti-x"></i>
