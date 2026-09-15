@@ -146,17 +146,23 @@ class Kas_Keluar extends BaseController
 
         $akunData = $this->request->getPost('akun');
 
+        // Prospek harus punya minimal satu baris posisi akun.
+        if (!is_array($akunData) || empty($akunData)) {
+            session()->setFlashdata('error', 'Minimal satu posisi akun wajib diisi.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+
         foreach ($akunData as $data) {
-            $noAkun = $data['no_akun'];
-            $jenisAkun = $data['jenis_akun'];
+            $noAkun = $data['no_akun'] ?? '';
+            $jenisAkun = $data['jenis_akun'] ?? '';
             $noRekening = isset($data['no_rekening']) ? $data['no_rekening'] : null;
             if (empty($noRekening)) {
                 $noRekening = null;
             }
-            $jumlah = $data['jumlah'];
-            $penerima = $data['penerima'];
-            $jenis = $data['posisi_drk']; // debet / kredit
-            $kategori_idkategori = $data['kategori_idkategori'];
+            $jumlah = (float)($data['jumlah'] ?? 0);
+            $penerima = (string)($data['penerima'] ?? '');
+            $jenis = (string)($data['posisi_drk'] ?? 'debet'); // debet / kredit
+            $kategori_idkategori = (int)($data['kategori_idkategori'] ?? 0);
 
             // Simpan data kas keluar
             $dataKasKeluar = [
@@ -179,7 +185,7 @@ class Kas_Keluar extends BaseController
 
             // Ambil data akun untuk jurnal
             $data_akunjurnal = $this->NoAkunModel->getByNoAkun($noAkun);
-            $nama_akun = $data_akunjurnal->nama_akun;
+            $nama_akun = $data_akunjurnal ? trim((string)$data_akunjurnal->nama_akun) : $noAkun;
 
             // Tentukan nilai debet dan kredit berdasarkan posisi_drk
             $debet = ($jenis === 'debet') ? $jumlah : 0;

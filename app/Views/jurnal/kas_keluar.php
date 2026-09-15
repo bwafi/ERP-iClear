@@ -137,7 +137,7 @@
                         <table class="table table-bordered align-middle" id="akun-terpilih-table">
                             <thead class="table-light">
                                 <tr>
-                                    <th style="min-width:220px;">No Akun</th>
+                                    <th style="min-width:340px;">No Akun</th>
                                     <th style="min-width:150px;">Kategori</th>
                                     <th style="min-width:110px;">Sumber Dana</th>
                                     <th style="min-width:180px;">No Rekening</th>
@@ -383,6 +383,7 @@
             $(row).find('.akun-no').select2({
                 dropdownParent: $('#input-kas-modal'),
                 width: '100%',
+                dropdownAutoWidth: true,
                 placeholder: 'Cari akun (mis. Piutang)',
                 allowClear: true
             });
@@ -437,15 +438,27 @@
 
         // Bersihkan format Rp sebelum submit (nilai murni angka)
         document.getElementById('form_kas_keluar').addEventListener('submit', function() {
+            // Re-enable unit yang dikunci agar nilainya ikut terkirim.
+            const u = document.getElementById('unit_idunit');
+            if (u.disabled) u.disabled = false;
             document.querySelectorAll('.akun-jumlah').forEach(function(el) {
                 el.value = el.value.replace(/[^0-9]/g, '') || '0';
             });
         });
 
-        // Default input unit dari akun yang login
+        // Default input unit dari akun yang login.
+        // Admin root (1), Direktur (2), Manager (34), Admin Center (0) boleh pilih
+        // semua unit; selain itu unit terkunci mengikuti unit akun yang login.
         const akunUnit = <?= (int)($akun->ID_UNIT ?? 0) ?>;
+        const akunRole = <?= (int)($akun->ID_JABATAN ?? 0) ?>;
+        const canPickUnit = [0, 1, 2, 34].includes(akunRole);
+
         if (akunUnit > 0) {
             $('#unit_idunit').val(akunUnit).trigger('change');
+        }
+        if (!canPickUnit && akunUnit > 0) {
+            $('#unit_idunit').prop('disabled', true);
+            $('#unit_idunit').closest('.col-md-4').find('label').append(' <span class="text-muted small">(unit otomatis)</span>');
         }
 
     });
