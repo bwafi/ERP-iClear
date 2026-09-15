@@ -69,6 +69,7 @@
             <table class="table border text-nowrap mb-0 align-middle" id="table_kas_keluar" style="width:100%">
                 <thead class="text-dark fs-4">
                     <tr>
+                        <th style="width:70px;">ID</th>
                         <th>Tanggal</th>
                         <th>Unit</th>
                         <th>Nomor Akun</th>
@@ -85,7 +86,7 @@
                 <tbody></tbody>
                 <tfoot>
                     <tr class="table-light fw-semibold">
-                        <td colspan="8" class="text-end">Total</td>
+                        <td colspan="9" class="text-end">Total</td>
                         <td class="text-end" id="sumJumlah">-</td>
                         <td colspan="2"></td>
                     </tr>
@@ -264,6 +265,7 @@
                 [0, 'desc']
             ],
             columns: [
+                { data: 'id' },
                 { data: 'tanggal' },
                 { data: 'unit' },
                 { data: 'no_akun' },

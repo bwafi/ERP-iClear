@@ -67,19 +67,20 @@ class Kas_Keluar extends BaseController
         $orderDir    = isset($order[0]['dir']) ? strtoupper($order[0]['dir']) : 'DESC';
 
         $columnMap = [
-            0 => 'kas_keluar.tanggal',
-            1 => 'unit.NAMA_UNIT',
-            2 => 'no_akun.no_akun',
-            3 => 'kategori_kas.kategori',
-            4 => 'kas_keluar.deskripsi',
-            5 => 'bank.nama_bank',
-            6 => 'kas_keluar.penerima',
-            7 => 'bank.norek',
-            8 => 'kas_keluar.jumlah',
-            9 => 'kas_keluar.jenis',
-            10 => null, // aksi — tidak urutkan
+            0 => 'kas_keluar.idkas_keluar',
+            1 => 'kas_keluar.tanggal',
+            2 => 'unit.NAMA_UNIT',
+            3 => 'no_akun.no_akun',
+            4 => 'kategori_kas.kategori',
+            5 => 'kas_keluar.deskripsi',
+            6 => 'bank.nama_bank',
+            7 => 'kas_keluar.penerima',
+            8 => 'bank.norek',
+            9 => 'kas_keluar.jumlah',
+            10 => 'kas_keluar.jenis',
+            11 => null, // aksi — tidak urutkan
         ];
-        $orderCol = $columnMap[$orderColIdx] ?? 'kas_keluar.tanggal';
+        $orderCol = $columnMap[$orderColIdx] ?? 'kas_keluar.idkas_keluar';
 
         $startDate = trim((string)$this->request->getGet('tanggal_awal'));
         $endDate   = trim((string)$this->request->getGet('tanggal_akhir'));
@@ -101,6 +102,7 @@ class Kas_Keluar extends BaseController
         $data = [];
         foreach ($rows as $r) {
             $data[] = [
+                'id'         => (int)$r->idkas_keluar,
                 'tanggal'    => date('d-m-Y', strtotime($r->tanggal)),
                 'unit'       => $r->NAMA_UNIT,
                 'no_akun'    => esc($r->no_akun ?? '', 'attr') . ($r->nama_akun ? ' <small class="text-muted">' . esc($r->nama_akun) . '</small>' : ''),
