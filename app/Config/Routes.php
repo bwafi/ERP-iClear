@@ -560,6 +560,18 @@ $routes->group('konten', ['filter' => 'auth'], function ($routes) {
     $routes->post('channel/hapus', 'Konten::channel_hapus');
 });
 
+// Social Media KPI
+$routes->group('sosial', ['filter' => 'auth'], function ($routes) {
+    $routes->get('kpi', 'Sosial::kpi');
+    $routes->get('account', 'Sosial::account');
+    $routes->post('account/simpan', 'Sosial::account_simpan');
+    $routes->post('account/toggle', 'Sosial::account_toggle');
+    $routes->post('account/hapus', 'Sosial::account_hapus');
+    $routes->get('target', 'Sosial::target');
+    $routes->post('target/simpan', 'Sosial::target_simpan');
+    $routes->post('target/hapus', 'Sosial::target_hapus');
+});
+
 // Marketing Digital (KPI Kepala Divisi)
 $routes->group('marketing', ['filter' => 'auth'], function ($routes) {
     $routes->get('', 'Marketing::index');

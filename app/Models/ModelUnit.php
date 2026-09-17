@@ -46,4 +46,47 @@ class ModelUnit extends Model
     {
         return $this->where(['idunit' => $id])->first();
     }
+
+    /**
+     * Pastikan Unit "ICLEAR Genteng" tersedia (idempoten).
+     * Digunakan seeder/migration Social Media KPI dan test.
+     *
+     * @return int idunit unit Genteng yang aktif
+     */
+    public function ensureGenteng(): int
+    {
+        $existing = $this->select('idunit')
+            ->groupStart()
+            ->like('NAMA_UNIT', 'Genteng', 'both')
+            ->orWhere('kode_unit', 'GNT')
+            ->groupEnd()
+            ->get()
+            ->getFirstRow('array');
+
+        if ($existing) {
+            return (int)$existing['idunit'];
+        }
+
+        $data = [
+            'idunit'        => 5,
+            'NAMA_UNIT'     => 'ICLEAR Genteng',
+            'kode_unit'     => 'GNT',
+            'NOID_UNIT'     => '05',
+            'NOTELP'        => '085183270910',
+            'JALAN_UNIT'    => 'Genteng, Banyuwangi',
+            'KELURAHAN_UNIT'=> 'iclear.genteng',
+            'KABUPATEN_UNIT'=> 'Banyuwangi',
+            'jenis'         => 'franchise',
+            'RADIUS'        => '200',
+        ];
+
+        if ($this->where('idunit', 5)->countAllResults() === 0) {
+            $this->insert($data);
+            return 5;
+        }
+
+        unset($data['idunit']);
+        $this->insert($data);
+        return (int)$this->insertID();
+    }
 }
