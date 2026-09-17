@@ -6,8 +6,8 @@
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
                     <a class="text-muted text-decoration-none" href="<?= base_url(
-                        "/",
-                    ) ?>">Jurnal</a>
+                                                                            "/",
+                                                                        ) ?>">Jurnal</a>
                 </li>
                 <li class="breadcrumb-item active" aria-current="page">Kas Keluar</li>
             </ol>
@@ -39,8 +39,8 @@
                     <option value="">Semua Unit</option>
                     <?php foreach ($unit as $u): ?>
                         <option value="<?= (int) $u->idunit ?>"><?= esc(
-    $u->NAMA_UNIT,
-) ?></option>
+                                                                    $u->NAMA_UNIT,
+                                                                ) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -53,8 +53,8 @@
         </form>
         <div class="ms-auto d-flex gap-2">
             <form action="<?= base_url(
-                "export_kas_keluar",
-            ) ?>" method="post" id="exportForm">
+                                "export_kas_keluar",
+                            ) ?>" method="post" id="exportForm">
                 <input type="hidden" name="tanggal_awal" id="expStart">
                 <input type="hidden" name="tanggal_akhir" id="expEnd">
                 <input type="hidden" name="unit_id" id="expUnit">
@@ -86,9 +86,9 @@
                         <th>No Rekening</th>
                         <th class="text-end">Jumlah</th>
                         <th class="text-center">Jenis</th>
-                        <?php if ((int) ($akun->ID_JABATAN ?? 0) === 0): ?>
-                                  <th class="text-center" style="width:90px;">Aksi</th>
-                              <?php endif; ?>
+                        <?php if ((int) ($akun->ID_JABATAN ?? 1) === 1): ?>
+                            <th class="text-center" style="width:90px;">Aksi</th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -114,8 +114,8 @@
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <form action="<?= base_url(
-                "insert_kas_keluar",
-            ) ?>" method="post" id="form_kas_keluar">
+                                "insert_kas_keluar",
+                            ) ?>" method="post" id="form_kas_keluar">
                 <div class="modal-header">
                     <h5 class="modal-title">Input Kas Keluar</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -132,8 +132,8 @@
                                 <option value="">Pilih Unit</option>
                                 <?php foreach ($unit as $u): ?>
                                     <option value="<?= (int) $u->idunit ?>"><?= esc(
-    $u->NAMA_UNIT,
-) ?></option>
+                                                                                $u->NAMA_UNIT,
+                                                                            ) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -203,8 +203,8 @@
                             <option value="">-- Pilih Kategori --</option>
                             <?php foreach ($kategori_kas as $kat): ?>
                                 <option value="<?= esc(
-                                    $kat->idkategori_kas,
-                                ) ?>"><?= esc($kat->kategori) ?></option>
+                                                    $kat->idkategori_kas,
+                                                ) ?>"><?= esc($kat->kategori) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -222,8 +222,8 @@
                             <option value="">-- Choose --</option>
                             <?php foreach ($bank as $b): ?>
                                 <option value="<?= (int) $b->idbank ?>"><?= esc(
-    $b->nama_bank . " " . $b->atas_nama . " : " . $b->norek,
-) ?></option>
+                                                                            $b->nama_bank . " " . $b->atas_nama . " : " . $b->norek,
+                                                                        ) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -270,8 +270,7 @@
     document.addEventListener('DOMContentLoaded', function() {
 
         // ── DataTables server-side ─────────────────────────────────────
-        const columns = [
-            {
+        const columns = [{
                 data: 'id'
             },
             {
@@ -310,7 +309,7 @@
         ];
 
         // Kolom Aksi hanya tampil untuk Admin Center (ID Jabatan 0)
-        if (<?= (int) ($akun->ID_JABATAN ?? 0) ?> === 0) {
+        if (<?= (int) ($akun->ID_JABATAN ?? 1) ?> === 1) {
             columns.push({
                 data: 'aksi',
                 className: 'text-center',
@@ -399,24 +398,24 @@
             <option value="">-- Pilih No Akun --</option>
             <?php foreach ($no_akun as $a): ?>
                 <option value="<?= esc($a->no_akun) ?>"><?= esc(
-    $a->no_akun,
-) ?> &mdash; <?= esc($a->nama_akun) ?></option>
+                                                            $a->no_akun,
+                                                        ) ?> &mdash; <?= esc($a->nama_akun) ?></option>
             <?php endforeach; ?>
         `;
         const katOptions = `
             <option value="">-- Pilih Kategori --</option>
             <?php foreach ($kategori_kas as $kat): ?>
                 <option value="<?= esc($kat->idkategori_kas) ?>"><?= esc(
-    $kat->kategori,
-) ?></option>
+                                                                        $kat->kategori,
+                                                                    ) ?></option>
             <?php endforeach; ?>
         `;
         const bankOptions = `
             <option value="">-- Pilih No Rekening --</option>
             <?php foreach ($bank as $b): ?>
                 <option value="<?= (int) $b->idbank ?>"><?= esc(
-    $b->nama_bank . " " . $b->atas_nama . " : " . $b->norek,
-) ?></option>
+                                                            $b->nama_bank . " " . $b->atas_nama . " : " . $b->norek,
+                                                        ) ?></option>
             <?php endforeach; ?>
         `;
 
