@@ -5,7 +5,9 @@
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Jurnal</a>
+                    <a class="text-muted text-decoration-none" href="<?= base_url(
+                        "/",
+                    ) ?>">Jurnal</a>
                 </li>
                 <li class="breadcrumb-item active" aria-current="page">Kas Keluar</li>
             </ol>
@@ -13,9 +15,9 @@
     </div>
 </div>
 
-<?php if (session('sukses')) : ?>
+<?php if (session("sukses")): ?>
     <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <?= esc(session('sukses')) ?>
+        <?= esc(session("sukses")) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
@@ -35,8 +37,10 @@
                 <label class="form-label small mb-1">Unit</label>
                 <select name="unit_id" id="unitSelect" class="form-select form-select-sm">
                     <option value="">Semua Unit</option>
-                    <?php foreach ($unit as $u) : ?>
-                        <option value="<?= (int)$u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                    <?php foreach ($unit as $u): ?>
+                        <option value="<?= (int) $u->idunit ?>"><?= esc(
+    $u->NAMA_UNIT,
+) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -48,7 +52,9 @@
             </div>
         </form>
         <div class="ms-auto d-flex gap-2">
-            <form action="<?= base_url('export_kas_keluar') ?>" method="post" id="exportForm">
+            <form action="<?= base_url(
+                "export_kas_keluar",
+            ) ?>" method="post" id="exportForm">
                 <input type="hidden" name="tanggal_awal" id="expStart">
                 <input type="hidden" name="tanggal_akhir" id="expEnd">
                 <input type="hidden" name="unit_id" id="expUnit">
@@ -80,7 +86,9 @@
                         <th>No Rekening</th>
                         <th class="text-end">Jumlah</th>
                         <th class="text-center">Jenis</th>
-                        <th class="text-center" style="width:90px;">Aksi</th>
+                        <?php if ((int) ($akun->ID_JABATAN ?? 0) === 0): ?>
+                                  <th class="text-center" style="width:90px;">Aksi</th>
+                              <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -88,7 +96,12 @@
                     <tr class="table-light fw-semibold">
                         <td colspan="9" class="text-end">Total</td>
                         <td class="text-end" id="sumJumlah">-</td>
-                        <td colspan="2"></td>
+
+                        <?php if ((int) ($akun->ID_JABATAN ?? 0) === 0): ?>
+                            <td colspan="2"></td>
+                        <?php else: ?>
+                            <td></td>
+                        <?php endif; ?>
                     </tr>
                 </tfoot>
             </table>
@@ -100,7 +113,9 @@
 <div class="modal fade" id="input-kas-modal" tabindex="-1" aria-labelledby="inputKasModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <form action="<?= base_url('insert_kas_keluar') ?>" method="post" id="form_kas_keluar">
+            <form action="<?= base_url(
+                "insert_kas_keluar",
+            ) ?>" method="post" id="form_kas_keluar">
                 <div class="modal-header">
                     <h5 class="modal-title">Input Kas Keluar</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -115,8 +130,10 @@
                             <label for="unit_idunit" class="form-label">Unit</label>
                             <select class="form-control" name="unit_idunit" id="unit_idunit" required>
                                 <option value="">Pilih Unit</option>
-                                <?php foreach ($unit as $u) : ?>
-                                    <option value="<?= (int)$u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                                <?php foreach ($unit as $u): ?>
+                                    <option value="<?= (int) $u->idunit ?>"><?= esc(
+    $u->NAMA_UNIT,
+) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -169,7 +186,7 @@
 <div class="modal fade" id="edit-kas-modal" tabindex="-1" aria-labelledby="editKasModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form action="<?= base_url('update_kas_keluar') ?>" method="post">
+            <form action="<?= base_url("update_kas_keluar") ?>" method="post">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Kas Keluar</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -184,8 +201,10 @@
                         <label for="edit_kategori" class="form-label">Kategori</label>
                         <select class="form-control" name="kategori_idkategori" id="edit_kategori" required>
                             <option value="">-- Pilih Kategori --</option>
-                            <?php foreach ($kategori_kas as $kat) : ?>
-                                <option value="<?= esc($kat->idkategori_kas) ?>"><?= esc($kat->kategori) ?></option>
+                            <?php foreach ($kategori_kas as $kat): ?>
+                                <option value="<?= esc(
+                                    $kat->idkategori_kas,
+                                ) ?>"><?= esc($kat->kategori) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -201,8 +220,10 @@
                         <label for="edit_penerima" class="form-label">Penerima / Rekening</label>
                         <select class="form-control" name="penerima" id="edit_penerima">
                             <option value="">-- Choose --</option>
-                            <?php foreach ($bank as $b) : ?>
-                                <option value="<?= (int)$b->idbank ?>"><?= esc($b->nama_bank . ' ' . $b->atas_nama . ' : ' . $b->norek) ?></option>
+                            <?php foreach ($bank as $b): ?>
+                                <option value="<?= (int) $b->idbank ?>"><?= esc(
+    $b->nama_bank . " " . $b->atas_nama . " : " . $b->norek,
+) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -227,7 +248,7 @@
 <div class="modal fade" id="delete-kas-modal" tabindex="-1" aria-labelledby="deleteKasModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form action="<?= base_url('delete_kas_keluar') ?>" method="post">
+            <form action="<?= base_url("delete_kas_keluar") ?>" method="post">
                 <div class="modal-header">
                     <h5 class="modal-title">Hapus Kas Keluar</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -249,11 +270,61 @@
     document.addEventListener('DOMContentLoaded', function() {
 
         // ── DataTables server-side ─────────────────────────────────────
+        const columns = [
+            {
+                data: 'id'
+            },
+            {
+                data: 'tanggal'
+            },
+            {
+                data: 'unit'
+            },
+            {
+                data: 'no_akun'
+            },
+            {
+                data: 'kategori'
+            },
+            {
+                data: 'deskripsi'
+            },
+            {
+                data: 'bank'
+            },
+            {
+                data: 'penerima'
+            },
+            {
+                data: 'norek'
+            },
+            {
+                data: 'jumlah',
+                className: 'text-end',
+                render: $.fn.dataTable.render.number('.', ',', 0, 'Rp ')
+            },
+            {
+                data: 'jenis',
+                className: 'text-center'
+            }
+        ];
+
+        // Kolom Aksi hanya tampil untuk Admin Center (ID Jabatan 0)
+        if (<?= (int) ($akun->ID_JABATAN ?? 0) ?> === 0) {
+            columns.push({
+                data: 'aksi',
+                className: 'text-center',
+                orderable: false,
+                searchable: false
+            });
+        }
+
         const dt = $('#table_kas_keluar').DataTable({
             processing: true,
             serverSide: true,
+
             ajax: {
-                url: '<?= base_url('kas_keluar/datatables') ?>',
+                url: '<?= base_url("kas_keluar/datatables") ?>',
                 type: 'GET',
                 data: function(d) {
                     d.tanggal_awal = $('#startDate').val();
@@ -261,39 +332,36 @@
                     d.unit_id = $('#unitSelect').val();
                 }
             },
+
             order: [
                 [0, 'desc']
             ],
-            columns: [
-                { data: 'id' },
-                { data: 'tanggal' },
-                { data: 'unit' },
-                { data: 'no_akun' },
-                { data: 'kategori' },
-                { data: 'deskripsi' },
-                { data: 'bank' },
-                { data: 'penerima' },
-                { data: 'norek' },
-                { data: 'jumlah', className: 'text-end', render: $.fn.dataTable.render.number('.', ',', 0, 'Rp ') },
-                { data: 'jenis', className: 'text-center' },
-                { data: 'aksi', className: 'text-center', orderable: false, searchable: false }
-            ],
+
+            columns: columns,
+
             pageLength: 25,
+
             lengthMenu: [
                 [10, 25, 50, 100, -1],
                 [10, 25, 50, 100, 'Semua']
             ],
+
             drawCallback: function(settings) {
-                // Total kolom jumlah pada halaman server-side via api
+                // Total kolom jumlah pada halaman server-side
                 const api = this.api();
                 let total = 0;
-                api.rows({ filter: 'applied' }).every(function() {
+
+                api.rows({
+                    filter: 'applied'
+                }).every(function() {
                     total += parseFloat(this.data().jumlah) || 0;
                 });
-                $('#sumJumlah').text('Rp ' + total.toLocaleString('id-ID'));
+
+                $('#sumJumlah').text(
+                    'Rp ' + total.toLocaleString('id-ID')
+                );
             }
         });
-
         $('#btnApply').on('click', function() {
             dt.ajax.reload();
         });
@@ -329,20 +397,26 @@
         // ── Modal input (redesign) ────────────────────────────────────
         const akunOptions = `
             <option value="">-- Pilih No Akun --</option>
-            <?php foreach ($no_akun as $a) : ?>
-                <option value="<?= esc($a->no_akun) ?>"><?= esc($a->no_akun) ?> &mdash; <?= esc($a->nama_akun) ?></option>
+            <?php foreach ($no_akun as $a): ?>
+                <option value="<?= esc($a->no_akun) ?>"><?= esc(
+    $a->no_akun,
+) ?> &mdash; <?= esc($a->nama_akun) ?></option>
             <?php endforeach; ?>
         `;
         const katOptions = `
             <option value="">-- Pilih Kategori --</option>
-            <?php foreach ($kategori_kas as $kat) : ?>
-                <option value="<?= esc($kat->idkategori_kas) ?>"><?= esc($kat->kategori) ?></option>
+            <?php foreach ($kategori_kas as $kat): ?>
+                <option value="<?= esc($kat->idkategori_kas) ?>"><?= esc(
+    $kat->kategori,
+) ?></option>
             <?php endforeach; ?>
         `;
         const bankOptions = `
             <option value="">-- Pilih No Rekening --</option>
-            <?php foreach ($bank as $b) : ?>
-                <option value="<?= (int)$b->idbank ?>"><?= esc($b->nama_bank . ' ' . $b->atas_nama . ' : ' . $b->norek) ?></option>
+            <?php foreach ($bank as $b): ?>
+                <option value="<?= (int) $b->idbank ?>"><?= esc(
+    $b->nama_bank . " " . $b->atas_nama . " : " . $b->norek,
+) ?></option>
             <?php endforeach; ?>
         `;
 
@@ -451,8 +525,8 @@
         // Default input unit dari akun yang login.
         // Admin root (1), Direktur (2), Manager (34), Admin Center (0) boleh pilih
         // semua unit; selain itu unit terkunci mengikuti unit akun yang login.
-        const akunUnit = <?= (int)($akun->ID_UNIT ?? 0) ?>;
-        const akunRole = <?= (int)($akun->ID_JABATAN ?? 0) ?>;
+        const akunUnit = <?= (int) ($akun->ID_UNIT ?? 0) ?>;
+        const akunRole = <?= (int) ($akun->ID_JABATAN ?? 0) ?>;
         const canPickUnit = [0, 1, 2, 34].includes(akunRole);
 
         if (akunUnit > 0) {
