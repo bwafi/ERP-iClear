@@ -119,13 +119,13 @@
                 {
                     data: 'jumlah_real',
                     render: function(data, type, row) {
-                        return '<input type="number" class="form-control form-control-sm jumlah-real" name="data[' + row.barang_idbarang + '][jumlah_real]" value="' + (data || '') + '">';
+                        return '<input type="number" class="form-control form-control-sm jumlah-real" name="data[' + row.barang_idbarang + '][jumlah_real]" value="' + ('') + '">';
                     }
                 },
                 {
                     data: 'jumlah_selisih',
                     render: function(data, type, row) {
-                        return '<input readonly class="form-control form-control-sm jumlah_selisih" name="data[' + row.barang_idbarang + '][jumlah_selisih]" value="' + (data || 0) + '">';
+                        return '<input readonly class="form-control form-control-sm jumlah_selisih" name="data[' + row.barang_idbarang + '][jumlah_selisih]" value="' + (0) + '">';
                     }
                 },
             ],
