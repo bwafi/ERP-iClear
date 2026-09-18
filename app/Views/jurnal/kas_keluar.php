@@ -97,7 +97,7 @@
                         <td colspan="9" class="text-end">Total</td>
                         <td class="text-end" id="sumJumlah">-</td>
 
-                        <?php if ((int) ($akun->ID_JABATAN ?? 0) === 0): ?>
+                        <?php if ((int) ($akun->ID_JABATAN ?? 1) === 1): ?>
                             <td colspan="2"></td>
                         <?php else: ?>
                             <td></td>
