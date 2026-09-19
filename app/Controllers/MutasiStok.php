@@ -163,8 +163,9 @@ class MutasiStok extends BaseController
 
             $produkjumlahKirim = $produk['jumlah_kirim'];
             $produkjumlahTerima = $produk['jumlah_terima'];
-            $produkharga_beli = $produk['harga_beli'];
-            $produkharga_mutasi = $produk['harga_mutasi'];
+            $produkharga_beli = $produk['harga_beli'] ?? 0;
+            $produkharga_jual = $produk['harga_jual'] ?? 0;
+            $produkharga_mutasi = $produk['harga_mutasi'] ?? 0;
 
             $datahpp = $this->HppBarangModel->getById($idbarang);
             $hpp = $datahpp->hpp ?? 0;
@@ -183,7 +184,8 @@ class MutasiStok extends BaseController
                 'terima_idunit' => $terima_idunit,
                 'mutasi_idmutasi' => $idMutasi,
                 'harga_mutasi' => $produkharga_mutasi,
-                'harga_beli' => $produkharga_beli
+                'harga_beli' => $produkharga_beli,
+                'harga_jual' => $produkharga_jual
 
             );
             $result2 = $this->DetailMutasiModel->insert_DetailMutasiStok($data2);

@@ -108,17 +108,17 @@
                             <td>pcs</td>
                             <td>
                                 <?= ($produk['harga_beli'] == 0)
-                                    ? 'Data masuk sebelum update system'
+                                    ? '-'
                                     : number_format($produk['harga_beli'], 0, ',', '.'); ?>
                             </td>
                             <td>
                                 <?= ($produk['harga_jual'] == 0)
-                                    ? 'Data masuk sebelum update system'
+                                    ? '-'
                                     : number_format($produk['harga_jual'], 0, ',', '.'); ?>
                             </td>
                             <td>
                                 <?= ($produk['harga_mutasi'] == 0)
-                                    ? 'Data masuk sebelum update system'
+                                    ? '-'
                                     : number_format($produk['harga_mutasi'], 0, ',', '.'); ?>
                             </td>
 
@@ -126,7 +126,7 @@
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="7" style="text-align:center;">Tidak ada data produk</td>
+                        <td colspan="8" style="text-align:center;">Tidak ada data produk</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
