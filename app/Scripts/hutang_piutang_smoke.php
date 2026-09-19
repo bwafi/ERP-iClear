@@ -87,12 +87,15 @@ try {
         'pihak_tipe' => 'pegawai',
         'pihak_id' => (int) $pegawai->ID_AKUN,
         'tanggal' => date('Y-m-d'),
-        'jatuh_tempo' => null,
+        'jatuh_tempo' => date('Y-m-d', strtotime('+30 days')),
         'total' => 500000,
         'uraian' => 'SMOKE-HP kasbon',
     ], (int) $pegawai->ID_AKUN);
     ok('createPosition kasbon', $r2['success'] && !empty($r2['id']), $r2['message']);
     if (!empty($r2['id'])) { $createdIds[] = $r2['id']; }
+    $kasbonAwal = $r2['id'] ? $svc->getById($r2['id']) : null;
+    $jtKasbon = date('Y-m-01', strtotime('first day of next month'));
+    ok('  kasbon jatuh tempo otomatis tgl 1 bulan depan', $kasbonAwal && $kasbonAwal->jatuh_tempo === $jtKasbon, 'jt=' . ($kasbonAwal->jatuh_tempo ?? 'null') . ' vs ' . $jtKasbon);
 
     // ---------- validasi: overpay ----------
     $over = $svc->bayar($r1['id'], ['jumlah_bayar' => 1200000, 'bayar_tunai' => 1200000]);

@@ -103,7 +103,7 @@ class HutangPiutangService
     // =====================================================================
 
     /**
-     * Kode: HP-<SEG>-<Ymd><unit><seq4>.
+     * Kode: <SEG>-<Ymd><unit><seq4>.
      * SEG: HUT (hutang) / PLG (piutang pelanggan) / KSB (kasbon) / PGW (legacy).
      */
     public function generateKode(string $jenis, string $sumberTipe, ?int $unitId = null): string
@@ -126,7 +126,7 @@ class HutangPiutangService
             $seg = $jenis === 'hutang' ? 'HUT' : 'PUT';
         }
 
-        $prefix = 'HP-' . $seg . '-' . date('Ymd') . ($unitId ?: '0');
+        $prefix = $seg . '-' . date('Ymd') . ($unitId ?: '0');
 
         $last = $this->hp->like('kode', $prefix, 'after')
             ->orderBy('kode', 'DESC')
@@ -221,6 +221,10 @@ class HutangPiutangService
         $total = (int) preg_replace('/[^\d]/', '', (string) ($in['total'] ?? 0));
         $tanggal = $in['tanggal'] ?? date('Y-m-d');
         $jatuhTempo = $in['jatuh_tempo'] ?? null;
+        // Kasbon dipotong dari slip gaji: jatuh tempo otomatis tanggal 1 bulan depan.
+        if ($sumberTipe === self::SUMBER_KASBON) {
+            $jatuhTempo = date('Y-m-01', strtotime('first day of next month'));
+        }
         $unitId = isset($in['unit_id']) ? (int) $in['unit_id'] : (int) session('ID_UNIT');
 
         if (!in_array($jenis, ['hutang', 'piutang'], true)) {
@@ -1065,7 +1069,7 @@ class HutangPiutangService
             return;
         }
 
-        $data['kode'] = 'HP-HUT-PB' . $pembelianId;
+        $data['kode'] = 'HUT-PB' . $pembelianId;
         $data['input_by'] = null;
         $this->hp->insert($data);
     }
@@ -1112,7 +1116,7 @@ class HutangPiutangService
             return;
         }
 
-        $data['kode'] = 'HP-PUT-PG' . $piutangId;
+        $data['kode'] = 'PUT-PG' . $piutangId;
         $data['input_by'] = null;
         $this->hp->insert($data);
     }

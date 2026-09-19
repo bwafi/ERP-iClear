@@ -77,7 +77,7 @@ $labelSumber = [
         </form>
 
         <?php if ($canInput) : ?>
-            <a href="<?= base_url('hutangpiutang/form') ?>" class="btn btn-sm btn-success mt-3">+ Input Hutang / Piutang</a>
+            <button type="button" class="btn btn-sm btn-success mt-3" data-bs-toggle="modal" data-bs-target="#input-modal">+ Input Hutang / Piutang</button>
         <?php endif; ?>
         <?php if (!$isPiutang) : ?>
             <div class="alert alert-info mt-3 mb-0 py-2 small">
@@ -145,6 +145,39 @@ $labelSumber = [
 </div>
 
 <?php if ($canInput) : ?>
+<div class="modal fade" id="input-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Input Hutang / Piutang</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <?= view('hutangpiutang/_input_form', [
+                    'input_types' => $input_types ?? [],
+                    'pelanggan' => $pelanggan ?? [],
+                    'pegawai' => $pegawai ?? [],
+                    'suplier' => $suplier ?? [],
+                    'teknisi' => $teknisi ?? [],
+                    'units' => $units ?? [],
+                    'unit_id' => $unit_id ?? null,
+                    'in_modal' => true,
+                    'default_sumber' => $isPiutang ? 'piutang_pelanggan' : 'jasa_teknisi',
+                ]) ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php if (function_exists('old') && old('sumber_tipe')) : ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var el = document.getElementById('input-modal');
+    if (el && window.bootstrap) { bootstrap.Modal.getOrCreateInstance(el).show(); }
+});
+</script>
+<?php endif; ?>
+
 <div class="modal fade" id="bayar-modal" tabindex="-1">
     <div class="modal-dialog">
         <form class="modal-content" method="post" action="<?= base_url('hutangpiutang/bayar') ?>">

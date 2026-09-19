@@ -266,7 +266,7 @@ class CreateHutangPiutangTables extends Migration
                  nama_pihak, tanggal, jatuh_tempo, uraian, total, total_dibayar, sisa,
                  status, unit_id, deleted, created_at, updated_at)
             SELECT
-                CONCAT('HP-HUT-PB', p.idpembelian),
+                CONCAT('HUT-PB', p.idpembelian),
                 'hutang', 'pembelian', p.idpembelian, 1, 'suplier', p.suplier_id_suplier,
                 COALESCE(NULLIF(s.nama_suplier, ''), '-'),
                 p.tanggal_masuk, p.jatuh_tempo, p.no_nota_supplier,
@@ -287,7 +287,7 @@ class CreateHutangPiutangTables extends Migration
                  nama_pihak, tanggal, jatuh_tempo, uraian, total, total_dibayar, sisa,
                  status, unit_id, deleted, created_at, updated_at)
             SELECT
-                CONCAT('HP-PUT-PG', pt.idpiutang),
+                CONCAT('PUT-PG', pt.idpiutang),
                 'piutang', 'piutang_legacy', pt.idpiutang, 1, 'pegawai', pt.pegawai_idpegawai,
                 COALESCE(NULLIF(a.NAMA_AKUN, ''), '-'),
                 pt.tanggal, pt.jatuh_tempo, pt.kode_piutang,
