@@ -359,6 +359,29 @@ class Payroll extends BaseController
             'status'    => 'dibayar',
         ]);
 
-        return redirect()->back()->with('sukses', 'Payroll ditandai sudah dibayar (' . $paidDate . ').');
+        // Potong penuh sisa kasbon pegawai (idempotent per payroll).
+        $potonganKasbon = 0;
+        try {
+            $service = new \App\Services\Finance\HutangPiutangService();
+            $settle = $service->settleKasbonFromPayroll($id, (int) $row->pegawai_id, (int) $row->unit_id, (int) session('ID_AKUN'));
+            if (!empty($settle['success'])) {
+                $potonganKasbon = (int) ($settle['potongan'] ?? 0);
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Settlement kasbon payroll #' . $id . ' gagal: ' . $e->getMessage());
+        }
+
+        $totalBersih = (int) ($row->total ?? 0) - $potonganKasbon;
+        $model->update($id, [
+            'potongan_kasbon' => $potonganKasbon,
+            'total_bersih'    => $totalBersih,
+        ]);
+
+        $pesan = 'Payroll ditandai sudah dibayar (' . $paidDate . ').';
+        if ($potonganKasbon > 0) {
+            $pesan .= ' Potongan kasbon: Rp ' . number_format($potonganKasbon, 0, ',', '.') . '.';
+        }
+
+        return redirect()->back()->with('sukses', $pesan);
     }
 }

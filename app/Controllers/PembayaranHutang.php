@@ -198,6 +198,11 @@ class PembayaranHutang extends BaseController
         );
 
         $this->PembelianModel->update($idpembelian, $data2);
+        try {
+            (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian((int) $idpembelian);
+        } catch (\Throwable $e) {
+            log_message('error', 'syncFromPembelian #' . $idpembelian . ' gagal: ' . $e->getMessage());
+        }
         session()->setFlashdata('sukses', 'Data Berhasil Diupdate');
         return redirect()->to(base_url('daftar_tagihan'));
     }

@@ -2088,6 +2088,13 @@ class PenilaianKPI extends BaseController
         // Maka gaji yang dikirim = total_gaji - lembur + bon (basis tanpa bon/lembur).
         $gaji = (float) $result['total_gaji'] - (float) $result['lembur'] + (float) $result['bon'];
 
+        // Kasbon aktif pegawai (modul Hutang Piutang) — ditampilkan sebagai potongan.
+        try {
+            $kasbon = (new \App\Services\Finance\HutangPiutangService())->getSisaKasbonPegawai((int) $idakun);
+        } catch (\Throwable $e) {
+            $kasbon = 0;
+        }
+
         return view('cetak/slip_gaji', [
             'pegawai'              => $kpi['karyawan'],
             'jabatan'              => $namajabatan,
@@ -2099,6 +2106,7 @@ class PenilaianKPI extends BaseController
             'tunjangan_penempatan' => $result['placement_allowance'],
             'gaji'                 => $gaji,
             'bon'                  => $bon,
+            'kasbon'               => $kasbon,
             'lembur'               => $lembur,
             'bulan'                => $bulan,
             'tahun'                => $tahun,

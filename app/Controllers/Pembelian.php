@@ -374,6 +374,14 @@ class Pembelian extends BaseController
             ];
         }
 
+        // Sinkronkan baris projection hutang supplier (best-effort, tidak
+        // menggagalkan pembelian bila modul hutang piutang bermasalah).
+        try {
+            (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian((int) $idPembelian);
+        } catch (\Throwable $e) {
+            log_message('error', 'syncFromPembelian #' . $idPembelian . ' gagal: ' . $e->getMessage());
+        }
+
         // insert jurnal pembelian
         foreach ($jurnal as $j) {
             $this->JurnalModel->insertJurnal(

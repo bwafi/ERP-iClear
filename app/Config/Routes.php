@@ -529,6 +529,18 @@ $routes->post('export_daftar_piutang', 'Piutang::export_daftar_piutang',  ['filt
 $routes->get('umur_piutang', 'Piutang::umur_piutang',  ['filter => auth']);
 $routes->post('export_aging_piutang', 'Piutang::export_aging_piutang',  ['filter => auth']);
 
+//Hutang Piutang (modul terpusat)
+$routes->get('hutangpiutang/dashboard', 'HutangPiutang::dashboard', ['filter' => 'auth']);
+$routes->get('hutangpiutang/piutang', 'HutangPiutang::piutang', ['filter' => 'auth']);
+$routes->get('hutangpiutang/hutang', 'HutangPiutang::hutang', ['filter' => 'auth']);
+$routes->get('hutangpiutang/riwayat', 'HutangPiutang::riwayat', ['filter' => 'auth']);
+$routes->get('hutangpiutang/form', 'HutangPiutang::form', ['filter' => 'auth']);
+$routes->post('hutangpiutang/store', 'HutangPiutang::store', ['filter' => 'auth']);
+$routes->get('hutangpiutang/detail/(:num)', 'HutangPiutang::detail/$1', ['filter' => 'auth']);
+$routes->post('hutangpiutang/bayar', 'HutangPiutang::bayar', ['filter' => 'auth']);
+$routes->post('hutangpiutang/kompensasi', 'HutangPiutang::kompensasi', ['filter' => 'auth']);
+$routes->get('hutangpiutang/cetak/(:num)', 'HutangPiutang::cetak/$1', ['filter' => 'auth']);
+
 $routes->get('tutup_kasir', 'TutupKasir::index',  ['filter => auth']);
 $routes->get('cetak-tutup-kasir/(:num)', 'TutupKasir::cetak_tutup_kasir/$1');
 $routes->post('tutupkasir/tutup', 'TutupKasir::tutup');

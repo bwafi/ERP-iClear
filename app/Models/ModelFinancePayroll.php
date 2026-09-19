@@ -16,6 +16,8 @@ class ModelFinancePayroll extends Model
         'paid_date',
         'status',
         'total',
+        'potongan_kasbon',
+        'total_bersih',
         'notes',
         'created_by',
     ];
