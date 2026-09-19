@@ -961,12 +961,12 @@ class TutupKasir extends BaseController
         $totalSop = $aktual_sop->total ?? 0;
 
         //persentas nilai
-        $batas1 = $batas_awal[$unit];
-        $batas2 = $batas_kedua[$unit];
-        $batas3 = $batas_ketiga[$unit];
-        $batas4 = $batas_keempat[$unit];
+        $batas1 = $batas_awal[$unit] ?? $batas_awal[1];
+        $batas2 = $batas_kedua[$unit] ?? $batas_kedua[1];
+        $batas3 = $batas_ketiga[$unit] ?? $batas_ketiga[1];
+        $batas4 = $batas_keempat[$unit] ?? $batas_keempat[1];
 
-        $targetOmset = $target_omset[$unit];
+        $targetOmset = $target_omset[$unit] ?? $target_omset[1];
 
         $aktual_operasional = 0;
 
