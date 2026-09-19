@@ -19,6 +19,12 @@ $routes->get('dashboard/keuangan', 'DashboardKeuangan::index', ['filter' => 'aut
 $routes->get('dashboard/hrd', 'DashboardHRD::index', ['filter' => 'auth']);
 $routes->get('dashboard/laba-rugi', 'DashboardLabaRugi::index', ['filter' => 'auth']);
 
+//Dashboard Finance + KPI Finance (Fase 1)
+$routes->get('dashboard/finance', 'DashboardFinance::index', ['filter' => 'auth']);
+$routes->post('finance/entry/omzet-sheet', 'DashboardFinance::entryOmzetSheet', ['filter' => 'auth']);
+$routes->post('finance/entry/manual', 'DashboardFinance::entryManual', ['filter' => 'auth']);
+$routes->post('finance/entry/payroll', 'DashboardFinance::entryPayroll', ['filter' => 'auth']);
+
 
 
 //Datamaster
@@ -432,6 +438,7 @@ $routes->post('update_payroll2', 'Payroll::update', ['filter' => 'auth']);
 $routes->post('delete_payroll2', 'Payroll::delete', ['filter' => 'auth']);
 $routes->post('lock_payroll2', 'Payroll::lockPayroll', ['filter' => 'auth']);
 $routes->post('unlock_payroll2', 'Payroll::unlockPayroll', ['filter' => 'auth']);
+$routes->post('payroll2/bayar', 'Payroll::bayar', ['filter' => 'auth']);
 
 //penilaian kpi
 $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);
