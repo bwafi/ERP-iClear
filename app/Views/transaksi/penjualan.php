@@ -91,6 +91,30 @@
                         Pilih Pelanggan
                     </button>
                 </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label for="form_provinsi" class="form-label">Provinsi</label>
+                    <select id="form_provinsi" name="domisili_provinsi"
+                        class="js-domisili form-control form-select" style="width: 100%;">
+                        <option value="">-- Pilih / Cari Provinsi --</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="form_kabupaten" class="form-label">Kabupaten</label>
+                    <select id="form_kabupaten" name="domisili_kabupaten"
+                        class="js-domisili form-control form-select" style="width: 100%;">
+                        <option value="">-- Pilih / Cari Kabupaten --</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="form_kecamatan" class="form-label">Kecamatan</label>
+                    <select id="form_kecamatan" name="domisili_kecamatan"
+                        class="js-domisili form-control form-select" style="width: 100%;">
+                        <option value="">-- Pilih / Cari Kecamatan --</option>
+                    </select>
+                </div>
 
                 <!-- Button Trigger Modal -->
 
@@ -378,7 +402,10 @@
                                         class="select2 form-control" style="width: 100%;">
                                         <option disabled selected>Select</option>
                                         <?php foreach ($pelanggan as $p): ?>
-                                            <option value="<?= htmlspecialchars($p->id_pelanggan) ?>">
+                                            <option value="<?= htmlspecialchars($p->id_pelanggan) ?>"
+                                                data-provinsi="<?= htmlspecialchars($p->provinsi ?? '') ?>"
+                                                data-kabupaten="<?= htmlspecialchars($p->kabupaten ?? '') ?>"
+                                                data-kecamatan="<?= htmlspecialchars($p->kecamatan ?? '') ?>">
                                                 <?= htmlspecialchars($p->nama) ?> : <?= htmlspecialchars($p->no_hp) ?>
                                             </option>
                                         <?php endforeach; ?>
@@ -667,22 +694,39 @@
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
-                                <label>nik</label>
-                                <input type="text" class="form-control" name="nik" required>
-                            </div>
-                            <div class="mb-3">
                                 <label>Nama</label>
                                 <input type="text" class="form-control" name="nama" required>
-                            </div>
-                            <div class="mb-3">
-                                <label>Alamat</label>
-                                <input type="text" class="form-control" name="alamat" required>
                             </div>
 
 
                             <div class="mb-3">
                                 <label>Nomor HP</label>
                                 <input type="text" class="form-control" name="no_hp" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label>Provinsi</label>
+                                <select name="provinsi" id="modal_provinsi"
+                                    class="js-domisili form-control form-select" style="width: 100%;" required>
+                                    <option value="">-- Pilih / Cari Provinsi --</option>
+                                    <?php foreach ($provinsi as $prov): ?>
+                                        <option value="<?= esc($prov->name) ?>"><?= esc($prov->name) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label>Kabupaten</label>
+                                <select name="kabupaten" id="modal_kabupaten"
+                                    class="js-domisili form-control form-select" style="width: 100%;" required>
+                                    <option value="">-- Pilih / Cari Kabupaten --</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label>Kecamatan</label>
+                                <select name="kecamatan" id="modal_kecamatan"
+                                    class="js-domisili form-control form-select" style="width: 100%;" required>
+                                    <option value="">-- Pilih / Cari Kecamatan --</option>
+                                </select>
                             </div>
                             
                             
@@ -713,46 +757,110 @@
                     dropdownParent: $('#pelangganModal')
                 });
 
-                $('#modalTambahPelanggan .select2').select2({
-                    dropdownParent: $('#modalTambahPelanggan'),
-                    width: '100%'
-                });
+                // Select2 searchable untuk domisili di Form Utama
+                $('#form_provinsi, #form_kabupaten, #form_kecamatan').select2({ width: '100%' });
 
-
-                $('#provinsi').on('change', function() {
-                    let provinsi = $(this).val();
-
-                    $('#kabupaten').html('<option value="">Loading...</option>').trigger('change');
-                    $('#kecamatan').html('<option value="">-- Pilih Kecamatan --</option>').trigger('change');
-
-                    if (provinsi !== '') {
-                        $.getJSON("<?= base_url('region/kabupaten') ?>/" + encodeURIComponent(provinsi), function(
-                            data) {
-                            let opt = '<option value="">-- Pilih Kabupaten --</option>';
-                            $.each(data, function(i, v) {
-                                opt += `<option value="${v.name}">${v.name}</option>`;
-                            });
-                            $('#kabupaten').html(opt);
+                // Inisialisasi Select2 domisili di dalam modal Tambah Pelanggan
+                $('#modalTambahPelanggan').on('shown.bs.modal', function() {
+                    $('#modalTambahPelanggan .js-domisili').each(function() {
+                        $(this).select2({
+                            dropdownParent: $('#modalTambahPelanggan'),
+                            width: '100%'
                         });
-                    }
+                    });
                 });
 
-                $('#kabupaten').on('change', function() {
-                    let kabupaten = $(this).val();
+                $('#modalTambahPelanggan').on('hidden.bs.modal', function() {
+                    $('#modalTambahPelanggan .js-domisili').select2('destroy');
+                    $('#modalTambahPelanggan select').val('').trigger('change');
+                });
 
-                    $('#kecamatan').html('<option value="">Loading...</option>').trigger('change');
+                function pushOption($sel, val) {
+                    if (!val) return;
+                    const escaped = String(val).replace(/"/g, '&quot;');
+                    if (!$sel.find('option[value="' + escaped + '"]').length) {
+                        $sel.append($('<option>', { value: val, text: val }));
+                    }
+                }
 
-                    if (kabupaten !== '') {
-                        $.getJSON("<?= base_url('region/kecamatan') ?>/" + encodeURIComponent(kabupaten), function(
-                            data) {
-                            let opt = '<option value="">-- Pilih Kecamatan --</option>';
-                            $.each(data, function(i, v) {
-                                opt += `<option value="${v.name}">${v.name}</option>`;
+                function setFormDomisili(d) {
+                    if (!d) return;
+                    pushOption($('#form_provinsi'), d.provinsi);
+                    pushOption($('#form_kabupaten'), d.kabupaten);
+                    pushOption($('#form_kecamatan'), d.kecamatan);
+                    $('#form_provinsi').data('desired', d.provinsi || '');
+                    $('#form_kabupaten').data('desired', d.kabupaten || '');
+                    $('#form_kecamatan').data('desired', d.kecamatan || '');
+                    $('#form_provinsi').val(d.provinsi || '').trigger('change');
+                    $('#form_kabupaten').val(d.kabupaten || '').trigger('change');
+                    $('#form_kecamatan').val(d.kecamatan || '').trigger('change');
+                }
+
+                function bindCascade($provSel, $kabSel, $kecSel) {
+                    $provSel.on('change', function() {
+                        let provinsi = $(this).val();
+
+                        $kabSel.html('<option value="">Loading...</option>').trigger('change');
+                        $kecSel.html('<option value="">-- Pilih Kecamatan --</option>').trigger('change');
+
+                        if (provinsi !== '') {
+                            $.getJSON("<?= base_url('region/kabupaten') ?>/" + encodeURIComponent(provinsi), function(
+                                data) {
+                                let opt = '<option value="">-- Pilih Kabupaten --</option>';
+                                $.each(data, function(i, v) {
+                                    opt += `<option value="${v.name}">${v.name}</option>`;
+                                });
+                                $kabSel.html(opt).trigger('change');
+                                const desiredKab = $kabSel.data('desired');
+                                if (desiredKab) {
+                                    pushOption($kabSel, desiredKab);
+                                    $kabSel.val(desiredKab).trigger('change');
+                                }
                             });
-                            $('#kecamatan').html(opt);
-                        });
+                        }
+                    });
+
+                    $kabSel.on('change', function() {
+                        let kabupaten = $(this).val();
+
+                        $kecSel.html('<option value="">Loading...</option>').trigger('change');
+
+                        if (kabupaten !== '') {
+                            $.getJSON("<?= base_url('region/kecamatan') ?>/" + encodeURIComponent(kabupaten), function(
+                                data) {
+                                let opt = '<option value="">-- Pilih Kecamatan --</option>';
+                                $.each(data, function(i, v) {
+                                    opt += `<option value="${v.name}">${v.name}</option>`;
+                                });
+                                $kecSel.html(opt).trigger('change');
+                                const desiredKec = $kecSel.data('desired');
+                                if (desiredKec) {
+                                    pushOption($kecSel, desiredKec);
+                                    $kecSel.val(desiredKec).trigger('change');
+                                }
+                            });
+                        }
+                    });
+                }
+
+                bindCascade($('#form_provinsi'), $('#form_kabupaten'), $('#form_kecamatan'));
+                bindCascade($('#modal_provinsi'), $('#modal_kabupaten'), $('#modal_kecamatan'));
+
+                function domisiliFromOption(selectedData, selectedOption) {
+                    let d = selectedData ? {
+                        provinsi: selectedData.provinsi,
+                        kabupaten: selectedData.kabupaten,
+                        kecamatan: selectedData.kecamatan
+                    } : {};
+                    if ((!d.provinsi && !d.kabupaten && !d.kecamatan) && selectedOption) {
+                        d = {
+                            provinsi: selectedOption.getAttribute('data-provinsi'),
+                            kabupaten: selectedOption.getAttribute('data-kabupaten'),
+                            kecamatan: selectedOption.getAttribute('data-kecamatan')
+                        };
                     }
-                });
+                    return d;
+                }
 
 
                 // ✅ Fix: close pelangganModal before opening modalTambah
@@ -779,6 +887,8 @@
                     document.getElementById('pelanggan-container').style.display = 'block';
                     document.getElementById('pelanggan').value = selectedOption.text;
 
+                    setFormDomisili(domisiliFromOption(null, selectedOption));
+
                     document.querySelector('#pelangganModal .btn-close').click();
                 });
 
@@ -803,7 +913,14 @@
                                     true,
                                     true
                                 );
+                                newOption.setAttribute('data-provinsi', response.data.provinsi || '');
+                                newOption.setAttribute('data-kabupaten', response.data.kabupaten || '');
+                                newOption.setAttribute('data-kecamatan', response.data.kecamatan || '');
                                 $('#pelanggan-select').append(newOption).trigger('change');
+                                $('#pelanggan').val(response.data.nama + ' : ' + response.data.no_hp);
+
+                                document.getElementById('pelanggan-container').style.display = 'block';
+                                setFormDomisili(response.data);
                                 alert('Pelanggan berhasil ditambahkan');
 
                                 // ✅ Reopen pelanggan modal automatically

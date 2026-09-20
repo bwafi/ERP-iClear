@@ -1,3 +1,22 @@
+<style>
+    /* Perbaiki posisi panah Select2 domisili agar berada di dalam field */
+    select.js-domisili+.select2-container .select2-selection--single {
+        height: 38px;
+    }
+
+    select.js-domisili+.select2-container .select2-selection--single .select2-selection__rendered {
+        line-height: 38px;
+    }
+
+    select.js-domisili+.select2-container .select2-selection--single .select2-selection__arrow {
+        top: 50%;
+        right: 12px;
+        height: 38px;
+        width: auto;
+        transform: translateY(-20%);
+    }
+</style>
+
 <div id="pelanggan-section" class="mt-3 mb-3" style="display: flex; justify-content: right;">
     <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#pelangganModal"
         style="display: inline-flex; align-items: center; margin-bottom: 4px;">
@@ -16,10 +35,10 @@
         <div class="col-md-12">
             <label class="form-label">Nama Staff</label>
 
-            <input type="text" class="form-control" 
+            <input type="text" class="form-control"
                 value="<?= $akun->NAMA_AKUN ?>" readonly>
 
-            <input type="hidden" name="id_akun" 
+            <input type="hidden" name="id_akun"
                 value="<?= $akun->ID_AKUN ?>">
         </div>
 
@@ -28,20 +47,20 @@
         <!--                <select name="unit" id="unitFilter" class="form-select"-->
         <!--                    onchange="filterKategori()">-->
         <!--                    <option value="">Semua Unit</option>-->
-                             <?php
-                            // $selectedUnit = session('ID_UNIT');
-                            // foreach ($unit as $row) {
-                            //     $selected = ($row->idunit == $selectedUnit) ? 'selected' : '';
-                            //     echo '<option value="' . esc($row->idunit) . '" ' . $selected . '>' . esc($row->NAMA_UNIT) . '</option>';
-                            // }
-                             ?>
+        <?php
+        // $selectedUnit = session('ID_UNIT');
+        // foreach ($unit as $row) {
+        //     $selected = ($row->idunit == $selectedUnit) ? 'selected' : '';
+        //     echo '<option value="' . esc($row->idunit) . '" ' . $selected . '>' . esc($row->NAMA_UNIT) . '</option>';
+        // }
+        ?>
         <!--                </select>-->
         <!--</div>-->
-        
+
         <div class="col-md-6">
             <label class="form-label">Nama Pelanggan</label>
 
-            <input type="text" class="form-control" id="nama_pelanggan" value="<?php echo @$old_service_pelanggan->nama ?>">
+            <input type="text" class="form-control" id="nama_pelanggan" value="<?php echo @$old_service_pelanggan->nama ?>" readonly>
         </div>
         <!-- <div class="col-md-6">
             <label class="form-label">Kode Faktur</label>
@@ -51,7 +70,39 @@
         <div class="col-md-6">
             <label class="form-label">No Hp</label>
             <input type="text" class="form-control" value="<?php echo @$old_service_pelanggan->no_hp ?>" name="no_hp"
-                id="no_hp">
+                id="no_hp" readonly>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Domisili Provinsi</label>
+            <select class="form-control form-select js-domisili" id="form_provinsi" name="domisili_provinsi" disabled>
+                <option value="">-- Pilih / Cari Provinsi --</option>
+                <?php foreach ($provinsi as $p): ?>
+                    <option value="<?= esc($p->name) ?>" <?= isset($old_service_pelanggan) && $old_service_pelanggan && $old_service_pelanggan->provinsi == $p->name ? 'selected' : '' ?>>
+                        <?= esc($p->name) ?>
+                    </option>
+                <?php endforeach ?>
+            </select>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Domisili Kabupaten</label>
+            <select class="form-control form-select js-domisili" id="form_kabupaten" name="domisili_kabupaten" disabled>
+                <option value="">-- Pilih / Cari Kabupaten --</option>
+                <?php if (isset($old_service_pelanggan) && $old_service_pelanggan && @$old_service_pelanggan->kabupaten): ?>
+                    <option value="<?= esc($old_service_pelanggan->kabupaten) ?>" selected><?= esc($old_service_pelanggan->kabupaten) ?></option>
+                <?php endif ?>
+            </select>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Domisili Kecamatan</label>
+            <select class="form-control form-select js-domisili" id="form_kecamatan" name="domisili_kecamatan" disabled>
+                <option value="">-- Pilih / Cari Kecamatan --</option>
+                <?php if (isset($old_service_pelanggan) && $old_service_pelanggan && @$old_service_pelanggan->kecamatan): ?>
+                    <option value="<?= esc($old_service_pelanggan->kecamatan) ?>" selected><?= esc($old_service_pelanggan->kecamatan) ?></option>
+                <?php endif ?>
+            </select>
         </div>
 
         <div class="col-md-6">
@@ -168,16 +219,34 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="nik" class="form-label">NIK</label>
-                        <input type="text" id="nik" name="nik" class="form-control" required />
-                    </div>
-                    <div class="mb-3">
                         <label for="nama" class="form-label">Nama</label>
                         <input type="text" id="nama" name="nama" class="form-control" required />
                     </div>
                     <div class="mb-3">
                         <label for="no_hp" class="form-label">No HP</label>
                         <input type="text" id="no_hp" name="no_hp" class="form-control" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="domisili_provinsi" class="form-label">Domisili Provinsi</label>
+                        <select id="domisili_provinsi" name="provinsi" class="form-select js-domisili" required>
+                            <option value="">-- Pilih / Cari Provinsi --</option>
+                            <?php foreach ($provinsi as $p): ?>
+                                <option value="<?= esc($p->name) ?>"><?= esc($p->name) ?></option>
+                            <?php endforeach ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="domisili_kabupaten" class="form-label">Domisili Kabupaten</label>
+                        <select id="domisili_kabupaten" name="kabupaten" class="form-select js-domisili" required>
+                            <option value="">-- Pilih / Cari Kabupaten --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="domisili_kecamatan" class="form-label">Domisili Kecamatan</label>
+                        <select id="domisili_kecamatan" name="kecamatan" class="form-select js-domisili" required>
+                            <option value="">-- Pilih / Cari Kecamatan --</option>
+                        </select>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -194,11 +263,54 @@
         const pelangganModal = new bootstrap.Modal(document.getElementById('pelangganModal'));
         const modalTambah = new bootstrap.Modal(document.getElementById('modalTambahPelanggan'));
 
-        function setSelectedCustomer(id, nama, noHp) {
+        // Select2 searchable untuk input data pelanggan (Form Utama)
+        $('#form_provinsi, #form_kabupaten, #form_kecamatan').select2({
+            width: '100%'
+        });
+
+        function pushOption($sel, val) {
+            if (!val) return;
+            const escaped = String(val).replace(/"/g, '&quot;');
+            if (!$sel.find('option[value="' + escaped + '"]').length) {
+                $sel.append($('<option>', {
+                    value: val,
+                    text: val
+                }));
+            }
+        }
+
+        function setSelectedCustomer(id, nama, noHp, domisiliData) {
             if (!id) return;
             document.getElementById('idpela').value = id;
             document.getElementById('nama_pelanggan').value = nama || '';
             document.getElementById('no_hp').value = noHp || '';
+
+            const d = domisiliData || {};
+            pushOption($('#form_provinsi'), d.provinsi);
+            pushOption($('#form_kabupaten'), d.kabupaten);
+            pushOption($('#form_kecamatan'), d.kecamatan);
+            $('#form_provinsi').data('desired', d.provinsi || '');
+            $('#form_kabupaten').data('desired', d.kabupaten || '');
+            $('#form_kecamatan').data('desired', d.kecamatan || '');
+            $('#form_provinsi').val(d.provinsi || '').trigger('change');
+            $('#form_kabupaten').val(d.kabupaten || '').trigger('change');
+            $('#form_kecamatan').val(d.kecamatan || '').trigger('change');
+        }
+
+        function domisiliFromOption(selectedData, selectedOption) {
+            let d = selectedData ? {
+                provinsi: selectedData.provinsi,
+                kabupaten: selectedData.kabupaten,
+                kecamatan: selectedData.kecamatan
+            } : {};
+            if ((!d.provinsi && !d.kabupaten && !d.kecamatan) && selectedOption) {
+                d = {
+                    provinsi: selectedOption.getAttribute('data-provinsi'),
+                    kabupaten: selectedOption.getAttribute('data-kabupaten'),
+                    kecamatan: selectedOption.getAttribute('data-kecamatan')
+                };
+            }
+            return d;
         }
 
         // Inisialisasi Select2 dengan AJAX
@@ -224,7 +336,10 @@
                                 id: item.id_pelanggan,
                                 text: item.nama + ' (' + item.no_hp + ')',
                                 nama: item.nama,
-                                no_hp: item.no_hp
+                                no_hp: item.no_hp,
+                                provinsi: item.provinsi,
+                                kabupaten: item.kabupaten,
+                                kecamatan: item.kecamatan
                             };
                         })
                     };
@@ -237,18 +352,7 @@
         $('#pelanggan-select').on('select2:select', function(e) {
             const data = e.params.data;
             if (data && data.id) {
-                let nama = data.nama || '';
-                let noHp = data.no_hp || '';
-                if (!nama && data.text) {
-                    const parts = data.text.split(' (');
-                    if (parts.length >= 2) {
-                        nama = parts[0].trim();
-                        noHp = parts[1].replace(')', '').trim();
-                    } else {
-                        nama = data.text;
-                    }
-                }
-                setSelectedCustomer(data.id, nama, noHp);
+                setSelectedCustomer(data.id, data.nama, data.no_hp, data);
             }
         });
 
@@ -272,6 +376,7 @@
 
             let nama = (selectedData ? selectedData.nama : '') || (selectedOption ? selectedOption.getAttribute('data-nama') : '') || '';
             let noHp = (selectedData ? selectedData.no_hp : '') || (selectedOption ? selectedOption.getAttribute('data-nohp') : '') || '';
+            const domisiliData = domisiliFromOption(selectedData, selectedOption);
 
             if (!nama && selectedData && selectedData.text) {
                 const parts = selectedData.text.split(' (');
@@ -283,7 +388,7 @@
                 }
             }
 
-            setSelectedCustomer(id, nama, noHp);
+            setSelectedCustomer(id, nama, noHp, domisiliData);
             pelangganModal.hide();
         });
 
@@ -310,12 +415,20 @@
                         );
                         $(newOption).attr('data-nama', response.data.nama);
                         $(newOption).attr('data-nohp', response.data.no_hp);
-                        
+                        $(newOption).attr('data-provinsi', response.data.provinsi || '');
+                        $(newOption).attr('data-kabupaten', response.data.kabupaten || '');
+                        $(newOption).attr('data-kecamatan', response.data.kecamatan || '');
+
                         $('#pelanggan-select').append(newOption).trigger('change');
-                        
+
                         // Set langsung ke form input
-                        setSelectedCustomer(response.data.id_pelanggan, response.data.nama, response.data.no_hp);
-                        
+                        setSelectedCustomer(
+                            response.data.id_pelanggan,
+                            response.data.nama,
+                            response.data.no_hp,
+                            response.data
+                        );
+
                         pelangganModal.hide();
                         alert('Pelanggan berhasil ditambahkan dan dipilih');
                     } else {
@@ -326,6 +439,98 @@
                     alert('Terjadi kesalahan saat menyimpan data.');
                 }
             });
+        });
+
+        $('#modalTambahPelanggan').on('shown.bs.modal', function() {
+            $('#modalTambahPelanggan select.js-domisili').each(function() {
+                $(this).select2({
+                    dropdownParent: $('#modalTambahPelanggan'),
+                    width: '100%'
+                });
+            });
+        });
+
+        $('#modalTambahPelanggan').on('hidden.bs.modal', function() {
+            $('#modalTambahPelanggan select.js-domisili').select2('destroy');
+            $('#modalTambahPelanggan select').val('').trigger('change');
+        });
+
+        // Cascade Domisili (Modal Tambah)
+        $('#domisili_provinsi').on('change', function() {
+            let provinsi = $(this).val();
+
+            $('#domisili_kabupaten').html('<option value="">Loading...</option>').trigger('change');
+            $('#domisili_kecamatan').html('<option value="">-- Pilih Kecamatan --</option>').trigger('change');
+
+            if (provinsi !== '') {
+                $.getJSON("<?= base_url('region/kabupaten') ?>/" + encodeURIComponent(provinsi), function(data) {
+                    let opt = '<option value="">-- Pilih Kabupaten --</option>';
+                    $.each(data, function(i, v) {
+                        opt += `<option value="${v.name}">${v.name}</option>`;
+                    });
+                    $('#domisili_kabupaten').html(opt).trigger('change');
+                });
+            }
+        });
+
+        $('#domisili_kabupaten').on('change', function() {
+            let kabupaten = $(this).val();
+
+            $('#domisili_kecamatan').html('<option value="">Loading...</option>').trigger('change');
+
+            if (kabupaten !== '') {
+                $.getJSON("<?= base_url('region/kecamatan') ?>/" + encodeURIComponent(kabupaten), function(data) {
+                    let opt = '<option value="">-- Pilih Kecamatan --</option>';
+                    $.each(data, function(i, v) {
+                        opt += `<option value="${v.name}">${v.name}</option>`;
+                    });
+                    $('#domisili_kecamatan').html(opt).trigger('change');
+                });
+            }
+        });
+
+        // Cascade Domisili (Form Utama)
+        $('#form_provinsi').on('change', function() {
+            let provinsi = $(this).val();
+
+            $('#form_kabupaten').html('<option value="">Loading...</option>').trigger('change');
+            $('#form_kecamatan').html('<option value="">-- Pilih Kecamatan --</option>').trigger('change');
+
+            if (provinsi !== '') {
+                $.getJSON("<?= base_url('region/kabupaten') ?>/" + encodeURIComponent(provinsi), function(data) {
+                    let opt = '<option value="">-- Pilih Kabupaten --</option>';
+                    $.each(data, function(i, v) {
+                        opt += `<option value="${v.name}">${v.name}</option>`;
+                    });
+                    $('#form_kabupaten').html(opt).trigger('change');
+                    const desiredKab = $('#form_kabupaten').data('desired');
+                    if (desiredKab) {
+                        pushOption($('#form_kabupaten'), desiredKab);
+                        $('#form_kabupaten').val(desiredKab).trigger('change');
+                    }
+                });
+            }
+        });
+
+        $('#form_kabupaten').on('change', function() {
+            let kabupaten = $(this).val();
+
+            $('#form_kecamatan').html('<option value="">Loading...</option>').trigger('change');
+
+            if (kabupaten !== '') {
+                $.getJSON("<?= base_url('region/kecamatan') ?>/" + encodeURIComponent(kabupaten), function(data) {
+                    let opt = '<option value="">-- Pilih Kecamatan --</option>';
+                    $.each(data, function(i, v) {
+                        opt += `<option value="${v.name}">${v.name}</option>`;
+                    });
+                    $('#form_kecamatan').html(opt).trigger('change');
+                    const desiredKec = $('#form_kecamatan').data('desired');
+                    if (desiredKec) {
+                        pushOption($('#form_kecamatan'), desiredKec);
+                        $('#form_kecamatan').val(desiredKec).trigger('change');
+                    }
+                });
+            }
         });
     });
 </script>
@@ -356,6 +561,12 @@
                 // Atau bisa pakai SweetAlert jika kamu pakai
                 return false;
             }
+        });
+
+        // Domisili di form utama bersifat read-only (auto dari pelanggan),
+        // re-enable sesaat saat submit agar nilainya tetap terkirim ke backend
+        $('form[action*="pelanggan_service"]').on('submit', function() {
+            $('#form_provinsi, #form_kabupaten, #form_kecamatan').prop('disabled', false);
         });
     });
 </script>

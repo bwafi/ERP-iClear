@@ -25887,7 +25887,7 @@ body
   .select2-container--classic
   .select2-selection--single
   .select2-selection__arrow {
-  top: -2px;
+  top: 24px;
   right: 20px;
   width: auto;
 }

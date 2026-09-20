@@ -7,7 +7,7 @@ use CodeIgniter\Router\RouteCollection;
  */
 $routes->get('/', 'Home::index', ['filter' => 'auth']);
 $routes->get('/template', 'Template::index');
-$routes->get('/Login', 'Auth::login');
+$routes->get('/login', 'Auth::login');
 $routes->post('/proses_login', 'Auth::proses_login');
 $routes->get('/Logout', 'Auth::proses_logout');
 $routes->post('auth/changePassword', 'Auth::changePassword');

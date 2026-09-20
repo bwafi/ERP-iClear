@@ -25,6 +25,7 @@ use App\Models\ModelBank;
 use App\Models\ModelDetailPenjualan;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
+use App\Models\ModelRegion;
 
 class Riwayat_Service extends BaseController
 
@@ -47,6 +48,7 @@ class Riwayat_Service extends BaseController
     protected $PembayaranBankModel;
     protected $PenjualanModel;
     protected $DetailPenjualanModel;
+    protected $RegionModel;
 
 
 
@@ -68,6 +70,7 @@ class Riwayat_Service extends BaseController
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
         $this->PenjualanModel = new ModelPenjualan();
+        $this->RegionModel = new ModelRegion();
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
     }
 
@@ -165,6 +168,7 @@ class Riwayat_Service extends BaseController
             'lama_garansi' => $lama_garansi ? (int)$lama_garansi->garansi_hari : null,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'sparepart' => $sparepart,
+            'provinsi' => $this->RegionModel->getProvinces(),
             'body'  => 'riwayat/table/service'
         );
         return view('template', $data);
@@ -197,6 +201,16 @@ class Riwayat_Service extends BaseController
 
         );
         $this->ServiceModel->updateService($idservice, $data);
+
+        $service = $this->ServiceModel->find($idservice);
+        if ($service && !empty($service->pelanggan_id_pelanggan)) {
+            $this->PelangganModel->update($service->pelanggan_id_pelanggan, [
+                'provinsi' => $this->request->getPost('domisili_provinsi'),
+                'kabupaten' => $this->request->getPost('domisili_kabupaten'),
+                'kecamatan' => $this->request->getPost('domisili_kecamatan'),
+            ]);
+        }
+
         return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=kerusakan'))->with('success', 'Data kerusakan berhasil diperbarui.');
     }
 

@@ -277,12 +277,57 @@ class Pelanggan extends BaseController
 
     public function simpanPelanggan()
     {
-        $data = $this->request->getPost();
+        $nik = trim((string) $this->request->getPost('nik'));
+        $nama = trim((string) $this->request->getPost('nama'));
+        $no_hp = trim((string) $this->request->getPost('no_hp'));
+        $alamat = trim((string) $this->request->getPost('alamat'));
+        $provinsi = trim((string) $this->request->getPost('provinsi'));
+        $kabupaten = trim((string) $this->request->getPost('kabupaten'));
+        $kecamatan = trim((string) $this->request->getPost('kecamatan'));
+
+        if ($nama === '' || $no_hp === '') {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Nama dan No HP wajib diisi',
+            ]);
+        }
+
+        if ($nik !== '') {
+            $duplicateNik = $this->PelangganModel
+                ->where('nik', $nik)
+                ->where('deleted', '0')
+                ->first();
+
+            if ($duplicateNik) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'NIK sudah terdaftar atas nama ' . $duplicateNik->nama,
+                ]);
+            }
+        }
+
+        if ($no_hp !== '') {
+            $duplicateHp = $this->PelangganModel
+                ->where('no_hp', $no_hp)
+                ->where('deleted', '0')
+                ->first();
+
+            if ($duplicateHp) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'No HP sudah terdaftar atas nama ' . $duplicateHp->nama,
+                ]);
+            }
+        }
 
         $insertData = [
-            'nik' => $data['nik'], // sesuai permintaan
-            'nama' => $data['nama'],
-            'no_hp' => $data['no_hp'],
+            'nik' => $nik,
+            'nama' => $nama,
+            'no_hp' => $no_hp,
+            'alamat' => $alamat,
+            'provinsi' => $provinsi,
+            'kabupaten' => $kabupaten,
+            'kecamatan' => $kecamatan,
         ];
 
         $insertId = $this->PelangganModel->insert_Pelanggan($insertData);
@@ -292,8 +337,12 @@ class Pelanggan extends BaseController
                 'success' => true,
                 'data' => [
                     'id_pelanggan' => $insertId,
-                    'nama' => $data['nama'],
-                    'no_hp' => $data['no_hp'],
+                    'nama' => $nama,
+                    'no_hp' => $no_hp,
+                    'alamat' => $alamat,
+                    'provinsi' => $provinsi,
+                    'kabupaten' => $kabupaten,
+                    'kecamatan' => $kecamatan,
                     'deleted' => 0,
                 ],
             ]);

@@ -123,7 +123,7 @@ class ModelService extends Model
 
     public function getByIdWithPelanggan($id)
     {
-        return $this->select('service.*, pelanggan.nama')
+        return $this->select('service.*, pelanggan.nama, pelanggan.provinsi, pelanggan.kabupaten, pelanggan.kecamatan')
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
             ->where('service.idservice', $id)
             ->first();

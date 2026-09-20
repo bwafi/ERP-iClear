@@ -20,6 +20,7 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelUnit;
 use App\Models\ModelKartuStok;
+use App\Models\ModelRegion;
 
 class Service extends BaseController
 
@@ -41,6 +42,7 @@ class Service extends BaseController
     protected $DetailPenjualanModel;
     protected $UnitModel;
     protected $KartuStokModel;
+    protected $RegionModel;
 
 
 
@@ -62,6 +64,7 @@ class Service extends BaseController
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
         $this->UnitModel = new ModelUnit();
         $this->KartuStokModel = new ModelKartuStok();
+        $this->RegionModel = new ModelRegion();
     }
 
     public function index()
@@ -84,6 +87,7 @@ class Service extends BaseController
             'oldkerusakan' => $oldkerusakan,
             'oldsparepart' => $oldsparepart,
             'unit' => $this->UnitModel->getUnit(),
+            'provinsi' => $this->RegionModel->getProvinces(),
             'body'  => 'transaksi/service'
         );
         return view('template', $data);
@@ -106,6 +110,7 @@ class Service extends BaseController
             'oldsparepart' => $oldsparepart,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'sparepart' => $this->StokBarangModel->getSparepart(),
+            'provinsi' => $this->RegionModel->getProvinces(),
             'body'  => 'transaksi/service'
         );
         return view('template', $data);
@@ -146,6 +151,15 @@ class Service extends BaseController
         $password_icloud = $this->request->getPost('password_icloud');
         $keluhan = $this->request->getPost('keluhan');
         $keterangan = $this->request->getPost('keterangan');
+
+        $domisili_provinsi = $this->request->getPost('domisili_provinsi');
+        $domisili_kabupaten = $this->request->getPost('domisili_kabupaten');
+        $domisili_kecamatan = $this->request->getPost('domisili_kecamatan');
+
+        if (empty($idpelanggan) || !$this->PelangganModel->getById($idpelanggan)) {
+            session()->setFlashdata('gagal', 'Gagal! Silakan pilih atau buat pelanggan terlebih dahulu sebelum menyimpan service.');
+            return redirect()->back();
+        }
 
         $idunit = session('ID_UNIT');
         $idakun = session('ID_AKUN');
@@ -198,6 +212,14 @@ class Service extends BaseController
         if ($result) {
             $idservice = $this->ServiceModel->insertID();
             session()->set('idservice', $idservice);
+
+            if (!empty($idpelanggan)) {
+                $this->PelangganModel->update($idpelanggan, [
+                    'provinsi' => $domisili_provinsi,
+                    'kabupaten' => $domisili_kabupaten,
+                    'kecamatan' => $domisili_kecamatan,
+                ]);
+            }
 
             $ar_nilai[] = $dp_bayar;
             $ar_nilai[] = 0;
@@ -521,7 +543,7 @@ class Service extends BaseController
 
         $search = $this->request->getPost('search') ?? '';
 
-        $builder = $this->PelangganModel;
+        $builder = $this->PelangganModel->where('deleted', '0');
         
         if (!empty($search)) {
             $builder->groupStart()

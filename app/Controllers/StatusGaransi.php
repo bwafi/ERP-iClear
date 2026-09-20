@@ -22,6 +22,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelRiwayatKlaimGaransi;
+use App\Models\ModelRegion;
 
 
 
@@ -43,6 +44,7 @@ class StatusGaransi extends BaseController
     protected $BankModel;
     protected $PembayaranBankModel;
     protected $RiwayatKlaimGaransiModel;
+    protected $RegionModel;
 
 
 
@@ -62,6 +64,7 @@ class StatusGaransi extends BaseController
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
         $this->RiwayatKlaimGaransiModel = new ModelRiwayatKlaimGaransi();
+        $this->RegionModel = new ModelRegion();
     }
 
     public function index()
@@ -152,6 +155,7 @@ class StatusGaransi extends BaseController
             'lama_garansi' => $lama_garansi ? (int)$lama_garansi->garansi_hari : null,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'sparepart' => $this->StokBarangModel->getSparepart(),
+            'provinsi' => $this->RegionModel->getProvinces(),
             'body'  => 'transaksi/table_garansi/service'
         );
         return view('template', $data);

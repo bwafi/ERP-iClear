@@ -106,12 +106,12 @@ class Auth extends BaseController
             } else {
                 echo "Password salah";
                 session()->setFlashdata('pesan_password', 'Password salah');
-                return redirect()->to(base_url('Login'));
+                return redirect()->to(base_url('login'));
             }
         } else {
             echo "Username tidak ditemukan";
             session()->setFlashdata('pesan_username', 'Username tidak ditemukan');
-            return redirect()->to(base_url('Login'));
+            return redirect()->to(base_url('login'));
         }
         // } 
         // else {
@@ -142,17 +142,17 @@ class Auth extends BaseController
 
 
         if (!$ID_AKUN) {
-            return redirect()->to(base_url('Login'));
+            return redirect()->to(base_url('login'));
         }
         $data_user = db_connect()->table("akun")->where("ID_AKUN", $ID_AKUN)->get()->getRow();
         if (!$data_user || empty($data_user->ROLES)) {
-            return redirect()->to(base_url('Login'));
+            return redirect()->to(base_url('login'));
         }
 
         $role = json_decode($data_user->ROLES);
 
         if (empty($role) || !is_array($role)) {
-            return redirect()->to(base_url('Login'));
+            return redirect()->to(base_url('login'));
         }
 
         $menu = db_connect()->table("menu")->whereIn("idmenu", $role)->get()->getResult();
@@ -201,6 +201,6 @@ class Auth extends BaseController
         ];
         // $update_log = db_connect('db_logs')->table('log_akses')->where('id', $idlogin)->update($log_akses);
         session()->destroy();
-        return redirect()->to(base_url() . 'Login');
+        return redirect()->to(base_url() . 'login');
     }
 }
