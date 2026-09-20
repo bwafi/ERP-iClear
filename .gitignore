@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# PHPUnit local config (contains local test DB credentials)
+/phpunit.xml
 writable/cache/*
 !writable/cache/.gitkeep
 writable/debugbar/*

@@ -399,6 +399,20 @@ $routes->post('update_kas_masuk', 'Kas_Masuk::update_kas_Masuk', ['filter' => 'a
 $routes->post('delete_kas_masuk', 'Kas_Masuk::delete_kas_Masuk', ['filter' => 'auth']);
 $routes->post('export_kas_masuk', 'Kas_Masuk::export', ['filter' => 'auth']);
 
+//Kas & Bank + Pembayaran Antar Unit
+$routes->group('kas_bank', ['filter' => 'auth'], function ($routes) {
+    $routes->get('', 'KasBank::index');
+    $routes->get('akun', 'KasBank::akun');
+    $routes->post('akun/save', 'KasBank::saveAkun', ['filter' => 'auth']);
+    $routes->post('saldo-awal/save', 'KasBank::saveSaldoAwal', ['filter' => 'auth']);
+    $routes->get('transfer', 'KasBank::transfer');
+    $routes->post('transfer/save', 'KasBank::saveTransfer', ['filter' => 'auth']);
+    $routes->get('transfer/reversal/(:num)', 'KasBank::reversalTransfer/$1', ['filter' => 'auth']);
+    $routes->get('antar-unit', 'KasBank::antar_unit');
+    $routes->post('antar-unit/save', 'KasBank::saveAntarUnit', ['filter' => 'auth']);
+    $routes->get('antar-unit/reversal/(:num)', 'KasBank::reversalAntarUnit/$1', ['filter' => 'auth']);
+});
+
 $routes->get('asset', 'Asset::index', ['filter' => 'auth']);
 $routes->post('insert_asset', 'Asset::insert_asset', ['filter' => 'auth']);
 $routes->post('update_asset', 'Asset::update_asset', ['filter' => 'auth']);

@@ -75,4 +75,14 @@ class ModelPembayaranHutangPiutang extends Model
             ->where('referensi_id', $referensiId)
             ->countAllResults();
     }
+
+    /**
+     * Pembayaran yang terkait referensi (mis. transaksi_kas_bank untuk reversal).
+     */
+    public function getByReferensi(string $referensiTipe, int $referensiId): array
+    {
+        return $this->where('referensi_tipe', $referensiTipe)
+            ->where('referensi_id', $referensiId)
+            ->findAll();
+    }
 }

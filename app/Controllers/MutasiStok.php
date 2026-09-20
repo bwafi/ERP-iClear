@@ -20,6 +20,7 @@ use App\Models\ModelDetailMutasi;
 use App\Models\ModelStokBarang;
 use Mpdf\Mpdf;
 use DateTime;
+use App\Libraries\ModeKasBank;
 
 class MutasiStok extends BaseController
 
@@ -38,6 +39,7 @@ class MutasiStok extends BaseController
     protected $HppBarangModel;
     protected $DetailMutasiModel;
     protected $StokBarangModel;
+    protected $KasBankLib;
 
 
     public function __construct()
@@ -55,6 +57,7 @@ class MutasiStok extends BaseController
         $this->HppBarangModel = new ModelHppBarang();
         $this->DetailMutasiModel = new ModelDetailMutasi();
         $this->StokBarangModel = new ModelStokBarang();
+        $this->KasBankLib = new ModeKasBank();
     }
 
     public function index()
@@ -187,6 +190,16 @@ class MutasiStok extends BaseController
 
             );
             $result2 = $this->DetailMutasiModel->insert_DetailMutasiStok($data2);
+        }
+
+        // Auto-register HUTANG/PIUTANG antar unit (best effort; tidak
+        // menggagalkan mutasi bila nilai belum terisi / akun belum dibuat).
+        if ($result2) {
+            try {
+                $this->KasBankLib->buatHutangPiutangDariMutasi((int)$idMutasi, (int)session('ID_AKUN'));
+            } catch (\Throwable $e) {
+                log_message('error', 'KasBank: gagal buat H/P dari mutasi #' . $idMutasi . ': ' . $e->getMessage());
+            }
         }
 
         if ($result & $result2) {

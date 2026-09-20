@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelUnit;
+use App\Libraries\ModeKasBank;
 
 
 class Kas_Masuk extends BaseController
@@ -27,6 +28,7 @@ class Kas_Masuk extends BaseController
     protected $KasMasukModel;
     protected $JurnalModel;
     protected $UnitModel;
+    protected $KasBankLib;
 
     public function __construct()
     {
@@ -38,6 +40,7 @@ class Kas_Masuk extends BaseController
         $this->KasMasukModel = new ModelKasMasuk();
         $this->JurnalModel = new ModelJurnal();
         $this->UnitModel = new ModelUnit();
+        $this->KasBankLib = new ModeKasBank();
     }
 
     public function index()
@@ -97,6 +100,15 @@ class Kas_Masuk extends BaseController
             // Ambil ID kas masuk terakhir
             $insertId = $this->KasMasukModel->insertID();
 
+            // Posting ringkas ke ledger kas/bank (best effort, idempotent).
+            if ($insertId) {
+                try {
+                    $this->KasBankLib->postingKasMasuk((int)$insertId);
+                } catch (\Throwable $e) {
+                    log_message('error', 'KasBank: gagal posting kas_masuk #' . $insertId . ': ' . $e->getMessage());
+                }
+            }
+
             // Ambil nama akun
             $data_akunjurnal = $this->NoAkunModel->getByNoAkun($noAkun);
             $nama_akun = $data_akunjurnal->nama_akun;
@@ -155,6 +167,18 @@ class Kas_Masuk extends BaseController
         ];
 
         $this->KasMasukModel->update($id, $data);
+
+        // Restore posting ledger kas/bank: hapus posting lama, posting ulang (idempotent).
+        $db = \Config\Database::connect();
+        $db->transStart();
+        try {
+            $this->KasBankLib->hapusPosting('kas_masuk', (int)$id);
+            $this->KasBankLib->postingKasMasuk((int)$id);
+        } catch (\Throwable $e) {
+            log_message('error', 'KasBank: gagal restore posting kas_masuk #' . $id . ': ' . $e->getMessage());
+        }
+        $db->transComplete();
+
         session()->setFlashdata('sukses', 'Data kas Masuk berhasil diupdate.');
         return redirect()->to(base_url('/kas_masuk'));
     }
@@ -162,7 +186,13 @@ class Kas_Masuk extends BaseController
     public function delete_kas_masuk()
     {
         $id = $this->request->getPost('idkas_masuk');
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+        $this->KasBankLib->hapusPosting('kas_masuk', (int)$id);
         $this->KasMasukModel->delete($id);
+        $db->transComplete();
+
         session()->setFlashdata('sukses', 'Data kas masuk berhasil dihapus.');
         return redirect()->to(base_url('/kas_masuk'));
     }
