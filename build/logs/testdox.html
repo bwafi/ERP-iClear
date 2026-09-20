@@ -51,81 +51,12 @@
         </style>
     </head>
     <body>
-        <h2>Bright Data Client (Tests\SocialMedia\BrightDataClient)</h2>
+        <h2>Customer Satisfaction (Tests\CustomerSatisfaction)</h2>
         <ul>
-            <li class="success">Trigger facebook posting ke endpoint trigger</li>
-            <li class="success">Trigger tik tok tanpa num posts</li>
-            <li class="success">Tidak ada request progress atau snapshot</li>
-            <li class="success">Response tanpa snapshot id lempar api exception</li>
-            <li class="success">Http 400 ditangani</li>
-            <li class="success">Http 401 ditangani</li>
-            <li class="success">Http 404 dataset tidak ditemukan</li>
-            <li class="success">Http 429 rate limit ditangani</li>
-            <li class="success">Http 500 ditangani</li>
-            <li class="success">Invalid j s o n ditangani</li>
-            <li class="success">Response kosong ditangani</li>
-            <li class="success">Timeout ditangani</li>
-            <li class="success">B o m pada response tetap bisa diparse</li>
-            <li class="success">Token belum dikonfigurasi ditangani</li>
-        </ul>
-        <h2>Kpi Service (Tests\SocialMedia\KpiService)</h2>
-        <ul>
-            <li class="success">Filter unit dan periode</li>
-            <li class="success">Snapshot terbaru tidak double counting</li>
-            <li class="success">Platform filter</li>
-            <li class="success">Target achievement</li>
-            <li class="success">Target global fallback</li>
-        </ul>
-        <h2>Normalize (Tests\SocialMedia\Normalize)</h2>
-        <ul>
-            <li class="success">Facebook normalization</li>
-            <li class="success">Facebook views and plays stay separate</li>
-            <li class="success">Tik tok normalization</li>
-            <li class="success">Post id kosong dilewati</li>
-            <li class="success">Metric tidak tersedia jadi null</li>
-            <li class="success">Metric nol tetap nol</li>
-            <li class="success">Error response memicu exception</li>
-            <li class="success">Tanggal unix timestamp</li>
-            <li class="success">Tanggal tidak valid jadi null</li>
-        </ul>
-        <h2>Process Jobs (Tests\SocialMedia\ProcessJobs)</h2>
-        <ul>
-            <li class="success">Pending job yang masih running tidak download</li>
-            <li class="success">Ready job download dan persist</li>
-            <li class="success">Failed job ditandai failed</li>
-            <li class="success">Completed job dilewati</li>
-            <li class="success">Invalid snapshot response ditandai error</li>
-            <li class="success">Satu job gagal job lain tetap diproses</li>
-            <li class="success">Menjalankan processor dua kali idempoten</li>
-            <li class="success">Batch limit bekerja</li>
-        </ul>
-        <h2>Provider Batch (Tests\SocialMedia\ProviderBatch)</h2>
-        <ul>
-            <li class="success">Trigger facebook mengembalikan snapshot dan dataset</li>
-            <li class="success">Trigger tik tok memakai dataset tik tok</li>
-            <li class="success">Trigger profile url kosong lempar</li>
-            <li class="success">Trigger platform tidak didukung lempar</li>
-        </ul>
-        <h2>Scraper Service (Tests\SocialMedia\ScraperService)</h2>
-        <ul>
-            <li class="success">Akun nonaktif tidak ditrigger</li>
-            <li class="success">Trigger berhasil dan snapshot disimpan ke database</li>
-            <li class="success">Trigger kembalikan snapshot id yang bervariasi</li>
-            <li class="success">Snapshot id sama tidak membuat duplicate job</li>
-            <li class="success">Satu akun gagal akun lain tetap diproses</li>
-            <li class="success">Api error ditangani tanpa menghentikan batch</li>
-            <li class="success">Result memuat detail untuk output c l i</li>
-            <li class="success">Post tidak duplicate</li>
-            <li class="success">Snapshot tidak overwrite bila waktu berbeda</li>
-            <li class="success">Retry job sama tidak buat snapshot duplicate</li>
-            <li class="success">Post tanpa external id tetap tersimpan via url fallback</li>
-            <li class="success">Views dan plays tersimpan terpisah</li>
-        </ul>
-        <h2>Unit And Seed (Tests\SocialMedia\UnitAndSeed)</h2>
-        <ul>
-            <li class="success">Unit genteng dibuat dan tidak duplicate</li>
-            <li class="success">Enam akun tersedia dan unit benar</li>
-            <li class="success">Authorization role</li>
+            <li class="defect">Kepala toko sees input form</li>
+            <li class="defect">Spv view only read only</li>
+            <li class="defect">Kepala toko cannot input unit lain</li>
+            <li class="defect">Kepala toko save valid</li>
         </ul>
     </body>
 </html>

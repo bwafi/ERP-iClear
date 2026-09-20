@@ -60,7 +60,7 @@
 <body>
     <!-- Header -->
     <div class="center">
-        <div style="text-align: center;" colspan="2"><img src="https://iclear.my.id/assets/img/logo.png" style="height: 40px; display: left; margin: auto;"></div>
+        <div style="text-align: center;" colspan="2"><img src="<?= base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></div>
         <div class="bold"><?= @$dataunit->NAMA_UNIT ?></div>
         <div>
             <?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?><br>

@@ -56,7 +56,7 @@
 
         <thead>
             <tr>
-                <td style="text-align: left;" colspan="2"><img src="https://iclear.my.id/assets/img/logo.png" style="height: 40px; display: left; margin: auto;"></td>
+                <td style="text-align: left;" colspan="2"><img src="<?= base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></td>
             </tr>
             <tr>
                 <td style="text-align: left;" colspan="2">No.Faktur : <?= @$service->no_service ?></td>
@@ -101,7 +101,7 @@
             <tr>
                 <!-- KOLOM GAMBAR -->
                 <td colspan="2" style="width:50%; text-align:left;">
-                    <img src="https://iclear.my.id/assets/img/hp.png" style="height: 200px;">
+                    <img src="<?= base_url('template/assets/images/hp.png') ?>" style="height: 200px;">
                 </td>
 
                 <?php

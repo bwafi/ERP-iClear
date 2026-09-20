@@ -73,7 +73,7 @@
 <div class="laporan-container">
     <table width="100%">
         <tr>
-            <td width="25%"><img src="https://iclear.my.id/assets/img/logo.png" style="height: 40px; display: left; margin: auto;"></td>
+            <td width="25%"><img src="<?= base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></td>
             <td width="75%">
                 <div class="judul">Laporan Tutup Kasir Harian</div>
             </td>
