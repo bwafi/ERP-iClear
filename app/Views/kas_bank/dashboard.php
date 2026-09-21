@@ -189,6 +189,8 @@ $jenisLabels = [
                 </table>
                 <small class="text-muted">
                     Net Cash Flow = Pemasukan − Pengeluaran. Transfer internal, pembayaran antar unit, dan saldo awal tidak termasuk (bukan arus kas operasional).
+                    Sejak Finance cut-off, hanya transaksi pada/setelah <?= esc(\App\Services\Finance\FinanceScopeService::cutoffDate()) ?> yang dihitung
+                    (baris "kas awal" & histori sebelum cut-off adalah legacy, tidak ikut).
                 </small>
             </div>
         </div>

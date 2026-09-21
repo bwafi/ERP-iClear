@@ -243,6 +243,20 @@ class KasBank extends BaseController
             $builder->where('transaksi_kas_bank.akun_kas_bank_id', $akunId);
         }
 
+        // Finance cut-off: Net Cash Flow & ringkasan pemasukan/pengeluaran yang
+        // ditampilkan adalah arus kas OPERASIONAL pada/setelah cut-off. Baris
+        // "kas awal" (penanda saldo dari backfill sistem lama) bukan transaksi;
+        // transaksi sebelum cut-off adalah legacy dan tidak dihitung ulang.
+        $cutoff = FinanceScopeService::cutoffDate();
+        $builder->where('transaksi_kas_bank.tanggal >=', $cutoff);
+        $builder->groupStart()
+            ->where('transaksi_kas_bank.keterangan !=', 'kas awal')
+            ->groupStart()
+                ->where('transaksi_kas_bank.keterangan IS NOT NULL')
+                ->where('transaksi_kas_bank.keterangan !=', '')
+            ->groupEnd()
+        ->groupEnd();
+
         $ringkasan = [];
         $netCashFlow = 0;
         foreach ($builder->get()->getResult() as $row) {
