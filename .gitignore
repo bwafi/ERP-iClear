@@ -81,5 +81,8 @@ yarn.lock
 *.cache
 .cache/
 
+# PHPUnit local config
+phpunit.xml
+
 # zed editor
 *.zed
