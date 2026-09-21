@@ -6,6 +6,7 @@ use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelPembayaranHutangPiutang;
 use App\Models\ModelTransaksiKasBank;
+use App\Services\Finance\HutangPiutangService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
@@ -125,7 +126,7 @@ class KasBankControllerTest extends CIUnitTestCase
         $q('CREATE TABLE db_detail_mutasi (
                 iddetail_mutasi INTEGER PRIMARY KEY AUTO_INCREMENT,
                 mutasi_idmutasi INT NULL, jumlah_kirim REAL NULL, jumlah_terima REAL NULL,
-                harga_mutasi REAL NULL, hpp_barang REAL NULL, barang_idbarang INT NULL,
+                satuan TEXT NULL, harga_mutasi REAL NULL, hpp_barang REAL NULL, barang_idbarang INT NULL,
                 kirim_idunit INT NULL, terima_idunit INT NULL)');
         $q('CREATE TABLE db_barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL)');
     }
@@ -171,8 +172,8 @@ class KasBankControllerTest extends CIUnitTestCase
 
         $q("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES
             (1, 'MTS1000921001', '2026-09-20 09:00:00', NULL, '0', 1, 2, 43)");
-        $q("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
-            (1, 1, 2, 1000, 800, 1, 2)");
+        $q("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 1000, 800, 1001, 1, 2)");
         $q("INSERT INTO db_barang (idbarang, nama_barang) VALUES (1001, 'Barang X')");
     }
 
@@ -577,6 +578,41 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             ->where('sumber_id', 1)
             ->get()->getResult();
         $this->assertCount(2, $rows2);
+    }
+
+    public function testCetakBuktiHutangPiutangMutasiMemuatListBarang(): void
+    {
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 44,
+            'ID_UNIT'    => 2,
+            'ID_JABATAN' => 35,
+        ]);
+
+        $r = $this->post('mutasi_stok/terima/1');
+        $r->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $rows = $db->table('hutang_piutang')
+            ->where('sumber_tipe', 'mutasi_unit')
+            ->where('sumber_id', 1)
+            ->get()->getResult();
+
+        $svc = new HutangPiutangService();
+        foreach ($rows as $hp) {
+            $detail = $svc->getDetailTransaksi($hp);
+
+            $this->assertSame('Mutasi Stok Antar Unit', $detail['sumber_label']);
+            $this->assertSame('MTS1000921001', $detail['referensi']);
+            $this->assertNotEmpty($detail['items']);
+
+            $it = $detail['items'][0];
+            $this->assertSame('Barang X', $it['nama']);
+            $this->assertSame(2.0, $it['qty']);
+            $this->assertSame(1000.0, $it['harga']);
+            $this->assertSame(2000.0, $it['subtotal']);
+            $this->assertContains($hp->kode, ['MUT-1-1-P', 'MUT-2-1-H']);
+        }
     }
 
     public function testAntarUnitRekeningFisikSamaTanpaGerakanKas(): void

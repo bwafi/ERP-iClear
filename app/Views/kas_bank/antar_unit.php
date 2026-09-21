@@ -112,17 +112,49 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>Unit</th><th class="text-end">Sisa</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Unit</th><th class="text-end">Sisa</th><th>Status</th><th></th></tr></thead>
                     <tbody>
-                        <?php foreach (($hp_piutang ?? []) as $p) : ?>
+                        <?php foreach (($hp_piutang ?? []) as $p) :
+                            $bukti = $detail_mutasi_map[(int) $p->sumber_id] ?? null; ?>
                             <tr>
                                 <td><?= esc($unitMap[(int) $p->unit_id] ?? 'U' . $p->unit_id) ?><br><small class="text-muted"><?= esc($p->nama_pihak) ?></small></td>
                                 <td class="text-end fw-semibold"><?= $rp($p->sisa) ?></td>
                                 <td><span class="badge <?= $badgeStatus($p->status) ?>"><?= $labelStatus($p->status) ?></span></td>
+                                <td class="text-end">
+                                    <?php if ($bukti) : ?>
+                                        <button type="button" class="btn btn-sm btn-light-soft"
+                                            data-bs-toggle="collapse" data-bs-target="#p-barang-<?= (int) $p->id ?>">
+                                            Barang
+                                        </button>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
+                            <?php if ($bukti) : ?>
+                                <tr class="collapse bg-light-subtle" id="p-barang-<?= (int) $p->id ?>">
+                                    <td colspan="4" class="ps-4 py-1">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <small class="text-muted"><strong><?= esc($bukti['no_nota']) ?></strong> • <?= esc(date('Y-m-d', strtotime((string) $bukti['tanggal']))) ?> • Jatuh tempo <?= esc($p->jatuh_tempo) ?></small>
+                                            <small class="fw-semibold">Total Barang: <?= $rp($bukti['total']) ?></small>
+                                        </div>
+                                        <table class="table table-sm table-striped align-middle mb-0 w-50">
+                                            <thead><tr><th>Barang</th><th class="text-end">Jml Kirim</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr></thead>
+                                            <tbody>
+                                                <?php foreach ($bukti['items'] as $d) : ?>
+                                                    <tr>
+                                                        <td><?= esc($d->nama_barang) ?></td>
+                                                        <td class="text-end"><?= (float) $d->jumlah_kirim ?></td>
+                                                        <td class="text-end"><?= $rp($d->harga_mutasi) ?></td>
+                                                        <td class="text-end"><?= $rp($d->nilai ?? 0) ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
                         <?php endforeach; ?>
                         <?php if (empty($hp_piutang)) : ?>
-                            <tr><td colspan="3" class="text-center text-muted">Belum ada piutang antar unit.</td></tr>
+                            <tr><td colspan="4" class="text-center text-muted">Belum ada piutang antar unit.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -146,10 +178,12 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                             <th class="text-end">Dibayar</th>
                             <th class="text-end">Sisa</th>
                             <th>Status</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach (($hp_hutang ?? []) as $h) : ?>
+                        <?php foreach (($hp_hutang ?? []) as $h) :
+                            $bukti = $detail_mutasi_map[(int) $h->sumber_id] ?? null; ?>
                             <tr>
                                 <td class="fw-semibold"><?= esc($h->kode) ?></td>
                                 <td><?= esc($unitMap[(int) $h->unit_id] ?? 'U' . $h->unit_id) ?></td>
@@ -158,10 +192,46 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                                 <td class="text-end"><?= $rp($h->total_dibayar) ?></td>
                                 <td class="text-end fw-semibold"><?= $rp($h->sisa) ?></td>
                                 <td><span class="badge <?= $badgeStatus($h->status) ?>"><?= $labelStatus($h->status) ?></span></td>
+                                <td class="text-end">
+                                    <?php if ($bukti) : ?>
+                                        <button type="button" class="btn btn-sm btn-light-soft"
+                                            data-bs-toggle="collapse" data-bs-target="#hp-barang-<?= (int) $h->id ?>">
+                                            Barang
+                                        </button>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
+                            <?php if ($bukti) : ?>
+                                <tr class="collapse bg-light-subtle" id="hp-barang-<?= (int) $h->id ?>">
+                                    <td colspan="8" class="ps-4 py-1">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <small class="text-muted">
+                                                <strong><?= esc($bukti['no_nota']) ?></strong> • Tanggal <?= esc(date('Y-m-d', strtotime((string) $bukti['tanggal']))) ?>
+                                                • Jatuh tempo <?= esc($h->jatuh_tempo) ?>
+                                            </small>
+                                            <small class="fw-semibold">Total Barang: <?= $rp($bukti['total']) ?></small>
+                                        </div>
+                                        <table class="table table-sm table-striped align-middle mb-0 w-50">
+                                            <thead>
+                                                <tr><th>Barang</th><th class="text-end">Jml Kirim</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($bukti['items'] as $d) : ?>
+                                                    <tr>
+                                                        <td><?= esc($d->nama_barang) ?></td>
+                                                        <td class="text-end"><?= (float) $d->jumlah_kirim ?></td>
+                                                        <td class="text-end"><?= $rp($d->harga_mutasi) ?></td>
+                                                        <td class="text-end"><?= $rp($d->nilai ?? 0) ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
                         <?php endforeach; ?>
                         <?php if (empty($hp_hutang)) : ?>
-                            <tr><td colspan="7" class="text-center text-muted">Belum ada hutang antar unit. Hutang terbentuk otomatis dari mutasi stok antar unit.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted">Belum ada hutang antar unit. Hutang terbentuk otomatis dari mutasi stok antar unit.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>

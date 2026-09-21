@@ -260,6 +260,7 @@
         'piutang_pelanggan' => 'Piutang Pelanggan',
         'kasbon' => 'Kasbon Pegawai',
         'piutang_legacy' => 'Piutang Pegawai',
+        'mutasi_unit' => 'Mutasi Stok Antar Unit',
     ];
     $status = \App\Services\Finance\HutangPiutangService::labelStatus($row->status);
 

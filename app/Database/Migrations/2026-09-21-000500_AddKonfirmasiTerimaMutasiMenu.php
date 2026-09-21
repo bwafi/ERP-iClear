@@ -19,9 +19,10 @@ class AddKonfirmasiTerimaMutasiMenu extends Migration
         $ada = $this->db->table('menu')->where('idmenu', 26)->get()->getRow();
         if (!$ada) {
             $this->db->table('menu')->insert([
-                'urutan'     => 26,
+                'idmenu'     => 26,
+                'urutan'     => 2,
                 'nama_menu'  => 'Konfirmasi Terima Mutasi',
-                'roles'      => 'mutasi_masuk',
+                'roles'      => 'mutasi_stok',
                 'url'        => 'mutasi_stok/masuk',
                 'show_menu'  => 1,
                 'sub'        => 0,

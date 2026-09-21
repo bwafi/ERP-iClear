@@ -6,6 +6,7 @@ use App\Models\ModelAkunKasBank;
 use App\Models\ModelAlokasiSaldoKasBank;
 use App\Models\ModelAuth;
 use App\Models\ModelBank;
+use App\Models\ModelDetailMutasi;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelNoAkun;
 use App\Models\ModelPembayaranHutangPiutang;
@@ -30,6 +31,7 @@ class KasBank extends BaseController
     protected $SaldoAwalModel;
     protected $HPModel;
     protected $PembayaranModel;
+    protected $DetailMutasiModel;
     protected $BankModel;
     protected $NoAkunModel;
     protected $AuthModel;
@@ -45,6 +47,7 @@ class KasBank extends BaseController
         $this->SaldoAwalModel = new ModelSaldoAwalKasBank();
         $this->HPModel = new ModelHutangPiutang();
         $this->PembayaranModel = new ModelPembayaranHutangPiutang();
+        $this->DetailMutasiModel = new ModelDetailMutasi();
         $this->BankModel = new ModelBank();
         $this->NoAkunModel = new ModelNoAkun();
         $this->AuthModel = new ModelAuth();
@@ -659,6 +662,34 @@ class KasBank extends BaseController
         $hp = $this->HPModel->getHutangPiutangUnit($unitTerpilih > 0 ? $unitTerpilih : null, 'hutang');
         $piutang = $this->HPModel->getHutangPiutangUnit($unitTerpilih > 0 ? $unitTerpilih : null, 'piutang');
 
+        // Detail barang mutasi untuk H/P yang bersumber dari mutasi stok
+        // (bukti H/P = list barang yang dikirim).
+        $detailMutasiMap = [];
+        foreach (array_merge($hp, $piutang) as $row) {
+            if ($row->sumber_tipe !== 'mutasi_unit' || (int) $row->sumber_id <= 0) {
+                continue;
+            }
+            $mid = (int) $row->sumber_id;
+            if (isset($detailMutasiMap[$mid])) {
+                continue;
+            }
+            $detail = $this->DetailMutasiModel->getFullDetailMutasiByMutasiId($mid);
+            if (empty($detail)) {
+                continue;
+            }
+            $total = 0;
+            foreach ($detail as $d) {
+                $d->nilai = $this->KasBankLib->nilaiDetailMutasi((array) $d);
+                $total += (int) $d->nilai;
+            }
+            $detailMutasiMap[$mid] = [
+                'no_nota' => $detail[0]->no_nota_mutasi ?? '',
+                'tanggal' => $detail[0]->mutasi_tanggal_kirim ?? '',
+                'total'   => $total,
+                'items'   => $detail,
+            ];
+        }
+
         // Reversal atribusi: pembayaran antar unit yang MEMAKAI rekening fisik
         // yang sama (tidak membuat gerakan kas/bank).
         $atribusi = $this->PembayaranModel
@@ -675,6 +706,7 @@ class KasBank extends BaseController
             'akun_penerima'    => $this->akunListUntuk($unitTerpilih),
             'hp_hutang'        => $hp,
             'hp_piutang'       => $piutang,
+            'detail_mutasi_map'=> $detailMutasiMap,
             'pembayaran'       => $this->TransaksiModel
                 ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
                 ->orderBy('idtransaksi', 'DESC')

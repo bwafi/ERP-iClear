@@ -32,6 +32,7 @@ class HutangPiutangService
     public const SUMBER_JASA_TEKNISI = 'jasa_teknisi';
     public const SUMBER_KELEBIHAN_TRANSFER = 'kelebihan_transfer';
     public const SUMBER_RETUR_BARANG = 'retur_barang';
+    public const SUMBER_MUTASI = 'mutasi_unit';
     public const SUMBER_MANUAL = 'manual';
 
     public const STATUS_BELUM = 'belum_lunas';
@@ -1157,6 +1158,7 @@ class HutangPiutangService
             self::SUMBER_KELEBIHAN_TRANSFER => 'Piutang Kelebihan Transfer',
             self::SUMBER_RETUR_BARANG => 'Piutang Retur Barang',
             self::SUMBER_MANUAL => 'Manual',
+            self::SUMBER_MUTASI => 'Mutasi Stok Antar Unit',
         ];
         return $map[$sumberTipe] ?? ucfirst(str_replace('_', ' ', $sumberTipe));
     }
@@ -1196,7 +1198,54 @@ class HutangPiutangService
             case self::SUMBER_KELEBIHAN_TRANSFER:
             case self::SUMBER_RETUR_BARANG:
                 return $this->detailManual($row, $detail);
+            case self::SUMBER_MUTASI:
+                return $this->detailMutasi($row, $detail);
         }
+
+        return $detail;
+    }
+
+    /**
+     * Detail bukti untuk hutang/piutang dari mutasi stok antar unit.
+     * Menyertakan list barang dari `detail_mutasi` sebagai item dokumen cetak.
+     */
+    protected function detailMutasi($row, array $detail): array
+    {
+        $detail['pihak_label'] = $row->jenis === 'hutang' ? 'Unit Penerima (Berhutang)' : 'Unit Pengirim (Berpiutang)';
+
+        $mutasi = $this->db->table('mutasi')->where('idmutasi', (int) $row->sumber_id)->get()->getRow();
+        if ($mutasi) {
+            $detail['referensi_label'] = 'No. Nota Mutasi';
+            $detail['referensi'] = $mutasi->no_nota_mutasi;
+            $detail['meta'] = array_merge($detail['meta'], [
+                [
+                    'label' => 'Tanggal Kirim Mutasi',
+                    'value' => $mutasi->tanggal_kirim ? date('d-m-Y', strtotime($mutasi->tanggal_kirim)) : '-',
+                ],
+            ]);
+        }
+
+        $detail['detail'] = $row->uraian ?: ($mutasi->no_nota_mutasi ?? self::labelSumber($row->sumber_tipe));
+
+        $items = [];
+        $rows = $this->db->table('detail_mutasi')
+            ->select('detail_mutasi.*, barang.nama_barang')
+            ->join('barang', 'barang.idbarang = detail_mutasi.barang_idbarang', 'left')
+            ->where('mutasi_idmutasi', (int) $row->sumber_id)
+            ->orderBy('iddetail_mutasi', 'ASC')
+            ->get()->getResult();
+        foreach ($rows as $d) {
+            $qty = (float) $d->jumlah_kirim;
+            $harga = (float) ($d->harga_mutasi ?: $d->hpp_barang);
+            $items[] = [
+                'nama' => $d->nama_barang ?: 'Barang #' . $d->barang_idbarang,
+                'satuan' => $d->satuan,
+                'qty' => $qty,
+                'harga' => $harga,
+                'subtotal' => $qty * $harga,
+            ];
+        }
+        $detail['items'] = $items;
 
         return $detail;
     }
