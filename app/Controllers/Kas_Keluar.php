@@ -254,18 +254,27 @@ class Kas_Keluar extends BaseController
             'updated_on' => date('Y-m-d H:i:s')
         ];
 
-        $this->KasKeluarModel->update($id, $data);
-
-        // Restore posting ledger kas/bank: hapus posting lama, posting ulang (idempotent).
+        // Source update + refresh posting ledger dalam SATU transaksi:
+        // hapus posting lama, posting ulang (idempotent). Jika posting gagal,
+        // update sumber ikut di-rollback.
         $db = \Config\Database::connect();
         $db->transStart();
         try {
+            $this->KasKeluarModel->update($id, $data);
             $this->KasBankLib->hapusPosting('kas_keluar', (int)$id);
             $this->KasBankLib->postingKasKeluar((int)$id);
+            $db->transComplete();
         } catch (\Throwable $e) {
-            log_message('error', 'KasBank: gagal restore posting kas_keluar #' . $id . ': ' . $e->getMessage());
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal update kas_keluar #' . $id . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal mengupdate kas keluar.');
+            return redirect()->to(base_url('/kas_keluar'));
         }
-        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal mengupdate kas keluar.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
 
         session()->setFlashdata('sukses', 'Data kas keluar berhasil diupdate.');
         return redirect()->to(base_url('/kas_keluar'));

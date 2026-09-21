@@ -62,24 +62,30 @@ class ModeKasBank
     }
 
     /**
-     * Resolve akun kas/bank dari unit & bank.
-     * Prioritas: akun BANK yang cocok (bank_idbank), lalu akun KAS pertama unit.
+     * Resolve rekening FISIK dari unit & bank.
+     * - Prioritas: akun BANK aktif dengan bank_idbank tsb (rekening fisik,
+     *   dipakai lintas unit -> TIDAK dibatasi unit).
+     * - Jika tidak ada / bankId kosong: akun KAS pertama aktif milik unit.
      * Return idakun_kas_bank atau null jika tidak ada -> posting di-skip.
+     *
+     * Backward compatible: guard sudahTerposting (sumber, akun, arah) menjaga
+     * baris yang sudah diposting TIDAK diubah; perubahan berimbas hanya pada
+     * baris yang belum terposting.
      */
     public function resolveAkun(int $unitId, ?string $bankId = null): ?int
     {
-        $akun = $this->AkunModel
-            ->where('status', 'aktif')
-            ->where('unit_id', $unitId);
-
         if (!empty($bankId)) {
-            $bank = (clone $akun)->where('tipe', 'BANK')->where('bank_idbank', $bankId)->first();
+            $bank = $this->AkunModel->getBankByBankIdbank((string)$bankId);
             if ($bank) {
                 return (int)$bank->idakun_kas_bank;
             }
         }
 
-        $kas = (clone $akun)->where('tipe', 'KAS')->first();
+        $kas = $this->AkunModel
+            ->where('unit_id', (int)$unitId)
+            ->where('tipe', 'KAS')
+            ->where('status', 'aktif')
+            ->first();
         if ($kas) {
             return (int)$kas->idakun_kas_bank;
         }
@@ -408,7 +414,7 @@ class ModeKasBank
      * Idempotent (guard uniq_hp_sumber + cek existing).
      * $akunUser = input_by pada hutang_piutang (fallback session / mutasi.input_by).
      */
-    public function buatHutangPiutangDariMutasi(int $idMutasi, ?int $akunUser = null): array
+    public function buatHutangPiutangDariMutasi(int $idMutasi, ?int $akunUser = null, ?string $jatuhTempo = null): array
     {
         $mutasi = $this->MutasiModel->find($idMutasi);
         if (!$mutasi) {
@@ -463,6 +469,13 @@ class ModeKasBank
         $kodeP   = 'MUT-' . $kirim . '-' . $idMutasi . '-P';
         $kodeH   = 'MUT-' . $terima . '-' . $idMutasi . '-H';
 
+        // Jatuh tempo: default deviasi mutasi (hari H konfirmasi/penerimaan) + 3
+        // hari; pemanggil boleh memaksa via parameter $jatuhTempo.
+        $dasarJt = $mutasi->tanggal_terima
+            ? date('Y-m-d', strtotime($mutasi->tanggal_terima))
+            : date('Y-m-d');
+        $jatuhTempo = $jatuhTempo ?: date('Y-m-d', strtotime($dasarJt . ' +3 days'));
+
         $insertedP = 0;
         $insertedH = 0;
 
@@ -478,7 +491,7 @@ class ModeKasBank
                 'lawan_unit_id'  => $terima,
                 'nama_pihak'     => $namaKirim,
                 'tanggal'        => $tanggal,
-                'jatuh_tempo'    => null,
+                'jatuh_tempo'    => $jatuhTempo,
                 'uraian'         => $uraian,
                 'total'          => $total,
                 'total_dibayar'  => 0,
@@ -506,7 +519,7 @@ class ModeKasBank
                 'lawan_unit_id'  => $kirim,
                 'nama_pihak'     => $namaTerima,
                 'tanggal'        => $tanggal,
-                'jatuh_tempo'    => null,
+                'jatuh_tempo'    => $jatuhTempo,
                 'uraian'         => $uraian,
                 'total'          => $total,
                 'total_dibayar'  => 0,

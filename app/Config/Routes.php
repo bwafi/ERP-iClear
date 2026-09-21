@@ -245,6 +245,8 @@ $routes->get('produk_terlaris', 'Produk_Terlaris::index', ['filter' => 'auth']);
 
 //mutasi stok
 $routes->get('mutasi_stok', 'MutasiStok::index', ['filter' => 'auth']);
+$routes->get('mutasi_stok/masuk', 'MutasiStok::masuk', ['filter' => 'auth']);
+$routes->post('mutasi_stok/terima/(:num)', 'MutasiStok::terima/$1', ['filter' => 'auth']);
 $routes->post('insert_mutasi', 'MutasiStok::insert', ['filter' => 'auth']);
 
 //riwayat pembelian
@@ -405,12 +407,15 @@ $routes->group('kas_bank', ['filter' => 'auth'], function ($routes) {
     $routes->get('akun', 'KasBank::akun');
     $routes->post('akun/save', 'KasBank::saveAkun', ['filter' => 'auth']);
     $routes->post('saldo-awal/save', 'KasBank::saveSaldoAwal', ['filter' => 'auth']);
+    $routes->post('saldo-alokasi/save', 'KasBank::saveAlokasiSaldo', ['filter' => 'auth']);
     $routes->get('transfer', 'KasBank::transfer');
     $routes->post('transfer/save', 'KasBank::saveTransfer', ['filter' => 'auth']);
-    $routes->get('transfer/reversal/(:num)', 'KasBank::reversalTransfer/$1', ['filter' => 'auth']);
+    $routes->post('transfer/reversal/(:num)', 'KasBank::reversalTransfer/$1', ['filter' => 'auth']);
     $routes->get('antar-unit', 'KasBank::antar_unit');
+    $routes->get('antar_unit', 'KasBank::antar_unit');
     $routes->post('antar-unit/save', 'KasBank::saveAntarUnit', ['filter' => 'auth']);
-    $routes->get('antar-unit/reversal/(:num)', 'KasBank::reversalAntarUnit/$1', ['filter' => 'auth']);
+    $routes->post('antar-unit/reversal/(:num)', 'KasBank::reversalAntarUnit/$1', ['filter' => 'auth']);
+    $routes->post('antar-unit/reversal-atribusi/(:num)', 'KasBank::reversalAtribusi/$1', ['filter' => 'auth']);
 });
 
 $routes->get('asset', 'Asset::index', ['filter' => 'auth']);

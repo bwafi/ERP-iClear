@@ -12,7 +12,8 @@
 
 <?php
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
-$canInput = $bisa_pilih_unit ?? false;
+$canInput = $can_transaksi ?? ($bisa_pilih_unit ?? false);
+$canKelola = $bisa_pilih_unit ?? false;
 $unitMap = [];
 foreach (($unit ?? []) as $u) {
     $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
@@ -22,9 +23,30 @@ foreach (($akun_kas_bank ?? []) as $a) {
     $akunMap[(int) $a->idakun_kas_bank] = $a;
 }
 $labelAkun = static function ($a) use ($unitMap) {
-    return ($unitMap[(int) $a->unit_id] ?? 'Unit ' . $a->unit_id) . ' – ' . $a->nama_akun . ' (' . $a->tipe . ')';
+    return ((isset($unitMap[(int) $a->unit_id])) ? $unitMap[(int) $a->unit_id] : 'Fisik') . ' – ' . $a->nama_akun . ' (' . $a->tipe . ')';
 };
 ?>
+
+<?php if (($bisa_pilih_unit ?? false)) : ?>
+    <form class="card mb-4" method="get" action="<?= base_url('kas_bank/transfer') ?>">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label mb-1">Unit Transaksi</label>
+                    <select name="unit_id" class="form-select form-select-sm">
+                        <?php foreach (($unit ?? []) as $u) : ?>
+                            <option value="<?= (int) $u->idunit ?>" <?= ($unit_terpilih ?? 0) == $u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-sm btn-primary w-100">Pilih</button>
+                </div>
+            </div>
+            <div class="form-text mt-1">Transfer mencatat perpindahan antar rekening fisik. Jika dua unit berbagi rekening yang sama, itu BUKAN transfer internal (gunakan Pembayaran Antar Unit).</div>
+        </div>
+    </form>
+<?php endif; ?>
 
 <div class="row g-3">
     <div class="col-lg-4">
@@ -36,7 +58,15 @@ $labelAkun = static function ($a) use ($unitMap) {
                 <?php if (!$canInput) : ?>
                     <div class="alert alert-warning py-2 mb-3">Anda hanya dapat melihat data. Hubungi Admin Center / Direktur / Manager untuk input.</div>
                 <?php endif; ?>
-                <form method="post" action="<?= base_url('kas_bank/transfer/save') ?>">
+                <form method="post" action="<?= base_url('kas_bank/transfer/save') ?>" enctype="multipart/form-data">
+                    <input type="hidden" name="submit_token" value="<?= esc($submit_token ?? '') ?>">
+                    <input type="hidden" name="unit_id" value="<?= (int) ($unit_terpilih ?? 0) ?>">
+                    <?php if (($bisa_pilih_unit ?? false)) : ?>
+                        <div class="mb-2">
+                            <label class="form-label mb-1">Unit Transaksi</label>
+                            <input type="text" class="form-control form-control-sm bg-light" value="<?= esc($unitMap[(int) ($unit_terpilih ?? 0)] ?? '-') ?>" readonly>
+                        </div>
+                    <?php endif; ?>
                     <div class="mb-2">
                         <label class="form-label mb-1">Dari Akun</label>
                         <select name="akun_asal_id" class="form-select form-select-sm" required <?= $canInput ? '' : 'disabled' ?>>
@@ -67,6 +97,10 @@ $labelAkun = static function ($a) use ($unitMap) {
                         <label class="form-label mb-1">Keterangan</label>
                         <input type="text" name="keterangan" class="form-control form-control-sm">
                     </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-1">Bukti Transfer (opsional)</label>
+                        <input type="file" name="bukti" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canInput ? '' : 'disabled' ?>>
+                    </div>
                     <button type="submit" class="btn btn-sm btn-primary w-100" <?= $canInput ? '' : 'disabled' ?>>Simpan Transfer</button>
                 </form>
                 <small class="text-muted d-block mt-2">Transfer internal tidak memengaruhi Net Cash Flow dan bukan pembayaran hutang/piutang.</small>
@@ -88,12 +122,13 @@ $labelAkun = static function ($a) use ($unitMap) {
                             <th>Dari</th>
                             <th>Ke</th>
                             <th class="text-end">Jumlah</th>
+                            <th>Bukti</th>
                             <th class="text-end">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($transaksi)) : ?>
-                            <tr><td colspan="6" class="text-center text-muted">Belum ada transfer internal.</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted">Belum ada transfer internal.</td></tr>
                         <?php endif; ?>
                         <?php foreach (($transaksi ?? []) as $t) :
                             $asal = $akunMap[(int) $t->akun_kas_bank_id] ?? null;
@@ -104,10 +139,19 @@ $labelAkun = static function ($a) use ($unitMap) {
                                 <td><?= $asal ? esc($labelAkun($asal)) : '.' ?></td>
                                 <td><?= $tujuan ? esc($labelAkun($tujuan)) : '-' ?></td>
                                 <td class="text-end fw-semibold"><?= $rp($t->jumlah) ?></td>
+                                <td>
+                                    <?php if ($t->bukti) : ?>
+                                        <a href="<?= base_url($t->bukti) ?>" target="_blank" class="btn btn-sm btn-light">Lihat</a>
+                                    <?php else : ?>
+                                        <small class="text-muted">-</small>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-end">
-                                    <?php if ($t->arah === 'KELUAR' && $canInput) : ?>
-                                        <a class="btn btn-sm btn-danger-soft" href="<?= base_url('kas_bank/transfer/reversal/' . (int) $t->idtransaksi) ?>"
-                                            onclick="return confirm('Batalkan transfer <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>?')">Batalkan</a>
+                                    <?php if ($t->arah === 'KELUAR' && $canKelola) : ?>
+                                        <form method="post" class="d-inline" action="<?= base_url('kas_bank/transfer/reversal/' . (int) $t->idtransaksi) ?>"
+                                            onsubmit="return confirm('Batalkan transfer <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>?')">
+                                            <button type="submit" class="btn btn-sm btn-danger-soft">Batalkan</button>
+                                        </form>
                                     <?php endif; ?>
                                 </td>
                             </tr>

@@ -21,6 +21,7 @@ $akunMap = [];
 foreach (($akun_kas_bank ?? []) as $a) {
     $akunMap[(int) $a->idakun_kas_bank] = $a->nama_akun;
 }
+$unitDipilih = (int) ($unit_terpilih ?? 0) > 0;
 $jenisLabels = [
     'PEMASUKAN' => 'Pemasukan',
     'PENGELUARAN' => 'Pengeluaran',
@@ -56,7 +57,10 @@ $jenisLabels = [
                 <select name="akun_id" class="form-select form-select-sm">
                     <option value="">Semua Akun</option>
                     <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
-                        <option value="<?= (int) $a->idakun_kas_bank ?>" <?= ($f['akun_id'] ?? 0) == $a->idakun_kas_bank ? 'selected' : '' ?>><?= esc(($unitMap[(int) $a->unit_id] ?? 'Unit ' . $a->unit_id) . ' – ' . $a->nama_akun) ?></option>
+                        <option value="<?= (int) $a->idakun_kas_bank ?>" <?= ($f['akun_id'] ?? 0) == $a->idakun_kas_bank ? 'selected' : '' ?>>
+                            <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : 'Fisik – ') . $a->nama_akun) ?>
+                            <?= $a->tipe === 'BANK' && empty($a->unit_id) ? ' (Bersama)' : '' ?>
+                        </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -71,24 +75,27 @@ $jenisLabels = [
     <div class="col-sm-6 col-xl-3">
         <div class="card shadow-none border bg-light-secondary overflow-hidden">
             <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Total Kas</p>
+                <p class="fs-3 fw-semibold text-dark mb-2">Total Kas <?= $unitDipilih ? '(unit terpilih)' : '' ?></p>
                 <h3 class="fw-semibold mb-0 text-primary"><?= $rp($total_kas ?? 0) ?></h3>
+                <?php if ($unitDipilih) : ?><small class="text-muted">Fisik semua unit: <?= $rp($total_fisik_kas ?? 0) ?></small><?php endif; ?>
             </div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="card shadow-none border bg-light-warning overflow-hidden">
             <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Total Bank</p>
+                <p class="fs-3 fw-semibold text-dark mb-2">Total Bank <?= $unitDipilih ? '(unit terpilih)' : '' ?></p>
                 <h3 class="fw-semibold mb-0 text-warning"><?= $rp($total_bank ?? 0) ?></h3>
+                <?php if ($unitDipilih) : ?><small class="text-muted">Fisik semua unit: <?= $rp($total_fisik_bank ?? 0) ?></small><?php endif; ?>
             </div>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="card shadow-none border bg-light-success overflow-hidden">
             <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Total Kas &amp; Bank</p>
+                <p class="fs-3 fw-semibold text-dark mb-2">Total Kas &amp; Bank <?= $unitDipilih ? '(unit terpilih)' : '' ?></p>
                 <h3 class="fw-semibold mb-0 text-success"><?= $rp($total_semua ?? 0) ?></h3>
+                <?php if ($unitDipilih) : ?><small class="text-muted">Fisik semua unit: <?= $rp($total_fisik_semua ?? 0) ?></small><?php endif; ?>
             </div>
         </div>
     </div>
@@ -102,11 +109,21 @@ $jenisLabels = [
     </div>
 </div>
 
+<?php if (!empty($warning_alokasi)) : ?>
+    <div class="alert alert-warning py-2">
+        <strong>Perhatian:</strong> total alokasi saldo awal melebihi saldo fisik pada rekening:
+        <?php foreach ($warning_alokasi as $ka) : ?>
+            <span class="badge bg-danger-subtle text-danger ms-1"><?= esc($akunMap[$ka] ?? '#' . $ka) ?></span>
+        <?php endforeach; ?>
+        (atur ulang alokasi di Master Akun).
+    </div>
+<?php endif; ?>
+
 <div class="row g-3">
     <div class="col-12 col-xl-7">
         <div class="card shadow-none border">
             <div class="card-header bg-transparent">
-                <h5 class="mb-0">Saldo per Akun (termasuk saldo awal)</h5>
+                <h5 class="mb-0">Saldo per Rekening Fisik <?= $unitDipilih ? '(termasuk alokasi unit terpilih)' : '' ?></h5>
             </div>
             <div class="card-body table-responsive">
                 <table class="table table-sm align-middle mb-0">
@@ -115,22 +132,33 @@ $jenisLabels = [
                             <th>Akun</th>
                             <th>Tipe</th>
                             <th>Status</th>
-                            <th class="text-end">Saldo</th>
+                            <th class="text-end">Saldo Fisik</th>
+                            <?php if ($unitDipilih) : ?>
+                                <th class="text-end">Saldo Unit</th>
+                            <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($akun_kas_bank)) : ?>
-                            <tr><td colspan="4" class="text-center text-muted">Belum ada akun kas/bank. Tambahkan lewat menu Master Akun &amp; Saldo Awal.</td></tr>
+                            <tr><td colspan="<?= $unitDipilih ? 5 : 4 ?>" class="text-center text-muted">Belum ada akun kas/bank. Tambahkan lewat menu Master Akun &amp; Saldo Awal.</td></tr>
                         <?php endif; ?>
                         <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                            <?php $shared = (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id)); ?>
                             <tr>
                                 <td>
-                                    <div class="fw-semibold"><?= esc($a->nama_akun) ?></div>
-                                    <small class="text-muted"><?= esc($unitMap[(int) $a->unit_id] ?? 'Unit ' . $a->unit_id) ?><?= $a->bank_idbank ? ' • ' . esc($a->bank_idbank) : '' ?></small>
+                                    <div class="fw-semibold"><?= esc($a->nama_akun) ?>
+                                        <?php if ($shared) : ?>
+                                            <span class="badge bg-secondary">Bersama</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <small class="text-muted"><?= esc($unitMap[(int) $a->unit_id] ?? 'Fisik lintas unit') ?><?= $a->bank_idbank ? ' • ' . esc($a->bank_idbank) : '' ?></small>
                                 </td>
                                 <td><span class="badge bg-<?= $a->tipe === 'KAS' ? 'primary-subtle text-primary' : 'warning-subtle text-warning' ?>"><?= esc($a->tipe) ?></span></td>
                                 <td><span class="badge bg-<?= $a->status === 'aktif' ? 'success-subtle text-success' : 'danger-subtle text-danger' ?>"><?= esc($a->status) ?></span></td>
-                                <td class="text-end fw-semibold"><?= $rp($saldo_per_akun[(int) $a->idakun_kas_bank] ?? 0) ?></td>
+                                <td class="text-end fw-semibold"><?= $rp($saldo_fisik_per_akun[(int) $a->idakun_kas_bank] ?? 0) ?></td>
+                                <?php if ($unitDipilih) : ?>
+                                    <td class="text-end"><?= $rp($saldo_unit_per_akun[(int) $a->idakun_kas_bank] ?? 0) ?></td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

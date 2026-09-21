@@ -5,6 +5,7 @@ namespace Tests;
 use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelTransaksiKasBank;
+use App\Models\ModelAkunKasBank;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
 
@@ -37,12 +38,35 @@ class KasBankTest extends CIUnitTestCase
             $this->db->query($sql);
         };
 
+        foreach ([
+            'db_transaksi_kas_bank',
+            'db_pembayaran_hutang_piutang',
+            'db_akun_kas_bank',
+            'db_alokasi_saldo_kas_bank',
+            'db_saldo_awal_kas_bank',
+            'db_hutang_piutang',
+            'db_kas_masuk',
+            'db_kas_keluar',
+            'db_pembayaran_hutang',
+            'db_pembayaran_piutang',
+            'db_mutasi',
+            'db_detail_mutasi',
+            'db_piutang',
+            'db_pembelian',
+            'db_unit',
+            'db_bank',
+        ] as $tabel) {
+            $q('DROP TABLE IF EXISTS ' . $tabel);
+        }
+
         $q('CREATE TABLE IF NOT EXISTS db_unit (idunit INTEGER PRIMARY KEY AUTO_INCREMENT, NAMA_UNIT TEXT NULL)');
+        $q('CREATE TABLE IF NOT EXISTS db_no_akun (no_akun TEXT NULL, nama_akun TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_bank (idbank VARCHAR(20) PRIMARY KEY, jenis_bank TEXT NULL, nama_bank TEXT NULL, atas_nama TEXT NULL, norek TEXT NULL, isppn INT NULL, gambar_qris TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_akun_kas_bank (
                 idakun_kas_bank INTEGER PRIMARY KEY AUTO_INCREMENT,
                 unit_id INT NULL, tipe TEXT NULL, nama_akun TEXT NULL,
                 bank_idbank TEXT NULL, no_akun_coa TEXT NULL, status TEXT NULL,
+                is_shared TINYINT(1) DEFAULT 0,
                 created_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_saldo_awal_kas_bank (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -52,8 +76,21 @@ class KasBankTest extends CIUnitTestCase
                 idtransaksi INTEGER PRIMARY KEY AUTO_INCREMENT,
                 tanggal TEXT NULL, unit_id INT NULL, akun_kas_bank_id INT NULL,
                 jenis TEXT NULL, arah TEXT NULL, jumlah REAL NULL, akun_tujuan_id INT NULL,
-                transfer_ref TEXT NULL, sumber_tipe TEXT NULL, sumber_id INT NULL,
+                transfer_ref TEXT NULL, submission_key VARCHAR(64) NULL, sumber_tipe TEXT NULL, sumber_id INT NULL,
                 keterangan TEXT NULL, bukti TEXT NULL, input_by INT NULL,
+                created_at TEXT NULL, updated_at TEXT NULL)');
+$colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submission_key'")->getResultArray();
+        if (! $colsTkb) {
+            $q('ALTER TABLE db_transaksi_kas_bank ADD COLUMN submission_key VARCHAR(64) NULL');
+        }
+        $ixTkb = $this->db->query("SHOW INDEX FROM db_transaksi_kas_bank WHERE Key_name = 'uniq_tkb_submission'")->getResultArray();
+        if (! $ixTkb) {
+            $q('ALTER TABLE db_transaksi_kas_bank ADD UNIQUE KEY uniq_tkb_submission (submission_key)');
+        }
+        $q('CREATE TABLE IF NOT EXISTS db_alokasi_saldo_kas_bank (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                akun_kas_bank_id INT NULL, unit_id INT NULL, nominal REAL NULL,
+                keterangan TEXT NULL, input_by INT NULL,
                 created_at TEXT NULL, updated_at TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_hutang_piutang (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -111,6 +148,7 @@ class KasBankTest extends CIUnitTestCase
     {
         $this->db->query('DELETE FROM db_transaksi_kas_bank');
         $this->db->query('DELETE FROM db_akun_kas_bank');
+        $this->db->query('DELETE FROM db_alokasi_saldo_kas_bank');
         $this->db->query('DELETE FROM db_saldo_awal_kas_bank');
         $this->db->query('DELETE FROM db_hutang_piutang');
         $this->db->query('DELETE FROM db_pembayaran_hutang_piutang');
@@ -123,24 +161,25 @@ class KasBankTest extends CIUnitTestCase
         $this->db->query('DELETE FROM db_unit');
         $this->db->query('DELETE FROM db_pembelian');
         $this->db->query('DELETE FROM db_bank');
+        $this->db->query('DELETE FROM db_no_akun');
 
         $this->db->query("INSERT INTO db_unit (idunit, NAMA_UNIT) VALUES (1, 'Unit A'), (2, 'Unit B')");
         $this->db->query("INSERT INTO db_bank (idbank, nama_bank, norek, atas_nama) VALUES ('BNI-001', 'Bank BNI', '555', 'PT Contoh')");
 
-        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, status) VALUES
-            (1, 1, 'KAS',  'Kas Unit A',  NULL, 'aktif'),
-            (2, 1, 'BANK', 'Bank BNI A',  'BNI-001', 'aktif'),
-            (3, 2, 'KAS',  'Kas Unit B',  NULL, 'aktif'),
-            (4, 2, 'BANK', 'Bank BNI B',  'BNI-001', 'aktif'),
-            (5, 1, 'BANK', 'Bank Nonaktif', 'BNI-001', 'nonaktif')");
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, status, is_shared) VALUES
+            (1, 1, 'KAS',  'Kas Unit A',  NULL, 'aktif', 0),
+            (2, NULL, 'BANK', 'Bank BNI Bersama', 'BNI-001', 'aktif', 1),
+            (3, 2, 'KAS',  'Kas Unit B',  NULL, 'aktif', 0),
+            (5, 1, 'BANK', 'Bank Nonaktif', 'BNI-001', 'nonaktif', 0)");
 
-        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan) VALUES (2, '2026-01-01', 500000, 'Saldo awal BNI A')");
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan) VALUES (2, '2026-01-01', 500000, 'Saldo awal BNI Bersama')");
     }
 
-    public function testResolveAkunBankLebihDiutamakanDariKas(): void
+    public function testResolveAkunBankFisikLintasUnitDiutamakanDariKas(): void
     {
+        // Satu rekening fisik BNI dipakai kedua unit (bank_idbank sama).
         $this->assertSame(2, $this->kasbank->resolveAkun(1, 'BNI-001'));
-        $this->assertSame(4, $this->kasbank->resolveAkun(2, 'BNI-001'));
+        $this->assertSame(2, $this->kasbank->resolveAkun(2, 'BNI-001'));
     }
 
     public function testResolveAkunFallbackKeKasSaatBankTidakCocok(): void
@@ -270,6 +309,47 @@ class KasBankTest extends CIUnitTestCase
         $this->assertSame('250000', (string)$row->jumlah);
     }
 
+    public function testSaldoFisikGabunganSemuaUnit(): void
+    {
+        // BCA Bersama (akun 6) dipakai unit 1 & unit 2: saldo fisik = gabungan
+        // seluruh transaksi antar unit, saldo awal satu tarikan fisik.
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, status, is_shared) VALUES
+            (6, NULL, 'BANK', 'BCA Bersama Jember', 'BCA-001', 'aktif', 1)");
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan) VALUES (6, '2026-01-01', 800000, 'Saldo awal BCA')");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal) VALUES (6, 1, 300000), (6, 2, 500000)");
+        $this->db->query("INSERT INTO db_transaksi_kas_bank (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah) VALUES
+            ('2026-02-01', 1, 6, 'PEMASUKAN', 'MASUK', 100000),
+            ('2026-02-02', 2, 6, 'PEMASUKAN', 'MASUK', 50000),
+            ('2026-02-03', 1, 6, 'PENGELUARAN', 'KELUAR', 50000),
+            ('2026-02-04', 2, 6, 'PENGELUARAN', 'KELUAR', 30000)");
+
+        $model = new ModelTransaksiKasBank();
+
+        // Fisik: 800rb + 150rb masuk - 80rb keluar = 870rb.
+        $this->assertSame(870000, $model->getSaldoFisikAkun(6));
+        $this->assertSame(870000, $model->getSaldoAkun(6));
+
+        // Per unit (alokasi + transaksi unit): unit 1 = 300rb+100rb-50rb=350rb;
+        // unit 2 = 500rb+50rb-30rb=520rb. Total atribusi = fisik = 870rb.
+        $this->assertSame(350000, $model->getSaldoUnitAkun(6, 1));
+        $this->assertSame(520000, $model->getSaldoUnitAkun(6, 2));
+        $this->assertSame(800000, $model->getTotalAlokasiUnit(6));
+        $this->assertSame($model->getSaldoUnitAkun(6, 1) + $model->getSaldoUnitAkun(6, 2), $model->getSaldoFisikAkun(6));
+    }
+
+    public function testAlokasiSaldoModelUpsertPerUnit(): void
+    {
+        $model = new \App\Models\ModelAlokasiSaldoKasBank();
+        $model->insert(['akun_kas_bank_id' => 2, 'unit_id' => 1, 'nominal' => 100000]);
+        $model->insert(['akun_kas_bank_id' => 2, 'unit_id' => 2, 'nominal' => 150000]);
+
+        $this->assertSame(250000, $model->sumByAkun(2));
+        $this->assertNotNull($model->getByAkunUnit(2, 1));
+
+        $index = $model->indexByAkun();
+        $this->assertCount(2, $index[2] ?? []);
+    }
+
     public function testNilaiDetailMutasiGunakanHargaMutasi(): void
     {
         $this->assertSame(2000, $this->kasbank->nilaiDetailMutasi(['jumlah_kirim' => 2, 'harga_mutasi' => 1000, 'hpp_barang' => 999]));
@@ -320,6 +400,35 @@ class KasBankTest extends CIUnitTestCase
         $this->assertSame('skipped', $r2['status']);
     }
 
+    public function testBuatHutangPiutangDariMutasiJatuhTempo(): void
+    {
+        // tanggal_terima diketahui -> default jatuh tempo = tanggal_terima + 3 hari.
+        $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES (1, 'M-2026-002', '2026-02-05', '2026-02-08 10:00:00', '1', 1, 2, 9)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 1000, 800, 1, 2)");
+
+        $model = new ModelHutangPiutang();
+        $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
+
+        $rows = $model->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 1)->findAll();
+        $this->assertCount(2, $rows);
+        $kode = array_map(fn ($x) => $x->kode, $rows);
+        $this->assertContains('MUT-1-1-P', $kode);
+        $this->assertContains('MUT-2-1-H', $kode);
+        foreach ($rows as $r) {
+            $this->assertSame('2026-02-11', $r->jatuh_tempo);
+        }
+
+        // Parameter $jatuhTempo eksplisit dipakai (bukan tanggal_terima + 3).
+        $model->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 1)->delete();
+        $this->kasbank->buatHutangPiutangDariMutasi(1, 9, '2026-03-01');
+        $rows = $model->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 1)->findAll();
+        $this->assertCount(2, $rows);
+        foreach ($rows as $r) {
+            $this->assertSame('2026-03-01', $r->jatuh_tempo);
+        }
+    }
+
     public function testTerapkanDanRestorePembayaranHP(): void
     {
         $model = new ModelHutangPiutang();
@@ -351,6 +460,37 @@ class KasBankTest extends CIUnitTestCase
         $this->assertSame('1000', (string)$hp->sisa);
     }
 
+    public function testTerbatasUnitMenyembunyikanRekeningUnitLain(): void
+    {
+        $model = new ModelAkunKasBank($this->db);
+        $ids  = function () use ($model): array {
+            $arr = array_map('intval', array_column($model->getAllWithUnitTerbatas(1), 'idakun_kas_bank'));
+            sort($arr);
+            return $arr;
+        };
+        $aktif = function () use ($model): array {
+            $arr = array_map('intval', array_column($model->getAktifUntukUnitTerbatas(1), 'idakun_kas_bank'));
+            sort($arr);
+            return $arr;
+        };
+
+        // Tanpa alokasi: unit 1 melihat KAS miliknya + BANK milik unitnya (trm.
+        // nonaktif 5); rekening bersama (2) dan KAS unit 2 (3) tidak terlihat.
+        $this->assertSame([1, 5], $ids());
+        $this->assertSame([1], $aktif());
+
+        // Setelah BNI Bersama dialokasikan ke unit 1 -> menjadi rekening unit 1.
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal) VALUES (2, 1, 250000)");
+        $this->assertSame([1, 2, 5], $ids());
+        $this->assertSame([1, 2], $aktif());
+
+        // Unit 2 tetap tidak melihat rekening bersama: hanya KAS miliknya.
+        $idsU2 = array_map('intval', array_column($model->getAllWithUnitTerbatas(2), 'idakun_kas_bank'));
+        $aktifU2 = array_map('intval', array_column($model->getAktifUntukUnitTerbatas(2), 'idakun_kas_bank'));
+        $this->assertSame([3], $idsU2);
+        $this->assertSame([3], $aktifU2);
+    }
+
     public function testSaldoModel(): void
     {
         $this->testPostingKasMasukIdempotent();
@@ -377,5 +517,27 @@ class KasBankTest extends CIUnitTestCase
         $this->assertSame($id1, $id2);
 
         $this->assertSame(1, $model->where('sumber_tipe', 'tes')->where('sumber_id', 77)->countAllResults());
+    }
+
+    public function testSubmissionKeyUniqueMemblokirSubmitDuplikat(): void
+    {
+        $model = new ModelTransaksiKasBank();
+        $base  = [
+            'tanggal'          => '2026-02-01',
+            'unit_id'          => 1,
+            'akun_kas_bank_id' => 2,
+            'jenis'            => 'TRANSFER_INTERNAL',
+            'arah'             => 'KELUAR',
+            'jumlah'           => 150000,
+            'transfer_ref'     => 'TRF-DUP-1',
+        ];
+
+        try {
+            $model->insert($base + ['submission_key' => 'DUPTOK-1']);
+            $model->insert($base + ['submission_key' => 'DUPTOK-1']);
+            $this->fail('Insert kedua dengan submission_key sama tidak gagal (seharusnya kena UNIQUE).');
+        } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
+            $this->assertSame(1, $model->where('submission_key', 'DUPTOK-1')->countAllResults());
+        }
     }
 }

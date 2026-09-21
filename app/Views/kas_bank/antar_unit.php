@@ -12,7 +12,8 @@
 
 <?php
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
-$canInput = $bisa_pilih_unit ?? false;
+$canTransaksi = $can_transaksi ?? false;
+$canKelola = $bisa_pilih_unit ?? false;
 $unitMap = [];
 foreach (($unit ?? []) as $u) {
     $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
@@ -21,6 +22,9 @@ $akunMap = [];
 foreach (($akun_kas_bank ?? []) as $a) {
     $akunMap[(int) $a->idakun_kas_bank] = $a;
 }
+$kelAkun = static function ($a) use ($unitMap) {
+    return ((isset($unitMap[(int) $a->unit_id])) ? $unitMap[(int) $a->unit_id] : 'Fisik') . ' – ' . $a->nama_akun . ' (' . $a->tipe . ')';
+};
 $labelStatus = static fn($s) => ['belum_lunas' => 'Belum Lunas', 'sebagian' => 'Sebagian', 'lunas' => 'Lunas'][$s] ?? $s;
 $badgeStatus = static fn($s) => ['belum_lunas' => 'bg-warning-subtle text-warning', 'sebagian' => 'bg-primary-subtle text-primary', 'lunas' => 'bg-success-subtle text-success'][$s] ?? 'bg-secondary-subtle text-secondary';
 $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && $h->status !== 'lunas');
@@ -33,13 +37,14 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                 <h5 class="mb-0">Form Pembayaran Antar Unit</h5>
             </div>
             <div class="card-body">
-                <?php if (!$canInput) : ?>
+                <?php if (!$canTransaksi) : ?>
                     <div class="alert alert-warning py-2 mb-3">Anda hanya dapat melihat data. Hubungi Admin Center / Direktur / Manager untuk input.</div>
                 <?php endif; ?>
                 <form method="post" action="<?= base_url('kas_bank/antar-unit/save') ?>" enctype="multipart/form-data">
+                    <input type="hidden" name="submit_token" value="<?= esc($submit_token ?? '') ?>">
                     <div class="mb-2">
                         <label class="form-label mb-1">Hutang Antar Unit</label>
-                        <select name="hutang_piutang_id" id="hp_hutang" class="form-select form-select-sm" required <?= $canInput ? '' : 'disabled' ?>>
+                        <select name="hutang_piutang_id" id="hp_hutang" class="form-select form-select-sm" required <?= $canTransaksi ? '' : 'disabled' ?>>
                             <option value="">Pilih Hutang (masih bersaldo)</option>
                             <?php foreach (($hp_hutang ?? []) as $h) : ?>
                                 <option value="<?= (int) $h->id ?>"
@@ -54,7 +59,7 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                     </div>
                     <div class="mb-2">
                         <label class="form-label mb-1">Akun Pengirim (kas/bank)</label>
-                        <select name="akun_pengirim_id" id="akun_pengirim" class="form-select form-select-sm" required <?= $canInput ? '' : 'disabled' ?>>
+                        <select name="akun_pengirim_id" id="akun_pengirim" class="form-select form-select-sm" required <?= $canTransaksi ? '' : 'disabled' ?>>
                             <option value="">Pilih Akun Pengirim</option>
                             <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>" data-unit="<?= (int) $a->unit_id ?>">
@@ -65,36 +70,38 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                     </div>
                     <div class="mb-2">
                         <label class="form-label mb-1">Akun Penerima (kas/bank)</label>
-                        <select name="akun_penerima_id" id="akun_penerima" class="form-select form-select-sm" required <?= $canInput ? '' : 'disabled' ?>>
+                        <select name="akun_penerima_id" id="akun_penerima" class="form-select form-select-sm" required <?= $canTransaksi ? '' : 'disabled' ?>>
                             <option value="">Pilih Akun Penerima</option>
-                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
-                                <option value="<?= (int) $a->idakun_kas_bank ?>" data-unit="<?= (int) $a->unit_id ?>">
-                                    [<?= esc($unitMap[(int) $a->unit_id] ?? 'U' . $a->unit_id) ?>] <?= esc($a->nama_akun) ?> (<?= esc($a->tipe) ?>)
+                            <?php foreach (($akun_penerima ?? []) as $a) : ?>
+                                <option value="<?= (int) $a->idakun_kas_bank ?>">
+                                    <?= esc($kelAkun($a)) ?> <?= (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id)) ? '(Bersama)' : '' ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label mb-1">Jumlah</label>
-                        <input type="text" name="jumlah" id="jumlah_bayar" class="form-control form-control-sm rupiah" placeholder="cth: 5.000.000" required <?= $canInput ? '' : 'disabled' ?>>
+                        <input type="text" name="jumlah" id="jumlah_bayar" class="form-control form-control-sm rupiah" placeholder="cth: 5.000.000" required <?= $canTransaksi ? '' : 'disabled' ?>>
                     </div>
                     <div class="mb-2">
                         <label class="form-label mb-1">Tanggal</label>
-                        <input type="date" name="tanggal" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" <?= $canInput ? '' : 'disabled' ?>>
+                        <input type="date" name="tanggal" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" <?= $canTransaksi ? '' : 'disabled' ?>>
                     </div>
                     <div class="mb-2">
                         <label class="form-label mb-1">Bukti Transfer (opsional)</label>
-                        <input type="file" name="bukti" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canInput ? '' : 'disabled' ?>>
+                        <input type="file" name="bukti" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canTransaksi ? '' : 'disabled' ?>>
                     </div>
                     <div class="mb-3">
                         <label class="form-label mb-1">Keterangan</label>
                         <input type="text" name="keterangan" class="form-control form-control-sm">
                     </div>
-                    <button type="submit" class="btn btn-sm btn-success w-100" <?= $canInput ? '' : 'disabled' ?>>Simpan Pembayaran</button>
+                    <button type="submit" class="btn btn-sm btn-success w-100" <?= $canTransaksi ? '' : 'disabled' ?>>Simpan Pembayaran</button>
                 </form>
                 <small class="text-muted d-block mt-2">
                     Pembayaran dari akun KAS dicatat tunai; dari akun BANK dicatat bank (bank pengirim).
-                    Sisa hutang <b>dan</b> pasangan piutangnya berkurang otomatis.
+                    Sisa hutang <b>dan</b> pasangan piutangnya berkurang otomatis.<br>
+                    Jika pengirim &amp; penerima memakai <b>rekening fisik yang sama</b> (rekening bersama), sistem hanya
+                    menyelesaikan H/P — <b>tanpa</b> gerakan kas di rekening (money tidak berpindah rekening).
                 </small>
             </div>
         </div>
@@ -161,6 +168,46 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
             </div>
         </div>
 
+        <div class="card shadow-none border mb-3">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">Penyelesaian H/P Rekening Fisik Sama (atribusi, tanpa gerakan kas)</h5>
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tanggal</th>
+                            <th>Hutang #</th>
+                            <th>Keterangan</th>
+                            <th class="text-end">Jumlah</th>
+                            <th class="text-end">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($histori_atribusi)) : ?>
+                            <tr><td colspan="5" class="text-center text-muted">Belum ada penyelesaian H/P rekening sama.</td></tr>
+                        <?php endif; ?>
+                        <?php foreach (($histori_atribusi ?? []) as $p) : ?>
+                            <tr>
+                                <td><?= esc($p->tanggal_bayar) ?></td>
+                                <td class="fw-semibold">#<?= (int) $p->referensi_id ?></td>
+                                <td><small><?= esc($p->keterangan) ?></small></td>
+                                <td class="text-end fw-semibold"><?= $rp($p->jumlah_bayar) ?></td>
+                                <td class="text-end">
+                                    <?php if ($canKelola) : ?>
+                                        <form method="post" class="d-inline" action="<?= base_url('kas_bank/antar-unit/reversal-atribusi/' . (int) $p->referensi_id) ?>"
+                                            onsubmit="return confirm('Batalkan penyelesaian H/P ini? Sisa hutang/piutang pasangannya akan dikembalikan. Kas tidak berubah.')">
+                                            <button type="submit" class="btn btn-sm btn-danger-soft">Batalkan</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="card shadow-none border">
             <div class="card-header bg-transparent">
                 <h5 class="mb-0">Riwayat Pembayaran Antar Unit</h5>
@@ -199,9 +246,11 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-end">
-                                    <?php if ($t->arah === 'KELUAR' && $canInput) : ?>
-                                        <a class="btn btn-sm btn-danger-soft" href="<?= base_url('kas_bank/antar-unit/reversal/' . (int) $t->idtransaksi) ?>"
-                                            onclick="return confirm('Batalkan pembayaran <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>? Sisa hutang/piutang pasangannya akan dikembalikan.')">Batalkan</a>
+                                    <?php if ($t->arah === 'KELUAR' && $canKelola) : ?>
+                                        <form method="post" class="d-inline" action="<?= base_url('kas_bank/antar-unit/reversal/' . (int) $t->idtransaksi) ?>"
+                                            onsubmit="return confirm('Batalkan pembayaran <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>? Sisa hutang/piutang pasangannya akan dikembalikan.')">
+                                            <button type="submit" class="btn btn-sm btn-danger-soft">Batalkan</button>
+                                        </form>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -215,7 +264,7 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
 
 <script>
 (function () {
-    var canInput = <?= $canInput ? 'true' : 'false' ?>;
+    var canInput = <?= $canKelola ? 'true' : 'false' ?>;
     var akunByUnit = {};
     document.querySelectorAll('#akun_pengirim option').forEach(function (o) {
         if (!o.value) return;
