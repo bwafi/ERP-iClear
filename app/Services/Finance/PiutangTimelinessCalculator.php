@@ -33,6 +33,7 @@ class PiutangTimelinessCalculator implements FinanceCalculatorInterface
         $endDate = date('Y-m-t', strtotime($startDate));
         $today = date('Y-m-d');
 
+        $cutoff = FinanceScopeService::cutoffDate();
         $items = $this->db->table('piutang')
             ->select('
                 piutang.idpiutang,
@@ -46,6 +47,7 @@ class PiutangTimelinessCalculator implements FinanceCalculatorInterface
             ')
             ->join('akun', 'akun.ID_AKUN = piutang.pegawai_idpegawai', 'left')
             ->where('piutang.unit_idunit', $unitId)
+            ->where('piutang.tanggal >=', $cutoff)
             ->where('piutang.jatuh_tempo >=', $startDate)
             ->where('piutang.jatuh_tempo <=', $endDate)
             ->orderBy('piutang.jatuh_tempo', 'ASC')

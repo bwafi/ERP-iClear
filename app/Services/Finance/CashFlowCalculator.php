@@ -36,11 +36,12 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     {
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
+        $cutoff = FinanceScopeService::cutoffDate();
 
-        $penjualan = $this->sumPenjualan($unitId, $startDate, $endDate);
-        $service = $this->sumService($unitId, $startDate, $endDate);
+        $penjualan = $this->sumPenjualan($unitId, $startDate, $endDate, $cutoff);
+        $service = $this->sumService($unitId, $startDate, $endDate, $cutoff);
         $penerimaan = $penjualan + $service;
-        $kasKeluar = $this->sumKasKeluar($unitId, $startDate, $endDate);
+        $kasKeluar = $this->sumKasKeluar($unitId, $startDate, $endDate, $cutoff);
 
         $net = $penerimaan - $kasKeluar;
         $target = (float) $this->config->cashFlowTargetPercent;
@@ -80,9 +81,10 @@ class CashFlowCalculator implements FinanceCalculatorInterface
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $penjualanByDate = $this->groupPenjualanByDate($unitId, $startDate, $endDate);
-        $serviceByDate = $this->groupServiceByDate($unitId, $startDate, $endDate);
-        $keluarByDate = $this->groupKasKeluarByDate($unitId, $startDate, $endDate);
+        $cutoff = FinanceScopeService::cutoffDate();
+        $penjualanByDate = $this->groupPenjualanByDate($unitId, $startDate, $endDate, $cutoff);
+        $serviceByDate = $this->groupServiceByDate($unitId, $startDate, $endDate, $cutoff);
+        $keluarByDate = $this->groupKasKeluarByDate($unitId, $startDate, $endDate, $cutoff);
 
         $map = [];
         foreach (array_unique(array_merge(array_keys($penjualanByDate), array_keys($serviceByDate))) as $tgl) {
@@ -122,13 +124,14 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     /**
      * Penerimaan penjualan = SUM(penjualan.harus_dibayar) dalam rentang.
      */
-    private function sumPenjualan(int $unitId, string $startDate, string $endDate): float
+    private function sumPenjualan(int $unitId, string $startDate, string $endDate, string $cutoff): float
     {
         $row = $this->db->table('penjualan')
             ->selectSum('harus_dibayar', 'total')
             ->where('unit_idunit', $unitId)
             ->where('DATE(tanggal) >=', $startDate)
             ->where('DATE(tanggal) <=', $endDate)
+            ->where('DATE(tanggal) >=', $cutoff)
             ->get()
             ->getRow();
 
@@ -138,13 +141,14 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     /**
      * Penerimaan service = SUM(service.bayar) dalam rentang.
      */
-    private function sumService(int $unitId, string $startDate, string $endDate): float
+    private function sumService(int $unitId, string $startDate, string $endDate, string $cutoff): float
     {
         $row = $this->db->table('service')
             ->selectSum('bayar', 'total')
             ->where('unit_idunit', $unitId)
             ->where('DATE(created_at) >=', $startDate)
             ->where('DATE(created_at) <=', $endDate)
+            ->where('DATE(created_at) >=', $cutoff)
             ->get()
             ->getRow();
 
@@ -154,7 +158,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     /**
      * Kas keluar = SUM(kas_keluar.jumlah), mengecualikan baris "kas awal".
      */
-    private function sumKasKeluar(int $unitId, string $startDate, string $endDate): float
+    private function sumKasKeluar(int $unitId, string $startDate, string $endDate, string $cutoff): float
     {
         $row = $this->applyKasAwalFilter(
             $this->db->table('kas_keluar')
@@ -162,6 +166,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
                 ->where('idunit', $unitId)
                 ->where('tanggal >=', $startDate)
                 ->where('tanggal <=', $endDate)
+                ->where('tanggal >=', $cutoff)
         )
             ->get()
             ->getRow();
@@ -172,7 +177,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     /**
      * @return array<string, float>
      */
-    private function groupPenjualanByDate(int $unitId, string $startDate, string $endDate): array
+    private function groupPenjualanByDate(int $unitId, string $startDate, string $endDate, string $cutoff): array
     {
         return $this->mapByDate(
             $this->db->table('penjualan')
@@ -180,6 +185,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
                 ->where('unit_idunit', $unitId)
                 ->where('DATE(tanggal) >=', $startDate)
                 ->where('DATE(tanggal) <=', $endDate)
+                ->where('DATE(tanggal) >=', $cutoff)
                 ->groupBy('DATE(tanggal)')
         );
     }
@@ -187,7 +193,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     /**
      * @return array<string, float>
      */
-    private function groupServiceByDate(int $unitId, string $startDate, string $endDate): array
+    private function groupServiceByDate(int $unitId, string $startDate, string $endDate, string $cutoff): array
     {
         return $this->mapByDate(
             $this->db->table('service')
@@ -195,6 +201,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
                 ->where('unit_idunit', $unitId)
                 ->where('DATE(created_at) >=', $startDate)
                 ->where('DATE(created_at) <=', $endDate)
+                ->where('DATE(created_at) >=', $cutoff)
                 ->groupBy('DATE(created_at)')
         );
     }
@@ -202,7 +209,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     /**
      * @return array<string, float>
      */
-    private function groupKasKeluarByDate(int $unitId, string $startDate, string $endDate): array
+    private function groupKasKeluarByDate(int $unitId, string $startDate, string $endDate, string $cutoff): array
     {
         return $this->mapByDate(
             $this->applyKasAwalFilter(
@@ -211,6 +218,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
                     ->where('idunit', $unitId)
                     ->where('tanggal >=', $startDate)
                     ->where('tanggal <=', $endDate)
+                    ->where('tanggal >=', $cutoff)
                     ->groupBy('DATE(tanggal)')
             )
         );

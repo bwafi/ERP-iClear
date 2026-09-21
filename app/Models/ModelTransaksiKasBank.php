@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Finance\FinanceScopeService;
 use CodeIgniter\Model;
 
 class ModelTransaksiKasBank extends Model
@@ -30,8 +31,13 @@ class ModelTransaksiKasBank extends Model
     ];
 
     /**
-     * Saldo fisik satu rekening (saldo awal fisik + seluruh pemasukan -
-     * pengeluaran, lintas unit). Rekening bersama = gabungan semua unit.
+     * Saldo fisik satu rekening (saldo awal fisik + pemasukan - pengeluaran,
+     * lintas unit). Rekening bersama = gabungan semua unit.
+     *
+     * Sejak Finance cut-off, `saldo_awal_kas_bank` adalah saldo riil as-of
+     * tanggal cut-off (opening balance). Transaksi yang dijumlahkan HANYA yang
+     * tanggal-nya pada/setelah cut-off; transaksi sebelum cut-off adalah legacy
+     * dan tidak boleh ikut menghitung ulang saldo aktif.
      */
     public function getSaldoAkun(int $akunId): int
     {
@@ -41,15 +47,19 @@ class ModelTransaksiKasBank extends Model
             ->get()
             ->getRow();
 
+        $cutoff = FinanceScopeService::cutoffDate();
+
         $masuk = $this->select('COALESCE(SUM(jumlah), 0) as total')
             ->where('akun_kas_bank_id', $akunId)
             ->where('arah', 'MASUK')
+            ->where('tanggal >=', $cutoff)
             ->get()
             ->getRow();
 
         $keluar = $this->select('COALESCE(SUM(jumlah), 0) as total')
             ->where('akun_kas_bank_id', $akunId)
             ->where('arah', 'KELUAR')
+            ->where('tanggal >=', $cutoff)
             ->get()
             ->getRow();
 
@@ -79,10 +89,13 @@ class ModelTransaksiKasBank extends Model
             ->get()
             ->getRow();
 
+        $cutoff = FinanceScopeService::cutoffDate();
+
         $masuk = $this->select('COALESCE(SUM(jumlah), 0) as total')
             ->where('akun_kas_bank_id', $akunId)
             ->where('unit_id', $unitId)
             ->where('arah', 'MASUK')
+            ->where('tanggal >=', $cutoff)
             ->get()
             ->getRow();
 
@@ -90,6 +103,7 @@ class ModelTransaksiKasBank extends Model
             ->where('akun_kas_bank_id', $akunId)
             ->where('unit_id', $unitId)
             ->where('arah', 'KELUAR')
+            ->where('tanggal >=', $cutoff)
             ->get()
             ->getRow();
 

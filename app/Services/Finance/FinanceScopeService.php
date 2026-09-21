@@ -129,4 +129,58 @@ class FinanceScopeService
     {
         return in_array($this->scopeInfo()['myRole'], self::inputRoles(), true);
     }
+
+    // =====================================================================
+    // Finance Cut-off / Scope data legacy-opening-active
+    // =====================================================================
+
+    public const SCOPE_ACTIVE = 'active';
+    public const SCOPE_OPENING = 'opening';
+    public const SCOPE_LEGACY = 'legacy';
+
+    /**
+     * Tanggal Financial Cut-off (YYYY-MM-DD). Data sebelum tanggal ini =
+     * legacy; mulai tanggal ini = active. Sumber tunggal: Config\Finance.
+     */
+    public static function cutoffDate(): string
+    {
+        return (string) (new Finance())->cutoffDate;
+    }
+
+    /**
+     * Normalisasi tanggal apapun (datetime/date/null) ke "YYYY-MM-DD".
+     */
+    public static function tanggalStr($tanggal): string
+    {
+        if (empty($tanggal)) {
+            return '';
+        }
+        if ($tanggal instanceof \DateTimeInterface) {
+            return $tanggal->format('Y-m-d');
+        }
+        $s = (string) $tanggal;
+        $t = strtotime($s);
+
+        return $t !== false ? date('Y-m-d', $t) : substr($s, 0, 10);
+    }
+
+    /**
+     * Apakah tanggal transaksi masuk kategori legacy (sebelum cut-off).
+     */
+    public static function isLegacyTransaction($tanggal): bool
+    {
+        $t = self::tanggalStr($tanggal);
+
+        return $t !== '' && $t < self::cutoffDate();
+    }
+
+    /**
+     * Apakah tanggal transaksi masuk kategori active (pada/setelah cut-off).
+     */
+    public static function isActiveTransaction($tanggal): bool
+    {
+        $t = self::tanggalStr($tanggal);
+
+        return $t !== '' && $t >= self::cutoffDate();
+    }
 }

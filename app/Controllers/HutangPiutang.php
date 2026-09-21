@@ -89,6 +89,7 @@ class HutangPiutang extends BaseController
             'unit_id' => $this->resolveUnitId(),
             'bulan' => $this->request->getGet('bulan'),
             'q' => $this->request->getGet('q'),
+            'scope' => $this->request->getGet('scope'),
         ];
 
         return view('template', [

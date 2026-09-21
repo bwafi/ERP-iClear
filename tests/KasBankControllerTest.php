@@ -89,7 +89,9 @@ class KasBankControllerTest extends CIUnitTestCase
                 lawan_unit_id INT NULL, nama_pihak TEXT NULL, tanggal TEXT NULL,
                 jatuh_tempo TEXT NULL, uraian TEXT NULL, total REAL NULL, total_dibayar REAL NULL,
                 sisa REAL NULL, status TEXT NULL, keterangan TEXT NULL, unit_id INT NULL,
-                input_by INT NULL, deleted INT DEFAULT 0, created_at TEXT NULL, updated_at TEXT NULL)');
+                input_by INT NULL, deleted INT DEFAULT 0, created_at TEXT NULL, updated_at TEXT NULL,
+                scope TEXT NULL DEFAULT \'active\', cutoff_closed_at TEXT NULL,
+                cutoff_closed_by INT NULL, cutoff_reason TEXT NULL)');
         $q('CREATE TABLE db_pembayaran_hutang_piutang (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 hutang_piutang_id INT NULL, tanggal_bayar TEXT NULL, jumlah_bayar REAL NULL,
@@ -662,5 +664,108 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame(0, $this->model(ModelPembayaranHutangPiutang::class)
             ->where('referensi_tipe', 'antar_unit_atribusi')
             ->countAllResults());
+    }
+
+    public function testListPositionsDefaultMenghilangkanLegacy(): void
+    {
+        $m = $this->model(ModelHutangPiutang::class);
+        $m->insert([
+            'kode' => 'H-903', 'jenis' => 'hutang', 'sumber_tipe' => 'manual',
+            'pihak_tipe' => 'supplier', 'pihak_id' => 1, 'nama_pihak' => 'Supplier Lama',
+            'tanggal' => '2025-06-01', 'total' => 250000, 'total_dibayar' => 0,
+            'sisa' => 250000, 'status' => 'belum_lunas', 'unit_id' => 1, 'deleted' => 0,
+            'scope' => 'legacy', 'cutoff_reason' => 'LEGACY_CUTOFF',
+        ]);
+
+        $svc = new HutangPiutangService();
+        $default = array_column($svc->listPositions(['jenis' => 'hutang']), 'kode');
+        $this->assertNotContains('H-903', $default);
+        $this->assertContains('H-901', $default);
+
+        $semua = array_column($svc->listPositions(['jenis' => 'hutang', 'scope' => 'semua']), 'kode');
+        $this->assertContains('H-903', $semua);
+
+        $legacy = array_column($svc->listPositions(['jenis' => 'hutang', 'scope' => 'legacy']), 'kode');
+        $this->assertContains('H-903', $legacy);
+        $this->assertNotContains('H-901', $legacy);
+    }
+
+    public function testRingkasanTidakMenghitungLegacy(): void
+    {
+        // Hutang manual (authoritative) aktif -> terhitung di ringkasan.
+        $m = $this->model(ModelHutangPiutang::class);
+        $m->insert([
+            'kode' => 'H-904', 'jenis' => 'hutang', 'sumber_tipe' => 'manual',
+            'pihak_tipe' => 'supplier', 'pihak_id' => 1, 'nama_pihak' => 'Supplier Aktif',
+            'tanggal' => '2026-10-15', 'total' => 100000, 'total_dibayar' => 0,
+            'sisa' => 100000, 'status' => 'belum_lunas', 'unit_id' => 1, 'deleted' => 0,
+            'scope' => 'active',
+        ]);
+        $id904 = (int) \Config\Database::connect()->table('hutang_piutang')
+            ->where('kode', 'H-904')->get()->getRow()->id;
+        $svc = new HutangPiutangService();
+        $this->assertSame(100000, $svc->getRingkasan([1])['total_hutang']);
+
+        // Setelah di-legacy (seperti hasil migration cut-off) -> hilang.
+        $m->where('id', $id904)
+            ->set(['scope' => 'legacy', 'cutoff_reason' => 'LEGACY_CUTOFF'])
+            ->update();
+        $this->assertSame(0, $svc->getRingkasan([1])['total_hutang']);
+
+        // Yang sudah legacy sejak awal juga tidak dihitung.
+        $m->insert([
+            'kode' => 'H-905', 'jenis' => 'hutang', 'sumber_tipe' => 'manual',
+            'pihak_tipe' => 'supplier', 'pihak_id' => 2, 'nama_pihak' => 'Supplier Lama',
+            'tanggal' => '2025-06-01', 'total' => 250000, 'total_dibayar' => 0,
+            'sisa' => 250000, 'status' => 'belum_lunas', 'unit_id' => 1, 'deleted' => 0,
+            'scope' => 'legacy', 'cutoff_reason' => 'LEGACY_CUTOFF',
+        ]);
+        $this->assertSame(0, $svc->getRingkasan([1])['total_hutang']);
+    }
+
+    public function testKasbonOpeningTetapTerhitung(): void
+    {
+        $m = $this->model(ModelHutangPiutang::class);
+        $m->insert([
+            'kode' => 'K-ON1', 'jenis' => 'piutang', 'sumber_tipe' => 'kasbon',
+            'pihak_tipe' => 'pegawai', 'pihak_id' => 43, 'nama_pihak' => 'Pegawai',
+            'tanggal' => '2025-08-01', 'total' => 300000, 'total_dibayar' => 0,
+            'sisa' => 300000, 'status' => 'sebagian', 'unit_id' => 1, 'deleted' => 0,
+            'scope' => 'opening',
+        ]);
+        $m->insert([
+            'kode' => 'K-LG1', 'jenis' => 'piutang', 'sumber_tipe' => 'kasbon',
+            'pihak_tipe' => 'pegawai', 'pihak_id' => 43, 'nama_pihak' => 'Pegawai',
+            'tanggal' => '2025-07-01', 'total' => 50000, 'total_dibayar' => 50000,
+            'sisa' => 0, 'status' => 'lunas', 'unit_id' => 1, 'deleted' => 0,
+            'scope' => 'legacy',
+        ]);
+
+        $svc = new HutangPiutangService();
+        // Hanya opening yang masih outstanding (legacy lunas dieksklusi).
+        $this->assertSame(300000, $svc->getSisaKasbonPegawai(43, 1));
+
+        // Kasbon opening tetap tampil di daftar default (bukan legacy).
+        $kod = array_column($svc->listPositions(['jenis' => 'piutang']), 'kode');
+        $this->assertContains('K-ON1', $kod);
+        $this->assertNotContains('K-LG1', $kod); // kasbon legacy tidak tampil di default
+    }
+
+    public function testGetSaldoAkunHanyaMenghitungTransaksiSetelahCutoff(): void
+    {
+        $db = \Config\Database::connect('tests');
+        $db->table('saldo_awal_kas_bank')->insert([
+            'akun_kas_bank_id' => 1, 'tanggal' => '2026-10-01', 'saldo' => 500000,
+            'keterangan' => 'OPENING',
+        ]);
+
+        $m = $this->model(ModelTransaksiKasBank::class);
+        // Transaksi sebelum cut-off (legacy) harus diabaikan.
+        $m->insert(['tanggal' => '2026-09-15', 'unit_id' => 1, 'akun_kas_bank_id' => 1, 'jenis' => 'kas_masuk', 'arah' => 'MASUK', 'jumlah' => 100000]);
+        // Transaksi aktif (pada/setelah cut-off) dihitung.
+        $m->insert(['tanggal' => '2026-10-15', 'unit_id' => 1, 'akun_kas_bank_id' => 1, 'jenis' => 'kas_masuk', 'arah' => 'MASUK', 'jumlah' => 50000]);
+        $m->insert(['tanggal' => '2026-11-01', 'unit_id' => 1, 'akun_kas_bank_id' => 1, 'jenis' => 'kas_keluar', 'arah' => 'KELUAR', 'jumlah' => 20000]);
+
+        $this->assertSame(530000, $m->getSaldoAkun(1));
     }
 }

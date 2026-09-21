@@ -461,7 +461,7 @@ class HutangPiutangService
         $q = $this->db->table('hutang_piutang')
             ->selectSum('sisa', 'total')
             ->where('deleted', 0)
-            ->where('is_projection', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
             ->where('sumber_tipe', self::SUMBER_KASBON)
             ->where('pihak_tipe', 'pegawai')
             ->where('pihak_id', $pegawaiId)
@@ -487,16 +487,22 @@ class HutangPiutangService
     {
         $unitIds = $unitIds ? array_map('intval', $unitIds) : null;
 
-        // 1. Hutang supplier — dibaca dari `pembelian` (BUKAN registry)
-        $qb = $this->db->table('pembelian')
+        // 1. Hutang supplier — dibaca dari registry (projection disinkron dari
+        //    `pembelian`), hanya scope aktif (active + opening). Data sebelum
+        //    cut-off (legacy) tidak dihitung sebagai outstanding.
+        $qb = $this->db->table('hutang_piutang')
             ->selectSum('sisa', 'sisa')
-            ->selectCount('idpembelian', 'jml')
+            ->selectCount('id', 'jml')
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('sumber_tipe', self::SUMBER_PEMBELIAN)
+            ->where('jenis', 'hutang')
             ->groupStart()
                 ->where('sisa >', 0)
-                ->orWhere('status !=', 'Lunas')
+                ->orWhere('status !=', self::STATUS_LUNAS)
             ->groupEnd();
         if ($unitIds) {
-            $qb->whereIn('unit_idunit', $unitIds);
+            $qb->whereIn('unit_id', $unitIds);
         }
         $hutangSupplier = $qb->get()->getRow();
         $hutangSupplierSisa = (int) ($hutangSupplier->sisa ?? 0);
@@ -504,9 +510,12 @@ class HutangPiutangService
 
         // 2. Jenis authoritative (piutang pelanggan, kasbon, manual, teknisi,
         //    kelebihan transfer, retur barang) — dibaca dari registry.
+        //    Kasbon lama yang masih outstanding masuk scope 'opening' sehingga
+        //    tetap terhitung; data legacy (sebelum cut-off) diabaikan.
         $auth = $this->db->table('hutang_piutang')
             ->select('sumber_tipe, jenis, COUNT(*) AS jml, COALESCE(SUM(sisa),0) AS sisa')
             ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
             ->whereIn('sumber_tipe', self::AUTHORITATIVE_SUMBER)
             ->groupBy('sumber_tipe, jenis');
         if ($unitIds) {
@@ -543,16 +552,21 @@ class HutangPiutangService
             }
         }
 
-        // 3. Piutang pegawai legacy — dibaca dari `piutang` (BUKAN registry)
-        $qp = $this->db->table('piutang')
-            ->selectSum('sisa_hutang', 'sisa')
-            ->selectCount('idpiutang', 'jml')
+        // 3. Piutang pegawai legacy — dibaca dari registry (projection
+        //    `piutang_legacy`), hanya scope aktif.
+        $qp = $this->db->table('hutang_piutang')
+            ->selectSum('sisa', 'sisa')
+            ->selectCount('id', 'jml')
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('sumber_tipe', self::SUMBER_PIUTANG_LEGACY)
+            ->where('jenis', 'piutang')
             ->groupStart()
-                ->where('sisa_hutang >', 0)
-                ->orWhere('status !=', 1)
+                ->where('sisa >', 0)
+                ->orWhere('status !=', self::STATUS_LUNAS)
             ->groupEnd();
         if ($unitIds) {
-            $qp->whereIn('unit_idunit', $unitIds);
+            $qp->whereIn('unit_id', $unitIds);
         }
         $piutangLegacy = $qp->get()->getRow();
         $piutangLegacySisa = (int) ($piutangLegacy->sisa ?? 0);
@@ -591,8 +605,8 @@ class HutangPiutangService
 
     /**
      * Hitung status & jatuh tempo tanpa double counting.
-     * Registry dipakai HANYA untuk jenis authoritative; jenis existing dihitung
-     * dari sumber masing-masing.
+     * Semua pembacaan dari registry `hutang_piutang` dengan scope aktif
+     * (active + opening); data legacy (sebelum cut-off) tidak dihitung.
      */
     private function countJatuhTempo(?array $unitIds): array
     {
@@ -604,44 +618,15 @@ class HutangPiutangService
         $jatuhTempo = 0;
         $terlambat = 0;
 
-        // Registry authoritative (piutang_pelanggan, kasbon)
         $q = $this->db->table('hutang_piutang')
             ->select('status, sisa, jatuh_tempo')
             ->where('deleted', 0)
-            ->whereIn('sumber_tipe', self::AUTHORITATIVE_SUMBER);
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY);
         if ($unitIds) {
             $q->whereIn('unit_id', $unitIds);
         }
         foreach ($q->get()->getResult() as $r) {
             $this->tallyStatus($r->status, $r->sisa, $r->jatuh_tempo, $today, $belum, $sebagian, $lunas, $jatuhTempo, $terlambat);
-        }
-
-        // Pembelian (hutang supplier)
-        $qp = $this->db->table('pembelian')->select('sisa, jatuh_tempo');
-        if ($unitIds) {
-            $qp->whereIn('unit_idunit', $unitIds);
-        }
-        foreach ($qp->get()->getResult() as $r) {
-            $status = ((int) $r->sisa <= 0) ? self::STATUS_LUNAS : self::STATUS_BELUM;
-            $this->tallyStatus($status, $r->sisa, $r->jatuh_tempo, $today, $belum, $sebagian, $lunas, $jatuhTempo, $terlambat);
-        }
-
-        // Piutang legacy
-        $ql = $this->db->table('piutang')->select('sisa_hutang, jumlah_hutang, jatuh_tempo');
-        if ($unitIds) {
-            $ql->whereIn('unit_idunit', $unitIds);
-        }
-        foreach ($ql->get()->getResult() as $r) {
-            $sisa = (int) $r->sisa_hutang;
-            $total = (int) $r->jumlah_hutang;
-            if ($sisa <= 0) {
-                $status = self::STATUS_LUNAS;
-            } elseif ($total - $sisa > 0) {
-                $status = self::STATUS_SEBAGIAN;
-            } else {
-                $status = self::STATUS_BELUM;
-            }
-            $this->tallyStatus($status, $sisa, $r->jatuh_tempo, $today, $belum, $sebagian, $lunas, $jatuhTempo, $terlambat);
         }
 
         return [
@@ -689,6 +674,17 @@ class HutangPiutangService
             ->select('hp.*, unit.NAMA_UNIT')
             ->join('unit', 'unit.idunit = hp.unit_id', 'left')
             ->where('hp.deleted', 0);
+
+        // Scope (cut-off): default hanya data aktif + opening; pengguna bisa
+        // melihat histori legacy via filter 'semua' atau scope spesifik.
+        $scope = (string) ($filters['scope'] ?? '');
+        if ($scope === FinanceScopeService::SCOPE_LEGACY) {
+            $q->where('hp.scope', FinanceScopeService::SCOPE_LEGACY);
+        } elseif ($scope === FinanceScopeService::SCOPE_OPENING) {
+            $q->where('hp.scope', FinanceScopeService::SCOPE_OPENING);
+        } elseif ($scope !== 'semua') {
+            $q->where('hp.scope !=', FinanceScopeService::SCOPE_LEGACY);
+        }
 
         if (!empty($filters['jenis'])) {
             $q->where('hp.jenis', $filters['jenis']);

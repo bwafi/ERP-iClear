@@ -35,6 +35,10 @@ class ModelHutangPiutang extends Model
         'total_dibayar',
         'sisa',
         'status',
+        'scope',
+        'cutoff_closed_at',
+        'cutoff_closed_by',
+        'cutoff_reason',
         'keterangan',
         'unit_id',
         'input_by',
@@ -75,7 +79,8 @@ class ModelHutangPiutang extends Model
             ->join('unit', 'unit.idunit = hutang_piutang.unit_id', 'left')
             ->join('unit as lawan', 'lawan.idunit = hutang_piutang.lawan_unit_id', 'left')
             ->where('hutang_piutang.pihak_tipe', 'unit')
-            ->where('hutang_piutang.deleted', 0);
+            ->where('hutang_piutang.deleted', 0)
+            ->where('hutang_piutang.scope !=', 'legacy');
 
         if (!empty($unitId)) {
             $builder->where('hutang_piutang.unit_id', (int) $unitId);

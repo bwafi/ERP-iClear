@@ -99,7 +99,9 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
                 lawan_unit_id INT NULL, nama_pihak TEXT NULL, tanggal TEXT NULL,
                 jatuh_tempo TEXT NULL, uraian TEXT NULL, total REAL NULL, total_dibayar REAL NULL,
                 sisa REAL NULL, status TEXT NULL, keterangan TEXT NULL, unit_id INT NULL,
-                input_by INT NULL, deleted INT DEFAULT 0, created_at TEXT NULL, updated_at TEXT NULL)');
+                input_by INT NULL, deleted INT DEFAULT 0, created_at TEXT NULL, updated_at TEXT NULL,
+                scope TEXT NULL DEFAULT \'active\', cutoff_closed_at TEXT NULL,
+                cutoff_closed_by INT NULL, cutoff_reason TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_pembayaran_hutang_piutang (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 hutang_piutang_id INT NULL, tanggal_bayar TEXT NULL, jumlah_bayar REAL NULL,
@@ -195,7 +197,7 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
 
     public function testPostingKasMasukIdempotent(): void
     {
-        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank) VALUES (1, '2026-02-01', 'Penjualan tunai', 50000, 1, 'BNI-001')");
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank) VALUES (1, '2026-10-05', 'Penjualan tunai', 50000, 1, 'BNI-001')");
 
         $r1 = $this->kasbank->postingKasMasuk(1);
         $this->assertSame('inserted', $r1['status']);
@@ -318,10 +320,10 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan) VALUES (6, '2026-01-01', 800000, 'Saldo awal BCA')");
         $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal) VALUES (6, 1, 300000), (6, 2, 500000)");
         $this->db->query("INSERT INTO db_transaksi_kas_bank (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah) VALUES
-            ('2026-02-01', 1, 6, 'PEMASUKAN', 'MASUK', 100000),
-            ('2026-02-02', 2, 6, 'PEMASUKAN', 'MASUK', 50000),
-            ('2026-02-03', 1, 6, 'PENGELUARAN', 'KELUAR', 50000),
-            ('2026-02-04', 2, 6, 'PENGELUARAN', 'KELUAR', 30000)");
+            ('2026-10-01', 1, 6, 'PEMASUKAN', 'MASUK', 100000),
+            ('2026-10-02', 2, 6, 'PEMASUKAN', 'MASUK', 50000),
+            ('2026-10-03', 1, 6, 'PENGELUARAN', 'KELUAR', 50000),
+            ('2026-10-04', 2, 6, 'PENGELUARAN', 'KELUAR', 30000)");
 
         $model = new ModelTransaksiKasBank();
 

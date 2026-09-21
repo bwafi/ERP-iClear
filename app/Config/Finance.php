@@ -62,6 +62,17 @@ class Finance extends BaseConfig
     public int $omzetTolerance = 0;
 
     /**
+     * Tanggal Financial Cut-off / release engine Finance baru (YYYY-MM-DD).
+     *
+     * Prinsip: seluruh hutang/piutang/mutasi/kas dengan tanggal transaksi
+     * SEBELUM tanggal ini diperlakukan sebagai data legacy/histori (tidak
+     * dihitung sebagai saldo aktif). Transaksi pada/≥ tanggal ini diproses
+     * normal oleh engine Finance baru. Satu-satunya sumber tanggal cut-off
+     * (diubah cukup di sini).
+     */
+    public string $cutoffDate = '2026-10-01';
+
+    /**
      * ID_JABATAN yang boleh mengisi (input) Dashboard Finance.
      */
     public array $financeInputRoles = [0, 1, 2, 34];

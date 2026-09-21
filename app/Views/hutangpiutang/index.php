@@ -59,6 +59,15 @@ $labelSumber = [
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label mb-1">Scope</label>
+                <select name="scope" class="form-select form-select-sm">
+                    <option value="">Aktif</option>
+                    <option value="semua" <?= ($f['scope'] ?? '') === 'semua' ? 'selected' : '' ?>>Semua Data</option>
+                    <option value="legacy" <?= ($f['scope'] ?? '') === 'legacy' ? 'selected' : '' ?>>Legacy</option>
+                    <option value="opening" <?= ($f['scope'] ?? '') === 'opening' ? 'selected' : '' ?>>Opening</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label mb-1">Bulan</label>
                 <input type="month" name="bulan" class="form-control form-control-sm" value="<?= esc($f['bulan'] ?? '') ?>">
             </div>
@@ -112,6 +121,7 @@ $labelSumber = [
                     <?php else : foreach ($rows as $row) :
                         $authoritative = in_array($row['sumber_tipe'], HutangPiutangService::AUTHORITATIVE_SUMBER, true);
                         $statusClass = $row['status'] === 'lunas' ? 'success' : ($row['status'] === 'sebagian' ? 'warning' : 'secondary');
+                        $scopeLabel = ['legacy' => 'Legacy', 'opening' => 'Opening'][$row['scope'] ?? ''] ?? '';
                     ?>
                         <tr>
                             <td class="fw-semibold"><?= esc($row['kode']) ?></td>
@@ -122,7 +132,7 @@ $labelSumber = [
                             <td class="text-end"><?= $rp($row['total']) ?></td>
                             <td class="text-end"><?= $rp($row['total_dibayar']) ?></td>
                             <td class="text-end fw-semibold"><?= $rp($row['sisa']) ?></td>
-                            <td><span class="badge bg-<?= $statusClass ?>"><?= esc(\App\Services\Finance\HutangPiutangService::labelStatus($row['status'])) ?></span></td>
+                            <td><span class="badge bg-<?= $statusClass ?>"><?= esc(\App\Services\Finance\HutangPiutangService::labelStatus($row['status'])) ?></span><?php if ($scopeLabel !== '') : ?> <span class="badge bg-light text-dark border"><?= esc($scopeLabel) ?></span><?php endif; ?></td>
                             <td class="text-end text-nowrap">
                                 <a href="<?= base_url('hutangpiutang/detail/' . $row['id']) ?>" class="btn btn-sm btn-light">Detail</a>
                                 <?php if ($authoritative && $canInput && $row['status'] !== 'lunas') : ?>

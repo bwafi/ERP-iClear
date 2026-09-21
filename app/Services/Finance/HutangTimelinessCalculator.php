@@ -40,6 +40,9 @@ class HutangTimelinessCalculator implements FinanceCalculatorInterface
         $today = date('Y-m-d');
 
         $lastPayment = $this->lastPaymentMap();
+        // Hanya pembelian aktif (pada/setelah cut-off). Pembelian sebelum
+        // cut-off adalah legacy dan tidak ikut dinilai ulang.
+        $cutoff = FinanceScopeService::cutoffDate();
         $purchases = $this->db->table('pembelian')
             ->select('
                 pembelian.idpembelian,
@@ -52,6 +55,7 @@ class HutangTimelinessCalculator implements FinanceCalculatorInterface
             ')
             ->join('suplier', 'suplier.id_suplier = pembelian.suplier_id_suplier', 'left')
             ->where('pembelian.unit_idunit', $unitId)
+            ->where('pembelian.tanggal_masuk >=', $cutoff)
             ->where('pembelian.jatuh_tempo >=', $startDate)
             ->where('pembelian.jatuh_tempo <=', $endDate)
             ->orderBy('pembelian.jatuh_tempo', 'ASC')

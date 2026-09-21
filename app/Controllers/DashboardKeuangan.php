@@ -8,6 +8,7 @@ use App\Models\ModelKasKeluar;
 use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPiutang;
 use App\Models\ModelUnit;
+use App\Services\Finance\FinanceScopeService;
 use Config\Database;
 
 class DashboardKeuangan extends BaseController
@@ -90,25 +91,31 @@ class DashboardKeuangan extends BaseController
             ->selectSum('kredit')
             ->first()->kredit ?? 0;
 
-        // Total Hutang (sisa hutang dari pembelian)
-        $hutangQuery = $this->db->table('pembelian')
-            ->selectSum('sisa');
+        // Total Hutang & Piutang — dibaca dari registry `hutang_piutang`
+        // dengan scope aktif (active + opening). Data legacy (sebelum cut-off,
+        // non-kasbon) tidak dihitung sebagai outstanding.
+        $hutangQuery = $this->db->table('hutang_piutang')
+            ->selectSum('sisa')
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('jenis', 'hutang');
 
         if ($unitId) {
-            $hutangQuery->where('unit_idunit', $unitId);
+            $hutangQuery->where('unit_id', $unitId);
         }
         $totalHutang = $hutangQuery->get()->getRow()->sisa ?? 0;
 
-        // Total Piutang (sisa hutang dari piutang)
-        $piutangQuery = $this->db->table('piutang')
-            ->selectSum('sisa_hutang')
-            ->where('status', 1); // 1 = aktif
+        $piutangQuery = $this->db->table('hutang_piutang')
+            ->selectSum('sisa')
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('jenis', 'piutang');
 
         if ($unitId) {
-            $piutangQuery->where('unit_idunit', $unitId);
+            $piutangQuery->where('unit_id', $unitId);
         }
 
-        $totalPiutang = $piutangQuery->get()->getRow()->sisa_hutang ?? 0;
+        $totalPiutang = $piutangQuery->get()->getRow()->sisa ?? 0;
 
         // Chart data - Kas Masuk/Keluar per hari
         $kasMasukData = $this->KasMasukModel
@@ -185,18 +192,21 @@ class DashboardKeuangan extends BaseController
         // Laba Rugi berdasarkan Transaksi
         $labaRugiTransaksi = $this->getLabaRugiFromTransaksi($startDate, $endDate, $unitId);
 
-        // Ringkasan status pelunasan piutang
-        $piutangStatusBuilder = $this->db->table('piutang')
-            ->select("CASE 
-        WHEN sisa_hutang <= 0 THEN 'Lunas'
-        WHEN status = 0 THEN 'Belum Lunas'
-        ELSE 'Dalam Proses'
+        // Ringkasan status pelunasan piutang (registry, scope aktif)
+        $piutangStatusBuilder = $this->db->table('hutang_piutang')
+            ->select("CASE
+        WHEN sisa <= 0 THEN 'Lunas'
+        WHEN status = 'sebagian' THEN 'Sebagian'
+        ELSE 'Belum Lunas'
     END AS status_label, COUNT(*) AS total_tagihan")
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('jenis', 'piutang')
             ->where('DATE(tanggal) >=', $startDate)
             ->where('DATE(tanggal) <=', $endDate);
 
         if ($unitId) {
-            $piutangStatusBuilder->where('unit_idunit', $unitId);
+            $piutangStatusBuilder->where('unit_id', $unitId);
         }
 
         $piutangStatusResult = $piutangStatusBuilder
@@ -206,20 +216,22 @@ class DashboardKeuangan extends BaseController
         $piutangStatusLabels = array_map(fn($row) => $row->status_label, $piutangStatusResult);
         $piutangStatusData   = array_map(fn($row) => (int) $row->total_tagihan, $piutangStatusResult);
 
-        // Ringkasan aging piutang (hanya yang masih outstanding)
-        $agingBuilder = $this->db->table('piutang')
+        // Ringkasan aging piutang (registry, scope aktif, hanya outstanding;
+        // bucket dihitung dari jatuhtempo tanpa dibatasi tanggal pembuatan).
+        $agingBuilder = $this->db->table('hutang_piutang')
             ->select("
-        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) <= 30 THEN sisa_hutang ELSE 0 END) AS bucket_0_30,
-        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) BETWEEN 31 AND 60 THEN sisa_hutang ELSE 0 END) AS bucket_31_60,
-        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) BETWEEN 61 AND 90 THEN sisa_hutang ELSE 0 END) AS bucket_61_90,
-        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) > 90 THEN sisa_hutang ELSE 0 END) AS bucket_90_plus
+        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) <= 30 THEN sisa ELSE 0 END) AS bucket_0_30,
+        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) BETWEEN 31 AND 60 THEN sisa ELSE 0 END) AS bucket_31_60,
+        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) BETWEEN 61 AND 90 THEN sisa ELSE 0 END) AS bucket_61_90,
+        SUM(CASE WHEN DATEDIFF(CURDATE(), jatuh_tempo) > 90 THEN sisa ELSE 0 END) AS bucket_90_plus
     ")
-            ->where('sisa_hutang >', 0)
-            ->where('DATE(tanggal) >=', $startDate)
-            ->where('DATE(tanggal) <=', $endDate);
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('jenis', 'piutang')
+            ->where('sisa >', 0);
 
         if ($unitId) {
-            $agingBuilder->where('unit_idunit', $unitId);
+            $agingBuilder->where('unit_id', $unitId);
         }
 
         $agingResult = $agingBuilder->get()->getRow();
