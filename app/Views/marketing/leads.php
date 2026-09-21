@@ -63,6 +63,14 @@
             </select>
         </div>
         <div class="col-auto">
+            <label class="form-label mb-1 small text-muted">Tipe Lead</label>
+            <select name="tipe" class="form-select">
+                <option value="">Semua Tipe</option>
+                <option value="IKLAN" <?= $tipe === 'IKLAN' ? 'selected' : '' ?>>Iklan</option>
+                <option value="NON_IKLAN" <?= $tipe === 'NON_IKLAN' ? 'selected' : '' ?>>Non Iklan</option>
+            </select>
+        </div>
+        <div class="col-auto">
             <label class="form-label mb-1 small text-muted">Status</label>
             <select name="status" class="form-select">
                 <option value="">Semua Status</option>
@@ -110,6 +118,7 @@
                             <th>Nama/Akun</th>
                             <th>Unit</th>
                             <th>Platform</th>
+                            <th>Tipe</th>
                             <th>No Telp (WA)</th>
                             <th>Keterangan Servis</th>
                             <th class="text-center">Status</th>
@@ -138,6 +147,15 @@
                                 <td>
                                     <?php if ($lead->platform) : ?>
                                         <span class="badge rounded-pill <?= $badgeCls ?>"><?= esc($lead->platform) ?></span>
+                                    <?php else : ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if ($lead->tipe) : ?>
+                                        <span class="badge rounded-pill <?= $lead->tipe === 'IKLAN' ? 'bg-primary-subtle text-primary' : 'bg-light border text-secondary' ?>">
+                                            <iconify-icon icon="<?= $lead->tipe === 'IKLAN' ? 'solar:megaphone-bold' : 'solar:user-block-bold' ?>" class="me-1 lh-1"></iconify-icon><?= $lead->tipe === 'IKLAN' ? 'Iklan' : 'Non Iklan' ?>
+                                        </span>
                                     <?php else : ?>
                                         <span class="text-muted">-</span>
                                     <?php endif; ?>
@@ -192,6 +210,7 @@
                                             data-nama="<?= esc($lead->nama, 'attr') ?>"
                                             data-unit="<?= (int)$lead->unit_id ?>"
                                             data-platform="<?= esc($lead->platform ?? '', 'attr') ?>"
+                                            data-tipe="<?= esc($lead->tipe ?? '', 'attr') ?>"
                                             data-no_telp_wa="<?= esc($lead->no_telp_wa ?? '', 'attr') ?>"
                                             data-keterangan="<?= esc($lead->keterangan ?? '', 'attr') ?>"
                                             data-status="<?= esc($lead->status) ?>"
@@ -218,7 +237,7 @@
                 <nav class="mt-3">
                     <ul class="pagination pagination-sm justify-content-end mb-0">
                         <?php
-                        $qs = 'bulan=' . $bulan . '&tahun=' . $tahun . '&status=' . urlencode($status) . '&platform=' . urlencode($platform) . '&unit_id=' . (int)$unitId;
+                        $qs = 'bulan=' . $bulan . '&tahun=' . $tahun . '&status=' . urlencode($status) . '&platform=' . urlencode($platform) . '&tipe=' . urlencode($tipe) . '&unit_id=' . (int)$unitId;
                         for ($p = 1; $p <= $totalPages; $p++) : ?>
                             <li class="page-item <?= $p === $currentPage ? 'active' : '' ?>">
                                 <a class="page-link" href="<?= base_url('marketing/leads?' . $qs . '&page=' . $p) ?>"><?= $p ?></a>
@@ -260,6 +279,14 @@
                                     <?php foreach ($platforms as $pf) : ?>
                                         <option value="<?= esc($pf->name) ?>"><?= esc($pf->name) ?></option>
                                     <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Tipe Lead</label>
+                                <select name="tipe" id="pp_tipe" class="form-select form-select-sm">
+                                    <option value="">— Pilih —</option>
+                                    <option value="IKLAN">Iklan</option>
+                                    <option value="NON_IKLAN">Non Iklan</option>
                                 </select>
                             </div>
                             <div class="col-md-3" id="pp_unit_col">
@@ -677,6 +704,7 @@
             document.getElementById('pp_id').value = this.dataset.id;
             document.getElementById('pp_tanggal').value = this.dataset.tanggal;
             document.getElementById('pp_platform').value = this.dataset.platform;
+            document.getElementById('pp_tipe').value = this.dataset.tipe || '';
             document.getElementById('pp_unit').value = this.dataset.unit;
             document.getElementById('pp_status').value = this.dataset.status;
             document.getElementById('pp_tgl_booking').value = this.dataset.tanggal_booking;

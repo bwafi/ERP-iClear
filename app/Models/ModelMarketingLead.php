@@ -18,7 +18,7 @@ class ModelMarketingLead extends Model
         'kommo_lead_id', 'kommo_account_id', 'kommo_pipeline_id',
         'kommo_status_id', 'kommo_updated_at', 'kommo_deleted_at',
         // Detail Prospek (baris manual, kommo_lead_id IS NULL).
-        'platform', 'unit_id', 'no_telp_wa', 'keterangan', 'tanggal_booking', 'omset', 'service_id', 'catatan', 'nomor',
+        'tipe', 'platform', 'unit_id', 'no_telp_wa', 'keterangan', 'tanggal_booking', 'omset', 'service_id', 'catatan', 'nomor',
     ];
 
     public const STATUS_PROSPEK = 'PROSPEK';
@@ -37,9 +37,9 @@ class ModelMarketingLead extends Model
     // ── Detail Prospek (baris manual, tanpa data sinkronisasi Kommo) ──
 
     /** Daftar detail prospek manual per bulan, urut tanggal terbaru. */
-    public function findDetailProspek(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null, ?int $limit = null, ?int $offset = 0): array
+    public function findDetailProspek(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null, ?string $tipe = null, ?int $limit = null, ?int $offset = 0): array
     {
-        $builder = $this->detailProspekWhere($month, $year, $status, $platform, $unitId)
+        $builder = $this->detailProspekWhere($month, $year, $status, $platform, $unitId, $tipe)
             ->select('marketing_lead.*, COALESCE(hpp_s.hpp, 0) AS hpp')
             ->join(
                 '(SELECT service_idservice, SUM(hpp_penjualan) AS hpp
@@ -56,9 +56,9 @@ class ModelMarketingLead extends Model
         return $builder->findAll();
     }
 
-    public function countDetailProspek(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null): int
+    public function countDetailProspek(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null, ?string $tipe = null): int
     {
-        return $this->detailProspekWhere($month, $year, $status, $platform, $unitId)->countAllResults();
+        return $this->detailProspekWhere($month, $year, $status, $platform, $unitId, $tipe)->countAllResults();
     }
 
     /** Nomor urut berikutnya untuk tanggal tertentu (kolom "No" pada sheet). */
@@ -72,7 +72,7 @@ class ModelMarketingLead extends Model
     }
 
     /** Gabungan kriteria baris manual detail prospek (bukan lead Kommo). */
-    private function detailProspekWhere(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null)
+    private function detailProspekWhere(int $month, int $year, ?string $status = null, ?string $platform = null, ?int $unitId = null, ?string $tipe = null)
     {
         $where = "DATE_FORMAT(tanggal, '%Y-%m') = '" . sprintf('%04d-%02d', $year, $month) . "'";
         $where .= ' AND kommo_lead_id IS NULL';
@@ -89,6 +89,9 @@ class ModelMarketingLead extends Model
         }
         if ($unitId !== null && $unitId > 0) {
             $where .= ' AND unit_id = ' . (int)$unitId;
+        }
+        if ($tipe !== null && $tipe !== '' && in_array($tipe, ['IKLAN', 'NON_IKLAN'], true)) {
+            $where .= " AND tipe = '" . $tipe . "'";
         }
         return $this->where($where, null, false);
     }

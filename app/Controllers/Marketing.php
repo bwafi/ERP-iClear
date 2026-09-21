@@ -375,6 +375,7 @@ class Marketing extends BaseController
         $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
         $status = strtoupper(trim((string)$this->request->getGet('status') ?: ''));
         $platform = trim((string)$this->request->getGet('platform') ?: '');
+        $tipe = strtoupper(trim((string)$this->request->getGet('tipe') ?: ''));
         $unitId = (int)$this->request->getGet('unit_id');
         if (!$this->validPeriod($bulan, $tahun)) {
             $bulan = (int)date('n');
@@ -382,6 +383,9 @@ class Marketing extends BaseController
         }
         if ($status !== '' && !in_array($status, \App\Models\ModelMarketingLead::PROSPEK_STATUSES, true)) {
             $status = '';
+        }
+        if ($tipe !== '' && !in_array($tipe, ['IKLAN', 'NON_IKLAN'], true)) {
+            $tipe = '';
         }
         if ($unitId > 0 && !in_array($unitId, array_map(fn($u) => (int)$u->idunit, $this->units()), true)) {
             $unitId = 0;
@@ -393,12 +397,13 @@ class Marketing extends BaseController
         $statusFilter   = $status !== '' ? $status : null;
         $platformFilter = $platform !== '' ? $platform : null;
         $unitFilter     = $unitId > 0 ? $unitId : null;
-        $total   = $this->LeaderModel->countDetailProspek($bulan, $tahun, $statusFilter, $platformFilter, $unitFilter);
+        $tipeFilter     = $tipe !== '' ? $tipe : null;
+        $total   = $this->LeaderModel->countDetailProspek($bulan, $tahun, $statusFilter, $platformFilter, $unitFilter, $tipeFilter);
         $totalPages = (int)ceil($total / $perPage);
         if ($page > $totalPages && $totalPages > 0) {
             $page = $totalPages;
         }
-        $rows = $this->LeaderModel->findDetailProspek($bulan, $tahun, $statusFilter, $platformFilter, $unitFilter, $perPage, ($page - 1) * $perPage);
+        $rows = $this->LeaderModel->findDetailProspek($bulan, $tahun, $statusFilter, $platformFilter, $unitFilter, $tipeFilter, $perPage, ($page - 1) * $perPage);
 
         $unitList = $this->units();
         $unitMap  = [];
@@ -413,6 +418,7 @@ class Marketing extends BaseController
             'tahun'     => $tahun,
             'status'    => $status,
             'platform'  => $platform,
+            'tipe'      => $tipe,
             'statuses'  => \App\Models\ModelMarketingLead::PROSPEK_STATUSES,
             'platforms' => (new ModelMarketingPlatform())->active(),
             'units'     => $unitList,
@@ -439,6 +445,7 @@ class Marketing extends BaseController
 
         $id             = (int)($this->request->getPost('id') ?? 0);
         $tanggal        = trim((string)$this->request->getPost('tanggal'));
+        $tipe           = strtoupper(trim((string)$this->request->getPost('tipe')));
         $nama           = trim((string)$this->request->getPost('nama'));
         $platform       = trim((string)$this->request->getPost('platform'));
         $unitId         = (int)$this->request->getPost('unit_id');
@@ -448,6 +455,10 @@ class Marketing extends BaseController
         $tanggalBooking = trim((string)$this->request->getPost('tanggal_booking'));
         $serviceId      = (int)$this->request->getPost('service_id');
         $catatan        = trim((string)$this->request->getPost('catatan'));
+
+        if ($tipe !== '' && !in_array($tipe, ['IKLAN', 'NON_IKLAN'], true)) {
+            return redirect()->back()->with('error', 'Tipe lead tidak valid.');
+        }
 
         if ($tanggal === '') {
             return redirect()->back()->with('error', 'Tanggal wajib diisi.');
@@ -539,6 +550,7 @@ class Marketing extends BaseController
 
         $data = [
             'tanggal'         => $tanggal,
+            'tipe'            => $tipe !== '' ? $tipe : null,
             'nama'            => mb_substr($nama, 0, 150),
             'platform'        => mb_substr($platform, 0, 50),
             'unit_id'         => $unitId,
