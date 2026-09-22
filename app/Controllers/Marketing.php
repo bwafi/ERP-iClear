@@ -56,7 +56,7 @@ class Marketing extends BaseController
 
     private function canWrite(): bool
     {
-        return in_array($this->currentRole(), [0, 1, 2, 43, 44], true);
+        return in_array($this->currentRole(), [0, 1, 2, 42, 43, 44], true);
     }
 
     private function readOrRedirect()
