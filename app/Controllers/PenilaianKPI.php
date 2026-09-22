@@ -2038,11 +2038,17 @@ class PenilaianKPI extends BaseController
 
         // =========================================================
         // BON & LEMBUR — source existing (kas_keluar, kategori 10)
+        // difilter sesuai bulan & tahun yang dipilih pada slip gaji
         // =========================================================
+        $startMonth = (($tahun ?: date('Y')) . '-' . str_pad((string) ($bulan ?: date('m')), 2, '0', STR_PAD_LEFT) . '-01');
+        $endMonth   = date('Y-m-t', strtotime($startMonth));
+
         $bon = $this->db->table('kas_keluar kk')
             ->selectSum('kk.jumlah', 'total_bon')
             ->where('kk.kategori_idkategori', 10)
             ->where('kk.penerima', $idakun)
+            ->where('kk.tanggal >=', $startMonth)
+            ->where('kk.tanggal <=', $endMonth)
             ->like('kk.deskripsi', 'bon')
             ->get()
             ->getRow()
@@ -2052,6 +2058,8 @@ class PenilaianKPI extends BaseController
             ->selectSum('kk.jumlah', 'total_bon')
             ->where('kk.kategori_idkategori', 10)
             ->where('kk.penerima', $idakun)
+            ->where('kk.tanggal >=', $startMonth)
+            ->where('kk.tanggal <=', $endMonth)
             ->like('kk.deskripsi', 'lembur')
             ->get()
             ->getRow()
