@@ -703,6 +703,10 @@ class KPIConfigurationSeeder extends Seeder
         // Root (1) & Direktur (2): fallback 250k (old else-branch), skor 0 → 0 rupiah
         $data[] = $mk(1, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
         $data[] = $mk(2, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
+        // Admin Center (0): 1.25jt
+        $data[] = $mk(0, 'TUNJANGAN_KINERJA', 1250000, 'percent_of_kpi');
+        // Manager (34): 2.25jt
+        $data[] = $mk(34, 'TUNJANGAN_KINERJA', 2250000, 'percent_of_kpi');
         // Admin (35): unit 1 = 850k, unit lain (default) = 250k
         $data[] = $mk(35, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi', 1);
         $data[] = $mk(35, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi', null);
@@ -714,12 +718,12 @@ class KPIConfigurationSeeder extends Seeder
         $data[] = $mk(41, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi');
         // CS (42): 250k
         $data[] = $mk(42, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
-        // Kepala Divisi/Pengiklan (43): 1jt
-        $data[] = $mk(43, 'TUNJANGAN_KINERJA', 1000000, 'percent_of_kpi');
-        // Multimedia (44): 250k
-        $data[] = $mk(44, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
-        // IT (45): 250k
-        $data[] = $mk(45, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
+        // Kepala Divisi / Digital Marketing (43): 1.5jt
+        $data[] = $mk(43, 'TUNJANGAN_KINERJA', 1500000, 'percent_of_kpi');
+        // Multimedia (44): 750k
+        $data[] = $mk(44, 'TUNJANGAN_KINERJA', 750000, 'percent_of_kpi');
+        // IT & System (45): 750k
+        $data[] = $mk(45, 'TUNJANGAN_KINERJA', 750000, 'percent_of_kpi');
         // PIC (46): 850k di context non-gaji (penilaian_kinerja/slip_gaji), 250k di gaji
         $data[] = $mk(46, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi', null, 'penilaian_kinerja');
         $data[] = $mk(46, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi', null, 'slip_gaji');

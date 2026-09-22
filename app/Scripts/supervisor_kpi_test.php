@@ -342,12 +342,32 @@ $ss41 = $db->query("SELECT ss.base_value FROM salary_structures ss
     JOIN salary_components sc ON sc.id = ss.salary_component_id
     WHERE ss.position_id = 41 AND sc.code = 'TUNJANGAN_KINERJA'
     ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Tunjangan kinerja KT 41 tetap Rp850.000', near((float)$ss41->base_value, 850000), var_export($ss41->base_value ?? null, true));
 $ss43 = $db->query("SELECT ss.base_value FROM salary_structures ss
     JOIN salary_components sc ON sc.id = ss.salary_component_id
     WHERE ss.position_id = 43 AND sc.code = 'TUNJANGAN_KINERJA'
     ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
-ok('Jabatan lain tidak berubah (KT 41 tetap Rp850.000)', near((float)$ss41->base_value, 850000), var_export($ss41->base_value ?? null, true));
-ok('Jabatan lain tidak berubah (Pengiklan 43 tetap Rp1.000.000)', near((float)$ss43->base_value, 1000000), var_export($ss43->base_value ?? null, true));
+ok('Tunjangan kinerja Kepala Divisi/Digital Marketing (43) = Rp1.500.000', near((float)$ss43->base_value, 1500000), var_export($ss43->base_value ?? null, true));
+$ss0 = $db->query("SELECT ss.base_value FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 0 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Tunjangan kinerja Admin Center (0) = Rp1.250.000', near((float)($ss0->base_value ?? 0), 1250000), var_export($ss0->base_value ?? null, true));
+$ss34 = $db->query("SELECT ss.base_value FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 34 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Tunjangan kinerja Manager (34) = Rp2.250.000', near((float)($ss34->base_value ?? 0), 2250000), var_export($ss34->base_value ?? null, true));
+$ss44 = $db->query("SELECT ss.base_value FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 44 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Tunjangan kinerja Multimedia (44) = Rp750.000', near((float)$ss44->base_value, 750000), var_export($ss44->base_value ?? null, true));
+$ss45 = $db->query("SELECT ss.base_value FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 45 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Tunjangan kinerja IT & System (45) = Rp750.000', near((float)$ss45->base_value, 750000), var_export($ss45->base_value ?? null, true));
 
 // Engine salary (SalaryCalculationService) memakai 1.5jt utk SPV @ KPI 100%.
 $salarySvc = new \App\Services\Payroll\SalaryCalculationService();
