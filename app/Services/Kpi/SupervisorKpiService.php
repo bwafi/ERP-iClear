@@ -136,10 +136,13 @@ class SupervisorKpiService
     /* ════════════════════ 1. OMZET WILAYAH ════════════════════ */
 
     /**
-     * SUM(actual omzet seluruh cabang) ÷ SUM(target omzet seluruh cabang) × 100.
+     * Achievement omzet agregat SPV (seluruh cabang dalam scope).
      *
      * Target per cabang = target dasar + adjustment HO (Rp7.000.000 per cabang
-     * dalam scope). Achievement di-cap maksimal 100 (pedoman §VII).
+     * dalam scope). Aturan FINAL:
+     *   - actual_total < target_total  → 0 (threshold; belum tercapai tidak dihitung)
+     *   - actual_total >= target_total → (actual_total ÷ target_total) × 100
+     * Achievement di-cap maksimal 100 (pedoman §VII).
      */
     public function omzetWilayah(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
     {
@@ -173,17 +176,22 @@ class SupervisorKpiService
             return null;
         }
 
+        // Threshold: total actual belum melampaui/mencapai total target → 0.
+        if ($actualSum < $targetSum) {
+            return 0.0;
+        }
+
         return min(round(($actualSum / $targetSum) * 100, 4), 100.0);
     }
 
     /* ════════════════════ 2. TARGET CABANG ════════════════════ */
 
     /**
-     * avg(actual omzet cabang ÷ target omzet cabang × 100) tiap cabang.
-     * Bukan sum÷sum (itu Omzet Wilayah).
+     * TARGET_CABANG = cabang tercapai ÷ total cabang dalam scope × 100.
      *
-     * Target per cabang = target dasar + adjustment HO (Rp7.000.000 per cabang
-     * dalam scope). Setiap achievement per cabang di-cap 100 (pedoman §VII).
+     * Berbeda dengan OMZET_WILAYAH: menilai TERCAPAI/TIDAK per cabang.
+     * Cabang TERCAPAI jika actual omzet >= (target dasar + Rp7.000.000 HO).
+     * Bukan rata-rata persentase achievement cabang.
      */
     public function targetCabang(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
     {
@@ -197,22 +205,24 @@ class SupervisorKpiService
             return null;
         }
 
-        $omset = new OmsetCabangCalculator();
-        $sum   = 0.0;
-        $n     = 0;
+        $omset   = new OmsetCabangCalculator();
+        $reached = 0;
+        $n       = 0;
 
         foreach ($units as $unit) {
             $target = $this->cabangTarget((int)$comp->id, (int)$unit, $targetContext, $date);
             if ($target === null || $target <= 0) {
-                continue; // cabang tanpa target tidak ikut rata-rata.
+                continue; // cabang tanpa target tidak ikut hitungan.
             }
             $target += self::HO_TARGET_ADJUSTMENT;
             $actual = $omset->calculate(0, (int)$unit, $month, $year);
-            $sum   += min(($actual / $target) * 100, 100.0);
+            if ($actual >= $target) {
+                $reached++;
+            }
             $n++;
         }
 
-        return $n > 0 ? min(round($sum / $n, 4), 100.0) : null;
+        return $n > 0 ? round($reached / $n * 100, 4) : null;
     }
 
     /* ════════════════════ 3. PRODUKTIVITAS CABANG ════════════════════ */
