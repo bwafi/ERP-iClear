@@ -30,19 +30,16 @@
         <form method="get" class="row g-2 align-items-end">
             <div class="col-auto">
                 <label class="form-label mb-1 small text-muted">Tanggal</label>
-                <input type="date" name="tanggal" class="form-control" value="<?= esc($tanggal) ?>" required>
+                <input type="date" name="tanggal" class="form-control" value="<?= esc($tanggal) ?>" required onchange="this.form.submit()">
             </div>
             <div class="col-auto">
                 <label class="form-label mb-1 small text-muted">Cabang</label>
-                <select name="unit_id" class="form-select" required>
+                <select name="unit_id" class="form-select" required onchange="this.form.submit()">
                     <option value="">Pilih Cabang</option>
                     <?php foreach ($units as $unit) : ?>
                         <option value="<?= (int)$unit->idunit ?>" <?= (int)$unit->idunit === $unitId ? 'selected' : '' ?>><?= esc($unit->NAMA_UNIT) ?></option>
                     <?php endforeach; ?>
                 </select>
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Tampilkan</button>
             </div>
             <?php if ($rekap['header']) : ?>
                 <div class="col-auto text-muted small align-self-center">
