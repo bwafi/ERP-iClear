@@ -708,8 +708,8 @@ class KPIConfigurationSeeder extends Seeder
         $data[] = $mk(35, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi', null);
         // Teknisi (36): 250k
         $data[] = $mk(36, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
-        // SPV (40): 1.25jt
-        $data[] = $mk(40, 'TUNJANGAN_KINERJA', 1250000, 'percent_of_kpi');
+        // SPV (40): 1.5jt (pedoman §XVIII)
+        $data[] = $mk(40, 'TUNJANGAN_KINERJA', 1500000, 'percent_of_kpi');
         // Kepala Toko (41): 850k
         $data[] = $mk(41, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi');
         // CS (42): 250k

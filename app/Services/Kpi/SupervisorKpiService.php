@@ -20,8 +20,8 @@ use App\Models\ModelKpiEvaluation;
  *     date() sebagai periode KPI.
  *
  * Komponen & Sumber data:
- *   OMZET_WILAYAH           sum(actual omzet cabang) / sum(target omzet cabang)
- *   TARGET_CABANG           avg(actual/target tiap cabang)
+ *   OMZET_WILAYAH           sum(actual omzet cabang) / sum(target omzet cabang, +adjustment HO)
+ *   TARGET_CABANG           avg(actual/target tiap cabang, target +adjustment HO)
  *   PRODUKTIVITAS_CABANG    unique customer bulan berjalan / bulan sebelumnya × 100
  *   SOP                     avg(KPI Kepatuhan SOP Kepala Toko) — nilai existing
  *   KINERJA_KEPALA_TOKO     avg(total KPI Kepala Toko, tanpa absensi)
@@ -40,6 +40,19 @@ class SupervisorKpiService
         'KEDISIPLINAN_TEAM',
         'CUSTOMER_SATISFACTION',
     ];
+
+    /**
+     * Adjustment target HO utk SPV.
+     *
+     * SPV termasuk HO → target omzet SPV = Σ(target dasar cabang + Rp7.000.000)
+     * BERLAKU PER CABANG dalam scope SPV.
+     *
+     * - Hanya cabang dalam scope yang mendapat adjustment.
+     * - Adjustment HANYA pada TARGET — actual omzet TIDAK di-adjust.
+     * - Target dasar cabang di tabel master TIDAK diubah (adjustment dihitung
+     *   pada layer kalkulasi SPV, bukan ditulis-balik ke kpi_targets).
+     */
+    public const HO_TARGET_ADJUSTMENT = 7000000.0;
 
     /** Jabatan "team cabang" di bawah Supervisor (termasuk Kepala Toko). */
     public const TEAM_JABATANS = [35, 36, 41, 42, 43, 44, 45];
@@ -124,6 +137,9 @@ class SupervisorKpiService
 
     /**
      * SUM(actual omzet seluruh cabang) ÷ SUM(target omzet seluruh cabang) × 100.
+     *
+     * Target per cabang = target dasar + adjustment HO (Rp7.000.000 per cabang
+     * dalam scope). Achievement di-cap maksimal 100 (pedoman §VII).
      */
     public function omzetWilayah(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
     {
@@ -147,7 +163,8 @@ class SupervisorKpiService
 
             $target = $this->cabangTarget((int)$comp->id, (int)$unit, $targetContext, $date);
             if ($target !== null) {
-                $targetSum += $target;
+                // SPV termasuk HO: +Rp7.000.000 per cabang (hanya target).
+                $targetSum += ($target + self::HO_TARGET_ADJUSTMENT);
                 $hasTarget = true;
             }
         }
@@ -156,7 +173,7 @@ class SupervisorKpiService
             return null;
         }
 
-        return round(($actualSum / $targetSum) * 100, 4);
+        return min(round(($actualSum / $targetSum) * 100, 4), 100.0);
     }
 
     /* ════════════════════ 2. TARGET CABANG ════════════════════ */
@@ -164,6 +181,9 @@ class SupervisorKpiService
     /**
      * avg(actual omzet cabang ÷ target omzet cabang × 100) tiap cabang.
      * Bukan sum÷sum (itu Omzet Wilayah).
+     *
+     * Target per cabang = target dasar + adjustment HO (Rp7.000.000 per cabang
+     * dalam scope). Setiap achievement per cabang di-cap 100 (pedoman §VII).
      */
     public function targetCabang(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
     {
@@ -186,12 +206,13 @@ class SupervisorKpiService
             if ($target === null || $target <= 0) {
                 continue; // cabang tanpa target tidak ikut rata-rata.
             }
+            $target += self::HO_TARGET_ADJUSTMENT;
             $actual = $omset->calculate(0, (int)$unit, $month, $year);
-            $sum   += ($actual / $target) * 100;
+            $sum   += min(($actual / $target) * 100, 100.0);
             $n++;
         }
 
-        return $n > 0 ? round($sum / $n, 4) : null;
+        return $n > 0 ? min(round($sum / $n, 4), 100.0) : null;
     }
 
     /* ════════════════════ 3. PRODUKTIVITAS CABANG ════════════════════ */
@@ -199,6 +220,7 @@ class SupervisorKpiService
     /**
      * unique customer bulan berjalan ÷ bulan sebelumnya × 100.
      * null bila bulan sebelumnya 0 (tanpa pembagian nol / tanpa dummy angka).
+     * Achievement di-cap maksimal 100 (pedoman §VII).
      */
     public function produktivitasCabang(int $supervisorId, int $ownUnit, int $month, int $year): ?float
     {
@@ -221,7 +243,7 @@ class SupervisorKpiService
             return null; // bulan sebelumnya 0 pelanggan → N/A, hindari ÷ 0.
         }
 
-        return round(($current / $previous) * 100, 4);
+        return min(round(($current / $previous) * 100, 4), 100.0);
     }
 
     /* ════════════════════ 4. SOP ════════════════════ */
@@ -252,12 +274,12 @@ class SupervisorKpiService
             );
             $val = $res['components']['KEPATUHAN_SOP']['normalized'] ?? null;
             if ($val !== null && is_numeric($val)) {
-                $sum += (float)$val;
+                $sum += min((float)$val, 100.0);
                 $n++;
             }
         }
 
-        return $n > 0 ? round($sum / $n, 4) : null;
+        return $n > 0 ? min(round($sum / $n, 4), 100.0) : null;
     }
 
     /* ════════════════════ 5. KINERJA KEPALA TOKO ════════════════════ */
@@ -289,12 +311,12 @@ class SupervisorKpiService
             );
             $val = $res['total_score'] ?? null;
             if ($val !== null && is_numeric($val)) {
-                $sum += (float)$val;
+                $sum += min((float)$val, 100.0);
                 $n++;
             }
         }
 
-        return $n > 0 ? round($sum / $n, 4) : null;
+        return $n > 0 ? min(round($sum / $n, 4), 100.0) : null;
     }
 
     /* ════════════════════ 6. KEDISIPLINAN TEAM ════════════════════ */
@@ -325,12 +347,12 @@ class SupervisorKpiService
             );
             $val = $res['attendance_score'] ?? null;
             if ($val !== null && is_numeric($val)) {
-                $sum += (float)$val;
+                $sum += min((float)$val, 100.0);
                 $n++;
             }
         }
 
-        return $n > 0 ? round($sum / $n, 4) : null;
+        return $n > 0 ? min(round($sum / $n, 4), 100.0) : null;
     }
 
     /* ════════════════════ 7. CUSTOMER SATISFACTION ════════════════════ */
@@ -353,7 +375,7 @@ class SupervisorKpiService
             (string)$year
         );
         if ($score !== null) {
-            return $score;
+            return min($score, 100.0);
         }
 
         $comp = $this->component('CUSTOMER_SATISFACTION');
@@ -370,7 +392,7 @@ class SupervisorKpiService
             ->orderBy('id', 'DESC')
             ->first();
 
-        return ($row && $row->normalized_score !== null) ? (float)$row->normalized_score : null;
+        return ($row && $row->normalized_score !== null) ? min((float)$row->normalized_score, 100.0) : null;
     }
 
     /**

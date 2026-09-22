@@ -213,14 +213,19 @@ $att = new \App\Services\Kpi\AttendanceAggregationService();
 $dateAnchor = sprintf('%04d-%02d-15', $YEAR, $MONTH);
 
 // ── 3. Per-komponen (SPV 49, scope [2,3]) ─────────────────────────
+// Target HO untuk SPV = target dasar + Rp7.000.000 PER CABANG (scope).
+// Unit 2: 35jt + 7jt = 42jt; Unit 3: 60jt + 7jt = 67jt → total target 109jt.
+// Actual 100jt (40jt + 60jt) → OMZET = 100/109 × 100 = 91.7431 (cap ≤100).
 $ow = $svc->achievement('OMZET_WILAYAH', $SPV49, 1, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
-ok('OMZET_WILAYAH = 105.2632 (100jt/95jt)', near($ow, 105.2632), var_export($ow, true));
+ok('OMZET_WILAYAH = 91.7431 (100jt/109jt, target stlh +7jt/cabang)', near($ow, 91.7431), var_export($ow, true));
 
+// TARGET_CABANG = avg(40/42×100, 60/67×100) = 92.3952 (cap per cabang ≤100).
 $tc = $svc->achievement('TARGET_CABANG', $SPV49, 1, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
-ok('TARGET_CABANG = 107.1429', near($tc, 107.1429), var_export($tc, true));
+ok('TARGET_CABANG = 92.3952', near($tc, 92.3952), var_export($tc, true));
 
+// PRODUKTIVITAS = 36/30 = 120 → di-cap 100 (pedoman §VII).
 $pc = $svc->achievement('PRODUKTIVITAS_CABANG', $SPV49, 1, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
-ok('PRODUKTIVITAS_CABANG = 120 (36/30)', near($pc, 120.0), var_export($pc, true));
+ok('PRODUKTIVITAS_CABANG = 100 (36/30 = 120, cap 100)', near($pc, 100.0), var_export($pc, true));
 
 $a58 = $att->calculateMonthlyAttendance(58, 3, (string)$MONTH, (string)$YEAR, 'penilaian_kinerja');
 $a60 = $att->calculateMonthlyAttendance(60, 2, (string)$MONTH, (string)$YEAR, 'penilaian_kinerja');
@@ -285,15 +290,129 @@ $absenWeightsOk =
     && near($detailAbsen['Kepatuhan SOP'] ?? null, 20);
 ok('Detail Absensi SPV bobot = 40/20/20/20', $absenWeightsOk, json_encode($detailAbsen));
 
+// ── 5b. Regression: target HO +7jt/cabang, cap ≤100, salary 1.5jt, insentif 0 ──
+$compIdOmset = (int)$db->query("SELECT id FROM kpi_components WHERE code = 'OMSET_CABANG'")->getRow()->id;
+
+// Scope masing-masing SPV (tidak boleh hardcode semua unit).
+ok('Scope SPV 49 = [2,3]', $svc->scopeUnits($SPV49, 50) === [2, 3], json_encode($svc->scopeUnits($SPV49, 50)));
+ok('Scope SPV 56 = [1,4]', $svc->scopeUnits($SPV56, 50) === [1, 4], json_encode($svc->scopeUnits($SPV56, 50)));
+
+// Adjust per cabang: 2 cabang dalam scope = +Rp14.000.000 total.
+$t2 = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 2 AND context = 'penilaian_kinerja' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
+$t3 = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 3 AND context = 'penilaian_kinerja' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
+$adj = \App\Services\Kpi\SupervisorKpiService::HO_TARGET_ADJUSTMENT;
+ok('Adjustment HO per cabang = Rp7.000.000', near($adj, 7000000), "adj={$adj}");
+$adjTotal = (($t2 + $adj) + ($t3 + $adj)) - ($t2 + $t3);
+ok('2 cabang dalam scope → total adjustment = +Rp14.000.000', near($adjTotal, 14000000), "adjTotal={$adjTotal}");
+ok('OMZET pakai target SETELAH adjustment (100/109)', near($ow, round(100000000 / (($t2 + $adj) + ($t3 + $adj)) * 100, 4)), "ow={$ow}");
+
+// Target dasar cabang TIDAK berubah (tidak ditulis kembali ke kpi_targets).
+ok('Target dasar cabang 2 tetap 35jt (tidak diubah)', near($t2, 35000000), "t2={$t2}");
+$t4Out = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 4 AND context = 'penilaian_kinerja' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
+ok('Cabang luar scope (unit 4) tetap 55jt (dasar, tanpa adjustment utk SPV49)', near($t4Out, 55000000), "t4={$t4Out}");
+
+// Actual omzet TIDAK di-adjust +7jt.
+$omsetCalc = new \App\Services\Kpi\OmsetCabangCalculator();
+ok('Actual omzet unit 2 tetap 40jt (tanpa +7jt)', near($omsetCalc->calculate(0, 2, $MONTH, $YEAR), 40000000), var_export($omsetCalc->calculate(0, 2, $MONTH, $YEAR), true));
+ok('Actual omzet unit 3 tetap 60jt (tanpa +7jt)', near($omsetCalc->calculate(0, 3, $MONTH, $YEAR), 60000000), var_export($omsetCalc->calculate(0, 3, $MONTH, $YEAR), true));
+
+// Cap ≤100 per komponen & total.
+$allKpiLe100 = true;
+foreach ($kpi['detail_kpi'] as $d) {
+    if ($d['nilai'] !== null && $d['nilai'] > 100) {
+        $allKpiLe100 = false;
+    }
+}
+ok('Semua detail KPI komponen SPV ≤ 100', $allKpiLe100, json_encode(array_column($kpi['detail_kpi'], 'nilai')));
+ok('skor_total (total KPI) SPV ≤ 100', $kpi['skor_total'] <= 100.0, var_export($kpi['skor_total'], true));
+ok('Insentif SPV = Rp0 (tidak ada group/member SPV)', near((float)$kpi['insentif'], 0.0), var_export($kpi['insentif'], true));
+
+// Tidak ada hardcode daftar semua unit di jalur kalkulasi SPV.
+$kpiSrc = file_get_contents(APPPATH . 'Services/Kpi/KpiCalculationService.php');
+ok('Tidak ada hardcode [1, 2, 3, 4] di KpiCalculationService.php', strpos($kpiSrc, '[1, 2, 3, 4]') === false, 'literal ditemukan');
+ok('Blok insentif SPV memakai scopeUnits()', strpos($kpiSrc, 'scopeUnits($employeeId, $unit)') !== false, 'scopeUnits tidak dipakai');
+
+// Salary: maksimum tunjangan kinerja SPV = Rp1.500.000 (pedoman §XVIII).
+$ssSpv = $db->query("SELECT ss.base_value, ss.calculation_type FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 40 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Maksimum tunjangan kinerja SPV (40) = Rp1.500.000', near((float)$ssSpv->base_value, 1500000), var_export($ssSpv->base_value ?? null, true));
+$ss41 = $db->query("SELECT ss.base_value FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 41 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+$ss43 = $db->query("SELECT ss.base_value FROM salary_structures ss
+    JOIN salary_components sc ON sc.id = ss.salary_component_id
+    WHERE ss.position_id = 43 AND sc.code = 'TUNJANGAN_KINERJA'
+    ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
+ok('Jabatan lain tidak berubah (KT 41 tetap Rp850.000)', near((float)$ss41->base_value, 850000), var_export($ss41->base_value ?? null, true));
+ok('Jabatan lain tidak berubah (Pengiklan 43 tetap Rp1.000.000)', near((float)$ss43->base_value, 1000000), var_export($ss43->base_value ?? null, true));
+
+// Engine salary (SalaryCalculationService) memakai 1.5jt utk SPV @ KPI 100%.
+$salarySvc = new \App\Services\Payroll\SalaryCalculationService();
+$salaryRes = $salarySvc->calculateSalary(
+    $SPV49, 40, 50, 'slip_gaji',
+    ['TUNJANGAN_KINERJA' => 100, 'TUNJANGAN_ABSEN' => 100],
+    0.0, 0.0, 0.0, 0.0, $dateAnchor
+);
+$amtKinerja = 0.0;
+foreach ($salaryRes['components'] as $c) {
+    if ($c['component_code'] === 'TUNJANGAN_KINERJA') {
+        $amtKinerja = (float)$c['amount'];
+    }
+}
+ok('KPI 100% → tunjangan kinerja SPV = Rp1.500.000', near($amtKinerja, 1500000), "amt={$amtKinerja}");
+
 // ── 6. Session scope berbeda (SPV 56, scope [1,4]) ───────────────
 $ow56 = $svc->achievement('OMZET_WILAYAH', $SPV56, 4, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
-ok('SPV 56 (scope [1,4]) TIDAK melihat data unit [2,3] → omzet 0 bukan 105', near($ow56, 0.0), var_export($ow56, true));
+ok('SPV 56 (scope [1,4]) TIDAK melihat data unit [2,3] → actual 0 → omzet 0', near($ow56, 0.0), var_export($ow56, true));
 
 $pc56 = $svc->achievement('PRODUKTIVITAS_CABANG', $SPV56, 4, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
 ok('SPV 56: prev unique customer = 0 → PRODUKTIVITAS = null (tanpa ÷0)', $pc56 === null, var_export($pc56, true));
 
 $cs56 = $svc->achievement('CUSTOMER_SATISFACTION', $SPV56, 4, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
 ok('SPV 56: CS belum diinput = null', $cs56 === null, var_export($cs56, true));
+
+// ── 6b. Regression: cap OMZET/TARGET saat actual > target (bulan 6) ──
+// Bulan 6: unit2 & unit3 GROSS PROFIT 100jt masing-masing (hpp=0).
+// Target HO unit2 = 42jt, unit3 = 67jt → 200/109 = 183.49 → cap 100.
+foreach ([2 => 100000000, 3 => 100000000] as $unitC => $subC) {
+    $salesTable->insert([
+        'kode_invoice'    => 'SV-2028-6-' . $unitC . '-CAP',
+        'tanggal'         => sprintf('%04d-06-15 10:10:00', $YEAR),
+        'total_penjualan' => $subC,
+        'diskon'          => 0,
+        'total_ppn'       => 0,
+        'harus_dibayar'   => (string)$subC,
+        'bayar'           => $subC,
+        'bayar_tunai'     => $subC,
+        'bank_idbank'     => '0',
+        'bayar_bank'      => 0,
+        'id_pelanggan'    => 999000 + $unitC,
+        'input_by'        => 58,
+        'sales_by'        => 58,
+        'unit_idunit'     => $unitC,
+    ]);
+    $pid = $db->insertID();
+    $detTable->insert([
+        'jumlah'               => 1,
+        'harga_penjualan'      => $subC,
+        'sub_total'            => $subC,
+        'hpp_penjualan'        => 0,
+        'satuan_jual'          => 'pcs',
+        'diskon_penjualan'     => '0',
+        'penjualan_idpenjualan' => $pid,
+        'barang_idbarang'      => 158,
+        'unit_idunit'          => $unitC,
+        'bundle'               => 0,
+    ]);
+}
+$owCap = $svc->achievement('OMZET_WILAYAH', $SPV49, 1, 6, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
+ok('OMZET_WILAYAH di-cap 100 saat actual (200jt) > target HO (109jt)', near($owCap, 100.0), var_export($owCap, true));
+$tcCap = $svc->achievement('TARGET_CABANG', $SPV49, 1, 6, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
+ok('TARGET_CABANG di-cap 100 (per cabang > target, cap 100)', near($tcCap, 100.0), var_export($tcCap, true));
+ok('Actual omzet bulan 6 tetap 100jt/cabang (tanpa +7jt)', near($omsetCalc->calculate(0, 2, 6, $YEAR), 100000000), var_export($omsetCalc->calculate(0, 2, 6, $YEAR), true));
 
 // ── 7. Edge & fallback ───────────────────────────────────────────
 ok('scopeUnits fallback ke unit sendiri', $svc->scopeUnits(999999, 7) === [7], json_encode($svc->scopeUnits(999999, 7)));

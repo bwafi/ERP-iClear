@@ -495,8 +495,10 @@ class KpiCalculationService
         if ($group->code === 'SPV') {
             $db = \Config\Database::connect();
             $totalIncentive = 0.0;
-            $units = [1, 2, 3, 4]; // Production units
-            
+            // Scope SPV (jabatan 40) = unit dari spv_units per supervisor,
+            // BUKAN semua unit. SPV 49 → [2,3], SPV 56 → [1,4].
+            $units = $this->supervisorService()->scopeUnits($employeeId, $unit);
+
             foreach ($units as $uId) {
                 $actualOmset = $omsetCalc->calculate(0, $uId, $month, $year);
                 $target = $this->targetModel->getTargetByKpiAndUnit($rule->kpi_component_id, $uId, 'gaji', $date);
