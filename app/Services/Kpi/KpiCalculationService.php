@@ -120,14 +120,20 @@ class KpiCalculationService
                     continue; // belum ada target utk KPI ini
                 }
                 
-                // OMSET: gunakan tiered scoring jika batas tersedia di target
+                // OMSET (Toko/Cabang): threshold tanpa tier — actual < target → 0; actual ≥ target → 100 (cap).
                 if (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG'])) {
-                    $achievement = $this->omsetTieredAchievement($positionId, $actualValue, $target, $context);
+                    $targetValue = (float) $target->target_value;
+                    $achievement = ($actualValue >= $targetValue)
+                        ? $this->scoreService()->achievementScore($actualValue, $targetValue)
+                        : 0.0;
                 } elseif ($component->code === 'OMSET_TEKNISI') {
-                    // OMSET TEKNISI: rasio sederhana aktual omset cabang utuh / target per teknisi, di-cap 100
-                    // Kebijakan: jumlah teknisi per cabang = 2 (konstanta), target per teknisi = target cabang / 2
-                    // Target per teknisi sudah disimpan di kpi_targets.target_value oleh seeder
-                    $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
+                    // OMSET TEKNISI: realisasi HANYA omzet service yg dikerjakan teknisi
+                    // (OmsetTeknisiCalculator: service.service_by, status selesai, bulan tsb).
+                    // Threshold tanpa tier: actual < target → 0; actual ≥ target → 100 (cap).
+                    $targetValue = (float) $target->target_value;
+                    $achievement = ($actualValue >= $targetValue)
+                        ? $this->scoreService()->achievementScore($actualValue, $targetValue)
+                        : 0.0;
                 } elseif ($component->code === 'CUSTOMER_COUNT') {
                     // CUSTOMER: Jika ada batas_bawah (batas_awal) & batas_atas (batas_keempat)
                     // Rule: jika actual >= batas_bawah, maka achievement = (actual / batas_atas) * 100
@@ -685,35 +691,6 @@ class KpiCalculationService
             }
         }
         return 1500000.0;
-    }
-
-    /**
-     * Tiered achievement score for omset based on DB batas_* columns.
-     */
-    protected function omsetTieredAchievement(int $positionId, float $actual, $target, string $context): float
-    {
-        if (!$target || $target->target_value <= 0) {
-            return 0.0;
-        }
-
-        $val = (float)$target->target_value;
-        $b1  = (float)($target->batas_awal ?? 0);
-        $b2  = (float)($target->batas_kedua ?? 0);
-        $b3  = (float)($target->batas_ketiga ?? 0);
-        $b4  = (float)($target->batas_keempat ?? 0);
-
-        // Tiered calculation based on thresholds
-        if ($actual >= $b4) return 100.0;
-        if ($actual >= $b3) return 75.0;
-        if ($actual >= $b2) return 50.0;
-        if ($actual >= $b1) return 25.0;
-        
-        // Linear fallback if below b1 but above 0
-        if ($b1 > 0) {
-            return min(($actual / $b1) * 25.0, 25.0);
-        }
-        
-        return 0.0;
     }
 
     public function getWeightValidationResult($positionId, $date = null, $group = 'kpi')

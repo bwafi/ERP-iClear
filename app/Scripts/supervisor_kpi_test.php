@@ -525,7 +525,89 @@ ok('scopeUnits fallback ke unit sendiri', $svc->scopeUnits(999999, 7) === [7], j
 $unk = $svc->achievement('UNKNOWN_COMPONENT', $SPV49, 1, $MONTH, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
 ok('Komponen tidak dikenal → null', $unk === null, var_export($unk, true));
 
-// ── 8. Rollback (tidak mencemari DB) ─────────────────────────────
+// ── 8b. OMSET_TEKNISI (jabatan 36): realisasi per service_by, threshold 0/100 ──
+$svcTable = $db->table('service');
+$ssTable  = $db->table('service_sparepart');
+$addService = function (int $by, int $unit, int $status, string $selesai, float $harusBayar) use ($svcTable, $db) {
+    $svcTable->insert([
+        'no_service'             => 'SRV-TEST-' . $by . '-' . $unit . '-' . $status . '-' . md5($selesai . $harusBayar),
+        'unit_idunit'            => $unit,
+        'service_by'             => $by,
+        'input_by'               => $by,
+        'pelanggan_id_pelanggan' => 1,
+        'status_service'         => $status,
+        'harus_dibayar'          => (int)$harusBayar,
+        'total_service'          => (int)$harusBayar,
+        'tanggal_selesai'        => $selesai,
+    ]);
+    return (int) $db->insertID();
+};
+
+// Zamroni (68, jabatan 36 unit 2):
+//   S1 10jt − sparepart hpp 1jt = 9jt, S2 6jt → total 15jt (< target 17,5jt).
+$s1 = $addService(68, 2, 4, sprintf('%04d-05-10 15:00:00', $YEAR), 10000000);
+$ssTable->insert(['service_idservice' => $s1, 'unit_idunit' => 2, 'hpp_penjualan' => 1000000, 'jumlah' => 1]);
+$addService(68, 2, 4, sprintf('%04d-05-12 16:00:00', $YEAR), 6000000);
+// Kontrol (TIDAK boleh dihitung): teknisi lain / belum selesai / bulan sebelumnya.
+$addService(60, 2, 4, sprintf('%04d-05-14 09:00:00', $YEAR), 50000000);
+$addService(68, 2, 1, sprintf('%04d-05-15 09:00:00', $YEAR), 99000000);
+$addService(68, 2, 4, sprintf('%04d-04-28 09:00:00', $YEAR), 99000000);
+
+$tekCalc = new \App\Services\Kpi\OmsetTeknisiCalculator();
+$tekActual = $tekCalc->calculate(68, 2, $MONTH, $YEAR);
+ok('OMSET_TEKNISI actual hanya service yg dikerjakan Zamroni (15jt)', near($tekActual, 15000000), var_export($tekActual, true));
+
+$tekRow = null;
+foreach ($kpiSvc->calculateForEmployee(68, 2, (string)$MONTH, (string)$YEAR, 'penilaian_kinerja', $dateAnchor)['items'] as $it) {
+    if (($it['code'] ?? '') === 'OMSET_TEKNISI') {
+        $tekRow = $it;
+    }
+}
+ok('OMSET_TEKNISI item dihitung utk teknisi 68', $tekRow !== null, json_encode($tekRow));
+ok('actual 15jt < target 17,5jt → achievement 0 (tanpa tier minimum)', $tekRow && near($tekRow['achievement'] ?? null, 0.0), json_encode($tekRow));
+
+$addService(68, 2, 4, sprintf('%04d-07-11 14:00:00', $YEAR), 18000000);
+$tekActual7 = $tekCalc->calculate(68, 2, 7, $YEAR);
+ok('OMSET_TEKNISI actual bulan 7 = 18jt', near($tekActual7, 18000000), var_export($tekActual7, true));
+$tekRow7 = null;
+foreach ($kpiSvc->calculateForEmployee(68, 2, '07', (string)$YEAR, 'penilaian_kinerja', sprintf('%04d-07-15', $YEAR))['items'] as $it) {
+    if (($it['code'] ?? '') === 'OMSET_TEKNISI') {
+        $tekRow7 = $it;
+    }
+}
+ok('actual 18jt ≥ target → achievement 100 (cap)', $tekRow7 && near($tekRow7['achievement'] ?? null, 100.0), json_encode($tekRow7));
+
+// ── 8c. OMSET_TOKO & OMSET_CABANG: threshold tanpa tier (actual < target → 0) ──
+$o5 = null;
+foreach ($kpiSvc->calculateForEmployee(68, 2, (string)$MONTH, (string)$YEAR, 'penilaian_kinerja', $dateAnchor)['items'] as $it) {
+    if (($it['code'] ?? '') === 'OMSET_TOKO') {
+        $o5 = $it;
+    }
+}
+ok('OMSET_TOKO bulan 5: actual 40jt ≥ target 35jt → 100', $o5 && near($o5['achievement'] ?? null, 100.0), json_encode($o5));
+$o4 = null;
+foreach ($kpiSvc->calculateForEmployee(68, 2, '04', (string)$YEAR, 'penilaian_kinerja', sprintf('%04d-04-15', $YEAR))['items'] as $it) {
+    if (($it['code'] ?? '') === 'OMSET_TOKO') {
+        $o4 = $it;
+    }
+}
+ok('OMSET_TOKO bulan 4: actual 0 < target 35jt → 0 (tanpa tier minimum)', $o4 && near($o4['achievement'] ?? null, 0.0), json_encode($o4));
+$k58_5 = null;
+foreach ($kpiSvc->calculateForEmployee(58, 3, (string)$MONTH, (string)$YEAR, 'penilaian_kinerja', $dateAnchor)['items'] as $it) {
+    if (($it['code'] ?? '') === 'OMSET_CABANG') {
+        $k58_5 = $it;
+    }
+}
+ok('OMSET_CABANG (KT unit3) bulan 5: actual 60jt = target 60jt → 100', $k58_5 && near($k58_5['achievement'] ?? null, 100.0), json_encode($k58_5));
+$k58_4 = null;
+foreach ($kpiSvc->calculateForEmployee(58, 3, '04', (string)$YEAR, 'penilaian_kinerja', sprintf('%04d-04-15', $YEAR))['items'] as $it) {
+    if (($it['code'] ?? '') === 'OMSET_CABANG') {
+        $k58_4 = $it;
+    }
+}
+ok('OMSET_CABANG bulan 4: actual 0 < target → 0', $k58_4 && near($k58_4['achievement'] ?? null, 0.0), json_encode($k58_4));
+
+// ── 9. Rollback (tidak mencemari DB) ─────────────────────────────
 $db->transRollback();
 $afterSales = (int)$db->query("SELECT COUNT(*) c FROM penjualan WHERE kode_invoice LIKE 'SV-2028-%'")->getRow()->c;
 $afterEvals = (int)$db->query(
