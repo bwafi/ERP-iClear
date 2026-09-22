@@ -225,6 +225,69 @@ class SupervisorKpiService
         return $n > 0 ? round($reached / $n * 100, 4) : null;
     }
 
+    /**
+     * Info omzet SPV utk tampilan informatif (penilaian_kinerja) — read-only.
+     *
+     * Ringkasan target & realisasi per cabang dalam scope:
+     *   target_non_ho_total (target dasar), target_ho_total (dasar + 7jt HO),
+     *   actual_total, shortfall_ho (Rp kurang utk capai target HO), dan
+     *   per-cabang: target_dasar, target_ho, actual, reached, shortfall_ho.
+     * Tidak mempengaruhi achievement — hanya data display.
+     */
+    public function omzetDetail(int $supervisorId, int $fallbackUnit, int $month, int $year, string $targetContext, ?string $date = null): ?array
+    {
+        $units = $this->scopeUnits($supervisorId, $fallbackUnit);
+        if (empty($units)) {
+            return null;
+        }
+
+        $comp = $this->component('OMSET_CABANG');
+        if (!$comp) {
+            return null;
+        }
+
+        $omset            = new OmsetCabangCalculator();
+        $detail           = [];
+        $targetDasarTotal = 0.0;
+        $targetHoTotal    = 0.0;
+        $actualTotal      = 0.0;
+        $hasTarget        = false;
+
+        foreach ($units as $unit) {
+            $target   = $this->cabangTarget((int)$comp->id, (int)$unit, $targetContext, $date);
+            $actual   = $omset->calculate(0, (int)$unit, $month, $year);
+            $targetHo = ($target !== null) ? ($target + self::HO_TARGET_ADJUSTMENT) : null;
+
+            if ($target !== null) {
+                $targetDasarTotal += $target;
+                $targetHoTotal   += $targetHo;
+                $hasTarget        = true;
+            }
+            $actualTotal += $actual;
+
+            $detail[] = [
+                'unit'         => (int)$unit,
+                'target_dasar' => ($target === null) ? null : round($target),
+                'target_ho'    => ($targetHo === null) ? null : round($targetHo),
+                'actual'       => round($actual),
+                'reached'      => ($targetHo !== null && $actual >= $targetHo),
+                'shortfall_ho' => ($targetHo === null) ? null : round(max($targetHo - $actual, 0)),
+            ];
+        }
+
+        if (!$hasTarget) {
+            return null;
+        }
+
+        return [
+            'target_non_ho_total' => round($targetDasarTotal),
+            'target_ho_total'     => round($targetHoTotal),
+            'actual_total'        => round($actualTotal),
+            'shortfall_ho'        => round(max($targetHoTotal - $actualTotal, 0)),
+            'cabang'              => $detail,
+        ];
+    }
+
     /* ════════════════════ 3. PRODUKTIVITAS CABANG ════════════════════ */
 
     /**

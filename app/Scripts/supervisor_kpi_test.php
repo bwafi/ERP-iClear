@@ -469,7 +469,7 @@ ok('TARGET_CABANG = 0 saat 0/2 cabang tercapai', near($tcLow, 0.0), var_export($
 
 // Bulan 10-13: TARGET_CABANG dengan 4 cabang.
 // Scope SPV 56 diperluas SEMENTARA → [1,2,3,4] (dalam transaction, di-rollback).
-// Target HO (penilaian_kinerja): u1=55+7=62jt, u2=35+7=42jt, u3=60+7=67jt, u4=55+7=62jt.
+// Target HO (penilaian_kinerja): u1=50+7=57jt, u2=35+7=42jt, u3=60+7=67jt, u4=55+7=62jt.
 $unitTable = $db->table('spv_units');
 foreach ([2, 3] as $extra) {
     $unitTable->insert([
@@ -493,11 +493,32 @@ $addSales(12, [2 => 42000000, 3 => 67000000, 4 => 62000000]);
 $tc34t = $svc->achievement('TARGET_CABANG', $SPV56, 4, 12, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
 ok('TARGET_CABANG = 75 (3/4 cabang tercapai)', near($tc34t, 75.0), var_export($tc34t, true));
 
-$addSales(13, [1 => 62000000, 2 => 42000000, 3 => 67000000, 4 => 62000000]);
+$addSales(13, [1 => 57000000, 2 => 42000000, 3 => 67000000, 4 => 62000000]);
 $tc44t = $svc->achievement('TARGET_CABANG', $SPV56, 4, 13, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
 ok('TARGET_CABANG = 100 (4/4 cabang tercapai)', near($tc44t, 100.0), var_export($tc44t, true));
 $ow44t = $svc->achievement('OMZET_WILAYAH', $SPV56, 4, 13, $YEAR, 'penilaian_kinerja', 'penilaian_kinerja', $dateAnchor);
-ok('OMZET_WILAYAH = 100 saat actual == target (233 = 233, 4 cabang)', near($ow44t, 100.0), var_export($ow44t, true));
+ok('OMZET_WILAYAH = 100 saat actual == target (228 = 228, 4 cabang)', near($ow44t, 100.0), var_export($ow44t, true));
+
+// ── 6c. Info target/realisasi utk tampilan (omzetDetail, read-only) ──
+$od = $svc->omzetDetail($SPV49, 1, $MONTH, $YEAR, 'penilaian_kinerja', $dateAnchor);
+ok('omzetDetail SPV49 bulan 5 ada', is_array($od), json_encode($od));
+ok('omzetDetail target_ho_total = 109jt', near($od['target_ho_total'] ?? null, 109000000), json_encode($od['target_ho_total'] ?? null));
+ok('omzetDetail target_non_ho_total = 95jt', near($od['target_non_ho_total'] ?? null, 95000000), json_encode($od['target_non_ho_total'] ?? null));
+ok('omzetDetail actual_total = 100jt', near($od['actual_total'] ?? null, 100000000), json_encode($od['actual_total'] ?? null));
+ok('omzetDetail shortfall_ho = 9jt', near($od['shortfall_ho'] ?? null, 9000000), json_encode($od['shortfall_ho'] ?? null));
+$cb2 = $od['cabang'][0] ?? null;
+ok('omzetDetail cabang unit2 target_ho 42jt actual 40jt belum tercapai', $cb2 && $cb2['unit'] === 2 && near($cb2['target_ho'], 42000000) && near($cb2['actual'], 40000000) && $cb2['reached'] === false, json_encode($cb2));
+
+$kpiInfo = $kpiSvc->calculateForSalary($SPV49, (string)$MONTH, (string)$YEAR, 'penilaian_kinerja')['detail_kpi'];
+$rowByName = array_column($kpiInfo, null, 'nama');
+$owRow = $rowByName['Omzet Wilayah'] ?? [];
+ok('Detail "Omzet Wilayah" membawa target HO 109jt', near($owRow['target'] ?? null, 109000000), json_encode($owRow));
+ok('Detail "Omzet Wilayah" shortfall 9jt', near($owRow['shortfall'] ?? null, 9000000), json_encode($owRow));
+$tcRow = $rowByName['Target Cabang'] ?? [];
+ok('Detail "Target Cabang" unit_count 2, reached 0, shortfall 2', ($tcRow['unit_count'] ?? null) === 2 && ($tcRow['reached'] ?? null) === 0 && ($tcRow['shortfall'] ?? null) === 2, json_encode($tcRow));
+
+$od6 = $svc->omzetDetail($SPV49, 1, 6, $YEAR, 'penilaian_kinerja', $dateAnchor);
+ok('omzetDetail bulan 6: 200jt realisasi, semua cabang tercapai', near($od6['actual_total'] ?? null, 200000000) && !empty($od6['cabang']) && $od6['cabang'][0]['reached'] && $od6['cabang'][1]['reached'], json_encode($od6));
 
 // ── 7. Edge & fallback ───────────────────────────────────────────
 ok('scopeUnits fallback ke unit sendiri', $svc->scopeUnits(999999, 7) === [7], json_encode($svc->scopeUnits(999999, 7)));

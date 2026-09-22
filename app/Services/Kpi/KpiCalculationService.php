@@ -72,6 +72,7 @@ class KpiCalculationService
         $weights = $this->weightModel->getByPosition($positionId, $date, 'kpi');
 
         $items = [];
+        $omzetInfo = null; // cache ringkasan omzet SPV (target/actual per cabang) utk display
         foreach ($weights as $w) {
             $component = $this->componentModel->where('id', $w->kpi_component_id)->first();
             if (!$component || !(int)$component->is_active) {
@@ -206,6 +207,51 @@ class KpiCalculationService
             $achievementVal = ($achievement === null) ? null : round($achievement, 4);
             $weightedVal    = ($achievement === null) ? null : round(($achievement / 100) * (float)$w->weight, 4);
 
+            // Info target/realisasi utk tampilan (read-only, tidak mempengaruhi nilai).
+            $targetInfo = null;
+            if ($positionId === 40 && in_array($component->code, ['OMZET_WILAYAH', 'TARGET_CABANG'], true)) {
+                if ($omzetInfo === null) {
+                    $omzetInfo = $this->supervisorService()->omzetDetail(
+                        $employeeId, $unitId, (int)$month, (int)$year, $targetContext, $date
+                    );
+                }
+                if ($omzetInfo) {
+                    if ($component->code === 'TARGET_CABANG') {
+                        $n = count($omzetInfo['cabang']);
+                        $reached = 0;
+                        foreach ($omzetInfo['cabang'] as $cb) {
+                            if (!empty($cb['reached'])) {
+                                $reached++;
+                            }
+                        }
+                        $targetInfo = [
+                            'unit_count' => $n,
+                            'reached'    => $reached,
+                            'shortfall'  => max($n - $reached, 0),
+                            'ho'         => true,
+                            'cabang'     => $omzetInfo['cabang'],
+                        ];
+                    } else {
+                        $targetInfo = [
+                            'target'    => $omzetInfo['target_ho_total'],
+                            'actual'    => $omzetInfo['actual_total'],
+                            'shortfall' => $omzetInfo['shortfall_ho'],
+                            'ho'        => true,
+                            'cabang'    => $omzetInfo['cabang'],
+                        ];
+                    }
+                }
+            } elseif (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI'], true) && isset($actualValue) && isset($target)) {
+                // Non-SPV: target biasa dari kpi_targets (non HO).
+                $targetInfo = [
+                    'target'    => (float)$target->target_value,
+                    'actual'    => (float)$actualValue,
+                    'shortfall' => max((float)$target->target_value - (float)$actualValue, 0.0),
+                    'ho'        => false,
+                    'cabang'    => null,
+                ];
+            }
+
             $items[] = [
                 'kpi_component_id'    => $component->id,
                 'code'                => $component->code,
@@ -215,6 +261,13 @@ class KpiCalculationService
                 'weight'              => (float)$w->weight,
                 'achievement'         => $achievementVal,
                 'weighted_score'      => $weightedVal,
+                'target'              => $targetInfo['target'] ?? null,
+                'actual'              => $targetInfo['actual'] ?? null,
+                'shortfall'           => $targetInfo['shortfall'] ?? null,
+                'unit_count'          => $targetInfo['unit_count'] ?? null,
+                'reached'             => $targetInfo['reached'] ?? null,
+                'ho'                  => $targetInfo['ho'] ?? null,
+                'cabang'              => $targetInfo['cabang'] ?? null,
             ];
         }
 
@@ -348,13 +401,20 @@ class KpiCalculationService
         $skorTotal  = min($kpiResult['total_score'], 100.0);
         $skorTotal2 = $kpiResult['skor_total2'];
 
-        // Build detail_kpi for views: array of ['nama','bobot','nilai']
+        // Build detail_kpi for views: array of ['nama','bobot','nilai', 'target', 'actual', ...]
         $detailKpi = [];
         foreach ($kpiResult['items'] as $item) {
             $detailKpi[] = [
-                'nama'  => $item['name'],
-                'bobot' => $item['weight'],
-                'nilai' => $item['achievement'],
+                'nama'       => $item['name'],
+                'bobot'      => $item['weight'],
+                'nilai'      => $item['achievement'],
+                'target'     => $item['target'] ?? null,
+                'actual'     => $item['actual'] ?? null,
+                'shortfall'  => $item['shortfall'] ?? null,
+                'unit_count' => $item['unit_count'] ?? null,
+                'reached'    => $item['reached'] ?? null,
+                'ho'         => $item['ho'] ?? null,
+                'cabang'     => $item['cabang'] ?? null,
             ];
         }
 

@@ -487,7 +487,7 @@ class KPIConfigurationSeeder extends Seeder
         $omsetThreshold = [
             1 => [ // Unit 1
                 'gaji'       => ['batas_awal' => 30000000, 'batas_kedua' => 35000000, 'batas_ketiga' => 40000000, 'batas_keempat' => 45000000, 'target' => 50000000],
-                'penilaian'  => ['batas_awal' => 35000000, 'batas_kedua' => 40000000, 'batas_ketiga' => 45000000, 'batas_keempat' => 50000000, 'target' => 55000000],
+                'penilaian'  => ['batas_awal' => 35000000, 'batas_kedua' => 40000000, 'batas_ketiga' => 45000000, 'batas_keempat' => 50000000, 'target' => 50000000],
             ],
             2 => [ // Unit 2
                 'gaji'       => ['batas_awal' => 18000000, 'batas_kedua' => 22000000, 'batas_ketiga' => 26000000, 'batas_keempat' => 30000000, 'target' => 35000000],
