@@ -230,6 +230,7 @@ $routes->get('stokopname/loadtable', 'StokOpname::loadTable');
 //kartu stok
 $routes->get('kartu_stok', 'Kartu_Stok::index', ['filter' => 'auth']);
 $routes->post('export/kartu_stock', 'Kartu_Stok::export', ['filter' => 'auth']);
+$routes->get('kartu_stok/dt', 'Kartu_Stok::dt', ['filter' => 'auth']);
 
 //stok hp
 $routes->get('stok_hp', 'StokHP::index', ['filter' => 'auth']);

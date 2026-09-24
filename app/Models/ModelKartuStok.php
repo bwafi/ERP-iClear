@@ -31,54 +31,124 @@ class ModelKartuStok extends Model
     }
 
     /**
-     * Server-side processing untuk DataTables (tabel Draft / Kartu Stok).
+     * Builder dasar Kartu Stok (stok_barang + barang + kategori), hanya data aktif.
      */
-    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'kode_barang', $orderDir = 'ASC', $unitFilter = '')
+    private function kartuStokBuilder()
     {
-        $allowedOrder = ['kode_barang', 'nama_barang', 'nama_unit', 'stok_akhir'];
+        return $this->db->table('stok_barang')
+            ->select('
+                stok_barang.idbarang AS idbarang,
+                stok_barang.id_unit,
+                stok_barang.kode_barang,
+                stok_barang.nama_barang,
+                stok_barang.imei,
+                stok_barang.nama_unit,
+                stok_barang.harga AS harga,
+                stok_barang.stok_awal,
+                stok_barang.stok_akhir,
+                stok_barang.total_pembelian,
+                stok_barang.total_penjualan,
+                stok_barang.total_retur_pelanggan,
+                stok_barang.total_retur_supplier,
+                stok_barang.total_mutasi_masuk,
+                stok_barang.total_mutasi_keluar,
+                barang.harga_beli,
+                barang.jenis_hp,
+                barang.warna,
+                barang.status_ppn,
+                kategori.nama_kategori
+            ')
+            ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('kategori', 'kategori.id = barang.idkategori', 'left')
+            ->where('barang.deleted', '0')
+            ->where('kategori.delete', '0');
+    }
+
+    private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '')
+    {
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('stok_barang.kode_barang', $search)
+                ->orLike('stok_barang.nama_barang', $search)
+                ->orLike('stok_barang.imei', $search)
+                ->orLike('stok_barang.nama_unit', $search)
+                ->orLike('kategori.nama_kategori', $search)
+                ->groupEnd();
+        }
+
+        if ($unit !== '') {
+            $builder->where('stok_barang.id_unit', $unit);
+        }
+
+        if ($ppn === 'PPN') {
+            $builder->where('barang.status_ppn', '1');
+        } elseif ($ppn === 'Non PPN') {
+            $builder->where('barang.status_ppn', '0');
+        }
+
+        return $builder;
+    }
+
+    /**
+     * Server-side processing DataTables Kartu Stok.
+     */
+    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'stok_barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '')
+    {
+        $allowedOrder = [
+            'stok_barang.kode_barang',
+            'stok_barang.nama_barang',
+            'stok_barang.nama_unit',
+            'kategori.nama_kategori',
+            'barang.status_ppn',
+            'stok_barang.stok_akhir',
+        ];
         if (!in_array($orderCol, $allowedOrder, true)) {
-            $orderCol = 'kode_barang';
+            $orderCol = 'stok_barang.kode_barang';
         }
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
 
-        $builder = $this->db->table('stok_barang')
-            ->select('idbarang, id_unit, kode_barang, nama_barang, nama_unit, stok_akhir');
+        $builder = $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn);
 
-        if ($search !== '') {
-            $builder->groupStart()
-                ->like('kode_barang', $search)
-                ->orLike('nama_barang', $search)
-                ->orLike('nama_unit', $search)
-                ->groupEnd();
-        }
-
-        if ($unitFilter !== '') {
-            $builder->where('nama_unit', $unitFilter);
-        }
-
-        $builder->orderBy($orderCol, $orderDir)
-            ->limit($limit, $offset);
-
-        return $builder->get()->getResult();
+        return $builder->orderBy($orderCol, $orderDir)
+            ->limit($limit, $offset)
+            ->get()
+            ->getResult();
     }
 
-    public function countKartuStokDT($search = '', $unitFilter = '')
+    /**
+     * Total keseluruhan (tanpa filter tambahan, hanya data aktif).
+     */
+    public function countKartuStokAll()
     {
-        $builder = $this->db->table('stok_barang');
+        return $this->kartuStokBuilder()->countAllResults(false);
+    }
 
-        if ($search !== '') {
-            $builder->groupStart()
-                ->like('kode_barang', $search)
-                ->orLike('nama_barang', $search)
-                ->orLike('nama_unit', $search)
-                ->groupEnd();
-        }
+    /**
+     * Total data setelah filter search/unit/ppn.
+     */
+    public function countKartuStokDT($search = '', $unit = '', $ppn = '')
+    {
+        return $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn)->countAllResults(false);
+    }
 
-        if ($unitFilter !== '') {
-            $builder->where('nama_unit', $unitFilter);
-        }
-
-        return $builder->countAllResults(false);
+    /**
+     * Ringkasan untuk kartu statistik halaman.
+     */
+    public function getSummaryKartuStok()
+    {
+        return $this->db->table('stok_barang')
+            ->select('
+                COUNT(*) AS total_barang,
+                COUNT(DISTINCT stok_barang.id_unit) AS total_unit,
+                COALESCE(SUM(stok_barang.stok_akhir), 0) AS total_stok,
+                COALESCE(SUM(stok_barang.stok_akhir * barang.harga_beli), 0) AS nilai_stok
+            ')
+            ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('kategori', 'kategori.id = barang.idkategori', 'left')
+            ->where('barang.deleted', '0')
+            ->where('kategori.delete', '0')
+            ->get()
+            ->getRow();
     }
 
 
