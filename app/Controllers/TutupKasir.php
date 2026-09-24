@@ -264,25 +264,51 @@ class TutupKasir extends BaseController
             ->getResultArray();
 
         // ==========================
-        // TOTAL OMSET BULAN INI
+        // FILTER BULAN / TAHUN (default: bulan berjalan)
         // ==========================
-        $omset_bulan = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow()
-            ->total ?? 0;
+        $bulan = (int) $this->request->getGet('bulan');
+        $tahun = (int) $this->request->getGet('tahun');
+
+        if ($bulan < 1 || $bulan > 12) {
+            $bulan = (int) date('m');
+        }
+        if ($tahun < 2000 || $tahun > 2100) {
+            $tahun = (int) date('Y');
+        }
+
+        $bulanSebelum = (int)date('m', mktime(0, 0, 0, $bulan - 1, 1, $tahun));
+        $tahunSebelum = (int)date('Y', mktime(0, 0, 0, $bulan - 1, 1, $tahun));
+
+        $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
+        $periodeLaluLabel = date('F Y', mktime(0, 0, 0, $bulanSebelum, 1, $tahunSebelum));
+
+        $isBulanBerjalan = ($bulan === (int) date('m') && $tahun === (int) date('Y'));
+
+        // ==========================
+        // TOTAL OMSET BULAN TERPILIH
+        // ==========================
+        $omset_bulan = $this->countOmset($unit, $bulan, $tahun);
+
+        // OMSET BULAN SEBELUMNYA (untuk perbandingan)
+        $omset_bulan_lalu = $this->countOmset($unit, $bulanSebelum, $tahunSebelum);
+
+        if ($omset_bulan_lalu > 0) {
+            $pertumbuhan_omset = round((($omset_bulan - $omset_bulan_lalu) / $omset_bulan_lalu) * 100, 1);
+        } elseif ($omset_bulan_lalu == 0 && $omset_bulan > 0) {
+            $pertumbuhan_omset = 100;
+        } else {
+            $pertumbuhan_omset = 0;
+        }
+
+        $selisih_omset = $omset_bulan - $omset_bulan_lalu;
 
         // ==========================
         // TOTAL PELANGGAN
         // ==========================
         $countService = $this->db->table('service')
             ->select('COUNT(idservice) AS total')
-            ->where('MONTH(tanggal_selesai)', date('m'))
-            ->where('YEAR(tanggal_selesai)', date('Y'))
+            ->where('MONTH(tanggal_selesai)', $bulan)
+            ->where('YEAR(tanggal_selesai)', $tahun)
             ->where('unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -290,8 +316,8 @@ class TutupKasir extends BaseController
 
         $countSales = $this->db->table('penjualan')
             ->select('COUNT(DISTINCT idpenjualan) AS total')
-            ->where('MONTH(tanggal)', date('m'))
-            ->where('YEAR(tanggal)', date('Y'))
+            ->where('MONTH(tanggal)', $bulan)
+            ->where('YEAR(tanggal)', $tahun)
             ->where('unit_idunit', $unit)
             ->like('kode_invoice', 'SLL', 'after')
             ->get()
@@ -314,8 +340,8 @@ class TutupKasir extends BaseController
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
             ->like('stok_barang.kode_barang', 'SPRT', 'after')
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->orderBy('stok_barang.total_penjualan', 'DESC')
             ->limit(1)
@@ -339,8 +365,8 @@ class TutupKasir extends BaseController
                 ) AS keyword_hp,
                 COUNT(*) AS total
             ")
-            ->where('MONTH(tanggal_selesai)', date('m'))
-            ->where('YEAR(tanggal_selesai)', date('Y'))
+            ->where('MONTH(tanggal_selesai)', $bulan)
+            ->where('YEAR(tanggal_selesai)', $tahun)
             ->where('unit_idunit', $unit)
             ->groupBy('keyword_hp')
             ->orderBy('total', 'DESC')
@@ -358,8 +384,8 @@ class TutupKasir extends BaseController
             ->selectCount('b.nama_barang', 'total')
             ->join('barang b', 'b.idbarang = dp.barang_idbarang')
             ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-            ->where('MONTH(p.tanggal)', date('m'))
-            ->where('YEAR(p.tanggal)', date('Y'))
+            ->where('MONTH(p.tanggal)', $bulan)
+            ->where('YEAR(p.tanggal)', $tahun)
             ->where('p.unit_idunit', $unit)
             ->where('b.idkategori', 3)
             ->notLike('b.nama_barang', 'mesin')
@@ -398,8 +424,8 @@ class TutupKasir extends BaseController
                 'barang',
                 'barang.idbarang = detail_penjualan.barang_idbarang'
             )
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->where('barang.idkategori =', 3)
             ->get()
@@ -416,8 +442,8 @@ class TutupKasir extends BaseController
                 'barang',
                 'barang.idbarang = detail_penjualan.barang_idbarang'
             )
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('barang.idkategori =', 3)
             ->get()
             ->getRow()
@@ -435,8 +461,8 @@ class TutupKasir extends BaseController
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->groupBy('DATE(penjualan.tanggal)')
             ->get()
@@ -448,12 +474,12 @@ class TutupKasir extends BaseController
             $dataHarian[$row->tgl] = $row->total;
         }
 
-        $jumlahHari = date('t');
+        $jumlahHari = (int) date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
         $listHari = [];
 
         for ($i = 1; $i <= $jumlahHari; $i++) {
 
-            $tgl = date('Y-m-') . str_pad($i, 2, '0', STR_PAD_LEFT);
+            $tgl = sprintf('%04d-%02d-%02d', $tahun, $bulan, $i);
 
             $listHari[] = [
                 'tanggal' => $tgl,
@@ -461,10 +487,34 @@ class TutupKasir extends BaseController
             ];
         }
 
+        // ==========================
+        // STATISTIK TAMBAHAN
+        // ==========================
+        $omset_rata_rata = $jumlahHari > 0 ? round($omset_bulan / $jumlahHari) : 0;
+
+        $hariTerbaik = null;
+        $omsetTerbaik = 0;
+        foreach ($listHari as $h) {
+            if ((float)$h['total'] > $omsetTerbaik) {
+                $omsetTerbaik = (float)$h['total'];
+                $hariTerbaik = $h['tanggal'];
+            }
+        }
+
         return view('template', [
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
+            'bulan'         => $bulan,
+            'tahun'         => $tahun,
+            'bulanSebelum'  => $bulanSebelum,
+            'tahunSebelum'  => $tahunSebelum,
+            'periodeLabel'  => $periodeLabel,
+            'periodeLaluLabel' => $periodeLaluLabel,
+            'isBulanBerjalan' => $isBulanBerjalan,
+            'omset_bulan_lalu' => $omset_bulan_lalu,
+            'pertumbuhan_omset' => $pertumbuhan_omset,
+            'selisih_omset' => $selisih_omset,
             'hpp'           => $hpp,
             'hpp_global'    => $hpp_global,
             'listHari'          => $listHari,
@@ -474,8 +524,26 @@ class TutupKasir extends BaseController
             'pelanggan_bulan'   => $pelanggan_bulan,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
+            'omset_rata_rata'   => $omset_rata_rata,
+            'hariTerbaik'       => $hariTerbaik,
+            'omsetTerbaik'      => $omsetTerbaik,
             'body'              => 'jurnal/omset_bulanan'
         ]);
+    }
+
+    /** Total omset (sub_total - HPP) untuk unit pada bulan/tahun tertentu. */
+    private function countOmset($unit, int $bulan, int $tahun): float
+    {
+        $row = $this->db->table('detail_penjualan')
+            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
+            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
+            ->where('penjualan.unit_idunit', $unit)
+            ->get()
+            ->getRow();
+
+        return (float)($row->total ?? 0);
     }
 
     public function assetberjalan()
