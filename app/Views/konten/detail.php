@@ -4,7 +4,6 @@ $statusBadge = [
     'PRODUCTION' => 'info',
     'QC' => 'warning',
     'APPROVED' => 'primary',
-    'PUBLISHED' => 'success',
     'COMPLETED' => 'success',
     'REVISION' => 'danger',
 ];
@@ -106,6 +105,17 @@ $statusBadge = [
     }
 </style>
 
+<?php if ($content->status === 'QC') : ?>
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-hourglass-split"></i>
+        <div>
+            <strong>Sedang QC</strong> — konten ini menunggu keputusan dari
+            <strong>Admin Root / Manager / Kepala Divisi</strong>:
+            disetujui (APPROVED) langsung selesai, atau dikembalikan untuk revisi (REVISION).
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Header -->
 <div class="kn-card p-4 mb-3">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
@@ -198,7 +208,7 @@ $statusBadge = [
 
                 <?php if (isset($brief) && $brief && ($brief->isi_brief || $brief->requirement)) : ?>
                     <div class="col-12">
-                        <div class="kn-label">Brief (Kesesuaian Brief)</div>
+                        <div class="kn-label">Brief</div>
                         <?php if ($brief->isi_brief) : ?><div class="small text-muted mb-1"><strong>Isi:</strong> <?= esc(nl2br($brief->isi_brief)) ?></div><?php endif; ?>
                         <?php if ($brief->requirement) : ?><div class="small text-muted"><strong>Requirement:</strong> <?= esc(nl2br($brief->requirement)) ?></div><?php endif; ?>
                     </div>
@@ -233,17 +243,6 @@ $statusBadge = [
                     <input type="hidden" name="id" value="<?= $content->id ?>">
                     <div class="col-md-7">
                         <textarea name="qc_note" class="form-control" rows="2" placeholder="Catatan QC (opsional)"></textarea>
-                        <?php if ($brief) : ?>
-                            <div class="form-check form-check-inline mt-2">
-                                <input class="form-check-input" type="radio" name="sesuai_brief" value="1" checked>
-                                <label class="form-check-label small">Sesuai Brief</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="sesuai_brief" value="0">
-                                <label class="form-check-label small">Tidak Sesuai Brief</label>
-                            </div>
-                            <small class="text-muted d-block">Verdict dipakai KPI Kesesuaian Brief.</small>
-                        <?php endif; ?>
                     </div>
                     <div class="col-md-5 d-flex gap-2 pt-1">
                         <button type="submit" name="qc_result" value="PASS" class="btn btn-sm btn-success">PASS → APPROVED</button>
@@ -253,159 +252,57 @@ $statusBadge = [
             <?php endif; ?>
         </div>
 
-        <!-- Brand Checklist -->
+        <!-- Kesesuaian Brief (dinilai manual oleh Kepala Divisi) -->
         <div class="kn-card p-4 mt-3">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-                <h6 class="kn-section-title mb-0">Brand Checklist</h6>
-                <span class="badge bg-primary-subtle text-primary" id="checkCount">0/<?= count($checklistItems) ?> tercentang</span>
-            </div>
-            <?php
-            $checkedMap = [];
-            foreach ($checklist as $cl) {
-                $checkedMap[(int)$cl->item_id] = (int)$cl->is_checked;
-            }
-            ?>
-            <?php if ($canQc) : ?>
-                <form method="post" action="<?= base_url('konten/checklist') ?>" id="checklistForm">
-                    <input type="hidden" name="content_id" value="<?= $content->id ?>">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <h6 class="kn-section-title mb-0">Kesesuaian Brief</h6>
+                <?php if (isset($briefVerdict) && $briefVerdict) : ?>
+                    <?php if ((int)$briefVerdict->sesuai === 1) : ?>
+                        <span class="badge text-bg-success">Sesuai Brief</span>
+                    <?php else : ?>
+                        <span class="badge text-bg-danger">Tidak Sesuai Brief</span>
+                    <?php endif; ?>
+                <?php else : ?>
+                    <span class="badge text-bg-light border">Belum dinilai</span>
                 <?php endif; ?>
-                <table class="table table-sm kn-table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Item</th>
-                            <th>Status</th><?php if ($canQc) : ?><th class="text-end">Centang</th><?php endif; ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($checklistItems as $item) : $isChecked = (bool)($checkedMap[(int)$item->id] ?? false); ?>
-                            <tr>
-                                <td><?= esc($item->name) ?></td>
-                                <td>
-                                    <?php if ($isChecked) : ?>
-                                        <span class="badge text-bg-success">Terpenuhi</span>
-                                    <?php else : ?>
-                                        <span class="badge text-bg-light border">Belum</span>
-                                    <?php endif; ?>
-                                </td>
-                                <?php if ($canQc) : ?>
-                                    <td class="text-end">
-                                        <input class="form-check-input check-item" type="checkbox" name="checks[]"
-                                            value="<?= $item->id ?>" <?= $isChecked ? 'checked' : '' ?>>
-                                    </td>
-                                <?php endif; ?>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-                <?php if ($canQc) : ?>
-                    <div class="d-flex justify-content-end align-items-center gap-2 mt-3">
-                        <small class="text-muted me-auto">Centang item yang terpenuhi, lalu simpan sekaligus.</small>
-                        <button type="submit" class="btn btn-primary btn-sm">Simpan Checklist</button>
-                    </div>
-                </form>
-            <?php endif; ?>
-        </div>
-
-        <!-- Publikasi -->
-        <div class="kn-card p-4 mt-3">
-            <h6 class="kn-section-title mb-3">Publikasi</h6>
-            <div class="table-responsive">
-                <table class="table table-sm kn-table align-middle">
-                    <thead>
-                        <tr>
-                            <th>Unit</th>
-                            <th>Platform</th>
-                            <th>Link</th>
-                            <th>Status</th>
-                            <th>Published At</th>
-                            <?php if ($canWrite) : ?><th class="text-end">Aksi</th><?php endif; ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($publications)) : ?>
-                            <tr>
-                                <td colspan="<?= $canWrite ? 6 : 5 ?>" class="kn-empty">Belum ada publikasi. Content dengan banyak publikasi tetap dihitung satu content.</td>
-                            </tr>
-                            <?php else : foreach ($publications as $pub) : ?>
-                                <tr>
-                                    <td><?= esc($pub->NAMA_UNIT ?? '-') ?></td>
-                                    <td><?= esc($pub->platform_name ?? '-') ?></td>
-                                    <td class="text-truncate" style="max-width:220px"><?= $pub->link ? '<a href="' . esc($pub->link) . '" target="_blank">' . esc($pub->link) . '</a>' : '-' ?></td>
-                                    <td><span class="badge <?= $pub->status === 'PUBLISHED' ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= esc($pub->status) ?></span></td>
-                                    <td><?= $pub->published_at ? date('d/m/Y H:i', strtotime($pub->published_at)) : '-' ?></td>
-                                    <?php if ($canWrite) : ?>
-                                        <td class="text-end text-nowrap">
-                                            <button class="btn btn-sm btn-outline-secondary btn-edit-pub" data-pub='<?= htmlspecialchars(json_encode([
-                                                                                                                        'id' => (int)$pub->id,
-                                                                                                                        'unit_id' => (int)$pub->unit_id,
-                                                                                                                        'platform_id' => (int)$pub->platform_id,
-                                                                                                                        'link' => $pub->link,
-                                                                                                                        'status' => $pub->status,
-                                                                                                                        'published_at' => $pub->published_at,
-                                                                                                                    ]), ENT_QUOTES) ?>'>Edit</button>
-                                            <form method="post" action="<?= base_url('konten/publication/delete') ?>" class="d-inline" onsubmit="return confirm('Hapus publikasi ini?')">
-                                                <input type="hidden" name="id" value="<?= $pub->id ?>">
-                                                <button class="btn btn-sm btn-outline-danger">Hapus</button>
-                                            </form>
-                                        </td>
-                                    <?php endif; ?>
-                                </tr>
-                        <?php endforeach;
-                        endif; ?>
-                    </tbody>
-                </table>
             </div>
 
-            <?php if ($canWrite) : ?>
-                <div class="d-flex align-items-center justify-content-between mt-4 mb-2">
-                    <h6 class="kn-form-title mb-0" id="pubFormTitle">Tambah Publikasi</h6>
-                    <span class="badge text-bg-warning d-none" id="pubEditBadge">Mode Edit</span>
+            <?php if (isset($briefVerdict) && $briefVerdict) : ?>
+                <div class="text-muted small mb-3">
+                    Dinilai oleh <?= esc($briefVerdict->penilai_nama ?? '-') ?> ·
+                    <?= date('d/m/Y H:i', strtotime($briefVerdict->created_at)) ?>
+                    <?php if ($briefVerdict->catatan) : ?><span class="d-block mt-1"><?= esc($briefVerdict->catatan) ?></span><?php endif; ?>
                 </div>
-                <form method="post" action="<?= base_url('konten/publication/save') ?>" id="pubForm" class="row g-2">
+            <?php endif; ?>
+
+            <?php if ($canAssessBrief) : ?>
+                <form method="post" action="<?= base_url('konten/brief/verdict') ?>" class="row g-2 align-items-end">
                     <input type="hidden" name="content_id" value="<?= $content->id ?>">
-                    <input type="hidden" name="id" id="pubId" value="0">
-                    <div class="col-md-2">
-                        <label class="form-label small">Unit</label>
-                        <select name="unit_id" id="pubUnit" class="form-select" required>
-                            <option value="">—</option>
-                            <?php foreach ($units as $u) : if (!in_array((int)$u->idunit, array_map('intval', $allowedUnits), true)) continue; ?>
-                                <option value="<?= $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                    <div class="col-md-auto">
+                        <div class="d-flex gap-3 pt-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="sesuai" value="1" id="briefSesuai1"
+                                    <?= isset($briefVerdict) && $briefVerdict && (int)$briefVerdict->sesuai === 1 ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="briefSesuai1">Sesuai Brief</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="sesuai" value="0" id="briefSesuai0"
+                                    <?= isset($briefVerdict) && $briefVerdict && (int)$briefVerdict->sesuai === 0 ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="briefSesuai0">Tidak Sesuai Brief</label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Platform</label>
-                        <select name="platform_id" id="pubPlatform" class="form-select" required>
-                            <option value="">—</option>
-                            <?php foreach ($platforms as $pf) : ?>
-                                <option value="<?= $pf->id ?>"><?= esc($pf->name) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                    <div class="col-md">
+                        <input type="text" name="catatan" class="form-control form-control-sm" placeholder="Catatan (opsional)" maxlength="255">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Link</label>
-                        <input type="text" name="link" id="pubLink" class="form-control" placeholder="https://...">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Status</label>
-                        <select name="status" id="pubStatus" class="form-select">
-                            <option value="PLANNED">PLANNED</option>
-                            <option value="PUBLISHED">PUBLISHED</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Published At</label>
-                        <input type="datetime-local" name="published_at" id="pubDate" class="form-control">
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end gap-1">
-                        <button class="btn btn-primary w-100" id="pubSubmitBtn">Tambah Publikasi</button>
-                    </div>
-                    <div class="col-md-1 d-flex align-items-end">
-                        <button type="button" class="btn btn-outline-secondary w-100 d-none" id="btnCancelPub">Batal</button>
+                    <div class="col-md-auto">
+                        <button type="submit" class="btn btn-sm btn-primary">Simpan Penilaian</button>
                     </div>
                 </form>
+                <small class="text-muted d-block mt-2">Penilaian ini dipakai KPI Kesesuaian Brief (kepala divisi).</small>
             <?php endif; ?>
         </div>
+
     </div>
 
     <div class="col-lg-4">
@@ -429,54 +326,3 @@ $statusBadge = [
         </div>
     </div>
 </div>
-
-<script>
-    function pubResetForm() {
-        $('#pubId').val(0);
-        $('#pubForm')[0].reset();
-        $('#pubFormTitle').text('Tambah Publikasi');
-        $('#pubSubmitBtn').text('Tambah Publikasi')
-            .removeClass('btn-warning')
-            .addClass('btn-primary');
-        $('#pubEditBadge').addClass('d-none');
-        $('#btnCancelPub').addClass('d-none');
-    }
-
-    $('.btn-edit-pub').on('click', function() {
-        var d = $(this).data('pub');
-        $('#pubId').val(d.id);
-        $('#pubUnit').val(d.unit_id);
-        $('#pubPlatform').val(d.platform_id);
-        $('#pubLink').val(d.link || '');
-        $('#pubStatus').val(d.status);
-        $('#pubDate').val(d.published_at ? d.published_at.replace(' ', 'T') : '');
-        $('#pubFormTitle').text('Edit Publikasi');
-        $('#pubSubmitBtn').text('Update Publikasi')
-            .removeClass('btn-primary')
-            .addClass('btn-warning');
-        $('#pubEditBadge').removeClass('d-none');
-        $('#btnCancelPub').removeClass('d-none');
-        $('#pubForm')[0].scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-        });
-    });
-
-    $('#btnCancelPub').on('click', function() {
-        pubResetForm();
-    });
-    $('#pubSubmitBtn').on('click', function(e) {
-        if ($('#pubId').val() > 0 && !$('#pubUnit').val()) {
-            e.preventDefault();
-            alert('Pilih unit publikasi.');
-        }
-    });
-
-    function updateCheckCount() {
-        var total = $('.check-item').length;
-        var checked = $('.check-item:checked').length;
-        $('#checkCount').text(checked + '/' + total + ' tercentang');
-    }
-    $('.check-item').on('change', updateCheckCount);
-    updateCheckCount();
-</script>

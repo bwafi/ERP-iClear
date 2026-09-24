@@ -4,15 +4,13 @@ namespace App\Controllers;
 
 use App\Models\ModelContent;
 use App\Models\ModelContentBrief;
+use App\Models\ModelContentBriefVerdict;
 use App\Models\ModelContentCampaign;
-use App\Models\ModelContentChecklist;
 use App\Models\ModelContentPerson;
 use App\Models\ModelContentQc;
 use App\Models\ModelContentType;
-use App\Models\ModelBrandChecklistItem;
 use App\Models\ModelContentUnit;
 use App\Models\ModelPlatform;
-use App\Models\ModelPublication;
 use App\Models\ModelChannel;
 use App\Models\ModelChannelMetric;
 use App\Models\ModelChannelPerformance;
@@ -33,15 +31,13 @@ class Konten extends BaseController
 {
     protected $ContentModel;
     protected $ContentBriefModel;
+    protected $BriefVerdictModel;
     protected $ContentCampaignModel;
     protected $ContentTypeModel;
-    protected $BrandChecklistItemModel;
-    protected $ContentChecklistModel;
     protected $ContentPersonModel;
     protected $ContentQcModel;
     protected $ContentUnitModel;
     protected $PlatformModel;
-    protected $PublicationModel;
     protected $ChannelModel;
     protected $ChannelMetricModel;
     protected $ChannelPerformanceModel;
@@ -56,15 +52,13 @@ class Konten extends BaseController
     {
         $this->ContentModel             = new ModelContent();
         $this->ContentBriefModel        = new ModelContentBrief();
+        $this->BriefVerdictModel     = new ModelContentBriefVerdict();
         $this->ContentCampaignModel     = new ModelContentCampaign();
         $this->ContentTypeModel         = new ModelContentType();
-        $this->BrandChecklistItemModel  = new ModelBrandChecklistItem();
-        $this->ContentChecklistModel    = new ModelContentChecklist();
         $this->ContentPersonModel       = new ModelContentPerson();
         $this->ContentQcModel           = new ModelContentQc();
         $this->ContentUnitModel         = new ModelContentUnit();
         $this->PlatformModel            = new ModelPlatform();
-$this->PublicationModel          = new ModelPublication();
         $this->ChannelModel              = new ModelChannel();
         $this->ChannelMetricModel        = new ModelChannelMetric();
         $this->ChannelPerformanceModel   = new ModelChannelPerformance();
@@ -112,7 +106,7 @@ $this->PublicationModel          = new ModelPublication();
     private function assertQc()
     {
         if (!ContentScopeService::canQc($this->currentRole())) {
-            return redirect()->to(base_url())->with('error', 'Anda tidak berhak melakukan QC / checklist.');
+            return redirect()->to(base_url())->with('error', 'Anda tidak berhak melakukan QC.');
         }
         return null;
     }
@@ -263,6 +257,12 @@ $this->PublicationModel          = new ModelPublication();
                 'talent_names'     => $row->talent_names,
                 'creative_names'   => $row->creative_names,
                 'created_at'       => $row->created_at,
+                'campaign_name'    => $row->campaign_name ?? null,
+                'campaign_status'  => $row->campaign_status ?? null,
+                'campaign_period'  => $row->campaign_period ?? null,
+                'campaign_deadline'=> $row->campaign_deadline ?? null,
+                'brief_sesuai'     => $row->brief_sesuai ?? null,
+                'brief_catatan'    => $row->brief_catatan ?? null,
             ];
         }
 
@@ -404,10 +404,6 @@ $this->PublicationModel          = new ModelPublication();
             is_array($creativeIds) ? $creativeIds : []
         );
 
-        // Brand checklist otomatis tersedia untuk content baru.
-        $items = array_map(fn($i) => $i->id, $this->BrandChecklistItemModel->optionsActive());
-        $this->ContentChecklistModel->ensureItemsForContent((int)$contentId, $items);
-
         // Brief kesesuaian (KPI Kesesuaian Brief 20%).
         $this->ContentBriefModel->upsertForContent(
             (int)$contentId,
@@ -449,28 +445,22 @@ $this->PublicationModel          = new ModelPublication();
             return redirect()->to(base_url('konten'))->with('error', 'Konten tidak ditemukan.');
         }
 
-        $publications = $this->ContentModel->publications((int)$id);
-
         return view('template', [
             'body'          => 'konten/detail',
             'akun'          => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'content'       => $content,
             'targetUnits'   => $this->ContentModel->targetUnits((int)$id),
             'peoples'       => $this->ContentModel->people((int)$id),
-            'checklist'     => $this->ContentChecklistModel->where('content_id', $id)->findAll(),
-            'checklistItems'=> $this->BrandChecklistItemModel->optionsActive(),
             'qcHistory'     => $this->ContentModel->qcHistory((int)$id),
-            'publications'  => $publications,
-            'platforms'     => $this->PlatformModel->optionsActive(),
-            'units'         => $this->UnitModel->orderBy('idunit', 'ASC')->findAll(),
-            'allowedUnits'  => $this->allowedUnitIds(),
             'brief'         => $this->ContentBriefModel->forContent((int)$id),
+            'briefVerdict'  => $this->BriefVerdictModel->latestForContent((int)$id),
+            'canAssessBrief'=> ContentScopeService::canAssessBrief($this->currentRole()),
             'campaign'      => !empty($content->campaign_id) ? $this->ContentCampaignModel->find((int)$content->campaign_id) : null,
             'campaigns'     => $this->ContentCampaignModel->orderBy('id', 'DESC')->findAll(100),
             'canWrite'      => ContentScopeService::canWrite($this->currentRole()),
             'canQc'         => ContentScopeService::canQc($this->currentRole()),
             'nextStatuses'  => ContentWorkflowService::TRANSITIONS[$content->status] ?? [],
-            'overdue'       => $content->deadline < date('Y-m-d') && !in_array($content->status, ['PUBLISHED', 'COMPLETED'], true),
+            'overdue'       => $content->deadline < date('Y-m-d') && $content->status !== 'COMPLETED',
         ]);
     }
 
@@ -510,115 +500,44 @@ $this->PublicationModel          = new ModelPublication();
         $id = (int)$this->request->getPost('id');
         $result = strtoupper(trim((string)$this->request->getPost('qc_result')));
         $note = trim((string)$this->request->getPost('qc_note')) ?: null;
-        $sesuaiBriefRaw = $this->request->getPost('sesuai_brief');
-        $sesuaiBrief = ($sesuaiBriefRaw === '1' || $sesuaiBriefRaw === '0') ? (int)$sesuaiBriefRaw : null;
 
         $content = $this->ContentModel->find($id);
         if (!$content) {
             return redirect()->back()->with('error', 'Konten tidak ditemukan.');
         }
 
-        $res = $this->WorkflowService->qc($content, $result, $note, $this->currentAkun(), $sesuaiBrief);
+        $res = $this->WorkflowService->qc($content, $result, $note, $this->currentAkun());
 
         return redirect()->back()->with($res['ok'] ? 'success' : 'error', $res['message']);
     }
 
-    public function checklist()
+    /**
+     * Penilaian Kesesuaian Brief — diisi MANUAL oleh Kepala Divisi (43) dkk.
+     */
+    public function brief_verdict()
     {
-        if ($r = $this->assertQc()) {
-            return $r;
-        }
-        if (!$this->request->is('post')) {
-            return redirect()->back();
-        }
-
-        $contentId = (int)$this->request->getPost('content_id');
-
-        $content = $this->ContentModel->find($contentId);
-        if (!$content) {
-            return redirect()->back()->with('error', 'Konten tidak ditemukan.');
-        }
-
-        // Centang brand disimpan SEKALI untuk semua item (bukan per-item).
-        $checks = $this->request->getPost('checks');
-        $checks = is_array($checks) ? array_map('intval', $checks) : [];
-
-        $activeItems = array_map(fn($i) => (int)$i->id, $this->BrandChecklistItemModel->optionsActive());
-
-        $this->ContentChecklistModel->syncForContent($contentId, $activeItems, $checks, $this->currentAkun());
-
-        return redirect()->back()->with('success', 'Checklist brand tersimpan.');
-    }
-
-    // ── Publication & Performance ──────────────────────────────────
-
-    public function save_publication()
-    {
-        if ($r = $this->assertWrite()) {
-            return $r;
+        if (!ContentScopeService::canAssessBrief($this->currentRole())) {
+            return redirect()->back()->with('error', 'Hanya Kepala Divisi yang dapat menilai kesesuaian brief.');
         }
         if (!$this->request->is('post')) {
             return redirect()->to(base_url('konten'));
         }
 
-        $id        = (int)($this->request->getPost('id') ?? 0);
         $contentId = (int)$this->request->getPost('content_id');
-        $unitId    = (int)$this->request->getPost('unit_id');
-        $platformId = (int)$this->request->getPost('platform_id');
-        $status    = strtoupper(trim((string)$this->request->getPost('status') ?: 'PLANNED'));
-        $link      = trim((string)$this->request->getPost('link'));
-        $publishedAt = trim((string)$this->request->getPost('published_at'));
-        $publishedAt = $publishedAt !== '' ? str_replace('T', ' ', $publishedAt) : '';
-
-        if (!in_array($status, ['PLANNED', 'PUBLISHED'], true)) {
-            $status = 'PLANNED';
-        }
+        $sesuai    = (int)$this->request->getPost('sesuai');
+        $catatan   = trim((string)$this->request->getPost('catatan')) ?: null;
 
         $content = $this->ContentModel->find($contentId);
         if (!$content) {
             return redirect()->back()->with('error', 'Konten tidak ditemukan.');
         }
-
-        $data = [
-            'content_id'   => $contentId,
-            'unit_id'      => $unitId,
-            'platform_id'  => $platformId,
-            'link'         => $link !== '' ? $link : null,
-            'status'       => $status,
-            'published_at' => $publishedAt !== '' ? $publishedAt : ($status === 'PUBLISHED' ? date('Y-m-d H:i:s') : null),
-        ];
-
-        if ($id > 0) {
-            $this->PublicationModel->update($id, $data);
-        } else {
-            $data['created_by'] = $this->currentAkun();
-            $this->PublicationModel->insert($data);
+        if (!in_array($sesuai, [0, 1], true)) {
+            return redirect()->back()->with('error', 'Pilih Sesuai Brief atau Tidak Sesuai Brief.');
         }
 
-        return redirect()->to(base_url('konten/detail/' . $contentId))
-            ->with('success', 'Publikasi disimpan.');
-    }
+        $this->BriefVerdictModel->insertVerdict($contentId, $sesuai, $catatan, $this->currentAkun());
 
-    public function hapus_publication()
-    {
-        if ($r = $this->assertWrite()) {
-            return $r;
-        }
-        if (!$this->request->is('post')) {
-            return redirect()->to(base_url('konten'));
-        }
-
-        $id = (int)$this->request->getPost('id');
-        $pub = $this->PublicationModel->find($id);
-        if (!$pub) {
-            return redirect()->back()->with('error', 'Publikasi tidak ditemukan.');
-        }
-
-        $contentId = (int)$pub->content_id;
-        $this->PublicationModel->delete($id); // performa ikut terhapus (CASCADE)
-
-        return redirect()->to(base_url('konten/detail/' . $contentId))
-            ->with('success', 'Publikasi dihapus.');
+        return redirect()->back()->with('success', 'Penilaian kesesuaian brief disimpan.');
     }
 
     // ── Pertumbuhan Channel (KPI 10%) ─────────────────────────────

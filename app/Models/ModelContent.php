@@ -20,7 +20,7 @@ class ModelContent extends Model
         'status', 'published_at', 'completed_at', 'created_by',
     ];
 
-    public const STATUSES = ['DRAFT', 'PRODUCTION', 'QC', 'APPROVED', 'PUBLISHED', 'COMPLETED', 'REVISION'];
+    public const STATUSES = ['DRAFT', 'PRODUCTION', 'QC', 'APPROVED', 'COMPLETED', 'REVISION'];
 
     public function getById($id)
     {
@@ -62,6 +62,55 @@ class ModelContent extends Model
         foreach ($rows as &$row) {
             $row->talent_names = $this->peopleNames((int)$row->id, 'TALENT');
             $row->creative_names = $this->peopleNames((int)$row->id, 'CREATIVE');
+        }
+        unset($row);
+
+        if ($rows) {
+            $ids = array_map('intval', array_column($rows, 'id'));
+            $in = implode(',', $ids);
+
+            $campaigns = $this->db->query(
+                "SELECT c.id, cc.nama, cc.period_month, cc.period_year, cc.status, cc.target_deadline
+                 FROM contents c
+                 JOIN content_campaigns cc ON cc.id = c.campaign_id
+                 WHERE c.id IN ({$in})"
+            )->getResult();
+            $campaignMap = [];
+            foreach ($campaigns as $cmp) {
+                $campaignMap[(int)$cmp->id] = $cmp;
+            }
+
+            $verdicts = $this->db->query(
+                "SELECT v.content_id, v.sesuai, v.catatan, v.created_at, a.NAMA_AKUN AS penilai_nama
+                 FROM content_brief_verdicts v
+                 JOIN (
+                    SELECT content_id, MAX(id) AS max_id
+                    FROM content_brief_verdicts
+                    GROUP BY content_id
+                 ) vm ON vm.max_id = v.id
+                 LEFT JOIN akun a ON a.ID_AKUN = v.penilai_id
+                 WHERE v.content_id IN ({$in})"
+            )->getResult();
+            $verdictMap = [];
+            foreach ($verdicts as $v) {
+                $verdictMap[(int)$v->content_id] = $v;
+            }
+
+            foreach ($rows as &$row) {
+                $id = (int)$row->id;
+                $cmp = $campaignMap[$id] ?? null;
+                $row->campaign_name     = $cmp ? $cmp->nama : null;
+                $row->campaign_status   = $cmp ? $cmp->status : null;
+                $row->campaign_period   = $cmp ? $cmp->period_month . '/' . $cmp->period_year : null;
+                $row->campaign_deadline = $cmp ? $cmp->target_deadline : null;
+
+                $v = $verdictMap[$id] ?? null;
+                $row->brief_sesuai        = $v ? (int)$v->sesuai : null;
+                $row->brief_catatan       = $v ? $v->catatan : null;
+                $row->brief_penilai_nama  = $v ? $v->penilai_nama : null;
+                $row->brief_created_at    = $v ? $v->created_at : null;
+            }
+            unset($row);
         }
 
         return $rows;

@@ -129,6 +129,8 @@
                         <th>Content Type</th>
                         <th>Target</th>
                         <th>Deadline</th>
+                        <th>Campaign</th>
+                        <th>Kesesuaian Brief</th>
                         <th>Dibuat</th>
                         <th>Status</th>
                         <th>Kreator &amp; Talent</th>
@@ -144,11 +146,11 @@
 <?php
 $badgeMap = [
     'DRAFT' => 'secondary', 'PRODUCTION' => 'info', 'QC' => 'warning',
-    'APPROVED' => 'primary', 'PUBLISHED' => 'success', 'COMPLETED' => 'success', 'REVISION' => 'danger',
+    'APPROVED' => 'primary', 'COMPLETED' => 'success', 'REVISION' => 'danger',
 ];
 $badgeIcon = [
     'DRAFT' => 'bi-pencil-square', 'PRODUCTION' => 'bi-gear', 'QC' => 'bi-clipboard-check',
-    'APPROVED' => 'bi-check2-circle', 'PUBLISHED' => 'bi-cloud-upload', 'COMPLETED' => 'bi-check2-all', 'REVISION' => 'bi-arrow-counterclockwise',
+    'APPROVED' => 'bi-check2-circle', 'COMPLETED' => 'bi-check2-all', 'REVISION' => 'bi-arrow-counterclockwise',
 ];
 ?>
 
@@ -202,6 +204,33 @@ $badgeIcon = [
                     render: function(data) {
                         if (!data) return '-';
                         return '<div class="text-nowrap">' + data + '</div>';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(data) {
+                        if (!data.campaign_name) return '<span class="text-muted small">-</span>';
+                        var st = data.campaign_status === 'active'
+                            ? '<span class="badge rounded-pill text-bg-success">Aktif</span>'
+                            : '<span class="badge rounded-pill text-bg-secondary">' + (data.campaign_status || '') + '</span>';
+                        var s = '<div class="fw-semibold small">' + data.campaign_name + '</div>';
+                        s += '<small class="text-muted">' + data.campaign_period + '</small> ' + st;
+                        if (data.campaign_deadline) s += '<br><small class="text-muted">deadline ' + data.campaign_deadline + '</small>';
+                        return s;
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(data) {
+                        if (data.brief_sesuai === null || data.brief_sesuai === undefined) {
+                            return '<span class="badge rounded-pill bg-light text-dark border">Belum dinilai</span>';
+                        }
+                        if (data.brief_sesuai === 1 || data.brief_sesuai === '1') {
+                            return '<span class="badge rounded-pill text-bg-success" title="' + (data.brief_catatan || '') + '">Sesuai Brief</span>';
+                        }
+                        return '<span class="badge rounded-pill text-bg-danger" title="' + (data.brief_catatan || '') + '">Tidak Sesuai</span>';
                     }
                 },
                 {

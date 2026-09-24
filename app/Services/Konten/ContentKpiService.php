@@ -92,7 +92,7 @@ class ContentKpiService
         }
         $where = '( ' . implode(' AND ', $sql) . ' )';
 
-        $out = ['total' => 0, 'draft' => 0, 'production' => 0, 'qc' => 0, 'approved' => 0, 'published' => 0, 'completed' => 0, 'revision' => 0, 'overdue' => 0];
+        $out = ['total' => 0, 'draft' => 0, 'production' => 0, 'qc' => 0, 'approved' => 0, 'completed' => 0, 'revision' => 0, 'overdue' => 0];
 
         $rows = $this->db->query(
             "SELECT c.status, COUNT(*) AS jml
@@ -115,7 +115,7 @@ class ContentKpiService
              FROM contents c
              WHERE {$where}
                AND c.deadline < CURDATE()
-               AND c.status NOT IN ('PUBLISHED', 'COMPLETED')",
+               AND c.status <> 'COMPLETED'",
             $params
         )->getRow()->jml;
 
@@ -143,11 +143,11 @@ class ContentKpiService
         $total = (int)$this->db->query("SELECT COUNT(*) jml FROM contents c WHERE {$where}", $params)->getRow()->jml;
         $completed = (int)$this->db->query("SELECT COUNT(*) jml FROM contents c WHERE {$where} AND c.status = 'COMPLETED'", $params)->getRow()->jml;
 
-        // Tepat waktu: status PUBLISHED/COMPLETED dan tanggal selesai ≤ deadline.
+        // Tepat waktu: hanya status COMPLETED dan tanggal selesai ≤ deadline.
         $onTime = (int)$this->db->query(
             "SELECT COUNT(*) jml FROM contents c
-             WHERE {$where} AND c.status IN ('PUBLISHED', 'COMPLETED')
-               AND COALESCE(c.completed_at, c.published_at) <= CONCAT(c.deadline, ' 23:59:59')",
+             WHERE {$where} AND c.status = 'COMPLETED'
+               AND c.completed_at <= CONCAT(c.deadline, ' 23:59:59')",
             $params
         )->getRow()->jml;
 

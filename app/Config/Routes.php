@@ -550,9 +550,7 @@ $routes->group('konten', ['filter' => 'auth'], function ($routes) {
     $routes->post('simpan', 'Konten::simpan');
     $routes->post('status', 'Konten::setStatus');
     $routes->post('qc', 'Konten::qc');
-    $routes->post('checklist', 'Konten::checklist');
-    $routes->post('publication/save', 'Konten::save_publication');
-    $routes->post('publication/delete', 'Konten::hapus_publication');
+    $routes->post('brief/verdict', 'Konten::brief_verdict');
     $routes->get('channel', 'Konten::channel');
     $routes->post('channel/simpan', 'Konten::channel_simpan');
     $routes->post('channel/hapus', 'Konten::channel_hapus');

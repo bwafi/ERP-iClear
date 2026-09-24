@@ -8,6 +8,9 @@ namespace App\Services\Konten;
  * Memakai session existing (ID_JABATAN / ID_UNIT / ID_AKUN) — tanpa membuat
  * sistem permission baru. Sesuai beberapa modul existing (PenilaianKPI):
  *   - Role 0,1,2,34 (Admin Center/Root, Direktur, Manager) → akses penuh
+ *   - Role 1,34,43 (Admin root, Manager, Kepala Divisi)  → SATU-SATUNYA yang boleh
+ *     QC (PASS/REJECT) & menilai Kesesuaian Brief
+ *   - Status "selesai" untuk hitungan KPI = COMPLETED saja (APPROVED belum dihitung)
  *   - Role 43 (Kepala Divisi)              → monitoring content read-only (scope seluruh
  *     divisi), TETAPI dapat mengelola Campaign & Improvement (ROLES_MANAGE)
  *   - Role 44 (Multimedia/Creative)        → operasional, scope SELURUH divisi (KPI jabatan
@@ -18,8 +21,9 @@ class ContentScopeService
 {
     public const ROLES_VIEW = [0, 1, 2, 34, 43, 44, 48];
     public const ROLES_WRITE = [0, 1, 2, 34, 44];
-    public const ROLES_QC = [0, 1, 2, 34, 43, 44]; // QC & checklist
+    public const ROLES_QC = [1, 34, 43];           // QC approval (PASS/REJECT): Admin root, Manager, Kadiv
     public const ROLES_MANAGE = [0, 1, 2, 34, 43]; // root/direktur/manager/kadiv
+    public const ROLES_ASSESS_BRIEF = [1, 34, 43]; // penilai Kesesuaian Brief: Admin root, Manager, Kadiv
 
     public const ROLE_KADIV = 43;
     public const ROLE_MULTIMEDIA = 44;
@@ -45,6 +49,12 @@ class ContentScopeService
     public static function canQc(int $role): bool
     {
         return in_array($role, self::ROLES_QC, true);
+    }
+
+    /** Penilai Kesesuaian Brief (Admin root / Manager / Kepala Divisi). */
+    public static function canAssessBrief(int $role): bool
+    {
+        return in_array($role, self::ROLES_ASSESS_BRIEF, true);
     }
 
     public static function canManage(int $role): bool

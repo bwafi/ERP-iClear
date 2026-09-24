@@ -150,8 +150,8 @@ $c1row = $ContentModel->find($c1);
 ok('C1 status awal DRAFT', $c1row->status === 'DRAFT');
 
 // Transisi ilegal.
-$illegal = $Workflow->transition($c1row, 'PUBLISHED', 63);
-ok('DRAFT→PUBLISHED diblokir', !$illegal['ok'], $illegal['message']);
+$illegal = $Workflow->transition($c1row, 'COMPLETED', 63);
+ok('DRAFT→COMPLETED diblokir', !$illegal['ok'], $illegal['message']);
 $okWf = $Workflow->transition($c1row, 'PRODUCTION', 63);
 $c1row = $ContentModel->find($c1);
 $okWf2 = $Workflow->transition($c1row, 'QC', 63);
@@ -178,13 +178,10 @@ $passQc = $Wf->qc($c1row, 'PASS', 'OK semua', 43);
 $c1row = $ContentModel->find($c1);
 ok('QC PASS → APPROVED', $passQc['ok'] && $c1row->status === 'APPROVED');
 
-// Approve → publish (stamp) → complete.
-$Workflow->transition($c1row, 'PUBLISHED', 63);
-$c1row = $ContentModel->find($c1);
-ok('published_at terisi saat PUBLISHED', $c1row->published_at !== null, $c1row->published_at);
+// Approve → langsung complete (tanpa PUBLISHED), stamp published_at + completed_at.
 $Workflow->transition($c1row, 'COMPLETED', 63);
 $c1row = $ContentModel->find($c1);
-ok('COMPLETED → completed_at terisi', $c1row->status === 'COMPLETED' && $c1row->completed_at !== null);
+ok('COMPLETED → published_at & completed_at terisi', $c1row->status === 'COMPLETED' && $c1row->published_at !== null && $c1row->completed_at !== null, "pub={$c1row->published_at} comp={$c1row->completed_at}");
 ok('C1 selesai ≤ deadline (tepat waktu)', $c1row->completed_at <= ($c1row->deadline . ' 23:59:59'));
 
 echo "\n== PUBLICATION (banyak publikasi = 1 content) ==\n";
@@ -388,7 +385,7 @@ ok('Filter unit=2 → C1(pub)+C2(target)+C3(ALL)=3 (C4 unit1 tidak)', (int)$Cont
 ok('Filter content_type FEED = 2', (int)$ContentModel->countContentsDT(['content_type' => $typeFeed->id, 'periode' => '2026-09', 'scope_sql' => "c.judul LIKE '[TEST]%'"]) === 2);
 $rows = $ContentModel->getContentsDT(10, 0, ['periode' => '2026-09', 'status' => 'COMPLETED', 'scope_sql' => "c.judul LIKE '[TEST]%'"], 'c.deadline', 'DESC');
 ok('Data pull baris: talent/creative names dipisah per role (relational, bukan kolom JSON)',
-    count($rows) === 1 && strpos($rows[0]->talent_names, 'Fahri') !== false && strpos($rows[0]->creative_names, 'fathoni') !== false);
+    count($rows) === 1 && strpos($rows[0]->talent_names, 'Fachri') !== false && strpos($rows[0]->creative_names, 'Fathoni') !== false);
 $rowFound = $rows[0];
 ok('C1 judul ditemukan', strpos($rowFound->judul, 'Promo Lebaran') !== false);
 

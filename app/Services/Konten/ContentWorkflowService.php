@@ -4,8 +4,10 @@ namespace App\Services\Konten;
 
 /**
  * Workflow sederhana content:
- *   DRAFT → PRODUCTION → QC → (PASS) APPROVED → PUBLISHED → COMPLETED
+ *   DRAFT → PRODUCTION → QC → (PASS) APPROVED → COMPLETED
  *                          ↘ (REJECT) REVISION → PRODUCTION → QC
+ *
+ * (Tidak ada status PUBLISHED; setelah disetujui langsung COMPLETED.)
  *
  * Status overdue TIDAK disimpan sebagai status; dihitung dari deadline saat
  * ditampilkan.
@@ -18,10 +20,9 @@ class ContentWorkflowService
     public const TRANSITIONS = [
         'DRAFT'      => ['PRODUCTION'],
         'PRODUCTION' => ['QC'],
-        'QC'         => ['APPROVED', 'REVISION'],
+        'QC'         => [],        // APPROVED/REVISION HANYA via form QC (di-gate canQc)
         'REVISION'   => ['PRODUCTION'],
-        'APPROVED'   => ['PRODUCTION', 'PUBLISHED'],
-        'PUBLISHED'  => ['COMPLETED'],
+        'APPROVED'   => ['COMPLETED'], // langsung selesai, tanpa PUBLISHED
         'COMPLETED'  => [],
     ];
 
@@ -40,9 +41,6 @@ class ContentWorkflowService
         $now = date('Y-m-d H:i:s');
         $updated = ['status' => $to, 'updated_at' => $now];
 
-        if ($to === 'PUBLISHED' && empty($content->published_at)) {
-            $updated['published_at'] = $now;
-        }
         if ($to === 'COMPLETED') {
             if (empty($content->published_at)) {
                 $updated['published_at'] = $now;
@@ -58,9 +56,10 @@ class ContentWorkflowService
     /**
      * Act QC: PASS → APPROVED, REJECT → REVISION. Mencatat histori di content_qc.
      *
-     * @param int|null $sesuaiBrief Verdict kesesuaian brief (1=sesuai, 0=tidak, null=tidak dinilai)
+     * Catatan: Kesesuaian Brief kini dinilai manual oleh Kepala Divisi
+     * (content_brief_verdicts), bukan lagi bagian dari QC.
      */
-    public function qc(object $content, string $result, ?string $note, int $checkerId, ?int $sesuaiBrief = null): array
+    public function qc(object $content, string $result, ?string $note, int $checkerId): array
     {
         $result = strtoupper(trim($result));
         if (!in_array($result, ['PASS', 'REJECT'], true)) {
@@ -76,7 +75,6 @@ class ContentWorkflowService
         (new \App\Models\ModelContentQc())->insert([
             'content_id'   => (int)$content->id,
             'status'       => $result,
-            'sesuai_brief' => $sesuaiBrief, // 1/0/null
             'note'         => $note ?: null,
             'checker_id'   => $checkerId,
             'checked_at'   => $now,

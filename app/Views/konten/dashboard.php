@@ -56,7 +56,6 @@
         ['label' => 'Total Content',   'value' => $stats['total'],      'icon' => 'solar:gallery-bold',            'color' => 'primary'],
         ['label' => 'Production',      'value' => $stats['production'], 'icon' => 'solar:pen-new-square-broken',   'color' => 'info'],
         ['label' => 'QC',              'value' => $stats['qc'],         'icon' => 'solar:list-check-bold',         'color' => 'warning'],
-        ['label' => 'Published',       'value' => $stats['published'],  'icon' => 'solar:cloud-upload-bold',       'color' => 'success'],
         ['label' => 'Completed',       'value' => $stats['completed'],  'icon' => 'solar:check-read-bold',         'color' => 'success'],
         ['label' => 'Overdue',         'value' => $stats['overdue'],    'icon' => 'solar:calendar-mark-bold',      'color' => 'danger'],
     ];
@@ -250,15 +249,14 @@
         if (chartKontenStatusEl) {
             new ApexCharts(chartKontenStatusEl, {
                 chart: { type: 'pie', fontFamily: 'inherit', toolbar: { show: false }, height: 260 },
-                labels: ['Production', 'QC', 'Published', 'Completed', 'Overdue'],
+                labels: ['Production', 'QC', 'Completed', 'Overdue'],
                 series: [
                     <?= (int)$stats['production'] ?>,
                     <?= (int)$stats['qc'] ?>,
-                    <?= (int)$stats['published'] ?>,
                     <?= (int)$stats['completed'] ?>,
                     <?= (int)$stats['overdue'] ?>,
                 ],
-                colors: ['#0dcaf0', '#ffc107', '#0d6efd', '#198754', '#dc3545'],
+                colors: ['#0dcaf0', '#ffc107', '#198754', '#dc3545'],
                 legend: { position: 'bottom' },
                 stroke: { width: 0 },
                 dataLabels: { enabled: true, formatter: function(v) { return Math.round(v) + '%'; } },

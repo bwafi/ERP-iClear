@@ -6,11 +6,11 @@ namespace App\Services\Konten;
  * Multimedia KPI — struktur OWNER (jabatan 44).
  *
  *   | KPI                | Bobot | Formula                                       |
- *   | Ketepatan Deadline | 25%   | on_time / total_assigned × 100                |
+ *   | Ketepatan Deadline | 25%   | on_time (COMPLETED) / total_assigned × 100    |
  *   | Kualitas Output    | 25%   | qc_pass / total_assigned × 100                |
- *   | Kesesuaian Brief   | 20%   | sesuai_brief / berbrief_dinilai × 100          |
+ *   | Kesesuaian Brief   | 20%   | verdict sesuai / dinilai (root/manager/kadiv)  |
  *   | Produktivitas      | 15%   | completed / TARGET_PRODUKTIVITAS × 100         |
- *   | Support Campaign   | 10%   | campaign_selesai / campaign_target × 100       |
+ *   | Support Campaign   | 10%   | campaign_selesai (COMPLETED) / campaign_target |
  *   | Improvement        | 5%    | approved / TARGET_IMPROVEMENT × 100            |
  *
  * SEMUA achievement dihitung PER EMPLOYEE (attribution via content_people /
@@ -76,6 +76,22 @@ class MultimediaKpiService
     }
 
     /**
+     * Campaign yang "terpilih" employee: campaign (status active/done) periode
+     * tsb yang BERISI paling tidak satu konten milik employee (via
+     * content_people). Campaign draft tanpa keterlibatan employee TIDAK
+     * dihitung, supaya KPI Support Campaign tidak dihukum oleh campaign
+     * yang tidak ia kerjakan.
+     */
+    private function campaignSelectedExpr(int $employeeId): string
+    {
+        return "EXISTS(
+            SELECT 1 FROM contents cc
+            JOIN content_people cp ON cp.content_id = cc.id
+            WHERE cc.campaign_id = content_campaigns.id AND cp.akun_id = {$employeeId}
+        )";
+    }
+
+    /**
      * @return array{0: string, 1: array} [WHERE (bisa AND), param pakai '?' ]
      */
     private function assignedWhere(int $employeeId, int $month, int $year): array
@@ -100,8 +116,8 @@ class MultimediaKpiService
 
         $onTime = (int)$db->query(
             "SELECT COUNT(*) jml FROM contents c
-             WHERE {$where} AND c.status IN ('PUBLISHED', 'COMPLETED')
-               AND COALESCE(c.completed_at, c.published_at) <= CONCAT(c.deadline, ' 23:59:59')",
+             WHERE {$where} AND c.status = 'COMPLETED'
+               AND c.completed_at <= CONCAT(c.deadline, ' 23:59:59')",
             $params
         )->getRow()->jml;
 
@@ -135,29 +151,32 @@ class MultimediaKpiService
     }
 
     /**
-     * Kesesuaian Brief: konten yang DINILAI kesesuaiannya (ada brief + verdict
-     * sesuai_brief di content_qc). Denominator = konten ber-brief yang dinilai;
-     * numerator = yang diberi verdict "sesuai" (sesuai_brief = 1).
+     * Kesesuaian Brief: dinilai MANUAL oleh Kepala Divisi (content_brief_verdicts).
+     * Denominator = content yang sudah DINILAI (punya verdict); numerator = yang
+     * verdict terbarunya "sesuai" (sesuai = 1). Verdict terbaru = MAX(id).
      */
     private function briefAchievement(int $employeeId, int $month, int $year): ?float
     {
         [$where, $params] = $this->assignedWhere($employeeId, $month, $year);
 
         $db = \Config\Database::connect();
-        $dinilai = 0;
-        $sesuai = 0;
         $rows = $db->query(
             "SELECT
                 COUNT(DISTINCT c.id) AS dinilai,
-                COUNT(DISTINCT CASE WHEN q.sesuai_brief = 1 THEN c.id END) AS sesuai
+                COUNT(DISTINCT CASE WHEN v.sesuai = 1 THEN c.id END) AS sesuai
              FROM contents c
-             JOIN content_qc q ON q.content_id = c.id AND q.sesuai_brief IS NOT NULL
+             JOIN (
+                SELECT content_id, MAX(id) AS max_id
+                FROM content_brief_verdicts
+                GROUP BY content_id
+             ) vm ON vm.content_id = c.id
+             JOIN content_brief_verdicts v ON v.id = vm.max_id
              WHERE {$where}",
             $params
         )->getRow();
 
-        $dinilai = (int)$rows->dinilai;
-        $sesuai  = (int)$rows->sesuai;
+        $dinilai = (int)($rows->dinilai ?? 0);
+        $sesuai  = (int)($rows->sesuai ?? 0);
         if ($dinilai <= 0) {
             return null;
         }
@@ -188,10 +207,13 @@ class MultimediaKpiService
     }
 
     /**
-     * Support Campaign: konten campaign yang dikerjakan employee & selesai
-     * tepat waktu (publikasi ≤ target_deadline campaign) dibanding target
-     * jumlah konten campaign periode tsb (campaign.target_jumlah_konten).
-     * Tanpa target campaign→ null (tidak menghukum, menunggu data).
+     * Support Campaign: hanya campaign yang "terpilih" employee (berisi konten
+     * miliknya via content_people) yang dihitung — campaign ber-status
+     * active ATAU done (campaign selesai tetap dinilai; hanya draft yang
+     * dikecualikan). Konten campaign yang DISELESAIKAN (status COMPLETED)
+     * tepat waktu (completed_at ≤ target_deadline campaign) dibanding target
+     * jumlah konten campaign tsb (campaign.target_jumlah_konten). Tanpa
+     * campaign terpilih → null (tidak menghukum, menunggu data keterlibatan).
      */
     private function campaignAchievement(int $employeeId, int $month, int $year, int $unitId): ?float
     {
@@ -199,7 +221,8 @@ class MultimediaKpiService
         $campaigns = $db->table('content_campaigns')
             ->where('period_month', $month)
             ->where('period_year', $year)
-            ->where('status', 'active')
+            ->whereIn('status', ['active', 'done'])
+            ->where($this->campaignSelectedExpr($employeeId), null, false)
             ->get()
             ->getResult();
         if (empty($campaigns)) {
@@ -223,10 +246,10 @@ class MultimediaKpiService
         )->getResult();
 
         foreach ($rows as $r) {
-            if (!in_array($r->status, ['PUBLISHED', 'COMPLETED'], true)) {
+            if ($r->status !== 'COMPLETED') {
                 continue;
             }
-            $tglSelesai = $r->completed_at ?: $r->published_at;
+            $tglSelesai = $r->completed_at;
             $deadlineCmp = null;
             foreach ($campaigns as $c) {
                 if ($c->id === $r->campaign_id) {
@@ -393,8 +416,8 @@ class MultimediaKpiService
         if ($total > 0) {
             $onTime = (int)$db->query(
                 "SELECT COUNT(*) jml FROM contents c WHERE {$where}
-                 AND c.status IN ('PUBLISHED','COMPLETED')
-                 AND COALESCE(c.completed_at, c.published_at) <= CONCAT(c.deadline, ' 23:59:59')",
+                 AND c.status = 'COMPLETED'
+                 AND c.completed_at <= CONCAT(c.deadline, ' 23:59:59')",
                 $params
             )->getRow()->jml;
 
@@ -405,17 +428,22 @@ class MultimediaKpiService
                 $params
             )->getRow()->jml;
 
-            $briefRows = $db->query(
-                "SELECT
-                    COUNT(DISTINCT c.id) AS dinilai,
-                    COUNT(DISTINCT CASE WHEN q.sesuai_brief = 1 THEN c.id END) AS sesuai
-                 FROM contents c
-                 JOIN content_qc q ON q.content_id = c.id AND q.sesuai_brief IS NOT NULL
-                 WHERE {$where}",
-                $params
-            )->getRow();
-            $dinilai = (int)($briefRows->dinilai ?? 0);
-            $sesuai  = (int)($briefRows->sesuai ?? 0);
+$briefRows = $db->query(
+            "SELECT
+                COUNT(DISTINCT c.id) AS dinilai,
+                COUNT(DISTINCT CASE WHEN v.sesuai = 1 THEN c.id END) AS sesuai
+             FROM contents c
+             JOIN (
+                SELECT content_id, MAX(id) AS max_id
+                FROM content_brief_verdicts
+                GROUP BY content_id
+             ) vm ON vm.content_id = c.id
+             JOIN content_brief_verdicts v ON v.id = vm.max_id
+             WHERE {$where}",
+            $params
+        )->getRow();
+        $dinilai = (int)($briefRows->dinilai ?? 0);
+        $sesuai  = (int)($briefRows->sesuai ?? 0);
 
             $completed = (int)$db->query(
                 "SELECT COUNT(*) jml FROM contents c WHERE {$where} AND c.status = 'COMPLETED'",
@@ -423,11 +451,13 @@ class MultimediaKpiService
             )->getRow()->jml;
         }
 
-        // SUPPORT_CAMPAIGN: campaign aktif periode tsb.
+        // SUPPORT_CAMPAIGN: campaign (active/done) periode tsb yang terpilih
+        // employee (berisi konten miliknya), agar campaign non-terlibat tidak dihitung.
         $campaigns = $db->table('content_campaigns')
             ->where('period_month', $month)
             ->where('period_year', $year)
-            ->where('status', 'active')
+            ->whereIn('status', ['active', 'done'])
+            ->where($this->campaignSelectedExpr($employeeId), null, false)
             ->get()
             ->getResult();
         if ($campaigns) {
@@ -444,11 +474,11 @@ class MultimediaKpiService
                 []
             )->getResult();
             foreach ($rows as $r) {
-                if (!in_array($r->status, ['PUBLISHED', 'COMPLETED'], true)) {
+                if ($r->status !== 'COMPLETED') {
                     continue;
                 }
                 $deadlineCmp = $deadlineMap[(int)$r->campaign_id] ?? null;
-                $doneAt = $r->completed_at ?: $r->published_at;
+                $doneAt = $r->completed_at;
                 if (!$deadlineCmp || ($doneAt && $doneAt <= date('Y-m-d 23:59:59', strtotime($deadlineCmp)))) {
                     $campaignSelesai++;
                 }

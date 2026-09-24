@@ -68,10 +68,14 @@ $contentId = $Content->insert([
 ]);
 (new \App\Models\ModelContentUnit())->replaceForContent((int)$contentId, [1]);
 (new \App\Models\ModelContentPerson())->replaceForContent((int)$contentId, [55], [63]);
-$items = (new \App\Models\ModelBrandChecklistItem())->optionsActive();
-(new \App\Models\ModelContentChecklist())->ensureItemsForContent((int)$contentId, array_map(fn($i) => $i->id, $items));
-$pubId = (new \App\Models\ModelPublication())->insert(['content_id' => (int)$contentId, 'unit_id' => 1, 'platform_id' => (int)$db->table('platforms')->where('code', 'INSTAGRAM')->get()->getRow()->id, 'status' => 'PLANNED', 'created_by' => 63]);
-(new \App\Models\ModelPublicationPerformance())->insert(['publication_id' => (int)$pubId, 'metric_id' => (int)$db->table('performance_metrics')->where('code', 'REACH')->get()->getRow()->id, 'period_month' => (int)date('n'), 'period_year' => (int)date('Y'), 'target' => 100, 'actual' => 120, 'achievement' => 120]);
+$Campaign = new \App\Models\ModelContentCampaign();
+$smokeCampId = $Campaign->insert([
+    'nama' => '[SMOKE] Campaign Rendering',
+    'period_month' => (int)date('m'), 'period_year' => (int)date('Y'),
+    'target_jumlah_konten' => 1, 'target_deadline' => date('Y-m-d', strtotime('+14 days')),
+    'status' => 'active', 'created_by' => 63,
+]);
+$db->table('contents')->where('id', $contentId)->update(['campaign_id' => (int)$smokeCampId]);
 
 try {
     $ctrl = new \App\Controllers\Konten();
@@ -95,6 +99,20 @@ try {
     $html = (string)$ctrl->index();
     ok('index() render — ada tabel DataTables', strpos($html, 'kontenTable') !== false);
     ok('index() render — kolom Dibuat', strpos($html, '<th>Dibuat</th>') !== false);
+    ok('index() render — kolom Campaign', strpos($html, '<th>Campaign</th>') !== false);
+    ok('index() render — kolom Kesesuaian Brief', strpos($html, '<th>Kesesuaian Brief</th>') !== false);
+
+    // dt() — JSON server-side DataTables harus memuat campaign & kesusaian brief
+    // (bug: controller dt() sebelumnya tidak mengirim kolom ini → tampil "-").
+    $_GET = ['draw' => 1, 'start' => 0, 'length' => 100, 'order' => [['column' => 3, 'dir' => 'desc']]];
+    $json = $ctrl->dt()->getBody();
+    $dtData = json_decode($json, true);
+    $hit = null;
+    foreach (($dtData['data'] ?? []) as $row) {
+        if ((int)$row['id'] === (int)$contentId) { $hit = $row; break; }
+    }
+    ok('dt() — baris membawa campaign_name (bukan "-")', $hit && isset($hit['campaign_name']) && $hit['campaign_name'] === '[SMOKE] Campaign Rendering', json_encode($hit));
+    ok('dt() — baris membawa field brief_sesuai', $hit && array_key_exists('brief_sesuai', $hit), json_encode($hit));
 
     $html = (string)$ctrl->form(null);
     ok('form() tambah render — ada field judul', strpos($html, 'Judul Konten') !== false);
@@ -105,9 +123,13 @@ try {
     ok('form() edit render — value judul terisi', strpos($html, '[SMOKE] Konten Rendering') !== false);
 
     $html = (string)$ctrl->detail($contentId);
-    ok('detail() render — ada publikasi', strpos($html, 'PubFormTitle') !== false || strpos($html, 'pubFormTitle') !== false || strpos($html, 'Tambah Publikasi') !== false);
+    ok('detail() render — tanpa section Brand Checklist', strpos($html, 'Brand Checklist') === false);
+    ok('detail() render — tanpa section Publikasi', strpos($html, 'Publikasi') === false && strpos($html, 'pubForm') === false);
+    ok('detail() render — kartu Kesesuaian Brief ada', strpos($html, 'Kesesuaian Brief') !== false);
+    ok('detail() render — status awal Belum dinilai', strpos($html, 'Belum dinilai') !== false);
+    ok('detail() render — form penilaian brief (kadiv/admin) tampil', strpos($html, 'name="sesuai"') !== false && strpos($html, 'konten/brief/verdict') !== false);
     ok('detail() render — QC action muncul (status QC)', strpos($html, 'Tindakan QC') !== false);
-    ok('detail() render — brand checklist (single form)', strpos($html, 'checklistForm') !== false && strpos($html, 'Simpan Checklist') !== false);
+    ok('detail() render — banner Sedang QC (menunggu approve/revisi kadiv)', strpos($html, 'Sedang QC') !== false && strpos($html, 'menunggu keputusan') !== false);
     ok('detail() render — badge nama visible (bg-info-subtle/bg-primary-subtle)', strpos($html, 'bg-info-subtle text-info') !== false && strpos($html, 'bg-primary-subtle text-primary') !== false);
     ok('detail() render — histori QC', strpos($html, 'Histori QC') !== false);
     ok('detail() render — tanpa Input Performa Publikasi', strpos($html, 'Input Performa Publikasi') === false && strpos($html, 'perfForm') === false);
@@ -129,6 +151,26 @@ try {
     ok('dashboard() role 44 ter-render (KPI berlaku utk multimedia)', strpos($html, 'Ringkasan KPI Multimedia (Owner)') !== false && strpos($html, 'Divisi Multimedia (semua cabang)') !== false);
     $formHtml = (string)$ctrl3->form(null);
     ok('role 44 dapat buka form tambah (operasional)', strpos($formHtml, 'Judul Konten') !== false);
+    $detail44 = (string)$ctrl3->detail($contentId);
+    ok('detail() role 44 — kartu brief ada, form penilaian TIDAK tampil', strpos($detail44, 'Kesesuaian Brief') !== false && strpos($detail44, 'name="sesuai"') === false);
+    ok('detail() role 44 — tanpa aksi QC (bukan approver)', strpos($detail44, 'Tindakan QC') === false);
+    ok('detail() role 44 — tanpa tombol status APPROVED/REVISION (QC via form saja)', strpos($detail44, 'value="APPROVED"') === false && strpos($detail44, 'value="REVISION"') === false);
+
+    // Role manager 34 (jabatan Manager): boleh QC approval & menilai brief.
+    $session->set(['ID_JABATAN' => 34, 'ID_AKUN' => 55, 'ID_UNIT' => 1]);
+    $ctrl4 = new \App\Controllers\Konten();
+    $ctrl4->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
+    $detail34 = (string)$ctrl4->detail($contentId);
+    ok('role 34 (Manager) — aksi QC tampil', strpos($detail34, 'Tindakan QC') !== false);
+    ok('role 34 (Manager) — form penilaian brief tampil', strpos($detail34, 'konten/brief/verdict') !== false);
+
+    // Role 2 (Direktur): lihat boleh, QC/brief TIDAK (hanya root/manager/kadiv).
+    $session->set(['ID_JABATAN' => 2, 'ID_AKUN' => 55, 'ID_UNIT' => 1]);
+    $ctrl5 = new \App\Controllers\Konten();
+    $ctrl5->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
+    $detail2 = (string)$ctrl5->detail($contentId);
+    ok('role 2 (Direktur) — aksi QC TIDAK tampil', strpos($detail2, 'Tindakan QC') === false);
+    ok('role 2 (Direktur) — form penilaian brief TIDAK tampil', strpos($detail2, 'konten/brief/verdict') === false);
 } catch (\Throwable $e) {
     echo "  CRASH " . get_class($e) . ": {$e->getMessage()} @ {$e->getFile()}:{$e->getLine()}\n";
     $fail++;
@@ -136,8 +178,8 @@ try {
 
 // Bersihkan.
 $Content->delete((int)$contentId);
-if ((int)($pubId ?? 0) > 0) {
-    try { $db->table('publication_performance')->where('publication_id', (int)$pubId)->delete(); $db->table('publications')->where('id', (int)$pubId)->delete(); } catch (\Throwable $e) {}
+if (!empty($smokeCampId)) {
+    $Campaign->delete((int)$smokeCampId);
 }
 $db->query("DELETE FROM contents WHERE judul LIKE '[SMOKE]%'");
 

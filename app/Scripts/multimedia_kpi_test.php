@@ -5,7 +5,9 @@
  * Menguji MultimediaKpiService (achievement per employee utk 6 komponen:
  * KETEPATAN_DEADLINE, KUALITAS_OUTPUT, KESESUAIAN_BRIEF, PRODUKTIVITAS,
  * SUPPORT_CAMPAIGN, IMPROVEMENT) + integrasi KpiCalculationService (bobot
- * 25/25/20/15/10/5 total 100). Semua data uji di-rollback di akhir.
+ * 25/25/20/15/10/5 total 100). Isolasi penuh: akun uji khusus (9901/9902,
+ * STATUS_PEGAWAI=0, deleted=1) sehingga data uji manual live di akun asli
+ * tidak pernah ikut dihitung. Semua data uji di-rollback di akhir.
  *
  * Usage: php74 app/Scripts/multimedia_kpi_test.php
  */
@@ -52,6 +54,30 @@ function near($a, $b, $tol = 0.01) {
 
 $db = \Config\Database::connect();
 $Svc = new MultimediaKpiService();
+
+// Akun uji khusus (bukan karyawan asli) supaya data uji manual live tidak
+// pernah ikut dihitung. Tidak tampil di dashboard divisi (STATUS_PEGAWAI=0)
+// dan tidak tampil di dropdown orang (deleted=1); hanya identitas FK.
+function ensureTestAccounts($db): void {
+    $need = [
+        9901 => ['jabatan' => 44, 'nama' => '[TEST] KPI Multimedia Owner'],
+        9902 => ['jabatan' => 44, 'nama' => '[TEST] KPI Multimedia Peer'],
+    ];
+    foreach ($need as $id => $f) {
+        if ($db->table('akun')->where('ID_AKUN', $id)->countAllResults() > 0) {
+            continue;
+        }
+        $db->table('akun')->insert([
+            'ID_AKUN' => $id, 'ID_JABATAN' => $f['jabatan'], 'ID_UNIT' => 1,
+            'NOID' => 'TEST-' . $id, 'EMAIL' => null, 'PASSWORD' => 'test',
+            'NAMA_AKUN' => $f['nama'], 'ALAMAT' => null, 'JENIS_KELAMIN' => '-',
+            'HP' => null, 'JENIS_PEGAWAI' => 100000, 'STATUS_PEGAWAI' => 0,
+            'FOTO_KTP' => null, 'FOTO_KK' => null, 'deleted' => 1,
+        ]);
+    }
+}
+ensureTestAccounts($db);
+
 $Engine = new KpiCalculationService();
 $ContentModel = new ModelContent();
 $PersonModel = new ModelContentPerson();
@@ -59,7 +85,8 @@ $QcModel = new ModelContentQc();
 $CampaignModel = new ModelContentCampaign();
 $ImprovementModel = new ModelImprovement();
 
-const EMP = 63;        // emulator karyawan Multimedia (jabatan 44)
+const EMP = 9901;    // akun uji khusus (jabatan 44, STATUS_PEGAWAI=0, deleted=1)
+const PEER = 9902;   // akun uji isolasi antar-employee
 const PERIODE_M = 9;
 const PERIODE_Y = 2026;
 
@@ -75,18 +102,19 @@ $db->query("DELETE FROM improvements WHERE judul LIKE '[KPI]%'");
 
 $contentIds = [];
 
-echo "== SETUP DATA UJI (bulan 9/2026, employee 63) ==\n";
+echo "== SETUP DATA UJI (bulan 9/2026, akun uji " . EMP . ") ==\n";
 // A: selesai TEPAT waktu + QC PASS sesuai brief + campaign on-time.
 $a = $ContentModel->insert([
     'judul' => '[KPI] Konten A tepat waktu', 'jenis_konten' => 'REGULAR',
     'target_scope' => 'ALL', 'deadline' => '2026-09-15', 'status' => 'COMPLETED',
     'published_at' => '2026-09-14 08:00:00', 'completed_at' => '2026-09-14 08:30:00', 'created_by' => EMP,
 ]);
-// B: selesai TELAT (publikasi 21/9 > deadline 20/9) + QC PASS sesuai brief, TANPA verdict.
+// B: APPROVED TEPAT waktu (deadline 20/9) tapi BELUM COMPLETED
+//    → tidak dihitung selesai/on-time untuk KPI (hanya COMPLETED).
 $b = $ContentModel->insert([
-    'judul' => '[KPI] Konten B telat', 'jenis_konten' => 'REGULAR',
-    'target_scope' => 'ALL', 'deadline' => '2026-09-20', 'status' => 'PUBLISHED',
-    'published_at' => '2026-09-21 09:00:00', 'created_by' => EMP,
+    'judul' => '[KPI] Konten B approved', 'jenis_konten' => 'REGULAR',
+    'target_scope' => 'ALL', 'deadline' => '2026-09-20', 'status' => 'APPROVED',
+    'created_by' => EMP,
 ]);
 // C: masih DRAFT (belum selesai).
 $c = $ContentModel->insert([
@@ -94,17 +122,17 @@ $c = $ContentModel->insert([
     'target_scope' => 'ALL', 'deadline' => '2026-09-25', 'status' => 'DRAFT', 'created_by' => EMP,
 ]);
 $contentIds = [$a, $b, $c];
-ok('3 konten uji employee 63 dibuat', count($contentIds) === 3 && $a > 0 && $b > 0 && $c > 0);
+ok('3 konten uji akun ' . EMP . ' dibuat', count($contentIds) === 3 && $a > 0 && $b > 0 && $c > 0);
 
-// D: milik employee 55 — harus TIDAK mencemari perhitungan 63.
+// D: milik PEER — harus TIDAK mencemari perhitungan EMP.
 $d = $ContentModel->insert([
     'judul' => '[KPI] Konten D karyawan lain', 'jenis_konten' => 'REGULAR',
     'target_scope' => 'ALL', 'deadline' => '2026-09-28', 'status' => 'COMPLETED',
-    'published_at' => '2026-09-10 09:00:00', 'completed_at' => '2026-09-10 09:30:00', 'created_by' => 55,
+    'published_at' => '2026-09-10 09:00:00', 'completed_at' => '2026-09-10 09:30:00', 'created_by' => PEER,
 ]);
-$PersonModel->replaceForContent((int)$d, [], [55]);
+$PersonModel->replaceForContent((int)$d, [], [PEER]);
 
-// People: A,B,C creative = 63.
+// People: A,B,C creative = EMP.
 foreach ($contentIds as $cid) {
     $PersonModel->replaceForContent((int)$cid, [], [EMP]);
 }
@@ -119,56 +147,84 @@ $ContentModel->update((int)$a, ['campaign_id' => (int)$camp]);
 $ContentModel->update((int)$b, ['campaign_id' => (int)$camp]);
 ok('Campaign aktif dibuat, A & B terhubung campaign', $camp > 0);
 
-// QC: A PASS + sesuai_brief=1; B PASS tanpa verdict (null); C tanpa QC.
+// QC: A PASS & B PASS — QC tidak lagi menyimpan verdict kesesuaian brief.
 $now = date('Y-m-d H:i:s');
-$QcModel->insert(['content_id' => (int)$a, 'status' => 'PASS', 'sesuai_brief' => 1, 'checker_id' => 43, 'checked_at' => '2026-09-14 10:00:00', 'created_at' => $now, 'updated_at' => $now]);
-$QcModel->insert(['content_id' => (int)$b, 'status' => 'PASS', 'sesuai_brief' => null, 'checker_id' => 43, 'checked_at' => '2026-09-21 10:00:00', 'created_at' => $now, 'updated_at' => $now]);
-ok('QC A(PASS,sesuai) & B(PASS,tanpa verdict) tercatat', true);
+$QcModel->insert(['content_id' => (int)$a, 'status' => 'PASS', 'checker_id' => 43, 'checked_at' => '2026-09-14 10:00:00', 'created_at' => $now, 'updated_at' => $now]);
+$QcModel->insert(['content_id' => (int)$b, 'status' => 'PASS', 'checker_id' => 43, 'checked_at' => '2026-09-21 10:00:00', 'created_at' => $now, 'updated_at' => $now]);
+ok('QC A(PASS) & B(PASS) tercatat', true);
 
-// Brief A (denominator kesesuaian brief) — cukup 1 konten dinilai.
-$db->table('content_briefs')->insert(['content_id' => (int)$a, 'isi_brief' => 'Brief A', 'created_at' => $now, 'updated_at' => $now]);
+// Kesesuaian Brief dinilai MANUAL oleh Kepala Divisi (content_brief_verdicts):
+//   A → sesuai (1); B → tidak sesuai (0). Keduanya masuk denominator.
+$BriefVerdict = new \App\Models\ModelContentBriefVerdict();
+$BriefVerdict->insertVerdict((int)$a, 1, 'Sesuai brief', 43);
+$BriefVerdict->insertVerdict((int)$b, 0, 'Logo melenceng', 43);
+ok('Verdict brief: A sesuai, B tidak sesuai tercatat', true);
 
-// Improvement employee 63 bulan 9/2026: 1 approved, 1 rejected, 1 draft.
+// Konten C punya brief tapi belum dinilai → tidak masuk denominator KPI.
+$db->table('content_briefs')->insert(['content_id' => (int)$c, 'isi_brief' => 'Brief C', 'created_at' => $now, 'updated_at' => $now]);
+
+// Improvement akun uji EMP bulan 9/2026: 1 approved, 1 rejected, 1 draft.
 $imp1 = $ImprovementModel->insert(['employee_id' => EMP, 'judul' => '[KPI] Imp approved', 'status' => 'approved', 'submission_month' => PERIODE_M, 'submission_year' => PERIODE_Y, 'approved_at' => '2026-09-15 09:00:00', 'evaluated_by' => 43]);
 $imp2 = $ImprovementModel->insert(['employee_id' => EMP, 'judul' => '[KPI] Imp rejected', 'status' => 'rejected', 'submission_month' => PERIODE_M, 'submission_year' => PERIODE_Y, 'evaluated_by' => 43]);
 $imp3 = $ImprovementModel->insert(['employee_id' => EMP, 'judul' => '[KPI] Imp draft', 'status' => 'draft', 'submission_month' => PERIODE_M, 'submission_year' => PERIODE_Y]);
 ok('Improvement 1 approved / 1 rejected / 1 draft dibuat', $imp1 && $imp2 && $imp3);
 
-echo "\n== MULTIMEDIA KPI SERVICE (per employee 63) ==\n";
+// Campaign DONE lain TANPA konten milik EMP → TIDAK terpilih → tidak dihitung.
+$camp2 = $CampaignModel->insert([
+    'nama' => '[KPI] Campaign Done Non-Terlibat', 'period_month' => PERIODE_M, 'period_year' => PERIODE_Y,
+    'target_jumlah_konten' => 3, 'target_deadline' => '2026-09-30', 'status' => 'done', 'created_by' => EMP,
+]);
+ok('Campaign done non-terlibat dibuat (target 3)', $camp2 > 0);
+
+// Campaign DONE yang TERLIBAT (berisi konten B milik EMP, target 1):
+// ikut dihitung (status done tetap dinilai), konten B APPROVED belum selesai → 0.
+$camp3 = $CampaignModel->insert([
+    'nama' => '[KPI] Campaign Done Terlibat', 'period_month' => PERIODE_M, 'period_year' => PERIODE_Y,
+    'target_jumlah_konten' => 1, 'target_deadline' => '2026-09-28', 'status' => 'done', 'created_by' => EMP,
+]);
+$ContentModel->update((int)$b, ['campaign_id' => (int)$camp3]);
+ok('Campaign done terlibat dibuat (B terhubung, target 1)', $camp3 > 0);
+
+echo "\n== MULTIMEDIA KPI SERVICE (per akun uji " . EMP . ") ==\n";
 // Realisasi:
 //   total assigned = 3 (A,B,C).  on-time = A(1) => 33.33
+//   Deadline: on-time hanya A (COMPLETED 14/9 ≤ 15/9); B APPROVED (approval
+//   lalu belum COMPLETED) TIDAK dihitung → 1/3 = 33.33
 $dln = $Svc->achievement('KETEPATAN_DEADLINE', EMP, 50, PERIODE_M, PERIODE_Y);
-ok('Deadline = 33.33 (1/3 tepat waktu)', near($dln, 100 / 3), (string)$dln);
+ok('Deadline = 33.33 (1/3; B hanya APPROVED tidak dihitung)', near($dln, 100 / 3), (string)$dln);
 
 //   QC pass distinct = A,B (2) → 66.67
 $kul = $Svc->achievement('KUALITAS_OUTPUT', EMP, 50, PERIODE_M, PERIODE_Y);
 ok('Kualitas = 66.67 (2/3 lolos QC)', near($kul, 200 / 3), (string)$kul);
 
-//   Brief: dinilai = hanya A (B verdict null) → sesuai 1/1 = 100
+//   Brief: dinilai = A & B (dua-duanya punya verdict) → sesuai 1/2 = 50
 $brf = $Svc->achievement('KESESUAIAN_BRIEF', EMP, 50, PERIODE_M, PERIODE_Y);
-ok('Kesesuaian Brief = 100 (1/1 dinilai sesuai)', near($brf, 100), (string)$brf);
+ok('Kesesuaian Brief = 50 (1/2 dinilai sesuai)', near($brf, 50), (string)$brf);
 
 //   Produktivitas: completed = A(1) / target 30 → 3.33
 $prd = $Svc->achievement('PRODUKTIVITAS', EMP, 50, PERIODE_M, PERIODE_Y);
 ok('Produktivitas = 3.33 (1 completed / target 30)', near($prd, 100 / 30), (string)$prd);
 
-//   Campaign: active target 2, selese on-time = A(1) vs deadline 18/9, B telat → 50
+//   Campaign: HANYA campaign terpilih (berisi konten EMP) dihitung, baik
+//   active maupun done. Ramadhan(active,target2): A on-time → 1. Done
+//   Terlibat(target1): B belum COMPLETED → 0. Done Non-Terlibat (target 3)
+//   TIDAK ditambah → total 1/3 = 33.33.
 $cap = $Svc->achievement('SUPPORT_CAMPAIGN', EMP, 50, PERIODE_M, PERIODE_Y);
-ok('Support Campaign = 50 (1/2 on-time)', near($cap, 50), (string)$cap);
+ok('Support Campaign = 33.33 (1/3; done terlibat ikut, done non-terlibat tidak)', near($cap, 100 / 3), (string)$cap);
 
 //   Improvement: approved 1 / target 1 → 100
 $imp = $Svc->achievement('IMPROVEMENT', EMP, 50, PERIODE_M, PERIODE_Y);
 ok('Improvement = 100 (1 approved / target 1)', near($imp, 100), (string)$imp);
 
-// Isolasi per employee: 55 hanya punya D (COMPLETED on-time, QC PASS) + tanpa improvement.
-$dln55 = $Svc->achievement('KETEPATAN_DEADLINE', 55, 50, PERIODE_M, PERIODE_Y);
-$prd55 = $Svc->achievement('PRODUKTIVITAS', 55, 50, PERIODE_M, PERIODE_Y);
-$imp55 = $Svc->achievement('IMPROVEMENT', 55, 50, PERIODE_M, PERIODE_Y);
-ok('Isolasi: 55 punya 1 konten (deadline 100)', $dln55 === 100.0, (string)$dln55);
-ok('Isolasi: produktivitas 55 = 1/30', near($prd55, 100 / 30), (string)$prd55);
-ok('Isolasi: improvement 55 = null (tidak ada data)', $imp55 === null, (string)$imp55);
+// Isolasi per employee: PEER hanya punya D (COMPLETED on-time, QC PASS) + tanpa improvement.
+$dlnPeer = $Svc->achievement('KETEPATAN_DEADLINE', PEER, 50, PERIODE_M, PERIODE_Y);
+$prdPeer = $Svc->achievement('PRODUKTIVITAS', PEER, 50, PERIODE_M, PERIODE_Y);
+$impPeer = $Svc->achievement('IMPROVEMENT', PEER, 50, PERIODE_M, PERIODE_Y);
+ok('Isolasi: PEER punya 1 konten (deadline 100)', $dlnPeer === 100.0, (string)$dlnPeer);
+ok('Isolasi: produktivitas PEER = 1/30', near($prdPeer, 100 / 30), (string)$prdPeer);
+ok('Isolasi: improvement PEER = null (tidak ada data)', $impPeer === null, (string)$impPeer);
 
-// Null behavior: campaign 63, periode tanpa campaign = null.
+// Null behavior: campaign EMP, periode tanpa campaign = null.
 $capNone = $Svc->achievement('SUPPORT_CAMPAIGN', EMP, 50, 2, PERIODE_Y);
 ok('Campaign periode tanpa data = null', $capNone === null, (string)$capNone);
 
@@ -233,11 +289,15 @@ foreach ([$a, $b, $c, $d] as $cid) {
     $ContentModel->delete((int)$cid);
 }
 $CampaignModel->delete((int)$camp);
+$CampaignModel->delete((int)$camp2);
+$CampaignModel->delete((int)$camp3);
 foreach ([$imp1, $imp2, $imp3] as $iid) {
     $ImprovementModel->delete((int)$iid);
 }
+$db->query("DELETE FROM content_brief_verdicts WHERE content_id IN (" . implode(',', [$a, $b, $c]) . ")");
 $db->query("DELETE FROM content_briefs WHERE content_id IN (" . implode(',', [$a, $b, $c]) . ")");
-ok('Data uji bersih', $db->query("SELECT COUNT(*) c FROM contents WHERE judul LIKE '[KPI]%'")->getRow()->c == 0);
+ok('Data uji bersih', $db->query("SELECT COUNT(*) c FROM contents WHERE judul LIKE '[KPI]%'")->getRow()->c == 0
+    && $db->query("SELECT COUNT(*) c FROM improvements WHERE employee_id IN (" . EMP . "," . PEER . ")")->getRow()->c == 0);
 
 echo "\n========================================\n";
 echo "RESULT: {$pass} PASS, {$fail} FAIL\n";
