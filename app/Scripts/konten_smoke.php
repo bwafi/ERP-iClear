@@ -152,10 +152,16 @@ try {
     ok('dashboard() role 44 ter-render (KPI berlaku utk multimedia)', strpos($html, 'Ringkasan KPI Multimedia (Owner)') !== false && strpos($html, 'Divisi Multimedia (semua cabang)') !== false);
     $formHtml = (string)$ctrl3->form(null);
     ok('role 44 dapat buka form tambah (operasional)', strpos($formHtml, 'Judul Konten') !== false);
+    $respEdit = $ctrl3->form($contentId);
+    ok('role 44 — form EDIT konten existing DITOLAK (redirect)', $respEdit instanceof \CodeIgniter\HTTP\RedirectResponse, get_class($respEdit));
+    $respDel = $ctrl3->hapus($contentId);
+    ok('role 44 — HAPUS konten DITOLAK (redirect)', $respDel instanceof \CodeIgniter\HTTP\RedirectResponse, get_class($respDel));
+    ok('role 44 — konten uji masih ada (tidak terhapus)', $Content->find($contentId) !== null);
     $detail44 = (string)$ctrl3->detail($contentId);
     ok('detail() role 44 — kartu brief ada, form penilaian TIDAK tampil', strpos($detail44, 'Kesesuaian Brief') !== false && strpos($detail44, 'name="sesuai"') === false);
     ok('detail() role 44 — tanpa aksi QC (bukan approver)', strpos($detail44, 'Tindakan QC') === false);
     ok('detail() role 44 — tanpa tombol status APPROVED/REVISION (QC via form saja)', strpos($detail44, 'value="APPROVED"') === false && strpos($detail44, 'value="REVISION"') === false);
+    ok('detail() role 44 — tanpa link Edit (hanya detail + ubah status)', strpos($detail44, 'konten/edit/' . $contentId) === false);
 
     // Role manager 34 (jabatan Manager): boleh QC approval & menilai brief.
     $session->set(['ID_JABATAN' => 34, 'ID_AKUN' => 55, 'ID_UNIT' => 1]);

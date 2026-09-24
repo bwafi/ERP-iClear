@@ -33,7 +33,7 @@
             <h5 class="mb-0">
                 <iconify-icon icon="solar:filter-bold" class="text-primary me-1"></iconify-icon> Filter &amp; Pencarian
             </h5>
-            <?php if ($canWrite) : ?>
+            <?php if ($canCreate) : ?>
                 <a href="<?= base_url('konten/tambah') ?>" class="btn btn-success">
                     <iconify-icon icon="solar:add-circle-bold" class="me-1"></iconify-icon>Tambah Konten
                 </a>

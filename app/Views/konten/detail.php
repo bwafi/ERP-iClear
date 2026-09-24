@@ -216,7 +216,7 @@ $statusBadge = [
                 </div>
             </div>
 
-            <?php if ($canWrite && !empty($nextStatuses)) : ?>
+            <?php if ($canChangeStatus && !empty($nextStatuses)) : ?>
                 <hr class="kn-divider">
                 <h6 class="kn-section-title mb-2">Ubah Status</h6>
                 <form method="post" action="<?= base_url('konten/status') ?>" class="d-flex gap-2 flex-wrap">

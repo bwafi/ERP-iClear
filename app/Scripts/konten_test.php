@@ -347,7 +347,7 @@ ok('Data uji channel dibersihkan', (int)$db->query("SELECT COUNT(*) c FROM chann
 echo "\n== SCOPE PER ROLE ==\n";
 ok('Role 1/2/34 → scope null (semua)', $Scope->scopeSql(1, 1, 63) === null && $Scope->scopeSql(2, 1, 63) === null && $Scope->scopeSql(34, 3, 55) === null);
 ok('Role 43 (Kadiv) → monitoring semua', $Scope->scopeSql(43, 1, 55) === null && !ContentScopeService::canWrite(43));
-ok('Role 44 bisa menulis', ContentScopeService::canWrite(44));
+ok('Role 44 → boleh create & ubah status, TIDAK edit/hapus', ContentScopeService::canCreate(44) && ContentScopeService::canChangeStatus(44) && !ContentScopeService::canWrite(44));
 ok('Role 41/42/45 tidak bisa lihat', !ContentScopeService::canView(41) && !ContentScopeService::canView(42));
 
 $sql44Fahri = $Scope->scopeSql(44, 1, 63);

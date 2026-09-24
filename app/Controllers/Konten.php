@@ -100,6 +100,22 @@ class Konten extends BaseController
         return null;
     }
 
+    private function assertCreate()
+    {
+        if (!ContentScopeService::canCreate($this->currentRole())) {
+            return redirect()->to(base_url())->with('error', 'Anda tidak berhak membuat konten.');
+        }
+        return null;
+    }
+
+    private function assertChangeStatus()
+    {
+        if (!ContentScopeService::canChangeStatus($this->currentRole())) {
+            return redirect()->to(base_url())->with('error', 'Anda tidak berhak mengubah status.');
+        }
+        return null;
+    }
+
     private function assertQc()
     {
         if (!ContentScopeService::canQc($this->currentRole())) {
@@ -185,6 +201,7 @@ class Konten extends BaseController
             'multimediaPeoples'=> $this->ContentModel->multimediaPeople(),
             'statuses'         => ModelContent::STATUSES,
             'canWrite'         => ContentScopeService::canWrite($this->currentRole()),
+            'canCreate'        => ContentScopeService::canCreate($this->currentRole()),
         ]);
     }
 
@@ -275,7 +292,8 @@ class Konten extends BaseController
 
     public function form($id = null)
     {
-        if ($r = $this->assertWrite()) {
+        // Tambah konten baru = canCreate (multimedia boleh); edit = canWrite.
+        if ($r = $id === null ? $this->assertCreate() : $this->assertWrite()) {
             return $r;
         }
 
@@ -317,15 +335,16 @@ class Konten extends BaseController
 
     public function simpan()
     {
-        if ($r = $this->assertWrite()) {
-            return $r;
-        }
-
         if (!$this->request->is('post')) {
             return redirect()->to(base_url('konten'));
         }
 
         $id = (int)($this->request->getPost('id') ?? 0);
+
+        // Konten baru = canCreate; update konten existing = canWrite.
+        if ($r = $id > 0 ? $this->assertWrite() : $this->assertCreate()) {
+            return $r;
+        }
 
         $judul = trim((string)$this->request->getPost('judul'));
         $deadline = trim((string)$this->request->getPost('deadline'));
@@ -448,6 +467,7 @@ class Konten extends BaseController
             'campaign'      => !empty($content->campaign_id) ? $this->ContentCampaignModel->find((int)$content->campaign_id) : null,
             'campaigns'     => $this->ContentCampaignModel->orderBy('id', 'DESC')->findAll(100),
             'canWrite'      => ContentScopeService::canWrite($this->currentRole()),
+            'canChangeStatus'=> ContentScopeService::canChangeStatus($this->currentRole()),
             'canQc'         => ContentScopeService::canQc($this->currentRole()),
             'nextStatuses'  => ContentWorkflowService::TRANSITIONS[$content->status] ?? [],
             'overdue'       => $content->deadline < date('Y-m-d') && $content->status !== 'COMPLETED',
@@ -458,7 +478,7 @@ class Konten extends BaseController
 
     public function setStatus()
     {
-        if ($r = $this->assertWrite()) {
+        if ($r = $this->assertChangeStatus()) {
             return $r;
         }
         if (!$this->request->is('post')) {

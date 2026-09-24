@@ -13,14 +13,18 @@ namespace App\Services\Konten;
  *   - Status "selesai" untuk hitungan KPI = COMPLETED saja (APPROVED belum dihitung)
  *   - Role 43 (Kepala Divisi)              → monitoring content read-only (scope seluruh
  *     divisi), TETAPI dapat mengelola Campaign & Improvement (ROLES_MANAGE)
- *   - Role 44 (Multimedia/Creative)        → operasional, scope SELURUH divisi (KPI jabatan
- *     multimedia bersifat perusahaan, jadi filter unit memuat semua unit).
+ *   - Role 44 (Multimedia/Creative)        → operasional: boleh TAMBAH konten baru &
+ *     mengubah STATUS, TIDAK boleh EDIT/HAPUS konten existing (hanya detail);
+ *     scope SELURUH divisi (KPI jabatan multimedia bersifat perusahaan, jadi
+ *     filter unit memuat semua unit).
  *   - Role 48 (Talent)                     → view-only (orang yang tampil).
  */
 class ContentScopeService
 {
     public const ROLES_VIEW = [0, 1, 2, 34, 43, 44, 48];
-    public const ROLES_WRITE = [0, 1, 2, 34, 44];
+    public const ROLES_WRITE = [0, 1, 2, 34];       // edit/hapus (perubahan konten existing)
+    public const ROLES_CREATE = [0, 1, 2, 34, 44]; // tambah konten baru (multimedia boleh buat)
+    public const ROLES_STATUS = [0, 1, 2, 34, 44]; // ubah status konten (multimedia boleh)
     public const ROLES_QC = [1, 34, 43];           // QC approval (PASS/REJECT): Admin root, Manager, Kadiv
     public const ROLES_MANAGE = [0, 1, 2, 34, 43]; // root/direktur/manager/kadiv
     public const ROLES_ASSESS_BRIEF = [1, 34, 43]; // penilai Kesesuaian Brief: Admin root, Manager, Kadiv
@@ -46,6 +50,18 @@ class ContentScopeService
         return in_array($role, self::ROLES_WRITE, true);
     }
 
+    /** Membuat konten baru (multimedia tetap boleh membuat DRAFT). */
+    public static function canCreate(int $role): bool
+    {
+        return in_array($role, self::ROLES_CREATE, true);
+    }
+
+    /** Mengubah status konten (multimedia boleh menggerakkan status). */
+    public static function canChangeStatus(int $role): bool
+    {
+        return in_array($role, self::ROLES_STATUS, true);
+    }
+
     public static function canQc(int $role): bool
     {
         return in_array($role, self::ROLES_QC, true);
@@ -62,10 +78,10 @@ class ContentScopeService
         return in_array($role, self::ROLES_MANAGE, true);
     }
 
-    /** Pengelolaan Campaign & Improvement: manager/kadiv, plus penulis operasional (44). */
+    /** Pengelolaan Campaign & Improvement: manager/kadiv, plus multimedia operasional (44). */
     public static function canManageKpi(int $role): bool
     {
-        return self::canManage($role) || self::canWrite($role);
+        return self::canManage($role) || self::canChangeStatus($role);
     }
 
     /**
