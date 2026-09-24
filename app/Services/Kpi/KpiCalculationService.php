@@ -138,21 +138,26 @@ class KpiCalculationService
                         ? $this->scoreService()->achievementScore($actualValue, $targetValue)
                         : 0.0;
                 } elseif ($component->code === 'CUSTOMER_COUNT') {
-                    // CUSTOMER: Jika ada batas_bawah (batas_awal) & batas_atas (batas_keempat)
-                    // Rule: jika actual >= batas_bawah, maka achievement = (actual / batas_atas) * 100
-                    // Jika actual < batas_bawah, maka 0 (atau proporsional jika batas_bawah tidak ada)
-                    $batasBawah = (float)($target->batas_awal ?? 0);
-                    $batasAtas  = (float)($target->batas_keempat ?? 0);
+                    // target_value DB = target pelanggan UNIT (full): BWI 220 / JBR 180 /
+                    // BWI 350 / Pandaan 250. Target per pegawai = target_value ÷ 2
+                    // (dibagi di kode, bukan di DB) utk teknisi & kepala toko.
+                    // Nilai KPI 0 jika aktual < target; jika tercapai → min(ratio, 100).
+                    $targetHalf = (float) $target->target_value / 2.0;
 
-                    if ($batasBawah > 0 && $batasAtas > 0) {
-                        if ($actualValue >= $batasBawah) {
-                            $achievement = min(($actualValue / $batasAtas) * 100.0, 100.0);
-                        } else {
-                            $achievement = 0.0;
-                        }
+                    if ($positionId === 36) {
+                        // TEKNISI: aktual = jumlah service yg teknisi tsb tangani pd bulan
+                        // tsb (service_by, semua status, unit tsb).
+                        $customerCalc = $this->calculators['customer_count'];
+                        $handled     = (float) $customerCalc->handledByTeknisi($employeeId, $unitId, (int)$month, (int)$year);
+                        $achievement = ($targetHalf > 0 && $handled >= $targetHalf)
+                            ? min(($handled / $targetHalf) * 100.0, 100.0)
+                            : 0.0;
                     } else {
-                        // Fallback jika tidak ada range batas: capped ratio terhadap target_value
-                        $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
+                        // Kepala Toko & lainnya: capped ratio terhadap target_value÷2,
+                        // tanpa threshold. 0 jika belum mencapai target.
+                        $achievement = ($targetHalf > 0 && $actualValue >= $targetHalf)
+                            ? $this->scoreService()->achievementScore($actualValue, $targetHalf)
+                            : 0.0;
                     }
                 } else {
                     // Other automatic: capped ratio
@@ -249,6 +254,30 @@ class KpiCalculationService
                             'cabang'    => $omzetInfo['cabang'],
                         ];
                     }
+                }
+            } elseif ($component->code === 'CUSTOMER_COUNT' && isset($actualValue) && isset($target)) {
+                // CUSTOMER_COUNT: target per pegawai = target_value(unit, full) ÷ 2.
+                // Aktual teknisi = service yg ditangani; aktual lainnya = TotalCustomer
+                // (service + penjualan ber-id pelanggan).
+                $targetHalf = (float) $target->target_value / 2.0;
+                if ($positionId === 36) {
+                    $handled = (float) $this->calculators['customer_count']
+                        ->handledByTeknisi($employeeId, $unitId, (int)$month, (int)$year);
+                    $targetInfo = [
+                        'target'    => round($targetHalf, 2),
+                        'actual'    => $handled,
+                        'shortfall' => max($targetHalf - $handled, 0.0),
+                        'ho'        => false,
+                        'cabang'    => null,
+                    ];
+                } else {
+                    $targetInfo = [
+                        'target'    => round($targetHalf, 2),
+                        'actual'    => (float)$actualValue,
+                        'shortfall' => max($targetHalf - (float)$actualValue, 0.0),
+                        'ho'        => false,
+                        'cabang'    => null,
+                    ];
                 }
             } elseif (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI'], true) && isset($actualValue) && isset($target)) {
                 // Non-SPV: target biasa dari kpi_targets (non HO).
@@ -429,6 +458,7 @@ class KpiCalculationService
                 'reached'    => $item['reached'] ?? null,
                 'ho'         => $item['ho'] ?? null,
                 'cabang'     => $item['cabang'] ?? null,
+                'format'     => in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number',
             ];
         }
 

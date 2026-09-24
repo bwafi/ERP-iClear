@@ -224,6 +224,7 @@
                                 <td class="ps-4 text-muted fw-medium"><?= $no++ ?></td>
                                 <td class="py-3">
                                     <span class="fw-bold text-dark d-block mb-1"><?= $kpi['nama'] ?></span>
+                                    <?php $isCurrency = ($kpi['format'] ?? 'currency') === 'currency'; ?>
                                     <?php if (!empty($kpi['cabang'])): ?>
                                         <div class="small mt-2 p-3 bg-light rounded-3 border">
                                             <?php foreach ($kpi['cabang'] as $cb): ?>
@@ -248,11 +249,13 @@
                                 <td class="text-center"><span class="badge bg-light text-secondary border px-2 py-1"><?= $kpi['bobot'] ?>%</span></td>
                                 <td class="text-nowrap">
                                     <?php if ($kpi['target'] !== null): ?>
-                                        <span class="fw-medium text-dark">Rp <?= number_format((float)$kpi['target'], 0, ',', '.') ?></span>
-                                        <?php if (!empty($kpi['ho'])): ?>
-                                            <span class="badge bg-info-subtle text-info ms-1">HO</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary-subtle text-secondary ms-1">Non HO</span>
+                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['target'], 0, ',', '.') ?></span>
+                                        <?php if ($isCurrency): ?>
+                                            <?php if (!empty($kpi['ho'])): ?>
+                                                <span class="badge bg-info-subtle text-info ms-1">HO</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary-subtle text-secondary ms-1">Non HO</span>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     <?php elseif ($kpi['unit_count'] !== null): ?>
                                         <span class="fw-medium text-dark"><?= $kpi['unit_count'] ?> Cabang</span>
@@ -262,7 +265,7 @@
                                 </td>
                                 <td class="text-nowrap">
                                     <?php if ($kpi['actual'] !== null): ?>
-                                        <span class="fw-medium text-dark">Rp <?= number_format((float)$kpi['actual'], 0, ',', '.') ?></span>
+                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['actual'], 0, ',', '.') ?></span>
                                     <?php elseif ($kpi['reached'] !== null): ?>
                                         <span class="fw-medium text-dark"><?= $kpi['reached'] ?> Cabang</span>
                                     <?php else: ?>
@@ -278,7 +281,7 @@
                                             <span class="text-success fw-medium small"><i class="fa fa-check me-1"></i> Semua tercapai</span>
                                         <?php endif; ?>
                                     <?php elseif ($kpi['shortfall'] !== null && $kpi['shortfall'] > 0): ?>
-                                        <span class="text-danger fw-medium small"><i class="fa fa-arrow-down me-1"></i> Rp <?= number_format((float)$kpi['shortfall'], 0, ',', '.') ?></span>
+                                        <span class="text-danger fw-medium small"><i class="fa fa-arrow-down me-1"></i> <?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['shortfall'], 0, ',', '.') ?></span>
                                     <?php elseif ($kpi['shortfall'] !== null): ?>
                                         <span class="text-success fw-medium small"><i class="fa fa-check me-1"></i> Target tercapai</span>
                                     <?php else: ?>
