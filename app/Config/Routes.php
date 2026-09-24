@@ -596,6 +596,7 @@ $routes->post('api/kommo/webhook', 'KommoWebhook::handle');
 // Jalur internal baca-saja untuk CRM. Tidak memakai session ERP dan setiap
 // permintaan wajib membawa signature HMAC.
 $routes->get('api/crm/lead-summary', 'CrmLeadBridge::leadSummary');
+$routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
 
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);
@@ -608,4 +609,3 @@ $routes->get('key_performance', 'KeyPerformance::index', ['filter' => 'auth']);
 $routes->post('insert_penilaian_Key', 'KeyPerformance::insert_penilaian', ['filter' => 'auth']);
 $routes->post('update_penilaian_Key', 'KeyPerformance::update_penilaian', ['filter' => 'auth']);
 $routes->post('delete_penilaian_KPI', 'KeyPerformance::delete_penilaian', ['filter' => 'auth']);
-
