@@ -69,7 +69,8 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
     {
         if ($search !== '') {
             $builder->groupStart()
-                ->like('no_akun.no_akun', $search)
+                ->orLike('kas_keluar.idkas_keluar', $search)
+                ->orLike('no_akun.no_akun', $search)
                 ->orLike('no_akun.nama_akun', $search)
                 ->orLike('kategori_kas.kategori', $search)
                 ->orLike('kas_keluar.deskripsi', $search)
