@@ -8,7 +8,8 @@ class CrmLeadBridge extends BaseController
     public function leadSummary()
     {
         $secret = trim((string) env('CRM_BRIDGE_SECRET', ''));
-        $phone = preg_replace('/\D+/', '', (string) $this->request->getGet('phone'));
+        $digits = preg_replace('/\D+/', '', (string) $this->request->getGet('phone'));
+        $phone = ltrim($digits, '0');
         $month = trim((string) $this->request->getGet('month'));
         $time = trim((string) $this->request->getHeaderLine('X-CRM-Time'));
         $given = trim((string) $this->request->getHeaderLine('X-CRM-Signature'));
@@ -19,7 +20,7 @@ class CrmLeadBridge extends BaseController
         ) {
             return $this->error('Permintaan bridge tidak valid.', 403);
         }
-        $signed = $phone . "\n" . $month . "\n" . $time;
+        $signed = $digits . "\n" . $month . "\n" . $time;
         if (!hash_equals(hash_hmac('sha256', $signed, $secret), $given)) {
             return $this->error('Signature bridge tidak valid.', 403);
         }
