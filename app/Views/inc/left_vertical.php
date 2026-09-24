@@ -27,6 +27,8 @@ $currentUri = service('uri');
         <a href="<?= base_url() ?>" class="text-nowrap logo-img mb-2 d-flex align-items-center justify-content-center">
             <img src="<?= base_url('template/assets/images/' . $logoFile) ?>" alt="Logo Unit"
                 class="dark-logo img-fluid" style="max-height: 45px; width: auto;" />
+            <img src="<?= base_url('template/assets/images/' . $logoFile) ?>" alt="Logo Unit"
+                class="light-logo img-fluid" style="max-height: 45px; width: auto;" />
         </a>
         <?php if (!empty($namaUnit)): ?>
             <span class="badge bg-primary-subtle text-primary px-3 py-1 rounded-pill fw-semibold small mt-1 text-truncate" style="max-width: 100%;">

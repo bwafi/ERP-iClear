@@ -25,7 +25,7 @@
     </script>
 
     <!-- Core Css -->
-    <link rel="stylesheet" href="<?php echo base_url('template/') ?>assets/css/styles.css" />
+    <link rel="stylesheet" href="<?php echo base_url('template/') ?>assets/css/styles.css?v=<?= filemtime(ROOTPATH . 'public/template/assets/css/styles.css') ?>" />
     <link rel="stylesheet" href="<?php echo base_url('template/assets/libs/select2/dist/css/select2.min.css') ?>">
 
 

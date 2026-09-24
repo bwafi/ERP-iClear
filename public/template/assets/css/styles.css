@@ -28339,3 +28339,16 @@ body div:where(.swal2-icon).swal2-success [class^="swal2-success-line"] {
   --bs-table-hover-bg: #15263a;
   --bs-table-hover-color: #7c8fac;
 }
+
+/* ---------------------------------- */
+/* Dark mode: kartu & header tetap gelap */
+/* ---------------------------------- */
+[data-bs-theme="dark"] .card-header.bg-white {
+  background-color: var(--bs-card-cap-bg, #101c2d) !important;
+}
+[data-bs-theme="dark"] .card.bg-white {
+  background-color: var(--bs-card-bg, #101c2d) !important;
+}
+[data-bs-theme="dark"] .bg-white.text-dark {
+  color: #c2cfe0 !important;
+}
