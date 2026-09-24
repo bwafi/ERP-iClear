@@ -17912,7 +17912,7 @@ html[data-layout="horizontal"] .body-wrapper > .container-xxl {
   top: 0px;
   position: fixed;
   z-index: 99999;
-  background: #fff;
+  background: var(--bs-body-bg, #fff);
 }
 
 .lds-ripple {
@@ -28269,4 +28269,50 @@ body div:where(.swal2-icon).swal2-success [class^="swal2-success-line"] {
 }
 [data-layout="vertical"] body[data-sidebartype="mini-sidebar"] .left-sidebar .sidebar-deprecated {
   display: none;
+}
+
+/* ---------------------------------- */
+/* Topbar: badge notifikasi (notif-count) */
+/* ---------------------------------- */
+.nav-icon-hover-bg {
+  position: relative;
+}
+.notif-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 50%;
+  background: #f04438;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 0 0 1.5px var(--bs-body-bg, #fff);
+  z-index: 2;
+}
+
+/* ---------------------------------- */
+/* Topbar: hasil pencarian menu */
+/* ---------------------------------- */
+.topbar-search-results {
+  position: absolute;
+  inset: 100% 0 auto 0;
+  margin-top: 0.5rem;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #e5eaee);
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 18px rgba(37, 83, 185, 0.12);
+  z-index: 10;
+}
+.topbar-search-results .dropdown-item:hover {
+  background: var(--bs-primary-bg-subtle, #e7efff);
+}
+.topbar-search-results .dropdown-item {
+  transition: background 0.1s ease-in-out;
 }

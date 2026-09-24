@@ -97,7 +97,7 @@ abstract class BaseController extends Controller
 
         //notifikasi expired service
 
-        $this->expired_service = $this->ServiceModel->ServiceBisaDiambil();
+        $this->expired_service = $this->ServiceModel->getExpiredService();
 
         \Config\Services::renderer()->setVar('expired_service', $this->expired_service);
 
