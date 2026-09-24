@@ -553,11 +553,16 @@ $routes->group('konten', ['filter' => 'auth'], function ($routes) {
     $routes->post('checklist', 'Konten::checklist');
     $routes->post('publication/save', 'Konten::save_publication');
     $routes->post('publication/delete', 'Konten::hapus_publication');
-    $routes->post('performance/save', 'Konten::save_performance');
-    $routes->post('performance/delete', 'Konten::hapus_performance');
     $routes->get('channel', 'Konten::channel');
     $routes->post('channel/simpan', 'Konten::channel_simpan');
     $routes->post('channel/hapus', 'Konten::channel_hapus');
+    $routes->get('campaigns', 'Konten::campaigns');
+    $routes->post('campaign/simpan', 'Konten::campaign_simpan');
+    $routes->post('campaign/hapus', 'Konten::campaign_hapus');
+    $routes->get('improvements', 'Konten::improvements');
+    $routes->post('improvement/simpan', 'Konten::improvement_simpan');
+    $routes->post('improvement/status', 'Konten::improvement_status');
+    $routes->post('improvement/hapus', 'Konten::improvement_hapus');
 });
 
 // Social Media KPI

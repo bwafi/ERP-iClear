@@ -16,9 +16,8 @@ class ModelContent extends Model
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
     protected $allowedFields = [
-        'judul', 'deskripsi', 'content_type_id', 'jenis_konten', 'target_scope', 'deadline',
-        'status', 'published_at', 'completed_at', 'performance_metric_id',
-        'performance_target', 'created_by',
+        'judul', 'deskripsi', 'content_type_id', 'jenis_konten', 'campaign_id', 'target_scope', 'deadline',
+        'status', 'published_at', 'completed_at', 'created_by',
     ];
 
     public const STATUSES = ['DRAFT', 'PRODUCTION', 'QC', 'APPROVED', 'PUBLISHED', 'COMPLETED', 'REVISION'];

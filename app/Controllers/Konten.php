@@ -3,24 +3,25 @@
 namespace App\Controllers;
 
 use App\Models\ModelContent;
+use App\Models\ModelContentBrief;
+use App\Models\ModelContentCampaign;
 use App\Models\ModelContentChecklist;
 use App\Models\ModelContentPerson;
 use App\Models\ModelContentQc;
 use App\Models\ModelContentType;
-use App\Models\ModelContentPerformanceTarget;
 use App\Models\ModelBrandChecklistItem;
 use App\Models\ModelContentUnit;
-use App\Models\ModelPerformanceMetric;
 use App\Models\ModelPlatform;
 use App\Models\ModelPublication;
-use App\Models\ModelPublicationPerformance;
 use App\Models\ModelChannel;
 use App\Models\ModelChannelMetric;
 use App\Models\ModelChannelPerformance;
+use App\Models\ModelImprovement;
 use App\Models\ModelUnit;
 use App\Services\Konten\ContentKpiService;
 use App\Services\Konten\ContentScopeService;
 use App\Services\Konten\ContentWorkflowService;
+use App\Services\Konten\MultimediaKpiService;
 
 /**
  * Dashboard Content Management — KPI Multimedia/Creative.
@@ -31,20 +32,20 @@ use App\Services\Konten\ContentWorkflowService;
 class Konten extends BaseController
 {
     protected $ContentModel;
+    protected $ContentBriefModel;
+    protected $ContentCampaignModel;
     protected $ContentTypeModel;
     protected $BrandChecklistItemModel;
     protected $ContentChecklistModel;
     protected $ContentPersonModel;
     protected $ContentQcModel;
     protected $ContentUnitModel;
-    protected $PerformanceTargetModel;
-    protected $PerformanceMetricModel;
     protected $PlatformModel;
     protected $PublicationModel;
-    protected $PublicationPerformanceModel;
     protected $ChannelModel;
     protected $ChannelMetricModel;
     protected $ChannelPerformanceModel;
+    protected $ImprovementModel;
     protected $UnitModel;
 
     protected $KpiService;
@@ -54,20 +55,20 @@ class Konten extends BaseController
     public function __construct()
     {
         $this->ContentModel             = new ModelContent();
+        $this->ContentBriefModel        = new ModelContentBrief();
+        $this->ContentCampaignModel     = new ModelContentCampaign();
         $this->ContentTypeModel         = new ModelContentType();
         $this->BrandChecklistItemModel  = new ModelBrandChecklistItem();
         $this->ContentChecklistModel    = new ModelContentChecklist();
         $this->ContentPersonModel       = new ModelContentPerson();
         $this->ContentQcModel           = new ModelContentQc();
         $this->ContentUnitModel         = new ModelContentUnit();
-        $this->PerformanceTargetModel   = new ModelContentPerformanceTarget();
-        $this->PerformanceMetricModel   = new ModelPerformanceMetric();
         $this->PlatformModel            = new ModelPlatform();
 $this->PublicationModel          = new ModelPublication();
-        $this->PublicationPerformanceModel = new ModelPublicationPerformance();
         $this->ChannelModel              = new ModelChannel();
         $this->ChannelMetricModel        = new ModelChannelMetric();
         $this->ChannelPerformanceModel   = new ModelChannelPerformance();
+        $this->ImprovementModel         = new ModelImprovement();
         $this->UnitModel                 = new ModelUnit();
 
         $this->KpiService      = new ContentKpiService();
@@ -116,6 +117,14 @@ $this->PublicationModel          = new ModelPublication();
         return null;
     }
 
+    private function assertManage()
+    {
+        if (!ContentScopeService::canManageKpi($this->currentRole())) {
+            return redirect()->to(base_url())->with('error', 'Anda tidak berhak mengelola campaign / improvement.');
+        }
+        return null;
+    }
+
     private function scopeSql(): ?string
     {
         return $this->ScopeService->scopeSql($this->currentRole(), $this->currentUnit(), $this->currentAkun());
@@ -151,6 +160,7 @@ $this->PublicationModel          = new ModelPublication();
 
         $stats = $this->KpiService->monthlyStats($bulan, $tahun, $scopeSql);
         $kpi   = $this->KpiService->monthlyKpi($bulan, $tahun, $scopeSql);
+        $kpiOwner = (new MultimediaKpiService())->monthlySummary($bulan, $tahun);
 
         return view('template', [
             'body'   => 'konten/dashboard',
@@ -159,6 +169,7 @@ $this->PublicationModel          = new ModelPublication();
             'tahun'  => $tahun,
             'stats'  => $stats,
             'kpi'    => $kpi,
+            'kpiOwner' => $kpiOwner,
             'scopeLabel' => $this->scopeLabel(),
         ]);
     }
@@ -296,7 +307,6 @@ $this->PublicationModel          = new ModelPublication();
             'akun'        => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'content'     => $content,
             'contentTypes'=> $this->ContentTypeModel->optionsActive(),
-            'metrics'     => $this->PerformanceMetricModel->optionsActive(),
             'units'       => $this->UnitModel->orderBy('idunit', 'ASC')->findAll(),
             'allowedUnits'=> $this->allowedUnitIds(),
             'peoples'     => $this->ContentModel->activePeople(),
@@ -304,7 +314,8 @@ $this->PublicationModel          = new ModelPublication();
             'selectedUnits' => $selectedUnits,
             'talentIds'   => $talentIds,
             'creativeIds' => $creativeIds,
-            'performanceTargets' => $id !== null ? $this->PerformanceTargetModel->forContent((int)$id) : [],
+            'campaigns'   => $this->ContentCampaignModel->orderBy('id', 'DESC')->findAll(100),
+            'brief'       => $id !== null ? $this->ContentBriefModel->forContent((int)$id) : null,
         ]);
     }
 
@@ -342,47 +353,23 @@ $this->PublicationModel          = new ModelPublication();
 
         $contentTypeId = $this->request->getPost('content_type_id') ? (int)$this->request->getPost('content_type_id') : null;
 
-        // Target performa multi-metric: banyak metric dipilih, memakai SATU nilai target.
-        $metricIds  = $this->request->getPost('performance_metric_id');
-        $metricIds  = is_array($metricIds) ? $metricIds : [];
+        $jenis = strtoupper(trim((string)$this->request->getPost('jenis_konten')));
+        $jenis = in_array($jenis, ['REGULAR', 'ADS'], true) ? $jenis : 'REGULAR';
 
-        $activeMetrics = [];
-        foreach ($this->PerformanceMetricModel->optionsActive() as $m) {
-            $activeMetrics[(int)$m->id] = $m;
-        }
-
-        $perfRows = [];
-        foreach ($metricIds as $mid) {
-            $metricId = (int)$mid;
-            if ($metricId <= 0 || !isset($activeMetrics[$metricId])) {
-                continue;
-            }
-            $perfRows[$metricId] = null;
-        }
-
-        $perfTargetRaw = $this->request->getPost('performance_target');
-        if ($perfTargetRaw !== null && trim((string)$perfTargetRaw) !== '') {
-            if (!is_numeric($perfTargetRaw) || (float)$perfTargetRaw < 0) {
-                $errors[] = 'Target performa tidak valid (angka ≥ 0).';
-            } else {
-                $perfTarget = (float)$perfTargetRaw;
-                foreach (array_keys($perfRows) as $metricId) {
-                    $perfRows[$metricId] = $perfTarget;
-                }
-            }
+        $campaignId = (int)($this->request->getPost('campaign_id') ?? 0);
+        if ($campaignId > 0 && !$this->ContentCampaignModel->find($campaignId)) {
+            $errors[] = 'Campaign tidak valid.';
         }
         if (!empty($errors)) {
             return redirect()->back()->with('error', implode(' ', $errors));
         }
-
-        $jenis = strtoupper(trim((string)$this->request->getPost('jenis_konten')));
-        $jenis = in_array($jenis, ['REGULAR', 'ADS'], true) ? $jenis : 'REGULAR';
 
         $data = [
             'judul'               => $judul,
             'deskripsi'           => $this->request->getPost('deskripsi') ?: null,
             'content_type_id'     => $contentTypeId ?: null,
             'jenis_konten'        => $jenis,
+            'campaign_id'         => $campaignId > 0 ? $campaignId : null,
             'target_scope'        => $targetScope,
             'deadline'            => $deadline,
         ];
@@ -408,9 +395,6 @@ $this->PublicationModel          = new ModelPublication();
         $unitIds = is_array($unitIds) ? $unitIds : [];
         $this->ContentUnitModel->replaceForContent((int)$contentId, $unitIds);
 
-        // Target performa multi-metric.
-        $this->PerformanceTargetModel->replaceForContent((int)$contentId, $perfRows);
-
         // People (Talent & Creative).
         $talentIds = $this->request->getPost('talent_ids') ?: [];
         $creativeIds = $this->request->getPost('creative_ids') ?: [];
@@ -423,6 +407,14 @@ $this->PublicationModel          = new ModelPublication();
         // Brand checklist otomatis tersedia untuk content baru.
         $items = array_map(fn($i) => $i->id, $this->BrandChecklistItemModel->optionsActive());
         $this->ContentChecklistModel->ensureItemsForContent((int)$contentId, $items);
+
+        // Brief kesesuaian (KPI Kesesuaian Brief 20%).
+        $this->ContentBriefModel->upsertForContent(
+            (int)$contentId,
+            (string)$this->request->getPost('isi_brief'),
+            (string)$this->request->getPost('requirement'),
+            null
+        );
 
         return redirect()->to(base_url('konten/detail/' . $contentId))
             ->with('success', $id > 0 ? 'Konten berhasil diperbarui.' : 'Konten berhasil dibuat.');
@@ -458,9 +450,6 @@ $this->PublicationModel          = new ModelPublication();
         }
 
         $publications = $this->ContentModel->publications((int)$id);
-        foreach ($publications as $pub) {
-            $pub->performances = $this->PublicationModel->performances((int)$pub->id);
-        }
 
         return view('template', [
             'body'          => 'konten/detail',
@@ -472,11 +461,12 @@ $this->PublicationModel          = new ModelPublication();
             'checklistItems'=> $this->BrandChecklistItemModel->optionsActive(),
             'qcHistory'     => $this->ContentModel->qcHistory((int)$id),
             'publications'  => $publications,
-            'performanceTargets' => $this->PerformanceTargetModel->forContent((int)$id),
             'platforms'     => $this->PlatformModel->optionsActive(),
-            'metrics'       => $this->PerformanceMetricModel->optionsActive(),
             'units'         => $this->UnitModel->orderBy('idunit', 'ASC')->findAll(),
             'allowedUnits'  => $this->allowedUnitIds(),
+            'brief'         => $this->ContentBriefModel->forContent((int)$id),
+            'campaign'      => !empty($content->campaign_id) ? $this->ContentCampaignModel->find((int)$content->campaign_id) : null,
+            'campaigns'     => $this->ContentCampaignModel->orderBy('id', 'DESC')->findAll(100),
             'canWrite'      => ContentScopeService::canWrite($this->currentRole()),
             'canQc'         => ContentScopeService::canQc($this->currentRole()),
             'nextStatuses'  => ContentWorkflowService::TRANSITIONS[$content->status] ?? [],
@@ -520,13 +510,15 @@ $this->PublicationModel          = new ModelPublication();
         $id = (int)$this->request->getPost('id');
         $result = strtoupper(trim((string)$this->request->getPost('qc_result')));
         $note = trim((string)$this->request->getPost('qc_note')) ?: null;
+        $sesuaiBriefRaw = $this->request->getPost('sesuai_brief');
+        $sesuaiBrief = ($sesuaiBriefRaw === '1' || $sesuaiBriefRaw === '0') ? (int)$sesuaiBriefRaw : null;
 
         $content = $this->ContentModel->find($id);
         if (!$content) {
             return redirect()->back()->with('error', 'Konten tidak ditemukan.');
         }
 
-        $res = $this->WorkflowService->qc($content, $result, $note, $this->currentAkun());
+        $res = $this->WorkflowService->qc($content, $result, $note, $this->currentAkun(), $sesuaiBrief);
 
         return redirect()->back()->with($res['ok'] ? 'success' : 'error', $res['message']);
     }
@@ -627,124 +619,6 @@ $this->PublicationModel          = new ModelPublication();
 
         return redirect()->to(base_url('konten/detail/' . $contentId))
             ->with('success', 'Publikasi dihapus.');
-    }
-
-    public function save_performance()
-    {
-        if ($r = $this->assertWrite()) {
-            return $r;
-        }
-        if (!$this->request->is('post')) {
-            return redirect()->to(base_url('konten'));
-        }
-
-        $publicationId = (int)$this->request->getPost('publication_id');
-        $month        = (int)$this->request->getPost('period_month');
-        $year         = (int)$this->request->getPost('period_year');
-        $targetRaw    = $this->request->getPost('target');
-        $actualRaw    = $this->request->getPost('actual');
-        $perfId       = (int)($this->request->getPost('id') ?? 0);
-
-        // Banyak metric, satu target, satu value actual (sama seperti pola konten).
-        $metricIds = $this->request->getPost('metric_id');
-        $metricIds = is_array($metricIds) ? $metricIds : [];
-
-        if ($month < 1 || $month > 12 || $year < 2000 || $year > 2100) {
-            return redirect()->back()->with('error', 'Periode performa tidak valid.');
-        }
-
-        $pub = $this->PublicationModel->find($publicationId);
-        if (!$pub) {
-            return redirect()->back()->with('error', 'Publikasi tidak ditemukan.');
-        }
-
-        $errors = [];
-        if ($targetRaw !== '' && (!is_numeric($targetRaw) || (float)$targetRaw < 0)) {
-            $errors[] = 'Target performa tidak valid (angka ≥ 0).';
-        }
-        $target = $targetRaw === '' ? 0 : (float)$targetRaw;
-
-        if ($actualRaw === '' || !is_numeric($actualRaw) || (float)$actualRaw < 0) {
-            $errors[] = 'Value actual tidak valid (angka ≥ 0).';
-        }
-        $actual = (float)$actualRaw;
-
-        $activeMetrics = [];
-        foreach ($this->PerformanceMetricModel->optionsActive() as $m) {
-            $activeMetrics[(int)$m->id] = $m;
-        }
-
-        $validMetricIds = [];
-        foreach ($metricIds as $mid) {
-            $metricId = (int)$mid;
-            if ($metricId <= 0 || !isset($activeMetrics[$metricId])) {
-                $errors[] = 'Metric performa tidak valid.';
-                continue;
-            }
-            $validMetricIds[$metricId] = $metricId;
-        }
-
-        if (empty($validMetricIds)) {
-            $errors[] = 'Pilih minimal satu metric.';
-        }
-
-        if (!empty($errors)) {
-            return redirect()->back()->with('error', implode(' ', $errors));
-        }
-
-        if ($perfId > 0 && $this->PublicationPerformanceModel->find($perfId)) {
-            // Mode edit: hanya ubah baris yang diklik (form terisi-ulang dari data baris tsb).
-            $firstMetricId = reset($validMetricIds);
-            $achievement = $target > 0 ? round($actual / $target * 100, 2) : null;
-            $this->PublicationPerformanceModel->update($perfId, [
-                'metric_id'      => $firstMetricId,
-                'period_month'   => $month,
-                'period_year'    => $year,
-                'target'         => $target,
-                'actual'         => $actual,
-                'achievement'    => $achievement,
-            ]);
-        } else {
-            foreach ($validMetricIds as $metricId) {
-                $achievement = $target > 0 ? round($actual / $target * 100, 2) : null;
-                $data = [
-                    'publication_id' => $publicationId,
-                    'metric_id'      => $metricId,
-                    'period_month'   => $month,
-                    'period_year'    => $year,
-                    'target'         => $target,
-                    'actual'         => $actual,
-                    'achievement'    => $achievement,
-                ];
-                $existing = $this->PublicationPerformanceModel->getByUnique($publicationId, $metricId, $month, $year);
-                if ($existing) {
-                    $this->PublicationPerformanceModel->update($existing->id, $data);
-                } else {
-                    $this->PublicationPerformanceModel->insert($data);
-                }
-            }
-        }
-
-        return redirect()->back()->with('success', 'Performa publikasi tersimpan.');
-    }
-
-    public function hapus_performance()
-    {
-        if ($r = $this->assertWrite()) {
-            return $r;
-        }
-        if (!$this->request->is('post')) {
-            return redirect()->to(base_url('konten'));
-        }
-
-        $perfId = (int)$this->request->getPost('id');
-        $perf = $this->PublicationPerformanceModel->find($perfId);
-        if (!$perf) {
-            return redirect()->back()->with('error', 'Performa tidak ditemukan.');
-        }
-
-        $this->PublicationPerformanceModel->delete($perfId);
-        return redirect()->back()->with('success', 'Performa publikasi dihapus.');
     }
 
     // ── Pertumbuhan Channel (KPI 10%) ─────────────────────────────
@@ -869,6 +743,268 @@ $this->PublicationModel          = new ModelPublication();
 
         $this->ChannelPerformanceModel->delete($id);
         return redirect()->back()->with('success', 'Performa channel dihapus.');
+    }
+
+    // ── Campaign (Support Campaign 10%) ────────────────────────────
+
+    public function campaigns()
+    {
+        if ($r = $this->assertRead()) {
+            return $r;
+        }
+
+        $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
+        $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
+        if ($bulan < 1 || $bulan > 12) {
+            $bulan = (int)date('n');
+        }
+
+        $campaigns = $this->ContentCampaignModel
+            ->where('period_month', $bulan)
+            ->where('period_year', $tahun)
+            ->orderBy('id', 'ASC')
+            ->findAll();
+
+        // Jumlah konten per campaign (sudah dinilai 1 konten = 1 satuan).
+        $contentCount = [];
+        foreach ($campaigns as $c) {
+            $contentCount[(int)$c->id] = $this->ContentModel
+                ->where('campaign_id', $c->id)
+                ->countAllResults();
+        }
+
+        return view('template', [
+            'body'          => 'konten/campaigns',
+            'akun'          => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'bulan'         => $bulan,
+            'tahun'         => $tahun,
+            'campaigns'     => $campaigns,
+            'contentCounts' => $contentCount,
+            'statuses'      => ModelContentCampaign::STATUSES,
+            'canWrite'      => ContentScopeService::canManageKpi($this->currentRole()),
+        ]);
+    }
+
+    public function campaign_simpan()
+    {
+        if ($r = $this->assertManage()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/campaigns'));
+        }
+
+        $id = (int)($this->request->getPost('id') ?? 0);
+        $nama = trim((string)$this->request->getPost('nama'));
+        $bulan = (int)$this->request->getPost('period_month');
+        $tahun = (int)$this->request->getPost('period_year');
+        $status = (string)$this->request->getPost('status');
+        $targetDeadline = trim((string)$this->request->getPost('target_deadline'));
+        $targetJumlah = trim((string)$this->request->getPost('target_jumlah_konten'));
+
+        if ($nama === '') {
+            return redirect()->back()->with('error', 'Nama campaign wajib diisi.');
+        }
+        if ($bulan < 1 || $bulan > 12 || $tahun < 2000 || $tahun > 2100) {
+            return redirect()->back()->with('error', 'Periode campaign tidak valid.');
+        }
+        if (!in_array($status, ModelContentCampaign::STATUSES, true)) {
+            $status = 'draft';
+        }
+        $targetJumlahVal = ($targetJumlah !== '' && is_numeric($targetJumlah)) ? (int)$targetJumlah : null;
+        if ($targetJumlahVal !== null && $targetJumlahVal < 0) {
+            return redirect()->back()->with('error', 'Target jumlah konten tidak valid.');
+        }
+
+        $data = [
+            'nama'                 => $nama,
+            'deskripsi'            => $this->request->getPost('deskripsi') ?: null,
+            'period_month'         => $bulan,
+            'period_year'          => $tahun,
+            'target_jumlah_konten' => $targetJumlahVal,
+            'target_deadline'      => ($targetDeadline !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $targetDeadline)) ? $targetDeadline : null,
+            'status'               => $status,
+            'pic'                  => (int)($this->request->getPost('pic') ?? 0) ?: null,
+        ];
+
+        if ($id > 0) {
+            if (!$this->ContentCampaignModel->find($id)) {
+                return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
+            }
+            $this->ContentCampaignModel->update($id, $data);
+            $msg = 'Campaign diperbarui.';
+        } else {
+            $data['created_by'] = $this->currentAkun();
+            $id = (int)$this->ContentCampaignModel->insert($data);
+            $msg = 'Campaign dibuat.';
+        }
+
+        return redirect()->to(base_url('konten/campaigns?bulan=' . $bulan . '&tahun=' . $tahun))
+            ->with('success', $msg);
+    }
+
+    public function campaign_hapus()
+    {
+        if ($r = $this->assertManage()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/campaigns'));
+        }
+
+        $id = (int)$this->request->getPost('id');
+        $row = $this->ContentCampaignModel->find($id);
+        if (!$row) {
+            return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
+        }
+
+        // Konten milik campaign dilepas (SET NULL), campaign dihapus.
+        $this->ContentModel->where('campaign_id', $id)->set('campaign_id', null)->update();
+        $this->ContentCampaignModel->delete($id);
+
+        return redirect()->back()->with('success', 'Campaign dihapus.');
+    }
+
+    // ── Improvement (5%) ───────────────────────────────────────────
+
+    public function improvements()
+    {
+        if ($r = $this->assertRead()) {
+            return $r;
+        }
+
+        $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
+        $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
+        if ($bulan < 1 || $bulan > 12) {
+            $bulan = (int)date('n');
+        }
+
+        $isManager = ContentScopeService::canManageKpi($this->currentRole());
+        $rows = $isManager
+            ? $this->ImprovementModel->orderBy('id', 'DESC')->findAll(200)
+            : $this->ImprovementModel->untukEmployeePeriode($this->currentAkun(), $bulan, $tahun);
+
+        $peoples = $this->ContentModel->activePeople();
+        $peopleById = [];
+        foreach ($peoples as $p) {
+            $peopleById[(int)$p->ID_AKUN] = $p;
+        }
+
+        return view('template', [
+            'body'          => 'konten/improvements',
+            'akun'          => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'bulan'         => $bulan,
+            'tahun'         => $tahun,
+            'rows'          => $rows,
+            'peopleById'    => $peopleById,
+            'multimediaPeoples' => $this->ContentModel->multimediaPeople(),
+            'statuses'      => ModelImprovement::STATUSES,
+            'canWrite'      => ContentScopeService::canManageKpi($this->currentRole()),
+            'canApprove'    => $isManager,
+        ]);
+    }
+
+    public function improvement_simpan()
+    {
+        if ($r = $this->assertManage()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/improvements'));
+        }
+
+        $id = (int)($this->request->getPost('id') ?? 0);
+        $judul = trim((string)$this->request->getPost('judul'));
+        $bulan = (int)$this->request->getPost('submission_month');
+        $tahun = (int)$this->request->getPost('submission_year');
+
+        if ($judul === '') {
+            return redirect()->back()->with('error', 'Judul improvement wajib diisi.');
+        }
+        if ($bulan < 1 || $bulan > 12 || $tahun < 2000 || $tahun > 2100) {
+            return redirect()->back()->with('error', 'Periode tidak valid.');
+        }
+
+        $employeeId = (int)($this->request->getPost('employee_id') ?? 0);
+        if ($employeeId <= 0) {
+            $employeeId = $this->currentAkun();
+        }
+
+        $data = [
+            'employee_id'       => $employeeId,
+            'judul'             => $judul,
+            'deskripsi'         => $this->request->getPost('deskripsi') ?: null,
+            'kategori'          => $this->request->getPost('kategori') ?: null,
+            'submission_month'  => $bulan,
+            'submission_year'   => $tahun,
+            'evidence'          => $this->request->getPost('evidence') ?: null,
+        ];
+
+        if ($id > 0 && $this->ImprovementModel->find($id)) {
+            unset($data['employee_id']);
+            $this->ImprovementModel->update($id, $data);
+            $msg = 'Improvement diperbarui.';
+        } else {
+            $data['status'] = 'submitted';
+            $id = (int)$this->ImprovementModel->insert($data);
+            $msg = 'Improvement diajukan.';
+        }
+
+        return redirect()->to(base_url('konten/improvements?bulan=' . $bulan . '&tahun=' . $tahun))
+            ->with('success', $msg);
+    }
+
+    public function improvement_status()
+    {
+        if ($r = $this->assertManage()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/improvements'));
+        }
+
+        $id = (int)$this->request->getPost('id');
+        $status = (string)$this->request->getPost('status');
+
+        $row = $this->ImprovementModel->find($id);
+        if (!$row) {
+            return redirect()->back()->with('error', 'Improvement tidak ditemukan.');
+        }
+        if (!in_array($status, ['submitted', 'approved', 'implemented', 'rejected'], true)) {
+            return redirect()->back()->with('error', 'Status tidak valid.');
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $data = ['status' => $status, 'evaluated_by' => $this->currentAkun(), 'updated_at' => $now];
+        if ($status === 'approved' || $status === 'implemented') {
+            $data['approved_at'] = $data['approved_at'] ?? $now;
+        }
+        $this->ImprovementModel->update($id, $data);
+
+        return redirect()->back()->with('success', "Status improvement menjadi {$status}.");
+    }
+
+    public function improvement_hapus()
+    {
+        if ($r = $this->assertManage()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('konten/improvements'));
+        }
+
+        $id = (int)$this->request->getPost('id');
+        $row = $this->ImprovementModel->find($id);
+        if (!$row) {
+            return redirect()->back()->with('error', 'Improvement tidak ditemukan.');
+        }
+        if ((int)$row->employee_id !== $this->currentAkun() && !ContentScopeService::canManageKpi($this->currentRole())) {
+            return redirect()->back()->with('error', 'Anda tidak berhak menghapus improvement ini.');
+        }
+
+        $this->ImprovementModel->delete($id);
+
+        return redirect()->back()->with('success', 'Improvement dihapus.');
     }
 
     // ── Lainnya ────────────────────────────────────────────────────

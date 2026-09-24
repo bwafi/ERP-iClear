@@ -5,6 +5,7 @@ use App\Models\ModelKpiComponent;
 use App\Models\ModelKpiTarget;
 use App\Models\ModelKpiWeight;
 use App\Services\Konten\ContentKpiService;
+use App\Services\Konten\MultimediaKpiService;
 use App\Services\Kpi\AttendanceAggregationService;
 use App\Services\Marketing\MarketingKpiService;
 
@@ -98,10 +99,12 @@ class KpiCalculationService
                     (int)$month,
                     (int)$year
                 );
-            // ==== MULTIMEDIA / CREATIVE (jabatan 44): Digital Marketing (ContentKpiService) ====
-            } elseif ($positionId === 44 && in_array($component->code, ContentKpiService::COMPONENT_CODES, true)) {
-                $achievement = $this->kontenService()->scoreByCode(
+            // ==== MULTIMEDIA / CREATIVE (jabatan 44): 6 KPI Owner (MultimediaKpiService) ====
+            } elseif ($positionId === 44 && in_array($component->code, MultimediaKpiService::CODES, true)) {
+                $achievement = $this->multimediaService()->achievement(
                     $component->code,
+                    $employeeId,
+                    $unitId,
                     (int)$month,
                     (int)$year
                 );
@@ -323,6 +326,11 @@ class KpiCalculationService
     public function kontenService(): ContentKpiService
     {
         return new ContentKpiService();
+    }
+
+    public function multimediaService(): MultimediaKpiService
+    {
+        return new MultimediaKpiService();
     }
 
     public function marketingService(): MarketingKpiService

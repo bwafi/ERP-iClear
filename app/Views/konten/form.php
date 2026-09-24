@@ -44,7 +44,18 @@
                         <option value="REGULAR" <?= ($content->jenis_konten ?? 'REGULAR') === 'REGULAR' ? 'selected' : '' ?>>Regular</option>
                         <option value="ADS" <?= ($content->jenis_konten ?? 'REGULAR') === 'ADS' ? 'selected' : '' ?>>Iklan (ADS)</option>
                     </select>
-                    <small class="text-muted">KPI Performa menilai konten Iklan (ADS).</small>
+                    <small class="text-muted">Konten iklan (ADS) untuk campaign berbayar.</small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Campaign <small class="text-muted">(Support Campaign 10%)</small></label>
+                    <select name="campaign_id" class="form-select">
+                        <option value="">— Tidak untuk campaign —</option>
+                        <?php foreach (($campaigns ?? []) as $camp) : ?>
+                            <option value="<?= $camp->id ?>" <?= (int)($content->campaign_id ?? 0) === (int)$camp->id ? 'selected' : '' ?>>
+                                <?= esc($camp->nama) ?> (<?= $camp->period_month ?>/<?= $camp->period_year ?></>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Deskripsi</label>
@@ -65,27 +76,6 @@
                             <input class="form-check-input" type="radio" name="target_scope" value="SELECTED" <?= ($content->target_scope ?? '') === 'SELECTED' ? 'checked' : '' ?>>
                             <span class="form-check-label">SELECTED</span>
                         </label>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <label class="form-label">Metric Performa (target)</label>
-                    <?php
-                        $perfTargets = $performanceTargets ?? [];
-                        if (!is_array($perfTargets)) {
-                            $perfTargets = [];
-                        }
-                        $perfSelectedIds = array_map(fn($pt) => (int)$pt->metric_id, $perfTargets);
-                        $perfTargetValue = $perfTargets ? ((float)$perfTargets[0]->target) : '';
-                    ?>
-                    <select name="performance_metric_id[]" class="form-select" multiple size="5">
-                        <?php foreach ($metrics as $m) : ?>
-                            <option value="<?= $m->id ?>" <?= in_array((int)$m->id, $perfSelectedIds, true) ? 'selected' : '' ?>><?= esc($m->name) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <div class="form-text">Pilih beberapa metric sekaligus (tahan Ctrl/Cmd untuk multi-pilih).</div>
-                    <div class="mt-2">
-                        <label class="form-label d-block">Target Performa</label>
-                        <input type="number" step="0.01" min="0" name="performance_target" class="form-control" style="max-width: 200px;" value="<?= esc($perfTargetValue) ?>">
                     </div>
                 </div>
             </div>
@@ -144,6 +134,20 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Isi Brief <small class="text-muted">(Kesesuaian Brief 20%)</small></label>
+                        <textarea name="isi_brief" class="form-control" rows="3"><?= esc($brief->isi_brief ?? '') ?></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Requirement Brief</label>
+                        <textarea name="requirement" class="form-control" rows="3"><?= esc($brief->requirement ?? '') ?></textarea>
+                    </div>
+                </div>
+                <small class="text-muted">Brief tersimpan per konten; kesesuaiannya dinilai saat QC.</small>
             </div>
 
             <div class="mt-4">

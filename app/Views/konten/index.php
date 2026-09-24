@@ -18,6 +18,15 @@
     </div>
 </div>
 
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <a href="<?= base_url('konten/campaigns') ?>" class="btn btn-sm btn-outline-primary">
+        <iconify-icon icon="solar:megaphone-bold" class="me-1"></iconify-icon>Campaign <small class="text-muted">(Support 10%)</small>
+    </a>
+    <a href="<?= base_url('konten/improvements') ?>" class="btn btn-sm btn-outline-success">
+        <iconify-icon icon="solar:lightbulb-bold" class="me-1"></iconify-icon>Improvement <small class="text-muted">(5%)</small>
+    </a>
+</div>
+
 <div class="card shadow-sm border-0 mb-3">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">

@@ -57,8 +57,10 @@ class ContentWorkflowService
 
     /**
      * Act QC: PASS → APPROVED, REJECT → REVISION. Mencatat histori di content_qc.
+     *
+     * @param int|null $sesuaiBrief Verdict kesesuaian brief (1=sesuai, 0=tidak, null=tidak dinilai)
      */
-    public function qc(object $content, string $result, ?string $note, int $checkerId): array
+    public function qc(object $content, string $result, ?string $note, int $checkerId, ?int $sesuaiBrief = null): array
     {
         $result = strtoupper(trim($result));
         if (!in_array($result, ['PASS', 'REJECT'], true)) {
@@ -72,13 +74,14 @@ class ContentWorkflowService
         $now = date('Y-m-d H:i:s');
 
         (new \App\Models\ModelContentQc())->insert([
-            'content_id'  => (int)$content->id,
-            'status'      => $result,
-            'note'        => $note ?: null,
-            'checker_id'  => $checkerId,
-            'checked_at'  => $now,
-            'created_at'  => $now,
-            'updated_at'  => $now,
+            'content_id'   => (int)$content->id,
+            'status'       => $result,
+            'sesuai_brief' => $sesuaiBrief, // 1/0/null
+            'note'         => $note ?: null,
+            'checker_id'   => $checkerId,
+            'checked_at'   => $now,
+            'created_at'   => $now,
+            'updated_at'   => $now,
         ]);
 
         $to = $result === 'PASS' ? 'APPROVED' : 'REVISION';

@@ -194,8 +194,8 @@
 
 <div class="card shadow-sm border-0">
     <div class="card-header bg-white">
-        <h5 class="mb-0">Ringkasan KPI Creative — <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></h5>
-        <small class="text-muted">Achievement &amp; bobot sesuai engine KPI existing. Satu content dihitung satu kali.</small>
+        <h5 class="mb-0">Ringkasan KPI Multimedia (Owner) — <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></h5>
+        <small class="text-muted">Struktur KPI Owner jabatan Multimedia (<?= (int)$kpiOwner['employee_count'] ?> pegawai aktif) — agregasi divisi. Bobot 25/25/20/15/10/5.</small>
     </div>
     <div class="card-body">
         <div class="table-responsive">
@@ -211,7 +211,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($kpi['items'] as $it) : ?>
+                    <?php foreach ($kpiOwner['items'] as $it) : ?>
                         <tr>
                             <td class="fw-semibold"><?= esc($it['name']) ?></td>
                             <td class="text-center"><?= esc($it['target']) ?></td>
@@ -227,15 +227,15 @@
                                 <?php endif; ?>
                             </td>
                             <td class="text-end fw-semibold">
-                                <?= $it['achievement'] === null ? '-' : number_format($it['achievement'] * $it['bobot'] / 100, 2, ',', '.') ?>
+                                <?= $it['weighted'] === null ? '-' : number_format($it['weighted'], 2, ',', '.') ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
                 <tfoot>
                     <tr class="table-light">
-                        <th colspan="5" class="text-end">Total Skor Digital Marketing</th>
-                        <th class="text-end fw-bold text-primary"><?= number_format($kpi['weighted_total'], 2, ',', '.') ?></th>
+                        <th colspan="5" class="text-end">Total Skor Multimedia</th>
+                        <th class="text-end fw-bold text-primary"><?= number_format($kpiOwner['weighted_total'], 2, ',', '.') ?></th>
                     </tr>
                 </tfoot>
             </table>
@@ -265,13 +265,13 @@
             }).render();
         }
 
-        // Bar achievement KPI creative
+        // Bar achievement KPI multimedia (owner)
         var chartKontenKpiEl = document.querySelector('#chartKontenKpi');
         if (chartKontenKpiEl) {
             new ApexCharts(chartKontenKpiEl, {
                 chart: { type: 'bar', fontFamily: 'inherit', toolbar: { show: false }, height: 260 },
-                series: [{ name: 'Achievement %', data: <?= json_encode(array_map(fn($i) => $i['achievement'] === null ? null : round($i['achievement'], 2), $kpi['items'])) ?> }],
-                xaxis: { categories: <?= json_encode(array_map(fn($i) => $i['name'], $kpi['items'])) ?> },
+                series: [{ name: 'Achievement %', data: <?= json_encode(array_map(fn($i) => $i['achievement'] === null ? null : round($i['achievement'], 2), $kpiOwner['items'])) ?> }],
+                xaxis: { categories: <?= json_encode(array_map(fn($i) => $i['name'], $kpiOwner['items'])) ?> },
                 plotOptions: { bar: { columnWidth: '45%', borderRadius: 3 } },
                 colors: ['#1d4e89'],
                 dataLabels: { enabled: true, formatter: function(v) { return v === null ? 'N/A' : v + '%'; } },

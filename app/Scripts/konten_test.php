@@ -5,8 +5,9 @@
  * Menjalankan alur model/service seperti controller: CRUD content, target
  * ALL/SELECTED, banyak talent/creative (satu orang dua peran), banyak
  * publikasi (tetap 1 content), workflow + QC pass/reject/revision, brand
- * checklist, performa publikasi, ringkasan KPI bulanan, scope per role,
- * dan query DataTables. Semua data uji di-rollback di akhir.
+ * checklist (KPI Performa Konten dihapus dari struktur 6 KPI owner),
+ * ringkasan KPI bulanan, scope per role, dan query DataTables. Semua data
+ * uji di-rollback di akhir.
  *
  * Usage: php74 app/Scripts/konten_test.php
  */
@@ -30,7 +31,6 @@ use App\Models\ModelContentChecklist;
 use App\Models\ModelContentPerson;
 use App\Models\ModelContentUnit;
 use App\Models\ModelPublication;
-use App\Models\ModelPublicationPerformance;
 use App\Models\ModelChannel;
 use App\Models\ModelChannelMetric;
 use App\Models\ModelChannelPerformance;
@@ -77,9 +77,8 @@ ok('Master platform Instagram ada', $platformIg !== null);
 ok('Master platform Facebook ada', $platformFb !== null);
 
 $typeFeed = (clone $db)->table('content_types')->where('code', 'FEED')->get()->getRow();
-$metricReach = (clone $db)->table('performance_metrics')->where('code', 'REACH')->get()->getRow();
 $checklistItems = (new \App\Models\ModelBrandChecklistItem())->optionsActive();
-ok('Master content_type & metric & checklist tersedia', $typeFeed && $metricReach && count($checklistItems) === 6);
+ok('Master content_type & checklist tersedia', $typeFeed && count($checklistItems) === 6);
 
 $peopleDb = (clone $db)->table('akun');
 $fahri = $peopleDb->where('ID_AKUN', 63)->get()->getRow();
@@ -96,8 +95,6 @@ $c1 = $ContentModel->insert([
     'target_scope' => 'ALL',
     'deadline'    => '2026-09-30',
     'status'      => 'DRAFT',
-    'performance_metric_id' => $metricReach->id,
-    'performance_target' => 1500,
     'created_by'  => 63,
 ]);
 $createdContentIds[] = (int)$c1;
@@ -190,28 +187,12 @@ $c1row = $ContentModel->find($c1);
 ok('COMPLETED → completed_at terisi', $c1row->status === 'COMPLETED' && $c1row->completed_at !== null);
 ok('C1 selesai ≤ deadline (tepat waktu)', $c1row->completed_at <= ($c1row->deadline . ' 23:59:59'));
 
-echo "\n== PUBLICATION + PERFORMANCE (banyak publikasi = 1 content) ==\n";
+echo "\n== PUBLICATION (banyak publikasi = 1 content) ==\n";
 $pubModel = new ModelPublication();
 $pub1 = $pubModel->insert(['content_id' => (int)$c1, 'unit_id' => 1, 'platform_id' => $platformIg->id, 'status' => 'PUBLISHED', 'published_at' => '2026-09-20 09:00:00', 'created_by' => 63]);
 $pub2 = $pubModel->insert(['content_id' => (int)$c1, 'unit_id' => 2, 'platform_id' => $platformIg->id, 'status' => 'PUBLISHED', 'published_at' => '2026-09-21 10:00:00', 'created_by' => 63]);
 $pub3 = $pubModel->insert(['content_id' => (int)$c1, 'unit_id' => 1, 'platform_id' => $platformFb->id, 'status' => 'PLANNED', 'created_by' => 63]);
 ok('C1 punya 3 publikasi (IG u1 + IG u2 + FB u1)', $pub1 && $pub2 && $pub3);
-
-$ppModel = new ModelPublicationPerformance();
-$set = function (int $pubId, int $metricId, float $target, float $actual) use ($ppModel) {
-    $ach = $target > 0 ? round($actual / $target * 100, 2) : null;
-    $existing = $ppModel->getByUnique($pubId, $metricId, 9, 2026);
-    if ($existing) {
-        $ppModel->update($existing->id, ['target' => $target, 'actual' => $actual, 'achievement' => $ach]);
-    } else {
-        $ppModel->insert(['publication_id' => $pubId, 'metric_id' => $metricId, 'period_month' => 9, 'period_year' => 2026, 'target' => $target, 'actual' => $actual, 'achievement' => $ach]);
-    }
-};
-$set((int)$pub1, (int)$metricReach->id, 1000, 1200); // 120%
-$set((int)$pub2, (int)$metricReach->id, 500, 400);   // 80%
-$set((int)$pub3, (int)$metricReach->id, 2000, 1000); // 50%
-$perfRow = $ppModel->getByUnique((int)$pub1, (int)$metricReach->id, 9, 2026);
-ok('Achievement P1 = 120', near($perfRow->achievement, 120), $perfRow->achievement);
 
 $totalPubC1 = $db->query("SELECT COUNT(*) c FROM publications WHERE content_id = {$c1}")->getRow()->c;
 ok('Masih dihitung 1 content (bukan 3) di ringkasan', (int)$totalPubC1 === 3);
@@ -246,22 +227,14 @@ ok('Jumlah Konten = 1/30×100', near($kpi['items'][0]['achievement'], 3.33), jso
 ok('Deadline = 1/3×100 (1 tepat waktu)', near($kpi['items'][1]['achievement'], 33.33), json_encode($kpi['items'][1]));
 ok('Kualitas = 1/3×100 (1 lolos QC)', near($kpi['items'][2]['achievement'], 33.33), json_encode($kpi['items'][2]));
 ok('Brand = 5/(6+6)×100', near($kpi['items'][3]['achievement'], 41.67), json_encode($kpi['items'][3]));
-ok('Performa = 2600/3500×100', near($kpi['items'][4]['achievement'], 74.29), json_encode($kpi['items'][4]));
-$expectedWeighted = 3.3333 * 0.15 + 33.3333 * 0.15 + 33.3333 * 0.25 + 41.6667 * 0.15 + 74.2857 * 0.20;
-ok('Skor tertimbang sesuai bobot engine', near($kpi['weighted_total'], $expectedWeighted), "{$kpi['weighted_total']} vs {$expectedWeighted}");
-ok('KPI engine: 6 komponen (maksimal bobot total 100)', count($Kpi::KPI_DEFS) === 6);
+$expectedWeighted = 3.3333 * 0.15 + 33.3333 * 0.15 + 33.3333 * 0.25 + 41.6667 * 0.15;
+ok('Skor tertimbang sesuai bobot engine (Performa 20 dihapus)', near($kpi['weighted_total'], $expectedWeighted), "{$kpi['weighted_total']} vs {$expectedWeighted}");
+ok('KPI engine: 5 komponen (Performa Konten dihapus)', count($Kpi::KPI_DEFS) === 5, 'count=' . count($Kpi::KPI_DEFS));
 $bobotSum = array_sum(array_column($Kpi::KPI_DEFS, 'bobot'));
-ok('Total bobot KPI konten = 100 (termasuk Pertumbuhan 10)', $bobotSum === 100, "sum={$bobotSum}");
-ok('KPI engine: komponen PERTUMBUHAN_CHANNEL ada & bobot 10', $kpi['items'][5]['key'] === 'PERTUMBUHAN_CHANNEL' && $kpi['items'][5]['bobot'] === 10);
+ok('Total bobot = 80 (Jumlah15+Deadline15+Kualitas25+Brand15+Pertumbuhan10)', $bobotSum === 80, "sum={$bobotSum}");
+ok('KPI engine: komponen PERTUMBUHAN_CHANNEL ada & bobot 10', $kpi['items'][4]['key'] === 'PERTUMBUHAN_CHANNEL' && $kpi['items'][4]['bobot'] === 10);
+ok('Performa tanpa data → achievement null (bukan dihitung 0)', !array_key_exists('PERFORMA', array_column($kpi['items'], 'key', 'key')));
 
-// KPI Performa hanya menilai konten ADS: publikasi C2 (REGULAR) berperforma tinggi
-// TIDAK boleh mengubah achievement performa.
-$pubC2 = $pubModel->insert(['content_id' => (int)$c2, 'unit_id' => 3, 'platform_id' => $platformFb->id, 'status' => 'PUBLISHED', 'published_at' => '2026-09-15 10:00:00', 'created_by' => 63]);
-$set((int)$pubC2, (int)$metricReach->id, 1, 999999);
-$perfC2 = $ppModel->getByUnique((int)$pubC2, (int)$metricReach->id, 9, 2026);
-ok('Performa tetap bisa diinput pada konten REGULAR', $perfC2 !== null && (float)$perfC2->actual === 999999.0);
-$kpiPost = $Kpi->monthlyKpi(9, 2026, "c.judul LIKE '[TEST]%'");
-ok('Performa KPI tidak terpengaruh konten REGULAR (tetap 74.29)', near($kpiPost['items'][4]['achievement'], 74.29), json_encode($kpiPost['items'][4]));
 ok('Jenis konten default REGULAR', $ContentModel->find((int)$c2)->jenis_konten === 'REGULAR');
 
 echo "\n== PERTUMBUHAN CHANNEL (KPI 10%) ==\n";
@@ -362,12 +335,12 @@ ok('Previous Aktual Agustus ter-update → IG Sept growth = (5600-5500)/5500 = 1
 
 // ── Integrasi dengan engine KPI 10% ──
 $kpiCh = $Kpi->monthlyKpi(9, 2026, "c.judul LIKE '[TEST]%'");
-$gItem = $kpiCh['items'][5];
+$gItem = $kpiCh['items'][4];
 $expectedAvg = round((125 + 150 + 62.5) / 3, 2); // nilai awal sebelum Agustus diubah
-ok('Items ke-6 = Pertumbuhan Channel (bobot 10, bukan manual)', $gItem['key'] === 'PERTUMBUHAN_CHANNEL' && $gItem['bobot'] === 10, json_encode($gItem));
+ok('Items ke-5 = Pertumbuhan Channel (bobot 10, bukan manual)', $gItem['key'] === 'PERTUMBUHAN_CHANNEL' && $gItem['bobot'] === 10, json_encode($gItem));
 ok('Achievement Pertumbuhan Channel = agregasi (avg achievement per metric)', $gItem['achievement'] !== null && near($gItem['achievement'], (22.75 + 150 + 62.5) / 3), json_encode($gItem));
 ok('scoreByCode engine = achievement komponen (posisi 44)', near($Kpi->scoreByCode('CHANNEL_GROWTH', 9, 2026), (float)$gItem['achievement']), $Kpi->scoreByCode('CHANNEL_GROWTH', 9, 2026));
-ok('Skor tertimbang menyertakan Pertumbuhan 10%', near($kpiCh['weighted_total'], 3.3333 * 0.15 + 33.3333 * 0.15 + 33.3333 * 0.25 + 41.6667 * 0.15 + 74.2857 * 0.20 + (float)$gItem['achievement'] * 0.10), $kpiCh['weighted_total']);
+ok('Skor tertimbang menyertakan Pertumbuhan 10%', near($kpiCh['weighted_total'], 3.3333 * 0.15 + 33.3333 * 0.15 + 33.3333 * 0.25 + 41.6667 * 0.15 + (float)$gItem['achievement'] * 0.10), $kpiCh['weighted_total']);
 ok('KPI tanpa data (misal hanya 1 bulan) → achievement KPI null (N/A)', $Kpi->channelGrowthSummary(8, 2026)['kpi_achievement'] === null);
 
 // Bersihkan data uji channel.

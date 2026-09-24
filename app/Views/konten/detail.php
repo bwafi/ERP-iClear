@@ -189,17 +189,21 @@ $statusBadge = [
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="kn-label">Metric Performa</div>
-                    <div class="kn-value">
-                        <?php if (empty($performanceTargets)) : ?>
-                            —
-                        <?php else : ?>
-                            <?php $metricNames = array_map(fn($pt) => esc($pt->metric_name), $performanceTargets); ?>
-                            <span class="d-block"><?= implode(', ', $metricNames) ?></span>
-                            <small class="text-muted">Target: <?= isset($performanceTargets[0]->target) && $performanceTargets[0]->target !== null ? number_format((float)$performanceTargets[0]->target, 2, ',', '.') : '-' ?></small>
-                        <?php endif; ?>
-                    </div>
+                    <div class="kn-label">Campaign</div>
+                    <div class="kn-value"><?= isset($campaign) && $campaign ? esc($campaign->nama) : '-' ?></div>
+                    <?php if (isset($campaign) && $campaign) : ?>
+                        <div class="text-muted small mt-1"><?= $campaign->period_month ?>/<?= $campaign->period_year ?></> · <?= esc(ucfirst($campaign->status ?? '')) ?></div>
+                    <?php endif; ?>
                 </div>
+
+                <?php if (isset($brief) && $brief && ($brief->isi_brief || $brief->requirement)) : ?>
+                    <div class="col-12">
+                        <div class="kn-label">Brief (Kesesuaian Brief)</div>
+                        <?php if ($brief->isi_brief) : ?><div class="small text-muted mb-1"><strong>Isi:</strong> <?= esc(nl2br($brief->isi_brief)) ?></div><?php endif; ?>
+                        <?php if ($brief->requirement) : ?><div class="small text-muted"><strong>Requirement:</strong> <?= esc(nl2br($brief->requirement)) ?></div><?php endif; ?>
+                    </div>
+                <?php endif; ?>
+
                 <div class="col-md-4">
                     <div class="kn-label">Published</div>
                     <div class="kn-value"><?= $content->published_at ? date('d/m/Y H:i', strtotime($content->published_at)) : '-' ?></div>
@@ -229,6 +233,17 @@ $statusBadge = [
                     <input type="hidden" name="id" value="<?= $content->id ?>">
                     <div class="col-md-7">
                         <textarea name="qc_note" class="form-control" rows="2" placeholder="Catatan QC (opsional)"></textarea>
+                        <?php if ($brief) : ?>
+                            <div class="form-check form-check-inline mt-2">
+                                <input class="form-check-input" type="radio" name="sesuai_brief" value="1" checked>
+                                <label class="form-check-label small">Sesuai Brief</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="sesuai_brief" value="0">
+                                <label class="form-check-label small">Tidak Sesuai Brief</label>
+                            </div>
+                            <small class="text-muted d-block">Verdict dipakai KPI Kesesuaian Brief.</small>
+                        <?php endif; ?>
                     </div>
                     <div class="col-md-5 d-flex gap-2 pt-1">
                         <button type="submit" name="qc_result" value="PASS" class="btn btn-sm btn-success">PASS → APPROVED</button>
@@ -328,24 +343,13 @@ $statusBadge = [
                                                                                                                         'status' => $pub->status,
                                                                                                                         'published_at' => $pub->published_at,
                                                                                                                     ]), ENT_QUOTES) ?>'>Edit</button>
-                                            <form method="post" action="<?= base_url('konten/publication/delete') ?>" class="d-inline" onsubmit="return confirm('Hapus publikasi beserta performanya?')">
+                                            <form method="post" action="<?= base_url('konten/publication/delete') ?>" class="d-inline" onsubmit="return confirm('Hapus publikasi ini?')">
                                                 <input type="hidden" name="id" value="<?= $pub->id ?>">
                                                 <button class="btn btn-sm btn-outline-danger">Hapus</button>
                                             </form>
                                         </td>
                                     <?php endif; ?>
                                 </tr>
-                                <?php if (!empty($pub->performances)) : ?>
-                                    <tr class="table-light">
-                                        <td colspan="<?= $canWrite ? 6 : 5 ?>">
-                                            <small><strong>Performa:</strong>
-                                                <?php foreach ($pub->performances as $perf) : ?>
-                                                    <span class="badge text-bg-light border me-2 fw-normal"><?= esc($perf->metric_name) ?> <?= date('m/Y', mktime(0, 0, 0, (int)$perf->period_month, 1, (int)$perf->period_year)) ?>: <?= number_format((float)$perf->actual, 0, ',', '.') ?>/<?= number_format((float)$perf->target, 0, ',', '.') ?> (<?= $perf->achievement !== null ? number_format((float)$perf->achievement, 1, ',', '.') . '%' : 'N/A' ?>)</span>
-                                                <?php endforeach; ?>
-                                            </small>
-                                        </td>
-                                    </tr>
-                                <?php endif; ?>
                         <?php endforeach;
                         endif; ?>
                     </tbody>
@@ -423,123 +427,6 @@ $statusBadge = [
                 </div>
             <?php endif; ?>
         </div>
-
-        <?php if ($canWrite) : ?>
-            <!-- Performa Publikasi -->
-            <div class="kn-card p-4 mt-3">
-                <?php
-                $perfRows = [];
-                foreach ($publications as $pub) {
-                    foreach (array_filter($pub->performances ?? []) as $perf) {
-                        $perf->publication_id = (int)$pub->id;
-                        $perf->publication_label = ($pub->NAMA_UNIT ?? '-') . ' — ' . ($pub->platform_name ?? '-');
-                        $perfRows[] = $perf;
-                    }
-                }
-                ?>
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h6 class="kn-section-title mb-0" id="perfFormTitle">Input Performa Publikasi</h6>
-                    <span class="badge text-bg-warning d-none" id="perfEditBadge">Mode Edit</span>
-                </div>
-
-                <?php if (!empty($perfRows)) : ?>
-                    <div class="table-responsive mb-3">
-                        <table class="table table-sm kn-table align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Publikasi</th>
-                                    <th>Metric</th>
-                                    <th>Periode</th>
-                                    <th class="text-end">Target</th>
-                                    <th class="text-end">Actual</th>
-                                    <th class="text-end">Capaian</th>
-                                    <th class="text-end">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($perfRows as $p) : ?>
-                                    <tr>
-                                        <td><small><?= esc($p->publication_label) ?></small></td>
-                                        <td><small><?= esc($p->metric_name ?? '-') ?></small></td>
-                                        <td><small><?= date('m/Y', mktime(0, 0, 0, (int)$p->period_month, 1, (int)$p->period_year)) ?></small></td>
-                                        <td class="text-end"><small><?= number_format((float)$p->target, 0, ',', '.') ?></small></td>
-                                        <td class="text-end"><small><?= number_format((float)$p->actual, 0, ',', '.') ?></small></td>
-                                        <td class="text-end"><small><?= $p->achievement !== null ? number_format((float)$p->achievement, 1, ',', '.') . '%' : 'N/A' ?></small></td>
-                                        <td class="text-end text-nowrap">
-                                            <button class="btn btn-sm btn-outline-secondary btn-edit-perf" data-perf='<?= htmlspecialchars(json_encode([
-                                                                                                                            'id' => (int)$p->id,
-                                                                                                                            'publication_id' => (int)$p->publication_id,
-                                                                                                                            'metric_id' => (int)$p->metric_id,
-                                                                                                                            'period_month' => (int)$p->period_month,
-                                                                                                                            'period_year' => (int)$p->period_year,
-                                                                                                                            'target' => (float)$p->target,
-                                                                                                                            'actual' => (float)$p->actual,
-                                                                                                                        ]), ENT_QUOTES) ?>'>Edit</button>
-                                            <form method="post" action="<?= base_url('konten/performance/delete') ?>" class="d-inline" onsubmit="return confirm('Hapus performa ini?')">
-                                                <input type="hidden" name="id" value="<?= $p->id ?>">
-                                                <button class="btn btn-sm btn-outline-danger">Hapus</button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-
-                <form method="post" action="<?= base_url('konten/performance/save') ?>" class="row g-2" id="perfForm">
-                    <input type="hidden" name="id" id="perfId" value="0">
-                    <div class="col-12">
-                        <label class="form-label small">Publikasi</label>
-                        <select name="publication_id" id="perfPublication" class="form-select" required>
-                            <option value="">— Pilih —</option>
-                            <?php foreach ($publications as $pub) : ?>
-                                <option value="<?= $pub->id ?>"><?= esc($pub->NAMA_UNIT ?? '-') ?> — <?= esc($pub->platform_name ?? '-') ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <?php if (empty($publications)) : ?><small class="text-danger d-block mt-1">Tambahkan publikasi terlebih dahulu.</small><?php endif; ?>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small">Periode Bulan</label>
-                        <select name="period_month" id="perfMonth" class="form-select">
-                            <?php for ($i = 1; $i <= 12; $i++) : ?>
-                                <option value="<?= $i ?>" <?= $i == date('n') ? 'selected' : '' ?>><?= date('F', mktime(0, 0, 0, $i, 1)) ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small">Tahun</label>
-                        <select name="period_year" id="perfYear" class="form-select">
-                            <?php for ($i = date('Y') - 1; $i <= date('Y') + 1; $i++) : ?>
-                                <option value="<?= $i ?>" <?= $i == date('Y') ? 'selected' : '' ?>><?= $i ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label small">Metric Performa</label>
-                        <select name="metric_id[]" id="perfMetric" class="form-select" multiple size="5" required>
-                            <?php foreach ($metrics as $m) : ?>
-                                <option value="<?= $m->id ?>"><?= esc($m->name) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <small class="text-muted">Pilih beberapa metric sekaligus (tahan Ctrl/Cmd untuk multi-pilih).</small>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small">Target (satu nilai)</label>
-                        <input type="number" step="0.01" min="0" name="target" id="perfTarget" class="form-control" value="0" required>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label small">Value (actual)</label>
-                        <input type="number" step="0.01" min="0" name="actual" id="perfActual" class="form-control" value="0" required>
-                    </div>
-                    <div class="col-12 d-grid gap-2 mt-1">
-                        <button class="btn btn-success w-100" id="perfSubmitBtn" <?= empty($publications) ? 'disabled' : '' ?>>Simpan Performa</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btnCancelPerf">Batal Edit</button>
-                    </div>
-                </form>
-                <small class="text-muted d-block mt-2">Achievement = actual / target × 100. Input manual (belum ada integrasi API media sosial).</small>
-            </div>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -582,48 +469,6 @@ $statusBadge = [
         if ($('#pubId').val() > 0 && !$('#pubUnit').val()) {
             e.preventDefault();
             alert('Pilih unit publikasi.');
-        }
-    });
-
-    function perfResetForm() {
-        $('#perfId').val(0);
-        $('#perfForm')[0].reset();
-        $('#perfFormTitle').text('Input Performa Publikasi');
-        $('#perfSubmitBtn').text('Simpan Performa')
-            .removeClass('btn-warning')
-            .addClass('btn-success');
-        $('#perfEditBadge').addClass('d-none');
-        $('#btnCancelPerf').addClass('d-none');
-    }
-
-    $('.btn-edit-perf').on('click', function() {
-        var d = $(this).data('perf');
-        $('#perfId').val(d.id);
-        $('#perfPublication').val(d.publication_id);
-        $('#perfMetric').val([String(d.metric_id)]);
-        $('#perfMonth').val(d.period_month);
-        $('#perfYear').val(d.period_year);
-        $('#perfTarget').val(d.target);
-        $('#perfActual').val(d.actual);
-        $('#perfFormTitle').text('Ubah Performa Publikasi');
-        $('#perfSubmitBtn').text('Ubah')
-            .removeClass('btn-success')
-            .addClass('btn-warning');
-        $('#perfEditBadge').removeClass('d-none');
-        $('#btnCancelPerf').removeClass('d-none');
-        $('#perfForm')[0].scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-        });
-    });
-
-    $('#btnCancelPerf').on('click', function() {
-        perfResetForm();
-    });
-    $('#perfSubmitBtn').on('click', function(e) {
-        if ($('#perfId').val() > 0 && !$('#perfPublication').val()) {
-            e.preventDefault();
-            alert('Pilih publikasi.');
         }
     });
 

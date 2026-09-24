@@ -8,7 +8,8 @@ namespace App\Services\Konten;
  * Memakai session existing (ID_JABATAN / ID_UNIT / ID_AKUN) — tanpa membuat
  * sistem permission baru. Sesuai beberapa modul existing (PenilaianKPI):
  *   - Role 0,1,2,34 (Admin Center/Root, Direktur, Manager) → akses penuh
- *   - Role 43 (Kepala Divisi)              → monitoring read-only, scope seluruh divisi
+ *   - Role 43 (Kepala Divisi)              → monitoring content read-only (scope seluruh
+ *     divisi), TETAPI dapat mengelola Campaign & Improvement (ROLES_MANAGE)
  *   - Role 44 (Multimedia/Creative)        → operasional, scope SELURUH divisi (KPI jabatan
  *     multimedia bersifat perusahaan, jadi filter unit memuat semua unit).
  *   - Role 48 (Talent)                     → view-only (orang yang tampil).
@@ -18,6 +19,7 @@ class ContentScopeService
     public const ROLES_VIEW = [0, 1, 2, 34, 43, 44, 48];
     public const ROLES_WRITE = [0, 1, 2, 34, 44];
     public const ROLES_QC = [0, 1, 2, 34, 43, 44]; // QC & checklist
+    public const ROLES_MANAGE = [0, 1, 2, 34, 43]; // root/direktur/manager/kadiv
 
     public const ROLE_KADIV = 43;
     public const ROLE_MULTIMEDIA = 44;
@@ -43,6 +45,17 @@ class ContentScopeService
     public static function canQc(int $role): bool
     {
         return in_array($role, self::ROLES_QC, true);
+    }
+
+    public static function canManage(int $role): bool
+    {
+        return in_array($role, self::ROLES_MANAGE, true);
+    }
+
+    /** Pengelolaan Campaign & Improvement: manager/kadiv, plus penulis operasional (44). */
+    public static function canManageKpi(int $role): bool
+    {
+        return self::canManage($role) || self::canWrite($role);
     }
 
     /**

@@ -81,10 +81,11 @@ try {
     ok('dashboard() render — judul Dashboard Multimedia', strpos($html, 'Dashboard Multimedia') !== false);
     ok('dashboard() render — breadcrumb Digital Marketing', strpos($html, 'Digital Marketing') !== false);
     ok('dashboard() render — ada kartu Total Content', strpos($html, 'Total Content') !== false, substr($html, 0, 80));
-    ok('dashboard() render — ada Ringkasan KPI', strpos($html, 'Ringkasan KPI Creative') !== false);
+    ok('dashboard() render — ada Ringkasan KPI Multimedia (Owner)', strpos($html, 'Ringkasan KPI Multimedia (Owner)') !== false);
     ok('dashboard() render — section Pertumbuhan Channel', strpos($html, 'Pertumbuhan Channel') !== false);
     ok('dashboard() render — link Input Performa Channel', strpos($html, 'konten/channel') !== false);
-    ok('dashboard() render — KPI table memuat bobot 10%', strpos($html, 'Pertumbuhan Channel') !== false);
+    ok('dashboard() render — KPI owner memuat 6 KPI (bobot 100)', strpos($html, 'Ketepatan Deadline') !== false && strpos($html, 'Kualitas Output') !== false && strpos($html, 'Kesesuaian Brief') !== false && strpos($html, 'Produktivitas') !== false && strpos($html, 'Support Campaign') !== false && strpos($html, 'Improvement') !== false);
+    ok('dashboard() render — tanpa Performa Konten', strpos($html, 'Performa Konten') === false);
 
     $html = (string)$ctrl->channel();
     ok('channel() render — judul Performa Channel', strpos($html, 'Performa Channel') !== false);
@@ -108,17 +109,15 @@ try {
     ok('detail() render — QC action muncul (status QC)', strpos($html, 'Tindakan QC') !== false);
     ok('detail() render — brand checklist (single form)', strpos($html, 'checklistForm') !== false && strpos($html, 'Simpan Checklist') !== false);
     ok('detail() render — badge nama visible (bg-info-subtle/bg-primary-subtle)', strpos($html, 'bg-info-subtle text-info') !== false && strpos($html, 'bg-primary-subtle text-primary') !== false);
-    ok('detail() render — input performa', strpos($html, 'Input Performa Publikasi') !== false);
-    ok('detail() render — form performa (id perfForm)', strpos($html, 'id="perfForm"') !== false);
-    ok('detail() render — aksi edit/hapus performa', strpos($html, 'btn-edit-perf') !== false && strpos($html, 'performance/delete') !== false);
     ok('detail() render — histori QC', strpos($html, 'Histori QC') !== false);
+    ok('detail() render — tanpa Input Performa Publikasi', strpos($html, 'Input Performa Publikasi') === false && strpos($html, 'perfForm') === false);
 
     // Role testing: kadiv (43) read-only –
     $session->set(['ID_JABATAN' => 43, 'ID_AKUN' => 55]);
     $ctrl2 = new \App\Controllers\Konten();
     $ctrl2->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
     $html = (string)$ctrl2->dashboard();
-    ok('dashboard() role 43 ter-render (monitoring)', strpos($html, 'Ringkasan KPI Creative') !== false);
+    ok('dashboard() role 43 ter-render (monitoring)', strpos($html, 'Ringkasan KPI Multimedia (Owner)') !== false);
     $resp = $ctrl2->form($contentId); // harus redirect (write denied)
     ok('role 43 tidak bisa buka form (redirect)', $resp instanceof \CodeIgniter\HTTP\RedirectResponse, get_class($resp));
 
@@ -127,7 +126,7 @@ try {
     $ctrl3 = new \App\Controllers\Konten();
     $ctrl3->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
     $html = (string)$ctrl3->dashboard();
-    ok('dashboard() role 44 ter-render (KPI berlaku utk multimedia)', strpos($html, 'Ringkasan KPI Creative') !== false && strpos($html, 'Divisi Multimedia') !== false);
+    ok('dashboard() role 44 ter-render (KPI berlaku utk multimedia)', strpos($html, 'Ringkasan KPI Multimedia (Owner)') !== false && strpos($html, 'Divisi Multimedia (semua cabang)') !== false);
     $formHtml = (string)$ctrl3->form(null);
     ok('role 44 dapat buka form tambah (operasional)', strpos($formHtml, 'Judul Konten') !== false);
 } catch (\Throwable $e) {

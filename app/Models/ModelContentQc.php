@@ -12,5 +12,5 @@ class ModelContentQc extends Model
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
-    protected $allowedFields = ['content_id', 'status', 'note', 'checker_id', 'checked_at'];
+    protected $allowedFields = ['content_id', 'status', 'sesuai_brief', 'note', 'checker_id', 'checked_at'];
 }

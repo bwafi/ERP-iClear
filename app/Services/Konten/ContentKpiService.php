@@ -10,12 +10,13 @@ namespace App\Services\Konten;
  * engine KPI existing. Bobot & target konten mengikuti spesifikasi KPI:
  *
  *   | KPI                 | Target        | Bobot |
- *   | Jumlah Konten       | 30/bulan      | 20%   |
- *   | Deadline            | ≥95%          | 20%   |
+ *   | Jumlah Konten       | 30/bulan      | 15%   |
+ *   | Deadline            | ≥95%          | 15%   |
  *   | Kualitas Konten     | ≥90%          | 25%   |
  *   | Konsistensi Brand   | ≥95%          | 15%   |
- *   | Performa Konten     | sesuai target | 20%   |
+ *   | Pertumbuhan Channel | sesuai growth | 10%   |
  *
+ * Catatan: KPI "Performa Konten" dihapus (tidak dipakai lagi di struktur 6 KPI owner).
  * Satu content tetap dihitung SATU KALI pada setiap metrik (COUNT DISTINCT / agregasi per content).
  */
 class ContentKpiService
@@ -27,7 +28,6 @@ class ContentKpiService
         ['key' => 'DEADLINE',           'name' => 'Deadline',              'bobot' => 15, 'target' => '≥95%'],
         ['key' => 'KUALITAS',           'name' => 'Kualitas Konten',       'bobot' => 25, 'target' => '≥90%'],
         ['key' => 'BRAND',              'name' => 'Konsistensi Brand',     'bobot' => 15, 'target' => '≥95%'],
-        ['key' => 'PERFORMA',           'name' => 'Performa Konten',       'bobot' => 20, 'target' => 'sesuai target'],
         ['key' => 'PERTUMBUHAN_CHANNEL','name' => 'Pertumbuhan Channel',   'bobot' => 10, 'target' => 'sesuai target growth'],
     ];
 
@@ -39,7 +39,6 @@ class ContentKpiService
         'KONTEN_DEADLINE',
         'KONTEN_KUALITAS',
         'KONTEN_BRAND',
-        'KONTEN_PERFORMA',
         'CHANNEL_GROWTH',
     ];
 
@@ -48,7 +47,6 @@ class ContentKpiService
         'KONTEN_DEADLINE' => 'DEADLINE',
         'KONTEN_KUALITAS' => 'KUALITAS',
         'KONTEN_BRAND'    => 'BRAND',
-        'KONTEN_PERFORMA' => 'PERFORMA',
         'CHANNEL_GROWTH'  => 'PERTUMBUHAN_CHANNEL',
     ];
 
@@ -161,9 +159,6 @@ class ContentKpiService
         // Brand checklist.
         $brand = $this->brandSummary($contentIds);
 
-        // Performa publikasi: sum actual / sum target periode tsb (scope content).
-        $perf = $this->performanceSummary($month, $year, $scopeSql);
-
         // Pertumbuhan channel social media (per channel+metric).
         $channel = $this->channelGrowthSummary($month, $year);
 
@@ -183,9 +178,6 @@ class ContentKpiService
                 case 'BRAND':
                     $achievement = $brand['total_items'] > 0 ? $brand['checked_items'] / $brand['total_items'] * 100 : null;
                     break;
-                case 'PERFORMA':
-                    $achievement = $perf['target'] > 0 ? $perf['actual'] / $perf['target'] * 100 : null;
-                    break;
                 case 'PERTUMBUHAN_CHANNEL':
                     $achievement = $channel['kpi_achievement'];
                     break;
@@ -203,7 +195,7 @@ class ContentKpiService
                 'bobot'       => $def['bobot'],
                 'target'      => $def['target'],
                 'achievement' => $achievement === null ? null : round($achievement, 2),
-                'realisasi'   => $this->realisasiLabel($def['key'], $total, $completed, $onTime, $qcPass, $brand, $perf, $channel),
+                'realisasi'   => $this->realisasiLabel($def['key'], $total, $completed, $onTime, $qcPass, $brand, $channel),
             ];
         }
 
@@ -220,7 +212,6 @@ class ContentKpiService
             'on_time'        => $onTime,
             'qc_pass'        => $qcPass,
             'brand'          => $brand,
-            'perf'           => $perf,
             'channel'        => $channel,
             'items'          => $items,
             'weighted_total' => round($weightedTotal, 2),
@@ -389,7 +380,7 @@ class ContentKpiService
         return $row ? (float)$row->actual : null;
     }
 
-    private function realisasiLabel(string $key, int $total, int $completed, int $onTime, int $qcPass, array $brand, array $perf, array $channel): string
+    private function realisasiLabel(string $key, int $total, int $completed, int $onTime, int $qcPass, array $brand, array $channel): string
     {
         switch ($key) {
             case 'JUMLAH_KONTEN':
@@ -400,8 +391,6 @@ class ContentKpiService
                 return "{$qcPass} lolos QC / {$total} konten";
             case 'BRAND':
                 return "{$brand['checked_items']} / {$brand['total_items']} item";
-            case 'PERFORMA':
-                return number_format($perf['actual'], 0, ',', '.') . ' / ' . number_format($perf['target'], 0, ',', '.');
             case 'PERTUMBUHAN_CHANNEL':
                 return $channel['kpi_metrics'] > 0 ? $channel['kpi_metrics'] . ' metric KPI terisi' : '-';
         }
