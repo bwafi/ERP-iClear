@@ -400,6 +400,36 @@ class PenilaianKPI extends BaseController
         return in_array((int)session()->get('ID_JABATAN'), [0, 1, 2, 34], true);
     }
 
+    private function readAsetFilter(?array $scope, array $unitCodes, int $fallbackUnit, int $fallbackDari): array
+    {
+        $filterUnit = (int)$this->request->getPost('filter_unit');
+        if ($filterUnit !== 0 && ($scope !== null && !in_array($filterUnit, $scope, true))) {
+            $filterUnit = $fallbackUnit;
+        }
+
+        $filterDari = (int)$this->request->getPost('filter_dari');
+        if ($filterDari !== 0 && !isset($unitCodes[$filterDari])) {
+            $filterDari = $fallbackDari;
+        }
+
+        $filterQ = trim((string)$this->request->getPost('q'));
+
+        return [$filterUnit, $filterDari, $filterQ];
+    }
+
+    private function buildAsetBack(int $filterUnit, int $filterDari, string $filterQ): string
+    {
+        $back = '/penilaian/kpi/aset_master?unit=' . $filterUnit;
+        if ($filterDari !== 0) {
+            $back .= '&dari=' . $filterDari;
+        }
+        if ($filterQ !== '') {
+            $back .= '&q=' . rawurlencode($filterQ);
+        }
+
+        return $back;
+    }
+
     public function aset_master_index()
     {
         if (!$this->isAssetMasterManager()) {
@@ -442,6 +472,8 @@ class PenilaianKPI extends BaseController
 
         $assets = $svc->masterAssetsWithLastAudit($unitId, $dariId);
 
+        $searchQ = trim((string)$this->request->getGet('q'));
+
         return view('template', [
             'myRole' => $myRole,
             'myUnit' => $myUnit,
@@ -451,6 +483,7 @@ class PenilaianKPI extends BaseController
             'dariId' => $dariId,
             'assets' => $assets,
             'unitCodes' => $svc->unitCodes(),
+            'searchQ' => $searchQ,
             'canDelete' => in_array($myRole, [0, 1, 2], true),
             'body' => 'penilaian/aset_master',
         ]);
@@ -490,7 +523,13 @@ class PenilaianKPI extends BaseController
             (string)($this->request->getPost('kode_aset') ?: '')
         );
 
-        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        [$filterUnit, $filterDari, $filterQ] = $this->readAsetFilter(
+            $scope,
+            $unitCodes,
+            $unitId,
+            $dariUnit
+        );
+        $back = $this->buildAsetBack($filterUnit, $filterDari, $filterQ);
         if (!$result['success']) {
             return redirect()->to($back)->with('error', implode(' ', $result['errors']));
         }
@@ -532,7 +571,13 @@ class PenilaianKPI extends BaseController
             $this->request->getPost('harga') !== '' ? (float)$this->request->getPost('harga') : null
         );
 
-        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        [$filterUnit, $filterDari, $filterQ] = $this->readAsetFilter(
+            $scope,
+            $unitCodes,
+            $unitId,
+            $dariUnit
+        );
+        $back = $this->buildAsetBack($filterUnit, $filterDari, $filterQ);
         if (!$result['success']) {
             return redirect()->to($back)->with('error', implode(' ', $result['errors']));
         }
@@ -546,12 +591,17 @@ class PenilaianKPI extends BaseController
         }
 
         $svc = new \App\Services\Kpi\AsetKpiService();
+        $myRole = (int)session()->get('ID_JABATAN');
+        $myId = (int)session()->get('ID_AKUN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
         $id = (int)$this->request->getPost('id');
         $active = (int)$this->request->getPost('active') === 1;
         $unitId = (int)$this->request->getPost('unit');
 
         $result = $svc->toggleMaster($id, $active);
-        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        [$filterUnit, $filterDari, $filterQ] = $this->readAsetFilter($scope, $svc->unitCodes(), $unitId, 0);
+        $back = $this->buildAsetBack($filterUnit, $filterDari, $filterQ);
         if (!$result['success']) {
             return redirect()->to($back)->with('error', implode(' ', $result['errors']));
         }
@@ -566,6 +616,9 @@ class PenilaianKPI extends BaseController
 
         $svc = new \App\Services\Kpi\AsetKpiService();
         $myRole = (int)session()->get('ID_JABATAN');
+        $myId = (int)session()->get('ID_AKUN');
+        $myUnit = (int)session()->get('ID_UNIT');
+        $scope = $svc->scopeUnits($myRole, $myUnit, $myId);
         $id = (int)$this->request->getPost('id');
         $unitId = (int)$this->request->getPost('unit');
 
@@ -575,7 +628,8 @@ class PenilaianKPI extends BaseController
         }
 
         $result = $svc->deleteMaster($id);
-        $back = '/penilaian/kpi/aset_master?unit=' . $unitId;
+        [$filterUnit, $filterDari, $filterQ] = $this->readAsetFilter($scope, $svc->unitCodes(), $unitId, 0);
+        $back = $this->buildAsetBack($filterUnit, $filterDari, $filterQ);
         if (!$result['success']) {
             return redirect()->to($back)->with('error', implode(' ', $result['errors']));
         }

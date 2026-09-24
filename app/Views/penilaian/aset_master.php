@@ -71,6 +71,9 @@ endif; ?>
     <div class="card-body">
         <form method="post" action="<?= base_url('penilaian/kpi/aset_master/insert') ?>" class="row g-2 align-items-end">
             <input type="hidden" name="kode_aset" value="">
+            <input type="hidden" name="filter_unit" value="<?= (int)$unitId ?>">
+            <input type="hidden" name="filter_dari" value="<?= (int)$dariId ?>">
+            <input type="hidden" name="q" value="<?= esc($searchQ ?? '') ?>">
             <div class="col-md-3">
                 <label class="form-label mb-1">Nama Aset</label>
                 <input type="text" name="asset" class="form-control form-control-sm" placeholder="contoh: Laptop Admin" required>
@@ -136,7 +139,8 @@ endif; ?>
             <input type="text"
                 id="searchAset"
                 class="form-control form-control-sm"
-                placeholder="Cari kode / nama aset...">
+                placeholder="Cari kode / nama aset..."
+                value="<?= esc($searchQ ?? '') ?>">
         </div>
     </div>
     <div class="card-body">
@@ -244,6 +248,9 @@ endif; ?>
                                             <input type="hidden" name="id" value="<?= $a['id'] ?>">
                                             <input type="hidden" name="unit" value="<?= $a['unit'] ?>">
                                             <input type="hidden" name="active" value="<?= $a['is_active'] ? '0' : '1' ?>">
+                                            <input type="hidden" name="filter_unit" value="<?= (int)$unitId ?>">
+                                            <input type="hidden" name="filter_dari" value="<?= (int)$dariId ?>">
+                                            <input type="hidden" name="q" value="<?= esc($searchQ ?? '') ?>">
 
                                             <button type="submit"
                                                 class="btn btn-sm btn-outline-<?= $a['is_active'] ? 'warning' : 'info' ?>">
@@ -259,6 +266,9 @@ endif; ?>
 
                                                 <input type="hidden" name="id" value="<?= $a['id'] ?>">
                                                 <input type="hidden" name="unit" value="<?= $a['unit'] ?>">
+                                                <input type="hidden" name="filter_unit" value="<?= (int)$unitId ?>">
+                                                <input type="hidden" name="filter_dari" value="<?= (int)$dariId ?>">
+                                                <input type="hidden" name="q" value="<?= esc($searchQ ?? '') ?>">
 
                                                 <button type="submit"
                                                     class="btn btn-sm btn-outline-danger">
@@ -284,6 +294,9 @@ endif; ?>
         <div class="modal-content">
             <form method="post" action="<?= base_url('penilaian/kpi/aset_master/update') ?>">
                 <input type="hidden" name="id" id="editId">
+                <input type="hidden" name="filter_unit" value="<?= (int)$unitId ?>">
+                <input type="hidden" name="filter_dari" value="<?= (int)$dariId ?>">
+                <input type="hidden" name="q" value="<?= esc($searchQ ?? '') ?>">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Aset Master</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -417,12 +430,14 @@ endif; ?>
 
     var searchAset = document.getElementById('searchAset');
     if (searchAset) {
-        searchAset.addEventListener('input', function() {
-            var q = this.value.toLowerCase();
+        var applyAsetFilter = function() {
+            var q = searchAset.value.trim().toLowerCase();
 
             document.querySelectorAll('#tblAsetMaster tbody tr').forEach(function(tr) {
                 tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
             });
-        });
+        };
+        searchAset.addEventListener('input', applyAsetFilter);
+        applyAsetFilter();
     }
 </script>
