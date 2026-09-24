@@ -206,14 +206,6 @@ $statusBadge = [
                     <?php endif; ?>
                 </div>
 
-                <?php if (isset($brief) && $brief && ($brief->isi_brief || $brief->requirement)) : ?>
-                    <div class="col-12">
-                        <div class="kn-label">Brief</div>
-                        <?php if ($brief->isi_brief) : ?><div class="small text-muted mb-1"><strong>Isi:</strong> <?= esc(nl2br($brief->isi_brief)) ?></div><?php endif; ?>
-                        <?php if ($brief->requirement) : ?><div class="small text-muted"><strong>Requirement:</strong> <?= esc(nl2br($brief->requirement)) ?></div><?php endif; ?>
-                    </div>
-                <?php endif; ?>
-
                 <div class="col-md-4">
                     <div class="kn-label">Published</div>
                     <div class="kn-value"><?= $content->published_at ? date('d/m/Y H:i', strtotime($content->published_at)) : '-' ?></div>

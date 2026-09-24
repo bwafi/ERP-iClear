@@ -137,20 +137,6 @@
             </div>
 
             <div class="mt-4">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Isi Brief <small class="text-muted">(Kesesuaian Brief 20%)</small></label>
-                        <textarea name="isi_brief" class="form-control" rows="3"><?= esc($brief->isi_brief ?? '') ?></textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Requirement Brief</label>
-                        <textarea name="requirement" class="form-control" rows="3"><?= esc($brief->requirement ?? '') ?></textarea>
-                    </div>
-                </div>
-                <small class="text-muted">Brief tersimpan per konten; kesesuaiannya dinilai saat QC.</small>
-            </div>
-
-            <div class="mt-4">
                 <button type="submit" class="btn btn-primary">Simpan</button>
                 <a href="<?= base_url('konten') ?>" class="btn btn-light">Batal</a>
             </div>

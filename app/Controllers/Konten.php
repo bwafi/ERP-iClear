@@ -3,7 +3,6 @@
 namespace App\Controllers;
 
 use App\Models\ModelContent;
-use App\Models\ModelContentBrief;
 use App\Models\ModelContentBriefVerdict;
 use App\Models\ModelContentCampaign;
 use App\Models\ModelContentPerson;
@@ -30,7 +29,6 @@ use App\Services\Konten\MultimediaKpiService;
 class Konten extends BaseController
 {
     protected $ContentModel;
-    protected $ContentBriefModel;
     protected $BriefVerdictModel;
     protected $ContentCampaignModel;
     protected $ContentTypeModel;
@@ -51,7 +49,6 @@ class Konten extends BaseController
     public function __construct()
     {
         $this->ContentModel             = new ModelContent();
-        $this->ContentBriefModel        = new ModelContentBrief();
         $this->BriefVerdictModel     = new ModelContentBriefVerdict();
         $this->ContentCampaignModel     = new ModelContentCampaign();
         $this->ContentTypeModel         = new ModelContentType();
@@ -315,7 +312,6 @@ class Konten extends BaseController
             'talentIds'   => $talentIds,
             'creativeIds' => $creativeIds,
             'campaigns'   => $this->ContentCampaignModel->orderBy('id', 'DESC')->findAll(100),
-            'brief'       => $id !== null ? $this->ContentBriefModel->forContent((int)$id) : null,
         ]);
     }
 
@@ -404,13 +400,8 @@ class Konten extends BaseController
             is_array($creativeIds) ? $creativeIds : []
         );
 
-        // Brief kesesuaian (KPI Kesesuaian Brief 20%).
-        $this->ContentBriefModel->upsertForContent(
-            (int)$contentId,
-            (string)$this->request->getPost('isi_brief'),
-            (string)$this->request->getPost('requirement'),
-            null
-        );
+        // Brief kesesuaian dinilai manual oleh Kepala Divisi via verdict
+        // (content_brief_verdicts); kolom brief di form sudah dihapus.
 
         return redirect()->to(base_url('konten/detail/' . $contentId))
             ->with('success', $id > 0 ? 'Konten berhasil diperbarui.' : 'Konten berhasil dibuat.');
@@ -452,7 +443,6 @@ class Konten extends BaseController
             'targetUnits'   => $this->ContentModel->targetUnits((int)$id),
             'peoples'       => $this->ContentModel->people((int)$id),
             'qcHistory'     => $this->ContentModel->qcHistory((int)$id),
-            'brief'         => $this->ContentBriefModel->forContent((int)$id),
             'briefVerdict'  => $this->BriefVerdictModel->latestForContent((int)$id),
             'canAssessBrief'=> ContentScopeService::canAssessBrief($this->currentRole()),
             'campaign'      => !empty($content->campaign_id) ? $this->ContentCampaignModel->find((int)$content->campaign_id) : null,

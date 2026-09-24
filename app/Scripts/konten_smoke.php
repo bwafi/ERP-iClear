@@ -119,6 +119,7 @@ try {
     ok('form() tambah render — pilihan Jenis Konten Regular/Iklan', strpos($html, 'Iklan (ADS)') !== false && strpos($html, 'name="jenis_konten"') !== false);
     ok('form() tambah render — picker Talent select2', strpos($html, 'id="talentSelect"') !== false && strpos($html, 'class="form-select select2"') !== false);
     ok('form() tambah render — picker Multimedia select2', strpos($html, 'id="creativeSelect"') !== false);
+    ok('form() tambah render — tanpa Isi Brief & Requirement Brief', strpos($html, 'Isi Brief') === false && strpos($html, 'Requirement Brief') === false && strpos($html, 'name="isi_brief"') === false);
     $html = (string)$ctrl->form($contentId);
     ok('form() edit render — value judul terisi', strpos($html, '[SMOKE] Konten Rendering') !== false);
 
