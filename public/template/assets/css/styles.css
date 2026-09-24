@@ -93,6 +93,14 @@
   color: #7c8fac;
   background-color: #111c2d;
 }
+[data-bs-theme="dark"] .form-control::-moz-placeholder {
+  color: #7c8fac;
+  opacity: 1;
+}
+[data-bs-theme="dark"] .form-control::placeholder {
+  color: #7c8fac;
+  opacity: 1;
+}
 [data-bs-theme="dark"] .form-select:focus,
 [data-bs-theme="dark"] .form-control:focus {
   border-color: #0085db !important;
@@ -28315,4 +28323,19 @@ body div:where(.swal2-icon).swal2-success [class^="swal2-success-line"] {
 }
 .topbar-search-results .dropdown-item {
   transition: background 0.1s ease-in-out;
+}
+
+/* ---------------------------------- */
+/* Dark mode: table-light (thead DataTables & umum) */
+/* ---------------------------------- */
+[data-bs-theme="dark"] .table-light {
+  --bs-table-color: #7c8fac;
+  --bs-table-bg: #111c2d;
+  --bs-table-border-color: #333f55;
+  --bs-table-striped-bg: #111c2d;
+  --bs-table-striped-color: #7c8fac;
+  --bs-table-active-bg: #15263a;
+  --bs-table-active-color: #c2cfe0;
+  --bs-table-hover-bg: #15263a;
+  --bs-table-hover-color: #7c8fac;
 }
