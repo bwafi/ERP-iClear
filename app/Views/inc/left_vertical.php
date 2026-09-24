@@ -94,20 +94,23 @@ $currentUri = service('uri');
                                         <?php if (in_array($menu['id'], $role)) : ?>
                                             <?php if (sizeof($menu['sub']) <= 0) : ?>
                                                 <li class="sidebar-item my-1">
-                                                    <a href="<?= base_url() . $menu['url'] ?>" class="sidebar-link text-secondary text-decoration-none py-2 px-3 rounded-2 d-block hover-bg-light">
+                                                    <!-- DIPERBAIKI: Menggunakan text-dark dan fw-medium agar lebih terbaca jelas -->
+                                                    <a href="<?= base_url() . $menu['url'] ?>" class="sidebar-link text-dark fw-medium text-decoration-none py-2 px-3 rounded-2 d-block hover-bg-light">
                                                         <span class="hide-menu"><?= $menu['nama'] ?></span>
                                                     </a>
                                                 </li>
                                             <?php else : ?>
                                                 <li class="sidebar-item my-1">
-                                                    <a class="sidebar-link has-arrow text-secondary text-decoration-none py-2 px-3 rounded-2 d-flex justify-content-between align-items-center" href="#" aria-expanded="false">
+                                                    <!-- DIPERBAIKI: Menggunakan text-dark dan fw-medium -->
+                                                    <a class="sidebar-link has-arrow text-dark fw-medium text-decoration-none py-2 px-3 rounded-2 d-flex justify-content-between align-items-center" href="#" aria-expanded="false">
                                                         <span class="hide-menu"><?= $menu['nama'] ?></span>
                                                     </a>
                                                     <ul aria-expanded="false" class="collapse two-level list-unstyled ps-3 pt-1">
                                                         <?php foreach ($menu['sub'] as $sub_menu) : ?>
                                                             <?php if (in_array($sub_menu['id'], $role)) : ?>
                                                                 <li class="sidebar-item my-1">
-                                                                    <a href="<?= base_url() . $sub_menu['url'] ?>" class="sidebar-link text-muted text-decoration-none py-1.5 px-3 rounded-2 d-block">
+                                                                    <!-- DIPERBAIKI: Menggunakan text-dark untuk sub menu level 2 -->
+                                                                    <a href="<?= base_url() . $sub_menu['url'] ?>" class="sidebar-link text-dark fw-medium text-decoration-none py-1.5 px-3 rounded-2 d-block">
                                                                         <span class="hide-menu"><?= $sub_menu['nama'] ?></span>
                                                                     </a>
                                                                 </li>
