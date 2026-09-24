@@ -125,20 +125,26 @@ endif; ?>
 </div>
 
 <div class="card shadow-sm border-0">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="mb-0">
             Daftar Aset Master —
             <?= $unitId === 0 ? 'Semua Lokasi' : esc($unitList[$unitId] ?? ('Unit ' . $unitId)) ?>
             ·
             <?= $dariId === 0 ? 'Semua Asal' : 'Dari ' . esc($unitList[$dariId] ?? ('Unit ' . $dariId)) ?>
         </h5>
+        <div class="col-md-4 col-lg-3">
+            <input type="text"
+                id="searchAset"
+                class="form-control form-control-sm"
+                placeholder="Cari kode / nama aset...">
+        </div>
     </div>
     <div class="card-body">
         <?php if (empty($assets)) : ?>
             <div class="text-muted small">Belum ada aset master terdaftar.</div>
         <?php else : ?>
             <div class="table-responsive">
-                <table class="table table-sm align-middle table-hover">
+                <table class="table table-sm align-middle table-hover" id="tblAsetMaster">
                     <thead class="table-light">
                         <tr>
                             <th rowspan="2" class="align-middle">Kode</th>
@@ -278,7 +284,6 @@ endif; ?>
         <div class="modal-content">
             <form method="post" action="<?= base_url('penilaian/kpi/aset_master/update') ?>">
                 <input type="hidden" name="id" id="editId">
-                <input type="hidden" name="unit" id="editUnit">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Aset Master</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -407,6 +412,17 @@ endif; ?>
     if (addDari) {
         addDari.addEventListener('change', function() {
             document.getElementById('previewKodeAdd').textContent = asetKodePreview(this.value);
+        });
+    }
+
+    var searchAset = document.getElementById('searchAset');
+    if (searchAset) {
+        searchAset.addEventListener('input', function() {
+            var q = this.value.toLowerCase();
+
+            document.querySelectorAll('#tblAsetMaster tbody tr').forEach(function(tr) {
+                tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
         });
     }
 </script>
