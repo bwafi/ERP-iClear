@@ -185,7 +185,7 @@ endif; ?>
                                         <br><small class="text-muted"><?= esc($a['keterangan']) ?></small>
                                     <?php endif; ?>
                                 </td>
-                                <td><small><?= esc($a['asal_name']) ?> <span class="badge bg-light border"><?= esc($a['asal_code']) ?></span></small></td>
+                                <td><small><?= esc($a['asal_name']) ?> <span class="badge bg-light border text-black"><?= esc($a['asal_code']) ?></span></small></td>
                                 <td><small><?= esc($a['unit_name']) ?></small></td>
                                 <td class="text-center fw-bold"><?= $a['quantity'] ?></td>
                                 <td class="text-end">
