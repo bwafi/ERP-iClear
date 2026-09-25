@@ -115,6 +115,30 @@ class CrmLeadBridge extends BaseController
         ]);
     }
 
+    /** Status service order menurut ERP, dicari dari nomor WhatsApp customer. */
+    public function serviceSummary()
+    {
+        $auth = $this->authorize('service');
+        if (!is_array($auth)) return $this->error($auth, 403);
+        [$phone] = $auth;
+        $suffix = substr($phone, -10);
+        $normal = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '+', ''), '-', ''), ' ', ''), '(', ''), 10)";
+        $rows = db_connect()->table('service s')
+            ->select("s.idservice,s.no_service,s.no_hp,s.tipe_hp,s.keterangan,s.status_service,s.status_proses,s.harus_dibayar,s.bayar,s.garansi_hari,s.tanggal_bisa_diambil,s.tanggal_selesai,s.created_at,s.unit_idunit, CASE s.unit_idunit WHEN 1 THEN 'Probolinggo' WHEN 2 THEN 'Jember' WHEN 3 THEN 'Banyuwangi' WHEN 4 THEN 'Pandaan' ELSE CONCAT('Unit ',COALESCE(s.unit_idunit,'')) END AS cabang", false)
+            ->where(sprintf($normal, 's.no_hp') . ' =', $suffix, false)
+            ->orderBy('s.created_at', 'DESC')->limit(10)->get()->getResultArray();
+        foreach ($rows as &$row) {
+            $row['status_label'] = $this->serviceStatusLabel((int) ($row['status_service'] ?? 0));
+            $due = max(0, (float) ($row['harus_dibayar'] ?? 0));
+            $paid = max(0, (float) ($row['bayar'] ?? 0));
+            $row['payment_due'] = $due;
+            $row['payment_paid'] = $paid;
+            $row['payment_remaining'] = max(0, $due - $paid);
+            $row['payment_label'] = $due <= 0 ? 'Belum ada tagihan final' : ($paid + 0.01 >= $due ? 'Lunas' : 'Menunggu pembayaran');
+        }
+        return $this->response->setContentType('application/json')->setJSON(['ok' => true, 'items' => $rows, 'read_only' => true]);
+    }
+
     private function authorize(string $type)
     {
         $secret = trim((string) env('CRM_BRIDGE_SECRET', ''));
@@ -138,6 +162,13 @@ class CrmLeadBridge extends BaseController
             $signed = $month . "\n" . $query . "\n" . $unit . "\n" . $item . "\n" . $time;
             if (!hash_equals(hash_hmac('sha256', $signed, $secret), $given)) return 'Signature bridge tidak valid.';
             return [$month, $query, $unit, $item];
+        }
+        if ($type === 'service') {
+            $phone = preg_replace('/\D+/', '', (string) $this->request->getGet('phone'));
+            if (!preg_match('/^[1-9][0-9]{6,19}$/', $phone)) return 'Nomor WhatsApp tidak valid.';
+            $signed = $phone . "\n" . $month . "\n" . $time;
+            if (!hash_equals(hash_hmac('sha256', $signed, $secret), $given)) return 'Signature bridge tidak valid.';
+            return [$phone];
         }
         $page = (int) $this->request->getGet('page');
         $status = strtoupper(trim((string) ($this->request->getGet('status') ?? 'ALL')));
@@ -246,6 +277,18 @@ class CrmLeadBridge extends BaseController
         if ($service === 'Service mesin') return 'Estimasi 5–7 hari; tergantung kerusakan dan pengiriman ke pusat Probolinggo.';
         if (in_array($service, ['Backglass', 'Housing'], true)) return 'Estimasi 2–5 jam.';
         return 'Estimasi 15–35 menit, dapat ditunggu.';
+    }
+
+    private function serviceStatusLabel(int $status): string
+    {
+        return match ($status) {
+            1 => 'Permintaan servis diterima',
+            2 => 'Dalam proses perbaikan',
+            3 => 'Siap diambil',
+            4 => 'Selesai — sudah diambil',
+            90, 91 => 'Dibatalkan',
+            default => 'Status ERP: ' . $status,
+        };
     }
 
     /** Harga poster promo awal bulan; berlaku hanya LCD Grade A, baterai Grade Ori, dan backglass. */
