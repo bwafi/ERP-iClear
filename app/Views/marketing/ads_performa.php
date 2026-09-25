@@ -359,10 +359,7 @@
                                         <option value="<?= (int)$cn['id'] ?>"><?= esc($cn['nama']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <small class="text-muted fs-1">
-                                    Campaign belum ada? Tambah di
-                                    <a href="<?= base_url('marketing/campaign') ?>" target="_blank">Campaign Digital Marketing</a>.
-                                </small>
+                                <small class="text-muted fs-1">Tambah campaign di halaman Digital Marketing.</small>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1 fw-semibold">Daily Budget (Rp)</label>
