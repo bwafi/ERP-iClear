@@ -68,14 +68,16 @@ class CrmLeadBridge extends BaseController
     {
         $auth = $this->authorize('catalog');
         if (!is_array($auth)) return $this->error($auth, 403);
-        [, $query, $unit] = $auth;
+        [, $query, $unit, $item] = $auth;
         $db = db_connect();
 
         // Sejumlah instalasi ERP menyimpan harga cabang pada VIEW stok_barang,
         // sebagian lain memakai harga master barang. Pilih harga cabang bila
         // tersedia, lalu aman jatuh ke harga master tanpa menulis apa pun.
         $stockFields = array_map('strtolower', $db->getFieldNames('stok_barang'));
-        $stockPrice = $this->firstField($stockFields, ['harga_jual', 'harga_penjualan', 'harga', 'price']);
+        // Hanya harga jual yang boleh dibuka ke CRM/WhatsApp. HPP atau harga
+        // beli tidak pernah dipilih atau dikirim oleh bridge ini.
+        $stockPrice = $this->firstField($stockFields, ['harga_penjualan', 'harga_jual', 'harga_retail', 'harga', 'price']);
         $priceSql = $stockPrice !== null ? 'COALESCE(s.' . $stockPrice . ', b.harga)' : 'b.harga';
 
         $builder = $db->table('barang b')
@@ -86,6 +88,7 @@ class CrmLeadBridge extends BaseController
             ->join('sub_kategori sk', 'sk.id=b.id_sub_kategori', 'left')
             ->where('b.deleted', 0);
         if ($unit > 0) $builder->where('s.id_unit', $unit);
+        if ($item > 0) $builder->where('b.idbarang', $item);
         if ($query !== '') {
             $builder->groupStart()
                 ->like('b.nama_barang', $query)
@@ -130,10 +133,11 @@ class CrmLeadBridge extends BaseController
         if ($type === 'catalog') {
             $query = trim((string) ($this->request->getGet('q') ?? ''));
             $unit = (int) ($this->request->getGet('unit') ?? 0);
-            if (mb_strlen($query) > 100 || $unit < 0 || $unit > 999999999) return 'Filter katalog tidak valid.';
-            $signed = $month . "\n" . $query . "\n" . $unit . "\n" . $time;
+            $item = (int) ($this->request->getGet('item') ?? 0);
+            if (mb_strlen($query) > 100 || $unit < 0 || $unit > 999999999 || $item < 0 || $item > 999999999) return 'Filter katalog tidak valid.';
+            $signed = $month . "\n" . $query . "\n" . $unit . "\n" . $item . "\n" . $time;
             if (!hash_equals(hash_hmac('sha256', $signed, $secret), $given)) return 'Signature bridge tidak valid.';
-            return [$month, $query, $unit];
+            return [$month, $query, $unit, $item];
         }
         $page = (int) $this->request->getGet('page');
         $status = strtoupper(trim((string) ($this->request->getGet('status') ?? 'ALL')));
