@@ -195,21 +195,21 @@ class CrmLeadBridge extends BaseController
             $row['nama_sub_kategori'] ?? '',
         ]), 'UTF-8');
         $service = '';
-        if (str_contains($haystack, 'lcd')) $service = 'LCD';
-        elseif (str_contains($haystack, 'baterai') || str_contains($haystack, 'battery')) $service = 'Baterai';
-        elseif (str_contains($haystack, 'backglass') || str_contains($haystack, 'back glass')) $service = 'Backglass';
-        elseif (str_contains($haystack, 'housing')) $service = 'Housing';
-        elseif (str_contains($haystack, 'jasa') && str_contains($haystack, 'pasang')) $service = 'Jasa pasang';
-        elseif (str_contains($haystack, 'mesin') || str_contains($haystack, 'logicboard') || str_contains($haystack, 'motherboard')) $service = 'Service mesin';
-        elseif (str_contains($haystack, 'flex') || str_contains($haystack, 'sparepart') || str_contains($haystack, 'spare part')) $service = 'Sparepart';
+        if (strpos($haystack, 'lcd') !== false) $service = 'LCD';
+        elseif (strpos($haystack, 'baterai') !== false || strpos($haystack, 'battery') !== false) $service = 'Baterai';
+        elseif (strpos($haystack, 'backglass') !== false || strpos($haystack, 'back glass') !== false) $service = 'Backglass';
+        elseif (strpos($haystack, 'housing') !== false) $service = 'Housing';
+        elseif (strpos($haystack, 'jasa') !== false && strpos($haystack, 'pasang') !== false) $service = 'Jasa pasang';
+        elseif (strpos($haystack, 'mesin') !== false || strpos($haystack, 'logicboard') !== false || strpos($haystack, 'motherboard') !== false) $service = 'Service mesin';
+        elseif (strpos($haystack, 'flex') !== false || strpos($haystack, 'sparepart') !== false || strpos($haystack, 'spare part') !== false) $service = 'Sparepart';
         if ($service === '') return ['service' => ''];
 
         $variant = '';
-        if (str_contains($haystack, 'grade aq')) $variant = 'Grade A';
-        elseif (str_contains($haystack, 'grade qa')) $variant = 'Grade Ori';
-        elseif (str_contains($haystack, 'original apple')) $variant = 'Original Apple';
-        elseif (str_contains($haystack, 'genuine')) $variant = 'Genuine Part';
-        elseif (str_contains($haystack, 'original')) $variant = 'Original';
+        if (strpos($haystack, 'grade aq') !== false) $variant = 'Grade A';
+        elseif (strpos($haystack, 'grade qa') !== false) $variant = 'Grade Ori';
+        elseif (strpos($haystack, 'original apple') !== false) $variant = 'Original Apple';
+        elseif (strpos($haystack, 'genuine') !== false) $variant = 'Genuine Part';
+        elseif (strpos($haystack, 'original') !== false) $variant = 'Original';
 
         $normal = max(0, (float) ($row['harga_erp'] ?? 0));
         $discount = 0;
