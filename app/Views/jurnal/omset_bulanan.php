@@ -3,7 +3,7 @@
     <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 p-4">
         <div>
             <h4 class="fw-semibold mb-1 text-dark">Omset Bulanan</h4>
-            <p class="fs-3 text-muted mb-0">Laporan ringkasan penjualan, performa produk, dan grafik omset harian</p>
+            <p class="fs-3 text-muted mb-0">Laporan ringkasan penjualan, performa produk, dan tren pendapatan harian</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0 bg-transparent p-0">
@@ -16,31 +16,34 @@
     </div>
 </div>
 
-<!-- Navigasi Periode (untuk semua role) -->
+<!-- Period Navigation Bar -->
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-3">
-        <div class="d-flex align-items-center justify-content-center flex-wrap gap-3">
+    <div class="card-body py-3 px-4">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
             <a href="<?= base_url('omset_bulanan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSebelum . '&tahun=' . $tahunSebelum) ?>"
-                class="btn btn-outline-primary d-inline-flex align-items-center gap-2 py-2 px-3">
-                <iconify-icon icon="solar:arrow-left-bold-duotone"></iconify-icon>
-                <span class="d-none d-md-inline"><?= date('F Y', mktime(0, 0, 0, $bulanSebelum, 1, $tahunSebelum)) ?></span>
-                <span class="d-md-none">Sebelumnya</span>
+                class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
+                <iconify-icon icon="solar:arrow-left-bold-duotone" class="text-primary"></iconify-icon>
+                <span class="fw-medium d-none d-md-inline"><?= date('F Y', mktime(0, 0, 0, $bulanSebelum, 1, $tahunSebelum)) ?></span>
+                <span class="fw-medium d-md-none">Sebelumnya</span>
             </a>
-            <div class="text-center px-3 py-1 border rounded-3 bg-primary-subtle">
-                <span class="fs-5 fw-bold text-primary"><?= esc($periodeLabel) ?></span>
+
+            <div class="d-flex align-items-center gap-2 px-3 py-2 border rounded-pill bg-primary-subtle bg-opacity-10 border-primary-subtle">
+                <iconify-icon icon="solar:calendar-bold-duotone" class="text-primary fs-5"></iconify-icon>
+                <span class="fs-4 fw-bold text-primary"><?= esc($periodeLabel) ?></span>
             </div>
+
             <?php if (!$isBulanBerjalan): ?>
                 <?php $bulanSesudah = (int)date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
                 <?php $tahunSesudah = (int)date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
                 <a href="<?= base_url('omset_bulanan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSesudah . '&tahun=' . $tahunSesudah) ?>"
-                    class="btn btn-outline-primary d-inline-flex align-items-center gap-2 py-2 px-3">
-                    <span class="d-none d-md-inline"><?= date('F Y', mktime(0, 0, 0, $bulanSesudah, 1, $tahunSesudah)) ?></span>
-                    <span class="d-md-none">Berikutnya</span>
-                    <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
+                    class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
+                    <span class="fw-medium d-none d-md-inline"><?= date('F Y', mktime(0, 0, 0, $bulanSesudah, 1, $tahunSesudah)) ?></span>
+                    <span class="fw-medium d-md-none">Berikutnya</span>
+                    <iconify-icon icon="solar:arrow-right-bold-duotone" class="text-primary"></iconify-icon>
                 </a>
             <?php else: ?>
-                <span class="btn btn-outline-secondary disabled d-inline-flex align-items-center gap-2 py-2 px-3 opacity-50" title="Bulan berikutnya belum tersedia">
-                    <span class="d-none d-md-inline">Berikutnya</span>
+                <span class="btn btn-light text-muted border disabled d-inline-flex align-items-center gap-2 py-2 px-3 opacity-50" title="Bulan berikutnya belum tersedia">
+                    <span class="fw-medium d-none d-md-inline">Berikutnya</span>
                     <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
                 </span>
             <?php endif; ?>
@@ -53,7 +56,7 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-4">
             <form method="GET" class="row align-items-end g-3">
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <label class="form-label fw-semibold fs-3 text-dark">Pilih Unit Cabang</label>
                     <select name="unit" class="form-select bg-white" onchange="this.form.submit()">
                         <?php foreach ($list_unit as $u): ?>
@@ -64,26 +67,20 @@
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold fs-3 text-dark">Bulan</label>
+                    <label class="form-label fw-semibold fs-3 text-dark">Bulan Pelaporan</label>
                     <select name="bulan" class="form-select bg-white" onchange="this.form.submit()">
                         <?php for ($i = 1; $i <= 12; $i++): ?>
                             <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>><?= date('F', mktime(0, 0, 0, $i, 1)) ?></option>
                         <?php endfor; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label class="form-label fw-semibold fs-3 text-dark">Tahun</label>
                     <select name="tahun" class="form-select bg-white" onchange="this.form.submit()">
                         <?php for ($i = date('Y'); $i >= date('Y') - 3; $i--): ?>
                             <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>><?= $i ?></option>
                         <?php endfor; ?>
                     </select>
-                </div>
-                <div class="col-md-2 d-flex align-items-end gap-2">
-                    <a href="<?= base_url('omset_bulanan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSebelum . '&tahun=' . $tahunSebelum) ?>"
-                        class="btn btn-outline-secondary w-100 d-inline-flex align-items-center justify-content-center gap-1">
-                        <iconify-icon icon="solar:arrow-left-bold-duotone"></iconify-icon> Sebelum
-                    </a>
                 </div>
             </form>
         </div>
@@ -98,9 +95,9 @@
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="badge bg-primary-subtle text-primary mb-2 px-2 py-1 fw-semibold">Fast Moving Service</span>
+                        <span class="badge bg-primary-subtle text-primary mb-2 px-2.5 py-1 fw-semibold">Fast Moving Service</span>
                         <h4 class="fw-bold mb-1 text-dark"><?= esc($bestsellerproduct->keyword_hp ?? '-') ?></h4>
-                        <span class="fs-3 text-muted">Total Terjual: <strong><?= number_format($bestsellerproduct->total ?? 0, 0, ',', '.') ?></strong></span>
+                        <span class="fs-3 text-muted">Total Terjual: <strong class="text-dark"><?= number_format($bestsellerproduct->total ?? 0, 0, ',', '.') ?></strong></span>
                     </div>
                     <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
                         <iconify-icon icon="solar:medal-ribbons-star-bold-duotone" width="36" height="36"></iconify-icon>
@@ -116,9 +113,9 @@
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="badge bg-info-subtle text-info mb-2 px-2 py-1 fw-semibold">Sparepart Best Seller</span>
+                        <span class="badge bg-info-subtle text-info mb-2 px-2.5 py-1 fw-semibold">Sparepart Best Seller</span>
                         <h4 class="fw-bold mb-1 text-dark"><?= esc($bestseller->nama_barang ?? '-') ?></h4>
-                        <span class="fs-3 text-muted">Total Terjual: <strong><?= number_format($bestseller->total_penjualan ?? 0, 0, ',', '.') ?></strong></span>
+                        <span class="fs-3 text-muted">Total Terjual: <strong class="text-dark"><?= number_format($bestseller->total_penjualan ?? 0, 0, ',', '.') ?></strong></span>
                     </div>
                     <div class="p-3 bg-info-subtle rounded-3 text-info d-flex align-items-center justify-content-center flex-shrink-0">
                         <iconify-icon icon="solar:box-minimalistic-bold-duotone" width="36" height="36"></iconify-icon>
@@ -136,7 +133,7 @@
                     <div>
                         <span class="text-uppercase fs-2 text-muted fw-bold tracking-wider d-block mb-1">Total Pelanggan Masuk</span>
                         <h3 class="fw-bold mb-1 text-dark"><?= number_format($pelanggan_bulan ?? 0, 0, ',', '.') ?></h3>
-                        <small class="text-muted">Periode <?= esc($periodeLabel) ?> · <?= number_format($countService ?? 0) ?> service / <?= number_format($countSales ?? 0) ?> penjualan</small>
+                        <small class="text-muted"><?= esc($periodeLabel) ?> · <?= number_format($countService ?? 0) ?> service / <?= number_format($countSales ?? 0) ?> penjualan</small>
                     </div>
                     <div class="p-3 bg-secondary-subtle rounded-3 text-dark d-flex align-items-center justify-content-center flex-shrink-0">
                         <iconify-icon icon="solar:user-bold-duotone" width="32" height="32"></iconify-icon>
@@ -220,7 +217,7 @@
                         <small class="text-muted"><?= esc($periodeLaluLabel) ?> · Selisih <?= $selisih_omset >= 0 ? '+' : '' ?>Rp <?= number_format(abs($selisih_omset ?? 0), 0, ',', '.') ?></small>
                     </div>
                     <div class="p-3 bg-secondary-subtle rounded-3 text-dark d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:history-backward-bold-duotone" width="32" height="32"></iconify-icon>
+                        <iconify-icon icon="solar:history-bold-duotone" width="32" height="32"></iconify-icon>
                     </div>
                 </div>
             </div>
@@ -256,7 +253,7 @@
                         <small class="text-muted"><?= $hariTerbaik ? 'Rp ' . number_format($omsetTerbaik ?? 0, 0, ',', '.') : 'Belum ada data' ?></small>
                     </div>
                     <div class="p-3 bg-danger-subtle rounded-3 text-danger d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:trophy-bold-duotone" width="32" height="32"></iconify-icon>
+                        <iconify-icon icon="solar:medal-star-bold-duotone" width="32" height="32"></iconify-icon>
                     </div>
                 </div>
             </div>
@@ -276,7 +273,7 @@
     <div class="col-md-4">
         <div class="card border shadow-none h-100 mb-0">
             <div class="card-body p-3">
-                <span class="text-muted fs-2 d-block mb-1">HPP Global</span>
+                <span class="text-muted fs-2 d-block mb-1">Value</span>
                 <h5 class="fw-bold text-dark mb-0">Rp <?= number_format($hpp_global ?? 0, 0, ',', '.') ?></h5>
                 <small class="text-muted"><?= esc($periodeLabel) ?></small>
             </div>

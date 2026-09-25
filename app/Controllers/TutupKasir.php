@@ -433,18 +433,14 @@ class TutupKasir extends BaseController
             ->total ?? 0;
 
         $hpp_global = $this->db->table('detail_penjualan')
-            ->select('SUM(hpp_penjualan) AS total')
+            ->selectSum('sub_total', 'total')
             ->join(
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->join(
-                'barang',
-                'barang.idbarang = detail_penjualan.barang_idbarang'
-            )
             ->where('MONTH(penjualan.tanggal)', $bulan)
             ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('barang.idkategori =', 3)
+            ->where('penjualan.unit_idunit', $unit)
             ->get()
             ->getRow()
             ->total ?? 0;
