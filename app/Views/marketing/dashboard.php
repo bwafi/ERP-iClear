@@ -276,7 +276,7 @@ foreach ($summary['items'] as $it) {
             Rumus: Omzet Global = omzet ERP semua cabang (threshold Target Toko → Target HO) ·
             Leads &amp; Kualitas = Leads (Hasil Performa Ads) + ratio qualified ·
             Conversion = Closing CS / Lead CS · CPL = Biaya Iklan (Spending + PPN) / Datang &amp; Closing CS ·
-            Campaign Performance &amp; Reporting = KPI Kualitas Pemakaian.
+            Campaign Performance = % ads ber-campaign valid · Reporting = % campaign Selesai dari total campaign.
         </div>
     </div>
 </div>

@@ -25,7 +25,7 @@ use App\Services\Konten\MultimediaKpiService;
  *   CONVERSION           10  Closing CS / Lead CS (target % di kpi_targets).
  *   CPL                  10  Budget Ads (data Performa Ads) / Datang & Closing CS
  *   CAMPAIGN_PERFORMANCE  5  Ads ber-campaign valid / total ads.
- *   REPORTING             5  Campaign done yang punya report / total done.
+ *   REPORTING             5  Campaign selesai (done) / total campaign.
  *   IMPROVEMENT           5  Reuse MultimediaKpiService::improvementResult.
  *
  * Seluruh komponen memakai periode KPI yang sama (month/year). Data kosong
@@ -148,13 +148,13 @@ class DigitalMarketingKpiService
         return round(min(100.0, $withCampaign / $totalAds * 100), 4);
     }
 
-    public static function reportingScore(int $doneTotal, int $withReport): ?float
+    public static function reportingScore(int $totalCampaign, int $done): ?float
     {
-        if ($doneTotal <= 0) {
+        if ($totalCampaign <= 0) {
             return null;
         }
 
-        return round(min(100.0, $withReport / $doneTotal * 100), 4);
+        return round(min(100.0, $done / $totalCampaign * 100), 4);
     }
 
     // ── Data operasional ───────────────────────────────────────────
@@ -237,19 +237,21 @@ class DigitalMarketingKpiService
         return ['total' => (int)$row->total, 'valid' => (int)$row->valid];
     }
 
-    /** Reporting: campaign selesai yang memiliki report dalam periode. */
+    /** Reporting: % campaign selesai (done) terhadap total campaign pada periode. */
     public function reportingCoverage(int $month, int $year): array
     {
-        $campaignModel = new ModelMarketingCampaign();
-        $done = $campaignModel->doneInPeriod($month, $year);
-        $withReport = 0;
-        foreach ($done as $c) {
-            if (trim((string)$c->report_url) !== '') {
-                $withReport++;
-            }
-        }
+        $db = $this->db;
+        $total = $db->table('marketing_campaigns')
+            ->where('period_month', $month)
+            ->where('period_year', $year)
+            ->countAllResults();
+        $done = $db->table('marketing_campaigns')
+            ->where('status', ModelMarketingCampaign::STATUS_DONE)
+            ->where('period_month', $month)
+            ->where('period_year', $year)
+            ->countAllResults();
 
-        return ['done' => count($done), 'with_report' => $withReport];
+        return ['total' => (int)$total, 'done' => (int)$done];
     }
 
     // ── Target ─────────────────────────────────────────────────────
@@ -397,13 +399,13 @@ class DigitalMarketingKpiService
 
             case 'REPORTING':
                 $rc = $this->reportingCoverage($month, $year);
-                $pct = $rc['done'] > 0 ? round($rc['with_report'] / $rc['done'] * 100, 2) : null;
+                $pct = $rc['total'] > 0 ? round($rc['done'] / $rc['total'] * 100, 2) : null;
                 return [
-                    'achievement' => self::reportingScore($rc['done'], $rc['with_report']),
+                    'achievement' => self::reportingScore($rc['total'], $rc['done']),
                     'target'      => 100,
                     'actual'      => $pct,
                     'shortfall'   => $pct === null ? null : round(max(100 - $pct, 0), 2),
-                    'source'      => 'Campaign selesai → Reporting',
+                    'source'      => 'Campaign selesai / total campaign',
                 ];
 
             case 'IMPROVEMENT':

@@ -1327,7 +1327,6 @@ class Marketing extends BaseController
         $bulan        = (int)$this->request->getPost('period_month');
         $tahun        = (int)$this->request->getPost('period_year');
         $status       = trim((string)$this->request->getPost('status') ?: \App\Models\ModelMarketingCampaign::STATUS_DRAFT);
-        $reportUrl    = trim((string)$this->request->getPost('report_url') ?: '');
 
         if (!$this->validPeriod($bulan, $tahun)) {
             return redirect()->back()->with('error', 'Periode campaign tidak valid.');
@@ -1359,7 +1358,6 @@ class Marketing extends BaseController
             'period_month'     => $bulan,
             'period_year'      => $tahun,
             'status'           => $status,
-            'report_url'       => $reportUrl !== '' ? $reportUrl : null,
             'pic'              => $this->currentAkun(),
             'created_by'       => $this->currentAkun(),
         ];

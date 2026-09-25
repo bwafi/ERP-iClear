@@ -15,7 +15,8 @@ use App\Services\Konten\MultimediaKpiService;
  *   - Conversion: target % di kpi_targets (default 30), lead 0 → null.
  *   - CPL: achievement target/actual cap 100 (lebih rendah lebih baik),
  *     average Datang & Closing; tanpa dividen ke nol → null.
- *   - Campaign Performance & Reporting: ratio cap 100; total 0 → null.
+ *   - Campaign Performance = ads ber-campaign valid / total ads; Reporting =
+ *     campaign Selesai (done) / total campaign. Ratio cap 100; total 0 → null.
  *   - Bobot: total 100.
  *   - Improvement: mekanisme Multimedia (di-reuse, bukan formula sendiri).
  */
@@ -143,12 +144,12 @@ final class DigitalMarketingKpiTest extends CIUnitTestCase
 
     // ── Reporting ──────────────────────────────────────────────────
 
-    public function testReportingNoDoneCampaignIsNull(): void
+    public function testReportingNoCampaignIsNull(): void
     {
         $this->assertNull(DigitalMarketingKpiService::reportingScore(0, 0));
     }
 
-    public function testReportingDoneCampaignsWithReports(): void
+    public function testReportingDoneVsTotalCampaign(): void
     {
         $this->assertSame(100.0, DigitalMarketingKpiService::reportingScore(3, 3));
         $this->assertSame(66.6667, DigitalMarketingKpiService::reportingScore(3, 2));

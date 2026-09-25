@@ -5,8 +5,8 @@
         <div class="text-white">
             <h4 class="fw-semibold mb-1 text-white">Campaign Digital Marketing</h4>
             <p class="text-white-50 mb-0 fs-3">
-                Master campaign per periode. Campaign Selesai (Done) yang diisi link Laporan
-                memenuhi KPI Reporting; pemakaian campaign wajib di Performa Ads.
+                Master campaign per periode. KPI Reporting = % Campaign Selesai (Done) dari total campaign;
+                pemakaian campaign wajib di Performa Ads.
             </p>
         </div>
         <nav aria-label="breadcrumb">
@@ -103,7 +103,6 @@
                             <th class="text-center">Status</th>
                             <th class="text-start">Periode Tanggal</th>
                             <th class="text-start">Deskripsi</th>
-                            <th class="text-start">Link Laporan Reporting</th>
                             <?php if ($canWrite) : ?>
                                 <th class="text-center pe-3">Aksi</th>
                             <?php endif; ?>
@@ -118,7 +117,6 @@
                                 'done'   => 'bg-success-subtle text-success border border-success-subtle',
                             ];
                             $sc = $statusClass[$row->status] ?? $statusClass['draft'];
-                            $hasReport = trim((string)$row->report_url) !== '';
                             ?>
                             <tr>
                                 <td class="ps-3 fw-semibold text-dark"><?= esc($row->nama) ?></td>
@@ -136,15 +134,6 @@
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-start text-muted"><?= esc($row->deskripsi) ?: '-' ?></td>
-                                <td class="text-start">
-                                    <?php if ($hasReport) : ?>
-                                        <a href="<?= esc($row->report_url) ?>" target="_blank" rel="noopener" class="text-decoration-none">
-                                            <iconify-icon icon="solar:link-circle-bold" class="me-1 align-text-bottom"></iconify-icon> Reporting
-                                        </a>
-                                    <?php else : ?>
-                                        <span class="text-muted">-</span>
-                                    <?php endif; ?>
-                                </td>
                                 <?php if ($canWrite) : ?>
                                     <td class="text-center text-nowrap pe-3">
                                         <button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1"
@@ -154,7 +143,6 @@
                                             data-tanggal-mulai="<?= esc((string)$row->tanggal_mulai, 'attr') ?>"
                                             data-tanggal-selesai="<?= esc((string)$row->tanggal_selesai, 'attr') ?>"
                                             data-status="<?= esc((string)$row->status, 'attr') ?>"
-                                            data-report="<?= esc((string)$row->report_url, 'attr') ?>"
                                             title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="post" action="<?= base_url('marketing/campaign/hapus') ?>" class="d-inline"
                                             onsubmit="return confirm('Hapus campaign ini?');">
@@ -214,11 +202,6 @@
                                 <input type="date" name="tanggal_selesai" id="cp_selesai" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-12">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Link Laporan Reporting</label>
-                                <input type="url" name="report_url" id="cp_report" class="form-control form-control-sm"
-                                    placeholder="https://drive.google.com/... (wajib jika status Selesai)">
-                            </div>
-                            <div class="col-md-12">
                                 <label class="form-label small text-muted mb-1 fw-semibold">Deskripsi</label>
                                 <textarea name="deskripsi" id="cp_deskripsi" class="form-control form-control-sm" rows="2"
                                     placeholder="Tujuan, segmentasi, dsb."></textarea>
@@ -255,7 +238,6 @@
             document.getElementById('cp_mulai').value = this.dataset.tanggalMulai || '';
             document.getElementById('cp_selesai').value = this.dataset.tanggalSelesai || '';
             document.getElementById('cp_status').value = this.dataset.status || 'draft';
-            document.getElementById('cp_report').value = this.dataset.report || '';
             var modal = new bootstrap.Modal(document.getElementById('modalCampaign'));
             modal.show();
         });
