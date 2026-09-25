@@ -598,6 +598,8 @@ $routes->post('api/kommo/webhook', 'KommoWebhook::handle');
 // permintaan wajib membawa signature HMAC.
 $routes->get('api/crm/lead-summary', 'CrmLeadBridge::leadSummary');
 $routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
+$routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
+$routes->get('api/crm/price-catalog', 'CrmLeadBridge::priceCatalog');
 
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);
