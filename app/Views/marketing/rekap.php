@@ -1,14 +1,14 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4"
-    style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div class="text-white">
-            <h4 class="fw-semibold mb-1 text-white">Rekap Marketing Harian</h4>
-            <small class="text-white-50">Input harian CS per cabang: Non Iklan, Iklan, Prospek, Datang &amp; Rate. Sumber utama KPI Marketing — terpisah dari data Kommo.</small>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Digital Marketing</span>
+            <h1 class="dm-page-title">Rekap Marketing Harian</h1>
+            <p class="dm-page-description">Input harian CS per cabang: Non Iklan, Iklan, Prospek, Datang &amp; Rate. Sumber utama KPI Marketing — terpisah dari data Kommo.</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('marketing') ?>">Marketing KPI</a></li>
-                <li class="breadcrumb-item active text-white">Rekap Harian</li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('marketing') ?>">Marketing KPI</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Rekap Harian</li>
             </ol>
         </nav>
     </div>
@@ -25,7 +25,7 @@
     </div>
 <?php endif; ?>
 
-<div class="card shadow-sm border-0 mb-3">
+<div class="card dm-filter-card shadow-sm border-0 mb-3">
     <div class="card-body">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-auto">

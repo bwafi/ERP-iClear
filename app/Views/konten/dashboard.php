@@ -1,20 +1,20 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4"
-    style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div class="text-white">
-            <h4 class="fw-semibold mb-1 text-white">Dashboard Multimedia &amp; Creative</h4>
-            <small class="text-white-50">Data operasional marketing (KPI Multimedia/Creative). Scope: <?= esc($scopeLabel) ?>.</small>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Digital Marketing</span>
+            <h1 class="dm-page-title">Dashboard Multimedia &amp; Creative</h1>
+            <p class="dm-page-description">Data operasional marketing (KPI Multimedia/Creative). Scope: <?= esc($scopeLabel) ?>.</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item active text-white">Digital Marketing</li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Digital Marketing</li>
             </ol>
         </nav>
     </div>
 </div>
 
-<div class="card shadow-sm border-0 mb-3">
+<div class="card dm-filter-card shadow-sm border-0 mb-3">
     <div class="card-body">
         <div class="d-flex flex-wrap gap-2 align-items-end justify-content-between">
             <form method="get" class="row g-2 align-items-end">
@@ -61,7 +61,7 @@
     ];
     foreach ($statCards as $c) : ?>
         <div class="col-6 col-md-4 col-xl-2">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card dm-metric-card border-0 shadow-sm h-100">
                 <div class="card-body p-3 d-flex align-items-center gap-3">
                     <div class="d-flex align-items-center justify-content-center rounded-3 text-white text-bg-<?= $c['color'] ?>" style="width:50px;height:50px;">
                         <iconify-icon icon="<?= $c['icon'] ?>" width="26" height="26"></iconify-icon>

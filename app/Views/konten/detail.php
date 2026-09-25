@@ -9,16 +9,16 @@ $statusBadge = [
 ];
 ?>
 <style>
-    :root {
-        --kn-border: #e5e7eb;
-        --kn-bg-subtle: #f8f9fb;
-        --kn-text-main: #1a1d23;
-        --kn-text-muted: #6b7280;
+    .dm-surface {
+        --kn-border: var(--bs-border-color);
+        --kn-bg-subtle: var(--bs-secondary-bg-subtle);
+        --kn-text-main: var(--bs-heading-color);
+        --kn-text-muted: var(--bs-body-color);
         --kn-radius: 12px;
     }
 
     .kn-card {
-        background: #fff;
+        background: var(--bs-body-bg);
         border: 1px solid var(--kn-border);
         border-radius: var(--kn-radius);
     }
@@ -116,12 +116,12 @@ $statusBadge = [
     </div>
 <?php endif; ?>
 
-<!-- Header -->
-<div class="kn-card p-4 mb-3">
+<div class="kn-card dm-detail-header p-4 mb-3">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
-        <div>
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Detail Konten</span>
             <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                <h4 class="fw-bold mb-0"><?= esc($content->judul) ?></h4>
+                <h1 class="dm-page-title"><?= esc($content->judul) ?></h1>
                 <span class="badge text-bg-<?= $statusBadge[$content->status] ?? 'secondary' ?>"><?= esc($content->status) ?></span>
                 <?php if ($overdue) : ?>
                     <span class="badge text-bg-danger">Terlambat</span>

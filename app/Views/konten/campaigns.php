@@ -1,19 +1,20 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div>
-            <h4 class="fw-semibold mb-0">Campaign Marketing</h4>
-            <small class="text-muted">KPI Multimedia — Support Campaign 10% (konten campaign dikerjakan tepat waktu vs target campaign).</small>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Multimedia</span>
+            <h1 class="dm-page-title">Campaign Marketing</h1>
+            <p class="dm-page-description">KPI Multimedia — Support Campaign 10% (konten campaign dikerjakan tepat waktu vs target campaign).</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('konten') ?>">Manajemen Konten</a></li>
-                <li class="breadcrumb-item active">Campaign</li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('konten') ?>">Manajemen Konten</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Campaign</li>
             </ol>
         </nav>
     </div>
 </div>
 
-<div class="card shadow-sm border-0 mb-4">
+<div class="card dm-filter-card shadow-sm border-0 mb-4">
     <div class="card-body">
         <form method="get" action="<?= base_url('konten/campaigns') ?>" class="row g-2 align-items-end">
             <div class="col-auto">

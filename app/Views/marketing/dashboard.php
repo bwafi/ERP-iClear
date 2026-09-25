@@ -1,14 +1,14 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4"
-    style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div class="text-white">
-            <h4 class="fw-semibold mb-1 text-white">Dashboard Digital Marketing</h4>
-            <small class="text-white-50">Kepala Divisi — seluruh actual dihitung otomatis dari data operasional (lead, biaya iklan, transaksi customer hasil lead).</small>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Digital Marketing</span>
+            <h1 class="dm-page-title">Dashboard Digital Marketing</h1>
+            <p class="dm-page-description">Kepala Divisi — seluruh actual dihitung otomatis dari data operasional (lead, biaya iklan, transaksi customer hasil lead).</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item active text-white">Dashboard Digital Marketing</li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Dashboard Digital Marketing</li>
             </ol>
         </nav>
     </div>
@@ -25,7 +25,7 @@
     </div>
 <?php endif; ?>
 
-<div class="card shadow-sm border-0 mb-3">
+<div class="card dm-filter-card shadow-sm border-0 mb-3">
     <div class="card-body">
         <div class="d-flex flex-wrap gap-2 align-items-end justify-content-between">
             <form method="get" class="row g-2 align-items-end">
@@ -146,7 +146,7 @@ foreach ($summary['items'] as $it) {
         $ico = $statIcons[$it['key']] ?? ['solar:widget-3-bold', 'primary'];
     ?>
         <div class="col-md-4 col-xl-2 px-1">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card dm-metric-card border-0 shadow-sm h-100">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <div class="d-flex align-items-center justify-content-center rounded-3 text-white text-bg-<?= $ico[1] ?>"
@@ -186,7 +186,7 @@ foreach ($summary['items'] as $it) {
             ];
             foreach ($rkCards as $c) :
             ?>
-                <div class="card border-0 shadow-sm flex-grow-1" style="min-width:130px;">
+                <div class="card dm-metric-card border-0 shadow-sm flex-grow-1" style="min-width:130px;">
                     <div class="card-body p-3 py-2 d-flex align-items-center gap-2">
                         <div class="d-flex align-items-center justify-content-center rounded-3 text-white text-bg-<?= $c[3] ?>" style="width:34px;height:34px;">
                             <iconify-icon icon="<?= $c[2] ?>" width="18" height="18"></iconify-icon>

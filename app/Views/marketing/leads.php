@@ -1,15 +1,15 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4"
-    style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div class="text-white">
-            <h4 class="fw-semibold mb-1 text-white">Detail Prospek</h4>
-            <small class="text-white-50">Prospek dihubungkan ke service — omset dihitung otomatis dari penjualan service. KPI Marketing tetap dari Rekap Harian CS.</small>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Digital Marketing</span>
+            <h1 class="dm-page-title">Detail Prospek</h1>
+            <p class="dm-page-description">Prospek dihubungkan ke service — omset dihitung otomatis dari penjualan service. KPI Marketing tetap dari Rekap Harian CS.</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('marketing') ?>">Marketing KPI</a></li>
-                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('marketing/rekap') ?>">Rekap Harian</a></li>
-                <li class="breadcrumb-item active text-white">Detail Prospek</li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('marketing') ?>">Marketing KPI</a></li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('marketing/rekap') ?>">Rekap Harian</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Detail Prospek</li>
             </ol>
         </nav>
     </div>
@@ -26,7 +26,7 @@
     </div>
 <?php endif; ?>
 
-<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+<div class="dm-filter-bar d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
     <form method="get" action="<?= base_url('marketing/leads') ?>" class="row g-2 align-items-end">
         <div class="col-auto">
             <label class="form-label mb-1 small text-muted">Bulan</label>

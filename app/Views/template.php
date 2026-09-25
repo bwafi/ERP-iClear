@@ -413,7 +413,20 @@
                     </script>
 
 
-                    <?= view($body); ?>
+                    <?php
+                    $viewName = $body ?? '';
+                    $isDigitalMarketingSurface = is_string($viewName) && (
+                        $viewName === 'marketing' || strpos($viewName, 'marketing/') === 0 ||
+                        $viewName === 'konten' || strpos($viewName, 'konten/') === 0
+                    );
+                    if ($isDigitalMarketingSurface) {
+                        echo '<div class="dm-surface">';
+                    }
+                    echo view($viewName);
+                    if ($isDigitalMarketingSurface) {
+                        echo '</div>';
+                    }
+                    ?>
 
                 </div>
             </div>

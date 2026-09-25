@@ -1,18 +1,14 @@
-<!-- Header Card -->
-<div class="card shadow-none position-relative overflow-hidden mb-4 border-0"
-    style="background: linear-gradient(120deg, #0f2b46 0%, #1d4e89 60%, #2a6dbb 100%);">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div class="text-white">
-            <h4 class="fw-semibold mb-1 text-white">Campaign Digital Marketing</h4>
-            <p class="text-white-50 mb-0 fs-3">
-                Master campaign per periode. KPI Reporting = % Campaign Selesai (Done) dari total campaign;
-                pemakaian campaign wajib di Performa Ads.
-            </p>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Digital Marketing</span>
+            <h1 class="dm-page-title">Campaign Digital Marketing</h1>
+            <p class="dm-page-description">Master campaign per periode. KPI Reporting = % Campaign Selesai (Done) dari total campaign; pemakaian campaign wajib di Performa Ads.</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-white-50 text-decoration-none" href="<?= base_url('marketing') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item active text-white" aria-current="page">Campaign</li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('marketing') ?>">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Campaign</li>
             </ol>
         </nav>
     </div>
@@ -39,7 +35,7 @@
 <?php endif; ?>
 
 <!-- Filter & Actions -->
-<div class="card shadow-sm border-0 mb-4">
+<div class="card dm-filter-card shadow-sm border-0 mb-4">
     <div class="card-body py-3">
         <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
             <form method="get" class="row g-2 align-items-end flex-grow-1">

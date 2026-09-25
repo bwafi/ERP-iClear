@@ -2,8 +2,10 @@
 /**
  * Smoke test render halaman KPI Digital Marketing (Marketing controller).
  *
- * Session palsu role Kepala Divisi (43) & Multimedia (44) → render dashboard,
- * leads, ads. Validasi penanda HTML. Tidak mengubah data.
+ * Session palsu role Kepala Divisi (43) → render dashboard, rekap, leads,
+ * ads_performa, kampanye, laporan. Memvalidasi halaman ter-render tanpa
+ * exception + penanda shell desain dm-surface (page-header/kicker/filter).
+ * Tidak mengubah data produksi.
  *
  * Usage: php74 app/Scripts/marketing_smoke.php
  */
@@ -54,32 +56,55 @@ try {
     $ctrl = new \App\Controllers\Marketing();
     $ctrl->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
 
+    // ── Dashboard ────────────────────────────────────────────────
     $html = (string)$ctrl->index();
-    ok('marketing dashboard render — judul Dashboard Digital Marketing', strpos($html, 'Dashboard Digital Marketing') !== false);
-    ok('marketing dashboard render — tabel 7 KPI', strpos($html, 'Ringkasan KPI Digital Marketing') !== false);
-    ok('marketing dashboard render — item Lead/Customer/Conversion', strpos($html, '>Lead<') !== false && strpos($html, '>Customer<') !== false && strpos($html, '>Conversion<') !== false);
-    ok('marketing dashboard render — item CPL/Omzet/ROAS', strpos($html, 'Cost Per Lead') !== false && strpos($html, 'Omzet Marketing') !== false && strpos($html, 'ROI/ROAS') !== false);
-    ok('marketing dashboard render — Pertumbuhan Channel (reuse)', strpos($html, 'Pertumbuhan Channel') !== false);
-    ok('marketing dashboard render — link Lead & Biaya Iklan', strpos($html, 'marketing/leads') !== false && strpos($html, 'marketing/ads') !== false);
+    ok('dashboard render — wrapper dm-surface aktif', strpos($html, 'dm-surface') !== false);
+    ok('dashboard render — judul Dashboard Digital Marketing', strpos($html, 'Dashboard Digital Marketing') !== false);
+    ok('dashboard render — page-header + kicker', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-page-kicker') !== false);
+    ok('dashboard render — filter-card', strpos($html, 'dm-filter-card') !== false);
+    ok('dashboard render — metric card', strpos($html, 'dm-metric-card') !== false);
+    ok('dashboard render — tabel 7 KPI (Ringkasan)', strpos($html, 'Ringkasan KPI Digital Marketing') !== false);
+    ok('dashboard render — link Lead & Campaign & Ads', strpos($html, 'marketing/leads') !== false && strpos($html, 'marketing/campaign') !== false && strpos($html, 'marketing/ads_performa') !== false);
 
-    $html = (string)$ctrl->leads();
-    ok('leads render — judul Lead Marketing', strpos($html, 'Lead Marketing') !== false);
-    ok('leads render — form tambah lead (nama/no_hp/source/ads)', strpos($html, 'name="nama"') !== false && strpos($html, 'name="no_hp"') !== false && strpos($html, 'name="ads_organic"') !== false);
-    ok('leads render — input tanggal tambah lead', strpos($html, 'name="tanggal"') !== false);
-
+    // ── Rekap Harian ─────────────────────────────────────────────
     $html = (string)$ctrl->rekap();
+    ok('rekap render — page-header + filter-card', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-card') !== false);
     ok('rekap render — judul Rekap Marketing Harian', strpos($html, 'Rekap Marketing Harian') !== false);
     ok('rekap render — form tanggal & cabang', strpos($html, 'name="tanggal"') !== false && strpos($html, 'name="unit_id"') !== false);
-    ok('rekap render — default platform WhatsApp/Instagram/TikTok', strpos($html, 'WhatsApp') !== false && strpos($html, 'Instagram') !== false && strpos($html, 'TikTok') !== false);
     ok('rekap render — kolom Non Iklan/Iklan/Prospek/Datang', strpos($html, 'Non Iklan') !== false && strpos($html, 'Prospek') !== false && strpos($html, 'Datang') !== false);
     ok('rekap render — simpan memakai POST rekap/simpan', strpos($html, 'marketing/rekap/simpan') !== false);
-    ok('rekap render — daftar rekap bulanan tampil', strpos($html, 'Daftar Rekap Marketing') !== false && strpos($html, 'name="bulan"') !== false);
+    ok('rekap render — daftar rekap bulanan tampil', strpos($html, 'Daftar Rekap Marketing') !== false);
 
-    $html = (string)$ctrl->ads();
-    ok('ads render — judul Biaya Iklan', strpos($html, 'Biaya Iklan (Ads Cost)') !== false);
-    ok('ads render — form tambah (channel/campaign/amount)', strpos($html, 'name="campaign"') !== false && strpos($html, 'name="amount"') !== false);
+    // ── Detail Prospek (leads) ───────────────────────────────────
+    $html = (string)$ctrl->leads();
+    ok('leads render — page-header + filter-bar', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-bar') !== false);
+    ok('leads render — judul Detail Prospek', strpos($html, 'Detail Prospek') !== false);
+    ok('leads render — tabel Data Prospek', strpos($html, 'Data Prospek') !== false);
+    ok('leads render — tombol Tambah Prospek (role 43)', strpos($html, 'Tambah Prospek') !== false);
 
-    // Role non-marketing (mis. 48 Talent) tidak bisa lihat.
+    // ── Performa Ads ─────────────────────────────────────────────
+    $html = (string)$ctrl->ads_performa();
+    ok('ads_performa render — page-header + filter-card', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-card') !== false);
+    ok('ads_performa render — judul Performa Ads (Iklan)', strpos($html, 'Performa Ads (Iklan)') !== false);
+    ok('ads_performa render — tabel Data Performa Ads', strpos($html, 'Data Performa Ads') !== false);
+    ok('ads_performa render — tombol Lihat Campaign', strpos($html, 'Lihat Campaign') !== false);
+    ok('ads_performa render — simpan memakai POST ads_performa/simpan', strpos($html, 'marketing/ads_performa/simpan') !== false);
+
+    // ── Campaign ─────────────────────────────────────────────────
+    $html = (string)$ctrl->campaign();
+    ok('campaign render — page-header + filter-card', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-card') !== false);
+    ok('campaign render — judul Campaign Digital Marketing', strpos($html, 'Campaign Digital Marketing') !== false);
+    ok('campaign render — daftar campaign + simpan POST', strpos($html, 'Daftar Campaign Digital Marketing') !== false && strpos($html, 'marketing/campaign/simpan') !== false);
+
+    // ── Laporan ──────────────────────────────────────────────────
+    $html = (string)$ctrl->laporan();
+    ok('laporan render — page-header + filter-card', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-card') !== false);
+    ok('laporan render — judul Laporan Digital Marketing', strpos($html, 'Laporan Digital Marketing') !== false);
+    $laporanAdaData = strpos($html, 'Performa Harian') !== false && strpos($html, 'Insight &amp; Evaluasi') !== false;
+    $laporanEmpty = strpos($html, 'Belum ada data Ads') !== false;
+    ok('laporan render — isi (performa harian & insight / empty state)', $laporanAdaData || $laporanEmpty, $laporanAdaData ? 'ada-data' : 'empty');
+
+    // ── Role 48 (Talent) tidak berhak ─────────────────────────────
     $session->set('ID_JABATAN', 48);
     $ctrl2 = new \App\Controllers\Marketing();
     $ctrl2->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());

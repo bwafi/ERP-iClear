@@ -1,25 +1,26 @@
 <style>
     #talentSelect + .select2-container,
     #creativeSelect + .select2-container { width: 100% !important; }
-    .select2-container .select2-selection--multiple { min-height: 44px; border: 1px solid #ced4da; border-radius: 8px; padding: 3px 6px; }
-    .select2-container .select2-selection__choice { border-radius: 20px; padding: 2px 10px; font-weight: 500; background: #cfe2ff; border-color: #cfe2ff; color: #084298; }
+    .select2-container .select2-selection--multiple { min-height: 44px; border: 1px solid var(--bs-border-color); border-radius: 8px; padding: 3px 6px; }
+    .select2-container .select2-selection__choice { border-radius: 20px; padding: 2px 10px; font-weight: 500; background: var(--bs-primary-bg-subtle); border-color: var(--bs-primary-border-subtle); color: var(--bs-primary-text-emphasis); }
 </style>
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div>
-            <h4 class="fw-semibold mb-0"><?= $content ? 'Edit Konten' : 'Tambah Konten' ?></h4>
-            <small class="text-muted">KPI Multimedia/Creative — satu content satu pekerjaan/karya.</small>
+<div class="card dm-page-header shadow-none border-0 mb-4">
+    <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div class="dm-page-heading">
+            <span class="dm-page-kicker">Multimedia</span>
+            <h1 class="dm-page-title"><?= $content ? 'Edit Konten' : 'Tambah Konten' ?></h1>
+            <p class="dm-page-description">KPI Multimedia/Creative — satu content satu pekerjaan/karya.</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('konten') ?>">Manajemen Konten</a></li>
-                <li class="breadcrumb-item active"><?= $content ? 'Edit' : 'Tambah' ?></li>
+                <li class="breadcrumb-item"><a class="text-decoration-none" href="<?= base_url('konten') ?>">Manajemen Konten</a></li>
+                <li class="breadcrumb-item active" aria-current="page"><?= $content ? 'Edit' : 'Tambah' ?></li>
             </ol>
         </nav>
     </div>
 </div>
 
-<div class="card shadow-sm border-0">
+<div class="card dm-form-card shadow-sm border-0">
     <div class="card-body">
         <form method="post" action="<?= base_url('konten/simpan') ?>">
             <input type="hidden" name="id" value="<?= $content->id ?? 0 ?>">
