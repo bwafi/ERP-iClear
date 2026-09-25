@@ -518,6 +518,8 @@ class TutupKasir extends BaseController
             'bestsellerproduct' => $bestsellerproduct,
             'omset_bulan'       => $omset_bulan,
             'pelanggan_bulan'   => $pelanggan_bulan,
+            'countService'      => $countService,
+            'countSales'        => $countSales,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
             'omset_rata_rata'   => $omset_rata_rata,
