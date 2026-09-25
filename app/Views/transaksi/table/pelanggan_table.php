@@ -15,18 +15,120 @@
         width: auto;
         transform: translateY(-20%);
     }
+
+    /* Panel status pemilihan pelanggan */
+    .service-customer-panel {
+        background: var(--bs-secondary-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 12px;
+    }
+
+    .service-customer-panel .btn {
+        white-space: nowrap;
+    }
+
+    .service-customer-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bs-primary);
+        color: #fff;
+        font-weight: 600;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .service-customer-empty,
+    .service-customer-fill {
+        display: flex;
+    }
+
+    /* Data otomatis dari pelanggan terpilih */
+    .service-auto {
+        background-color: var(--bs-success-bg-subtle);
+        color: var(--bs-body-color);
+    }
+
+    .service-select-auto+.select2-container .select2-selection--single {
+        background-color: var(--bs-success-bg-subtle);
+    }
+
+    .service-modal-section {
+        font-size: .76rem;
+        font-weight: 700;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+
+    .service-modal-section i {
+        font-size: .85rem;
+    }
 </style>
 
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-    <span class="text-body d-inline-flex align-items-center gap-2">
-        <i class="bi bi-person-badge"></i>
-        Diinput oleh: <strong><?= $akun->NAMA_AKUN ?></strong>
-    </span>
-    <button type="button" class="btn btn-warning d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#pelangganModal">
-        <iconify-icon icon="mdi:account" width="20" height="20"></iconify-icon>
-        Input Data Pelanggan
-    </button>
+<div class="service-customer-panel p-3 mb-4">
     <input type="hidden" name="id_akun" value="<?= $akun->ID_AKUN ?>">
+
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="text-body d-inline-flex align-items-center gap-2">
+            <i class="bi bi-person-badge"></i>
+            Diinput oleh: <strong><?= $akun->NAMA_AKUN ?></strong>
+        </span>
+    </div>
+
+    <hr class="my-3 opacity-25">
+
+    <div class="d-flex flex-wrap align-items-center gap-3">
+        <!-- Empty state -->
+        <div class="service-customer-empty flex-wrap align-items-center gap-3 flex-grow-1 <?= !empty(@$old_service_pelanggan->nama) ? 'd-none' : '' ?>" id="customer-empty">
+            <span class="service-customer-avatar bg-secondary-subtle text-secondary border">
+                <i class="bi bi-person fs-4"></i>
+            </span>
+            <div class="flex-grow-1" style="min-width: 200px;">
+                <div class="fw-semibold text-body">Pilih pelanggan untuk memulai</div>
+                <div class="text-muted fs-3">Nama, No HP & domisili akan terisi otomatis.</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#pelangganModal">
+                    <i class="bi bi-search"></i> Pilih Pelanggan
+                </button>
+                <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalTambahPelanggan">
+                    <i class="bi bi-person-plus"></i> Tambah Baru
+                </button>
+            </div>
+        </div>
+
+        <!-- Selected state -->
+        <div class="service-customer-fill d-none flex-wrap align-items-center gap-3 flex-grow-1 <?= !empty(@$old_service_pelanggan->nama) ? '' : 'd-none' ?>" id="customer-fill">
+            <span class="service-customer-avatar" id="customer-initial">-</span>
+            <div class="flex-grow-1" style="min-width: 200px;">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="fw-semibold text-body" id="customer-nama">-</span>
+                    <span class="badge text-bg-success d-inline-flex align-items-center gap-1 <?= empty($idservice) ? 'd-none' : '' ?>" id="customer-ticket-badge">
+                        <i class="bi bi-check-circle-fill"></i> Terhubung ke service
+                    </span>
+                    <span class="badge text-bg-secondary d-inline-flex align-items-center gap-1 <?= !empty($idservice) ? 'd-none' : '' ?>" id="customer-draft-badge">
+                        <i class="bi bi-pencil"></i> Belum disimpan
+                    </span>
+                </div>
+                <div class="text-muted fs-3 d-flex flex-wrap align-items-center gap-2 mt-1">
+                    <span class="d-inline-flex align-items-center gap-1"><i class="bi bi-telephone-fill"></i> <span id="customer-hp">-</span></span>
+                    <span class="d-inline-flex align-items-center gap-1"><i class="bi bi-geo-alt-fill"></i> <span id="customer-domisili">-</span></span>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#pelangganModal">
+                    <i class="bi bi-arrow-repeat"></i> Ganti
+                </button>
+                <button type="button" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalTambahPelanggan">
+                    <i class="bi bi-person-plus"></i> Tambah Baru
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <form action="<?php echo base_url('insert/pelanggan_service') ?>" enctype="multipart/form-data" method="post">
@@ -50,18 +152,18 @@
             <input type="text" value="<?php echo @$old_service_pelanggan->dp_bayar ?>" class="form-control" name="dp_bayar">
         </div>
 
-        <!-- Pelanggan -->
+        <!-- Pelanggan (otomatis dari pelanggan terpilih) -->
         <div class="col-md-4">
-            <label class="form-label fw-semibold">Nama Pelanggan</label>
-            <input type="text" class="form-control" id="nama_pelanggan" value="<?php echo @$old_service_pelanggan->nama ?>" readonly>
+            <label class="form-label fw-semibold d-inline-flex align-items-center gap-1">Nama Pelanggan <i class="bi bi-magic fs-3 text-success" title="Terisi otomatis dari pelanggan terpilih"></i></label>
+            <input type="text" class="form-control service-auto" id="nama_pelanggan" value="<?php echo @$old_service_pelanggan->nama ?>" readonly>
         </div>
         <div class="col-md-4">
             <label class="form-label fw-semibold">No HP</label>
-            <input type="text" class="form-control" value="<?php echo @$old_service_pelanggan->no_hp ?>" name="no_hp" id="no_hp" readonly>
+            <input type="text" class="form-control service-auto" value="<?php echo @$old_service_pelanggan->no_hp ?>" name="no_hp" id="no_hp" readonly>
         </div>
         <div class="col-md-4">
             <label class="form-label fw-semibold">Domisili Provinsi</label>
-            <select class="form-control form-select js-domisili" id="form_provinsi" name="domisili_provinsi" disabled>
+            <select class="form-control form-select js-domisili service-select-auto" id="form_provinsi" name="domisili_provinsi" disabled>
                 <option value="">-- Pilih / Cari Provinsi --</option>
                 <?php foreach ($provinsi as $p): ?>
                     <option value="<?= esc($p->name) ?>" <?= isset($old_service_pelanggan) && $old_service_pelanggan && $old_service_pelanggan->provinsi == $p->name ? 'selected' : '' ?>>
@@ -72,7 +174,7 @@
         </div>
         <div class="col-md-6">
             <label class="form-label fw-semibold">Domisili Kabupaten</label>
-            <select class="form-control form-select js-domisili" id="form_kabupaten" name="domisili_kabupaten" disabled>
+            <select class="form-control form-select js-domisili service-select-auto" id="form_kabupaten" name="domisili_kabupaten" disabled>
                 <option value="">-- Pilih / Cari Kabupaten --</option>
                 <?php if (isset($old_service_pelanggan) && $old_service_pelanggan && @$old_service_pelanggan->kabupaten): ?>
                     <option value="<?= esc($old_service_pelanggan->kabupaten) ?>" selected><?= esc($old_service_pelanggan->kabupaten) ?></option>
@@ -81,7 +183,7 @@
         </div>
         <div class="col-md-6">
             <label class="form-label fw-semibold">Domisili Kecamatan</label>
-            <select class="form-control form-select js-domisili" id="form_kecamatan" name="domisili_kecamatan" disabled>
+            <select class="form-control form-select js-domisili service-select-auto" id="form_kecamatan" name="domisili_kecamatan" disabled>
                 <option value="">-- Pilih / Cari Kecamatan --</option>
                 <?php if (isset($old_service_pelanggan) && $old_service_pelanggan && @$old_service_pelanggan->kecamatan): ?>
                     <option value="<?= esc($old_service_pelanggan->kecamatan) ?>" selected><?= esc($old_service_pelanggan->kecamatan) ?></option>
@@ -150,24 +252,41 @@
     </div>
 
     <div class="modal fade" id="pelangganModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Cari Data Pelanggan</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="bg-primary-subtle text-primary rounded-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                            <iconify-icon icon="solar:user-search-bold" width="20" height="20"></iconify-icon>
+                        </span>
+                        <div>
+                            <h5 class="modal-title">Cari Data Pelanggan</h5>
+                            <p class="text-muted fs-3 mb-0">Ketik nama atau No HP pelanggan.</p>
+                        </div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Ketik Nama atau No HP:</label>
-                        <select id="pelanggan-select" name="selectedidpelanggan" class="form-control select2-ajax" style="width: 100%;">
-                            <option value="">Cari pelanggan...</option>
-                        </select>
-                    </div>
-
-                    <div style="display: flex; justify-content: right; gap: 10px; margin-top: 20px;">
-                        <button id="btnPilihPelanggan" type="button" class="btn btn-primary">Pilih</button>
-                        <button id="btnTambahPelanggan" type="button" class="btn btn-success">Tambah Baru</button>
-                    </div>
+                <div class="modal-body pt-3 pb-2">
+                    <label class="form-label fw-semibold d-flex align-items-center gap-1">
+                        Nama / No HP <span class="badge text-bg-light border fw-normal">select2: ketik untuk cari</span>
+                    </label>
+                    <select id="pelanggan-select" name="selectedidpelanggan" class="form-control select2-ajax" style="width: 100%;">
+                        <option value="">Cari pelanggan...</option>
+                    </select>
+                    <p class="text-muted fs-3 mt-2 mb-0 d-flex align-items-center gap-1">
+                        <i class="bi bi-info-circle"></i>
+                        Pelanggan baru dapat ditambahkan lewat tombol "Tambah Baru".
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button id="btnTambahPelanggan" type="button" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
+                        <iconify-icon icon="solar:user-plus-rounded-bold" width="18" height="18"></iconify-icon>
+                        Tambah Baru
+                    </button>
+                    <button id="btnPilihPelanggan" type="button" class="btn btn-primary d-inline-flex align-items-center gap-2">
+                        <iconify-icon icon="solar:check-circle-bold" width="18" height="18"></iconify-icon>
+                        Pilih
+                    </button>
                 </div>
             </div>
         </div>
@@ -175,48 +294,69 @@
 </form>
 
 <div class="modal fade" id="modalTambahPelanggan" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form id="formTambahPelanggan">
-                <div class="modal-header">
-                    <h5 class="modal-title">Tambah Pelanggan Baru</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="bg-success-subtle text-success rounded-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <iconify-icon icon="solar:user-plus-rounded-bold" width="20" height="20"></iconify-icon>
+                    </span>
+                    <div>
+                        <h5 class="modal-title">Tambah Pelanggan Baru</h5>
+                        <p class="text-muted fs-3 mb-0">Data domisili wajib dilengkapi.</p>
+                    </div>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="nama" class="form-label">Nama</label>
-                        <input type="text" id="nama" name="nama" class="form-control" required />
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formTambahPelanggan">
+                <div class="modal-body pt-3">
+                    <div class="service-modal-section d-flex align-items-center gap-1 mb-2">
+                        <i class="bi bi-person-vcard"></i> Kontak
                     </div>
-                    <div class="mb-3">
-                        <label for="no_hp" class="form-label">No HP</label>
-                        <input type="text" id="no_hp" name="no_hp" class="form-control" required />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="nama" class="form-label fw-semibold">Nama</label>
+                            <input type="text" id="nama" name="nama" class="form-control" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label for="no_hp" class="form-label fw-semibold">No HP</label>
+                            <input type="text" id="no_hp" name="no_hp" class="form-control" required />
+                        </div>
                     </div>
-
-                    <div class="mb-3">
-                        <label for="domisili_provinsi" class="form-label">Domisili Provinsi</label>
-                        <select id="domisili_provinsi" name="provinsi" class="form-select js-domisili" required>
-                            <option value="">-- Pilih / Cari Provinsi --</option>
-                            <?php foreach ($provinsi as $p): ?>
-                                <option value="<?= esc($p->name) ?>"><?= esc($p->name) ?></option>
-                            <?php endforeach ?>
-                        </select>
+                    <hr class="my-3 opacity-25">
+                    <div class="service-modal-section d-flex align-items-center gap-1 mb-2">
+                        <i class="bi bi-geo-alt"></i> Domisili
                     </div>
-                    <div class="mb-3">
-                        <label for="domisili_kabupaten" class="form-label">Domisili Kabupaten</label>
-                        <select id="domisili_kabupaten" name="kabupaten" class="form-select js-domisili" required>
-                            <option value="">-- Pilih / Cari Kabupaten --</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="domisili_kecamatan" class="form-label">Domisili Kecamatan</label>
-                        <select id="domisili_kecamatan" name="kecamatan" class="form-select js-domisili" required>
-                            <option value="">-- Pilih / Cari Kecamatan --</option>
-                        </select>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="domisili_provinsi" class="form-label fw-semibold">Provinsi</label>
+                            <select id="domisili_provinsi" name="provinsi" class="form-select js-domisili" required>
+                                <option value="">-- Pilih / Cari Provinsi --</option>
+                                <?php foreach ($provinsi as $p): ?>
+                                    <option value="<?= esc($p->name) ?>"><?= esc($p->name) ?></option>
+                                <?php endforeach ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="domisili_kabupaten" class="form-label fw-semibold">Kabupaten</label>
+                            <select id="domisili_kabupaten" name="kabupaten" class="form-select js-domisili" required>
+                                <option value="">-- Pilih / Cari Kabupaten --</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="domisili_kecamatan" class="form-label fw-semibold">Kecamatan</label>
+                            <select id="domisili_kecamatan" name="kecamatan" class="form-select js-domisili" required>
+                                <option value="">-- Pilih / Cari Kecamatan --</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">Simpan Pelanggan</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2">
+                        <iconify-icon icon="solar:check-circle-bold" width="18" height="18"></iconify-icon>
+                        Simpan Pelanggan
+                    </button>
                 </div>
             </form>
         </div>
@@ -260,7 +400,32 @@
             $('#form_provinsi').val(d.provinsi || '').trigger('change');
             $('#form_kabupaten').val(d.kabupaten || '').trigger('change');
             $('#form_kecamatan').val(d.kecamatan || '').trigger('change');
+            updateCustomerPanel();
         }
+
+        window.updateCustomerPanel = function () {
+            const awal = $('#customer-empty');
+            const terisi = $('#customer-fill');
+            const nama = (document.getElementById('nama_pelanggan').value || '').trim();
+
+            if (awal.length && terisi.length) {
+                const has = !!nama;
+                awal.toggleClass('d-none', has);
+                terisi.toggleClass('d-none', !has);
+            }
+
+            if (nama) {
+                $('#customer-initial').text(nama.charAt(0).toUpperCase());
+                $('#customer-nama').text(nama);
+                $('#customer-hp').text(document.getElementById('no_hp').value || '-');
+
+                const prov = $('#form_provinsi').val() || '';
+                const kab = $('#form_kabupaten').val() || '';
+                const kec = $('#form_kecamatan').val() || '';
+                const dom = [prov, kab, kec].filter(Boolean).join(', ');
+                $('#customer-domisili').text(dom || '-');
+            }
+        };
 
         function domisiliFromOption(selectedData, selectedOption) {
             let d = selectedData ? {
@@ -497,6 +662,14 @@
                 });
             }
         });
+
+        // Panel status mengikuti perubahan domisili (otomatis dari pelanggan)
+        $('#form_provinsi, #form_kabupaten, #form_kecamatan').on('change', function() {
+            if (window.updateCustomerPanel) window.updateCustomerPanel();
+        });
+
+        // Saat edit pelanggan lama, garisbawahi status sudah terhubung
+        if (window.updateCustomerPanel) window.updateCustomerPanel();
     });
 </script>
 
@@ -521,7 +694,7 @@
 
             if (!idPela || idPela.trim() === '') {
                 e.preventDefault(); // cegah form submit
-                alert('Silakan pilih pelanggan terlebih dahulu melalui tombol input data pelanggan!');
+                alert('Silakan pilih pelanggan terlebih dahulu melalui tombol "Pilih Pelanggan"!');
                 return false;
             }
         });
