@@ -600,6 +600,7 @@ $routes->get('api/crm/lead-summary', 'CrmLeadBridge::leadSummary');
 $routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
 $routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
 $routes->get('api/crm/price-catalog', 'CrmLeadBridge::priceCatalog');
+$routes->get('api/crm/service-summary', 'CrmLeadBridge::serviceSummary');
 
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);
