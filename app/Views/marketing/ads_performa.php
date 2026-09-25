@@ -61,9 +61,9 @@
                 <div class="col-md-3">
                     <label class="form-label small text-muted mb-1 fw-semibold">Campaign</label>
                     <select name="campaign" class="form-select form-select-sm">
-                        <option value="">Semua Campaign</option>
+                        <option value="0">Semua Campaign</option>
                         <?php foreach ($campaigns as $cn) : ?>
-                            <option value="<?= esc($cn) ?>" <?= $kampanye === $cn ? 'selected' : '' ?>><?= esc($cn) ?></option>
+                            <option value="<?= (int)$cn['id'] ?>" <?= $kampanye == (int)$cn['id'] ? 'selected' : '' ?>><?= esc($cn['nama']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -191,6 +191,7 @@
                             <th class="text-end">Impression</th>
                             <th class="text-end">Klik</th>
                             <th class="text-end">Hasil</th>
+                            <th class="text-end">Kualitas Leads</th>
                             <th class="text-start">Catatan</th>
                             <?php if ($canWrite) : ?>
                                 <th class="text-center pe-3">Aksi</th>
@@ -248,7 +249,7 @@
                                         <span class="badge bg-secondary-subtle text-secondary px-2">Umum</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="fw-semibold text-dark text-start"><?= esc($row->campaign) ?></td>
+                                <td class="fw-semibold text-dark text-start"><?= esc($row->campaign_name ?? $row->campaign ?? '-') ?></td>
                                 <td class="text-end"><?= $row->daily_budget !== null ? 'Rp ' . number_format($row->daily_budget, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end fw-semibold text-primary"><?= $row->amount !== null ? 'Rp ' . number_format($row->amount, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end"><?= $row->ppn !== null ? number_format($row->ppn, 1, ',', '.') . '%' : '-' ?></td>
@@ -258,6 +259,13 @@
                                 <td class="text-end"><?= $row->impression !== null ? number_format($row->impression, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end"><?= $row->klik !== null ? number_format($row->klik, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end fw-semibold text-success"><?= $row->hasil !== null ? number_format($row->hasil, 0, ',', '.') : '-' ?></td>
+                                <td class="text-end">
+                                    <?php if ($row->qualified !== null) : ?>
+                                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><?= number_format($row->qualified, 0, ',', '.') ?></span>
+                                    <?php else : ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-start">
                                     <?php if (!empty($row->note)) : ?>
                                         <span class="text-muted catatan-cell" data-bs-toggle="tooltip" title="<?= esc($row->note, 'attr') ?>"><?= esc($row->note) ?></span>
@@ -272,7 +280,7 @@
                                             data-tanggal="<?= esc($row->tanggal) ?>"
                                             data-unit="<?= (int)$row->unit_id ?>"
                                             data-channels="<?= esc($row->channel_ids ?: json_encode([$row->channel_id]), 'attr') ?>"
-                                            data-campaign="<?= esc($row->campaign, 'attr') ?>"
+                                            data-campaign="<?= (int)$row->campaign_id ?? 0 ?>"
                                             data-budget="<?= esc((string)($row->daily_budget ?? ''), 'attr') ?>"
                                             data-amount="<?= esc((string)($row->amount ?? ''), 'attr') ?>"
                                             data-ppn="<?= esc((string)($row->ppn ?? ''), 'attr') ?>"
@@ -281,6 +289,7 @@
                                             data-impression="<?= esc((string)($row->impression ?? ''), 'attr') ?>"
                                             data-klik="<?= esc((string)($row->klik ?? ''), 'attr') ?>"
                                             data-hasil="<?= esc((string)($row->hasil ?? ''), 'attr') ?>"
+                                            data-qualified="<?= esc((string)($row->qualified ?? ''), 'attr') ?>"
                                             data-note="<?= esc((string)$row->note ?? '', 'attr') ?>"
                                             title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="post" action="<?= base_url('marketing/ads_performa/hapus') ?>" class="d-inline"
@@ -344,8 +353,16 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1 fw-semibold">Campaign</label>
-                                <input type="text" name="campaign" id="pf_campaign" class="form-control form-control-sm"
-                                    placeholder="mis. Promo Ramadhan" required>
+                                <select name="campaign_id" id="pf_campaign" class="form-select form-select-sm" required>
+                                    <option value="">— Pilih Campaign —</option>
+                                    <?php foreach ($campaigns as $cn) : ?>
+                                        <option value="<?= (int)$cn['id'] ?>"><?= esc($cn['nama']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <small class="text-muted fs-1">
+                                    Campaign belum ada? Tambah di
+                                    <a href="<?= base_url('marketing/campaign') ?>" target="_blank">Campaign Digital Marketing</a>.
+                                </small>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1 fw-semibold">Daily Budget (Rp)</label>
@@ -385,6 +402,11 @@
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1 fw-semibold">Hasil</label>
                                 <input type="text" name="hasil" id="pf_hasil" class="form-control form-control-sm angka-bulat"
+                                    placeholder="0">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Kualitas Leads (Qualified)</label>
+                                <input type="text" name="qualified" id="pf_qualified" class="form-control form-control-sm angka-bulat"
                                     placeholder="0">
                             </div>
                             <div class="col-md-12">
@@ -472,6 +494,7 @@
             document.getElementById('pf_impression').value = this.dataset.impression || '';
             document.getElementById('pf_klik').value = this.dataset.klik || '';
             document.getElementById('pf_hasil').value = this.dataset.hasil || '';
+            document.getElementById('pf_qualified').value = this.dataset.qualified || '';
             document.getElementById('pf_note').value = this.dataset.note || '';
             syncPfPeriod();
             var modal = new bootstrap.Modal(document.getElementById('modalPerformaAds'));

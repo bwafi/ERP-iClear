@@ -66,9 +66,9 @@ $hasDaily = !empty($tglKeys);
                 <div class="col-auto">
                     <label class="form-label mb-1 small text-muted">Campaign</label>
                     <select name="campaign" class="form-select form-select-sm">
-                        <option value="">Semua Campaign</option>
+                        <option value="0">Semua Campaign</option>
                         <?php foreach ($campaigns as $c) : ?>
-                            <option value="<?= esc($c) ?>" <?= $kampanye === $c ? 'selected' : '' ?>><?= esc($c) ?></option>
+                            <option value="<?= (int)$c['id'] ?>" <?= $kampanye == (int)$c['id'] ? 'selected' : '' ?>><?= esc($c['nama']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

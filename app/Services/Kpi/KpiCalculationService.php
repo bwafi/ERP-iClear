@@ -7,6 +7,7 @@ use App\Models\ModelKpiWeight;
 use App\Services\Konten\ContentKpiService;
 use App\Services\Konten\MultimediaKpiService;
 use App\Services\Kpi\AttendanceAggregationService;
+use App\Services\Marketing\DigitalMarketingKpiService;
 use App\Services\Marketing\MarketingKpiService;
 
 /**
@@ -29,6 +30,7 @@ class KpiCalculationService
     protected $calculators = [];
     protected $attendanceAggregationService;
     protected $marketingService;
+    protected $digitalMarketingService;
 
     public function __construct()
     {
@@ -74,6 +76,7 @@ class KpiCalculationService
 
         $items = [];
         $omzetInfo = null; // cache ringkasan omzet SPV (target/actual per cabang) utk display
+        $digitalData = null; // cache data target/actual KPI Digital Marketing (jabatan 43)
         foreach ($weights as $w) {
             $component = $this->componentModel->where('id', $w->kpi_component_id)->first();
             if (!$component || !(int)$component->is_active) {
@@ -92,13 +95,19 @@ class KpiCalculationService
                     $targetContext,
                     $date
                 );
-            // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): marketing KPI (Lead/Customer/CPL/Omzet/ROAS/Channel) ====
-            } elseif ($positionId === 43 && in_array($component->code, MarketingKpiService::COMPONENT_CODES, true)) {
-                $achievement = $this->marketingService()->scoreByCode(
+            // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): 7 KPI Digital Marketing
+            // (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/CAMPAIGN_PERFORMANCE/REPORTING/IMPROVEMENT) ====
+            } elseif ($positionId === 43 && in_array($component->code, DigitalMarketingKpiService::CODES, true)) {
+                $digitalData = $this->digitalMarketingService()->componentData(
                     $component->code,
+                    (int)$employeeId,
+                    (int)$unitId,
                     (int)$month,
-                    (int)$year
+                    (int)$year,
+                    $targetContext,
+                    $date
                 );
+                $achievement = $digitalData['achievement'];
             // ==== MULTIMEDIA / CREATIVE (jabatan 44): 6 KPI Owner (MultimediaKpiService) ====
             } elseif ($positionId === 44 && in_array($component->code, MultimediaKpiService::CODES, true)) {
                 $achievement = $this->multimediaService()->achievement(
@@ -288,6 +297,16 @@ class KpiCalculationService
                     'ho'        => false,
                     'cabang'    => null,
                 ];
+            } elseif ($digitalData !== null) {
+                // KPI Digital Marketing (jabatan 43): target/actual dari
+                // DigitalMarketingKpiService::componentData (divisi/HO scope).
+                $targetInfo = [
+                    'target'    => $digitalData['target'],
+                    'actual'    => $digitalData['actual'],
+                    'shortfall' => $digitalData['shortfall'],
+                    'ho'        => true,
+                    'cabang'    => null,
+                ];
             }
 
             $items[] = [
@@ -368,6 +387,14 @@ class KpiCalculationService
             $this->marketingService = new MarketingKpiService();
         }
         return $this->marketingService;
+    }
+
+    public function digitalMarketingService(): DigitalMarketingKpiService
+    {
+        if ($this->digitalMarketingService === null) {
+            $this->digitalMarketingService = new DigitalMarketingKpiService();
+        }
+        return $this->digitalMarketingService;
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int

@@ -223,96 +223,15 @@ class MarketingKpiService
     }
 
     /**
-     * Ringkasan 7 KPI utk dashboard: key, name, bobot, target label, actual
-     * label, achievement. Seluruh actual dihitung otomatis.
+     * Ringkasan 7 KPI Divisi Digital Marketing utk dashboard — delegate ke
+     * DigitalMarketingKpiService (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/
+     * CAMPAIGN_PERFORMANCE/REPORTING/IMPROVEMENT, bobot & target dari DB).
+     *
+     * @param int|null $employeeId ID_AKUN utk KPI Improvement (Kepala Divisi).
      */
-    public function monthlySummary(int $month, int $year): array
+    public function monthlySummary(int $month, int $year, ?int $employeeId = null, int $unitId = 50): array
     {
-        $leads    = $this->countLeads($month, $year);
-        $customers = $this->countCustomers($month, $year);
-        $conv     = $this->conversionPct($month, $year);
-        $cost     = $this->adsCost($month, $year);
-        $paid     = $this->paidLeads($month, $year);
-        $cpl      = $this->cpl($month, $year);
-        $omzet    = $this->marketingRevenue($month, $year);
-        $roas     = $this->roas($month, $year);
-        $channel  = (new ContentKpiService())->channelGrowthSummary($month, $year);
-
-        $items = [];
-
-        $items[] = [
-            'key'   => self::CODE_LEAD,
-            'name'  => 'Lead',
-            'bobot' => self::BOBOT[self::CODE_LEAD],
-            'target_label' => self::TARGET_LEAD_PER_BULAN . ' /bulan',
-            'actual_label' => number_format($leads, 0, ',', '.') . ' lead',
-            'achievement'  => $leads > 0 ? round(min(100.0, $leads / self::TARGET_LEAD_PER_BULAN * 100), 2) : null,
-            'key_value'    => $leads,
-        ];
-        $items[] = [
-            'key'   => self::CODE_CUSTOMER,
-            'name'  => 'Customer',
-            'bobot' => self::BOBOT[self::CODE_CUSTOMER],
-            'target_label' => self::TARGET_CUSTOMER_PER_BULAN . ' /bulan',
-            'actual_label' => number_format($customers, 0, ',', '.') . ' customer',
-            'achievement'  => $customers > 0 ? round(min(100.0, $customers / self::TARGET_CUSTOMER_PER_BULAN * 100), 2) : null,
-            'key_value'    => $customers,
-        ];
-        $items[] = [
-            'key'   => self::CODE_CONVERSION,
-            'name'  => 'Conversion',
-            'bobot' => self::BOBOT[self::CODE_CONVERSION],
-            'target_label' => self::TARGET_CONVERSION_PCT . '%',
-            'actual_label' => $conv === null ? 'N/A' : number_format($conv, 2, ',', '.') . '%',
-            'achievement'  => $conv === null ? null : round(min(100.0, $conv / self::TARGET_CONVERSION_PCT * 100), 2),
-            'key_value'    => $conv,
-        ];
-        $items[] = [
-            'key'   => self::CODE_CPL,
-            'name'  => 'Cost Per Lead',
-            'bobot' => self::BOBOT[self::CODE_CPL],
-            'target_label' => '≤ Rp ' . number_format(self::TARGET_CPL, 0, ',', '.'),
-            'actual_label' => $cpl === null ? 'N/A' : 'Rp ' . number_format($cpl, 0, ',', '.'),
-            'achievement'  => ($cpl !== null && $cpl > 0) ? round(min(100.0, self::TARGET_CPL / $cpl * 100), 2) : null,
-            'key_value'    => $cpl,
-        ];
-        $items[] = [
-            'key'   => self::CODE_OMZET,
-            'name'  => 'Omzet Marketing',
-            'bobot' => self::BOBOT[self::CODE_OMZET],
-            'target_label' => 'Rp ' . number_format(self::TARGET_OMZET_MARKETING, 0, ',', '.'),
-            'actual_label' => 'Rp ' . number_format($omzet, 0, ',', '.'),
-            'achievement'  => $omzet > 0 ? round(min(100.0, $omzet / self::TARGET_OMZET_MARKETING * 100), 2) : null,
-            'key_value'    => $omzet,
-        ];
-        $items[] = [
-            'key'   => self::CODE_ROAS,
-            'name'  => 'ROI/ROAS',
-            'bobot' => self::BOBOT[self::CODE_ROAS],
-            'target_label' => number_format(self::TARGET_ROAS, 2, ',', '.') . '×',
-            'actual_label' => $roas === null ? 'N/A' : number_format($roas, 2, ',', '.') . '×',
-            'achievement'  => $roas === null ? null : round(min(100.0, $roas / self::TARGET_ROAS * 100), 2),
-            'key_value'    => $roas,
-        ];
-
-        $costInfo = ['ads_cost' => $cost, 'paid_lead' => $paid];
-
-        $items[] = [
-            'key'   => self::CODE_GROWTH,
-            'name'  => 'Pertumbuhan Channel',
-            'bobot' => self::BOBOT[self::CODE_GROWTH],
-            'target_label' => 'sesuai target growth',
-            'actual_label' => ($channel['kpi_achievement'] ?? null) === null ? 'N/A' : 'rata2 ' . number_format($channel['kpi_achievement'], 2, ',', '.') . '%',
-            'achievement'  => $channel['kpi_achievement'] ?? null,
-            'key_value'    => $channel['kpi_achievement'] ?? null,
-        ];
-
-        return [
-            'items'         => $items,
-            'cost'          => $costInfo,
-            'channel'       => $channel,
-            'weightsum'     => array_sum(self::BOBOT),
-        ];
+        return (new DigitalMarketingKpiService())->monthlySummary($month, $year, $employeeId, $unitId);
     }
 
     // ── Data chart (ApexCharts) ───────────────────────────────────

@@ -95,7 +95,7 @@ class Marketing extends BaseController
             $tahun = (int)date('Y');
         }
 
-        $summary = $this->Service->monthlySummary($bulan, $tahun);
+        $summary = $this->Service->monthlySummary($bulan, $tahun, $this->currentAkun(), 50);
 
         return view('template', [
             'body'    => 'marketing/dashboard',
@@ -661,7 +661,8 @@ class Marketing extends BaseController
     // ── Performa Ads (sumber tunggal data iklan) ────────────────
     // Source of truth spending & metrik Laporan Digital Marketing:
     // PPN, Biaya Harian (spending), Daily Budget, Objective, Reach,
-    // Impression, Klik, Hasil per (tanggal, campaign, cabang ± channel).
+    // Impression, Klik, Hasil, Kualitas (qualified) per
+    // (tanggal, campaign, cabang ± channel).
 
     public function ads_performa()
     {
@@ -675,15 +676,15 @@ class Marketing extends BaseController
             $bulan = (int)date('n');
             $tahun = (int)date('Y');
         }
-        $kampanye = trim((string)$this->request->getGet('campaign'));
+        $campaignId = (int)($this->request->getGet('campaign') ?? 0);
 
         return view('template', [
             'body'     => 'marketing/ads_performa',
             'akun'     => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'bulan'    => $bulan,
             'tahun'    => $tahun,
-            'kampanye' => $kampanye,
-            'rows'     => $this->AdsPerfModel->findByPeriod($bulan, $tahun, $kampanye),
+            'kampanye' => $campaignId,
+            'rows'     => $this->AdsPerfModel->findByPeriod($bulan, $tahun, $campaignId > 0 ? $campaignId : null),
             'campaigns' => $this->AdsPerfModel->campaigns($bulan, $tahun),
             'channels' => $this->ChannelModel->active(),
             'units'    => $this->units(),
@@ -706,7 +707,7 @@ class Marketing extends BaseController
         $tahun        = (int)$this->request->getPost('period_year');
         $channelIds   = $this->request->getPost('channel_id') ?? [];
         $unitId       = (int)($this->request->getPost('unit_id') ?? 0);
-        $campaign     = trim((string)$this->request->getPost('campaign'));
+        $campaignId   = (int)($this->request->getPost('campaign_id') ?? 0);
         $amountRaw    = trim((string)$this->request->getPost('amount') ?: '');
         $budgetRaw    = trim((string)$this->request->getPost('daily_budget') ?: '');
         $ppnRaw       = trim((string)$this->request->getPost('ppn') ?: '');
@@ -715,6 +716,7 @@ class Marketing extends BaseController
         $impression   = trim((string)$this->request->getPost('impression') ?: '');
         $klik         = trim((string)$this->request->getPost('klik') ?: '');
         $hasil        = trim((string)$this->request->getPost('hasil') ?: '');
+        $qualified    = trim((string)$this->request->getPost('qualified') ?: '');
         $note         = trim((string)$this->request->getPost('note') ?: '');
 
         if (!$this->validPeriod($bulan, $tahun)) {
@@ -730,8 +732,11 @@ class Marketing extends BaseController
         } else {
             $tanggal = null;
         }
-        if ($campaign === '') {
-            return redirect()->back()->with('error', 'Nama campaign wajib diisi.');
+        if ($campaignId <= 0) {
+            return redirect()->back()->with('error', 'Campaign wajib dipilih.');
+        }
+        if (!(new \App\Models\ModelMarketingCampaign())->find($campaignId)) {
+            return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
         }
 
         // Validasi & normalisasi channel ganda.
@@ -834,7 +839,7 @@ class Marketing extends BaseController
             'channel_id'   => $channelIdFallback,
             'channel_ids'  => $channelIdsJson,
             'unit_id'      => $unitId > 0 ? $unitId : null,
-            'campaign'     => $campaign,
+            'campaign_id'  => $campaignId,
             'amount'       => $amount,
             'daily_budget' => $budget,
             'ppn'          => $ppn,
@@ -843,6 +848,7 @@ class Marketing extends BaseController
             'impression'   => $toCount($impression),
             'klik'         => $toCount($klik),
             'hasil'        => $toCount($hasil),
+            'qualified'    => $toCount($qualified),
             'note'         => $note !== '' ? $note : null,
             'created_by'   => $this->currentAkun(),
         ];
@@ -852,7 +858,7 @@ class Marketing extends BaseController
             $this->AdsPerfModel->update($id, $data);
             $msg = 'Performa Ads berhasil diperbarui.';
         } else {
-            $existing = $this->AdsPerfModel->getByUnique($bulan, $tahun, $campaign, $tanggal ?? '', $channelIdFallback ?? 0, $unitId);
+            $existing = $this->AdsPerfModel->getByUnique($bulan, $tahun, $campaignId, $tanggal ?? '', $channelIdFallback ?? 0, $unitId);
             if ($existing) {
                 $this->AdsPerfModel->update($existing->id, $data);
                 $msg = 'Performa Ads periode ini sudah ada, diperbarui.';
@@ -899,31 +905,32 @@ class Marketing extends BaseController
             $bulan = (int)date('n');
             $tahun = (int)date('Y');
         }
-        $kampanye = trim((string)$this->request->getGet('campaign'));
+        $campaignId = (int)($this->request->getGet('campaign') ?? 0);
 
         $db = $this->db();
 
-        // ── Data spending per (tanggal, kampanye, channel, unit) ────
+        // ── Data spending per (tanggal, campaign, channel, unit) ────
         $where  = 'a.period_month = ? AND a.period_year = ?';
         $params = [$bulan, $tahun];
-        if ($kampanye !== '') {
-            $where  .= ' AND a.campaign = ?';
-            $params[] = $kampanye;
+        if ($campaignId > 0) {
+            $where  .= ' AND a.campaign_id = ?';
+            $params[] = $campaignId;
         }
 
         $raw = $db->query(
-            "SELECT a.tanggal, a.campaign, a.channel_id, a.channel_ids, a.unit_id, a.amount, a.note
+            "SELECT a.tanggal, a.campaign_id, mc.nama AS campaign_name, a.channel_id, a.channel_ids, a.unit_id, a.amount, a.note
              FROM marketing_ads_performance a
+             LEFT JOIN marketing_campaigns mc ON mc.id = a.campaign_id
              WHERE {$where}
-             ORDER BY a.tanggal ASC, a.campaign ASC, a.id ASC",
+             ORDER BY a.tanggal ASC, mc.nama ASC, a.id ASC",
             $params
         )->getResultArray();
 
-        // Daftar kampanye utk filter (semua periode, tanpa filter).
+        // Daftar campaign utk filter (semua Campaign Digital Marketing periode ini).
         $allCampaigns = $db->query(
-            'SELECT DISTINCT campaign FROM marketing_ads_performance
-             WHERE period_month = ? AND period_year = ? AND campaign <> \'\'
-             ORDER BY campaign ASC',
+            'SELECT id, nama FROM marketing_campaigns
+             WHERE period_month = ? AND period_year = ?
+             ORDER BY nama ASC',
             [$bulan, $tahun]
         )->getResultArray();
 
@@ -941,13 +948,13 @@ class Marketing extends BaseController
         // Sumber metrik: marketing_ads_performance (menu Performa Ads).
         $perfWhere  = 'p.period_month = ? AND p.period_year = ?';
         $perfParams = [$bulan, $tahun];
-        if ($kampanye !== '') {
-            $perfWhere  .= ' AND p.campaign = ?';
-            $perfParams[] = $kampanye;
+        if ($campaignId > 0) {
+            $perfWhere  .= ' AND p.campaign_id = ?';
+            $perfParams[] = $campaignId;
         }
 
         $perfRows = $db->query(
-            "SELECT DATE_FORMAT(p.tanggal, '%Y-%m-%d') AS tgl, p.campaign,
+            "SELECT DATE_FORMAT(p.tanggal, '%Y-%m-%d') AS tgl, mc.nama AS campaign_name,
                     COALESCE(SUM(p.daily_budget), 0) AS daily_budget,
                     COALESCE(MAX(p.ppn), 0) AS ppn,
                     MIN(NULLIF(p.objective, '')) AS objective,
@@ -956,15 +963,16 @@ class Marketing extends BaseController
                     COALESCE(SUM(p.klik), 0) AS klik,
                     COALESCE(SUM(p.hasil), 0) AS hasil
              FROM marketing_ads_performance p
+             LEFT JOIN marketing_campaigns mc ON mc.id = p.campaign_id
              WHERE {$perfWhere}
-             GROUP BY tgl, p.campaign",
+             GROUP BY tgl, mc.nama",
             $perfParams
         )->getResultArray();
 
         $perfMap = [];
         foreach ($perfRows as $pr) {
             $tglKey = $pr['tgl'] ?: '';
-            $perfMap[$tglKey . '|' . $pr['campaign']] = [
+            $perfMap[$tglKey . '|' . $pr['campaign_name']] = [
                 'daily_budget' => (float)$pr['daily_budget'],
                 'ppn'          => (float)$pr['ppn'],
                 'objective'    => trim((string)$pr['objective']),
@@ -975,14 +983,15 @@ class Marketing extends BaseController
             ];
         }
 
-        // ── Agregat harian per (tanggal, kampanye) ──────────────────
+        // ── Agregat harian per (tanggal, campaign) ──────────────────
         $daily = [];      // key: tanggal|campaign
         $perTgl = [];     // key: tanggal → spending (chart)
         $perCampaign = []; // key: campaign → spending
         foreach ($raw as $row) {
             $tglKey  = $row['tanggal'] ?: '';
             $tglShow = $tglKey !== '' ? date('Y-m-d', strtotime($tglKey)) : '';
-            $key     = $tglShow . '|' . $row['campaign'];
+            $campaignName = trim((string)($row['campaign_name'] ?? '')) !== '' ? $row['campaign_name'] : 'Tanpa Campaign';
+            $key     = $tglShow . '|' . $campaignName;
 
             if (!isset($daily[$key])) {
                 $chIds = !empty($row['channel_ids']) ? json_decode($row['channel_ids'], true) : [];
@@ -1000,7 +1009,7 @@ class Marketing extends BaseController
                     : [];
                 $daily[$key] = [
                     'tanggal'    => $tglShow,
-                    'campaign'   => $row['campaign'],
+                    'campaign'   => $campaignName,
                     'spending'   => 0.0,
                     'entri'      => 0,
                     'keterangan' => trim((string)$row['note']),
@@ -1054,7 +1063,7 @@ class Marketing extends BaseController
             if ($tglShow !== '') {
                 $perTgl[$tglShow] = ($perTgl[$tglShow] ?? 0.0) + (float)$row['amount'];
             }
-            $perCampaign[$row['campaign']] = ($perCampaign[$row['campaign']] ?? 0.0) + (float)$row['amount'];
+            $perCampaign[$campaignName] = ($perCampaign[$campaignName] ?? 0.0) + (float)$row['amount'];
         }
 
         // Hari tanpa tanggal → grouping "Periode" (tidak masuk chart harian).
@@ -1258,8 +1267,8 @@ class Marketing extends BaseController
             'akun'       => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'bulan'      => $bulan,
             'tahun'      => $tahun,
-            'kampanye'   => $kampanye,
-            'campaigns'  => array_map(fn($c) => $c['campaign'], $allCampaigns),
+            'kampanye'   => $campaignId,
+            'campaigns'  => array_map(fn($c) => ['id' => (int)$c['id'], 'nama' => $c['nama']], $allCampaigns),
             'sum'        => $summary,
             'daily'      => array_values($daily),
             'perTgl'     => $perTgl,
@@ -1269,5 +1278,121 @@ class Marketing extends BaseController
             'metricsPerChannel' => $metricsPerChannel,
             'metricsPerUnit' => $metricsPerUnit,
         ]);
+    }
+
+    // ── Campaign Digital Marketing (master) ────────────────────────
+
+    public function campaign()
+    {
+        if ($r = $this->readOrRedirect()) {
+            return $r;
+        }
+
+        $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
+        $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
+        if (!$this->validPeriod($bulan, $tahun)) {
+            $bulan = (int)date('n');
+            $tahun = (int)date('Y');
+        }
+
+        $model = new \App\Models\ModelMarketingCampaign();
+
+        return view('template', [
+            'body'     => 'marketing/kampanye',
+            'akun'     => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
+            'bulan'    => $bulan,
+            'tahun'    => $tahun,
+            'rows'     => $model->where('period_month', $bulan)
+                ->where('period_year', $tahun)
+                ->orderBy('nama', 'ASC')->findAll(),
+            'statusLabels' => \App\Models\ModelMarketingCampaign::STATUS_LABELS,
+            'canWrite' => $this->canWrite(),
+        ]);
+    }
+
+    public function campaign_simpan()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/campaign'));
+        }
+
+        $id           = (int)($this->request->getPost('id') ?? 0);
+        $nama         = trim((string)$this->request->getPost('nama') ?: '');
+        $deskripsi    = trim((string)$this->request->getPost('deskripsi') ?: '');
+        $tanggalMulai = trim((string)$this->request->getPost('tanggal_mulai') ?: '');
+        $tanggalSelesai = trim((string)$this->request->getPost('tanggal_selesai') ?: '');
+        $bulan        = (int)$this->request->getPost('period_month');
+        $tahun        = (int)$this->request->getPost('period_year');
+        $status       = trim((string)$this->request->getPost('status') ?: \App\Models\ModelMarketingCampaign::STATUS_DRAFT);
+        $reportUrl    = trim((string)$this->request->getPost('report_url') ?: '');
+
+        if (!$this->validPeriod($bulan, $tahun)) {
+            return redirect()->back()->with('error', 'Periode campaign tidak valid.');
+        }
+        if ($nama === '') {
+            return redirect()->back()->with('error', 'Nama campaign wajib diisi.');
+        }
+        if (!array_key_exists($status, \App\Models\ModelMarketingCampaign::STATUS_LABELS)) {
+            $status = \App\Models\ModelMarketingCampaign::STATUS_DRAFT;
+        }
+        $dateCheck = [];
+        foreach ([$tanggalMulai, $tanggalSelesai] as $d) {
+            if ($d !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+                return redirect()->back()->with('error', 'Format tanggal campaign tidak valid.');
+            }
+            $dateCheck[$d === $tanggalMulai ? 'mulai' : 'selesai'] = $d;
+        }
+        if (!empty($dateCheck['mulai']) && !empty($dateCheck['selesai'])
+            && $dateCheck['selesai'] < $dateCheck['mulai']) {
+            return redirect()->back()->with('error', 'Tanggal selesai harus setelah tanggal mulai.');
+        }
+
+        $model = new \App\Models\ModelMarketingCampaign();
+        $data = [
+            'nama'             => $nama,
+            'deskripsi'        => $deskripsi !== '' ? $deskripsi : null,
+            'tanggal_mulai'    => !empty($dateCheck['mulai']) ? $dateCheck['mulai'] : null,
+            'tanggal_selesai'  => !empty($dateCheck['selesai']) ? $dateCheck['selesai'] : null,
+            'period_month'     => $bulan,
+            'period_year'      => $tahun,
+            'status'           => $status,
+            'report_url'       => $reportUrl !== '' ? $reportUrl : null,
+            'pic'              => $this->currentAkun(),
+            'created_by'       => $this->currentAkun(),
+        ];
+
+        if ($id > 0 && $model->find($id)) {
+            $model->update($id, $data);
+            $msg = 'Campaign diperbarui.';
+        } else {
+            $model->insert($data);
+            $msg = 'Campaign tersimpan.';
+        }
+
+        return redirect()->to(base_url('marketing/campaign?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $msg);
+    }
+
+    public function campaign_hapus()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/campaign'));
+        }
+        $id = (int)$this->request->getPost('id');
+        $model = new \App\Models\ModelMarketingCampaign();
+        if (!$model->find($id)) {
+            return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
+        }
+        $ads = new \App\Models\ModelMarketingAdsPerf();
+        if ($ads->where('campaign_id', $id)->countAllResults() > 0) {
+            return redirect()->back()->with('error', 'Campaign masih dipakai Performa Ads, tidak bisa dihapus.');
+        }
+        $model->delete($id);
+        return redirect()->back()->with('success', 'Campaign dihapus.');
     }
 }

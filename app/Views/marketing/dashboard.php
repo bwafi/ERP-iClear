@@ -50,6 +50,9 @@
                 <a href="<?= base_url('marketing/leads') ?>" class="btn btn-primary">
                     <iconify-icon icon="solar:users-group-rounded-bold" class="me-1"></iconify-icon>Lead
                 </a>
+                <a href="<?= base_url('marketing/campaign') ?>" class="btn btn-primary">
+                    <iconify-icon icon="solar:megaphone-bold" class="me-1"></iconify-icon>Campaign
+                </a>
                 <a href="<?= base_url('marketing/ads_performa') ?>" class="btn btn-primary">
                     <iconify-icon icon="solar:chart-2-bold" class="me-1"></iconify-icon>Performa Ads
                 </a>
@@ -63,14 +66,20 @@
 
 <?php
 $statIcons = [
-    'LEAD_MARKETING'       => ['solar:users-group-rounded-bold', 'primary'],
-    'CUSTOMER_MARKETING'   => ['solar:user-id-bold', 'success'],
-    'CONVERSION_MARKETING' => ['solar:tuning-3-bold', 'info'],
+    'OMZET_GLOBAL'         => ['solar:banknote-bold', 'primary'],
+    'LEADS_QUALITY'        => ['solar:users-group-rounded-bold', 'success'],
+    'CONVERSION'           => ['solar:tuning-3-bold', 'info'],
     'CPL'                  => ['solar:wallet-bold', 'warning'],
-    'OMZET_MARKETING'      => ['solar:banknote-bold', 'secondary'],
-    'ROAS_MARKETING'       => ['solar:chart-up-bold', 'danger'],
-    'CHANNEL_GROWTH'       => ['solar:chart-2-bold', 'dark'],
+    'CAMPAIGN_PERFORMANCE' => ['solar:chart-2-bold', 'secondary'],
+    'REPORTING'            => ['solar:document-text-bold', 'dark'],
+    'IMPROVEMENT'          => ['solar:chart-up-bold', 'danger'],
 ];
+$omzetGlobalItem = null;
+foreach ($summary['items'] as $it) {
+    if ($it['key'] === 'OMZET_GLOBAL') {
+        $omzetGlobalItem = $it;
+    }
+}
 ?>
 
 <div class="row g-3 mb-3">
@@ -102,7 +111,7 @@ $statIcons = [
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white">
-                <h5 class="mb-0"><iconify-icon icon="solar:wallet-bold" class="text-primary me-1"></iconify-icon>Omzet Marketing vs Biaya Iklan</h5>
+                <h5 class="mb-0"><iconify-icon icon="solar:banknote-bold" class="text-primary me-1"></iconify-icon>Omzet Global vs Biaya Iklan</h5>
                 <small class="text-muted">6 bulan terakhir.</small>
             </div>
             <div class="card-body">
@@ -113,16 +122,16 @@ $statIcons = [
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white">
-                <h5 class="mb-0"><iconify-icon icon="solar:bolt-bold" class="text-primary me-1"></iconify-icon>ROAS</h5>
-                <small class="text-muted">Omzet / Biaya Iklan — <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></small>
+                <h5 class="mb-0"><iconify-icon icon="solar:bolt-bold" class="text-primary me-1"></iconify-icon>Omzet Global</h5>
+                <small class="text-muted">Achievement vs target — <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></small>
             </div>
             <div class="card-body d-flex flex-column align-items-center justify-content-center">
-                <?php $roasVal = $summary['items'][5]['key_value'] ?? null; ?>
+                <?php $ogpct = $omzetGlobalItem['achievement'] ?? null; ?>
                 <div class="display-5 fw-bold text-success">
-                    <?= $roasVal === null ? 'N/A' : number_format($roasVal, 2, ',', '.') ?>×
+                    <?= $ogpct === null ? 'N/A' : number_format($ogpct, 2, ',', '.') ?>%
                 </div>
-                <span class="badge rounded-pill text-bg-<?= ($roasVal ?? 0) >= 1.5 ? 'success' : 'danger' ?> mt-2">
-                    target <?= number_format(1.5, 2, ',', '.') ?>×
+                <span class="badge rounded-pill text-bg-<?= ($ogpct ?? 0) >= 100 ? 'success' : 'danger' ?> mt-2">
+                    target 100%
                 </span>
                 <div class="mt-3 w-100">
                     <div id="chartRoasGauge"></div>
@@ -264,86 +273,11 @@ $statIcons = [
             </table>
         </div>
         <div class="small text-muted mt-2">
-            Rumus: Conversion = Customer / Lead × 100 · CPL = Biaya Iklan / Paid Lead ·
-            Omzet Marketing = penjualan + service dari customer hasil lead · ROAS = Omzet / Biaya Iklan ·
-            Pertumbuhan = (actual − previous) / previous × 100 per channel+metric.
+            Rumus: Omzet Global = omzet ERP semua cabang (threshold Target Toko → Target HO) ·
+            Leads &amp; Kualitas = Leads (Hasil Performa Ads) + ratio qualified ·
+            Conversion = Closing CS / Lead CS · CPL = Biaya Iklan (Spending + PPN) / Datang &amp; Closing CS ·
+            Campaign Performance &amp; Reporting = KPI Kualitas Pemakaian.
         </div>
-    </div>
-</div>
-
-<div class="card shadow-sm border-0 mt-3">
-    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-            <h5 class="mb-0">Pertumbuhan Channel — <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></h5>
-            <small class="text-muted">metric dihitung per channel + metric (tidak dijumlahkan antar metric).</small>
-        </div>
-        <?php if (($summary['channel']['kpi_achievement'] ?? null) !== null) : ?>
-            <span class="badge rounded-pill text-bg-primary fs-6 py-2">
-                <iconify-icon icon="solar:chart-2-bold" class="me-1"></iconify-icon>
-                Rata-rata Achievement KPI: <?= number_format($summary['channel']['kpi_achievement'], 2, ',', '.') ?>%
-            </span>
-        <?php endif; ?>
-    </div>
-    <div class="card-body">
-        <?php if (empty($summary['channel']['rows'])) : ?>
-            <div class="text-center py-4">
-                <iconify-icon icon="solar:chart-2-line-outline" class="text-muted fs-1"></iconify-icon>
-                <p class="text-muted mt-2 mb-1">Belum ada data performa channel.</p>
-                <a href="<?= base_url('konten/channel') ?>" class="btn btn-sm btn-primary">Input Performa Channel</a>
-            </div>
-        <?php else : ?>
-            <div class="table-responsive">
-                <table class="table table-sm align-middle table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Channel</th>
-                            <th>Metric</th>
-                            <th class="text-end">Previous</th>
-                            <th class="text-end">Actual</th>
-                            <th class="text-center">Growth</th>
-                            <th class="text-center">Target</th>
-                            <th class="text-center">Achievement</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($summary['channel']['rows'] as $c) : ?>
-                            <tr>
-                                <td class="fw-semibold">
-                                    <iconify-icon icon="solar:instagram-line-bold" class="text-muted me-1"></iconify-icon>
-                                    <?= esc($c['channel_name']) ?>
-                                </td>
-                                <td><?= esc($c['metric_name']) ?>
-                                    <?php if ($c['is_kpi']) : ?>
-                                        <span class="badge rounded-pill bg-success-subtle text-success ms-1">KPI</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-end"><?= $c['previous'] !== null ? number_format($c['previous'], 0, ',', '.') : '<span class="text-muted">N/A</span>' ?></td>
-                                <td class="text-end fw-semibold"><?= number_format($c['actual'], 0, ',', '.') ?></td>
-                                <td class="text-center">
-                                    <?php if ($c['growth'] === null) : ?>
-                                        <span class="badge rounded-pill text-bg-secondary">N/A</span>
-                                    <?php else : ?>
-                                        <span class="badge rounded-pill <?= $c['growth'] >= 0 ? 'text-bg-success' : 'text-bg-danger' ?>">
-                                            <?= $c['growth'] > 0 ? '+' : '' ?><?= number_format($c['growth'], 2, ',', '.') ?>%
-                                        </span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-center"><?= $c['target'] !== null ? number_format($c['target'], 2, ',', '.') . '%' : '-' ?></td>
-                                <td class="text-center">
-                                    <?php if ($c['achievement'] === null) : ?>
-                                        <span class="text-muted">-</span>
-                                    <?php else : ?>
-                                        <span class="badge rounded-pill <?= $c['achievement'] >= 100 ? 'text-bg-success' : ($c['achievement'] >= 80 ? 'text-bg-warning' : 'text-bg-danger') ?>">
-                                            <?= number_format($c['achievement'], 2, ',', '.') ?>%
-                                        </span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -383,7 +317,7 @@ $statIcons = [
     new ApexCharts(document.querySelector('#chartOmzetAds'), Object.assign({}, chartCommon, {
         chart: Object.assign({}, chartCommon.chart, { type: 'bar', height: 260 }),
         series: [
-            { name: 'Omzet Marketing', type: 'bar', data: <?= json_encode($trend['omzet']) ?> },
+            { name: 'Omzet Global', type: 'bar', data: <?= json_encode($trend['omzet']) ?> },
             { name: 'Biaya Iklan', type: 'bar', data: <?= json_encode($trend['ads']) ?> },
         ],
         xaxis: { categories: <?= json_encode($trend['labels']) ?> },
@@ -394,21 +328,21 @@ $statIcons = [
         yaxis: { labels: { formatter: function(v) { return v >= 1000000 ? (v / 1000000).toFixed(1) + ' jt' : v >= 1000 ? (v / 1000).toFixed(0) + ' rb' : v; } } },
     })).render();
 
-    // Gauge ROAS
-    var roasVal = <?= json_encode((($rv = $summary['items'][5]['key_value'] ?? null) !== null) ? round((float)$rv, 2) : null) ?>;
+    // Gauge Omzet Global (achievement KPI)
+    var ogpct = <?= json_encode($ogpct !== null ? round((float)$ogpct, 2) : null) ?>;
     new ApexCharts(document.querySelector('#chartRoasGauge'), {
         chart: { type: 'radialBar', fontFamily: 'inherit', height: 170, toolbar: { show: false } },
-        series: [roasVal === null ? 0 : Math.min(100, Math.round(roasVal / 3 * 100))],
+        series: [ogpct === null ? 0 : Math.min(100, Math.round(ogpct))],
         plotOptions: {
             radialBar: {
                 hollow: { size: '60%' },
                 dataLabels: {
                     name: { show: false },
-                    value: { fontSize: '20px', formatter: function() { return roasVal === null ? 'N/A' : roasVal.toFixed(1) + '×'; } },
+                    value: { fontSize: '20px', formatter: function() { return ogpct === null ? 'N/A' : ogpct.toFixed(1) + '%'; } },
                 },
             },
         },
-        colors: [roasVal >= 1.5 ? '#198754' : '#dc3545'],
-        labels: ['ROAS'],
+        colors: [ogpct >= 100 ? '#198754' : '#dc3545'],
+        labels: ['Omzet Global'],
     }).render();
 </script>

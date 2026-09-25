@@ -164,6 +164,17 @@ class MarketingRekapService
             ->first()->sum ?? 0;
     }
 
+    /** Total Datang CS (sum detail.datang) dalam satu bulan. */
+    public function monthlyDatangTotal(int $month, int $year): int
+    {
+        $m = sprintf('%04d-%02d', $year, $month);
+        return (int)$this->detailModel
+            ->join('marketing_rekap_harian', 'marketing_rekap_harian.id = marketing_rekap_harian_detail.rekap_id', 'inner')
+            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'", null, false)
+            ->selectSum('datang', 'sum')
+            ->first()->sum ?? 0;
+    }
+
     /**
      * Ringkasan bulanan rekap semua cabang (format kartu dashboard):
      * non_iklan, iklan, total, prospek, datang, rate, total_lead_wa_dm,

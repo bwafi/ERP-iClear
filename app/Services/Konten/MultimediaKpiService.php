@@ -274,8 +274,11 @@ class MultimediaKpiService
     /**
      * Improvement: improvement employee yang di-setuju (approved/implemented)
      * pada bulan berjalan dibanding target bulanan.
+     *
+     * Mechanism ini dipakai ulang oleh jabatan 43 (Kepala Divisi Digital
+     * Marketing) via DigitalMarketingKpiService — tanpa duplikasi logic.
      */
-    private function improvementAchievement(int $employeeId, int $month, int $year): ?float
+    public function improvementResult(int $employeeId, int $month, int $year): array
     {
         $db = \Config\Database::connect();
         $total = (int)$db->table('improvements')
@@ -284,7 +287,7 @@ class MultimediaKpiService
             ->where('submission_year', $year)
             ->countAllResults();
         if ($total <= 0) {
-            return null;
+            return ['submitted' => 0, 'approved' => 0, 'achievement' => null];
         }
 
         $approved = (int)$db->table('improvements')
@@ -294,7 +297,16 @@ class MultimediaKpiService
             ->whereIn('status', ['approved', 'implemented'])
             ->countAllResults();
 
-        return round(min(100.0, $approved / self::TARGET_IMPROVEMENT * 100), 2);
+        return [
+            'submitted'   => $total,
+            'approved'    => $approved,
+            'achievement' => round(min(100.0, $approved / self::TARGET_IMPROVEMENT * 100), 2),
+        ];
+    }
+
+    private function improvementAchievement(int $employeeId, int $month, int $year): ?float
+    {
+        return $this->improvementResult($employeeId, $month, $year)['achievement'];
     }
 
     /**
