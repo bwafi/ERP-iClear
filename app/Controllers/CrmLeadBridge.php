@@ -281,14 +281,23 @@ class CrmLeadBridge extends BaseController
 
     private function serviceStatusLabel(int $status): string
     {
-        return match ($status) {
-            1 => 'Permintaan servis diterima',
-            2 => 'Dalam proses perbaikan',
-            3 => 'Siap diambil',
-            4 => 'Selesai — sudah diambil',
-            90, 91 => 'Dibatalkan',
-            default => 'Status ERP: ' . $status,
-        };
+        // `match` requires PHP 8. ERP may be configured with an older PHP
+        // handler, so keep the bridge compatible with PHP 7 as well.
+        switch ($status) {
+            case 1:
+                return 'Permintaan servis diterima';
+            case 2:
+                return 'Dalam proses perbaikan';
+            case 3:
+                return 'Siap diambil';
+            case 4:
+                return 'Selesai — sudah diambil';
+            case 90:
+            case 91:
+                return 'Dibatalkan';
+            default:
+                return 'Status ERP: ' . $status;
+        }
     }
 
     /** Harga poster promo awal bulan; berlaku hanya LCD Grade A, baterai Grade Ori, dan backglass. */
@@ -318,8 +327,10 @@ class CrmLeadBridge extends BaseController
         ];
         // Model yang lebih panjang harus dicek lebih dulu supaya “iPhone 14”
         // tidak mengambil harga iPhone 14 Pro.
-        uksort($prices, static fn($a, $b) => strlen($b) <=> strlen($a));
-        foreach ($prices as $model => $row) if (str_contains($haystack, $model)) {
+        uksort($prices, static function ($a, $b) {
+            return strlen($b) <=> strlen($a);
+        });
+        foreach ($prices as $model => $row) if (strpos($haystack, $model) !== false) {
             return $row[$service === 'LCD' ? 0 : ($service === 'Baterai' ? 1 : 2)];
         }
         return null;
