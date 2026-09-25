@@ -19,7 +19,7 @@ class AddCampaignDigitalMarketingMenu extends Migration
         'url'       => 'marketing/campaign',
     ];
 
-    protected const TARGET_JABATANS = [43];
+    protected const TARGET_JABATANS = [43, 1, 34];
 
     public function up()
     {
