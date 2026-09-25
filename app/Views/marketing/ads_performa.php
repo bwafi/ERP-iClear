@@ -75,6 +75,9 @@
             </form>
 
             <div class="d-flex flex-wrap gap-2">
+                <a href="<?= base_url('marketing/campaign?bulan=' . $bulan . '&tahun=' . $tahun) ?>" class="btn btn-outline-info btn-sm px-3">
+                    <iconify-icon icon="solar:list-bold" class="me-1 align-text-bottom"></iconify-icon>Lihat Campaign
+                </a>
                 <?php if ($canWrite) : ?>
                     <button type="button" class="btn btn-info btn-sm px-3" onclick="openCampaignModal()">
                         <iconify-icon icon="solar:megaphone-bold" class="me-1 align-text-bottom"></iconify-icon>Input Campaign
