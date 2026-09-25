@@ -103,11 +103,18 @@
         <input type="text" class="form-control" id="harga_akhir_sparepart" name="harga_akhir" value="Rp 0" readonly>
     </div>
 
-    <div style="display: flex; justify-content: space-between;">
+    <div class="service-step-footer">
         <div>
             <input hidden type="text" name="idservice_s" value="<?php echo @$idservice ?>">
-            <button type="button" class="btn btn-light" id="btn-previous-to-kerusakan">Sebelumnya</button>
-            <button type="submit" id="selanjutnyabtnnya" class="btn btn-success">Selanjutnya</button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-previous-to-kerusakan">
+                <i class="bi bi-arrow-left me-1"></i> Sebelumnya
+            </button>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="text-muted fs-3 d-none d-sm-inline">Total dihitung otomatis ke tahap Pembayaran.</span>
+            <button type="submit" id="selanjutnyabtnnya" class="btn btn-primary">
+                Selanjutnya <i class="bi bi-arrow-right ms-1"></i>
+            </button>
         </div>
     </div>
     <input type="text" hidden value="<?php echo @$idservice ?>" name="" id="idpelabel">

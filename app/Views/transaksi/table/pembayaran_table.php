@@ -86,9 +86,13 @@
     </div>
 
 
-    <div class="d-flex justify-content-end">
-        <button type="button" class="btn btn-light btn-lg me-2" id="btn-previous-to-sparepart">Sebelumnya</button>
-        <button type="submit" id="submitSemuaForm" class="btn btn-success btn-lg">Submit</button>
+    <div class="service-step-footer">
+        <button type="button" class="btn btn-outline-secondary" id="btn-previous-to-sparepart">
+            <i class="bi bi-arrow-left me-1"></i> Sebelumnya
+        </button>
+        <button type="submit" id="submitSemuaForm" class="btn btn-success">
+            <i class="bi bi-check2-circle me-1"></i> Submit
+        </button>
     </div>
     <input type="text" hidden id="idpelayar" value="<?php echo @$idservice ?>">
 </form>

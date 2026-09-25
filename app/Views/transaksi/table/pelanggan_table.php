@@ -17,12 +17,16 @@
     }
 </style>
 
-<div id="pelanggan-section" class="mt-3 mb-3" style="display: flex; justify-content: right;">
-    <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#pelangganModal"
-        style="display: inline-flex; align-items: center; margin-bottom: 4px;">
-        <iconify-icon icon="mdi:account" width="20" height="20" style="margin-right: 8px;"></iconify-icon>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <span class="text-body d-inline-flex align-items-center gap-2">
+        <i class="bi bi-person-badge"></i>
+        Diinput oleh: <strong><?= $akun->NAMA_AKUN ?></strong>
+    </span>
+    <button type="button" class="btn btn-warning d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#pelangganModal">
+        <iconify-icon icon="mdi:account" width="20" height="20"></iconify-icon>
         Input Data Pelanggan
     </button>
+    <input type="hidden" name="id_akun" value="<?= $akun->ID_AKUN ?>">
 </div>
 
 <form action="<?php echo base_url('insert/pelanggan_service') ?>" enctype="multipart/form-data" method="post">
@@ -32,49 +36,31 @@
         <input hidden type="text" id="created_at" value="<?php echo @$old_service_pelanggan->created_at ?>">
         <input type="hidden" name="selectedidpelanggan" id="idpela" value="<?php echo @$old_service_pelanggan->id_pelanggan ?>">
 
-        <div class="col-md-12">
-            <label class="form-label">Nama Staff</label>
-
-            <input type="text" class="form-control"
-                value="<?= $akun->NAMA_AKUN ?>" readonly>
-
-            <input type="hidden" name="id_akun"
-                value="<?= $akun->ID_AKUN ?>">
+        <!-- Perangkat -->
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Tipe HP</label>
+            <input type="text" placeholder="" class="form-control" name="tipe_hp">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">IMEI</label>
+            <input type="text" value="<?php echo @$old_service_pelanggan->imei ?>" class="form-control" name="imei">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">DP</label>
+            <input type="text" value="<?php echo @$old_service_pelanggan->dp_bayar ?>" class="form-control" name="dp_bayar">
         </div>
 
-        <!--<div class="col-md-12">-->
-        <!--    <label class="form-label" for="unitFilter">Nama Unit:</label> <br>-->
-        <!--                <select name="unit" id="unitFilter" class="form-select"-->
-        <!--                    onchange="filterKategori()">-->
-        <!--                    <option value="">Semua Unit</option>-->
-        <?php
-        // $selectedUnit = session('ID_UNIT');
-        // foreach ($unit as $row) {
-        //     $selected = ($row->idunit == $selectedUnit) ? 'selected' : '';
-        //     echo '<option value="' . esc($row->idunit) . '" ' . $selected . '>' . esc($row->NAMA_UNIT) . '</option>';
-        // }
-        ?>
-        <!--                </select>-->
-        <!--</div>-->
-
-        <div class="col-md-6">
-            <label class="form-label">Nama Pelanggan</label>
-
+        <!-- Pelanggan -->
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Nama Pelanggan</label>
             <input type="text" class="form-control" id="nama_pelanggan" value="<?php echo @$old_service_pelanggan->nama ?>" readonly>
         </div>
-        <!-- <div class="col-md-6">
-            <label class="form-label">Kode Faktur</label>
-            <input type="text" class="form-control" value="">
-        </div> -->
-
-        <div class="col-md-6">
-            <label class="form-label">No Hp</label>
-            <input type="text" class="form-control" value="<?php echo @$old_service_pelanggan->no_hp ?>" name="no_hp"
-                id="no_hp" readonly>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">No HP</label>
+            <input type="text" class="form-control" value="<?php echo @$old_service_pelanggan->no_hp ?>" name="no_hp" id="no_hp" readonly>
         </div>
-
-        <div class="col-md-6">
-            <label class="form-label">Domisili Provinsi</label>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Domisili Provinsi</label>
             <select class="form-control form-select js-domisili" id="form_provinsi" name="domisili_provinsi" disabled>
                 <option value="">-- Pilih / Cari Provinsi --</option>
                 <?php foreach ($provinsi as $p): ?>
@@ -84,9 +70,8 @@
                 <?php endforeach ?>
             </select>
         </div>
-
         <div class="col-md-6">
-            <label class="form-label">Domisili Kabupaten</label>
+            <label class="form-label fw-semibold">Domisili Kabupaten</label>
             <select class="form-control form-select js-domisili" id="form_kabupaten" name="domisili_kabupaten" disabled>
                 <option value="">-- Pilih / Cari Kabupaten --</option>
                 <?php if (isset($old_service_pelanggan) && $old_service_pelanggan && @$old_service_pelanggan->kabupaten): ?>
@@ -94,9 +79,8 @@
                 <?php endif ?>
             </select>
         </div>
-
         <div class="col-md-6">
-            <label class="form-label">Domisili Kecamatan</label>
+            <label class="form-label fw-semibold">Domisili Kecamatan</label>
             <select class="form-control form-select js-domisili" id="form_kecamatan" name="domisili_kecamatan" disabled>
                 <option value="">-- Pilih / Cari Kecamatan --</option>
                 <?php if (isset($old_service_pelanggan) && $old_service_pelanggan && @$old_service_pelanggan->kecamatan): ?>
@@ -105,23 +89,9 @@
             </select>
         </div>
 
-        <div class="col-md-6">
-            <label class="form-label">DP</label>
-            <input type="text" value="<?php echo @$old_service_pelanggan->dp_bayar ?>" class="form-control" name="dp_bayar">
-        </div>
-
-        <div class="col-md-6">
-            <label class="form-label">Imei</label>
-            <input type="text" value="<?php echo @$old_service_pelanggan->imei ?>" class="form-control" name="imei">
-        </div>
-        <div class="col-md-6">
-            <label class="form-label">Tipe HP</label>
-            <input type="text" placeholder="" class="form-control" name="tipe_hp">
-        </div>
-
-
-        <div class="col-md-6">
-            <label class="form-label">Passcode</label>
+        <!-- Akses perangkat -->
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Passcode</label>
             <div class="input-group">
                 <input value="<?php echo @$old_service_pelanggan->passcode ?>" type="password"
                     class="form-control" name="passcode" id="passcode">
@@ -130,15 +100,13 @@
                 </span>
             </div>
         </div>
-
-
-        <div class="col-md-6">
-            <label class="form-label">Email (icloud)</label>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Email (iCloud)</label>
             <input type="email" value="<?php echo @$old_service_pelanggan->email_icloud ?>" placeholder="@icloud.com"
                 class="form-control" name="email_icloud">
         </div>
-        <div class="col-md-6">
-            <label class="form-label">Password (icloud)</label>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Password (iCloud)</label>
             <div class="input-group">
                 <input type="password" value="<?php echo @$old_service_pelanggan->password_icloud ?>"
                     placeholder="********" class="form-control" name="password_icloud" id="password_icloud">
@@ -148,34 +116,36 @@
             </div>
         </div>
 
-        <!-- <div class="col-md-6"> 
-            <label class="form-label">Gudang</label>
-            <select class="form-select" name="gudang">
-                <option selected>---Pilih Gudang---</option>
-                
-            </select>
-        </div> -->
-
+        <!-- Keluhan -->
         <div class="col-md-6">
-            <label class="form-label">Keluhan</label>
+            <label class="form-label fw-semibold">Keluhan</label>
             <textarea style="height: 100px;" class="form-control"
                 name="keluhan"><?php echo @$old_service_pelanggan->keluhan ?></textarea>
         </div>
-
         <div class="col-md-6">
-            <label class="form-label">Keterangan</label>
+            <label class="form-label fw-semibold">Keterangan</label>
             <textarea style="height: 100px;" type="text" class="form-control"
                 name="keterangan"><?php echo @$old_service_pelanggan->keterangan ?></textarea>
         </div>
 
     </div>
 
-    <!-- Buttons -->
-    <div class="d-flex justify-content-between mt-4">
-        <!-- <button type="button" class="btn btn-outline-secondary">Sebelumnya</button> -->
+    <!-- Footer -->
+    <div class="service-step-footer">
         <div>
-            <button type="submit" id="btn-simpan" class="btn btn-info text-white me-2">Simpan</button>
-            <button type="button" class="btn btn-success" id="btn-next-to-kerusakan">Selanjutnya</button>
+            <?php if (!empty($idservice)): ?>
+                <span class="text-muted fs-3 d-inline-flex align-items-center gap-1">
+                    Selanjutnya: centang kerusakan di tahap &quot;Kerusakan&quot;.
+                </span>
+            <?php endif; ?>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" id="btn-simpan" class="btn btn-primary">
+                <i class="bi bi-check2 me-1"></i> Simpan
+            </button>
+            <button type="button" class="btn btn-outline-primary" id="btn-next-to-kerusakan">
+                Selanjutnya <i class="bi bi-arrow-right ms-1"></i>
+            </button>
         </div>
     </div>
 
@@ -194,7 +164,6 @@
                         </select>
                     </div>
 
-                    <!-- Tombol di bawah dropdown -->
                     <div style="display: flex; justify-content: right; gap: 10px; margin-top: 20px;">
                         <button id="btnPilihPelanggan" type="button" class="btn btn-primary">Pilih</button>
                         <button id="btnTambahPelanggan" type="button" class="btn btn-success">Tambah Baru</button>
@@ -203,10 +172,6 @@
             </div>
         </div>
     </div>
-
-
-
-
 </form>
 
 <div class="modal fade" id="modalTambahPelanggan" tabindex="-1">
@@ -536,7 +501,6 @@
 </script>
 
 
-
 <script>
     document.getElementById('btn-next-to-kerusakan').addEventListener('click', function() {
         var idservice = document.querySelector('input[name="idservice"]').value;
@@ -558,7 +522,6 @@
             if (!idPela || idPela.trim() === '') {
                 e.preventDefault(); // cegah form submit
                 alert('Silakan pilih pelanggan terlebih dahulu melalui tombol input data pelanggan!');
-                // Atau bisa pakai SweetAlert jika kamu pakai
                 return false;
             }
         });
