@@ -76,6 +76,9 @@
 
             <div class="d-flex flex-wrap gap-2">
                 <?php if ($canWrite) : ?>
+                    <button type="button" class="btn btn-info btn-sm px-3" onclick="openCampaignModal()">
+                        <iconify-icon icon="solar:megaphone-bold" class="me-1 align-text-bottom"></iconify-icon>Input Campaign
+                    </button>
                     <button type="button" class="btn btn-success btn-sm px-3" onclick="openPerformaModal()">
                         <iconify-icon icon="solar:add-circle-bold" class="me-1 align-text-bottom"></iconify-icon>Input Performa
                     </button>
@@ -359,7 +362,8 @@
                                         <option value="<?= (int)$cn['id'] ?>"><?= esc($cn['nama']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <small class="text-muted fs-1">Tambah campaign di halaman Digital Marketing.</small>
+                                <small class="text-muted fs-1">Campaign belum ada?
+                                    <a href="javascript:void(0)" onclick="openCampaignModal()">Tambah Campaign</a></small>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1 fw-semibold">Daily Budget (Rp)</label>
@@ -424,6 +428,65 @@
     </div>
 <?php endif; ?>
 
+<!-- Modal Tambah Campaign Digital Marketing -->
+<?php if ($canWrite) : ?>
+    <div class="modal fade" id="modalCampaign" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <form method="post" action="<?= base_url('marketing/campaign/simpan') ?>" id="campaignForm">
+                <input type="hidden" name="id" id="cp_id" value="">
+                <input type="hidden" name="period_month" id="cpPeriodMonth" value="<?= $bulan ?>">
+                <input type="hidden" name="period_year" id="cpPeriodYear" value="<?= $tahun ?>">
+                <input type="hidden" name="redirect" value="<?= esc(base_url('marketing/ads_performa?bulan=' . $bulan . '&tahun=' . $tahun), 'attr') ?>">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title fw-semibold">
+                            <iconify-icon icon="solar:megaphone-bold" class="text-primary me-1 align-text-bottom"></iconify-icon>
+                            <span id="cp_title">Input Campaign</span>
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Nama Campaign</label>
+                                <input type="text" name="nama" id="cp_nama" class="form-control form-control-sm"
+                                    placeholder="mis. Promo Ramadhan 2026" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Status</label>
+                                <select name="status" id="cp_status" class="form-select form-select-sm">
+                                    <option value="draft">Draft</option>
+                                    <option value="active">Aktif</option>
+                                    <option value="done">Selesai</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Tanggal Mulai</label>
+                                <input type="date" name="tanggal_mulai" id="cp_mulai" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Tanggal Selesai</label>
+                                <input type="date" name="tanggal_selesai" id="cp_selesai" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Deskripsi</label>
+                                <textarea name="deskripsi" id="cp_deskripsi" class="form-control form-control-sm" rows="2"
+                                    placeholder="Tujuan, segmentasi, dsb."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-success btn-sm px-4">
+                            <iconify-icon icon="solar:check-circle-bold" class="me-1 align-text-bottom"></iconify-icon>Simpan Data
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
+
 <script>
     // Format input: angka bulat (reach, imp, klik, hasil)
     var perfForm = document.getElementById('performaForm');
@@ -458,6 +521,17 @@
         document.getElementById('pf_title').textContent = 'Input Performa Ads';
         syncPfPeriod();
         var modal = new bootstrap.Modal(document.getElementById('modalPerformaAds'));
+        modal.show();
+    }
+
+    function openCampaignModal() {
+        var f = document.getElementById('campaignForm');
+        f.reset();
+        document.getElementById('cp_id').value = '';
+        document.getElementById('cp_title').textContent = 'Input Campaign';
+        document.getElementById('cpPeriodMonth').value = <?= (int)$bulan ?>;
+        document.getElementById('cpPeriodYear').value = <?= (int)$tahun ?>;
+        var modal = new bootstrap.Modal(document.getElementById('modalCampaign'));
         modal.show();
     }
 

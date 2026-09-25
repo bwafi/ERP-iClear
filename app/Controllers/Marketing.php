@@ -1370,6 +1370,11 @@ class Marketing extends BaseController
             $msg = 'Campaign tersimpan.';
         }
 
+        $ref = trim((string)$this->request->getPost('redirect') ?: '');
+        if ($ref !== '' && strpos($ref, base_url()) === 0) {
+            return redirect()->to($ref)->with('success', $msg);
+        }
+
         return redirect()->to(base_url('marketing/campaign?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $msg);
     }
 
