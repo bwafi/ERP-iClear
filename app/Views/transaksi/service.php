@@ -319,13 +319,13 @@
                             </span>
                         </a>
                     </div>
-                    <div class="service-rail-item <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="pembayaran">
+                    <div class="service-rail-item <?= (empty($idservice) || session('ID_JABATAN') == JABATAN_TEKNISI) ? 'disabled-tab is-locked' : '' ?>" data-step="pembayaran">
                         <a class="service-rail-link" id="pembayaran-tab" data-bs-toggle="tab" href="#pembayaran" role="tab"
                             aria-controls="pembayaran" aria-selected="false">
                             <span class="service-rail-node" id="node-pembayaran">4</span>
                             <span class="service-rail-body">
                                 <span class="service-rail-title">Pembayaran</span>
-                                <span class="service-rail-sub" id="sub-pembayaran"><?= empty($idservice) ? 'Lengkapi data pelanggan dulu.' : 'Rangkuman tagihan.' ?></span>
+                                <span class="service-rail-sub" id="sub-pembayaran"><?= empty($idservice) ? 'Lengkapi data pelanggan dulu.' : (session('ID_JABATAN') == JABATAN_TEKNISI ? 'Tidak tersedia untuk jabatan ini.' : 'Rangkuman tagihan.') ?></span>
                             </span>
                         </a>
                     </div>
@@ -360,13 +360,20 @@
 <script>
     document.addEventListener("DOMContentLoaded", function () {
 
-        /* Role lock: jabatan 36 (kasir) dilarang mengakses langkah Sparepart */
-        const isRestricted = <?= session('ID_JABATAN') == JABATAN_KASIR ? 'true' : 'false' ?>;
+        /* Role lock: jabatan 36 (kasir/teknisi) dilarang mengakses langkah Sparepart & Pembayaran */
+        const isRestricted = <?= in_array(session('ID_JABATAN'), [JABATAN_KASIR, JABATAN_TEKNISI]) ? 'true' : 'false' ?>;
 
         if (isRestricted) {
             const sparepartTab = document.getElementById('sparepart-tab');
             if (sparepartTab) {
                 sparepartTab.addEventListener('show.bs.tab', function (e) {
+                    e.preventDefault();
+                    return false;
+                });
+            }
+            const pembayaranTab = document.getElementById('pembayaran-tab');
+            if (pembayaranTab) {
+                pembayaranTab.addEventListener('show.bs.tab', function (e) {
                     e.preventDefault();
                     return false;
                 });

@@ -99,3 +99,4 @@ define('EVENT_PRIORITY_HIGH', 10);
  |--------------------------------------------------------------------------
  */
 defined('JABATAN_KASIR') || define('JABATAN_KASIR', 36);
+defined('JABATAN_TEKNISI') || define('JABATAN_TEKNISI', 36);
