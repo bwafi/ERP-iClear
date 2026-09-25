@@ -550,6 +550,15 @@ class TutupKasir extends BaseController
 
         $id_jabatan = session()->get('ID_JABATAN');
 
+        // ==========================
+        // FILTER BULAN & TAHUN
+        // ==========================
+        $seleksiBulan = (int) $this->request->getGet('bulan') ?: (int) date('n');
+        $seleksiTahun = (int) $this->request->getGet('tahun') ?: (int) date('Y');
+        $seleksiBulan = ($seleksiBulan < 1 || $seleksiBulan > 12) ? (int) date('n') : $seleksiBulan;
+        $seleksiTahun = $seleksiTahun < 2000 ? (int) date('Y') : $seleksiTahun;
+        $seleksiBulanPadded = str_pad((string) $seleksiBulan, 2, '0', STR_PAD_LEFT);
+
         // Ambil list unit
         $list_unit = $this->db->table('unit')
             ->get()
@@ -590,8 +599,8 @@ class TutupKasir extends BaseController
         $omset_bulan = $this->db->table('detail_penjualan')
             ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
+            ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
             ->where('penjualan.unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -724,8 +733,8 @@ class TutupKasir extends BaseController
             1 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', date('m'))
-                    ->where('YEAR(penjualan.tanggal)', date('Y'))
+                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
+                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
                     ->where('penjualan.unit_idunit =', 1)
                     ->get()
                     ->getRow()
@@ -733,8 +742,8 @@ class TutupKasir extends BaseController
             2 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', date('m'))
-                    ->where('YEAR(penjualan.tanggal)', date('Y'))
+                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
+                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
                     ->where('penjualan.unit_idunit =', 2)
                     ->get()
                     ->getRow()
@@ -742,8 +751,8 @@ class TutupKasir extends BaseController
             3 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', date('m'))
-                    ->where('YEAR(penjualan.tanggal)', date('Y'))
+                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
+                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
                     ->where('penjualan.unit_idunit =', 3)
                     ->get()
                     ->getRow()
@@ -751,8 +760,8 @@ class TutupKasir extends BaseController
             4 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', date('m'))
-                    ->where('YEAR(penjualan.tanggal)', date('Y'))
+                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
+                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
                     ->where('penjualan.unit_idunit =', 4)
                     ->get()
                     ->getRow()
@@ -765,8 +774,8 @@ class TutupKasir extends BaseController
         foreach ([1, 2, 3, 4] as $idUnit) {
             $countService = $this->db->table('service')
                 ->select('COUNT(idservice) AS total')
-                ->where('MONTH(tanggal_selesai)', date('m'))
-                ->where('YEAR(tanggal_selesai)', date('Y'))
+                ->where('MONTH(tanggal_selesai)', $seleksiBulanPadded)
+                ->where('YEAR(tanggal_selesai)', $seleksiTahun)
                 ->where('unit_idunit', $idUnit)
                 ->get()
                 ->getRow()
@@ -774,8 +783,8 @@ class TutupKasir extends BaseController
 
             $countSales = $this->db->table('penjualan')
                 ->select('COUNT(DISTINCT idpenjualan) AS total')
-                ->where('MONTH(tanggal)', date('m'))
-                ->where('YEAR(tanggal)', date('Y'))
+                ->where('MONTH(tanggal)', $seleksiBulanPadded)
+                ->where('YEAR(tanggal)', $seleksiTahun)
                 ->where('unit_idunit', $idUnit)
                 ->like('kode_invoice', 'SLL', 'after')
                 ->get()
@@ -788,8 +797,8 @@ class TutupKasir extends BaseController
 
         $aktual_tutup_kasir    = $this->db->table('tutup_kasir')
                                     ->select('COUNT(status) AS total')
-                                    ->where('MONTH(tanggal)', date('m'))
-                                    ->where('YEAR(tanggal)', date('Y'))
+                                    ->where('MONTH(tanggal)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal)', $seleksiTahun)
                                     ->where('unit', $unit)
                                     ->get()
                                     ->getRow();
@@ -798,8 +807,8 @@ class TutupKasir extends BaseController
         $aktual_opname         = $this->db->table('stok_opname_draft')
                                     ->select('COUNT(DISTINCT DATE(tanggal)) AS total')
                                     ->where('unit_idunit', $unit)
-                                    ->where('MONTH(tanggal)', date('m'), false)
-                                    ->where('YEAR(tanggal)', date('Y'), false)
+                                    ->where('MONTH(tanggal)', $seleksiBulanPadded, false)
+                                    ->where('YEAR(tanggal)', $seleksiTahun, false)
                                     ->get()
                                     ->getRow()
                                     ->total;
@@ -808,16 +817,16 @@ class TutupKasir extends BaseController
 
         $aktual_divisi         = $this->db->table('penilaian')
                                     ->select('Avg(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->get()
                                     ->getRow();
         $total_divisi = $aktual_divisi->total ?? 0;
 
         $ak_kebersihan         = $this->db->table('penilaian')
                                     ->select('Avg(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('aspek =', 'kebersihan')
                                     ->get()
                                     ->getRow();
@@ -825,8 +834,8 @@ class TutupKasir extends BaseController
 
         $ak_seragam         = $this->db->table('penilaian')
                                     ->select('Avg(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('aspek =', 'seragam')
                                     ->get()
                                     ->getRow();
@@ -834,8 +843,8 @@ class TutupKasir extends BaseController
 
         $ak_kepatuhan          = $this->db->table('penilaian')
                                     ->select('Avg(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('aspek =', 'kepatuhan sop')
                                     ->get()
                                     ->getRow();
@@ -843,8 +852,8 @@ class TutupKasir extends BaseController
         
         $aktual_closing        = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'closing')
                                     ->get()
@@ -853,8 +862,8 @@ class TutupKasir extends BaseController
 
         $aktual_upselling      = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'upselling')
                                     ->get()
@@ -863,8 +872,8 @@ class TutupKasir extends BaseController
 
         $aktual_followup       = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'followup')
                                     ->get()
@@ -873,8 +882,8 @@ class TutupKasir extends BaseController
         
         $aktual_budgeting      = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'budgeting')
                                     ->get()
@@ -883,8 +892,8 @@ class TutupKasir extends BaseController
 
         $aktual_roas           =$this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'roas')
                                     ->get()
@@ -893,8 +902,8 @@ class TutupKasir extends BaseController
 
         $aktual_feed_pl        = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'feed pl')
                                     ->get()
@@ -903,8 +912,8 @@ class TutupKasir extends BaseController
 
         $aktual_video          = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'video')
                                     ->get()
@@ -913,8 +922,8 @@ class TutupKasir extends BaseController
 
         $aktual_feed_mingguan  = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'feed mingguan')
                                     ->get()
@@ -923,8 +932,8 @@ class TutupKasir extends BaseController
 
         $aktual_story          = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'story')
                                     ->get()
@@ -933,8 +942,8 @@ class TutupKasir extends BaseController
 
         $aktual_testimoni      = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'testimoni')
                                     ->get()
@@ -943,8 +952,8 @@ class TutupKasir extends BaseController
 
         $aktual_bug_minor      = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'bug minor')
                                     ->get()
@@ -953,8 +962,8 @@ class TutupKasir extends BaseController
 
         $aktual_bug_operasional= $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'operasional')
                                     ->get()
@@ -963,8 +972,8 @@ class TutupKasir extends BaseController
 
         $aktual_ecommerce      = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'ecommerce')
                                     ->get()
@@ -973,8 +982,8 @@ class TutupKasir extends BaseController
 
         $aktual_fitur          = $this->db->table('penilaian')
                                     ->select('SUM(skor) AS total')
-                                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                                     ->where('pegawai_idpegawai', $selected_karyawan)
                                     ->where('aspek =', 'operasional')
                                     ->get()
@@ -984,8 +993,8 @@ class TutupKasir extends BaseController
         // $aktual_kehadiran = 150;
         $aktual_kehadiran = $this->db->table('penilaian')
                     ->select('SUM(skor) AS total')
-                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                     ->where('pegawai_idpegawai', $selected_karyawan)
                     ->where('aspek =', 'kehadiran')
                     ->get()
@@ -995,8 +1004,8 @@ class TutupKasir extends BaseController
 
         $aktual_kebersihan = $this->db->table('penilaian')
                     ->select('SUM(skor) AS total')
-                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                     ->where('pegawai_idpegawai', $selected_karyawan)
                     ->where('aspek =', 'kebersihan')
                     ->get()
@@ -1005,8 +1014,8 @@ class TutupKasir extends BaseController
 
         $aktual_seragam = $this->db->table('penilaian')
                     ->select('SUM(skor) AS total')
-                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                     ->where('pegawai_idpegawai', $selected_karyawan)
                     ->where('aspek =', 'seragam')
                     ->get()
@@ -1016,8 +1025,8 @@ class TutupKasir extends BaseController
 
         $aktual_sop = $this->db->table('penilaian')
                     ->select('SUM(skor) AS total')
-                    ->where('MONTH(tanggal_penilaian)', date('m'))
-                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
+                    ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
                     ->where('pegawai_idpegawai', $selected_karyawan)
                     ->where('aspek =', 'kepatuhan sop')
                     ->get()
@@ -1427,13 +1436,23 @@ class TutupKasir extends BaseController
         $pengeluaran = $this->db->table('kas_keluar')
             ->selectSum('kas_keluar.jumlah', 'total')
             ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori')
-            ->where('MONTH(kas_keluar.tanggal)', date('m'))
-            ->where('YEAR(kas_keluar.tanggal)', date('Y'))
+            ->where('MONTH(kas_keluar.tanggal)', $seleksiBulanPadded)
+            ->where('YEAR(kas_keluar.tanggal)', $seleksiTahun)
             ->where('kas_keluar.idunit', $unit)
             ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,11,18])
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        $isBulanBerjalan = ($seleksiBulan == (int) date('n') && $seleksiTahun == (int) date('Y'));
+
+        $bulanSebelum = (int) date('n', mktime(0, 0, 0, $seleksiBulan - 1, 1, $seleksiTahun));
+        $tahunSebelum = (int) date('Y', mktime(0, 0, 0, $seleksiBulan - 1, 1, $seleksiTahun));
+        $bulanSesudah = (int) date('n', mktime(0, 0, 0, $seleksiBulan + 1, 1, $seleksiTahun));
+        $tahunSesudah = (int) date('Y', mktime(0, 0, 0, $seleksiBulan + 1, 1, $seleksiTahun));
+
+        $periodeLabel = date('F Y', mktime(0, 0, 0, $seleksiBulan, 1, $seleksiTahun));
+        $hariDalamBulan = (int) date('t', mktime(0, 0, 0, $seleksiBulan, 1, $seleksiTahun));
 
         return view('template', [
             'list_unit'      => $list_unit,
@@ -1443,6 +1462,14 @@ class TutupKasir extends BaseController
             'totalGajiUnit'  => $totalGajiUnit,
             
             'omset_bulan'       => $omset_bulan,
+            'bulan'             => $seleksiBulan,
+            'tahun'             => $seleksiTahun,
+            'isBulanBerjalan'   => $isBulanBerjalan,
+            'bulanSebelum'      => $bulanSebelum,
+            'tahunSebelum'      => $tahunSebelum,
+            'bulanSesudah'      => $bulanSesudah,
+            'tahunSesudah'      => $tahunSesudah,
+            'hariDalamBulan'    => $hariDalamBulan,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }
