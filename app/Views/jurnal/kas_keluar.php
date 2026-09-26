@@ -21,11 +21,17 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         --kk-ink-3: color-mix(in srgb, var(--bs-emphasis-color) 56%, var(--bs-body-bg));
         --kk-line: var(--bs-border-color);
         --kk-raise: var(--bs-tertiary-bg);
-        /* Permukaan deck memakai token kartu aplikasi, sama seperti halaman lain.
-           Tanpa token ini dek transparan dan kanvas halaman (`#f0f5f9` terang /
-           `#15263a` gelap) ikut terlihat lewat isi dek. */
-        --kk-surface: var(--bs-card-bg);
-        --kk-r: 12px;
+        /* Permukaan deck harus warna kartu aplikasi, sama seperti halaman lain.
+           `--bs-card-bg` hanya ada di dalam selektor `.card` (styles.css:5477),
+           sehingga di luar kartu token itu kosong: dek jadi transparan dan
+           kanvas halaman (`#f0f5f9` terang / `#15263a` gelap) terlihat langsung
+           lewat isi dek — itu sebabnya halaman ini terlihat berbeda dari yang lain.
+           `.card` sendiri mengecat `var(--bs-body-bg)`, jadi itulah nilainya. */
+        --kk-surface: var(--bs-body-bg);
+        /* Radius + bayangan kartu aplikasi (styles.css `.card`), supaya dek
+           terbaca sebagai kartu yang sama, bukan bidang lepas di kanvas. */
+        --kk-r: 1.125rem;
+        --kk-shadow: 0 2px 6px rgba(37, 83, 185, .1);
         --kk-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     }
 
@@ -41,15 +47,18 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
     }
 
     /* ── Masthead ─────────────────────────────────────────────── */
+    /* Kartu judul tanpa bayangan, mengikuti kartu header halaman lain
+       (`card shadow-none`): judul dan cakupan periode di atas kanvasAbu. */
     .kk-masthead {
         display: flex;
         flex-wrap: wrap;
-        align-items: flex-end;
+        align-items: center;
         justify-content: space-between;
         gap: .75rem 1.25rem;
-        padding-bottom: 1rem;
+        padding: 1rem 1.25rem;
         margin-bottom: 1rem;
-        border-bottom: 1px solid var(--kk-line);
+        background: var(--kk-surface);
+        border-radius: var(--kk-r);
     }
 
     .kk-masthead h1 {
@@ -84,8 +93,8 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
     /* ── Deck kerangka ────────────────────────────────────────── */
     .kk-deck {
         background: var(--kk-surface);
-        border: 1px solid var(--kk-line);
         border-radius: var(--kk-r);
+        box-shadow: var(--kk-shadow);
     }
 
     .kk-deck+.kk-deck {
@@ -344,6 +353,12 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
 
     .kk-search[data-filled="true"] .kk-clear {
         display: block;
+    }
+
+    /* Tombol bersihkan mengisi 26px di tepi kanan; tanpa ruang yang disisakan,
+       teks yang panjang menimpanya. */
+    .kk-search[data-filled="true"] .form-control {
+        padding-right: 2.25rem;
     }
 
     .kk-search .kk-clear:hover {
@@ -1088,7 +1103,9 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         <div class="kk-cmdbar">
             <div class="kk-search" id="kkSearchWrap" data-filled="false">
                 <label class="visually-hidden" for="kkSearch">Cari kas keluar</label>
-                <iconify-icon class="kk-search-icon" icon="solar:magnifer-linear" width="18" height="18" aria-hidden="true"></iconify-icon>
+                <!-- Solar menamai ikon ini `magnifier`; `magnifer` (tanpa "i")
+                     hanya alias di API Iconify dan bisa sewaktu-waktu hilang. -->
+                <iconify-icon class="kk-search-icon" icon="solar:magnifier-linear" width="18" height="18" aria-hidden="true"></iconify-icon>
                 <input type="search" class="form-control" id="kkSearch"
                     placeholder="Cari ID, deskripsi, kategori, penerima, No. Akun…"
                     autocomplete="off" spellcheck="false">
