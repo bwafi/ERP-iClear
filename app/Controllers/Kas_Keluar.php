@@ -70,24 +70,44 @@ class Kas_Keluar extends BaseController
             0 => 'kas_keluar.idkas_keluar',
             1 => 'kas_keluar.tanggal',
             2 => 'unit.NAMA_UNIT',
-            3 => 'no_akun.no_akun',
-            4 => 'kategori_kas.kategori',
+            3 => 'kategori_kas.kategori',
+            4 => 'no_akun.no_akun',
             5 => 'kas_keluar.deskripsi',
-            6 => 'bank.nama_bank',
-            7 => 'kas_keluar.penerima',
-            8 => 'bank.norek',
-            9 => 'kas_keluar.jumlah',
-            10 => 'kas_keluar.jenis',
-            11 => null, // aksi — tidak urutkan
+            6 => 'kas_keluar.penerima',
+            7 => 'kas_keluar.jumlah',
+            8 => 'kas_keluar.jenis',
+            9 => null, // aksi — tidak urutkan
         ];
-        $orderCol = $columnMap[$orderColIdx] ?? 'kas_keluar.idkas_keluar';
+        $orderCol = $columnMap[$orderColIdx] ?? 'kas_keluar.tanggal';
 
         $startDate = trim((string)$this->request->getGet('tanggal_awal'));
         $endDate   = trim((string)$this->request->getGet('tanggal_akhir'));
         $unitId    = (int)$this->request->getGet('unit_id');
 
+        // Kueri yang isinya hanya angka dibaca sebagai pencarian ID: dicocokkan
+        // persis ke primary key, bukan sebagai substring. "3" sebagai substring
+        // mengembalikan ratusan baris yang tidak pernah dimaksud; "3" sebagai ID
+        // selesai seketika lewat indeks. Pencarian teks tetap memakai OR LIKE
+        // seperti sebelumnya, dan pengguna bisa memaksa mode teks lewat
+        // search_mode=text.
+        $searchMode = (string)$this->request->getGet('search_mode');
+        $idExact    = ($search !== '' && $searchMode !== 'text' && ctype_digit($search));
+
         $total    = $this->KasKeluarModel->countAllKasKeluar();
-        $filtered = $this->KasKeluarModel->countKasKeluarFiltered($search, $startDate ?: null, $endDate ?: null, $unitId ?: null);
+        $filtered = $this->KasKeluarModel->countKasKeluarFiltered(
+            $search,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null,
+            $idExact
+        );
+        $sumTotal = $this->KasKeluarModel->sumKasKeluarFiltered(
+            $search,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null,
+            $idExact
+        );
         $rows     = $this->KasKeluarModel->getKasKeluarDataTable(
             $length,
             $start,
@@ -96,39 +116,55 @@ class Kas_Keluar extends BaseController
             $orderDir,
             $startDate ?: null,
             $endDate ?: null,
-            $unitId ?: null
+            $unitId ?: null,
+            $idExact
         );
 
+        // Resolusi ID dijawab terpisah dari isi tabel, supaya "ID ada tapi di
+        // luar filter aktif" tetap bisa disampaikan alih-alih diam-diam
+        // menampilkan nol baris.
+        $idHit = null;
+        if ($idExact) {
+            $hit = $this->KasKeluarModel->findKasKeluarById((int)$search);
+            if ($hit) {
+                $idHit = [
+                    'id'       => (int)$hit->idkas_keluar,
+                    'tanggal'  => $hit->tanggal,
+                    'deskripsi' => (string)($hit->deskripsi ?? ''),
+                    'jumlah'   => (float)$hit->jumlah,
+                    'unit'     => (string)($hit->NAMA_UNIT ?? ''),
+                    'inScope'  => $this->KasKeluarModel->isKasKeluarInScope(
+                        (int)$search,
+                        $startDate ?: null,
+                        $endDate ?: null,
+                        $unitId ?: null
+                    ),
+                ];
+            }
+        }
+
+        // Nilai dikembalikan terpisah, tanpa HTML: sel disusun di tampilan agar
+        // escaping dan pemotongan teks punya satu tempat yang jelas.
         $data = [];
         foreach ($rows as $r) {
             $data[] = [
-                'id'         => (int)$r->idkas_keluar,
-                'tanggal'    => date('d-m-Y', strtotime($r->tanggal)),
-                'unit'       => $r->NAMA_UNIT,
-                'no_akun'    => esc($r->no_akun ?? '', 'attr') . ($r->nama_akun ? ' <small class="text-muted">' . esc($r->nama_akun) . '</small>' : ''),
-                'kategori'   => esc($r->kategori ?? ''),
-                'deskripsi'  => esc($r->deskripsi ?? ''),
-                'bank'       => esc($r->nama_bank ?? '-'),
-                'penerima'   => esc($r->penerima ?? '-'),
-                'norek'      => esc($r->norek ?? '-'),
-                'jumlah'     => (float)$r->jumlah,
-                'jenis'      => ucfirst(esc($r->jenis ?? '-')),
-                'aksi'       => '<div class="d-flex justify-content-center gap-1">'
-                    . '<button type="button" class="btn btn-sm btn-outline-primary edit-button" title="Edit" '
-                    . 'data-id="' . (int)$r->idkas_keluar . '" '
-                    . 'data-tanggal="' . esc($r->tanggal, 'attr') . '" '
-                    . 'data-kategori="' . (int)($r->kategori_idkategori ?? 0) . '" '
-                    . 'data-deskripsi="' . esc($r->deskripsi ?? '', 'attr') . '" '
-                    . 'data-jumlah="' . (float)$r->jumlah . '" '
-                    . 'data-jenis="' . esc($r->jenis ?? '', 'attr') . '" '
-                    . 'data-idbank="' . (int)($r->idbank ?? 0) . '" '
-                    . 'data-penerima="' . esc($r->penerima ?? '', 'attr') . '" '
-                    . 'data-bs-toggle="modal" data-bs-target="#edit-kas-modal">'
-                    . '<i class="bi bi-pencil-square"></i></button>'
-                    . '<button type="button" class="btn btn-sm btn-outline-danger delete-button" title="Hapus" '
-                    . 'data-id="' . (int)$r->idkas_keluar . '" '
-                    . 'data-bs-toggle="modal" data-bs-target="#delete-kas-modal">'
-                    . '<i class="bi bi-trash"></i></button></div>',
+                'id'        => (int)$r->idkas_keluar,
+                'tanggal'   => (string)$r->tanggal,
+                'unit'      => (string)($r->NAMA_UNIT ?? ''),
+                'no_akun'   => (string)($r->no_akun ?? ''),
+                'nama_akun' => trim((string)($r->nama_akun ?? '')),
+                'kategori'  => (string)($r->kategori ?? ''),
+                'kategori_id' => (int)($r->kategori_idkategori ?? 0),
+                'idbank'    => ($r->idbank === null || $r->idbank === '') ? 0 : (int)$r->idbank,
+                'deskripsi' => (string)($r->deskripsi ?? ''),
+                'nama_bank' => (string)($r->nama_bank ?? ''),
+                'norek'     => (string)($r->norek ?? ''),
+                'penerima'  => (string)($r->penerima ?? ''),
+                'jumlah'    => (float)$r->jumlah,
+                'jenis'     => trim((string)($r->jenis ?? '')),
+                // Kolom Aksi tidak menyimpan apa pun, tapi DataTables server-side
+                // menuntut setiap kolom yang dikonfigurasi punya kunci di payload.
+                'aksi'      => null,
             ];
         }
 
@@ -136,6 +172,9 @@ class Kas_Keluar extends BaseController
             'draw'            => $draw,
             'recordsTotal'    => $total,
             'recordsFiltered' => $filtered,
+            'sumTotal'        => $sumTotal,
+            'isIdQuery'       => $idExact,
+            'idHit'           => $idHit,
             'data'            => $data,
         ]);
     }

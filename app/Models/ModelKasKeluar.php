@@ -64,21 +64,31 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
             ->join('no_akun', 'no_akun.no_akun = kas_keluar.no_akun', 'left');
     }
 
-    /** Terapkan filter umum (search/tanggal/unit) pada builder kas keluar. */
-    private function applyKasKeluarFilter($builder, string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null)
+    /**
+     * Terapkan filter umum (search/tanggal/unit) pada builder kas keluar.
+     *
+     * $idExact memilih pencocokan persis primary key. Kueri yang isinya hanya angka
+     * memakai mode ini: mencocokkan "3" sebagai substring mengembalikan ratusan
+     * baris yang tidak pernah dimaksud, sementara `idkas_keluar = 3` memakai
+     * indeks dan selesai seketika.
+     */
+    private function applyKasKeluarFilter($builder, string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false)
     {
         if ($search !== '') {
-            $builder->groupStart()
-                ->orLike('kas_keluar.idkas_keluar', $search)
-                ->orLike('no_akun.no_akun', $search)
-                ->orLike('no_akun.nama_akun', $search)
-                ->orLike('kategori_kas.kategori', $search)
-                ->orLike('kas_keluar.deskripsi', $search)
-                ->orLike('bank.nama_bank', $search)
-                ->orLike('bank.norek', $search)
-                ->orLike('unit.NAMA_UNIT', $search)
-                ->orLike('kas_keluar.penerima', $search)
-                ->groupEnd();
+            if ($idExact) {
+                $builder->where('kas_keluar.idkas_keluar', (int)$search);
+            } else {
+                $builder->groupStart()
+                    ->orLike('no_akun.no_akun', $search)
+                    ->orLike('no_akun.nama_akun', $search)
+                    ->orLike('kategori_kas.kategori', $search)
+                    ->orLike('kas_keluar.deskripsi', $search)
+                    ->orLike('bank.nama_bank', $search)
+                    ->orLike('bank.norek', $search)
+                    ->orLike('unit.NAMA_UNIT', $search)
+                    ->orLike('kas_keluar.penerima', $search)
+                    ->groupEnd();
+            }
         }
         if (!empty($startDate)) {
             $builder->where('kas_keluar.tanggal >=', $startDate);
@@ -98,18 +108,54 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
     }
 
     /** Jumlah baris setelah filter untuk DataTables. */
-    public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null): int
+    public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): int
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId);
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
         return $builder->countAllResults();
     }
 
-    /** Baris data untuk DataTables server-side. */
-    public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null): array
+    /**
+     * Total Rupiah dari SELURUH baris terfilter, bukan hanya halaman aktif.
+     * Dipakai supaya angka "Total" di kaki tabel tidak berbeda dengan yang
+     * dibaca pengguna dari hasil filter.
+     */
+    public function sumKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): float
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId);
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
+
+        $row = $builder->select('COALESCE(SUM(kas_keluar.jumlah), 0) AS total', true)->first();
+
+        return (float)($row->total ?? 0);
+    }
+
+    /** Satu baris berdasarkan ID kas keluar,abaikan filter periode/unit. */
+    public function findKasKeluarById(int $id): ?object
+    {
+        return $this->baseKasKeluarQuery()
+            ->where('kas_keluar.idkas_keluar', $id)
+            ->first();
+    }
+
+    /**
+     * Apakah ID ini masih lolos periode/unit yang sedang aktif?
+     * Dipakai untuk memberi tahu "ID ada, tapi di luar filter" alih-alih
+     * diam-diam mengembalikan nol baris.
+     */
+    public function isKasKeluarInScope(int $id, ?string $startDate = null, ?string $endDate = null, ?int $unitId = null): bool
+    {
+        $builder = $this->baseKasKeluarQuery();
+        $this->applyKasKeluarFilter($builder, (string)$id, $startDate, $endDate, $unitId, true);
+
+        return $builder->countAllResults() > 0;
+    }
+
+    /** Baris data untuk DataTables server-side. */
+    public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): array
+    {
+        $builder = $this->baseKasKeluarQuery();
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
 
         $safeOrderCols = [
             'kas_keluar.tanggal',
