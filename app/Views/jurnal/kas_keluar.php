@@ -181,12 +181,12 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
     }
 
     /* Lipat / buka. Badan deck yang tertutup harus benar-benar keluar dari
-       flow: kalau hanya dipipihkan, tabel posisi di dalamnya tetap lifeless
+       flow: kalau hanya dipipihkan, tabel rincian akun di dalamnya tetap lifeless
        dan melebarkan dokumen, bukan menggulir di dalam deck. */
     .kk-composer-body {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
-        /* Tabel posisi 7 kolom melebihi lebar ponsel. `.table-responsive`
+        /* Tabel rincian akun 7 kolom melebihi lebar ponsel. `.table-responsive`
            menggulirkan tabelnya sendiri, tapi tanpa containment overflow-nya
            tetap merambat ke atas sampai seluruh halaman bisa digeser sideways
            begitu composer dibuka. */
@@ -237,11 +237,16 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         margin-bottom: .375rem;
     }
 
+    /* Jarak ke atas bukan kosmetik: baris input di atasnya (`.row g-3`) berakhir
+       tepat di sisi subhead, dan kolom paling lebar di baris itu adalah input
+       Deskripsi — jadi tombol "Tambah Baris" duduk persis di bawahnya. Tanpa
+       margin ini keduanya menempel, apalagi setelah tombol dibuat lebih tinggi. */
     .kk-subhead {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
+        margin-top: 1.25rem;
     }
 
     .kk-subhead .kk-field-label {
@@ -271,6 +276,36 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
     .kk-pos-table .form-control,
     .kk-pos-table .form-select {
         font-size: .8125rem;
+    }
+
+    /* Panah select2 No. Akun / No. Rekening jatuh di luar kotaknya.
+       Template bersama mengunci `.select2-selection__arrow` ke `top: 24px`
+       (styles.css:25898) lalu menaikkan tingginya jadi 40px (styles.css:25956)
+       — sama dengan tinggi kotak selection. Panah 40px yang mulai di 24px
+       berakhir 24px di bawah kotak, dan `b` di dalamnya dipusatkan di 50%
+       tinggi panah, sehingga ujung caret jatuh ±2px di bawah garis bawah
+       input. `right: 20px` juga menumpukkannya tepat di tempat tombol
+       bersihkan (`margin-right: 20px`), jadi caret dan "×" berebut ruang.
+       Di sini geometri panah dikembalikan kekotak yang benar, tombol
+       bersihkan digeser ke kiri oblast panah, dan teks diberi ruang cukup.
+       Prefix `body` menyamai spesifisitas aturan template, dan blok <style>
+       halaman ini muncul belakangan di badan dokumen. `height` sengaja tidak
+       ditimpa: `.select2-selection--single` tidak punya `position: relative`
+       (hanya `.select2-container`), jadi containing block panah berukuran
+       `auto` dan `height: 100%` akan kolaps jadi nol. Tinggi 40px dari
+       styles.css:25956 justru yang benar. */
+    body .kk-scope .select2-container--default .select2-selection--single .select2-selection__arrow {
+        top: 0;
+        right: 0;
+        width: 26px;
+    }
+
+    body .kk-scope .select2-container--default .select2-selection--single .select2-selection__clear {
+        margin-right: 28px;
+    }
+
+    body .kk-scope .select2-container--default .select2-selection--single .select2-selection__rendered {
+        padding-right: 30px;
     }
 
     .kk-total-line {
@@ -613,7 +648,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         white-space: nowrap;
     }
 
-    /* Posisi: debet = chip berisi, kredit = chip garis. Bentuk dan warna
+    /* Debet/Kredit: debet = chip berisi, kredit = chip garis. Bentuk dan warna
        membedakan, supaya tetap terbaca tanpa mengandalkan warna. */
     .kk-pos-debet {
         background: var(--bs-primary-bg-subtle);
@@ -960,7 +995,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             </span>
             <span class="kk-composer-label">
                 <strong id="kkComposerTitle">Input Kas Keluar</strong>
-                <span class="kk-composer-sub" id="kkComposerSub">Belum ada draf — isi tanggal, unit, lalu tambah posisi akun</span>
+                <span class="kk-composer-sub" id="kkComposerSub">Belum ada draf — isi tanggal, unit, lalu tambah baris akun</span>
             </span>
             <span class="kk-composer-live" id="kkComposerLive" hidden>
                 <b class="kk-num" id="kkComposerLiveTotal">Rp 0</b>
@@ -974,7 +1009,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             <div>
                 <div class="kk-composer-inner">
 
-                    <!-- Form input: route insert_kas_keluar, banyak posisi akun -->
+                    <!-- Form input: route insert_kas_keluar, banyak baris akun -->
                     <form action="<?= base_url("insert_kas_keluar") ?>" method="post" id="kkFormInsert" novalidate>
                         <div class="row g-3">
                             <div class="col-12 col-md-3">
@@ -999,10 +1034,10 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                         </div>
 
                         <div class="kk-subhead">
-                            <span class="kk-field-label" id="kkPosLabel">Posisi Akun</span>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="kkAddPosisi">
+                            <span class="kk-field-label" id="kkPosLabel">Rincian Akun</span>
+                            <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 px-3 py-2" id="kkAddPosisi">
                                 <iconify-icon icon="solar:add-circle-linear" width="16" height="16" aria-hidden="true"></iconify-icon>
-                                <span class="ms-1">Tambah Posisi</span>
+                                <span>Tambah Baris</span>
                             </button>
                         </div>
 
@@ -1015,7 +1050,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                                         <th scope="col">Sumber Dana</th>
                                         <th scope="col">No. Rekening</th>
                                         <th scope="col">Penerima</th>
-                                        <th scope="col">Posisi</th>
+                                        <th scope="col">Debet/Kredit</th>
                                         <th scope="col" class="text-end">Jumlah</th>
                                         <th scope="col"><span class="visually-hidden">Hapus</span></th>
                                     </tr>
@@ -1035,7 +1070,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                         </div>
                     </form>
 
-                    <!-- Form edit: route update_kas_keluar, satu posisi (bentuk yang
+                    <!-- Form edit: route update_kas_keluar, satu baris (bentuk yang
                          benar-benar diterima route ini) -->
                     <form action="<?= base_url("update_kas_keluar") ?>" method="post" id="kkFormEdit" hidden>
                         <input type="hidden" name="idkas_keluar" id="kkEditId">
@@ -1067,7 +1102,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                                 <input type="text" class="form-control" name="deskripsi" id="kkEditDeskripsi" maxlength="255" required>
                             </div>
                             <div class="col-6 col-md-2">
-                                <label class="kk-field-label" for="kkEditPosisi">Posisi</label>
+                                <label class="kk-field-label" for="kkEditPosisi">Debet/Kredit</label>
                                 <select class="form-select" name="posisi_drk" id="kkEditPosisi">
                                     <option value="debet">Debet</option>
                                     <option value="kredit">Kredit</option>
@@ -1082,7 +1117,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
 
                         <p class="kk-note">
                             <iconify-icon icon="solar:info-circle-linear" width="16" height="16" class="flex-shrink-0 mt-1" aria-hidden="true"></iconify-icon>
-                            <span>Mode edit mengubah tanggal, kategori, deskripsi, jumlah, penerima, dan posisi. Unit dan No. Akun tetap seperti saat transaksi dibuat.</span>
+                            <span>Mode edit mengubah tanggal, kategori, deskripsi, jumlah, penerima, dan debet/kredit. Unit dan No. Akun tetap seperti saat transaksi dibuat.</span>
                         </p>
 
                         <div class="d-flex justify-content-end gap-2">
@@ -1169,7 +1204,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                         <th scope="col" class="kk-c-desc">Deskripsi</th>
                         <th scope="col" class="kk-c-penerima">Penerima</th>
                         <th scope="col" class="kk-c-jumlah">Jumlah</th>
-                        <th scope="col" class="kk-c-jenis">Posisi</th>
+                        <th scope="col" class="kk-c-jenis">Debet/Kredit</th>
                         <?php if ($canAct): ?>
                             <th scope="col" class="kk-c-aksi"><span class="visually-hidden">Aksi</span></th>
                         <?php endif; ?>
@@ -1180,7 +1215,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                     <tr>
                         <?php // Baris kaki harus penjumlah persis sama dengan jumlah kolom
                         // ledger: label menutup ID..Penerima, nominal duduk di bawah
-                        // Jumlah, lalu hitungan grabs Posisi + Aksi. ?>
+                        // Jumlah, lalu hitungan grabs Debet/Kredit + Aksi. ?>
                         <td colspan="7" class="text-end" id="kkFootLabel">Total</td>
                         <td class="kk-foot-total" id="kkFootTotal">Rp 0</td>
                         <td colspan="<?= $canAct ? 2 : 1 ?>" class="kk-foot-count text-secondary" id="kkFootCount"></td>
@@ -1248,7 +1283,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         const CAN_PICK_UNIT = <?= $canPickUnit ? 'true' : 'false' ?>;
         const LOGIN_UNIT = <?= $akunUnit ?>;
 
-        // ── Option lists, dipakai untuk baris posisi akun ──────────
+        // ── Option lists, dipakai untuk baris rincian akun ──────────
         const AKUN_OPTIONS = `<option value="">-- Pilih No. Akun --</option><?php foreach ($no_akun as $a): ?><option value="<?= esc($a->no_akun) ?>"><?= esc($a->no_akun) ?> &mdash; <?= esc($a->nama_akun) ?></option><?php endforeach; ?>`;
         const KAT_OPTIONS = `<option value="">-- Pilih Kategori --</option><?php foreach ($kategori_kas as $kat): ?><option value="<?= (int) $kat->idkategori_kas ?>"><?= esc($kat->kategori) ?></option><?php endforeach; ?>`;
         const BANK_OPTIONS = `<option value="">-- Pilih No. Rekening --</option><?php foreach ($bank as $b): ?><option value="<?= (int) $b->idbank ?>"><?= esc($b->nama_bank . ' · ' . $b->atas_nama . ' · ' . $b->norek) ?></option><?php endforeach; ?>`;
@@ -1295,7 +1330,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             { key: 'deskripsi', label: 'Deskripsi', cls: 'kk-c-desc', orderable: true },
             { key: 'penerima', label: 'Penerima', cls: 'kk-c-penerima', orderable: true },
             { key: 'jumlah', label: 'Jumlah', cls: 'kk-c-jumlah', orderable: true },
-            { key: 'jenis', label: 'Posisi', cls: 'kk-c-jenis', orderable: true }
+            { key: 'jenis', label: 'Debet/Kredit', cls: 'kk-c-jenis', orderable: true }
         ];
         if (CAN_ACT) {
             COLS.push({ key: 'aksi', label: '', cls: 'kk-c-aksi', orderable: false, searchable: false });
@@ -1375,7 +1410,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                 '<td><select class="form-select kk-pos-posisi" name="akun[' + i + '][posisi_drk]">' +
                 '<option value="debet" selected>Debet</option><option value="kredit">Kredit</option></select></td>' +
                 '<td><input type="text" class="form-control text-end kk-num kk-pos-jumlah" name="akun[' + i + '][jumlah]" inputmode="numeric" placeholder="0" required></td>' +
-                '<td class="text-end"><button type="button" class="kk-rowbtn is-danger kk-pos-hapus" title="Hapus posisi" aria-label="Hapus posisi akun">' +
+                '<td class="text-end"><button type="button" class="kk-rowbtn is-danger kk-pos-hapus" title="Hapus baris" aria-label="Hapus baris akun">' +
                 '<iconify-icon icon="solar:trash-bin-minimalistic-linear" width="16" height="16"></iconify-icon></button></td>';
 
             posBody.appendChild(row);
@@ -1426,12 +1461,12 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             });
             draftTotal.textContent = rupiah(total);
             liveTotal.textContent = rupiah(total);
-            liveMeta.textContent = n + ' posisi' + (n === 1 ? '' : ' akun');
+            liveMeta.textContent = n + ' baris' + (n === 1 ? '' : ' akun');
 
             const tgl = byId('#kkTanggal').value;
             sub.textContent = (n === 0)
-                ? 'Belum ada draf — isi tanggal, unit, lalu tambah posisi akun'
-                : (tgl ? tanggalPendek(tgl) : 'Tanggal belum diisi') + ' · ' + n + ' posisi akun';
+                ? 'Belum ada draf — isi tanggal, unit, lalu tambah baris akun'
+                : (tgl ? tanggalPendek(tgl) : 'Tanggal belum diisi') + ' · ' + n + ' baris akun';
             live.hidden = n === 0;
         }
 
@@ -1531,7 +1566,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             const u = byId('#kkUnit');
             if (u.disabled) u.disabled = false;
 
-            // Satu transaksi harus punya minimal satu posisi akun. Baris posisi
+            // Satu transaksi harus punya minimal satu baris akun. Baris akun
             // bisa saja semuanya dihapus, dan tanpa penjaga ini form tetap terkirim.
             const rows = posBody.querySelectorAll('tr').length;
             if (rows === 0) {
@@ -1586,7 +1621,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                 return tag;
             }
             const tag = el('span', 'kk-tag kk-pos-kosong', '—');
-            tag.title = 'Posisi tidak diisi pada transaksi ini';
+            tag.title = 'Baris ini tidak diisi pada transaksi ini';
             return tag;
         }
 

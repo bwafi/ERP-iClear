@@ -187,9 +187,9 @@ class Kas_Keluar extends BaseController
 
         $akunData = $this->request->getPost('akun');
 
-        // Prospek harus punya minimal satu baris posisi akun.
+        // Prospek harus punya minimal satu baris akun.
         if (!is_array($akunData) || empty($akunData)) {
-            session()->setFlashdata('error', 'Minimal satu posisi akun wajib diisi.');
+            session()->setFlashdata('error', 'Minimal satu baris akun wajib diisi.');
             return redirect()->to(base_url('/kas_keluar'));
         }
 
