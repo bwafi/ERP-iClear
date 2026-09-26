@@ -1470,10 +1470,24 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             live.hidden = n === 0;
         }
 
+        // Unit terkunci mengikuti akun login, seperti sebelumnya. Harus dipanggil
+        // ulang setiap kali form di-reset: `form.reset()` mengembalikan select ke
+        // option default ("Pilih Unit"), sehingga unit yang terkunci ikut hilang.
+        function applyUnitDefault() {
+            const u = byId('#kkUnit');
+            if (LOGIN_UNIT > 0) {
+                u.value = LOGIN_UNIT;
+            }
+            const locked = !CAN_PICK_UNIT && LOGIN_UNIT > 0;
+            u.disabled = locked;
+            byId('#kkUnitHint').hidden = !locked;
+        }
+
         function resetComposer() {
             composerMode = 'insert';
             posisiIndex = 0;
             formInsert.reset();
+            applyUnitDefault();
             formEdit.reset();
             posBody.innerHTML = '';
             // Default ke hari ini, seperti alur input sebelumnya. Tanggal disusun
@@ -1551,15 +1565,6 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             setComposerOpen(false);
         });
         byId('#kkTanggal').addEventListener('change', updateDraftTotal);
-
-        // Unit terkunci mengikuti akun login, seperti sebelumnya.
-        if (LOGIN_UNIT > 0) {
-            byId('#kkUnit').value = LOGIN_UNIT;
-        }
-        if (!CAN_PICK_UNIT && LOGIN_UNIT > 0) {
-            byId('#kkUnit').disabled = true;
-            byId('#kkUnitHint').hidden = false;
-        }
 
         // Bersihkan format ribuan dan pastikan unit terkunci tetap terkirim.
         formInsert.addEventListener('submit', function (e) {

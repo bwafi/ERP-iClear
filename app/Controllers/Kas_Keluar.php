@@ -186,7 +186,18 @@ class Kas_Keluar extends BaseController
     {
         $tanggal = $this->request->getPost('tanggal');
         $deskripsi = $this->request->getPost('deskripsi');
-        $idunit = $this->request->getPost('unit_idunit');
+        $idunit = (int) $this->request->getPost('unit_idunit');
+
+        // Unit terkunci mengikuti akun login di form. Kalau select ter-disable,
+        // browser tetap mengirimnya, tapi form yang sudah pernah di-reset bisa
+        // mengirim nilai kosong — jadi unit login dipakai sebagai cadangan.
+        if ($idunit <= 0) {
+            $idunit = (int) session('ID_UNIT');
+        }
+        if ($idunit <= 0) {
+            session()->setFlashdata('error', 'Unit wajib diisi.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
 
         $akunData = $this->request->getPost('akun');
 
