@@ -5,8 +5,10 @@ namespace App\Controllers;
 use App\Services\Finance\FinanceKpiCalculationService;
 use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\OmsetDailyCalculator;
+use App\Services\Finance\RekonDailyCalculator;
 use App\Models\ModelFinanceOmsetDaily;
 use App\Models\ModelFinanceKpiRecord;
+use App\Models\ModelFinanceRekonDaily;
 use App\Models\ModelUnit;
 use Config\Finance;
 
@@ -16,6 +18,8 @@ class DashboardFinance extends BaseController
     protected $scopeService;
     protected $omsetDaily;
     protected $omsetCalculator;
+    protected $rekonCalc;
+    protected $rekonModel;
     protected $modelUnit;
     protected $config;
 
@@ -25,6 +29,8 @@ class DashboardFinance extends BaseController
         $this->scopeService = new FinanceScopeService();
         $this->omsetDaily = new ModelFinanceOmsetDaily();
         $this->omsetCalculator = new OmsetDailyCalculator();
+        $this->rekonCalc = new RekonDailyCalculator();
+        $this->rekonModel = new ModelFinanceRekonDaily();
         $this->modelUnit = new ModelUnit();
         $this->config = new Finance();
     }
@@ -143,7 +149,7 @@ class DashboardFinance extends BaseController
     }
 
     /**
-     * Simpan penilaian manual (Kesehatan Uang, Rekonsiliasi, Compliance, Improvement).
+     * Simpan penilaian manual (Kesehatan Uang, Compliance, Improvement).
      */
     public function entryManual()
     {
@@ -229,6 +235,155 @@ class DashboardFinance extends BaseController
         );
 
         return redirect()->back()->with('sukses', 'Catatan payroll tersimpan (jatuh tempo ' . $dueDate . ').');
+    }
+
+    /**
+     * Halaman Rekonsiliasi Harian.
+     */
+    public function rekonsiliasi()
+    {
+        $info = $this->scopeService->scopeInfo();
+        if (!$info['isLintas']) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengakses Rekonsiliasi.');
+        }
+
+        $units = $this->scopeService->resolveAllowedUnits();
+        $unitId = $this->scopeService->resolveSelectedUnitId($this->request->getGet('unit_id'));
+        $unitName = $unitId ? ($this->modelUnit->find($unitId)->NAMA_UNIT ?? '') : '';
+
+        $month = $this->request->getGet('month') ?: date('Y-m');
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $month = date('Y-m');
+        }
+        [$year, $mon] = array_map('intval', explode('-', $month));
+
+        $list = [];
+        $rekonScore = null;
+        if ($unitId) {
+            $list = $this->rekonCalc->monthlyList($unitId, $mon, $year);
+            $rekonScore = $this->rekonCalc->calculate($unitId, $mon, $year);
+        }
+
+        return view('template', [
+            'title'       => 'Rekonsiliasi Harian',
+            'body'        => 'dashboard/finance_rekonsiliasi',
+            'units'       => $units,
+            'unit_id'     => $unitId,
+            'unit_name'   => $unitName ?: '—',
+            'month'       => $month,
+            'list'        => $list,
+            'rekon_score' => $rekonScore,
+            'can_input'   => $info['isLintas'],
+        ]);
+    }
+
+    /**
+     * Form rekonsiliasi untuk satu tanggal.
+     */
+    public function rekonForm()
+    {
+        $info = $this->scopeService->scopeInfo();
+        if (!$info['isLintas']) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengakses Rekonsiliasi.');
+        }
+
+        $units = $this->scopeService->resolveAllowedUnits();
+        $unitId = $this->scopeService->resolveSelectedUnitId(
+            $this->request->getGet('unit_id') ?? $this->request->getPost('unit_id')
+        );
+        $unitName = $unitId ? ($this->modelUnit->find($unitId)->NAMA_UNIT ?? '') : '';
+
+        $tanggal = $this->request->getGet('tanggal') ?: date('Y-m-d');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+            $tanggal = date('Y-m-d');
+        }
+        if ($tanggal > date('Y-m-d')) {
+            $tanggal = date('Y-m-d');
+        }
+
+        $erp = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+        $existing = null;
+        if ($unitId) {
+            $erp = $this->rekonCalc->erpValues($unitId, $tanggal);
+            $existing = $this->rekonModel->getByUnitAndDate($unitId, $tanggal);
+        }
+
+        return view('template', [
+            'title'      => 'Rekonsiliasi — ' . $tanggal,
+            'body'       => 'dashboard/finance_rekon_form',
+            'units'      => $units,
+            'unit_id'    => $unitId,
+            'unit_name'  => $unitName ?: '—',
+            'tanggal'    => $tanggal,
+            'erp'        => $erp,
+            'existing'   => $existing,
+            'can_input'  => $info['isLintas'],
+        ]);
+    }
+
+    /**
+     * Simpan rekonsiliasi harian.
+     */
+    public function rekonSave()
+    {
+        if (!$this->scopeService->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengisi rekonsiliasi.');
+        }
+
+        $post = $this->request->getPost();
+        $unitId = (int) ($post['unit_id'] ?? 0);
+        $tanggal = (string) ($post['tanggal'] ?? '');
+
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+            return redirect()->back()->with('gagal', 'Tanggal tidak valid.');
+        }
+        if ($tanggal > date('Y-m-d')) {
+            return redirect()->back()->with('gagal', 'Tidak bisa rekonsiliasi tanggal masa depan.');
+        }
+
+        $allowedIds = array_map('intval', array_column(
+            array_map('get_object_vars', $this->scopeService->resolveAllowedUnits()),
+            'idunit'
+        ));
+        if (!in_array($unitId, $allowedIds, true)) {
+            return redirect()->back()->with('gagal', 'Unit tidak diperbolehkan.');
+        }
+
+        $erp = $this->rekonCalc->erpValues($unitId, $tanggal);
+
+        $actualCash = $this->parseRupiah($post['actual_cash_masuk'] ?? '');
+        $actualTransfer = $this->parseRupiah($post['actual_transfer_masuk'] ?? '');
+        $actualKeluar = $this->parseRupiah($post['actual_kas_keluar'] ?? '');
+
+        if ($actualCash < 0 || $actualTransfer < 0 || $actualKeluar < 0) {
+            return redirect()->back()->with('gagal', 'Nilai aktual tidak boleh negatif.');
+        }
+
+        $checkedCash = !empty($post['checked_cash_masuk']) ? 1 : 0;
+        $checkedTransfer = !empty($post['checked_transfer_masuk']) ? 1 : 0;
+        $checkedKeluar = !empty($post['checked_kas_keluar']) ? 1 : 0;
+
+        $this->rekonModel->upsert([
+            'unit_id'                => $unitId,
+            'tanggal'                => $tanggal,
+            'erp_cash_masuk'         => (int) $erp['cash_masuk'],
+            'actual_cash_masuk'      => (int) $actualCash,
+            'selisih_cash_masuk'     => (int) $actualCash - (int) $erp['cash_masuk'],
+            'checked_cash_masuk'     => $checkedCash,
+            'erp_transfer_masuk'     => (int) $erp['transfer_masuk'],
+            'actual_transfer_masuk'  => (int) $actualTransfer,
+            'selisih_transfer_masuk' => (int) $actualTransfer - (int) $erp['transfer_masuk'],
+            'checked_transfer_masuk' => $checkedTransfer,
+            'erp_kas_keluar'         => (int) $erp['kas_keluar'],
+            'actual_kas_keluar'      => (int) $actualKeluar,
+            'selisih_kas_keluar'     => (int) $actualKeluar - (int) $erp['kas_keluar'],
+            'checked_kas_keluar'     => $checkedKeluar,
+            'catatan'                => trim((string) ($post['catatan'] ?? '')),
+            'input_by'               => (int) session('ID_AKUN'),
+        ]);
+
+        return redirect()->to(base_url('finance/rekonsiliasi?unit_id=' . $unitId . '&month=' . substr($tanggal, 0, 7)))
+            ->with('sukses', 'Rekonsiliasi ' . $tanggal . ' tersimpan.');
     }
 
     /**

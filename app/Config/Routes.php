@@ -24,6 +24,9 @@ $routes->get('dashboard/finance', 'DashboardFinance::index', ['filter' => 'auth'
 $routes->post('finance/entry/omzet-sheet', 'DashboardFinance::entryOmzetSheet', ['filter' => 'auth']);
 $routes->post('finance/entry/manual', 'DashboardFinance::entryManual', ['filter' => 'auth']);
 $routes->post('finance/entry/payroll', 'DashboardFinance::entryPayroll', ['filter' => 'auth']);
+$routes->get('finance/rekonsiliasi', 'DashboardFinance::rekonsiliasi', ['filter' => 'auth']);
+$routes->get('finance/rekon/form', 'DashboardFinance::rekonForm', ['filter' => 'auth']);
+$routes->post('finance/rekon/save', 'DashboardFinance::rekonSave', ['filter' => 'auth']);
 
 
 

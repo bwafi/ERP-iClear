@@ -45,7 +45,6 @@ class Finance extends BaseConfig
      */
     public array $manualKpiCodes = [
         'kesehatan_uang',
-        'rekonsiliasi',
         'compliance',
         'improvement',
     ];

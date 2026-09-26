@@ -10,8 +10,8 @@ use Config\Finance;
 /**
  * Orkestrator perhitungan & snapshot KPI Finance untuk satu unit+periode.
  *
- * - Auto  : akurasi (omzet ERP vs sheet), cash_flow, hutang_piutang (dihitung live)
- * - Manual: kesehatan_uang, rekonsiliasi, compliance, improvement
+ * - Auto  : akurasi (omzet ERP vs sheet), cash_flow, hutang_piutang, rekonsiliasi
+ * - Manual: kesehatan_uang, compliance, improvement
  * - Placeholder "belum_dinilai" (Fase 4): payroll
  */
 class FinanceKpiCalculationService
@@ -23,6 +23,7 @@ class FinanceKpiCalculationService
     protected $hutang;
     protected $piutang;
     protected $payroll;
+    protected $rekon;
     protected $payrollModel;
     protected $config;
 
@@ -35,6 +36,7 @@ class FinanceKpiCalculationService
         $this->hutang = new HutangTimelinessCalculator();
         $this->piutang = new PiutangTimelinessCalculator();
         $this->payroll = new PayrollTimelinessCalculator();
+        $this->rekon = new RekonDailyCalculator();
         $this->payrollModel = new ModelFinancePayroll();
         $this->config = new Finance();
     }
@@ -89,6 +91,7 @@ class FinanceKpiCalculationService
             'hutang_detail' => $this->hutang->calculate($unitId, $month, $year),
             'piutang_detail' => $this->piutang->calculate($unitId, $month, $year),
             'payroll_detail' => $this->payroll->calculate($unitId, $month, $year),
+            'rekon_detail' => $this->rekon->calculate($unitId, $month, $year),
             'manual_records' => $this->kpiRecord->getByUnitAndPeriod($unitId, $year, $month),
             'manual_options' => $this->config->manualKpiCodes,
         ];
@@ -145,6 +148,10 @@ class FinanceKpiCalculationService
             case 'payroll':
                 $payroll = $this->payroll->calculate($unitId, $month, $year);
                 return $this->buildRow($code, $weight, 'auto', $payroll['score'], null, $payroll['status']);
+
+            case 'rekonsiliasi':
+                $rekon = $this->rekon->calculate($unitId, $month, $year);
+                return $this->buildRow($code, $weight, 'auto', $rekon['score'], null, $rekon['status']);
 
             default:
                 throw new \RuntimeException("KPI code tidak dikenal: {$code}");
