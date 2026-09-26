@@ -41,10 +41,17 @@ class Finance extends BaseConfig
     ];
 
     /**
-     * KPI yang diisi manual oleh Finance.
+     * KPI yang bisa diisi manual oleh Finance.
+     *
+     * 'rekonsiliasi' sengaja DISISIPKAN sebagai FALLBACK: modul sudah punya
+     * calculator auto, dan FinanceKpiCalculationService mencoba auto lebih
+     * dahulu. Jika auto tidak tersedia / error / tidak dapat dihitung, skor
+     * manual dari finance_kpi_records tetap dipakai. Jangan hapus item ini
+     * sebelum calculator auto terbukti stabil di produksi.
      */
     public array $manualKpiCodes = [
         'kesehatan_uang',
+        'rekonsiliasi',
         'compliance',
         'improvement',
     ];
@@ -81,4 +88,18 @@ class Finance extends BaseConfig
      * Dibiarkan kosong: kontrol akses penuh lewat financeInputRoles.
      */
     public array $financeViewRoles = [];
+
+    /**
+     * Jabatan yang boleh melakukan approval rekonsiliasi
+     * (SUBMITTED -> VERIFIED / NEED_REVISION).
+     *
+     * Hanya MANAGER (34) dan ADMIN ROOT (1) yang boleh memeriksa (verify).
+     * Administrator Finance (0) dan Direktur (2) tetap boleh MENGISI form
+     * (financeInputRoles), tetapi tidak berwenang memverifikasi.
+     *
+     * Aturan YANG WAJIB berlaku apa pun konfigurasi:
+     * whoever yang mengirim (submitted_by / input_by) TIDAK BOLEH memverifikasi
+     * miliknya sendiri (separation of duties).
+     */
+    public array $financeApproveRoles = [1, 34];
 }

@@ -203,6 +203,7 @@
                         'cash_flow' => '#tab-cashflow',
                         'hutang_piutang' => '#tab-hutang',
                         'payroll' => '#tab-payroll',
+                        'rekonsiliasi' => '#tab-rekon',
                     ][$row['code']] ?? '#tab-manual';
                     ?>
                     <div class="col-md-3">
@@ -302,6 +303,9 @@
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-payroll" type="button">Payroll</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-rekon" type="button">Rekonsiliasi</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manual" type="button">Riwayat Manual</button>
@@ -714,6 +718,54 @@
                             Belum ada data payroll. Sebelum ada jadwal gaji (due_date) & tanggal bayar, KPI Payroll menunggu input.
                         </div>
                     <?php endif; ?>
+                </div>
+
+                <!-- Rekonsiliasi -->
+                <div class="tab-pane fade" id="tab-rekon">
+                    <?php
+                    $rekonDetail = $rekon_detail['detail'] ?? [];
+                    $rekonScore  = $rekon_detail['score'] ?? null;
+                    $rekonStatus = $rekon_detail['status'] ?? 'tidak tersedia';
+                    $rekonLink   = 'finance/rekonsiliasi?unit_id=' . (int) $unit_id . '&month=' . $month;
+                    ?>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small mb-1">Skor KPI (Verified)</div>
+                                <div class="fs-4 fw-semibold">
+                                    <?= $rekonScore !== null ? number_format((float) $rekonScore, 2, ',', '.') . '%' : '—' ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small mb-1">Hari Kerja</div>
+                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_kerja'] ?? 0) ?></div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small mb-1">Lengkap &amp; Verified</div>
+                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_lengkap_verified'] ?? 0) ?></div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="text-muted small mb-1">Status Perhitungan</div>
+                                <div class="fs-6 fw-semibold mt-1"><?= esc($rekonStatus) ?></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
+                        <span>
+                            Hanya hari yang <strong>lengkap</strong> (ketua kelompok diperiksa) dan sudah
+                            <strong>VERIFIED</strong> yang dihitung ke KPI. Selisih tidak menurunkan skor.
+                        </span>
+                        <a href="<?= base_url($rekonLink) ?>" class="btn btn-primary btn-sm">
+                            <i class="bi bi-arrow-right-circle me-1"></i>Buka Rekonsiliasi Harian
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Riwayat Manual -->

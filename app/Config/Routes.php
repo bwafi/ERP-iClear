@@ -27,6 +27,8 @@ $routes->post('finance/entry/payroll', 'DashboardFinance::entryPayroll', ['filte
 $routes->get('finance/rekonsiliasi', 'DashboardFinance::rekonsiliasi', ['filter' => 'auth']);
 $routes->get('finance/rekon/form', 'DashboardFinance::rekonForm', ['filter' => 'auth']);
 $routes->post('finance/rekon/save', 'DashboardFinance::rekonSave', ['filter' => 'auth']);
+$routes->post('finance/rekon/submit', 'DashboardFinance::rekonSubmit', ['filter' => 'auth']);
+$routes->post('finance/rekon/approve', 'DashboardFinance::rekonApprove', ['filter' => 'auth']);
 
 
 

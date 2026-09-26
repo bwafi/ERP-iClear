@@ -10,9 +10,15 @@ use Config\Finance;
 /**
  * Orkestrator perhitungan & snapshot KPI Finance untuk satu unit+periode.
  *
- * - Auto  : akurasi (omzet ERP vs sheet), cash_flow, hutang_piutang, rekonsiliasi
+ * - Auto  : akurasi (omzet ERP vs sheet), cash_flow, hutang_piutang, payroll
  * - Manual: kesehatan_uang, compliance, improvement
- * - Placeholder "belum_dinilai" (Fase 4): payroll
+ * - Auto + fallback manual: rekonsiliasi
+ *
+ * Transisi aman rekonsiliasi: 'rekonsiliasi' tetap terdaftar di
+ * Finance::$manualKpiCodes, tetapi kpiRow() mencoba calculator auto lebih
+ * dahulu. Score auto dipakai bila tersedia; bila calculator error atau tidak
+ * dapat dihitung (score null), skor manual dari finance_kpi_records dipakai
+ * sehingga deploy calculator tidak pernah membuat KPIexisting jadi 0/null.
  */
 class FinanceKpiCalculationService
 {
@@ -94,6 +100,7 @@ class FinanceKpiCalculationService
             'rekon_detail' => $this->rekon->calculate($unitId, $month, $year),
             'manual_records' => $this->kpiRecord->getByUnitAndPeriod($unitId, $year, $month),
             'manual_options' => $this->config->manualKpiCodes,
+            'approve_roles' => $this->config->financeApproveRoles,
         ];
     }
 
@@ -103,6 +110,12 @@ class FinanceKpiCalculationService
     protected function kpiRow(int $unitId, int $month, int $year, string $startDate, string $endDate, string $code, array $akurasiDetail): array
     {
         $weight = (float) $this->config->kpiWeights[$code];
+
+        // Auto-first: coba calculator, jatuh ke manual bila tidak bisa dihitung.
+        if ($code === 'rekonsiliasi') {
+            return $this->rekonRow($unitId, $month, $year, $weight);
+        }
+
         $manual = in_array($code, $this->config->manualKpiCodes, true);
 
         if ($manual) {
@@ -150,12 +163,64 @@ class FinanceKpiCalculationService
                 return $this->buildRow($code, $weight, 'auto', $payroll['score'], null, $payroll['status']);
 
             case 'rekonsiliasi':
-                $rekon = $this->rekon->calculate($unitId, $month, $year);
-                return $this->buildRow($code, $weight, 'auto', $rekon['score'], null, $rekon['status']);
+                // ditangani sebelum switch oleh rekonRow()
+                return $this->rekonRow($unitId, $month, $year, $weight);
 
             default:
                 throw new \RuntimeException("KPI code tidak dikenal: {$code}");
         }
+    }
+
+    /**
+     * Baris KPI Rekonsiliasi dengan transisi aman auto -> manual.
+     *
+     * 1. Coba calculator auto. Bila score !== null (berhasil dihitung) pakai
+     *    score auto, mode 'auto' supaya ikut di-snapshot.
+     * 2. Bila calculator error / data kosong / kolom belum ada, baca skor
+     *    manual dari finance_kpi_records (mode 'manual' diutamakan).
+     * 3. Bila tidak ada manual sama sekali -> belum_dinilai.
+     */
+    protected function rekonRow(int $unitId, int $month, int $year, float $weight): array
+    {
+        $autoScore = null;
+        $autoStatus = 'error';
+
+        try {
+            $rekon = $this->rekon->calculate($unitId, $month, $year);
+            $autoScore = $rekon['score'];
+            $autoStatus = (string) $rekon['status'];
+        } catch (\Throwable $e) {
+            $autoScore = null;
+            $autoStatus = 'error';
+        }
+
+        if ($autoScore !== null) {
+            return $this->buildRow('rekonsiliasi', $weight, 'auto', (float) $autoScore, null, $autoStatus);
+        }
+
+        $record = $this->kpiRecord->findOneByUnitCodePeriod($unitId, 'rekonsiliasi', $year, $month);
+        if ($record && $record->score !== null) {
+            $notes = 'Fallback manual: calculator auto tidak dapat menghitung '
+                . '(status: ' . $autoStatus . ').';
+
+            return $this->buildRow(
+                'rekonsiliasi',
+                $weight,
+                (string) $record->mode,
+                (float) $record->score,
+                $notes,
+                'fallback_manual'
+            );
+        }
+
+        return $this->buildRow(
+            'rekonsiliasi',
+            $weight,
+            'manual',
+            null,
+            null,
+            'belum_dinilai'
+        );
     }
 
     private function buildRow(string $code, float $weight, string $mode, ?float $score, ?string $notes, string $status): array
