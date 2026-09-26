@@ -20,6 +20,7 @@ use App\Models\ModelDetailMutasi;
 use App\Models\ModelStokBarang;
 use Mpdf\Mpdf;
 use DateTime;
+use App\Libraries\ModeKasBank;
 
 class MutasiStok extends BaseController
 
@@ -38,6 +39,7 @@ class MutasiStok extends BaseController
     protected $HppBarangModel;
     protected $DetailMutasiModel;
     protected $StokBarangModel;
+    protected $KasBankLib;
 
 
     public function __construct()
@@ -55,6 +57,7 @@ class MutasiStok extends BaseController
         $this->HppBarangModel = new ModelHppBarang();
         $this->DetailMutasiModel = new ModelDetailMutasi();
         $this->StokBarangModel = new ModelStokBarang();
+        $this->KasBankLib = new ModeKasBank();
     }
 
     public function index()
@@ -70,6 +73,112 @@ class MutasiStok extends BaseController
             'body'  => 'stok/mutasi_stok'
         );
         return view('template', $data);
+    }
+
+    /**
+     * Daftar mutasi yang ditujukan ke unit pengguna (admin cabang penerima),
+     * untuk konfirmasi penerimaan. Admin lintas (root/direktur/manager/admin
+     * center) melihat semua mutasi.
+     */
+    public function masuk()
+    {
+        $unit = (int) session('ID_UNIT');
+        $isLintas = in_array((int) session('ID_JABATAN'), [0, 1, 2, 34], true);
+
+        $mutasiModel = $this->MutasiStokModel;
+        if (!$isLintas) {
+            $mutasiModel = $mutasiModel->where('terima_idunit', $unit);
+        }
+        $daftar = $mutasiModel->orderBy('idmutasi', 'DESC')->limit(200)->findAll();
+
+        $items = [];
+        foreach ($daftar as $m) {
+            $detail = $this->DetailMutasiModel->getFullDetailMutasiByMutasiId((int) $m->idmutasi);
+            $total = 0;
+            foreach ($detail as $d) {
+                $d->nilai = $this->KasBankLib->nilaiDetailMutasi((array) $d);
+                $total += (int) $d->nilai;
+            }
+            $unitKirim  = $this->UnitModel->getById((int) $m->kirim_idunit);
+            $unitTerima = $this->UnitModel->getById((int) $m->terima_idunit);
+            $items[] = (object) [
+                'idmutasi'          => (int) $m->idmutasi,
+                'no_nota_mutasi'    => $m->no_nota_mutasi,
+                'tanggal_kirim'     => date('Y-m-d', strtotime($m->tanggal_kirim)),
+                'tanggal_terima'    => $m->tanggal_terima ? date('Y-m-d', strtotime($m->tanggal_terima)) : null,
+                'status'            => (string) $m->status,
+                'kirim_idunit'      => (int) $m->kirim_idunit,
+                'terima_idunit'     => (int) $m->terima_idunit,
+                'nama_unit_kirim'   => $unitKirim ? $unitKirim->NAMA_UNIT : "Unit {$m->kirim_idunit}",
+                'nama_unit_terima'  => $unitTerima ? $unitTerima->NAMA_UNIT : "Unit {$m->terima_idunit}",
+                'total'             => $total,
+                'detail'            => $detail,
+            ];
+        }
+
+        $data = [
+            'akun'  => $this->AuthModel->getById(session('ID_AKUN')),
+            'unit'  => $this->UnitModel->getUnit(),
+            'items' => $items,
+            'body'  => 'stok/mutasi_masuk',
+        ];
+        return view('template', $data);
+    }
+
+    /**
+     * Konfirmasi penerimaan mutasi oleh admin unit penerima. Saat itu
+     * HUTANG/PIUTANG antar unit dibuat, jatuh tempo = tanggal terima + 3 hari.
+     */
+    public function terima($idmutasi)
+    {
+        $idmutasi = (int) $idmutasi;
+        $mutasi = $this->MutasiStokModel->getById($idmutasi);
+        if (!$mutasi) {
+            session()->setFlashdata('gagal', 'Mutasi tidak ditemukan.');
+            return redirect()->back();
+        }
+
+        $unit = (int) session('ID_UNIT');
+        $isLintas = in_array((int) session('ID_JABATAN'), [0, 1, 2, 34], true);
+        if (!$isLintas && (int) $mutasi->terima_idunit !== $unit) {
+            session()->setFlashdata('gagal', 'Anda hanya bisa menerima mutasi yang ditujukan ke unit Anda.');
+            return redirect()->back();
+        }
+
+        if ((string) $mutasi->status === '1') {
+            session()->setFlashdata('gagal', 'Mutasi sudah diterima sebelumnya.');
+            return redirect()->back();
+        }
+
+        $db = \Config\Database::connect();
+        try {
+            $db->transStart();
+
+            $now = date('Y-m-d H:i:s');
+            $this->MutasiStokModel->update($idmutasi, [
+                'status'        => '1',
+                'tanggal_terima'=> $now,
+                'input_by'      => (int) session('ID_AKUN'),
+                'updated_on'    => $now,
+            ]);
+
+            $r = $this->KasBankLib->buatHutangPiutangDariMutasi($idmutasi, (int) session('ID_AKUN'));
+
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal konfirmasi terima mutasi #' . $idmutasi . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menyimpan penerimaan mutasi. Silakan coba lagi.');
+            return redirect()->back();
+        }
+
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal menyimpan penerimaan mutasi.');
+            return redirect()->back();
+        }
+
+        session()->setFlashdata('sukses', 'Mutasi diterima. Hutang/Piutang antar unit dibuat otomatis (jatuh tempo +3 hari).');
+        return redirect()->to(base_url('mutasi_stok/masuk'));
     }
 
     public function insert()

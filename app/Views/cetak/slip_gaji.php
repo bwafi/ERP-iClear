@@ -264,10 +264,15 @@
                     <td>Rp<?= number_format($bon ?? 0,0,',','.') ?></td>
                 </tr>
 
+                <tr>
+                    <td>Kasbon</td>
+                    <td>Rp<?= number_format($kasbon ?? 0,0,',','.') ?></td>
+                </tr>
+
                 <tr class="total">
                 <td>TOTAL (B)</td>
                 <td>
-                    Rp<?= number_format($bon ?? 0,0,',','.') ?>
+                    Rp<?= number_format(($bon ?? 0) + ($kasbon ?? 0),0,',','.') ?>
                 </td>
             </tr>
 
@@ -289,7 +294,7 @@
                     </td>
 
                     <td class="netto" align="right">
-                        Rp<?= number_format($gaji + $lembur - $bon,0,',','.') ?>
+                        Rp<?= number_format($gaji + $lembur - ($bon ?? 0) - ($kasbon ?? 0),0,',','.') ?>
                     </td>
                 </tr>
             </table>

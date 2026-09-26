@@ -19,6 +19,17 @@ $routes->get('dashboard/keuangan', 'DashboardKeuangan::index', ['filter' => 'aut
 $routes->get('dashboard/hrd', 'DashboardHRD::index', ['filter' => 'auth']);
 $routes->get('dashboard/laba-rugi', 'DashboardLabaRugi::index', ['filter' => 'auth']);
 
+//Dashboard Finance + KPI Finance (Fase 1)
+$routes->get('dashboard/finance', 'DashboardFinance::index', ['filter' => 'auth']);
+$routes->post('finance/entry/omzet-sheet', 'DashboardFinance::entryOmzetSheet', ['filter' => 'auth']);
+$routes->post('finance/entry/manual', 'DashboardFinance::entryManual', ['filter' => 'auth']);
+$routes->post('finance/entry/payroll', 'DashboardFinance::entryPayroll', ['filter' => 'auth']);
+$routes->get('finance/rekonsiliasi', 'DashboardFinance::rekonsiliasi', ['filter' => 'auth']);
+$routes->get('finance/rekon/form', 'DashboardFinance::rekonForm', ['filter' => 'auth']);
+$routes->post('finance/rekon/save', 'DashboardFinance::rekonSave', ['filter' => 'auth']);
+$routes->post('finance/rekon/submit', 'DashboardFinance::rekonSubmit', ['filter' => 'auth']);
+$routes->post('finance/rekon/approve', 'DashboardFinance::rekonApprove', ['filter' => 'auth']);
+
 
 
 //Datamaster
@@ -240,6 +251,8 @@ $routes->get('produk_terlaris', 'Produk_Terlaris::index', ['filter' => 'auth']);
 
 //mutasi stok
 $routes->get('mutasi_stok', 'MutasiStok::index', ['filter' => 'auth']);
+$routes->get('mutasi_stok/masuk', 'MutasiStok::masuk', ['filter' => 'auth']);
+$routes->post('mutasi_stok/terima/(:num)', 'MutasiStok::terima/$1', ['filter' => 'auth']);
 $routes->post('insert_mutasi', 'MutasiStok::insert', ['filter' => 'auth']);
 
 //riwayat pembelian
@@ -394,6 +407,23 @@ $routes->post('update_kas_masuk', 'Kas_Masuk::update_kas_Masuk', ['filter' => 'a
 $routes->post('delete_kas_masuk', 'Kas_Masuk::delete_kas_Masuk', ['filter' => 'auth']);
 $routes->post('export_kas_masuk', 'Kas_Masuk::export', ['filter' => 'auth']);
 
+//Kas & Bank + Pembayaran Antar Unit
+$routes->group('kas_bank', ['filter' => 'auth'], function ($routes) {
+    $routes->get('', 'KasBank::index');
+    $routes->get('akun', 'KasBank::akun');
+    $routes->post('akun/save', 'KasBank::saveAkun', ['filter' => 'auth']);
+    $routes->post('saldo-awal/save', 'KasBank::saveSaldoAwal', ['filter' => 'auth']);
+    $routes->post('saldo-alokasi/save', 'KasBank::saveAlokasiSaldo', ['filter' => 'auth']);
+    $routes->get('transfer', 'KasBank::transfer');
+    $routes->post('transfer/save', 'KasBank::saveTransfer', ['filter' => 'auth']);
+    $routes->post('transfer/reversal/(:num)', 'KasBank::reversalTransfer/$1', ['filter' => 'auth']);
+    $routes->get('antar-unit', 'KasBank::antar_unit');
+    $routes->get('antar_unit', 'KasBank::antar_unit');
+    $routes->post('antar-unit/save', 'KasBank::saveAntarUnit', ['filter' => 'auth']);
+    $routes->post('antar-unit/reversal/(:num)', 'KasBank::reversalAntarUnit/$1', ['filter' => 'auth']);
+    $routes->post('antar-unit/reversal-atribusi/(:num)', 'KasBank::reversalAtribusi/$1', ['filter' => 'auth']);
+});
+
 $routes->get('asset', 'Asset::index', ['filter' => 'auth']);
 $routes->post('insert_asset', 'Asset::insert_asset', ['filter' => 'auth']);
 $routes->post('update_asset', 'Asset::update_asset', ['filter' => 'auth']);
@@ -433,6 +463,7 @@ $routes->post('update_payroll2', 'Payroll::update', ['filter' => 'auth']);
 $routes->post('delete_payroll2', 'Payroll::delete', ['filter' => 'auth']);
 $routes->post('lock_payroll2', 'Payroll::lockPayroll', ['filter' => 'auth']);
 $routes->post('unlock_payroll2', 'Payroll::unlockPayroll', ['filter' => 'auth']);
+$routes->post('payroll2/bayar', 'Payroll::bayar', ['filter' => 'auth']);
 
 //penilaian kpi
 $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);
@@ -522,6 +553,18 @@ $routes->post('export_riwayat_ciputang', 'Piutang::export_riwayat_piutang',  ['f
 $routes->post('export_daftar_piutang', 'Piutang::export_daftar_piutang',  ['filter => auth']);
 $routes->get('umur_piutang', 'Piutang::umur_piutang',  ['filter => auth']);
 $routes->post('export_aging_piutang', 'Piutang::export_aging_piutang',  ['filter => auth']);
+
+//Hutang Piutang (modul terpusat)
+$routes->get('hutangpiutang/dashboard', 'HutangPiutang::dashboard', ['filter' => 'auth']);
+$routes->get('hutangpiutang/piutang', 'HutangPiutang::piutang', ['filter' => 'auth']);
+$routes->get('hutangpiutang/hutang', 'HutangPiutang::hutang', ['filter' => 'auth']);
+$routes->get('hutangpiutang/riwayat', 'HutangPiutang::riwayat', ['filter' => 'auth']);
+$routes->get('hutangpiutang/form', 'HutangPiutang::form', ['filter' => 'auth']);
+$routes->post('hutangpiutang/store', 'HutangPiutang::store', ['filter' => 'auth']);
+$routes->get('hutangpiutang/detail/(:num)', 'HutangPiutang::detail/$1', ['filter' => 'auth']);
+$routes->post('hutangpiutang/bayar', 'HutangPiutang::bayar', ['filter' => 'auth']);
+$routes->post('hutangpiutang/kompensasi', 'HutangPiutang::kompensasi', ['filter' => 'auth']);
+$routes->get('hutangpiutang/cetak/(:num)', 'HutangPiutang::cetak/$1', ['filter' => 'auth']);
 
 $routes->get('tutup_kasir', 'TutupKasir::index',  ['filter => auth']);
 $routes->get('cetak-tutup-kasir/(:num)', 'TutupKasir::cetak_tutup_kasir/$1');

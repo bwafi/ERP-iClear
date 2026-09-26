@@ -16,6 +16,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPembelian;
+use App\Libraries\ModeKasBank;
 
 
 
@@ -30,6 +31,7 @@ class PembayaranHutang extends BaseController
     protected $JurnalModel;
     protected $PembayaranHutangModel;
     protected $PembelianModel;
+    protected $KasBankLib;
 
     public function __construct()
     {
@@ -38,6 +40,7 @@ class PembayaranHutang extends BaseController
         $this->KategoriKasModel = new ModelKategoriKas();
         $this->NoAkunModel = new ModelNoAkun();
         $this->BankModel = new ModelBank();
+        $this->KasBankLib = new ModeKasBank();
         $this->KasMasukModel = new ModelKasMasuk();
         $this->JurnalModel = new ModelJurnal();
         $this->PembayaranHutangModel = new ModelPembayaranHutang;
@@ -176,6 +179,17 @@ class PembayaranHutang extends BaseController
 
         );
         $this->PembayaranHutangModel->insert($data);
+        $idPembayaran = $this->PembayaranHutangModel->insertID();
+
+        // Posting ringkas ke ledger kas/bank (best effort, idempotent).
+        if ($idPembayaran) {
+            try {
+                $this->KasBankLib->postingCicilanHutang((int)$idPembayaran);
+            } catch (\Throwable $e) {
+                log_message('error', 'KasBank: gagal posting cicilan hutang #' . $idPembayaran . ': ' . $e->getMessage());
+            }
+        }
+
         $datapembelian = $this->PembelianModel->getById($idpembelian);
         $total_bayar_lama = $datapembelian->total_bayar;
         $bayar_tunai_lama = $datapembelian->bayar_tunai;
@@ -198,6 +212,11 @@ class PembayaranHutang extends BaseController
         );
 
         $this->PembelianModel->update($idpembelian, $data2);
+        try {
+            (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian((int) $idpembelian);
+        } catch (\Throwable $e) {
+            log_message('error', 'syncFromPembelian #' . $idpembelian . ' gagal: ' . $e->getMessage());
+        }
         session()->setFlashdata('sukses', 'Data Berhasil Diupdate');
         return redirect()->to(base_url('daftar_tagihan'));
     }

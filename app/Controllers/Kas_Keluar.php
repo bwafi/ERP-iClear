@@ -14,6 +14,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelUnit;
+use App\Libraries\ModeKasBank;
 
 class Kas_Keluar extends BaseController
 {
@@ -24,6 +25,7 @@ class Kas_Keluar extends BaseController
     protected $BankModel;
     protected $JurnalModel;
     protected $UnitModel;
+    protected $KasBankLib;
 
     public function __construct()
     {
@@ -34,6 +36,7 @@ class Kas_Keluar extends BaseController
         $this->BankModel = new ModelBank();
         $this->JurnalModel = new ModelJurnal();
         $this->UnitModel = new ModelUnit();
+        $this->KasBankLib = new ModeKasBank();
     }
 
     public function index()
@@ -224,6 +227,15 @@ class Kas_Keluar extends BaseController
             // Ambil ID kas keluar yang baru saja diinsert
             $insertId = $this->KasKeluarModel->insertID();
 
+            // Posting ringkas ke ledger kas/bank (best effort, idempotent).
+            if ($insertId) {
+                try {
+                    $this->KasBankLib->postingKasKeluar((int)$insertId);
+                } catch (\Throwable $e) {
+                    log_message('error', 'KasBank: gagal posting kas_keluar #' . $insertId . ': ' . $e->getMessage());
+                }
+            }
+
             // Ambil data akun untuk jurnal
             $data_akunjurnal = $this->NoAkunModel->getByNoAkun($noAkun);
             $nama_akun = $data_akunjurnal ? trim((string)$data_akunjurnal->nama_akun) : $noAkun;
@@ -281,7 +293,28 @@ class Kas_Keluar extends BaseController
             'updated_on' => date('Y-m-d H:i:s')
         ];
 
-        $this->KasKeluarModel->update($id, $data);
+        // Source update + refresh posting ledger dalam SATU transaksi:
+        // hapus posting lama, posting ulang (idempotent). Jika posting gagal,
+        // update sumber ikut di-rollback.
+        $db = \Config\Database::connect();
+        $db->transStart();
+        try {
+            $this->KasKeluarModel->update($id, $data);
+            $this->KasBankLib->hapusPosting('kas_keluar', (int)$id);
+            $this->KasBankLib->postingKasKeluar((int)$id);
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal update kas_keluar #' . $id . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal mengupdate kas keluar.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal mengupdate kas keluar.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+
         session()->setFlashdata('sukses', 'Data kas keluar berhasil diupdate.');
         return redirect()->to(base_url('/kas_keluar'));
     }
@@ -289,7 +322,13 @@ class Kas_Keluar extends BaseController
     public function delete_kas_keluar()
     {
         $id = $this->request->getPost('idkas_keluar');
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+        $this->KasBankLib->hapusPosting('kas_keluar', (int)$id);
         $this->KasKeluarModel->delete($id);
+        $db->transComplete();
+
         session()->setFlashdata('sukses', 'Data kas keluar berhasil dihapus.');
         return redirect()->to(base_url('/kas_keluar'));
     }

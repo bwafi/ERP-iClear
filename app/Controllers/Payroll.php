@@ -77,6 +77,61 @@ class Payroll extends BaseController
     {
         $payrollLocks = $this->getPayrollLocks();
 
+        // --- Periode seleksi (default bulan berjalan) ---
+        $bulanParam = $this->request->getGet('bulan');
+        if ($bulanParam === null) {
+            $bulan   = date('Y-m');
+            $showAll = false;
+        } elseif ($bulanParam === '') {
+            $bulan   = date('Y-m');
+            $showAll = true;
+        } else {
+            $bulan   = trim((string) $bulanParam);
+            $showAll = false;
+        }
+
+        if (!preg_match('/^\d{4}-\d{2}$/', $bulan)) {
+            $bulan = date('Y-m');
+        }
+        $tahun = (int) substr($bulan, 0, 4);
+        $bln   = (int) substr($bulan, 5, 2);
+        $from  = $bulan . '-01';
+        $to    = $showAll ? '' : date('Y-m-t', strtotime($from));
+
+        // --- Jadwal & realisasi gaji (finance_payroll) ---
+        $builder = $this->db->table('finance_payroll fp')
+            ->select('fp.*, u.NAMA_UNIT, a.NAMA_AKUN')
+            ->join('unit u', 'u.idunit = fp.unit_id', 'left')
+            ->join('akun a', 'a.ID_AKUN = fp.pegawai_id', 'left');
+
+        if (!$showAll) {
+            $builder->where('fp.due_date >=', $from)
+                ->where('fp.due_date <=', $to);
+        }
+
+        $payrollItems = $builder
+            ->orderBy('fp.due_date', 'DESC')
+            ->orderBy('u.NAMA_UNIT', 'ASC')
+            ->get()
+            ->getResult();
+
+        // --- Ringkasan KPI per unit (hanya saat bulan dipilih) ---
+        $payrollSummary = [];
+        if (!$showAll) {
+            $calc = new \App\Services\Finance\PayrollTimelinessCalculator();
+            foreach ($payrollItems as $row) {
+                $unitId = (int) $row->unit_id;
+                if (isset($payrollSummary[$unitId])) {
+                    continue;
+                }
+                $r = $calc->calculate($unitId, $bln, $tahun);
+                $r['nama_unit'] = $row->NAMA_UNIT;
+                $payrollSummary[$unitId] = $r;
+            }
+        }
+
+        $scope = new \App\Services\Finance\FinanceScopeService();
+
         $builder = $this->db->table('kas_keluar kk');
 
         $builder->select('
@@ -129,9 +184,9 @@ class Payroll extends BaseController
             ->get()
             ->getResult();
 
-        // Data akun untuk penerima
+        // Data akun untuk penerima / karyawan
         $akun = $this->db->table('akun')
-            ->select('ID_AKUN, NAMA_AKUN')
+            ->select('ID_AKUN, NAMA_AKUN, ID_UNIT')
             ->orderBy('NAMA_AKUN', 'ASC')
             ->get()
             ->getResult();
@@ -140,13 +195,18 @@ class Payroll extends BaseController
         
 
         return view('template', [
-            'payrollLocks' => $payrollLocks,
-            'kas_keluar'   => $kas_keluar,
-            'unit'         => $unit,
-            'kategori_kas' => $kategori_kas,
-            'akun'         => $akun,
-            'bank'         => $this->BankModel->getBank(),
-            'body'         => 'jurnal/payroll'
+            'payrollLocks'  => $payrollLocks,
+            'payrollItems'  => $payrollItems,
+            'payrollSummary' => array_values($payrollSummary),
+            'bulan'         => $bulan,
+            'show_all'      => $showAll,
+            'can_input'     => $scope->canInput(),
+            'kas_keluar'    => $kas_keluar,
+            'unit'          => $unit,
+            'kategori_kas'  => $kategori_kas,
+            'akun'          => $akun,
+            'bank'          => $this->BankModel->getBank(),
+            'body'          => 'jurnal/payroll'
         ]);
     }
 
@@ -254,5 +314,74 @@ class Payroll extends BaseController
 
         return redirect()->to(base_url('payroll2'))
             ->with('success', 'Data kas keluar berhasil dihapus.');
+    }
+
+
+    /**
+     * Tandai satu baris payroll gaji (finance_payroll) sebagai sudah dibayar.
+     */
+    public function bayar()
+    {
+        $scope = new \App\Services\Finance\FinanceScopeService();
+
+        if (!$scope->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengubah payroll.');
+        }
+
+        $id       = (int) ($this->request->getPost('id') ?? 0);
+        $paidDate = (string) ($this->request->getPost('paid_date') ?? '');
+        if ($paidDate === '') {
+            $paidDate = date('Y-m-d');
+        }
+
+        if ($id <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $paidDate)) {
+            return redirect()->back()->with('gagal', 'Data pembayaran tidak valid.');
+        }
+
+        $model = new \App\Models\ModelFinancePayroll();
+        $row   = $model->find($id);
+
+        if (!$row) {
+            return redirect()->back()->with('gagal', 'Data payroll tidak ditemukan.');
+        }
+
+        $allowedIds = array_map('intval', array_column(
+            array_map('get_object_vars', $scope->resolveAllowedUnits()),
+            'idunit'
+        ));
+
+        if (!in_array((int) $row->unit_id, $allowedIds, true)) {
+            return redirect()->back()->with('gagal', 'Unit tidak diperbolehkan.');
+        }
+
+        $model->update($id, [
+            'paid_date' => $paidDate,
+            'status'    => 'dibayar',
+        ]);
+
+        // Potong penuh sisa kasbon pegawai (idempotent per payroll).
+        $potonganKasbon = 0;
+        try {
+            $service = new \App\Services\Finance\HutangPiutangService();
+            $settle = $service->settleKasbonFromPayroll($id, (int) $row->pegawai_id, (int) $row->unit_id, (int) session('ID_AKUN'));
+            if (!empty($settle['success'])) {
+                $potonganKasbon = (int) ($settle['potongan'] ?? 0);
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Settlement kasbon payroll #' . $id . ' gagal: ' . $e->getMessage());
+        }
+
+        $totalBersih = (int) ($row->total ?? 0) - $potonganKasbon;
+        $model->update($id, [
+            'potongan_kasbon' => $potonganKasbon,
+            'total_bersih'    => $totalBersih,
+        ]);
+
+        $pesan = 'Payroll ditandai sudah dibayar (' . $paidDate . ').';
+        if ($potonganKasbon > 0) {
+            $pesan .= ' Potongan kasbon: Rp ' . number_format($potonganKasbon, 0, ',', '.') . '.';
+        }
+
+        return redirect()->back()->with('sukses', $pesan);
     }
 }

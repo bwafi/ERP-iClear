@@ -119,6 +119,11 @@ class Piutang extends BaseController
             'unit_idunit' => session('ID_UNIT')
         );
         $this->PiutangModel->insert_Piutang($data);
+        try {
+            (new \App\Services\Finance\HutangPiutangService())->syncFromPiutangLegacy((int) $this->PiutangModel->insertID());
+        } catch (\Throwable $e) {
+            log_message('error', 'syncFromPiutangLegacy gagal: ' . $e->getMessage());
+        }
         session()->setFlashData('sukses', 'Berhasil Tambah Data');
         return redirect()->to(base_url('piutang'));
     }
@@ -182,6 +187,11 @@ class Piutang extends BaseController
             'status' => $statusnya
         );
         $this->PiutangModel->update($idpiutang, $data2);
+        try {
+            (new \App\Services\Finance\HutangPiutangService())->syncFromPiutangLegacy((int) $idpiutang);
+        } catch (\Throwable $e) {
+            log_message('error', 'syncFromPiutangLegacy #' . $idpiutang . ' gagal: ' . $e->getMessage());
+        }
         session()->setFlashData('sukses', 'Berhasil Update Piutang');
         return redirect()->to(base_url('daftar_piutang'));
     }
