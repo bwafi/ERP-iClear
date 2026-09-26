@@ -19,9 +19,9 @@ class CorrectBankRekeningOwnership extends Migration
 {
     public function up()
     {
-        $this->setAkun(bank: '1', nama: 'Bank BCA Pandaan 0391796181', unit: 4, shared: 0);
-        $this->setAkun(bank: '2', nama: 'Bank BCA CV ICLEAR 0393778773 (Jember & Probolinggo)', unit: 2, shared: 1);
-        $this->setAkun(bank: '3', nama: 'Bank BCA Admin Center/Finance 0391943558 (IRA)', unit: null, shared: 1);
+        $this->setAkun('1', 'Bank BCA Pandaan 0391796181', 4, 0);
+        $this->setAkun('2', 'Bank BCA CV ICLEAR 0393778773 (Jember & Probolinggo)', 2, 1);
+        $this->setAkun('3', 'Bank BCA Admin Center/Finance 0391943558 (IRA)', null, 1);
 
         // Rekening IRA (bank 3) internal: alokasi placeholder tidak diperlukan.
 
@@ -87,9 +87,9 @@ class CorrectBankRekeningOwnership extends Migration
     {
         // Best-effort balikan ke mapping lama (catatan: penghapusan akun FARA
         // tidak bisa dikembalikan otomatis).
-        $this->setAkun(bank: '1', nama: 'Bank BCA Probolinggo 0391796181', unit: 1, shared: 0);
-        $this->setAkun(bank: '2', nama: 'Bank BCA Jember 0393778773', unit: 2, shared: 0);
-        $this->setAkun(bank: '3', nama: 'Bank BCA Banyuwangi 0391943558', unit: 3, shared: 0);
+        $this->setAkun('1', 'Bank BCA Probolinggo 0391796181', 1, 0);
+        $this->setAkun('2', 'Bank BCA Jember 0393778773', 2, 0);
+        $this->setAkun('3', 'Bank BCA Banyuwangi 0391943558', 3, 0);
     }
 
     private function setAkun(string $bank, string $nama, ?int $unit, int $shared): void
