@@ -595,6 +595,13 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         width: 150px;
     }
 
+    /* Deskripsi isinya paling bebas, jadi lebarnya dibatasi eksplisit. Tanpa
+       ini tabel auto-layout mengikuti isi terpanjang dan kolom ini ikut menarik
+       seluruh tabel jadi jauh lebih lebar dari wadahnya. */
+    .kk-c-desc {
+        width: 280px;
+    }
+
     .kk-c-penerima {
         width: 190px;
     }
@@ -631,6 +638,53 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    /* Deskripsi boleh dua baris lalu dipangkas, supaya teksnya tetap terbaca
+       tanpa harus hover. `white-space: nowrap` sengaja tidak dipakai di sini:
+       teks yang tidak membungkus membuat lebar minimum sel sama dengan panjang
+       teks, dan itu yang membuat kolom mengabaikan batas lebarnya.
+       `overflow-wrap` menjaga referensi panjang tanpa spasi tidak meluber. */
+    .kk-desc {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        cursor: help;
+    }
+
+    /* Tooltip deskripsi. Dipasang ke <body> dengan position: fixed karena
+       `.kk-tablewrap` memakai `contain: paint` — tooltip yang diletakkan di
+       dalam wrap akan terpotong oleh konteks tersebut. */
+    .kk-tip {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 1080;
+        max-width: min(28rem, calc(100vw - 2rem));
+        padding: .5rem .625rem;
+        border-radius: 8px;
+        background: var(--bs-dark, #1c2430);
+        color: #fff;
+        font-size: .8125rem;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        box-shadow: 0 .5rem 1.25rem rgba(0, 0, 0, .3);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .12s ease;
+    }
+
+    .kk-tip.is-tampil {
+        opacity: 1;
+    }
+
+    .kk-desc:focus-visible {
+        outline: 2px solid var(--bs-primary);
+        outline-offset: 2px;
+        border-radius: 3px;
     }
 
     .kk-tag {
@@ -933,6 +987,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         .kk-c-date,
         .kk-c-kat,
         .kk-c-akun,
+        .kk-c-desc,
         .kk-c-penerima,
         .kk-c-jumlah,
         .kk-c-jenis,
@@ -957,7 +1012,8 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
 
         .kk-composer[data-open="true"] .kk-composer-inner,
         .kk-composer-caret,
-        .kk-rowbtn {
+        .kk-rowbtn,
+        .kk-tip {
             transition: none;
             animation: none;
         }
@@ -1566,6 +1622,86 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         });
         byId('#kkTanggal').addEventListener('change', updateDraftTotal);
 
+        // ── Tooltip deskripsi ──────────────────────────────────────
+        // Isi penuhnya deskripsi yang terpotong. `title` bawaan browser
+        // sebenarnya sudah ada, tapi muncul juga di deskripsi yang utuh,
+        // datang terlambat (~1 detik), dan tampilannya tidak serasi.
+        // Tooltip ini hanya muncul kalau teksnya benar-benar terpotong.
+        const kkTable = byId('#table_kas_keluar');
+        const kkTip = document.createElement('div');
+        kkTip.className = 'kk-tip';
+        kkTip.setAttribute('role', 'tooltip');
+        kkTip.hidden = true;
+        document.body.appendChild(kkTip);
+
+        function kkDescTerpotong(span) {
+            return span.scrollHeight > span.clientHeight + 1 ||
+                span.scrollWidth > span.clientWidth + 1;
+        }
+
+        function kkTipTampil(span) {
+            // Teks penuhnya tetap ada di DOM; yang dipangkas cuma tampilannya.
+            const teks = (span.textContent || '').trim();
+            if (!teks || teks === '—' || !kkDescTerpotong(span)) {
+                kkTipSembunyi();
+                return;
+            }
+            kkTip.textContent = teks;
+            kkTip.hidden = false;
+            const r = span.getBoundingClientRect();
+            // Ditempatkan dulu di pojok supaya tinggi sebenarnya diketahui
+            // sebelum memutuskan mau di atas atau di bawah sel.
+            kkTip.style.left = '0px';
+            kkTip.style.top = '0px';
+            const t = kkTip.getBoundingClientRect();
+            const gap = 8;
+            let top = r.bottom + gap;
+            if (top + t.height > window.innerHeight - gap) {
+                top = r.top - t.height - gap;
+            }
+            let left = r.left;
+            if (left + t.width > window.innerWidth - gap) {
+                left = window.innerWidth - t.width - gap;
+            }
+            kkTip.style.top = Math.max(gap, top) + 'px';
+            kkTip.style.left = Math.max(gap, left) + 'px';
+            kkTip.classList.add('is-tampil');
+        }
+
+        function kkTipSembunyi() {
+            kkTip.classList.remove('is-tampil');
+            kkTip.hidden = true;
+        }
+
+        // Delegasi ke tabel, bukan listener per sel, supaya tetap hidup
+        // setelah DataTables menggambar ulang isi tbody.
+        kkTable.addEventListener('mouseover', function (e) {
+            const s = e.target.closest('.kk-desc');
+            if (s) kkTipTampil(s); else kkTipSembunyi();
+        });
+        kkTable.addEventListener('mouseleave', kkTipSembunyi);
+        // Fokus agar teks penuhnya tetap bisa dibaca pakai keyboard.
+        kkTable.addEventListener('focusin', function (e) {
+            const s = e.target.closest('.kk-desc');
+            if (s) kkTipTampil(s); else kkTipSembunyi();
+        });
+        kkTable.addEventListener('focusout', kkTipSembunyi);
+        window.addEventListener('scroll', kkTipSembunyi, true);
+        window.addEventListener('resize', kkTipSembunyi);
+
+        // Hanya deskripsi terpotong yang jadi titik fokus, supaya tidak
+        // menambah banyak tab stop di tabel yang panjang. Dicek ulang tiap
+        // render karena lebar kolom mengikuti viewport.
+        function kkSyncDescFokus() {
+            kkTable.querySelectorAll('.kk-desc').forEach(function (s) {
+                if (kkDescTerpotong(s)) {
+                    s.setAttribute('tabindex', '0');
+                } else {
+                    s.removeAttribute('tabindex');
+                }
+            });
+        }
+
         // Bersihkan format ribuan dan pastikan unit terkunci tetap terkirim.
         formInsert.addEventListener('submit', function (e) {
             const u = byId('#kkUnit');
@@ -1689,9 +1825,9 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             kategori: cellKategori,
             no_akun: (row) => cellTwo(row.no_akun || '—', row.nama_akun, true),
             deskripsi: (row) => {
-                const s = el('span', 'kk-clip', row.deskripsi || '—');
-                s.title = row.deskripsi || '';
-                return s;
+                // Tanpa `title`: tooltip kk-tip menggantikannya, dan `title`
+                // akan tampil dua kali kalau keduanya menyala.
+                return el('span', 'kk-desc', row.deskripsi || '—');
             },
             penerima: (row) => cellTwo(row.penerima || '—', row.nama_bank ? (row.nama_bank + ' · ' + row.norek) : '', true),
             jumlah: cellJumlah,
@@ -2096,5 +2232,11 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         dt.on('length.dt', function () {
             byId('#kkLength').value = String(dt.page.len());
         });
+
+        // Titik fokus deskripsi mengikuti isi sel terbaru. Dicek ulang tiap
+        // render dan tiap perubahan lebar viewport, karena lebar kolom ikut
+        // bergeser sehingga sel yang tadinya muat bisa jadi terpotong.
+        dt.on('draw.dt', kkSyncDescFokus);
+        window.addEventListener('resize', kkSyncDescFokus);
     });
 </script>
