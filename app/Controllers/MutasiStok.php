@@ -18,6 +18,7 @@ use App\Models\ModelUnit;
 use App\Models\ModelHppBarang;
 use App\Models\ModelDetailMutasi;
 use App\Models\ModelStokBarang;
+use App\Models\ModelHutangPiutang;
 use Mpdf\Mpdf;
 use DateTime;
 use App\Libraries\ModeKasBank;
@@ -80,27 +81,51 @@ class MutasiStok extends BaseController
      * untuk konfirmasi penerimaan. Admin lintas (root/direktur/manager/admin
      * center) melihat semua mutasi.
      */
+    /**
+     * Halaman konfirmasi terima mutasi.
+     *
+     * unbounded `limit(200)` lama di sini disembunyikan: yang terlihat 200
+     * nota pertama saja, dan sisanya mustahil dicari karena tidak ada filter.
+     * Sekarang jadi query berpaginasi, dan angka totalnya diambil dari
+     * COUNT yang syaratnya sama persis dengan query datanya.
+     */
     public function masuk()
     {
         $unit = (int) session('ID_UNIT');
         $isLintas = in_array((int) session('ID_JABATAN'), [0, 1, 2, 34], true);
 
-        $mutasiModel = $this->MutasiStokModel;
-        if (!$isLintas) {
-            $mutasiModel = $mutasiModel->where('terima_idunit', $unit);
+        $filter = $this->filterMasuk();
+        $perPage = 25;
+        $page = max(1, (int) $this->request->getGet('page'));
+        $total = $this->MutasiStokModel->countMutasiMasuk($isLintas, $unit, $filter);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+
+        //.User bisa tiba di halaman 5 lalu memfilter sampai tersisa 1 halaman.
+        // Tanpa clamp di sini tabelnya kosong dan tidak ada cara kembali
+        // kecuali mengetik URL manual.
+        if ($page > $totalPages) {
+            $page = $totalPages;
         }
-        $daftar = $mutasiModel->orderBy('idmutasi', 'DESC')->limit(200)->findAll();
+
+        $daftar = $this->MutasiStokModel->getMutasiMasuk($perPage, $page, $isLintas, $unit, $filter);
+
+        // Peta unit diambil sekali. Sebelumnya setiap baris memanggil
+        // getById() dua kali; dengan 25 baris per halaman itu 50 query sia-sia
+        // hanya untuk nama unit.
+        $semuaUnit = $this->UnitModel->getUnit();
+        $unitMap = [];
+        foreach ($semuaUnit as $u) {
+            $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
+        }
 
         $items = [];
         foreach ($daftar as $m) {
             $detail = $this->DetailMutasiModel->getFullDetailMutasiByMutasiId((int) $m->idmutasi);
-            $total = 0;
+            $totalNilai = 0;
             foreach ($detail as $d) {
                 $d->nilai = $this->KasBankLib->nilaiDetailMutasi((array) $d);
-                $total += (int) $d->nilai;
+                $totalNilai += (int) $d->nilai;
             }
-            $unitKirim  = $this->UnitModel->getById((int) $m->kirim_idunit);
-            $unitTerima = $this->UnitModel->getById((int) $m->terima_idunit);
             $items[] = (object) [
                 'idmutasi'          => (int) $m->idmutasi,
                 'no_nota_mutasi'    => $m->no_nota_mutasi,
@@ -109,20 +134,92 @@ class MutasiStok extends BaseController
                 'status'            => (string) $m->status,
                 'kirim_idunit'      => (int) $m->kirim_idunit,
                 'terima_idunit'     => (int) $m->terima_idunit,
-                'nama_unit_kirim'   => $unitKirim ? $unitKirim->NAMA_UNIT : "Unit {$m->kirim_idunit}",
-                'nama_unit_terima'  => $unitTerima ? $unitTerima->NAMA_UNIT : "Unit {$m->terima_idunit}",
-                'total'             => $total,
+                'nama_unit_kirim'   => $unitMap[(int) $m->kirim_idunit] ?? "Unit {$m->kirim_idunit}",
+                'nama_unit_terima'  => $unitMap[(int) $m->terima_idunit] ?? "Unit {$m->terima_idunit}",
+                'total'             => $totalNilai,
                 'detail'            => $detail,
             ];
         }
 
         $data = [
-            'akun'  => $this->AuthModel->getById(session('ID_AKUN')),
-            'unit'  => $this->UnitModel->getUnit(),
-            'items' => $items,
-            'body'  => 'stok/mutasi_masuk',
+            'akun'        => $this->AuthModel->getById(session('ID_AKUN')),
+            'unit'        => $semuaUnit,
+            'items'       => $items,
+            'filter'      => $filter,
+            'isLintas'    => $isLintas,
+            'currentPage' => $page,
+            'perPage'     => $perPage,
+            'total'       => $total,
+            'totalPages'  => $totalPages,
+            'body'        => 'stok/mutasi_masuk',
         ];
         return view('template', $data);
+    }
+
+    /**
+     * Baca filter dari query string, semua sudah divalidasi.
+     *
+     * Nilai yang tidak dikenal dibuang, bukan diteruskan ke query.
+     * Status dibatasi ke 0/1 dan tanggal harus tanggal yang benar-benar ada,
+     * supaya `?status=abc` atau `?dari=xyz` tidak jadi SQL aneh — dan supaya
+     * URL yang tidak valid tidak bisa membuat footer menghitung halaman
+     * yang berbeda dari tabelnya.
+     */
+    private function filterMasuk(): array
+    {
+        $status = trim((string) ($this->request->getGet('status') ?? ''));
+
+        return [
+            'search' => trim((string) ($this->request->getGet('search') ?? '')),
+            'status' => in_array($status, ['0', '1'], true) ? $status : '',
+            'dari'   => $this->tanggalMasuk($this->request->getGet('dari')),
+            'sampai'=> $this->tanggalMasuk($this->request->getGet('sampai')),
+            'unit'   => (int) ($this->request->getGet('unit') ?: 0),
+        ];
+    }
+
+    private function tanggalMasuk($v): string
+    {
+        $v = trim((string) $v);
+        if (! preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $v, $m)) {
+            return '';
+        }
+
+        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]) ? $v : '';
+    }
+
+    /**
+     * Kembalikan user ke daftar dengan filter & halaman yang sama.
+     *
+     * Dipakai setelah terima/batal, supaya menerima satu nota tidak melempar
+     * user balik ke daftar tanpa filter dan harus mencari lagi dari awal —
+     * justru hal yang paling menyebalkan begitu ada paginasi.
+     *
+     * Query string diambil dari field `asal`, bukan HTTP_REFERER: referer
+     * hilang begitu user refresh atau membuka tab baru, dan user yang sudah
+     * menyaring tiga kriteria tidak boleh kehilangan tempatnya. Kuncinya
+     * tetap dibatasi daftar putih dan divalidasi ulang, jadi `asal` tidak
+     * bisa jadi jalur menyuntik parameter ke URL lain.
+     */
+    private function kembaliKeDaftarMasuk(): string
+    {
+        $base = base_url('mutasi_stok/masuk');
+        $asal = (string) ($this->request->getPost('asal') ?? '');
+        if ($asal === '' || ! str_contains($asal, '?')) {
+            return $base;
+        }
+
+        parse_str((string) parse_url($asal, PHP_URL_QUERY), $q);
+        $params = array_filter([
+            'search'  => trim((string) ($q['search'] ?? '')),
+            'status'  => in_array((string) ($q['status'] ?? ''), ['0', '1'], true) ? (string) $q['status'] : '',
+            'dari'    => $this->tanggalMasuk($q['dari'] ?? ''),
+            'sampai' => $this->tanggalMasuk($q['sampai'] ?? ''),
+            'unit'    => (int) ($q['unit'] ?? 0) ?: '',
+            'page'    => max(1, (int) ($q['page'] ?? 1)),
+        ], static fn ($v) => $v !== '' && $v !== 0);
+
+        return $params ? $base . '?' . http_build_query($params) : $base;
     }
 
     /**
@@ -178,7 +275,146 @@ class MutasiStok extends BaseController
         }
 
         session()->setFlashdata('sukses', 'Mutasi diterima. Hutang/Piutang antar unit dibuat otomatis (jatuh tempo +3 hari).');
-        return redirect()->to(base_url('mutasi_stok/masuk'));
+        // Kembali ke filter & halaman asal, bukan daftar polos: kalau user
+        // sedang menyaring "belum diterima" di halaman 3, nota yang baru saja
+        // ia terima akan hilang dari pandangan. Itu membingungkan — orang
+        // bisa mengira aksinya tidak bekerja.
+        return redirect()->to($this->kembaliKeDaftarMasuk());
+    }
+
+    /**
+     * Batalkan penerimaan mutasi (keputusan 2026-09-27).
+     *
+     * Memperbaiki salah klik pada tombol Terima. Tombol Terima melakukan DUA
+     * hal sekaligus, jadi membalikannya tidak bisa hanya menyentuh `status`:
+     *   1. status mutasi -> '1', tanggal_terima diisi
+     *   2. ModeKasBank::buatHutangPiutangDariMutasi() membuat sepasang
+     *      Hutang/Piutang antar unit (pengirim berpiutang, penerima berhutang)
+     *
+     * Kalau hanya status yang dikembalikan, sepasang dokumen itu tetap
+     * menggantung di buku besar dan mutasinya bisa di-terima lagi — membuat
+     * dokumen kembar. Jadi keduanya dibatalkan dalam satu transaksi.
+     *
+     * Dokumen H/P tidak dihapus fisik, hanya di-soft delete (deleted = 1):
+     * pembatalan dokumen keuangan harus meninggalkan jejak, dan tabelnya
+     * sudah menyediakan kolom itu. Alasan pembatalan ikut disimpan di
+     * `keterangan` supaya barang yang dihapus bisa dibaca sendiri.
+     *
+     * BARRIER: kalau ada pembayaran yang sudah menempel pada dokumen H/P
+     * itu, pembatalan DITOLAK. Mematikan dokumen yang sudah bergerak di kas
+     * sama dengan menghapus jejak uang, dan itu bukan urusan pembatalan.
+     *
+     * Otorisasi: hanya jabatan 1 (Admin Root). Berbeda dari menerima, yang
+     * boleh siapa pun yang punya akses unit tujuan: membatalkan dokumen
+     * keuangan adalah tindakan yang lebih besar daripada membuatnya.
+     */
+    public function batalTerima($idmutasi)
+    {
+        $idmutasi = (int) $idmutasi;
+        $redirect = redirect()->to($this->kembaliKeDaftarMasuk());
+
+        if (! $this->bolehBatalTerima()) {
+            $redirect->with('gagal', 'Hanya Admin Root yang bisa membatalkan penerimaan mutasi.');
+            return $redirect;
+        }
+
+        $mutasi = $this->MutasiStokModel->getById($idmutasi);
+        if (! $mutasi) {
+            $redirect->with('gagal', 'Mutasi tidak ditemukan.');
+            return $redirect;
+        }
+
+        if ((string) $mutasi->status !== '1') {
+            $redirect->with('gagal', 'Mutasi ini belum diterima, jadi tidak ada yang perlu dibatalkan.');
+            return $redirect;
+        }
+
+        $alasan = trim((string) ($this->request->getPost('alasan_batal') ?? ''));
+        if ($alasan === '') {
+            $redirect->with('gagal', 'Alasan pembatalan wajib diisi.');
+            return $redirect;
+        }
+
+        $hpModel = new ModelHutangPiutang();
+        $dokumen = $hpModel->where('sumber_tipe', 'mutasi_unit')
+            ->where('sumber_id', $idmutasi)
+            ->where('deleted', 0)
+            ->findAll();
+
+        foreach ($dokumen as $d) {
+            $sudahBayar = (int) $d->total_dibayar;
+            $sisa       = (int) $d->sisa;
+            $total      = (int) $d->total;
+            if ($sudahBayar > 0 || $sisa !== $total) {
+                $redirect->with(
+                    'gagal',
+                    'Pembatalan ditolak: dokumen H/P ' . $d->kode . ' sudah punya pembayaran '
+                    . 'sebesar Rp ' . number_format($sudahBayar, 0, ',', '.')
+                    . '. Batalkan pembayarannya dulu dari menu Hutang/Piutang.'
+                );
+                return $redirect;
+            }
+        }
+
+        $db = \Config\Database::connect();
+        try {
+            $db->transStart();
+
+            $now = date('Y-m-d H:i:s');
+            $catatan = 'Dibatalkan oleh #' . (int) session('ID_AKUN') . ' pada ' . $now . '. Alasan: ' . $alasan;
+
+            foreach ($dokumen as $d) {
+                $hpModel->update((int) $d->id, [
+                    'deleted'    => 1,
+                    'keterangan' => $catatan,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            // input_by sengaja TIDAK disentuh: isinya sudah ditimpa terima()
+            // dan tidak bisa dipulihkan ke pembuat aslinya. Pembatalan
+            // merekam orangnya sendiri lewat batal_oleh.
+            $this->MutasiStokModel->update($idmutasi, [
+                'status'        => '0',
+                'tanggal_terima'=> null,
+                'batal_oleh'    => (int) session('ID_AKUN'),
+                'batal_at'      => $now,
+                'batal_alasan'  => $alasan,
+                'updated_on'    => $now,
+            ]);
+
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'MutasiStok: gagal batal terima #' . $idmutasi . ': ' . $e->getMessage());
+            $redirect->with('gagal', 'Gagal membatalkan penerimaan mutasi. Silakan coba lagi.');
+            return $redirect;
+        }
+
+        if ($db->transStatus() === false) {
+            $redirect->with('gagal', 'Gagal membatalkan penerimaan mutasi.');
+            return $redirect;
+        }
+
+        $redirect->with(
+            'sukses',
+            'Penerimaan mutasi dibatalkan. Dokumen Hutang/Piutang antar unit ikut dibatalkan.'
+            . (count($dokumen) ? ' (' . count($dokumen) . ' dokumen)' : '')
+        );
+        return $redirect;
+    }
+
+    /**
+     * Otorisasi pembatalan: jabatan 1 (Admin Root) saja.
+     *
+     * Sengaja lebih ketat dari terima(). Menerima menambah satu dokumen
+     * keuangan; membatalkan menghapus dokumen itu. Kalau keduanya terbuka
+     * untuk orang yang sama, siapa pun yang salah klik bisa menghapus
+     * jejaknya sendiri tanpa ada yang lain tahu.
+     */
+    private function bolehBatalTerima(): bool
+    {
+        return in_array((int) session('ID_JABATAN'), [1], true);
     }
 
     public function insert()

@@ -252,6 +252,7 @@ $routes->get('produk_terlaris', 'Produk_Terlaris::index', ['filter' => 'auth']);
 $routes->get('mutasi_stok', 'MutasiStok::index', ['filter' => 'auth']);
 $routes->get('mutasi_stok/masuk', 'MutasiStok::masuk', ['filter' => 'auth']);
 $routes->post('mutasi_stok/terima/(:num)', 'MutasiStok::terima/$1', ['filter' => 'auth']);
+$routes->post('mutasi_stok/batal-terima/(:num)', 'MutasiStok::batalTerima/$1', ['filter' => 'auth']);
 $routes->post('insert_mutasi', 'MutasiStok::insert', ['filter' => 'auth']);
 
 //riwayat pembelian
