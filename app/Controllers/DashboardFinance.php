@@ -292,6 +292,34 @@ class DashboardFinance extends BaseController
             $list = $this->rekonCalc->monthlyList($unitId, $mon, $year, $statusProses ?: null);
             $rekonScore = $this->rekonCalc->calculate($unitId, $mon, $year);
 
+            // Angka ERP untuk panel per-hari. Satu panggilan rentang (3 query
+            // sebulan), bukan erpValues() per hari yang akan jadi ~6 query per
+            // hari. Angkanya TIDAK dibaca dari row->erp_*: record menyimpan
+            // snapshot saat save, sedangkan panel harus menampilkan angka
+            // terkini — sama seperti halaman form, dan sama seperti yang
+            // jadi dasar hitungan selisih saat server menyimpan.
+            $erpBulan = $this->rekonCalc->erpValuesRange(
+                $unitId,
+                sprintf('%04d-%02d-01', $year, $mon),
+                date('Y-m-t', mktime(0, 0, 0, $mon, 1, $year))
+            );
+            $myId = (int) $info['myId'];
+            foreach ($list as $i => $item) {
+                $list[$i]['erp'] = $erpBulan[$item['tanggal']] ?? [
+                    'cash_masuk'     => 0,
+                    'transfer_masuk' => 0,
+                    'kas_keluar'     => 0,
+                ];
+                // Per hari, bukan per halaman: hak mengubah angka ikut
+                // status hari itu dan siapa yang mengirimnya.
+                $list[$i]['boleh_ubah'] = RekonDailyCalculator::bolehUbahAngka($item['row'], $myId);
+                $list[$i]['kunci_alasan'] = RekonDailyCalculator::kunciAlasan($item['row'], $myId);
+                // Otorisasi approve per hari, bukan per halaman: canApproveRekon
+                // menolak kalau pemohon ikut mengirim/mengisi hari itu, jadi
+                // satu panel harus dicek sendiri-sendiri.
+                $list[$i]['can_approve'] = $this->canApproveRekon($item['row']);
+            }
+
             $ids = [];
             foreach ($list as $item) {
                 if (! $item['row']) {
@@ -322,75 +350,16 @@ class DashboardFinance extends BaseController
     }
 
     /**
-     * Form rekonsiliasi untuk satu tanggal.
-     */
-    public function rekonForm()
-    {
-        $info = $this->scopeService->scopeInfo();
-        if (!$info['isLintas']) {
-            return redirect()->back()->with('gagal', 'Anda tidak berhak mengakses Rekonsiliasi.');
-        }
-
-        $data = $this->rekonFormData($info);
-
-        return view('template', array_merge($data, [
-            'title' => 'Rekonsiliasi — ' . $data['tanggal'],
-            'body'  => 'dashboard/finance_rekon_form',
-        ]));
-    }
-
-    /**
-     * Menyusun seluruh data view form rekonsiliasi harian.
-     * Dipisah agar dapat diuji langsung (smoke test).
-     */
-    protected function rekonFormData(array $info): array
-    {
-        $units = $this->scopeService->resolveAllowedUnits();
-        $unitId = $this->scopeService->resolveSelectedUnitId(
-            $this->request->getGet('unit_id') ?? $this->request->getPost('unit_id')
-        );
-        $unitName = $unitId ? ($this->modelUnit->find($unitId)->NAMA_UNIT ?? '') : '';
-
-        $tanggal = $this->request->getGet('tanggal') ?: date('Y-m-d');
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
-            $tanggal = date('Y-m-d');
-        }
-        if ($tanggal > date('Y-m-d')) {
-            $tanggal = date('Y-m-d');
-        }
-
-        $erp = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
-        $existing = null;
-        if ($unitId) {
-            $erp = $this->rekonCalc->erpValues($unitId, $tanggal);
-            $existing = $this->rekonModel->getByUnitAndDate($unitId, $tanggal);
-        }
-
-        $statusProses = RekonDailyCalculator::statusProses($existing);
-        $locked = RekonDailyCalculator::isLocked($existing);
-
-        return [
-            'units'         => $units,
-            'unit_id'       => $unitId,
-            'unit_name'     => $unitName ?: '—',
-            'tanggal'       => $tanggal,
-            'erp'           => $erp,
-            'existing'      => $existing,
-            'can_input'     => $info['isLintas'],
-            'status_proses' => $statusProses,
-            'locked'        => $locked,
-            'my_id'         => (int) $info['myId'],
-            'is_submitter'  => $existing && (int) $existing->submitted_by === (int) $info['myId'],
-            'can_approve'   => $this->canApproveRekon($existing),
-            'can_submit'    => $info['isLintas']
-                && ! $locked
-                && RekonDailyCalculator::siapSubmit($existing)
-                && (! $existing || RekonDailyCalculator::statusProses($existing) !== ModelFinanceRekonDaily::STATUS_SUBMITTED),
-        ];
-    }
-
-    /**
-     * Simpan rekonsiliasi harian (DRAFT).
+     * Simpan rekonsiliasi harian — SATU aksi, bukan dua.
+     *
+     * Dulu: "Simpan Draft" (DRAFT) lalu "Kirim untuk Verifikasi" (SUBMITTED),
+     * dua klik untuk hal yang memang satu pekerjaan. Sekarang kalau ketiga
+     * kelompok actual sudah terisi, save langsung menulis SUBMITTED beserta
+     * submitted_by/submitted_at, jadi Manager / Admin Root (jabatan 1 & 34)
+     * bisa langsung approve atau minta revisi.
+     *
+     * Kalau belum lengkap, data tetap disimpan sebagai DRAFT — pekerjaan
+     * setengah jadi tidak boleh ikut terkirim, dan tidak hilang.
      *
      * Validasi server-side adalah source of truth: nilai wajib numerik bulat
      * dan tidak boleh negatif. Setelah VERIFIED, data terkunci.
@@ -421,6 +390,19 @@ class DashboardFinance extends BaseController
             return redirect()->back()->with('gagal', 'Rekonsiliasi sudah VERIFIED dan terkunci.');
         }
 
+        // SUDAH DIKIRIM = angkanya jadi pernyataan, bukan draf. Dahulu
+        // keadaan ini tidak dijaga sama sekali, sehingga Manager (jabatan 34)
+        // yang juga punya financeInputRoles bisa menulis ulang angka yang
+        // sedang menunggu persetujuan dirinya sendiri, lalu menyimpannya
+        // kembali sebagai SUBMITTED. Mematikan tombol di UI tidak cukup:
+        // route ini harus menolaknya juga.
+        if (! RekonDailyCalculator::bolehUbahAngka($existing, (int) session('ID_AKUN'))) {
+            return redirect()->back()->with(
+                'gagal',
+                RekonDailyCalculator::kunciAlasan($existing, (int) session('ID_AKUN'))
+            );
+        }
+
         $erp = $this->rekonCalc->erpValues($unitId, $tanggal);
 
         // Nominal aktual: parse ketat (tolak non-numerik & negatif).
@@ -441,6 +423,16 @@ class DashboardFinance extends BaseController
         $erpTransfer = (int) $erp['transfer_masuk'];
         $erpKeluar = (int) $erp['kas_keluar'];
 
+        // Kelengkapan ikut definisi milik RekonDailyCalculator (satu sumber
+        // kebenaran, sama dengan yang dipakai numerator KPI) — bukan ditiru
+        // di sini. Angkanya sudah berupa ?int hasil parse di atas, jadi
+        // cukup dirakit jadi object; tidak perlu baca ulang dari DB.
+        $lengkap = RekonDailyCalculator::isLengkap((object) [
+            'actual_cash_masuk'     => $actualCash,
+            'actual_transfer_masuk' => $actualTransfer,
+            'actual_kas_keluar'     => $actualKeluar,
+        ]);
+
         $this->rekonModel->upsert([
             'unit_id'                => $unitId,
             'tanggal'                => $tanggal,
@@ -455,17 +447,40 @@ class DashboardFinance extends BaseController
             'actual_kas_keluar'      => $actualKeluar,
             'selisih_kas_keluar'     => $this->hitungSelisih($actualKeluar, $erpKeluar),
             'catatan'                => trim((string) ($post['catatan'] ?? '')),
-            'status_proses'          => ModelFinanceRekonDaily::STATUS_DRAFT,
-            'submitted_by'           => null,
-            'submitted_at'           => null,
+            // Lengkap -> langsung SUBMITTED (satu klik). Belum -> DRAFT.
+            'status_proses'          => $lengkap
+                ? ModelFinanceRekonDaily::STATUS_SUBMITTED
+                : ModelFinanceRekonDaily::STATUS_DRAFT,
+            'submitted_by'           => $lengkap ? (int) session('ID_AKUN') : null,
+            'submitted_at'           => $lengkap ? date('Y-m-d H:i:s') : null,
             'verified_by'            => null,
             'verified_at'            => null,
+            // Catatan revisi dari manager dibuang: datanya sedang dikirim ulang.
             'catatan_revisi'         => null,
             'input_by'               => (int) session('ID_AKUN'),
         ]);
 
-        return redirect()->to(base_url('finance/rekonsiliasi?unit_id=' . $unitId . '&month=' . substr($tanggal, 0, 7)))
-            ->with('sukses', 'Rekonsiliasi ' . $tanggal . ' tersimpan sebagai draft.');
+        $pesan = $lengkap
+            ? 'Rekonsiliasi ' . $tanggal . ' tersimpan dan langsung terkirim ke Manager / Admin Root untuk diverifikasi.'
+            : 'Rekonsiliasi ' . $tanggal . ' tersimpan sebagai draft. Lengkapi ketiga kelompok Actual, lalu simpan sekali lagi untuk langsung terkirim.';
+
+        // Setelah simpan dari panel daftar, buka HARI BERIKUTNYA: orang
+        // yang sedang catching up mengisi berurutan, jadi panel aktif jangan
+        // agonizing di tanggal yang baru saja beres — dan angka yang baru
+        // disimpan sudah kelihatan di sidebar sebagai badge.
+        //
+        // Syarat pindah: hanya kalau besok masih di bulan yang sama dan sudah
+        // lewat. Kalau tidak (akhir bulan, atau tanggal terakhir yang sudah
+        // tercatat), tetap di tanggal ini supaya hasil simpan langsung
+        // terlihat, bukan melompat ke panel kosong.
+        $bulanIni = substr($tanggal, 0, 7);
+        $besok    = date('Y-m-d', strtotime($tanggal . ' +1 day'));
+        $hariTampil = ($bulanIni === substr($besok, 0, 7) && $besok <= date('Y-m-d'))
+            ? $besok
+            : $tanggal;
+
+        return redirect()->to(base_url('finance/rekonsiliasi?unit_id=' . $unitId . '&month=' . $bulanIni . '&hari=' . $hariTampil))
+            ->with('sukses', $pesan);
     }
 
     /**
@@ -504,7 +519,7 @@ class DashboardFinance extends BaseController
             'catatan_revisi' => null,
         ]);
 
-        return redirect()->to(base_url('finance/rekon/form?unit_id=' . $unitId . '&tanggal=' . $tanggal))
+        return $this->redirectKeList($unitId, $tanggal)
             ->with('sukses', 'Rekonsiliasi ' . $tanggal . ' dikirim untuk diverifikasi.');
     }
 
@@ -556,7 +571,7 @@ class DashboardFinance extends BaseController
                 'catatan_revisi' => null,
             ]);
 
-            return redirect()->to(base_url('finance/rekon/form?unit_id=' . $unitId . '&tanggal=' . $tanggal))
+            return $this->redirectKeList($unitId, $tanggal)
                 ->with('sukses', 'Rekonsiliasi ' . $tanggal . ' diverifikasi.');
         }
 
@@ -572,7 +587,7 @@ class DashboardFinance extends BaseController
                 'catatan_revisi' => $catatan,
             ]);
 
-            return redirect()->to(base_url('finance/rekon/form?unit_id=' . $unitId . '&tanggal=' . $tanggal))
+            return $this->redirectKeList($unitId, $tanggal)
                 ->with('sukses', 'Rekonsiliasi ' . $tanggal . ' dikembalikan untuk revisi.');
         }
 
@@ -585,6 +600,36 @@ class DashboardFinance extends BaseController
      * Syarat: jabatan termasuk financeApproveRoles, unit dalam scope, dan
      * pengguna BUKAN pengirimnya sendiri (submitted_by / input_by).
      */
+    /**
+     * Kembali ke halaman list dengan hari itu terpilih.
+     *
+     * Dulu semua aksi rekonsiliasi mendarat di finance/rekon/form. halaman
+     * itu dihapus 2026-09-27: input dan verifikasi sekarang keduanya inline
+     * di finance/rekonsiliasi, jadi POST selalu harus kembali ke sana dengan
+     * panel hari itu terbuka — kalau tidak, user mendarat di bulan yang
+     * benar tapi panel yang salah, dan tidak tahu hari mana yang ia ubah.
+     */
+    private function redirectKeList(int $unitId, string $tanggal)
+    {
+        return redirect()->to($this->rekonListUrl($unitId, $tanggal));
+    }
+
+    /**
+     * URL list rekonsiliasi dengan hari tertentu terpilih.
+     *
+     * Dipisah dari redirectKeList supaya URL-nya bisa diuji tanpa menyentuh
+     * internal RedirectResponse.
+     */
+    private function rekonListUrl(int $unitId, string $tanggal): string
+    {
+        return base_url(sprintf(
+            'finance/rekonsiliasi?unit_id=%d&month=%s&hari=%s',
+            $unitId,
+            rawurlencode(substr($tanggal, 0, 7)),
+            rawurlencode($tanggal)
+        ));
+    }
+
     private function canApproveRekon($row = null): bool
     {
         $info = $this->scopeService->scopeInfo();

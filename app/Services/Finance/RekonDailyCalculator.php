@@ -52,6 +52,91 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
+     * Nilai ERP untuk satu RENTANG tanggal, dihitung dengan 3 query total.
+     *
+     * Kenapa ada: daftar bulanan merender panel untuk setiap hari. Kalau panel
+     * itu ikut menampilkan angka ERP, memanggil erpValues() per hari berarti 6
+     * query per hari — untuk bulan 31 hari itu ~186 query per load halaman.
+     * Versi ini menjumlahkan sekali per tanggal (GROUP BY), lalu caller
+     * mengindeks hasilnya per tanggal.
+     *
+     * Hasil WAJIB identik dengan erpValues() per tanggal, termasuk filter
+     * `kode_invoice NOT LIKE '%srv%'`. both-dijaga oleh tes pembanding di
+     * app/Scripts/rekon_daily_test.php (F9).
+     *
+     * Tanggal tanpa transaksi TIDAK muncul di hasil — caller yang memutuskan
+     * default 0-nya, supaya "nihil" tidak tertukar dengan "tidak dihitung".
+     *
+     * @return array<string, array{cash_masuk:int, transfer_masuk:int, kas_keluar:int}>
+     */
+    public function erpValuesRange(int $unitId, string $startDate, string $endDate): array
+    {
+        $out = [];
+
+        // Penjualan: cash & transfer dari satu scan, dikelompokkan per tanggal.
+        $penjualan = $this->db->table('penjualan')
+            ->select('DATE(tanggal) AS tgl', false)
+            ->selectSum('bayar_tunai', 'cash')
+            ->selectSum('bayar_bank', 'transfer')
+            ->where('DATE(tanggal) >=', $startDate)
+            ->where('DATE(tanggal) <=', $endDate)
+            ->where('unit_idunit', $unitId)
+            ->notLike('kode_invoice', 'srv', 'after')
+            ->groupBy('tgl')
+            ->get()
+            ->getResultArray();
+        foreach ($penjualan as $r) {
+            $d = (string) $r['tgl'];
+            $out[$d] = [
+                'cash_masuk'     => (int) ($r['cash'] ?? 0),
+                'transfer_masuk' => (int) ($r['transfer'] ?? 0),
+                'kas_keluar'     => 0,
+            ];
+        }
+
+        // Service (selesai & sudah dibayar): cash + transfer.
+        $service = $this->db->table('service')
+            ->select('DATE(tanggal_selesai) AS tgl', false)
+            ->selectSum('bayar_tunai', 'cash')
+            ->select('SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)) AS transfer')
+            ->where('DATE(tanggal_selesai) >=', $startDate)
+            ->where('DATE(tanggal_selesai) <=', $endDate)
+            ->where('status_service', 4)
+            ->where('unit_idunit', $unitId)
+            ->groupBy('tgl')
+            ->get()
+            ->getResultArray();
+        foreach ($service as $r) {
+            $d = (string) $r['tgl'];
+            if (! isset($out[$d])) {
+                $out[$d] = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+            }
+            $out[$d]['cash_masuk']     += (int) ($r['cash'] ?? 0);
+            $out[$d]['transfer_masuk'] += (int) ($r['transfer'] ?? 0);
+        }
+
+        // Kas keluar: satu SUM per tanggal.
+        $keluar = $this->db->table('kas_keluar')
+            ->select('DATE(tanggal) AS tgl', false)
+            ->selectSum('jumlah', 'total')
+            ->where('DATE(tanggal) >=', $startDate)
+            ->where('DATE(tanggal) <=', $endDate)
+            ->where('idunit', $unitId)
+            ->groupBy('tgl')
+            ->get()
+            ->getResultArray();
+        foreach ($keluar as $r) {
+            $d = (string) $r['tgl'];
+            if (! isset($out[$d])) {
+                $out[$d] = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+            }
+            $out[$d]['kas_keluar'] += (int) ($r['total'] ?? 0);
+        }
+
+        return $out;
+    }
+
+    /**
      * Cash Masuk = penjualan.bayar_tunai + service.bayar_tunai.
      * Setara TutupKasir::index() "PENJUALAN CASH" + "SERVICE CASH".
      */
@@ -330,6 +415,67 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
+     * Apakah angka pada baris ini masih boleh diubah oleh $aktorId?
+     *
+     * Ini berbeda dari isLocked(), yang hanya menjawab "sudah selesai
+     * diverifikasi belum".
+     *
+     * SUDAH DIKIRIM berarti angkanya sudah jadi pernyataan, bukan draf.
+     * Dahulu keadaan ini sama sekali tidak dijaga: isLocked() hanya true
+     * untuk VERIFIED, sehingga siapa pun yang punya financeInputRoles —
+     * termasuk jabatan 34 (Manager) dan 1 (Admin Root) — masih bisa
+     * menulis ulang angka yang sedang menunggu persetujuan, lalu
+     * menyimpan ulang supaya tetap SUBMITTED. Manager pun bisa mengubah
+     * angka yang diminta dia setujui, termasuk setelah membuka layar
+     * verifikasi. Jadi aturan ini WAJIB ditegakkan di server
+     * (DashboardFinance::rekonSave), bukan hanya dengan mematikan tombol.
+     *
+     * Aturannya (keputusan bisnis 2026-09-27):
+     *   - belum ada record  -> boleh, ini pengisian pertama
+     *   - DRAFT             -> boleh, memang belum jadi pernyataan
+     *   - NEED_REVISION     -> boleh, catatan manager justru meminta ini
+     *   - SUBMITTED         -> HANYA yang mengirim (submitted_by) yang boleh
+     *                          menarik hincirannya sebelum ada yang memverifikasi
+     *   - VERIFIED          -> tidak boleh, untuk siapa pun
+     *
+     * Perlu dicek di server, bukan lewat peran: jabatan 34 dan 1 ada di
+     * financeInputRoles sekaligus financeApproveRoles, jadi satu orang bisa
+     * jadi pengirim sekaligus pemverifikasi. Aturan peran tidak bisa
+     * membedakan kasus itu.
+     */
+    public static function bolehUbahAngka(?object $row, int $aktorId): bool
+    {
+        $status = self::statusProses($row);
+
+        if ($status === ModelFinanceRekonDaily::STATUS_VERIFIED) {
+            return false;
+        }
+
+        if ($status === ModelFinanceRekonDaily::STATUS_SUBMITTED) {
+            return $aktorId > 0 && (int) $row->submitted_by === $aktorId;
+        }
+
+        return true;
+    }
+
+    /**
+     * Alasan singkat untuk ditampilkan di UI saat angka tidak boleh diubah.
+     * Kembalikan null kalau boleh diubah.
+     */
+    public static function kunciAlasan(?object $row, int $aktorId): ?string
+    {
+        if (self::bolehUbahAngka($row, $aktorId)) {
+            return null;
+        }
+
+        if (self::isLocked($row)) {
+            return 'Sudah diverifikasi dan terkunci.';
+        }
+
+        return 'Sudah dikirim dan menunggu verifikasi. Hanya yang mengirim yang bisa mengubah angka ini.';
+    }
+
+    /**
      * Nama-nama akun untuk list (input_by / submitted_by / verified_by).
      *
      * @param array<int,int> $ids
@@ -405,14 +551,23 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
      *
      * Numerator: ketiga actual_* terisi (IS NOT NULL) DAN status_proses =
      *            'verified'. 'submitted'/'need_revision'/'draft' TIDAK dihitung.
+     *            Tidak ada pengecualian hari: Minggu & hari libur ikut dihitung
+     *            kalau sudah diverifikasi.
      * Selisih TIDAK memengaruhi skor: LENGKAP_COCOK dan LENGKAP_SELISIH
      *            sama-sama dihitung sebagai hari selesai selama terverifikasi.
-     * Denominator: Senin–Sabtu dalam periode, dipotong di hari ini.
-     *              HARI LIBUR BELUM diperhitungkan.
+     * Denominator: SEMUA hari kalender dalam periode, dipotong di hari ini.
      *
-     * Mengembalikan score = null bila tabel/kolom belum tersedia atau tidak
-     * ada hari kerja, sehingga pemanggil (FinanceKpiCalculationService) dapat
-     * jatuh ke skor manual.
+     * PENTING (2026-09-27): denominator dulu hanya Senin-Sabatu sementara
+     * numerator menghitung semua hari. Akibatnya mengisi hari Minggu bisa
+     * mendorong skor ke 100% (lalu di-cap) padahal masih ada hari kerja
+     * yang belum diisi. Contoh Sept 2026: 19 dari 23 hari kerja + 4 Minggu
+     * = 23/23 = 100%. Aturan bisnisnya: rekonsiliasi WAJIB tiap hari kalender,
+     * termasuk Minggu/libur, dan boleh disusulkan di hari berikutnya — jadi
+     * kedua sisi harus memakai rentang yang sama.
+     *
+     * Mengembalikan score = null bila tabel/kolom belum tersedia atau belum
+     * ada satu pun hari yang lewat, sehingga pemanggil
+     * (FinanceKpiCalculationService) dapat jatuh ke skor manual.
      */
     public function calculate(int $unitId, int $month, int $year): array
     {
@@ -424,11 +579,11 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
             $endDate = $today;
         }
 
-        $hariKerja = $this->countHariKerja($startDate, $endDate);
+        $hariDilalui = $this->countHariDilalui($startDate, $endDate);
         $hariLengkap = 0;
         $hariLengkapVerified = 0;
 
-        if ($hariKerja > 0) {
+        if ($hariDilalui > 0) {
             try {
                 $hariLengkap = $this->model->countLengkapInRange($unitId, $startDate, $endDate);
                 $hariLengkapVerified = $this->model->countLengkapVerifiedInRange($unitId, $startDate, $endDate);
@@ -440,7 +595,7 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
                     'detail' => [
                         'start_date'           => $startDate,
                         'end_date'             => $endDate,
-                        'hari_kerja'           => $hariKerja,
+                        'hari_dilalui'        => $hariDilalui,
                         'hari_lengkap'         => 0,
                         'hari_lengkap_verified' => 0,
                         'error'                => $e->getMessage(),
@@ -452,12 +607,12 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
         $detail = [
             'start_date'           => $startDate,
             'end_date'             => $endDate,
-            'hari_kerja'           => $hariKerja,
+            'hari_dilalui'        => $hariDilalui,
             'hari_lengkap'         => $hariLengkap,
             'hari_lengkap_verified' => $hariLengkapVerified,
         ];
 
-        if ($hariKerja <= 0) {
+        if ($hariDilalui <= 0) {
             return [
                 'score'  => null,
                 'status' => 'data_kosong',
@@ -465,7 +620,10 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
             ];
         }
 
-        $score = min(($hariLengkapVerified / $hariKerja) * 100, 100);
+        // min(100) adalah jaring pengaman, bukan aturan: dengan denominator
+        // semua hari kalender dan unique key (unit_id, tanggal), numerator
+        // tidak mungkin melebihi denominator.
+        $score = min(($hariLengkapVerified / $hariDilalui) * 100, 100);
 
         return [
             'score'  => round($score, 2),
@@ -475,17 +633,20 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Hitung hari kerja (Senin-Sabtu) dalam rentang.
+     * Hitung hari kalender yang sudah lewat dalam rentang (Senin–Minggu).
+     *
+     * Ini denominator KPI Rekonsiliasi. Sengaja TIDAK menyaring hari: rekonsiliasi
+     * wajib diisi setiap hari kalender, termasuk Minggu dan hari libur, dan
+     * boleh disusulkan pada hari-hari berikutnya. Karena numerator
+     * (countLengkapVerifiedInRange) juga tidak menyaring hari, kedua sisi memakai
+     * rentang yang sama dan skor tidak bisa "digelembungkan" oleh hari Minggu.
      */
-    protected function countHariKerja(string $startDate, string $endDate): int
+    protected function countHariDilalui(string $startDate, string $endDate): int
     {
         $count = 0;
         $d = $startDate;
         while ($d <= $endDate) {
-            $dow = (int) date('w', strtotime($d));
-            if ($dow >= 1 && $dow <= 6) {
-                $count++;
-            }
+            $count++;
             $d = date('Y-m-d', strtotime($d . ' +1 day'));
         }
         return $count;

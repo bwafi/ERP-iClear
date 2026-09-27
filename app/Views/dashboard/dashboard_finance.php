@@ -1,5 +1,10 @@
 <style>
     :root {
+        /* Aksen biru dulu ditulis langsung (#3b82f6) di empat tempat. Diseuaikan
+           jadi token supaya kartu skor, hover, dan garis bawah tidak bisa
+           lepas satu sama lain saat warnanya diganti. */
+        --fn-accent: #3b82f6;
+        --fn-accent-soft: rgba(59, 130, 246, 0.12);
         --fn-border: #e5e7eb;
         --fn-bg-subtle: #f8f9fb;
         --fn-text-main: #1a1d23;
@@ -30,13 +35,13 @@
     }
 
     .fn-scorecard:hover {
-        border-color: #3b82f6;
-        box-shadow: 0 2px 10px rgba(59, 130, 246, 0.12);
+        border-color: var(--fn-accent);
+        box-shadow: 0 2px 10px var(--fn-accent-soft);
         transform: translateY(-1px);
     }
 
     .fn-scorecard.has-score {
-        border-left: 3px solid #3b82f6;
+        border-left: 3px solid var(--fn-accent);
     }
 
     .fn-scorecard.no-score {
@@ -65,7 +70,7 @@
     }
 
     .fn-nav-tabs .nav-link.active {
-        border-bottom: 2px solid #3b82f6;
+        border-bottom: 2px solid var(--fn-accent);
         color: #1a1d23;
         background: none;
     }
@@ -739,8 +744,8 @@
                         </div>
                         <div class="col-md-3">
                             <div class="border rounded p-3 h-100">
-                                <div class="text-muted small mb-1">Hari Kerja</div>
-                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_kerja'] ?? 0) ?></div>
+                                <div class="text-muted small mb-1">Hari Dilalui</div>
+                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_dilalui'] ?? 0) ?></div>
                             </div>
                         </div>
                         <div class="col-md-3">

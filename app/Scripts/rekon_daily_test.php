@@ -552,20 +552,22 @@ $startM = date('Y-m-01');
 $endM = date('Y-m-t');
 $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
 
-// Hari kerja Senin-Sabtu yang sudah lewat, dibatasi hari ini.
-$hariKerja = [];
+// SEMUA hari kalender yang sudah lewat, dibatasi hari ini.
+//
+// 2026-09-27: dulu daftar ini hanya Senin-Sabatu karena KPI-nya memakai
+// countHariKerja(). Aturan bisnisnya rekonsiliasi wajib tiap hari kalender
+// (Minggu & hari libur termasuk, boleh disusulkan), jadi denominator KPI
+// sekarang juga semua hari. Lihat RekonDailyCalculator::countHariDilalui().
+$hariDilalui = [];
 $d = $startM;
 $endMin = $endM < $today ? $endM : $today;
 while ($d <= $endMin) {
-    $dow = (int) date('w', strtotime($d));
-    if ($dow >= 1 && $dow <= 6) {
-        $hariKerja[] = $d;
-    }
+    $hariDilalui[] = $d;
     $d = date('Y-m-d', strtotime($d . ' +1 day'));
 }
 
-$jmlHariKerja = count($hariKerja);
-ok('F1: minimal 1 hari kerja dalam bulan berjalan', $jmlHariKerja >= 1, "hari_kerja={$jmlHariKerja}");
+$jmlHariDilalui = count($hariDilalui);
+ok('F1: minimal 1 hari dalam bulan berjalan', $jmlHariDilalui >= 1, "hari_dilalui={$jmlHariDilalui}");
 
 // $terisi = false -> actual_* NULL (hari ada, tapi belum direkonsiliasi).
 $seed = function (string $tgl, string $status, bool $terisi = true) use ($model, $unitId) {
@@ -578,34 +580,34 @@ $seed = function (string $tgl, string $status, bool $terisi = true) use ($model,
     ]);
 };
 
-if ($jmlHariKerja < 3) {
-    skip('F2-F7: butuh minimal 3 hari kerja');
+if ($jmlHariDilalui < 3) {
+    skip('F2-F7: butuh minimal 3 hari');
 } else {
     // H+1 verified, H+2 submitted, H+3 draft, sisanya kosong.
-    $seed($hariKerja[0], ModelFinanceRekonDaily::STATUS_VERIFIED);
-    $seed($hariKerja[1], ModelFinanceRekonDaily::STATUS_SUBMITTED);
-    $seed($hariKerja[2], ModelFinanceRekonDaily::STATUS_DRAFT);
+    $seed($hariDilalui[0], ModelFinanceRekonDaily::STATUS_VERIFIED);
+    $seed($hariDilalui[1], ModelFinanceRekonDaily::STATUS_SUBMITTED);
+    $seed($hariDilalui[2], ModelFinanceRekonDaily::STATUS_DRAFT);
 
     $res = $calc->calculate($unitId, $monthNow, $yearNow);
-    $expected = round((1 / $jmlHariKerja) * 100, 2);
+    $expected = round((1 / $jmlHariDilalui) * 100, 2);
     ok(
-        'F2: hanya 1 hari verified dari ' . $jmlHariKerja . ' hari kerja',
+        'F2: hanya 1 hari verified dari ' . $jmlHariDilalui . ' hari',
         (float) $res['score'] === $expected,
         "score={$res['score']} expected={$expected}"
     );
     ok('F3: numerator hanya menghitung verified', (int) $res['detail']['hari_lengkap_verified'] === 1, json_encode($res['detail']));
     ok('F4: hari lengkap (tanpa syarat verified) = 3', (int) $res['detail']['hari_lengkap'] === 3, json_encode($res['detail']));
-    ok('F5: denominator = jumlah hari kerja Sen-Sab', (int) $res['detail']['hari_kerja'] === $jmlHariKerja, json_encode($res['detail']));
+    ok('F5: denominator = semua hari kalender yang lewat', (int) $res['detail']['hari_dilalui'] === $jmlHariDilalui, json_encode($res['detail']));
 
     // Semua hari kerja verified -> 100
-    foreach ($hariKerja as $tgl) {
+    foreach ($hariDilalui as $tgl) {
         $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
     }
     $res100 = $calc->calculate($unitId, $monthNow, $yearNow);
     ok('F6: semua hari verified -> 100', (float) $res100['score'] === 100.0, "score={$res100['score']}");
 
     // Tidak ada verified -> 0
-    foreach ($hariKerja as $tgl) {
+    foreach ($hariDilalui as $tgl) {
         $seed($tgl, ModelFinanceRekonDaily::STATUS_DRAFT);
     }
     $res0 = $calc->calculate($unitId, $monthNow, $yearNow);
@@ -613,7 +615,7 @@ if ($jmlHariKerja < 3) {
 
     // Verified dengan selisih tetap dihitung (selisih tidak menurunkan skor)
     $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
-    foreach ($hariKerja as $tgl) {
+    foreach ($hariDilalui as $tgl) {
         $model->upsert([
             'unit_id' => $unitId, 'tanggal' => $tgl,
             'erp_cash_masuk' => 100, 'actual_cash_masuk' => 7777, 'selisih_cash_masuk' => 7677,
@@ -624,6 +626,72 @@ if ($jmlHariKerja < 3) {
     }
     $resSelisih = $calc->calculate($unitId, $monthNow, $yearNow);
     ok('F8: verified + selisih tetap 100 (selisih tidak menurunkan skor)', (float) $resSelisih['score'] === 100.0, "score={$resSelisih['score']}");
+
+    // --- F8b-F8e: aturan "rekonsiliasi tiap hari kalender" -------------------
+    //
+    // Aturan bisnis: admin WAJIB mengisi tiap hari, Minggu & hari libur
+    // termasuk, dan boleh disusulkan di hari berikutnya. Dulu denominator
+    // hanya Senin-Sabatu sementara numerator menghitung semua hari — akibatnya
+    // 19 dari 23 hari kerja + 4 Minggu = 23/23 = 100% (lalu di-cap), padahal
+    // 4 hari kerja belum diisi. Kedua sisi harus memakai rentang yang sama.
+    $minggu = array_values(array_filter($hariDilalui, static function (string $t): bool {
+        return (int) date('w', strtotime($t)) === 0;
+    }));
+
+    if (count($minggu) < 1) {
+        skip('F8b-F8e: bulan berjalan tidak punya Minggu yang sudah lewat');
+    } else {
+        // Semua hari KECUALISKAN Minggu pertama -> verified. Kalau denominator
+        // masih Sen-Sab, mengisi Minggu akan menutupi lubang itu dan skor
+        // akan terbaca 100%.
+        $tanpaMinggu = array_values(array_diff($hariDilalui, [$minggu[0]]));
+        $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
+        foreach ($tanpaMinggu as $tgl) {
+            $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
+        }
+        // Minggu pertama sengaja DIISI verified: harus menambah skor, karena
+        // aturan bisnis menyatakan Minggu wajib direkonsiliasi.
+        $seed($minggu[0], ModelFinanceRekonDaily::STATUS_VERIFIED);
+
+        $resSemua = $calc->calculate($unitId, $monthNow, $yearNow);
+        $expectedSemua = round((count($hariDilalui) / $jmlHariDilalui) * 100, 2);
+
+        ok(
+            'F8b: denominator = semua hari kalender (Minggu masuk hitungan)',
+            (int) $resSemua['detail']['hari_dilalui'] === $jmlHariDilalui
+                && $jmlHariDilalui > count($tanpaMinggu),
+            'dilalui=' . $resSemua['detail']['hari_dilalui'] . ' tanpaMinggu=' . count($tanpaMinggu)
+        );
+        ok(
+            'F8c: mengisi Minggu MENAMBAH skor (bukan diabaikan)',
+            (int) $resSemua['detail']['hari_lengkap_verified'] === $jmlHariDilalui
+                && (float) $resSemua['score'] === $expectedSemua,
+            'verified=' . $resSemua['detail']['hari_lengkap_verified'] . " score={$resSemua['score']} expected={$expectedSemua}"
+        );
+
+        // Cermin skenario bug lama: semua hari kerja verified, semua Minggu
+        // KOSONG. Skor harus di bawah 100 kalau denominator = semua hari.
+        $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
+        $bukanMinggu = array_values(array_filter($hariDilalui, static function (string $t): bool {
+            return (int) date('w', strtotime($t)) !== 0;
+        }));
+        foreach ($bukanMinggu as $tgl) {
+            $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
+        }
+        $resTanpaMinggu = $calc->calculate($unitId, $monthNow, $yearNow);
+        $expectedTanpaMinggu = round((count($bukanMinggu) / $jmlHariDilalui) * 100, 2);
+        ok(
+            'F8d: Minggu kosong menurunkan skor (tidak ada lagi "100% palsu")',
+            (float) $resTanpaMinggu['score'] === $expectedTanpaMinggu && (float) $resTanpaMinggu['score'] < 100.0,
+            "score={$resTanpaMinggu['score']} expected={$expectedTanpaMinggu}"
+                . ' (nonMinggu=' . count($bukanMinggu) . '/' . $jmlHariDilalui . ')'
+        );
+        ok(
+            'F8e: numerator tidak pernah melebihi denominator',
+            (int) $resSemua['detail']['hari_lengkap_verified'] <= (int) $resSemua['detail']['hari_dilalui'],
+            json_encode($resSemua['detail'])
+        );
+    }
 
     // Filter status proses di list bulanan
     $listAll = $calc->monthlyList($unitId, $monthNow, $yearNow);
@@ -638,12 +706,19 @@ if ($jmlHariKerja < 3) {
     // supaya Finance tetap melihat hari Minggu/Minggu besar di daftar.
     $hariEfektif = (int) ((strtotime($endMin) - strtotime($startM)) / 86400) + 1;
     ok('F9: list bulanan memuat semua hari kalender yang sudah lewat', count($listAll) === $hariEfektif, 'list=' . count($listAll) . ' diharapkan=' . $hariEfektif);
-    // Hanya hari kerja yang di-seed VERIFIED; hari Minggu tidak punya record
-    // sehingga statusnya 'draft' dan rightfully tersaring oleh filter.
+    // Bandingkan dengan JUMLAH BARIS VERIFIED NYATA di DB, bukan dengan jumlah
+    // hari kalender: blok uji sebelumnya menyisakan data yang berbeda-beda,
+    // dan assertion yang bergantung pada sisa itu ikut ikut gagal.
+    $jmlVerifiedDb = (int) $db->table('finance_rekon_daily')
+        ->where('unit_id', $unitId)
+        ->where('tanggal >=', $startM)
+        ->where('tanggal <=', $endMin)
+        ->where('status_proses', ModelFinanceRekonDaily::STATUS_VERIFIED)
+        ->countAllResults();
     ok(
         'F10: filter status=verified hanya menyaring baris verified',
-        $semuaVerified && count($listVerified) === $jmlHariKerja,
-        'terfilter=' . count($listVerified) . ' verified=' . $jmlHariKerja
+        $semuaVerified && count($listVerified) === $jmlVerifiedDb,
+        'terfilter=' . count($listVerified) . ' verified_di_db=' . $jmlVerifiedDb
     );
     $listDraft = $calc->monthlyList($unitId, $monthNow, $yearNow, ModelFinanceRekonDaily::STATUS_DRAFT);
     $semuaDraft = true;
@@ -654,6 +729,46 @@ if ($jmlHariKerja < 3) {
     }
     ok('F10b: filter draft tidak bocor baris verified', $semuaDraft, 'jumlah=' . count($listDraft));
 }
+
+// F12: erpValuesRange() WAJIB sama persis dengan erpValues() per tanggal.
+// Daftar bulanan memakai yang bulk (3 query sebulan) supaya panel per-hari
+// bisa menampilkan angka ERP tanpa 6 query per hari. Kalau keduanya meleset,
+// angka ERP di panel berbeda dari angka yang tersimpan saat save — dan
+// selisih dihitung dari angka itu, jadi selisih yang tampil ikut bohong.
+$range = $calc->erpValuesRange($unitId, $startM, $endM);
+$beda = [];
+$d = $startM;
+while ($d <= $endM) {
+    $satuHari = $calc->erpValues($unitId, $d);
+    $bulat = $range[$d] ?? ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+    if ($satuHari !== $bulat) {
+        $beda[] = $d . ' per_hari=' . json_encode($satuHari) . ' bulk=' . json_encode($bulat);
+    }
+    $d = date('Y-m-d', strtotime($d . ' +1 day'));
+}
+ok(
+    'F12: erpValuesRange identik dengan erpValues untuk tiap tanggal',
+    $beda === [],
+    implode(' | ', array_slice($beda, 0, 3))
+);
+
+// Bila bulan ini memang punya transaksi, rentang harus mengembalikan
+// minimal satu tanggal. Tanpa ini, F12 bisa lulus karena kedua sisi sama-sama
+// kosong (mis. test dijalankan di unit tanpa transaksi sama sekali).
+$adaTransaksi = (int) $db->table('penjualan')
+        ->where('DATE(tanggal) >=', $startM)->where('DATE(tanggal) <=', $endM)
+        ->where('unit_idunit', $unitId)->countAllResults() > 0
+    || (int) $db->table('service')
+        ->where('DATE(tanggal_selesai) >=', $startM)->where('DATE(tanggal_selesai) <=', $endM)
+        ->where('unit_idunit', $unitId)->countAllResults() > 0
+    || (int) $db->table('kas_keluar')
+        ->where('DATE(tanggal) >=', $startM)->where('DATE(tanggal) <=', $endM)
+        ->where('idunit', $unitId)->countAllResults() > 0;
+ok(
+    'F12b: ada transaksi di bulan ini -> rentang tidak kosong',
+    ! $adaTransaksi || count($range) > 0,
+    'ada_transaksi=' . var_export($adaTransaksi, true) . ' tanggal_di_rentang=' . count($range)
+);
 
 // Bulan tanpa hari kerja (Maret di bulan < 3 pada tanggal 1) -> score null agar fallback manual aktif
 ok('F11: calculate() mengembalikan array dengan score & detail', is_array($res) && array_key_exists('score', $res) && isset($res['detail']));
@@ -788,19 +903,55 @@ $db->transRollback();
 
 // Route & view
 $routeSrc = file_get_contents(ROOTPATH . 'app/Config/Routes.php');
-$formSrc = file_get_contents(APPPATH . 'Views/dashboard/finance_rekon_form.php');
+// Halaman form harian dihapus 2026-09-27; input dan verifikasi sekarang
+// inline di daftar bulanan, jadi partial input disambungkan dari sana.
+$formSrc = file_get_contents(APPPATH . 'Views/dashboard/finance_rekonsiliasi.php');
 ok('H10: route finance/rekonsiliasi terdaftar', strpos($routeSrc, "finance/rekonsiliasi") !== false);
 ok('H11: route finance/rekon/submit terdaftar', strpos($routeSrc, "finance/rekon/submit") !== false);
 ok('H12: route finance/rekon/approve terdaftar', strpos($routeSrc, "finance/rekon/approve") !== false);
 ok('H14: dashboard memiliki link ke rekonsiliasi', strpos(file_get_contents(APPPATH . 'Views/dashboard/dashboard_finance.php'), 'finance/rekonsiliasi?unit_id=') !== false);
 
 // Format input Aktual: titik ribuan harus OTOMATIS (user ketik angka saja).
-ok('H13a: view punya groupThousands() untuk format ribuan otomatis', strpos($formSrc, 'function groupThousands') !== false);
-ok('H13b: input menolak karakter di luar digit/pemisah (minus tidak di-strip diam-diam)', strpos($formSrc, '[^0-9.,\\s]') !== false);
-ok('H13c: ada handler paste dengan parse ketat', strpos($formSrc, "addEventListener('paste'") !== false);
-ok('H13d: ada hint "ketik angka saja" untuk user', strpos($formSrc, 'rekon-format-hint') !== false && strpos($formSrc, 'Ketik angka saja') !== false);
-ok('H13e: parser JS menolak negatif (parity server)', strpos($formSrc, 'n < 0') !== false);
-ok('H13f: tidak ada lagi toLocaleString pada nilai input (pakai groupThousands)', strpos($formSrc, 'this.value = actual > 0 ? actual.toLocaleString') === false);
+// Perilaku input TIDAK lagi tinggal di view form: markup ada di
+// inc/rek_input_fields.php dan logikanya di inc/rek_input_js.php, supaya
+// panel per-hari di daftar bulanan memakai implementasi yang sama. Assertion
+// ini sekarang memeriksa kedua partial itu, ditambah bahwa view form benar-
+// benar menyambungkannya — kalau salah satu.include dibuang, scan sumber
+// tetap hijau padahal form kehilangan inputnya.
+$fieldsSrc = file_get_contents(APPPATH . 'Views/inc/rek_input_fields.php');
+$inputJsSrc = file_get_contents(APPPATH . 'Views/inc/rek_input_js.php');
+
+ok('H13a: view list menyertakan partial input (markup + JS)', strpos($formSrc, "view('inc/rek_input_fields'") !== false && strpos($formSrc, "view('inc/rek_input_js')") !== false);
+ok('H13a3: halaman form harian benar-benar dihapus', ! file_exists(APPPATH . 'Views/dashboard/finance_rekon_form.php'));
+ok('H13a4: route form harian dihapus', strpos(file_get_contents(APPPATH . 'Config/Routes.php'), 'finance/rekon/form') === false);
+ok('H13a5: list punya form verifikasi inline', strpos($formSrc, "base_url('finance/rekon/approve')") !== false && strpos($formSrc, 'value="need_revision"') !== false);
+ok('H13a6: list tidak lagi menautkan halaman form', strpos($formSrc, 'finance/rekon/form?unit_id=') === false);
+ok('H13a2: partial input punya groupThousands() untuk format ribuan otomatis', strpos($inputJsSrc, 'function groupThousands') !== false);
+ok('H13b: input menolak karakter di luar digit/pemisah (minus tidak di-strip diam-diam)', strpos($inputJsSrc, '[^0-9.,\\s]') !== false);
+ok('H13c: ada handler paste dengan parse ketat', strpos($inputJsSrc, "addEventListener('paste'") !== false);
+ok('H13d: ada hint "ketik angka saja" untuk user', strpos($fieldsSrc, 'rekon-format-hint') !== false && strpos($fieldsSrc, 'Ketik angka saja') !== false);
+ok('H13e: parser JS menolak negatif (parity server)', strpos($inputJsSrc, 'n < 0') !== false);
+ok('H13f: tidak ada lagi toLocaleString pada nilai input (pakai groupThousands)', strpos($inputJsSrc, 'this.value = actual > 0 ? actual.toLocaleString') === false);
+
+// Input terkunci harus memakai ATRIBUT disabled, bukan class bernama
+// "disabled". Class itu tidak menambah atribut apa pun: fieldnya masih bisa
+// diketik, hanya tampilannya yang menyesatkan. Textarea di blok yang sama
+// sudah benar, jadi ketidakkonsistenan ini sulit dilihatan mata.
+ok(
+    'H13g: input terkunci pakai atribut disabled, bukan class',
+    preg_match('/placeholder="0"\s*<\?= \$disabled \?>/', $fieldsSrc) === 1
+        && strpos($fieldsSrc, 'text-end<?= $disabled ?>') === false,
+    'harus ada pola: placeholder="0"<?= $disabled ?>'
+);
+
+// Panel per-hari di daftar bulanan harus memakai partial input yang sama,
+// dengan prefix id per tanggal. Tanpa prefix, 27 panel menghasilkan 81 input
+// yang berebut id msg_/selisih_/status_ yang sama.
+$listSrc = file_get_contents(APPPATH . 'Views/dashboard/finance_rekonsiliasi.php');
+ok('H15: panel daftar menyertakan partial input + JS yang sama', strpos($listSrc, "view('inc/rek_input_fields'") !== false && strpos($listSrc, "view('inc/rek_input_js')") !== false);
+ok('H15b: panel daftar memberi prefix id per tanggal', strpos($listSrc, "'p' . str_replace('-', '', \$tgl) . '-'") !== false);
+ok('H15c: panel daftar punya satu tombol Simpan & Kirim per hari', substr_count($listSrc, 'Simpan &amp; Kirim') === 1 && strpos($listSrc, "base_url('finance/rekon/save')") !== false);
+
 
 // Test client-side (butuh node). Dijalankan sungguhan agar regresi format
 // ribuan di browser tidak bisa lolos hanya karena test PHP hijau.

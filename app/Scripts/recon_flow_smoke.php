@@ -1,6 +1,7 @@
 <?php
 /**
- * Smoke test alur POST: save -> submit -> approve (verify / need_revision).
+ * Smoke test alur POST: save (lengkap -> otomatis submitted) -> approve
+ * (verify / need_revision), plus penjaga endpoint rekonSubmit eksplisit.
  *
  * Memverifikasi controller benar-benar menolak input tidak valid,olak
  * self-verify, dan tidak merusak alur di level HTTP (bukan hanya logika murni).
@@ -94,36 +95,48 @@ $basePost = [
     'catatan' => 'flow smoke',
 ];
 
-// 1. Simpan draft
-runAs((int) $akunSubmitter->ID_AKUN, $basePost, 'rekonSave');
+// 1. Simpan TIDAK lengkap -> tetap draft (tidak ikut terkirim)
+$draftPost = $basePost;
+$draftPost['actual_transfer_masuk'] = '';
+runAs((int) $akunSubmitter->ID_AKUN, $draftPost, 'rekonSave');
 $row = $model->getByUnitAndDate($unitId, $today);
 check('POST save membuat record draft', $row !== null);
-check('draft berstatus draft', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'draft');
+check('tidak lengkap -> tetap draft (tidak terkirim)', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'draft');
 check('nominal diparse sebagai integer', (int) $row->actual_cash_masuk === 1000000, (string) $row->actual_cash_masuk);
 check('input_by terisi akun submitter', (int) $row->input_by === (int) $akunSubmitter->ID_AKUN);
 check('draft belum punya submitted_by', $row->submitted_by === null);
+check('draft belum punya submitted_at', $row->submitted_at === null);
 check('selisih dihitung server-side', (int) $row->selisih_cash_masuk === (int) $row->actual_cash_masuk - (int) $row->erp_cash_masuk);
 
 // 2. Nominal negatif DITOLAK (tidak menimpa data)
 $negPost = $basePost;
 $negPost['actual_cash_masuk'] = '-1.000.000';
+$negPost['actual_transfer_masuk'] = '';
+$sebelum = $model->getByUnitAndDate($unitId, $today);
 runAs((int) $akunSubmitter->ID_AKUN, $negPost, 'rekonSave');
 $rowAfterNeg = $model->getByUnitAndDate($unitId, $today);
-check('nominal negatif ditolak (data lama utuh)', (int) $rowAfterNeg->actual_cash_masuk === 1000000, (string) $rowAfterNeg->actual_cash_masuk);
+check('nominal negatif ditolak (data lama utuh)', (int) $rowAfterNeg->actual_cash_masuk === (int) $sebelum->actual_cash_masuk, (string) $rowAfterNeg->actual_cash_masuk);
+check('ditolak tetap draft', App\Services\Finance\RekonDailyCalculator::statusProses($rowAfterNeg) === 'draft');
 
 // 3. Teks non-numerik DITOLAK
 $badPost = $basePost;
 $badPost['actual_transfer_masuk'] = 'abc';
+$badPost['actual_kas_keluar'] = '';
+$sebelum = $model->getByUnitAndDate($unitId, $today);
 runAs((int) $akunSubmitter->ID_AKUN, $badPost, 'rekonSave');
 $rowAfterBad = $model->getByUnitAndDate($unitId, $today);
-check('nominal non-numerik ditolak', (int) $rowAfterBad->actual_transfer_masuk === 500000, (string) $rowAfterBad->actual_transfer_masuk);
+check('nominal non-numerik ditolak (seluruh field utuh)', (int) $rowAfterBad->actual_kas_keluar === (int) $sebelum->actual_kas_keluar, (string) $rowAfterBad->actual_kas_keluar);
+check('nominal non-numerik ditolak -> transfer tetap kosong', (string) $rowAfterBad->actual_transfer_masuk === (string) $sebelum->actual_transfer_masuk, (string) $rowAfterBad->actual_transfer_masuk);
 
 // 4. Desimal DITOLAK
 $decPost = $basePost;
 $decPost['actual_kas_keluar'] = '250.000,50';
+$decPost['actual_transfer_masuk'] = '';
+$sebelum = $model->getByUnitAndDate($unitId, $today);
 runAs((int) $akunSubmitter->ID_AKUN, $decPost, 'rekonSave');
 $rowAfterDec = $model->getByUnitAndDate($unitId, $today);
-check('nominal desimal ditolak', (int) $rowAfterDec->actual_kas_keluar === 250000, (string) $rowAfterDec->actual_kas_keluar);
+check('nominal desimal ditolak (tidak dipotong diam-diam)', (int) $rowAfterDec->actual_kas_keluar === (int) $sebelum->actual_kas_keluar, (string) $rowAfterDec->actual_kas_keluar);
+check('nominal desimal ditolak tetap draft', App\Services\Finance\RekonDailyCalculator::statusProses($rowAfterDec) === 'draft');
 
 // 5. Tanggal masa depan DITOLAK
 $future = date('Y-m-d', strtotime('+1 day'));
@@ -132,12 +145,14 @@ $futurePost['tanggal'] = $future;
 runAs((int) $akunSubmitter->ID_AKUN, $futurePost, 'rekonSave');
 check('tanggal masa depan ditolak', $model->getByUnitAndDate($unitId, $future) === null);
 
-// 6. Submit -> submitted
-runAs((int) $akunSubmitter->ID_AKUN, ['unit_id' => $unitId, 'tanggal' => $today], 'rekonSubmit');
+// 6. Simpan LENGKAP -> LANGSUNG submitted, tanpa klik kedua.
+//    Ini inti perubahan: satu POST save sudah cukup untuk masuk antrean approval.
+runAs((int) $akunSubmitter->ID_AKUN, $basePost, 'rekonSave');
 $row = $model->getByUnitAndDate($unitId, $today);
-check('POST submit -> submitted', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'submitted');
+check('lengkap -> save langsung submitted (satu klik)', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'submitted');
 check('submitted_by = akun submitter', (int) $row->submitted_by === (int) $akunSubmitter->ID_AKUN);
 check('submitted_at terisi', $row->submitted_at !== null);
+check('seluruh actual terisi setelah kirim', (int) $row->actual_kas_keluar === 250000, (string) $row->actual_kas_keluar);
 
 // 7. SELF-VERIFY DITOLAK
 $verSelf = ['unit_id' => $unitId, 'tanggal' => $today, 'action' => 'verify', 'catatan_revisi' => ''];
@@ -158,18 +173,83 @@ $row = $model->getByUnitAndDate($unitId, $today);
 check('need_revision DITERIMA oleh approver', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'need_revision');
 check('catatan revisi tersimpan', $row->catatan_revisi === 'Selisih transfer 25.000, mohon dicek');
 
-// 10. Data perlu revisi bisa diedit & disubmit ulang
+// 10. Data perlu revisi: perbaiki + simpan -> langsung terkirim lagi
 $fixPost = $basePost;
 $fixPost['actual_transfer_masuk'] = '475.000';
 runAs((int) $akunSubmitter->ID_AKUN, $fixPost, 'rekonSave');
 $row = $model->getByUnitAndDate($unitId, $today);
 check('perbaiki data setelah need_revision', (int) $row->actual_transfer_masuk === 475000, (string) $row->actual_transfer_masuk);
-check('revisi mengembalikan status ke draft', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'draft');
+check('perbaiki + simpan lengkap -> langsung terkirim lagi', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'submitted');
 check('catatan revisi dibersihkan setelah revisi', $row->catatan_revisi === null);
+check('submitted_by = akun submitter saat kirim ulang', (int) $row->submitted_by === (int) $akunSubmitter->ID_AKUN);
 
-runAs((int) $akunSubmitter->ID_AKUN, ['unit_id' => $unitId, 'tanggal' => $today], 'rekonSubmit');
-$row = $model->getByUnitAndDate($unitId, $today);
-check('submit ulang berhasil', App\Services\Finance\RekonDailyCalculator::statusProses($row) === 'submitted');
+// 10b. Endpoint rekonSubmit eksplisit MASIH ADA dan tetap menjaga diri:
+//      data tidak lengkap tidak boleh terkirim lewat jalur itu.
+$kemarin = date('Y-m-d', strtotime('-1 day'));
+$postKemarin = $basePost;
+$postKemarin['tanggal'] = $kemarin;
+$postKemarin['actual_kas_keluar'] = '';
+runAs((int) $akunSubmitter->ID_AKUN, $postKemarin, 'rekonSave');
+check('submit eksplisit: tidak lengkap -> draft', App\Services\Finance\RekonDailyCalculator::statusProses($model->getByUnitAndDate($unitId, $kemarin)) === 'draft');
+runAs((int) $akunSubmitter->ID_AKUN, ['unit_id' => $unitId, 'tanggal' => $kemarin], 'rekonSubmit');
+check('submit eksplisit DITOLAK saat tidak lengkap', App\Services\Finance\RekonDailyCalculator::statusProses($model->getByUnitAndDate($unitId, $kemarin)) === 'draft');
+
+// 10c. ATURAN KUNCI ANGKA SUDAH DIKIRIM (keputusan 2026-09-27)
+//      Hanya submitter yang boleh menarik hincirannya; selain itu beku.
+//       Ini menutup lubang: isLocked() hanya true untuk VERIFIED, jadi
+//       Manager (34) yang juga ada di financeInputRoles dulu bisa menulis
+//       ulang angka yang sedang menunggu persetujuannya sendiri.
+$calc = App\Services\Finance\RekonDailyCalculator::class;
+$rowSubmitted = $model->getByUnitAndDate($unitId, $today);
+$idSubmitter = (int) $akunSubmitter->ID_AKUN;
+$idLain      = (int) $akunApprover->ID_AKUN;
+
+check('tbl nilai: submitted -> submitter BOLEH ubah', $calc::bolehUbahAngka($rowSubmitted, $idSubmitter) === true);
+check('tbl nilai: submitted -> selain submitter BEKU', $calc::bolehUbahAngka($rowSubmitted, $idLain) === false);
+check('tbl nilai: submitted -> aktor 0 BEKU', $calc::bolehUbahAngka($rowSubmitted, 0) === false);
+check(
+    'tbl nilai: draft -> boleh ubah oleh siapa pun yang punya hak input',
+    $calc::bolehUbahAngka($model->getByUnitAndDate($unitId, $kemarin), $idLain) === true
+);
+check(
+    'tbl nilai: belum ada record -> boleh',
+    $calc::bolehUbahAngka(null, $idLain) === true
+);
+check('kunciAlasan null saat boleh ubah', $calc::kunciAlasan($rowSubmitted, $idSubmitter) === null);
+check(
+    'kunciAlasan menjelaskan menunggu verifikasi',
+    str_contains((string) $calc::kunciAlasan($rowSubmitted, $idLain), 'menunggu verifikasi')
+);
+
+// 10d. MANAGER (bukan pengirim) MENYIMPA -> DITOLAK, angka tidak berubah.
+$before = $model->getByUnitAndDate($unitId, $today);
+$sabotage = $basePost;
+$sabotage['actual_cash_masuk'] = '7.777.777';
+$sabotage['catatan'] = 'dicoba manager yang akan menyetujui sendiri';
+runAs($idLain, $sabotage, 'rekonSave');
+$after = $model->getByUnitAndDate($unitId, $today);
+check('KUNCI: manager non-pengirim tidak bisa mengubah angka terkirim', (int) $after->actual_cash_masuk === (int) $before->actual_cash_masuk, 'cash ' . $after->actual_cash_masuk);
+check('KUNCI: pengirim tidak berubah setelah percobaan manager', (int) $after->submitted_by === $idSubmitter);
+check('KUNCI: status tetap submitted setelah percobaan manager', $calc::statusProses($after) === 'submitted');
+check('KUNCI: catatan sabotage tidak tersimpan', $after->catatan !== 'dicoba manager yang akan menyetujui sendiri');
+
+// 10e. PENGAIRIM tetap boleh menarik hinciran (kasus salah ketik sebelum diverifikasi).
+$fix = $basePost;
+$fix['actual_cash_masuk'] = '1.234.000';
+$fix['catatan'] = 'salah ketik, sudah dikoreksi pengirim';
+runAs($idSubmitter, $fix, 'rekonSave');
+$after = $model->getByUnitAndDate($unitId, $today);
+check('KUNCI: pengirim BOLEH memperbaiki sebelum diverifikasi', (int) $after->actual_cash_masuk === 1234000, (string) $after->actual_cash_masuk);
+check('KUNCI: masih submitted setelah dikoreksi pengirim', $calc::statusProses($after) === 'submitted');
+
+// 10f. Setelah need_revision, angka terbuka lagi untuk yang punya hak input.
+runAs($idLain, ['unit_id' => $unitId, 'tanggal' => $today, 'action' => 'need_revision', 'catatan_revisi' => 'Ck cash 1.234.000'], 'rekonApprove');
+$rev = $model->getByUnitAndDate($unitId, $today);
+check('need_revision membuka kembali hak ubah', $calc::bolehUbahAngka($rev, $idLain) === true);
+$revFix = $basePost;
+$revFix['actual_cash_masuk'] = '1.000.000';
+runAs($idSubmitter, $revFix, 'rekonSave');
+check('revisi -> simpan ulang -> submitted', $calc::statusProses($model->getByUnitAndDate($unitId, $today)) === 'submitted');
 
 // 11. Verify oleh approver lain DITERIMA
 runAs((int) $akunApprover->ID_AKUN, $verSelf, 'rekonApprove');

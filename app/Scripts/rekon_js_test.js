@@ -2,7 +2,7 @@
  * Regression test client-side untuk form Rekonsiliasi Harian.
  *
  * Menjalankan <script> yang benar-benar ada di
- * app/Views/dashboard/finance_rekon_form.php di atas DOM minimal, lalu
+ * app/Views/inc/rek_input_js.php di atas DOM minimal, lalu
  * mensimulasikan ketikan/paste pengguna. Tujuannya menjaga dua hal yang
  * sering rewel:
  *   1. Titik ribuan ter-format OTOMATIS saat mengetik angka saja.
@@ -18,7 +18,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const VIEW = path.join(__dirname, '..', 'Views', 'dashboard', 'finance_rekon_form.php');
+// Logika input dipindah ke partial agar form DAN panel per-hari di daftar
+// bulanan memakai SATU implementasi. Test ini tetap menguji kode yang
+// benar-benar dirender, hanya sumbernya partial, bukan view form.
+const VIEW = path.join(__dirname, '..', 'Views', 'inc', 'rek_input_js.php');
 
 let pass = 0;
 let fail = 0;
@@ -53,6 +56,13 @@ function makeClassList() {
     };
 }
 
+/** Label baris di view (dipakai form untuk prefiks pesan live-region). */
+const LABELS = {
+    cash_masuk: 'Cash Masuk',
+    transfer_masuk: 'Transfer Masuk',
+    kas_keluar: 'Kas Keluar',
+};
+
 function makeInput(group, erp, value) {
     return {
         value: value || '',
@@ -72,6 +82,15 @@ function makeInput(group, erp, value) {
         setAttribute(k, v) { this.attrs[k] = v; },
         removeAttribute(k) { delete this.attrs[k]; },
         setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; },
+        /** Baris tabel: form membaca .rk-k untuk nama kelompok saat pesan. */
+        closest(sel) {
+            if (sel !== 'tr') { return null; }
+            return {
+                querySelector(s) {
+                    return s === '.rk-k' ? { textContent: LABELS[group] || group } : null;
+                },
+            };
+        },
         fire(ev, extra) {
             const evt = Object.assign({
                 defaultPrevented: false,
@@ -104,17 +123,27 @@ const els = {
     'status_cash_masuk': { innerHTML: '' },
     'status_transfer_masuk': { innerHTML: '' },
     'status_kas_keluar': { innerHTML: '' },
-    'rekon-format-hint': {
-        textContent: '',
-        classList: makeClassList(),
-        dataset: { default: 'Ketik angka saja, titik ribuan otomatis. Kosong berarti Rp 0.' },
-    },
+    // Pesan error per-field (view: <div class="rk-msg" id="msg_<?= key ?>">).
+    // Redesign memakai pesan di bawah field masing-masing, bukan satu hint global.
+    'msg_cash_masuk': { textContent: '' },
+    'msg_transfer_masuk': { textContent: '' },
+    'msg_kas_keluar': { textContent: '' },
+};
+
+// Unit input dipanggil sebagai factory: script mencari elemen ber-atribut
+// [data-rk-input], lalu memasang penangan pada .rupiah-rekon di dalamnya.
+// Mock ini meniru bentuk itu. Prefix diuji lewat koefisien 0 (halaman form)
+// DAN lewat unit kedua ber-prefix (daftar bulanan) di blok paling bawah.
+const unitDefault = {
+    getAttribute: () => '',
+    querySelectorAll(sel) { return sel === '.rupiah-rekon' ? inputs : []; },
 };
 
 global.document = {
     addEventListener(ev, fn) { if (ev === 'DOMContentLoaded') { global.__boot = fn; } },
     querySelectorAll(sel) {
         if (sel === '.rupiah-rekon') { return inputs; }
+        if (sel === '[data-rk-input]') { return global.__units || [unitDefault]; }
         return [];
     },
     getElementById(id) { return els[id] || null; },
@@ -139,7 +168,7 @@ check('ketik 1500000 -> "1.500.000"', cash.type('1500000'), '1.500.000');
 check('titik otomatis tanpa user mengetik pemisah', cash.value.includes('.'), true);
 check('kursor berada di akhir', cash.selectionStart, cash.value.length);
 check('input valid (tidak is-invalid)', cash.classList.contains('is-invalid'), false);
-check('hint kembali normal', els['rekon-format-hint'].classList.contains('text-danger'), false);
+check('input sah tidak menyisakan pesan error', els['msg_cash_masuk'].textContent, '');
 
 cash.value = '';
 cash.fire('input');
@@ -195,7 +224,8 @@ cash.value = '1.000-';
 cash.fire('input');
 check('minus ditolak & nilai lama dipulihkan', cash.value, '1.000');
 check('minus ditandai is-invalid', cash.classList.contains('is-invalid'), true);
-check('hint berubah jadi error', els['rekon-format-hint'].classList.contains('text-danger'), true);
+check('pesan per-field berubah jadi error', els['msg_cash_masuk'].textContent.length > 0, true);
+check('pesan per-field menyebut alasannya', /tidak boleh negatif/i.test(els['msg_cash_masuk'].textContent), true);
 check('badge kembali "Belum diperiksa" saat invalid', els['status_cash_masuk'].innerHTML.includes('Belum diperiksa'), true);
 check('selisih jadi "—" saat invalid', els['selisih_cash_masuk'].textContent, '—');
 
@@ -207,7 +237,7 @@ check('huruf ditolak', cash.value, '1.000');
 cash.value = '';
 cash.fire('input');
 check('input valid berikutnya menghapus error', cash.classList.contains('is-invalid'), false);
-check('hint kembali ke teks default', els['rekon-format-hint'].textContent, els['rekon-format-hint'].dataset.default);
+check('pesan per-field dikosongkan lagi', els['msg_cash_masuk'].textContent, '');
 
 // === 4. Paste (parse ketat, parity dengan server) ============================
 transfer.fire('paste', { clipboardData: { getData: () => '2.750.000' } });
@@ -239,7 +269,10 @@ check('paste angka polos diformat otomatis', transfer.value, '2.500.000');
 check('paste valid menghapus error', transfer.classList.contains('is-invalid'), false);
 
 transfer.fire('paste', { clipboardData: { getData: () => '0' } });
-check('paste "0" -> kosong (konvensi Rp 0)', transfer.value, '');
+// Angka 0 itu SAH, bukan "belum diisi": parseNominalRekon() di
+// DashboardFinance memetakan "" -> null tapi "0" -> 0. Kalau paste "0"
+// dikosongkan, hari yang sebenarnya lengkap akan tersimpan ulang jadi NULL.
+check('paste "0" -> tetap "0" (0 sah, bukan kosong)', transfer.value, '0');
 
 // === 5. Blur & nilai awal dari server ========================================
 keluar.value = '3.250.000';
@@ -251,6 +284,64 @@ keluar.value = '';
 keluar.fire('input');
 check('kosong TIDAK dihitung selisih (tampil "—")', els['selisih_kas_keluar'].textContent, '\u2014');
 check('kosong tetap berstatus "Belum diperiksa"', els['status_kas_keluar'].innerHTML.includes('Belum diperiksa'), true);
+
+// --- dua unit input berdampingan (halaman daftar bulanan) -------------------
+// Di daftar bulanan satu halaman memuat satu unit per tanggal, masing-masing
+// dengan prefix id sendiri. Dua hal yang wajib benar:
+//   1. Input hari B TIDAK boleh menulis ke selisih/pesan milik unit A.
+//   2. Setelah init semua unit, mengetik di unit A masih menyasar elemen A.
+//
+// Risiko nyata: kalau inputs/groups/prefix dibiarkan di scope modul, unit
+// terakhir yang di-init yang menang, dan setiap ketikan setelahnya menulis ke
+// panel tanggal yang salah.
+const mkUnit = (prefix, erpCash) => {
+    const list = [{
+        dataset: { group: 'cash_masuk', erp: String(erpCash) },
+        value: '', classList: {
+            _s: new Set(),
+            add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); },
+            contains(c) { return this._s.has(c); },
+        },
+        handlers: {},
+        addEventListener(ev, fn) { this.handlers[ev] = fn; },
+        fire(ev, arg) { this.handlers[ev].call(this, arg || {}); },
+        setAttribute() {}, removeAttribute() {},
+        setSelectionRange() {},
+        closest() { return { querySelector: () => ({ textContent: 'Cash Masuk' }) }; },
+    }];
+    els[prefix + 'selisih_cash_masuk'] = { textContent: '' };
+    els[prefix + 'status_cash_masuk'] = { innerHTML: '' };
+    els[prefix + 'msg_cash_masuk'] = { textContent: '' };
+    return {
+        getAttribute: () => prefix,
+        querySelectorAll: sel => (sel === '.rupiah-rekon' ? list : []),
+        _list: list,
+    };
+};
+
+const hariA = mkUnit('', 1_000_000);
+const hariB = mkUnit('p20260910-', 500_000);
+global.__units = [hariA, hariB];
+global.__boot();
+
+hariA._list[0].value = '1.000.000';
+hariA._list[0].fire('input');
+check('hari A: input diketik jadi berpemisah ribuan', hariA._list[0].value, '1.000.000');
+check('hari A: selisih A = 0 (Cocok)', els['selisih_cash_masuk'].textContent, 'Rp 0');
+check('hari A: status A = Cocok', els['status_cash_masuk'].innerHTML.includes('Cocok'), true);
+check('hari A: selisih B tidak ikut berubah', els['p20260910-selisih_cash_masuk'].textContent, '\u2014');
+
+hariB._list[0].value = '750.000';
+hariB._list[0].fire('input');
+check('hari B: selisih B = 250.000 (Selisih)', els['p20260910-selisih_cash_masuk'].textContent, 'Rp 250.000');
+check('hari B: status B = Selisih', els['p20260910-status_cash_masuk'].innerHTML.includes('Selisih'), true);
+check('hari B: selisih A tidak berubah', els['selisih_cash_masuk'].textContent, 'Rp 0');
+
+// Error harus mendarat di pesan milik unit yang diketik.
+hariB._list[0].value = 'abc';
+hariB._list[0].fire('input');
+check('hari B: pesan error masuk ke msg B', els['p20260910-msg_cash_masuk'].textContent.length > 0, true);
+check('hari A: pesan error A tetap kosong', els['msg_cash_masuk'].textContent, '');
 
 console.log('\n========================================');
 console.log('PASS: ' + pass + '  FAIL: ' + fail);
