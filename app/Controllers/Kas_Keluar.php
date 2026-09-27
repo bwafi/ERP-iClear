@@ -332,13 +332,26 @@ class Kas_Keluar extends BaseController
 
     public function delete_kas_keluar()
     {
-        $id = $this->request->getPost('idkas_keluar');
+        $id = (int) $this->request->getPost('idkas_keluar');
 
         $db = \Config\Database::connect();
         $db->transStart();
-        $this->KasBankLib->hapusPosting('kas_keluar', (int)$id);
-        $this->KasKeluarModel->delete($id);
-        $db->transComplete();
+        try {
+            $this->JurnalModel->hapusByReferensi('kas_keluar', $id);
+            $this->KasBankLib->hapusPosting('kas_keluar', $id);
+            $this->KasKeluarModel->delete($id);
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal hapus kas_keluar #' . $id . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menghapus kas keluar.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal menghapus kas keluar.');
+            return redirect()->to(base_url('/kas_keluar'));
+        }
 
         session()->setFlashdata('sukses', 'Data kas keluar berhasil dihapus.');
         return redirect()->to(base_url('/kas_keluar'));

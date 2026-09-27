@@ -16,6 +16,14 @@ class ModelJurnal extends Model
         $this->insert($data);
     }
 
+    public function hapusByReferensi(string $tabelReferensi, $idReferensi)
+    {
+        return $this->builder()
+            ->where('tabel_referensi', $tabelReferensi)
+            ->where('id_referensi', (string) $idReferensi)
+            ->delete();
+    }
+
     public function insertJurnal($tanggal, $kode_template, $ar_value, $keterangan, $id_referensi, $tabel_referensi, $id_unit = null)
     {
         $id_akun = session('ID_AKUN');
