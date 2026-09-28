@@ -137,6 +137,39 @@ class ModelService extends Model
             ->findAll();
     }
 
+    /**
+     * Ubah filter unit dari request (id unit atau nama unit) menjadi id unit.
+     *
+     * Diterima id unit ("5") maupun nama unit ("ICLEAR Genteng") supaya filter
+     * tetap jalan untuk parameter yang selama ini mengirim nama kota, tanpa
+     * perlu daftar unit yang di-hardcode di query.
+     *
+     * @return int|null id unit, atau null bila filter tidak dikenal
+     */
+    public function resolveUnitFilter($unitFilter): ?int
+    {
+        $unitFilter = trim((string) ($unitFilter ?? ''));
+        if ($unitFilter === '') {
+            return null;
+        }
+
+        if (ctype_digit($unitFilter)) {
+            return (int) $unitFilter;
+        }
+
+        $row = $this->db->table('unit')
+            ->select('idunit')
+            ->groupStart()
+            ->like('NAMA_UNIT', $unitFilter, 'both')
+            ->orWhere('KABUPATEN_UNIT', $unitFilter)
+            ->groupEnd()
+            ->orderBy('idunit', 'ASC')
+            ->get()
+            ->getFirstRow();
+
+        return $row ? (int) $row->idunit : null;
+    }
+
     public function getRiwayatServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
     {
         $allowedColumns = [
@@ -165,10 +198,10 @@ class ModelService extends Model
             $params[] = $endDate;
         }
         if (!empty($unitFilter)) {
-            $unitMap = ['Probolinggo' => 1, 'Jember' => 2, 'Banyuwangi' => 3, 'Pandaan' => 4];
-            if (isset($unitMap[$unitFilter])) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
                 $whereConditions[] = 'service.unit_idunit = ?';
-                $params[] = $unitMap[$unitFilter];
+                $params[] = $unitId;
             }
         }
 
@@ -189,12 +222,14 @@ class ModelService extends Model
                 service.keterangan,
                 service.no_hp,
                 service.unit_idunit,
+                unit.NAMA_UNIT as nama_unit,
                 service.status_service,
                 service.garansi_hari,
                 service.tanggal_selesai,
                 pelanggan.nama as nama_pelanggan
             FROM service
             JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            LEFT JOIN unit ON unit.idunit = service.unit_idunit
             WHERE {$whereClause}
             ORDER BY {$orderColumnName} {$orderDir}
             LIMIT ? OFFSET ?";
@@ -549,10 +584,10 @@ class ModelService extends Model
             $params[] = $endDate;
         }
         if (!empty($unitFilter)) {
-            $unitMap = ['Probolinggo' => 1, 'Jember' => 2, 'Banyuwangi' => 3, 'Pandaan' => 4];
-            if (isset($unitMap[$unitFilter])) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
                 $whereConditions[] = 'service.unit_idunit = ?';
-                $params[] = $unitMap[$unitFilter];
+                $params[] = $unitId;
             }
         }
 
@@ -575,6 +610,7 @@ class ModelService extends Model
                 service.no_hp,
                 service.tipe_hp,
                 service.unit_idunit,
+                unit.NAMA_UNIT as nama_unit,
                 service.status_proses,
                 service.status_service,
                 DATEDIFF(NOW(), service.created_at) as lama_service_days,
@@ -587,6 +623,7 @@ class ModelService extends Model
                 END as rank
             FROM service
             JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            LEFT JOIN unit ON unit.idunit = service.unit_idunit
             WHERE {$whereClause}
             ORDER BY {$orderByClause}
             LIMIT ? OFFSET ?";
@@ -669,8 +706,9 @@ class ModelService extends Model
     public function ServiceBisaDiambil()
     {
         // Ambil data service dengan status 3
-        $services = $this->select('service.*, pelanggan.nama as nama_pelanggan')
+        $services = $this->select('service.*, pelanggan.nama as nama_pelanggan, unit.NAMA_UNIT as nama_unit')
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
+            ->join('unit', 'unit.idunit = service.unit_idunit', 'left')
             ->whereIn('status_service', [3])
             ->findAll();
 
@@ -753,10 +791,12 @@ class ModelService extends Model
                 pelanggan.nama as nama_pelanggan,
                 service.no_hp,
                 service.unit_idunit,
+                unit.NAMA_UNIT as nama_unit,
                 service.garansi_hari,
                 DATEDIFF(NOW(), service.tanggal_selesai) as lama_service_days
             ')
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
+            ->join('unit', 'unit.idunit = service.unit_idunit', 'left')
             ->where('service.status_service', 4);
 
         if (!empty($startDate)) {

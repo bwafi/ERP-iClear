@@ -196,15 +196,9 @@
                     data: 'no_hp'
                 },
                 {
-                    data: 'unit_idunit',
-                    render: function(data) {
-                        const units = {
-                            1: 'Probolinggo',
-                            2: 'Jember',
-                            3: 'Banyuwangi',
-                            4: 'Pandaan'
-                        };
-                        return units[data] || data;
+                    data: 'nama_unit',
+                    render: function(data, type, row) {
+                        return data || ('Unit ' + (row.unit_idunit ?? '?'));
                     }
                 },
                 {

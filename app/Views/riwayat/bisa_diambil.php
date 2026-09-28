@@ -83,6 +83,12 @@
                 </tr>
             </thead>
             <tbody>
+                <?php
+                $unitNama = [];
+                foreach (($unit ?? []) as $u) {
+                    $unitNama[(int) $u->idunit] = $u->NAMA_UNIT;
+                }
+                ?>
                 <?php if (!empty($service)): ?>
                     <?php foreach ($service as $row): ?>
                         <tr>
@@ -92,7 +98,7 @@
                             <td><?= esc($row->nama_pelanggan) ?></td>
                             <td><?= esc($row->no_hp) ?></td>
                             <td>
-                                <?= esc($row->unit_idunit == 1 ? 'Probolinggo' : ($row->unit_idunit == 2 ? 'Jember' : ($row->unit_idunit == 3 ? 'Banyuwangi': ($row->unit_idunit == 4 ? 'Pandaan' : $row->unit_idunit)))) ?>
+                                <?= esc($row->nama_unit ?? ($unitNama[(int) $row->unit_idunit] ?? ('Unit ' . $row->unit_idunit))) ?>
                             </td>
                             <td><?= esc($row->lama_service) ?></td>
 

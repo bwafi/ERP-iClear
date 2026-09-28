@@ -82,6 +82,7 @@ class Riwayat_Service extends BaseController
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
+            'unit' => $this->UnitModel->getUnit(),
             'is_admin' => session()->get('ID_JABATAN') == 1,
             'body'  => 'riwayat/service'
         );
@@ -523,7 +524,10 @@ class Riwayat_Service extends BaseController
         'kerusakan'  => $kerusakan,
         'human'      => $human,
         'qrImageUrl' => $qrImageUrl,
-        'dataunit'   => $this->UnitModel->getById(session('ID_UNIT'))
+        // Header invoice memakai unit milik service-nya, bukan unit user yang
+        // sedang login. Kalau dicetak user unit lain, kopnya jadi unit yang
+        // salah (mis. service Genteng dicetak dari user Banyuwangi).
+        'dataunit'   => $this->UnitModel->getById($service->unit_idunit ?? session('ID_UNIT'))
     ];
 
     $mode = $this->request->getGet('mode');
@@ -755,6 +759,7 @@ class Riwayat_Service extends BaseController
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
+            'unit' => $this->UnitModel->getUnit(),
             'body'  => 'riwayat/proses_service'
         );
         return view('template', $data);
@@ -922,6 +927,7 @@ class Riwayat_Service extends BaseController
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => $this->ServiceModel->ServiceBisaDiambil(),
+            'unit' => $this->UnitModel->getUnit(),
             'body'  => 'riwayat/bisa_diambil'
         );
         return view('template', $data);

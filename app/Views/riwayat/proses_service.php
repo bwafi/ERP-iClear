@@ -27,10 +27,9 @@
                 <label class="form-label fw-semibold mb-2">Unit</label>
                 <select id="unitFilter" class="form-select">
                     <option value="">Semua Unit</option>
-                    <option value="Probolinggo">Probolinggo</option>
-                    <option value="Jember">Jember</option>
-                    <option value="Banyuwangi">Banyuwangi</option>
-                    <option value="Pandaan">Pandaan</option>
+                    <?php foreach (($unit ?? []) as $u): ?>
+                        <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-lg-3 col-md-6">
@@ -290,15 +289,9 @@
                     data: 'tipe_hp'
                 },
                 {
-                    data: 'unit_idunit',
-                    render: function(data) {
-                        const units = {
-                            1: 'Probolinggo',
-                            2: 'Jember',
-                            3: 'Banyuwangi',
-                            4: 'Pandaan'
-                        };
-                        return units[data] || 'Tidak diketahui';
+                    data: 'nama_unit',
+                    render: function(data, type, row) {
+                        return data || ('Unit ' + (row.unit_idunit ?? '?'));
                     }
                 },
                 {

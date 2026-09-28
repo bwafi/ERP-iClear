@@ -124,7 +124,8 @@ class CrmLeadBridge extends BaseController
         $suffix = substr($phone, -10);
         $normal = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '+', ''), '-', ''), ' ', ''), '(', ''), 10)";
         $rows = db_connect()->table('service s')
-            ->select("s.idservice,s.no_service,s.no_hp,s.tipe_hp,s.keterangan,s.status_service,s.status_proses,s.harus_dibayar,s.bayar,s.garansi_hari,s.tanggal_bisa_diambil,s.tanggal_selesai,s.created_at,s.unit_idunit, CASE s.unit_idunit WHEN 1 THEN 'Probolinggo' WHEN 2 THEN 'Jember' WHEN 3 THEN 'Banyuwangi' WHEN 4 THEN 'Pandaan' ELSE CONCAT('Unit ',COALESCE(s.unit_idunit,'')) END AS cabang", false)
+            ->select("s.idservice,s.no_service,s.no_hp,s.tipe_hp,s.keterangan,s.status_service,s.status_proses,s.harus_dibayar,s.bayar,s.garansi_hari,s.tanggal_bisa_diambil,s.tanggal_selesai,s.created_at,s.unit_idunit, COALESCE(u.NAMA_UNIT, CONCAT('Unit ',COALESCE(s.unit_idunit,''))) AS cabang", false)
+            ->join('unit u', 'u.idunit = s.unit_idunit', 'left')
             ->where(sprintf($normal, 's.no_hp') . ' =', $suffix, false)
             ->orderBy('s.created_at', 'DESC')->limit(10)->get()->getResultArray();
         foreach ($rows as &$row) {
