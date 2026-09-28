@@ -153,6 +153,14 @@ class TutupKasir extends BaseController
 
         $unit = $this->request->getGet('unit');
 
+        // Daftar unit diambil dari tabel `unit`, bukan ditulis manual di view.
+        // Sebelumnya view meng-hardcode 4 unit, jadi unit yang baru ditambahkan
+        // (mis. ICLEAR Genteng) tidak pernah muncul di dropdown filter.
+        $list_unit = $this->db->table('unit')
+            ->orderBy('idunit', 'ASC')
+            ->get()
+            ->getResultArray();
+
         $builder = $this->db->table('tutup_kasir tk')
 
             ->select('
@@ -168,9 +176,25 @@ class TutupKasir extends BaseController
 
             ->where('DATE(tk.tanggal)', $tanggal);
 
-        // filter unit jika dipilih
-        if (!empty($unit)) {
+        // Filter unit hanya kalau nilainya unit yang benar-benar ada. Parameter
+        // `unit` datang dari query string, jadi tanpa pengecekan ini angka
+        // session seperti "5abc" akan lolos dan menghasilkan halaman kosong
+        // tanpa pesan apa pun.
+        $isUnitValid = false;
+        foreach ($list_unit as $u) {
+            if ((string) $u['idunit'] === (string) $unit) {
+                $isUnitValid = true;
+                break;
+            }
+        }
+
+        if ($isUnitValid) {
             $builder->where('tk.unit', $unit);
+        } else {
+            // Unit tidak dikenal: samakan dengan "belum memilih apa pun" supaya
+            // query tetap jalan, dan dropdown tidak menampilkan opsi aktif yang
+            // salah.
+            $unit = null;
         }
 
         $tutupkasir = $builder
@@ -185,6 +209,7 @@ class TutupKasir extends BaseController
                 'tutupkasir' => null,
                 'tanggal'    => $tanggal,
                 'selected_unit' => $unit,
+                'list_unit'  => $list_unit,
                 'body' => 'jurnal/kasir_bulanan'
 
             ]);
@@ -197,6 +222,8 @@ class TutupKasir extends BaseController
             'tanggal' => $tanggal,
 
             'selected_unit' => $unit,
+
+            'list_unit' => $list_unit,
 
             // saldo awal
             'kas_awalcash' => $tutupkasir->awal_cash ?? 0,

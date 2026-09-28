@@ -62,25 +62,12 @@
             <select name="unit"
                 class="form-select">
 
-                <option value="1"
-                    <?= ($selected_unit ?? '') == 1 ? 'selected' : '' ?>>
-                    Probolinggo
-                </option>
-
-                <option value="2"
-                    <?= ($selected_unit ?? '') == 2 ? 'selected' : '' ?>>
-                    Jember
-                </option>
-
-                <option value="3"
-                    <?= ($selected_unit ?? '') == 3 ? 'selected' : '' ?>>
-                    Banyuwangi
-                </option>
-
-                <option value="4"
-                    <?= ($selected_unit ?? '') == 4 ? 'selected' : '' ?>>
-                    Pandaan
-                </option>
+                <?php foreach ($list_unit as $u): ?>
+                    <option value="<?= (int)$u['idunit'] ?>"
+                        <?= (string)($selected_unit ?? '') === (string)$u['idunit'] ? 'selected' : '' ?>>
+                        <?= $u['NAMA_UNIT'] ?>
+                    </option>
+                <?php endforeach; ?>
 
             </select>
 
