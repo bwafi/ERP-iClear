@@ -131,17 +131,26 @@
     </div>
 </div>
 
-<form action="<?php echo base_url('insert/pelanggan_service') ?>" enctype="multipart/form-data" method="post">
+<?php
+// Ada ticket yang sedang jalan di session? Kalau ada, form ini menyunting
+// ticket tersebut (jalur update yang sama dengan halaman detail), bukan
+// membuat ticket baru. Kalau tidak, form membuat ticket baru.
+$formAction = empty($idservice)
+    ? base_url('insert/pelanggan_service')
+    : base_url('update/pelanggan_service');
+?>
+<form action="<?= $formAction ?>" enctype="multipart/form-data" method="post">
     <div class="row g-3">
 
         <input hidden type="text" name="idservice" value="<?php echo @$idservice ?>">
+        <input hidden type="text" name="return_to" value="service">
         <input hidden type="text" id="created_at" value="<?php echo @$old_service_pelanggan->created_at ?>">
         <input type="hidden" name="selectedidpelanggan" id="idpela" value="<?php echo @$old_service_pelanggan->id_pelanggan ?>">
 
         <!-- Perangkat -->
         <div class="col-md-4">
             <label class="form-label fw-semibold">Tipe HP</label>
-            <input type="text" placeholder="" class="form-control" name="tipe_hp">
+            <input type="text" value="<?php echo @$old_service_pelanggan->tipe_hp ?>" placeholder="" class="form-control" name="tipe_hp">
         </div>
         <div class="col-md-4">
             <label class="form-label fw-semibold">IMEI</label>

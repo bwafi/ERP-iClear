@@ -98,5 +98,16 @@ define('EVENT_PRIORITY_HIGH', 10);
  | Custom Application Constants
  |--------------------------------------------------------------------------
  */
-defined('JABATAN_KASIR') || define('JABATAN_KASIR', 36);
+/*
+ |--------------------------------------------------------------------------
+ | Jabatan
+ |--------------------------------------------------------------------------
+ | Nilainya harus cocok dengan kolom ID_JABATAN pada tabel `jabatan`:
+ | 35 = ADMIN / KASIR (cabang), 36 = Teknisi.
+ |
+ | Keduanya sama-sama punya akses langkah 1-4 (Pelanggan, Kerusakan, Sparepart,
+ | Pembayaran) di /service, jadi TIDAK ada lagi penguncian langkah 3-4
+ | berdasarkan jabatan di halaman itu.
+ */
+defined('JABATAN_KASIR') || define('JABATAN_KASIR', 35);
 defined('JABATAN_TEKNISI') || define('JABATAN_TEKNISI', 36);

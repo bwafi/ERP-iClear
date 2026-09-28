@@ -212,6 +212,18 @@ class Riwayat_Service extends BaseController
             ]);
         }
 
+        // Form di /service memakai endpoint yang sama untuk menyunting ticket
+        // yang sedang jalan. Kalau dari sana, kembalikan teknisi ke alur 4
+        // langkahnya; kalau dari halaman detail, tetap di halaman detail.
+        // Nilai return_to bukan URL, hanya penanda asal form.
+        if ($this->request->getPost('return_to') === 'service') {
+            // setFlashdata, bukan ->with('success'): layout hanya membaca
+            // flash 'sukses'/'gagal' (Views/template.php).
+            session()->setFlashdata('sukses', 'Data service berhasil diperbarui.');
+
+            return redirect()->to(base_url('service?tab=kerusakan'));
+        }
+
         return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=kerusakan'))->with('success', 'Data kerusakan berhasil diperbarui.');
     }
 

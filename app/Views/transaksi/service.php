@@ -271,11 +271,16 @@
                     <div class="sv-label"><i class="bi bi-wallet2"></i> DP</div>
                     <div class="sv-value" id="sv-dp">-</div>
                 </div>
-                <div class="ms-lg-auto">
+                <div class="ms-lg-auto d-flex flex-column align-items-end gap-2">
                     <div class="service-summary-metric text-lg-end">
                         <div class="sv-label"><i class="bi bi-tag-fill"></i> Total Akhir</div>
                         <div class="sv-value text-primary fs-4" id="sv-total">Rp 0</div>
                     </div>
+                    <a href="<?= base_url('service/clear_session') ?>"
+                        class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                        onclick="return confirm('Kosongkan form dan mulai ticket baru?\n\nTicket ini tidak dihapus. Kerusakan yang sudah disimpan tetap ada dan ticket tetap muncul di /proses_service untuk diselesaikan admin.')">
+                        <i class="bi bi-plus-circle"></i> Mulai Service Baru
+                    </a>
                 </div>
             </div>
         </div>
@@ -309,23 +314,23 @@
                             </span>
                         </a>
                     </div>
-                    <div class="service-rail-item <?= (empty($idservice) || session('ID_JABATAN') == JABATAN_KASIR) ? 'disabled-tab is-locked' : '' ?>" data-step="sparepart">
+                    <div class="service-rail-item <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="sparepart">
                         <a class="service-rail-link" id="sparepart-tab" data-bs-toggle="tab" href="#sparepart" role="tab"
                             aria-controls="sparepart" aria-selected="false">
                             <span class="service-rail-node" id="node-sparepart">3</span>
                             <span class="service-rail-body">
                                 <span class="service-rail-title">Sparepart</span>
-                                <span class="service-rail-sub" id="sub-sparepart"><?= empty($idservice) ? 'Lengkapi data pelanggan dulu.' : (session('ID_JABATAN') == JABATAN_KASIR ? 'Tidak tersedia untuk jabatan ini.' : 'Belum ada sparepart.') ?></span>
+                                <span class="service-rail-sub" id="sub-sparepart"><?= empty($idservice) ? 'Lengkapi data pelanggan dulu.' : 'Belum ada sparepart.' ?></span>
                             </span>
                         </a>
                     </div>
-                    <div class="service-rail-item <?= (empty($idservice) || session('ID_JABATAN') == JABATAN_TEKNISI) ? 'disabled-tab is-locked' : '' ?>" data-step="pembayaran">
+                    <div class="service-rail-item <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="pembayaran">
                         <a class="service-rail-link" id="pembayaran-tab" data-bs-toggle="tab" href="#pembayaran" role="tab"
                             aria-controls="pembayaran" aria-selected="false">
                             <span class="service-rail-node" id="node-pembayaran">4</span>
                             <span class="service-rail-body">
                                 <span class="service-rail-title">Pembayaran</span>
-                                <span class="service-rail-sub" id="sub-pembayaran"><?= empty($idservice) ? 'Lengkapi data pelanggan dulu.' : (session('ID_JABATAN') == JABATAN_TEKNISI ? 'Tidak tersedia untuk jabatan ini.' : 'Rangkuman tagihan.') ?></span>
+                                <span class="service-rail-sub" id="sub-pembayaran"><?= empty($idservice) ? 'Lengkapi data pelanggan dulu.' : 'Rangkuman tagihan.' ?></span>
                             </span>
                         </a>
                     </div>
@@ -360,25 +365,10 @@
 <script>
     document.addEventListener("DOMContentLoaded", function () {
 
-        /* Role lock: jabatan 36 (kasir/teknisi) dilarang mengakses langkah Sparepart & Pembayaran */
-        const isRestricted = <?= in_array(session('ID_JABATAN'), [JABATAN_KASIR, JABATAN_TEKNISI]) ? 'true' : 'false' ?>;
-
-        if (isRestricted) {
-            const sparepartTab = document.getElementById('sparepart-tab');
-            if (sparepartTab) {
-                sparepartTab.addEventListener('show.bs.tab', function (e) {
-                    e.preventDefault();
-                    return false;
-                });
-            }
-            const pembayaranTab = document.getElementById('pembayaran-tab');
-            if (pembayaranTab) {
-                pembayaranTab.addEventListener('show.bs.tab', function (e) {
-                    e.preventDefault();
-                    return false;
-                });
-            }
-        }
+        // Tidak ada lagi penguncian langkah 3-4 berdasarkan jabatan: teknisi
+        // (36) dan admin/kasir cabang (35) dua-duanya boleh menyelesaikan
+        // seluruh 1-4 di /service. Yang mengunci hanya "belum ada ticket"
+        // (kelas is-locked di rail di atas), bukan jabatan.
 
         const STEPS = ['pelanggan', 'kerusakan', 'sparepart', 'pembayaran'];
 
