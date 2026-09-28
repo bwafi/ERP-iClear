@@ -3,14 +3,13 @@
  * Smoke test alur /service untuk teknisi (36) dan admin/kasir cabang (35).
  *
  * Keduanya boleh menyelesaikan langkah 1-4 (Pelanggan, Kerusakan, Sparepart,
- * Pembayaran) di halaman yang sama, jadi TIDAK ada lagihandoff wajib ke
+ * Pembayaran) di halaman yang sama, jadi tidak ada handoff wajib ke
  * /proses_service setelah langkah 2. Yang diuji di sini:
  *
  *   1. konstanta jabatan cocok dengan tabel `jabatan` (kasir 35, teknisi 36)
  *   2. rail /service tidak mengunci langkah 3-4 untuk jabatan 35 maupun 36
  *   3. session 'idservice' TETAP setelah langkah 2 supaya bisa lanjut 3-4
- *   4. service/clear_session hanya melepas session, tidak menghapus ticket
- *   5. form /service menyunting ticket yang sedang jalan (endpoint update)
+ *   4. form /service menyunting ticket yang sedang jalan (endpoint update)
  *      dan prefill tipe_hp supaya tidak wiped saat disimpan ulang
  *
  * Jalankan: php app/Scripts/service_handoff_smoke.php
@@ -48,8 +47,6 @@ $reqProp   = new ReflectionProperty(CodeIgniter\Controller::class, 'request');
 $reqProp->setAccessible(true);
 $kerusakanM = new ReflectionMethod($controller, 'insert_kerusakan');
 $kerusakanM->setAccessible(true);
-$clearM     = new ReflectionMethod($controller, 'clear_session');
-$clearM->setAccessible(true);
 
 $fungsiIds = array_column($db->table('fungsi')->orderBy('idfungsi', 'ASC')->limit(2)->get()->getResultArray(), 'idfungsi');
 if (count($fungsiIds) < 1) {
@@ -142,22 +139,7 @@ check(
     (string) $resKasir->getHeaderLine('Location')
 );
 
-// ---------------------------------------- 3. clear_session tidak destruktif
-$_SESSION = ['ID_JABATAN' => 36, 'ID_AKUN' => 1, 'ID_UNIT' => 1, 'idservice' => $sid2];
-$_POST     = [];
-$_GET      = [];
-$reqProp->setValue($controller, Config\Services::request(null, false));
-$clearM->invoke($controller);
-
-check('clear_session: session lepas', session('idservice') === null);
-check('clear_session: ticket tetap ada', $db->table('service')->where('idservice', $sid2)->countAllResults() === 1);
-check(
-    'clear_session: pesan menyebut ticket tidak dihapus',
-    is_string(session('sukses')) && strpos(session('sukses'), 'tidak dihapus') !== false,
-    var_export(session('sukses'), true)
-);
-
-// ---------------------------------------- 4. form /service pindah ke update
+// ---------------------------------------- 3. form /service pindah ke update
 function renderFormPelanggan($idservice, $service): string
 {
     $akun = (object) ['ID_AKUN' => 1, 'NAMA_AKUN' => 'Smoke'];

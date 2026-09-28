@@ -283,16 +283,6 @@ class Service extends BaseController
         return redirect()->to('cetak/invoice_service/' . $idservice)->with('success', 'Data kerusakan berhasil diperbarui.');
     }
 
-    /**
-     * Nomor service yang enak dibaca user; jatuh ke id kalau barisnya hilang.
-     * Tidak pakai nullsafe operator karena composer.json masih mengizinkan PHP 7.4.
-     */
-    private function noServiceAtauId($idservice)
-    {
-        $row = $this->ServiceModel->find($idservice);
-
-        return $row && $row->no_service ? $row->no_service : $idservice;
-    }
 
     public function insert_sparepart()
     {
@@ -599,19 +589,8 @@ class Service extends BaseController
 
     public function clear_session()
     {
-        // Hanya melepas ticket yang nempel di form. Baris service-nya tetap
-        // ada di /proses_service untuk diselesaikan admin, jadi teknisi bisa
-        // langsung mulai ticket berikutnya tanpa kehilangan data.
-        $idservice = session('idservice');
         session()->remove('idservice');
-
-        $pesan = 'Form dikosongkan, silakan mulai service baru.';
-        if ($idservice) {
-            $pesan = 'Form dikosongkan. Ticket ' . $this->noServiceAtauId($idservice) . ' tidak dihapus — masih ada di /proses_service untuk diselesaikan admin.';
-        }
-
-        session()->setFlashdata('sukses', $pesan);
-
+        session()->setFlashdata('sukses', 'Session berhasil dihapus');
         return redirect()->to(base_url('service'));
     }
 

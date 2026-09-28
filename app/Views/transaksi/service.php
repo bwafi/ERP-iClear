@@ -271,16 +271,11 @@
                     <div class="sv-label"><i class="bi bi-wallet2"></i> DP</div>
                     <div class="sv-value" id="sv-dp">-</div>
                 </div>
-                <div class="ms-lg-auto d-flex flex-column align-items-end gap-2">
+                <div class="ms-lg-auto">
                     <div class="service-summary-metric text-lg-end">
                         <div class="sv-label"><i class="bi bi-tag-fill"></i> Total Akhir</div>
                         <div class="sv-value text-primary fs-4" id="sv-total">Rp 0</div>
                     </div>
-                    <a href="<?= base_url('service/clear_session') ?>"
-                        class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
-                        onclick="return confirm('Kosongkan form dan mulai ticket baru?\n\nTicket ini tidak dihapus. Kerusakan yang sudah disimpan tetap ada dan ticket tetap muncul di /proses_service untuk diselesaikan admin.')">
-                        <i class="bi bi-plus-circle"></i> Mulai Service Baru
-                    </a>
                 </div>
             </div>
         </div>
