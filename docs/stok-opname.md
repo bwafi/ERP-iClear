@@ -8,10 +8,63 @@ dan informatif. Berikut catatan perubahannya dan panduan penggunaannya.
 
 ## 1. Changelog
 
-### v1.5 — Pengawas hanya melihat & finalisasi boleh parsial (dengan peringatan) (2026-09-07)
+### v2.1 — Admin Root boleh menjalankan stok opname (2026-09-28)
+
+- **Admin Root (ID_JABATAN 1) tidak lagi mode lihat.** Ia sudah bisa memilih unit,
+  dan sekarang juga bisa menjalankan *Mulai / Simpan Draft / Finalisasi / Reopen*
+  pada unit yang dipilih. Berguna untuk menutup opname unit yang operatornya tidak
+  bisa melakukan hitung fisik.
+- Konsep peran dipisah agar tidak ada yang ikut berubah:
+  - `VIEW_ONLY_ROLES` (0, 2, 34, 40) — tidak boleh mutasi.
+  - `CROSS_UNIT_ROLES` (0, 1, 2, 34) — boleh memilih unit.
+  - `MONITOR_ROLES` (0, 1, 2, 34, 40) — boleh memakai filter selisih.
+  Sebelumnya ketiganya diturunkan dari satu daftar `SUPERVISOR_ROLES`, sehingga
+  ketika Admin Root dilepas dari daftar read-only, filter selisih miliknya ikut
+  hilang. Sekarang ketiganya berdiri sendiri.
+- **Nilai unit dari POST divalidasi.** Begitu `unit` menjadi input yang bisa
+  dipilih, nilainya harus dicek terhadap daftar unit yang ada — `0`, `-1`, dan
+  `999999` ditolak. Operator biasa tetap dikunci ke `session('ID_UNIT')`.
+- Nilai yang diisi Admin Root tercatat atas `actor_id` dia sendiri di
+  `stok_opname_audit`, sehingga terlihat jelas pada riwayat siapa yang menutup
+  opname unit tersebut.
+
+### v2.0 — Finalisasi wajib 100%, draft bisa dilanjutkan lintas hari, daftar hanya barang berstok (2026-09-28)
+
+- **Finalisasi HANYA boleh bila semua barang berstok terisi.** v1.5 masih mengizinkan
+  finalisasi parsial dengan peringatan; aturan itu dicabut. Tombol *Finalisasi* nonaktif
+  selama masih ada barang kosong, dan server menolak dengan pesan berisi sisa barang.
+- **Satu periode/unit = satu daftar barang berstok.** Saat *Mulai Opname*, yang masuk
+  daftar hanya barang dengan `stok_akhir <> 0`. Barang stok 0 tidak perlu dihitung fisik;
+  barang stok **negatif** tetap masuk justru karena itu kondisi bermasalah yang harus
+  ditemukan. One unit hanya boleh punya satu DRAFT terbuka; untuk membuat periode baru,
+  periode yang sedang menggantung harus diselesaikan (lihat banner *Lanjutkan draft ini*).
+- **Draft bisa dilanjutkan di hari lain.** v1.x memaksa `tanggal = date('Y-m-d')`, jadi
+  opname yang tidak selesai hari itu menggantung selamanya dan tidak pernah masuk hitungan
+  KPI. v2 membuka DRAFT yang masih ada saat operator masuk, lintas hari. Audinya: sebelum
+  September 2026 ada 44 DRAFT menggantung di semua unit.
+- **Operator memfinalisasi sendiri**, tanpa approval, tapi wajib menyertakan **alasan**
+  saat *Reopen*.
+- **Reopen tidak menghapus data.** Nilai final lama ditandai `is_reverted = 1` dan tetap
+  tersimpan. View `stok_barang` hanya menjumlahkan baris aktif (`is_reverted = 0`), jadi
+  koreksi tetap mengubah `stok_akhir` seperti sebelumnya tetapi jejaknya bisa ditelusuri.
+  Setiap aksi (`mulai`, `simpan`, `finalisasi`, `reopen`) dicatat di `stok_opname_audit`
+  lengkap dengan aktor dan jumlah barang terisi.
+- **Nilai kosong berarti dikosongkan**, bukan error — jadi salah input bisa dikoreksi tanpa
+  jalur terpisah. Nilai negatif ditolak dan dilaporkan (hasil hitung fisik tidak mungkin negatif).
+- **KPI hanya menghitung periode FINAL yang terisi penuh** (`terisi_barang = total_barang`).
+  Semua pembaca KPI diseragamkan ke aturan ini; sebelumnya sebagian menghitung
+  `stok_opname_draft` sehingga angkanya beda dari KPI resmi.
+- **Keamanan**: route `stok_opname/loadtable` yang terbuka publik (tanpa login) sudah
+  dihapus; route mutasi memakai filter `auth` + `csrf`; `AuthFilter` tidak lagi meloloskan
+  sesi yang punya `ID_UNIT` tapi belum terautentikasi.
+- **Data September 2026 dimigrasikan**: 43 DRAFT legacy lengkap difinalisasi lewat
+  `php spark stokopname:cutover`, sehingga 48 periode menjadi FINAL. Periode legacy yang
+  ter-finalize tanpa isian lengkap (1 periode) sengaja tidak dihitung KPI.
+
+### v1.5 — Pengawas hanya melihat & finalisasi boleh parsial (dengan peringatan) (2026-09-07) — DIBATALKAN oleh v2.0
 
 - **Role pengawas (Admin Center 0, Admin Root 1, Direktur 2, Manager 34, SPV 40)
-  HANYA melihat**: tombol *Mulai/Simpan Draft/Finalisasi/Reopen* disembunyikan,
+  HANYA melihat** *(hanya berlaku di v1.5; lifting untuk Admin Root ada di v2.1)*: tombol *Mulai/Simpan Draft/Finalisasi/Reopen* disembunyikan,
   input Jumlah Real readonly, dan endpoint-nya juga di-guard di server.
   Pengawasan/monitoring tetap lengkap (progress, riwayat, filter selisih, pencarian).
 - **Finalisasi DIPERBOLEHKAN meski belum semua terisi** — muncul peringatan yang
@@ -71,7 +124,9 @@ dan informatif. Berikut catatan perubahannya dan panduan penggunaannya.
   - *Mulai Opname* → membuat periode DRAFT dan menyiapkan daftar barang otomatis dari stok kartu (`stok_barang`).
   - *Simpan Draft* → menyimpan jumlah real secara bertahap/berulang (bisa dicicil, aman).
   - *Finalisasi* → hanya bisa jika **semua barang sudah terisi**; data disalin ke tabel final `stok_opname`, periode terkunci FINAL, dan terhitung di riwayat & KPI.
-  - *Reopen* → membuka kembali periode FINAL untuk koreksi (hasil final unit/tanggal tsb dihapus lalu dihitung ulang setelah finalisasi baru).
+  - *Reopen* → membuka kembali periode FINAL untuk koreksi. **v1.x menghapus** hasil final
+    periode tersebut lalu menghitung ulang setelah finalisasi baru; **v2.0 menggantinya**
+    dengan penandaan `is_reverted` supaya nilai lamanya tetap bisa ditelusuri.
 - **Indikator & informasi lengkap**:
   - Badge status `BELUM DIMULAI / DRAFT / FINAL`.
   - Progress bar + "x dari y barang terisi (n%)" + peringatan sisa barang kosong.
@@ -86,7 +141,7 @@ dan informatif. Berikut catatan perubahannya dan panduan penggunaannya.
   - Enter pada input = pindah ke baris berikutnya (tidak submit), baris yang baru terisi hilang dari tab "Belum Terisi" & fokus berpindah otomatis.
   - Progress bar & counter diperbarui realtime saat mengetik.
   - Sticky header tabel.
-- **Pembatasan role**: pemilih **Unit & Tanggal** hanya untuk Admin Root / Manager (ID_JABATAN `0,1,2,34`). Operator/inputer otomatis memakai unit miliknya (`ID_UNIT`) dan tanggal hari ini — tidak bisa pindah unit/tanggal lain.
+- **Pembatasan role**: pemilih **Unit & Tanggal** hanya untuk Admin Root / Manager (ID_JABATAN `0,1,2,34`). Operator/inputer memakai unit miliknya (`ID_UNIT`) dan **v2 tidak lagi mengunci tanggal ke hari ini** — DRAFT bisa dilanjutkan lintas hari.
 - **KPI Stok Opname** kini hanya menghitung **periode FINAL** (sebelumnya semua baris draft ikut terhitung).
 
 - **Filter baru `Belum Disimpan`**: barang yang sudah diinput di browser tapi belum disimpan server (belum klik *Simpan Draft*), lengkap dengan counter.
@@ -123,11 +178,22 @@ stok_opname_periode(id, unit_idunit, tanggal, status 'DRAFT|FINAL',
                     jumlah_komp, jumlah_real, jumlah_selisih,
                     total_barang, terisi_barang,
                     mulai_by, finalisasi_by, tanggal_finalisasi,
+                    reopen_by, tanggal_reopen, alasan_reopen,
+                    catatan_finalisasi,
                     created_at, updated_at)
 
-stok_opname_draft (…, periode_id)
-stok_opname       (…, periode_id)
+stok_opname_draft (…, periode_id)              -- working set, UNIQUE (periode_id, barang_idbarang)
+stok_opname       (…, periode_id, is_reverted,
+                      reverted_by, reverted_at, revert_alasan)
+
+stok_opname_audit(id, periode_id, unit_idunit, tanggal,
+                  aksi 'mulai|simpan|finalisasi|reopen',
+                  actor_id, jumlah_barang, jumlah_terisi, catatan, created_at)
 ```
+
+> `stok_opname` tidak lagi punya UNIQUE `(periode_id, barang_idbarang)` karena satu
+> periode bisa difinalisasi ulang setelah reopen — tiap finalisasi menulis revisi
+> barisnya sendiri. View `stok_barang` hanya menjumlahkan baris dengan `is_reverted = 0`.
 
 ---
 
@@ -137,9 +203,21 @@ stok_opname       (…, periode_id)
 
 | Role | Bisa pilih Unit & Tanggal | Bisa ubah/simpan/finalisasi | Tampilan |
 |---|---|---|---|
-| Admin Center (0), Admin Root (1), Direktur (2), Manager (34) | ✅ Ya | ❌ Hanya melihat | Bisa lihat semua unit & tanggal kapan saja |
+| **Admin Root (1)** | ✅ Ya | ✅ **Ya, unit mana pun** | Bisa initiation, mengisi, finalisasi, dan reopen unit yang dipilih |
+| Admin Center (0), Direktur (2), Manager (34) | ✅ Ya | ❌ Hanya melihat | Bisa lihat semua unit & tanggal kapan saja |
 | SPV (40) | ❌ (unit sendiri) | ❌ Hanya melihat | Lihat + filter selisih |
-| Operator / inputer (kasir, teknisi, dll) | ❌ Tidak | ✅ Ya | Otomatis unit miliknya + tanggal hari ini |
+| Operator / inputer (kasir, teknisi, dll) | ❌ Tidak | ✅ Ya (unit sendiri, finalize tanpa approval) | Unit miliknya; DRAFT yang menggantung dibuka otomatis |
+
+> **Admin Root bisa menjalankan opname, tapi pilih unit dulu.** Ia tetap bukan operator
+> unit tersebut, jadi nilai yang ia isi tercatat atas namanya di `stok_opname_audit`
+> (`actor_id`), bukan atas nama operator unit itu. Pakai ini terutama untuk menutup
+> opname unit yang operatornya tidak bisa melakukan hitung fisik — jangan dipakai
+> menggantikan hitung fisik operator.
+>
+> Catatan keamanan: `unit` milik Admin Root datang dari request, jadi **divalidasi**
+> terhadap daftar unit yang ada. Nilai seperti `0`, `-1`, atau `999999` akan ditolak.
+> Untuk operator biasa, `unit` dari POST diabaikan dan dipaksa memakai unit sesinya,
+> jadi tidak ada jalur mengopname unit lain.
 
 ### 2.2 Alur Kerja
 
@@ -147,31 +225,40 @@ stok_opname       (…, periode_id)
 Buka menu Stok Opname
         │
         ▼
-┌── BELUM DIMULAI ──┐   (unit & tanggal sudah terpilih otomatis)
-│  Klik [Mulai Opname]│→  periode DRAFT dibuat + daftar barang dari stok kartu
+┌── SUDAH ADA DRAFT MENGGANTUNG? ──┐
+│  Muncul banner "Lanjutkan draft"  │→  buka periode itu (bisa beda tanggal/hari)
+└───────────────────────────────────┘
+        │ tidak ada
+        ▼
+┌── BELUM DIMULAI ──┐
+│  Klik [Mulai Opname]│→  periode DRAFT dibuat, daftar = barang berstok (stok ≠ 0)
 └────────────────────┘
         │
         ▼
-┌── DRAFT ─────────────────────────────────────────────┐
-│  Isi kolom "Jumlah Real" sesuai hitung fisik         │
-│  • Tekan Enter → pindah ke barang berikutnya         │
-│  • Baris yang terisi otomatis hilang dari "Belum"    │
-│  • Simpan kapan saja dengan [Simpan Draft] (dicicil) │
-│  • Bisa cari barang dulu (search) lalu isi           │
-└──────────────────────────────────────────────────────┘
-        │  semua terisi
+┌── DRAFT ──────────────────────────────────────────────┐
+│  Isi kolom "Jumlah Real" sesuai hitung fisik          │
+│  • Tekan Enter → pindah ke barang berikutnya          │
+│  • Baris yang terisi otomatis hilang dari "Belum"     │
+│  • Simpan kapan saja dengan [Simpan Draft] (dicicil)  │
+│  • Boleh tutup browser & lanjutkan besok              │
+│  • Kosongkan kolom = membatalkan isian                │
+└───────────────────────────────────────────────────────┘
+        │ 100% terisi (tombol Finalisasi aktif)
         ▼
 ┌── FINAL ───────────────────────────────┐
 │  Data terkunci, tampil read-only      │
 │  Terhitung di riwayat & KPI           │
-│  Mau koreksi? [Reopen / Koreksi]      │
+│  Koreksi? [Reopen / Koreksi] + alasan │
 └────────────────────────────────────────┘
 ```
 
 ### 2.3 Langkah detail untuk Operator
 
-1. Buka menu **Stok → Stok Opname**. (Unit & tanggal otomatis: unit Anda, tanggal hari ini.)
-2. Jika status **BELUM DIMULAI**, klik **Mulai Opname** dan konfirmasi. Daftar barang muncul.
+1. Buka menu **Stok → Stok Opname**. Unit otomatis unit Anda. Kalau ada DRAFT dari hari
+   sebelumnya, halaman langsung membuka DRAFT itu dan muncul banner pengingat.
+2. Jika status **BELUM DIMULAI**, klik **Mulai Opname** dan konfirmasi. Hanya barang
+   berstok (`stok ≠ 0`) yang masuk daftar. Kalau sudah ada DRAFT yang menggantung di unit
+   ini, tombol **Mulai Opname** ditolak — selesaikan atau lanjutkan yang lama.
 3. Di tab **Belum Terisi**, isi **Jumlah Real** (hasil hitung fisik) satu per satu:
    - Ketik angka lalu tekan **Enter** → fokus berpindah ke barang berikutnya.
    - Barang yang sudah terisi otomatis tak muncul lagi di tab Belum Terisi.
@@ -179,9 +266,14 @@ Buka menu Stok Opname
    - Gunakan tab **Belum Disimpan** untuk melihat barang yang sudah diinput di browser
      tapi belum disimpan server (daftar otomatis urut dari yang terbaru diinput).
 4. Untuk mencari barang (misal hanya menginput sebagian), ketik di kotak **"Cari kode / nama barang"** — hasil pencarian menampilkan barang terisi maupun belum, siap diisi/dikoreksi.
-5. Setiap saat bisa klik **Simpan Draft** — aman, data tersimpan walau belum lengkap.
-6. Kapan saja siap, klik **Finalisasi** dan konfirmasi. Kalau masih ada barang kosong, muncul **peringatan** berisi jumlahnya — boleh lanjut (barang kosong tercatat `-`) atau batal dulu untuk melengkapi.
-7. Jika salah setelah final, klik **Reopen / Koreksi**, perbaiki, lalu **Finalisasi** ulang.
+5. Setiap saat bisa klik **Simpan Draft** — aman, data tersimpan walau belum lengkap dan
+   bisa dilanjutkan di hari lain.
+6. Tombol **Finalisasi** hanya aktif setelah **seluruh** barang berstok terisi. Kalau masih
+   ada barang kosong, tombolnya nonaktif; kalau tetap dipaksa, server menolak dengan
+   pesan berisi sisa barang yang belum diisi.
+7. Jika salah setelah final, klik **Reopen / Koreksi**, isi **alasan** (wajib), perbaiki,
+   lalu **Finalisasi** ulang. Nilai final sebelumnya tersimpan sebagai riwayat (tidak
+   dihapus) dan tidak ikut dihitung lagi.
 
 ### 2.4 Langkah untuk Admin / Manager
 
@@ -194,6 +286,21 @@ Buka menu Stok Opname
 
 - **Mengisi banyak barang berurutan**: pastikan tab *Belum Terisi* aktif, cukup tekan **Enter** setelah tiap angka — tidak perlu klik Simpan setiap kali (Simpan hanya saat halaman ditutup/di-refresh).
 - **Progress bar** menunjukkan posisi sekarang jelas; jangan sampai menutup halaman sebelum **Simpan Draft**.
-- **Finalisasi boleh tidak lengkap**: muncul peringatan jumlah barang yang masih kosong saat konfirmasi — lanjutkan atau isi dulu, terserah Anda. Barang yang kosong tercatat `-` pada data final.
-- **Role pengawas (Admin/Manager/SPV/Direktur) hanya dapat melihat** progres, riwayat, dan memakai filter selisih; tidak bisa menyimpan/memfinalisasi.
+- **Finalisasi WAJIB lengkap**: tombolnya tidak aktif selama masih ada barang kosong.
+  Ini bukan sekadar tampilan — server juga menolak, jadi tidak bisa difinalisasi sebagian.
+- **Satu unit hanya boleh punya satu DRAFT terbuka.** Kalau daftar lama masih menggantung,
+  selesaikan atau lanjutkan dulu sebelum membuat periode baru; dengan begitu tidak ada dua
+  daftar yang sama-sama menggantung dan ambigu.
+- **Draft aman lintas hari**: tutup browser di tengah hitung pun tidak hilang, asal sudah
+  di-*Simpan Draft*. Kapan pun kembali, halaman membuka periode yang sama.
+- **Reopen wajib beralasan** dan nilainya tidak hilang — revise lama ditandai tidak aktif,
+  bukan dihapus, dan tampil di riwayat aktivitas.
+- **KPI 4 periode FINAL per bulan**: satu unit harus menyelesaikan 4 opname penuh dalam
+  sebulan. Kartu KPI di atas halaman menampilkan progres bulan berjalan.
+- **Cek cepat kondisi data**: `php spark opname:verify` (read-only) menampilkan status
+  skema v2, jumlah periode FINAL/DRAFT, baris yatim, dan progres KPI per unit. Jalankan
+  setelah deploy atau migrasi.
+- **Role mode-lihat (Admin Center 0, Direktur 2, Manager 34, SPV 40) hanya dapat
+  melihat** progres, riwayat, dan memakai filter selisih; tidak bisa menyimpan/memfinalisasi.
+  **Admin Root (1) berbeda**: ia boleh menjalankan opname (lihat tabel 2.1).
 - Pencarian bisa digunakan untuk mengecek satu barang: ketik sebagian kode → muncul semua baris yang cocok apa pun statusnya.

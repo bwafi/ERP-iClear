@@ -8,7 +8,7 @@ namespace App\Services\Kpi;
  * Actual value dibaca dari source data yang sama dengan sistem lama:
  *   - penilaian        (SUM/AVG skor per aspek)
  *   - tutup_kasir      (COUNT status)
- *   - stok_opname_draft (COUNT DISTINCT tanggal)
+ *   - stok_opname_periode (COUNT periode FINAL yang terisi penuh)
  *
  * Target dibaca dari kpi_targets (source of truth NEW flow).
  *

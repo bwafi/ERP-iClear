@@ -875,6 +875,21 @@ class TutupKasir extends BaseController
                 ->get()
                 ->getRow();
             $ttl_kepatuhan  = $ak_kepatuhan->total ?? 0;
+        // Samakan dengan StokOpnameCalculator: yang dihitung hanya periode FINAL
+        // yang seluruh barang berstoknya terisi. Versi lama menghitung DISTINCT
+        // tanggal pada stok_opname_draft, jadi draft kosong pun ikut dihitung
+        // dan angkanya beda dari KPI resmi.
+        $aktual_opname         = $this->db->table('stok_opname_periode')
+                                    ->select('COUNT(*) AS total')
+                                    ->where('unit_idunit', $unit)
+                                    ->where('status', 'FINAL')
+                                    ->where('terisi_barang = total_barang', null, false)
+                                    ->where('total_barang >', 0)
+                                    ->where('MONTH(tanggal)', date('m'), false)
+                                    ->where('YEAR(tanggal)', date('Y'), false)
+                                    ->get()
+                                    ->getRow()
+                                    ->total;
 
             $aktual_closing        = $this->db->table('penilaian')
                 ->select('SUM(skor) AS total')

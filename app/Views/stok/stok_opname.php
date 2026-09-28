@@ -24,7 +24,48 @@
     </div>
 <?php endif; ?>
 
-<!-- Pilih unit & tanggal (hanya admin root / manager; operator mengikuti unit & tanggal sendiri) -->
+<!-- Banner lanjutkan DRAFT yang menggantung lintas hari -->
+<?php if (!empty($canMutate) && !empty($draftTerbuka) && (string)$draftTerbuka->tanggal !== $tanggal) : ?>
+    <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <i class="bi bi-pencil-square"></i>
+            Ada stok opname <strong>belum difinalisasi</strong> untuk unit ini
+            (tanggal <strong><?= esc(date('d/m/Y', strtotime($draftTerbuka->tanggal))) ?></strong>,
+            <?= (int)$draftTerbuka->terisi_barang ?>/<?= (int)$draftTerbuka->total_barang ?> terisi).
+            One unit hanya boleh punya satu draft terbuka.
+        </div>
+        <a class="btn btn-sm btn-warning" href="<?= base_url('stok_opname?unit=' . (int)$unit . '&tanggal=' . esc($draftTerbuka->tanggal)) ?>">
+            <i class="bi bi-arrow-right-circle"></i> Lanjutkan draft ini
+        </a>
+    </div>
+<?php endif; ?>
+
+<!-- Progres KPI stok opname bulan ini -->
+<?php if (!empty($kpiBulanIni)) : ?>
+    <?php $kpi = $kpiBulanIni; ?>
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-semibold">
+                    <i class="bi bi-trophy"></i> KPI Stok Opname — <?= esc(date('F Y', strtotime($kpi['bulan'] . '-01'))) ?>
+                </span>
+                <span class="small text-muted">
+                    <strong><?= (int)$kpi['final'] ?></strong> periode FINAL / target <?= (int)$kpi['target'] ?>
+                    (<?= (int)$kpi['pct'] ?>%)
+                </span>
+            </div>
+            <div class="progress progress-so rounded-3" style="height:8px">
+                <div class="progress-bar <?= $kpi['final'] >= $kpi['target'] ? 'bg-success' : 'bg-primary' ?>"
+                     role="progressbar" style="width: <?= (int)$kpi['pct'] ?>%"></div>
+            </div>
+            <small class="text-muted">
+                Hanya periode yang seluruh barang berstok terisi dan sudah difinalisasi yang dihitung.
+            </small>
+        </div>
+    </div>
+<?php endif; ?>
+
+<!-- Pilih unit & tanggal (hanya role lintas-unit; operator mengikuti unit & tanggal sendiri) -->
 <?php if (!empty($canPickUnit)) : ?>
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-body py-3">
@@ -140,17 +181,18 @@ foreach ($unitList as $u) {
             </div>
         </div>
 
-        <!-- Tombol aksi (hanya untuk yang boleh mengubah; pengawas hanya melihat) -->
+        <!-- Tombol aksi (hanya untuk yang boleh mengubah; role mode-lihat hanya melihat) -->
         <div class="border-top pt-3 mt-3 d-flex gap-2 flex-wrap align-items-center">
             <?php if (empty($canMutate)) : ?>
                 <span class="badge bg-info-subtle text-info fs-6">
-                    <i class="bi bi-eye"></i> Mode lihat — pengawas tidak dapat mengubah/simpan/finalisasi.
+                    <i class="bi bi-eye"></i> Mode lihat — role ini tidak dapat mengubah/simpan/finalisasi.
                 </span>
             <?php elseif (!$periode) : ?>
                 <form method="post" action="<?= base_url('stok_opname/mulai') ?>">
+                    <?= csrf_field() ?>
                     <input type="hidden" name="unit" value="<?= (int)$unit ?>">
                     <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
-                    <button type="submit" class="btn btn-primary" onclick="return confirm('Mulai stok opname untuk unit ini pada tanggal ' + '<?= esc($tanggal, 'js') ?>' + '? Daftar barang otomatis diambil dari stok kartu.')">
+                    <button type="submit" class="btn btn-primary" onclick="return confirm('Mulai stok opname untuk unit ini pada tanggal ' + '<?= esc($tanggal, 'js') ?>' + '? Daftar barang akan diambil otomatis dari barang yang berstok.')">
                         <iconify-icon icon="solar:play-bold" class="me-1"></iconify-icon>Mulai Opname
                     </button>
                 </form>
@@ -158,13 +200,27 @@ foreach ($unitList as $u) {
                 <button type="submit" form="formOpname" name="aksi" value="simpan" class="btn btn-primary">
                     <iconify-icon icon="solar:save-bold" class="me-1"></iconify-icon>Simpan Draft
                 </button>
-                <button type="submit" form="formOpname" name="aksi" value="finalisasi" class="btn btn-success btn-finalize">
-                    <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
-                </button>
+                <?php if ($sisa > 0) : ?>
+                    <button type="button" class="btn btn-success" disabled
+                        title="Finalisasi hanya bisa dilakukan setelah semua barang berstok terisi.">
+                        <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
+                    </button>
+                <?php else : ?>
+                    <button type="submit" form="formOpname" name="aksi" value="finalisasi" class="btn btn-success btn-finalize"
+                        onclick="return confirm('Finalisasi periode ini? Semua barang berstok wajib terisi. Setelah difinalisasi, stok koreksi ikut diterapkan.')">
+                        <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
+                    </button>
+                <?php endif; ?>
             <?php else : ?>
-                <form method="post" action="<?= base_url('stok_opname/reopen') ?>" onsubmit="return confirm('Buka kembali stok opname FINAL ini? Hasil final unit/tanggal ini akan dihapus dan dihitung ulang setelah finalisasi baru. Lanjutkan?');">
+                <form method="post" action="<?= base_url('stok_opname/reopen') ?>" class="d-flex flex-wrap gap-2 align-items-start"
+                    onsubmit="return confirm('Buka kembali stok opname FINAL ini? Nilai final sebelumnya akan ditandai tidak aktif dan tetap tersimpan di riwayat. Lanjutkan?');">
+                    <?= csrf_field() ?>
                     <input type="hidden" name="unit" value="<?= (int)$unit ?>">
                     <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
+                    <div class="me-2" style="min-width:320px">
+                        <input type="text" name="alasan" class="form-control form-control-sm" maxlength="255"
+                            placeholder="Alasan reopen (wajib)" required>
+                    </div>
                     <button type="submit" class="btn btn-outline-warning">
                         <iconify-icon icon="solar:refresh-bold" class="me-1"></iconify-icon>Reopen / Koreksi
                     </button>
@@ -195,6 +251,7 @@ foreach ($unitList as $u) {
         <?php else : ?>
             <?php if ($isDraft) : ?>
                 <form method="post" action="<?= base_url('stok_opname/simpan') ?>" id="formOpname">
+                    <?= csrf_field() ?>
             <?php endif; ?>
             <input type="hidden" name="unit" value="<?= (int)$unit ?>">
             <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
@@ -343,17 +400,48 @@ foreach ($unitList as $u) {
                 <div class="text-muted small mt-2">
                     <i class="bi bi-info-circle"></i>
                     Isi <strong>Jumlah Real</strong> sesuai hasil hitung fisik. Selisih dihitung otomatis.
-                    Simpan draft kapan saja (dicicil), lalu <strong>Finalisasi</strong> setelah semua barang terisi.
+                    Simpan draft kapan saja (dicicil, boleh dilanjutkan di hari lain).
+                    <strong>Finalisasi</strong> baru bisa dilakukan setelah <strong>seluruh</strong> barang berstok terisi.
+                    Kosongkan kolom untuk membatalkan isian.
                 </div>
             <?php else : ?>
                 <div class="text-muted small mt-2">
                     <i class="bi bi-info-circle"></i>
-                    Periode ini sudah <strong>FINAL</strong>. Untuk mengubah data, gunakan tombol <strong>Reopen / Koreksi</strong> lalu finalisasi ulang.
+                    Periode ini sudah <strong>FINAL</strong>. Untuk mengubah data, gunakan tombol <strong>Reopen / Koreksi</strong>
+                    dengan alasan, lalu finalisasi ulang.
                 </div>
             <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
+
+<!-- Jejak audit periode -->
+<?php if (!empty($auditTrail)) : ?>
+    <div class="card shadow-sm border-0 mt-3">
+        <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Riwayat Aktivitas Periode Ini</h6></div>
+        <div class="card-body py-2 px-4">
+            <ul class="list-unstyled mb-0 small">
+                <?php foreach ($auditTrail as $a) : ?>
+                    <li class="border-bottom py-1 d-flex flex-wrap gap-2 justify-content-between">
+                        <span>
+                            <span class="badge bg-<?= $a['aksi'] === 'finalisasi' ? 'success' : ($a['aksi'] === 'reopen' ? 'warning' : 'secondary') ?>-subtle text-<?= $a['aksi'] === 'finalisasi' ? 'success' : ($a['aksi'] === 'reopen' ? 'warning' : 'secondary') ?>">
+                                <?= esc($a['aksi']) ?>
+                            </span>
+                            <?= (int)$a['jumlah_terisi'] ?>/<?= (int)$a['jumlah_barang'] ?> terisi
+                            <?php if (!empty($a['catatan'])) : ?>
+                                — <em><?= esc($a['catatan']) ?></em>
+                            <?php endif; ?>
+                        </span>
+                        <span class="text-muted">
+                            user #<?= (int)$a['actor_id'] ?> ·
+                            <?= esc(date('d/m/Y H:i', strtotime((string)$a['created_at']))) ?>
+                        </span>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    </div>
+<?php endif; ?>
 
 <!-- Riwayat periode unit ini -->
 <?php if (!empty($historis)) : ?>

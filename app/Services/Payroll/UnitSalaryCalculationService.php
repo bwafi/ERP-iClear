@@ -149,9 +149,16 @@ class UnitSalaryCalculationService
                 ->where('MONTH(tanggal)', $bulan)->where('YEAR(tanggal)', $tahun)
                 ->where('unit', $unit)->get()->getRow()->total ?? 0;
 
-            $aktual_opname = $this->db->table('stok_opname_draft')
-                ->select('COUNT(DISTINCT DATE(tanggal)) AS total')
+            // Samakan dengan StokOpnameCalculator: hanya periode FINAL yang
+            // seluruh barang berstoknya terisi. Versi lama menghitung draft
+            // apa pun, termasuk draft kosong, sehingga angka payroll beda
+            // dari KPI resmi.
+            $aktual_opname = $this->db->table('stok_opname_periode')
+                ->select('COUNT(*) AS total')
                 ->where('unit_idunit', $unit)
+                ->where('status', 'FINAL')
+                ->where('terisi_barang = total_barang', null, false)
+                ->where('total_barang >', 0)
                 ->where('MONTH(tanggal)', $bulan)->where('YEAR(tanggal)', $tahun)
                 ->get()->getRow()->total ?? 0;
 

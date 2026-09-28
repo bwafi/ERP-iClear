@@ -231,14 +231,18 @@ $routes->get('input_stokawal/(:any)', 'StokAwal::input_stokawal/$1', ['filter' =
 $routes->get('stok', 'StokAwal::stok', ['filter' => 'auth']);
 
 //stokopname
+// CSRF diaktifkan lewat group (CI4 4.4 hanya menerima satu filter per route,
+// sedangkan group bisa menerima array filter). Sengaja TIDAK mengaktifkan
+// 'csrf' di $globals, karena form lain di aplikasi belum punya token-nya.
 $routes->get('stok_opname', 'StokOpname::index', ['filter' => 'auth']);
-$routes->post('stok_opname/mulai', 'StokOpname::mulai', ['filter' => 'auth']);
-$routes->post('stok_opname/simpan', 'StokOpname::simpan', ['filter' => 'auth']);
-$routes->post('stok_opname/finalisasi', 'StokOpname::finalisasi', ['filter' => 'auth']);
-$routes->post('stok_opname/reopen', 'StokOpname::reopen', ['filter' => 'auth']);
-$routes->post('insert/stokopname', 'StokOpname::simpan', ['filter' => 'auth']);
-$routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => 'auth']);
-$routes->get('stokopname/loadtable', 'StokOpname::loadTable');
+$routes->group('stok_opname', ['filter' => ['auth', 'csrf']], static function ($routes) {
+    $routes->post('mulai', 'StokOpname::mulai');
+    $routes->post('simpan', 'StokOpname::simpan');
+    $routes->post('finalisasi', 'StokOpname::finalisasi');
+    $routes->post('reopen', 'StokOpname::reopen');
+});
+$routes->post('insert/stokopname', 'StokOpname::simpan', ['filter' => ['auth', 'csrf']]);
+$routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => ['auth', 'csrf']]);
 
 
 //kartu stok
