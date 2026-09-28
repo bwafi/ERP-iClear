@@ -24,35 +24,21 @@
         <form action="<?= base_url('insert_penjualan') ?>" method="post" id="form_penjualan"
             enctype="multipart/form-data">
             <div class="row mb-3">
-                <?php
-                $idUnit = session('ID_UNIT');
-                $tanggalHariIni = date('Y-m-d');
-                ?>
+                <?php $tanggalHariIni = date('Y-m-d'); ?>
 
                 <div class="col-md-6">
                     <label for="tanggal_masuk" class="form-label">Tanggal</label>
 
-                    <?php if ($idUnit == 1): ?>
-                        <!-- UNIT 1: bebas pilih tanggal -->
-                        <input type="date"
-                            class="form-control"
-                            id="tanggal_masuk"
-                            name="tanggal_masuk"
-                            value="<?= $tanggalHariIni ?>"
-                            required>
-
-                    <?php else: ?>
-                        <!-- UNIT selain 1: tidak bisa backdate -->
-                        <input type="date"
-                            class="form-control"
-                            id="tanggal_masuk"
-                            name="tanggal_masuk"
-                            value="<?= $tanggalHariIni ?>"
-                            min="<?= $tanggalHariIni ?>"
-                            max="<?= $tanggalHariIni ?>"
-                            readonly
-                            required>
-                    <?php endif; ?>
+                    <!-- Semua unit bebas memilih tanggal, termasuk backdate.
+                         Sebelumnya hanya unit 1 yang boleh; unit lain dikunci
+                         readonly + min/max = hari ini sehingga tidak bisa
+                         mengisi tanggal sendiri. -->
+                    <input type="date"
+                        class="form-control"
+                        id="tanggal_masuk"
+                        name="tanggal_masuk"
+                        value="<?= $tanggalHariIni ?>"
+                        required>
                 </div>
 
 
