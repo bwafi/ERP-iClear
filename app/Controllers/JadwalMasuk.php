@@ -46,9 +46,9 @@ class JadwalMasuk extends BaseController
         ]);
 
         if ($this->JadwalMasukModel->insert($data)) {
-            return redirect()->back()->with('success', 'Jadwal berhasil ditambahkan.');
+            return redirect()->back()->with('sukses', 'Jadwal berhasil ditambahkan.');
         } else {
-            return redirect()->back()->with('error', 'Gagal menambahkan jadwal.');
+            return redirect()->back()->with('gagal', 'Gagal menambahkan jadwal.');
         }
     }
 
@@ -69,9 +69,9 @@ class JadwalMasuk extends BaseController
         ]);
 
         if ($this->JadwalMasukModel->update($id, $data)) {
-            return redirect()->back()->with('success', 'Jadwal berhasil diperbarui.');
+            return redirect()->back()->with('sukses', 'Jadwal berhasil diperbarui.');
         } else {
-            return redirect()->back()->with('error', 'Gagal memperbarui jadwal.');
+            return redirect()->back()->with('gagal', 'Gagal memperbarui jadwal.');
         }
     }
 
@@ -80,9 +80,9 @@ class JadwalMasuk extends BaseController
         $id = $this->request->getPost('idjadwal_masuk');
 
         if ($this->JadwalMasukModel->delete($id)) {
-            return redirect()->back()->with('success', 'Jadwal berhasil dihapus.');
+            return redirect()->back()->with('sukses', 'Jadwal berhasil dihapus.');
         } else {
-            return redirect()->back()->with('error', 'Gagal menghapus jadwal.');
+            return redirect()->back()->with('gagal', 'Gagal menghapus jadwal.');
         }
     }
 }

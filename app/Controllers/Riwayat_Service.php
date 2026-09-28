@@ -217,14 +217,10 @@ class Riwayat_Service extends BaseController
         // langkahnya; kalau dari halaman detail, tetap di halaman detail.
         // Nilai return_to bukan URL, hanya penanda asal form.
         if ($this->request->getPost('return_to') === 'service') {
-            // setFlashdata, bukan ->with('success'): layout hanya membaca
-            // flash 'sukses'/'gagal' (Views/template.php).
-            session()->setFlashdata('sukses', 'Data service berhasil diperbarui.');
-
-            return redirect()->to(base_url('service?tab=kerusakan'));
+            return redirect()->to(base_url('service?tab=kerusakan'))->with('sukses', 'Data service berhasil diperbarui.');
         }
 
-        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=kerusakan'))->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=kerusakan'))->with('sukses', 'Data kerusakan berhasil diperbarui.');
     }
 
 
@@ -237,7 +233,7 @@ class Riwayat_Service extends BaseController
         $idservice = $this->request->getPost('idservice_k');
 
         if (empty($fungsiTerpilih)) {
-            return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('info', 'Tidak ada kerusakan yang dipilih.');
+            return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('gagal', 'Tidak ada kerusakan yang dipilih.');
         }
 
         date_default_timezone_set('Asia/Jakarta');
@@ -278,7 +274,7 @@ class Riwayat_Service extends BaseController
             $this->ServiceKerusakanModel->deleteByServiceAndFungsi($idservice, $idfungsi);
         }
 
-        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('sukses', 'Data sparepart berhasil diperbarui.');
     }
 
 
@@ -359,7 +355,7 @@ class Riwayat_Service extends BaseController
                     ->deleteByServiceAndBarang($idservice, $barangId);
             }
         }
-        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=pembayaran'))->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=pembayaran'))->with('sukses', 'Data pembayaran berhasil disimpan.');
     }
 
     private function buatPenjualanDariService($idservice, $produkData)

@@ -1549,7 +1549,7 @@ class TutupKasir extends BaseController
         }
 
         return redirect()->to('/tutup_kasir')
-            ->with('success', 'Tutup kasir berhasil');
+            ->with('sukses', 'Tutup kasir berhasil');
     }
 
     public function cetak_tutup_kasir($id)

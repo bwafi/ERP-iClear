@@ -187,7 +187,7 @@ class StatusGaransi extends BaseController
 
         );
         $this->ServiceModel->updateService($idservice, $data);
-        return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=kerusakan'))->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=kerusakan'))->with('sukses', 'Data kerusakan berhasil diperbarui.');
     }
 
 
@@ -198,7 +198,7 @@ class StatusGaransi extends BaseController
         $idservice = $this->request->getPost('idservice_k');
 
         if (empty($fungsiTerpilih)) {
-            return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=sparepart'))->with('info', 'Tidak ada kerusakan yang dipilih.');
+            return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=sparepart'))->with('gagal', 'Tidak ada kerusakan yang dipilih.');
         }
 
         date_default_timezone_set('Asia/Jakarta');
@@ -239,7 +239,7 @@ class StatusGaransi extends BaseController
             $this->ServiceKerusakanModel->deleteByServiceAndFungsi($idservice, $idfungsi);
         }
 
-        return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=sparepart'))->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=sparepart'))->with('sukses', 'Data sparepart berhasil diperbarui.');
     }
 
 
@@ -324,7 +324,7 @@ class StatusGaransi extends BaseController
                     ->deleteByServiceAndBarang($idservice, $barangId);
             }
         }
-        return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=pembayaran'))->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=pembayaran'))->with('sukses', 'Data pembayaran berhasil disimpan.');
     }
 
 

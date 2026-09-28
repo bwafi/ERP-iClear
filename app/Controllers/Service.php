@@ -227,7 +227,7 @@ class Service extends BaseController
 
 
             session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
-            return redirect()->to('/service?tab=kerusakan')->with('success', 'Data kerusakan berhasil diperbarui.');
+            return redirect()->to('/service?tab=kerusakan')->with('sukses', 'Data kerusakan berhasil diperbarui.');
         }
     }
 
@@ -239,7 +239,7 @@ class Service extends BaseController
         $idservice = $this->request->getPost('idservice_k');
 
         if (empty($fungsiTerpilih)) {
-            return redirect()->to('/service?tab=kerusakan')->with('info', 'Tidak ada kerusakan yang dipilih.');
+            return redirect()->to('/service?tab=kerusakan')->with('gagal', 'Tidak ada kerusakan yang dipilih.');
         }
 
         date_default_timezone_set('Asia/Jakarta');
@@ -280,7 +280,7 @@ class Service extends BaseController
             $this->ServiceKerusakanModel->deleteByServiceAndFungsi($idservice, $idfungsi);
         }
 
-        return redirect()->to('cetak/invoice_service/' . $idservice)->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to('cetak/invoice_service/' . $idservice)->with('sukses', 'Data kerusakan berhasil diperbarui.');
     }
 
 
@@ -366,7 +366,7 @@ class Service extends BaseController
                     ->deleteByServiceAndBarang($idservice, $barangId);
             }
         }
-        return redirect()->to('/service?tab=pembayaran')->with('success', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to('/service?tab=pembayaran')->with('sukses', 'Data sparepart berhasil diperbarui.');
     }
 
     private function buatPenjualanDariService($idservice, $produkData)

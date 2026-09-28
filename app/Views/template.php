@@ -734,7 +734,7 @@
         <script>
             $(document).ready(function() {
                 toastr.success(
-                    "<?= session()->getFlashdata('sukses'); ?>",
+                    <?= json_encode(session()->getFlashdata('sukses')) ?>,
                     "Berhasil!", {
                         showMethod: "slideDown",
                         hideMethod: "slideUp",

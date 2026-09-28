@@ -46,7 +46,7 @@ class Payroll extends BaseController
 
         if (empty($id)) {
             return redirect()->back()
-                ->with('error', 'ID payroll tidak ditemukan.');
+                ->with('gagal', 'ID payroll tidak ditemukan.');
         }
 
         $locks = $this->getPayrollLocks();
@@ -56,7 +56,7 @@ class Payroll extends BaseController
         $this->savePayrollLocks($locks);
 
         return redirect()->back()
-            ->with('success', 'Payroll berhasil dikunci.');
+            ->with('sukses', 'Payroll berhasil dikunci.');
     }
 
     public function unlockPayroll()
@@ -70,7 +70,7 @@ class Payroll extends BaseController
         $this->savePayrollLocks($locks);
 
         return redirect()->back()
-            ->with('success', 'Payroll berhasil dibuka kembali.');
+            ->with('sukses', 'Payroll berhasil dibuka kembali.');
     }
 
     public function index()
@@ -247,7 +247,7 @@ class Payroll extends BaseController
         $this->db->table('kas_keluar')->insert($data);
 
         return redirect()->to(base_url('payroll2'))
-            ->with('success', 'Data kas keluar berhasil ditambahkan.');
+            ->with('sukses', 'Data kas keluar berhasil ditambahkan.');
     }
 
 
@@ -262,7 +262,7 @@ class Payroll extends BaseController
 
         if (!empty($locks[(string) $id])) {
             return redirect()->back()
-                ->with('error', 'Payroll ini sudah dikunci dan tidak dapat diubah.');
+                ->with('gagal', 'Payroll ini sudah dikunci dan tidak dapat diubah.');
         }
 
         $jumlah = $this->request->getPost('jumlah');
@@ -290,7 +290,7 @@ class Payroll extends BaseController
             ->update($data);
 
         return redirect()->to(base_url('payroll2'))
-            ->with('success', 'Data kas keluar berhasil diperbarui.');
+            ->with('sukses', 'Data kas keluar berhasil diperbarui.');
     }
 
 
@@ -305,7 +305,7 @@ class Payroll extends BaseController
 
         if (!empty($locks[(string) $id])) {
             return redirect()->back()
-                ->with('error', 'Payroll ini sudah dikunci dan tidak dapat dihapus.');
+                ->with('gagal', 'Payroll ini sudah dikunci dan tidak dapat dihapus.');
         }
 
         $this->db->table('kas_keluar')
@@ -313,7 +313,7 @@ class Payroll extends BaseController
             ->delete();
 
         return redirect()->to(base_url('payroll2'))
-            ->with('success', 'Data kas keluar berhasil dihapus.');
+            ->with('sukses', 'Data kas keluar berhasil dihapus.');
     }
 
 

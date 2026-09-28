@@ -178,11 +178,11 @@ class Auth extends BaseController
     $confirmPassword = $this->request->getPost('confirm_password');
 
     if (empty($newPassword) || empty($confirmPassword)) {
-        return redirect()->back()->with('error', 'Password tidak boleh kosong.');
+        return redirect()->back()->with('gagal', 'Password tidak boleh kosong.');
     }
 
     if ($newPassword !== $confirmPassword) {
-        return redirect()->back()->with('error', 'Konfirmasi password tidak cocok.');
+        return redirect()->back()->with('gagal', 'Konfirmasi password tidak cocok.');
     }
 
     $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
@@ -190,7 +190,7 @@ class Auth extends BaseController
     $userModel = new \App\Models\ModelAuth();
     $userModel->update($userId, ['PASSWORD' => $hashedPassword]);
 
-    return redirect()->back()->with('success', 'Password berhasil diubah.');
+    return redirect()->back()->with('sukses', 'Password berhasil diubah.');
     }
 
     function proses_logout()
