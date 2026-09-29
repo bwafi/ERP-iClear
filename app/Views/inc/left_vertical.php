@@ -48,12 +48,15 @@ $currentUri = service('uri');
             <ul id="sidebarnav" class="mb-0">
                 <?php foreach ($menu_utama as $mymenu) : ?>
                     <?php if (in_array($mymenu['id'], $role)) : ?>
+                        <?php
+                        // Parent yang punya url tetap bisa diklik (mis. "Kas & Bank" -> /kas_bank),
+                        // cuma Expand/Collapse lewat script sidebarmenu.js yang tidak preventDefault.
+                        $parentHref  = !empty($mymenu['url']) ? base_url($mymenu['url']) : '#';
+                        $is_active   = (base_url() . $mymenu['url'] == current_url());
+                        ?>
 
                         <!-- Menu Tanpa Sub-menu -->
                         <?php if (sizeof($mymenu['menu']) <= 0) : ?>
-                            <?php
-                            $is_active = (base_url() . $mymenu['url'] == current_url());
-                            ?>
                             <?php if ($mymenu['utama'] == 0) : ?>
                                 <li class="nav-small-cap text-uppercase text-muted fw-bold fs-xs px-3 mt-4 mb-2">
                                     <iconify-icon icon="solar:menu-dots-bold-duotone" class="nav-small-cap-icon fs-5 align-middle me-1"></iconify-icon>
@@ -85,7 +88,8 @@ $currentUri = service('uri');
                             <?php endif; ?>
 
                             <li class="sidebar-item mb-1">
-                                <a class="sidebar-link has-arrow success-hover-bg text-dark rounded-3 px-3 py-2 d-flex align-items-center text-decoration-none" href="#" aria-expanded="false">
+                                <a class="sidebar-link has-arrow success-hover-bg <?= $is_active ? 'active' : 'text-dark' ?> rounded-3 px-3 py-2 d-flex align-items-center text-decoration-none"
+                                    href="<?= $parentHref ?>" aria-expanded="false">
                                     <span class="aside-icon p-2 bg-success-subtle text-success rounded-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
                                         <?= ($mymenu['icon'] != null) ? $mymenu['icon'] : '<iconify-icon icon="solar:smart-speaker-minimalistic-line-duotone" class="fs-6"></iconify-icon>'; ?>
                                     </span>
