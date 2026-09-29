@@ -1,14 +1,5 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Transfer &amp; Pembayaran Antar Unit</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('kas_bank') ?>">Kas &amp; Bank</a></li>
-                <li class="breadcrumb-item active">Pembayaran Antar Unit</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<?= $this->include('kas_bank/_nav') ?>
+<?= $this->include('kas_bank/_theme') ?>
 
 <?php
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
@@ -26,41 +17,72 @@ $kelAkun = static function ($a) use ($unitMap) {
     return ((isset($unitMap[(int) $a->unit_id])) ? $unitMap[(int) $a->unit_id] : 'Fisik') . ' – ' . $a->nama_akun . ' (' . $a->tipe . ')';
 };
 $labelStatus = static fn($s) => ['belum_lunas' => 'Belum Lunas', 'sebagian' => 'Sebagian', 'lunas' => 'Lunas'][$s] ?? $s;
-$badgeStatus = static fn($s) => ['belum_lunas' => 'bg-warning-subtle text-warning', 'sebagian' => 'bg-primary-subtle text-primary', 'lunas' => 'bg-success-subtle text-success'][$s] ?? 'bg-secondary-subtle text-secondary';
+$badgeStatus = static fn($s) => ['belum_lunas' => 'kb-badge-amber', 'sebagian' => 'kb-badge-blue', 'lunas' => 'kb-badge-green'][$s] ?? 'kb-badge-muted';
 $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && $h->status !== 'lunas');
 ?>
 
-<div class="row g-3">
-    <div class="col-lg-4">
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Form Pembayaran Antar Unit</h5>
+<!-- Context Banner -->
+<div class="kb-banner mb-4">
+    <div class="kb-banner-icon text-warning">
+        <iconify-icon icon="bi:building-check"></iconify-icon>
+    </div>
+    <div class="kb-banner-content">
+        <strong class="text-emphasis">Aturan Penyelesaian Hutang/Piutang Antar Cabang:</strong>
+        <div class="text-secondary mt-1">
+            Hutang terbentuk otomatis dari mutasi stok barang antar unit.
+            Jika <strong class="text-body">Rekening Pengirim &amp; Penerima Beda</strong>, transaksi mencatat pergerakan kas/bank nyata.
+            Jika <strong class="text-body">Rekening Fisik Sama</strong> (rekening bersama), sistem mencatat <strong class="text-primary">Atribusi</strong> (penyelesaian H/P tanpa gerakan kas).
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Form & Piutang -->
+    <div class="col-12 col-lg-5 col-xl-4">
+        <!-- Form Pembayaran Card -->
+        <div class="kb-card mb-4">
+            <div class="kb-card-header bg-tertiary">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="kb-step-badge bg-success">
+                        <iconify-icon icon="bi:send-fill"></iconify-icon>
+                    </div>
+                    <div>
+                        <h6 class="kb-card-title mb-0">Form Pelunasan Antar Unit</h6>
+                        <span class="kb-card-sub text-muted">Bayar hutang mutasi stok</span>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="p-3">
                 <?php if (!$canTransaksi) : ?>
-                    <div class="alert alert-warning py-2 mb-3">Anda hanya dapat melihat data. Hubungi Admin Center / Direktur / Manager untuk input.</div>
+                    <div class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2 mb-3">
+                        <iconify-icon icon="bi:shield-lock-fill" class="kb-ico"></iconify-icon>
+                        <span>Mode Lihat Saja. Hubungi Admin Center / Manager untuk input.</span>
+                    </div>
                 <?php endif; ?>
+
                 <form method="post" action="<?= base_url('kas_bank/antar-unit/save') ?>" enctype="multipart/form-data">
                     <input type="hidden" name="submit_token" value="<?= esc($submit_token ?? '') ?>">
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Hutang Antar Unit</label>
-                        <select name="hutang_piutang_id" id="hp_hutang" class="form-select form-select-sm" required <?= $canTransaksi ? '' : 'disabled' ?>>
-                            <option value="">Pilih Hutang (masih bersaldo)</option>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Target Hutang Antar Unit</label>
+                        <select name="hutang_piutang_id" id="hp_hutang" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
+                            <option value="">Pilih Tagihan Hutang</option>
                             <?php foreach (($hp_hutang ?? []) as $h) : ?>
                                 <option value="<?= (int) $h->id ?>"
                                     data-unit="<?= (int) $h->unit_id ?>"
                                     data-lawan="<?= (int) $h->lawan_unit_id ?>"
                                     data-sisa="<?= (int) $h->sisa ?>"
                                     <?= (int) $h->sisa <= 0 ? 'disabled' : '' ?>>
-                                    [<?= esc($unitMap[(int) $h->unit_id] ?? 'Unit ' . $h->unit_id) ?>] <?= esc($h->nama_pihak) ?> — sisa <?= $rp($h->sisa) ?>
+                                    [<?= esc($unitMap[(int) $h->unit_id] ?? 'U' . $h->unit_id) ?>] <?= esc($h->nama_pihak) ?> — sisa <?= $rp($h->sisa) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Akun Pengirim (kas/bank)</label>
-                        <select name="akun_pengirim_id" id="akun_pengirim" class="form-select form-select-sm" required <?= $canTransaksi ? '' : 'disabled' ?>>
-                            <option value="">Pilih Akun Pengirim</option>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Akun Pengirim (Kas/Bank)</label>
+                        <select name="akun_pengirim_id" id="akun_pengirim" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
+                            <option value="">Pilih Rekening Pengirim</option>
                             <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>" data-unit="<?= (int) $a->unit_id ?>">
                                     [<?= esc($unitMap[(int) $a->unit_id] ?? 'U' . $a->unit_id) ?>] <?= esc($a->nama_akun) ?> (<?= esc($a->tipe) ?>)
@@ -68,10 +90,11 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Akun Penerima (kas/bank)</label>
-                        <select name="akun_penerima_id" id="akun_penerima" class="form-select form-select-sm" required <?= $canTransaksi ? '' : 'disabled' ?>>
-                            <option value="">Pilih Akun Penerima</option>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Akun Penerima (Kas/Bank)</label>
+                        <select name="akun_penerima_id" id="akun_penerima" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
+                            <option value="">Pilih Rekening Penerima</option>
                             <?php foreach (($akun_penerima ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>">
                                     <?= esc($kelAkun($a)) ?> <?= (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id)) ? '(Bersama)' : '' ?>
@@ -79,72 +102,91 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Jumlah</label>
-                        <input type="text" name="jumlah" id="jumlah_bayar" class="form-control form-control-sm rupiah" placeholder="cth: 5.000.000" required <?= $canTransaksi ? '' : 'disabled' ?>>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Tanggal</label>
-                        <input type="date" name="tanggal" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" <?= $canTransaksi ? '' : 'disabled' ?>>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Bukti Transfer (opsional)</label>
-                        <input type="file" name="bukti" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canTransaksi ? '' : 'disabled' ?>>
-                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label mb-1">Keterangan</label>
-                        <input type="text" name="keterangan" class="form-control form-control-sm">
+                        <label class="kb-label mb-1">Nominal Pembayaran (Rp)</label>
+                        <input type="text" name="jumlah" id="jumlah_bayar" class="form-control form-control-sm kb-input rupiah" placeholder="cth: 5.000.000" required <?= $canTransaksi ? '' : 'disabled' ?>>
                     </div>
-                    <button type="submit" class="btn btn-sm btn-success w-100" <?= $canTransaksi ? '' : 'disabled' ?>>Simpan Pembayaran</button>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Tanggal Transaksi</label>
+                        <input type="date" name="tanggal" class="form-control form-control-sm kb-input" value="<?= date('Y-m-d') ?>" <?= $canTransaksi ? '' : 'disabled' ?>>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Bukti Transfer <small class="text-muted">(Opsional)</small></label>
+                        <input type="file" name="bukti" class="form-control form-control-sm kb-input" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canTransaksi ? '' : 'disabled' ?>>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Keterangan Catatan</label>
+                        <input type="text" name="keterangan" class="form-control form-control-sm kb-input" placeholder="Catatan pembayaran...">
+                    </div>
+
+                    <button type="submit" class="btn btn-success btn-sm w-100 fw-semibold d-flex align-items-center justify-content-center gap-1" <?= $canTransaksi ? '' : 'disabled' ?>>
+                        <iconify-icon icon="bi:check2-circle"></iconify-icon>
+                        Simpan Pembayaran
+                    </button>
                 </form>
-                <small class="text-muted d-block mt-2">
-                    Pembayaran dari akun KAS dicatat tunai; dari akun BANK dicatat bank (bank pengirim).
-                    Sisa hutang <b>dan</b> pasangan piutangnya berkurang otomatis.<br>
-                    Jika pengirim &amp; penerima memakai <b>rekening fisik yang sama</b> (rekening bersama), sistem hanya
-                    menyelesaikan H/P — <b>tanpa</b> gerakan kas di rekening (money tidak berpindah rekening).
-                </small>
             </div>
         </div>
 
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Piutang Antar Unit (unit lawan)</h5>
+        <!-- Table Piutang Card -->
+        <div class="kb-card mb-4">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Piutang Antar Unit</h5>
+                    <span class="kb-card-sub text-muted">Hak tagih unit ke unit lawan</span>
+                </div>
+                <span class="kb-badge kb-badge-green">Piutang</span>
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>Unit</th><th class="text-end">Sisa</th><th>Status</th><th></th></tr></thead>
+            <div class="table-responsive">
+                <table class="table kb-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Unit Lawan</th>
+                            <th class="text-end">Sisa Tagihan</th>
+                            <th>Status</th>
+                            <th class="text-end">Detail</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php foreach (($hp_piutang ?? []) as $p) :
                             $bukti = $detail_mutasi_map[(int) $p->sumber_id] ?? null; ?>
                             <tr>
-                                <td><?= esc($unitMap[(int) $p->unit_id] ?? 'U' . $p->unit_id) ?><br><small class="text-muted"><?= esc($p->nama_pihak) ?></small></td>
-                                <td class="text-end fw-semibold"><?= $rp($p->sisa) ?></td>
-                                <td><span class="badge <?= $badgeStatus($p->status) ?>"><?= $labelStatus($p->status) ?></span></td>
+                                <td>
+                                    <div class="fw-semibold text-emphasis"><?= esc($unitMap[(int) $p->unit_id] ?? 'U' . $p->unit_id) ?></div>
+                                    <div class="text-muted"><?= esc($p->nama_pihak) ?></div>
+                                </td>
+                                <td class="text-end kb-num fw-bold text-success"><?= $rp($p->sisa) ?></td>
+                                <td><span class="kb-badge <?= $badgeStatus($p->status) ?>"><?= $labelStatus($p->status) ?></span></td>
                                 <td class="text-end">
                                     <?php if ($bukti) : ?>
-                                        <button type="button" class="btn btn-sm btn-light-soft"
+                                        <button type="button" class="btn btn-xs btn-outline-secondary"
                                             data-bs-toggle="collapse" data-bs-target="#p-barang-<?= (int) $p->id ?>">
-                                            Barang
+                                            Items
                                         </button>
                                     <?php endif; ?>
                                 </td>
                             </tr>
                             <?php if ($bukti) : ?>
-                                <tr class="collapse bg-light-subtle" id="p-barang-<?= (int) $p->id ?>">
-                                    <td colspan="4" class="ps-4 py-1">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <small class="text-muted"><strong><?= esc($bukti['no_nota']) ?></strong> • <?= esc(date('Y-m-d', strtotime((string) $bukti['tanggal']))) ?> • Jatuh tempo <?= esc($p->jatuh_tempo) ?></small>
-                                            <small class="fw-semibold">Total Barang: <?= $rp($bukti['total']) ?></small>
+                                <tr class="bg-tertiary collapse" id="p-barang-<?= (int) $p->id ?>">
+                                    <td colspan="4" class="p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold text-emphasis"><?= esc($bukti['no_nota']) ?> · <?= esc(date('Y-m-d', strtotime((string) $bukti['tanggal']))) ?></span>
+                                            <span class="fw-bold text-primary">Total: <?= $rp($bukti['total']) ?></span>
                                         </div>
-                                        <table class="table table-sm table-striped align-middle mb-0 w-50">
-                                            <thead><tr><th>Barang</th><th class="text-end">Jml Kirim</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr></thead>
+                                        <table class="table table-sm table-bordered mb-0 bg-white">
+                                            <thead class="table-light">
+                                                <tr><th>Barang</th><th class="text-end">Qty</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
+                                            </thead>
                                             <tbody>
                                                 <?php foreach ($bukti['items'] as $d) : ?>
                                                     <tr>
                                                         <td><?= esc($d->nama_barang) ?></td>
-                                                        <td class="text-end"><?= (float) $d->jumlah_kirim ?></td>
-                                                        <td class="text-end"><?= $rp($d->harga_mutasi) ?></td>
-                                                        <td class="text-end"><?= $rp($d->nilai ?? 0) ?></td>
+                                                        <td class="text-end kb-num"><?= (float) $d->jumlah_kirim ?></td>
+                                                        <td class="text-end kb-num"><?= $rp($d->harga_mutasi) ?></td>
+                                                        <td class="text-end kb-num fw-semibold"><?= $rp($d->nilai ?? 0) ?></td>
                                                     </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
@@ -154,7 +196,11 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                             <?php endif; ?>
                         <?php endforeach; ?>
                         <?php if (empty($hp_piutang)) : ?>
-                            <tr><td colspan="4" class="text-center text-muted">Belum ada piutang antar unit.</td></tr>
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">
+                                    Belum ada catatan piutang antar unit.
+                                </td>
+                            </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -162,66 +208,72 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
         </div>
     </div>
 
-    <div class="col-lg-8">
-        <div class="card shadow-none border mb-3">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Hutang Antar Unit (milik unit ini)</h5>
+    <!-- Right Column: Hutang, Atribusi & Riwayat -->
+    <div class="col-12 col-lg-7 col-xl-8">
+        <!-- Table Hutang Card -->
+        <div class="kb-card mb-4">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Hutang Antar Unit</h5>
+                    <span class="kb-card-sub text-muted">Kewajiban cabang ini ke cabang lain</span>
+                </div>
+                <span class="kb-badge kb-badge-red">Hutang</span>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle mb-0">
+            <div class="table-responsive">
+                <table class="table kb-table align-middle mb-0">
                     <thead>
                         <tr>
                             <th>Kode</th>
-                            <th>Unit</th>
-                            <th>Pasangan</th>
+                            <th>Unit Asal</th>
+                            <th>Unit Lawan</th>
                             <th class="text-end">Total</th>
                             <th class="text-end">Dibayar</th>
                             <th class="text-end">Sisa</th>
                             <th>Status</th>
-                            <th></th>
+                            <th class="text-end">Detail</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach (($hp_hutang ?? []) as $h) :
                             $bukti = $detail_mutasi_map[(int) $h->sumber_id] ?? null; ?>
                             <tr>
-                                <td class="fw-semibold"><?= esc($h->kode) ?></td>
-                                <td><?= esc($unitMap[(int) $h->unit_id] ?? 'U' . $h->unit_id) ?></td>
-                                <td><?= esc($unitMap[(int) $h->lawan_unit_id] ?? 'U' . $h->lawan_unit_id) ?><br><small class="text-muted"><?= esc($h->nama_pihak) ?></small></td>
-                                <td class="text-end"><?= $rp($h->total) ?></td>
-                                <td class="text-end"><?= $rp($h->total_dibayar) ?></td>
-                                <td class="text-end fw-semibold"><?= $rp($h->sisa) ?></td>
-                                <td><span class="badge <?= $badgeStatus($h->status) ?>"><?= $labelStatus($h->status) ?></span></td>
+                                <td><span class="kb-badge kb-badge-muted"><?= esc($h->kode) ?></span></td>
+                                <td class="text-muted"><?= esc($unitMap[(int) $h->unit_id] ?? 'U' . $h->unit_id) ?></td>
+                                <td>
+                                    <div class="fw-semibold text-emphasis"><?= esc($unitMap[(int) $h->lawan_unit_id] ?? 'U' . $h->lawan_unit_id) ?></div>
+                                    <div class="text-muted"><?= esc($h->nama_pihak) ?></div>
+                                </td>
+                                <td class="text-end kb-num"><?= $rp($h->total) ?></td>
+                                <td class="text-end kb-num text-success"><?= $rp($h->total_dibayar) ?></td>
+                                <td class="text-end kb-num text-danger fw-bold"><?= $rp($h->sisa) ?></td>
+                                <td><span class="kb-badge <?= $badgeStatus($h->status) ?>"><?= $labelStatus($h->status) ?></span></td>
                                 <td class="text-end">
                                     <?php if ($bukti) : ?>
-                                        <button type="button" class="btn btn-sm btn-light-soft"
+                                        <button type="button" class="btn btn-xs btn-outline-secondary"
                                             data-bs-toggle="collapse" data-bs-target="#hp-barang-<?= (int) $h->id ?>">
-                                            Barang
+                                            Items
                                         </button>
                                     <?php endif; ?>
                                 </td>
                             </tr>
                             <?php if ($bukti) : ?>
-                                <tr class="collapse bg-light-subtle" id="hp-barang-<?= (int) $h->id ?>">
-                                    <td colspan="8" class="ps-4 py-1">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <small class="text-muted">
-                                                <strong><?= esc($bukti['no_nota']) ?></strong> • Tanggal <?= esc(date('Y-m-d', strtotime((string) $bukti['tanggal']))) ?>
-                                                • Jatuh tempo <?= esc($h->jatuh_tempo) ?>
-                                            </small>
-                                            <small class="fw-semibold">Total Barang: <?= $rp($bukti['total']) ?></small>
+                                <tr class="bg-tertiary collapse" id="hp-barang-<?= (int) $h->id ?>">
+                                    <td colspan="8" class="p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold text-emphasis"><?= esc($bukti['no_nota']) ?> · Tgl: <?= esc(date('Y-m-d', strtotime((string) $bukti['tanggal']))) ?> · Jt Tempo: <?= esc($h->jatuh_tempo) ?></span>
+                                            <span class="fw-bold text-primary">Total: <?= $rp($bukti['total']) ?></span>
                                         </div>
-                                        <table class="table table-sm table-striped align-middle mb-0 w-50">
-                                            <thead>
-                                                <tr><th>Barang</th><th class="text-end">Jml Kirim</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
+                                        <table class="table table-sm table-bordered mb-0 bg-white">
+                                            <thead class="table-light">
+                                                <tr><th>Barang</th><th class="text-end">Qty</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($bukti['items'] as $d) : ?>
                                                     <tr>
                                                         <td><?= esc($d->nama_barang) ?></td>
-                                                        <td class="text-end"><?= (float) $d->jumlah_kirim ?></td>
-                                                        <td class="text-end"><?= $rp($d->harga_mutasi) ?></td>
-                                                        <td class="text-end"><?= $rp($d->nilai ?? 0) ?></td>
+                                                        <td class="text-end kb-num"><?= (float) $d->jumlah_kirim ?></td>
+                                                        <td class="text-end kb-num"><?= $rp($d->harga_mutasi) ?></td>
+                                                        <td class="text-end kb-num fw-semibold"><?= $rp($d->nilai ?? 0) ?></td>
                                                     </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
@@ -231,23 +283,32 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                             <?php endif; ?>
                         <?php endforeach; ?>
                         <?php if (empty($hp_hutang)) : ?>
-                            <tr><td colspan="8" class="text-center text-muted">Belum ada hutang antar unit. Hutang terbentuk otomatis dari mutasi stok antar unit.</td></tr>
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    Belum ada hutang antar unit terdaftar.
+                                </td>
+                            </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <div class="card shadow-none border mb-3">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Penyelesaian H/P Rekening Fisik Sama (atribusi, tanpa gerakan kas)</h5>
+        <!-- Table Atribusi Card -->
+        <div class="kb-card mb-4">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Penyelesaian H/P Rekening Sama (Atribusi)</h5>
+                    <span class="kb-card-sub text-muted">Pelunasan tanpa pergerakan saldo kas/bank fisik</span>
+                </div>
+                <span class="kb-badge kb-badge-muted">Atribusi</span>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle mb-0">
+            <div class="table-responsive">
+                <table class="table kb-table align-middle mb-0">
                     <thead>
                         <tr>
                             <th>Tanggal</th>
-                            <th>Hutang #</th>
+                            <th>Ref Hutang</th>
                             <th>Keterangan</th>
                             <th class="text-end">Jumlah</th>
                             <th class="text-end">Aksi</th>
@@ -255,19 +316,23 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                     </thead>
                     <tbody>
                         <?php if (empty($histori_atribusi)) : ?>
-                            <tr><td colspan="5" class="text-center text-muted">Belum ada penyelesaian H/P rekening sama.</td></tr>
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">
+                                    Belum ada riwayat penyelesaian H/P rekening sama.
+                                </td>
+                            </tr>
                         <?php endif; ?>
                         <?php foreach (($histori_atribusi ?? []) as $p) : ?>
                             <tr>
-                                <td><?= esc($p->tanggal_bayar) ?></td>
-                                <td class="fw-semibold">#<?= (int) $p->referensi_id ?></td>
-                                <td><small><?= esc($p->keterangan) ?></small></td>
-                                <td class="text-end fw-semibold"><?= $rp($p->jumlah_bayar) ?></td>
+                                <td class="text-muted"><?= esc($p->tanggal_bayar) ?></td>
+                                <td><span class="kb-badge kb-badge-muted">#<?= (int) $p->referensi_id ?></span></td>
+                                <td class="text-secondary"><?= esc($p->keterangan) ?></td>
+                                <td class="text-end kb-num fw-bold text-emphasis"><?= $rp($p->jumlah_bayar) ?></td>
                                 <td class="text-end">
                                     <?php if ($canKelola) : ?>
                                         <form method="post" class="d-inline" action="<?= base_url('kas_bank/antar-unit/reversal-atribusi/' . (int) $p->referensi_id) ?>"
-                                            onsubmit="return confirm('Batalkan penyelesaian H/P ini? Sisa hutang/piutang pasangannya akan dikembalikan. Kas tidak berubah.')">
-                                            <button type="submit" class="btn btn-sm btn-danger-soft">Batalkan</button>
+                                            onsubmit="return confirm('Batalkan penyelesaian H/P ini? Sisa hutang/piutang pasangannya akan dikembalikan. Saldo kas tidak berubah.')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2">Batalkan</button>
                                         </form>
                                     <?php endif; ?>
                                 </td>
@@ -278,48 +343,56 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
             </div>
         </div>
 
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Riwayat Pembayaran Antar Unit</h5>
+        <!-- Riwayat Pembayaran Card -->
+        <div class="kb-card mb-4">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Riwayat Pembayaran Real Kas/Bank</h5>
+                    <span class="kb-card-sub text-muted">Daftar transfer pembayaran antar unit yang memengaruhi kas/bank</span>
+                </div>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle mb-0">
+            <div class="table-responsive">
+                <table class="table kb-table align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Ref</th>
+                            <th>Kode Ref</th>
                             <th>Tanggal</th>
                             <th>Pengirim</th>
                             <th>Penerima</th>
                             <th class="text-end">Jumlah</th>
-                            <th>Bukti</th>
+                            <th class="text-center">Bukti</th>
                             <th class="text-end">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($pembayaran)) : ?>
-                            <tr><td colspan="7" class="text-center text-muted">Belum ada pembayaran antar unit.</td></tr>
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    Belum ada riwayat pembayaran kas/bank antar unit.
+                                </td>
+                            </tr>
                         <?php endif; ?>
                         <?php foreach (($pembayaran ?? []) as $t) :
                             $asal = $akunMap[(int) $t->akun_kas_bank_id] ?? null;
                             $tujuan = $akunMap[(int) $t->akun_tujuan_id] ?? null; ?>
                             <tr>
-                                <td class="fw-semibold"><?= esc($t->transfer_ref) ?></td>
-                                <td><?= esc($t->tanggal) ?></td>
-                                <td><?= $asal ? esc(($unitMap[(int) $asal->unit_id] ?? '') . ' – ' . $asal->nama_akun) : '-' ?></td>
-                                <td><?= $tujuan ? esc(($unitMap[(int) $tujuan->unit_id] ?? '') . ' – ' . $tujuan->nama_akun) : '-' ?></td>
-                                <td class="text-end fw-semibold"><?= $rp($t->jumlah) ?></td>
-                                <td>
+                                <td><span class="kb-badge kb-badge-amber fw-semibold"><?= esc($t->transfer_ref) ?></span></td>
+                                <td class="text-muted"><?= esc($t->tanggal) ?></td>
+                                <td class="text-emphasis"><?= $asal ? esc(($unitMap[(int) $asal->unit_id] ?? '') . ' – ' . $asal->nama_akun) : '-' ?></td>
+                                <td class="text-emphasis"><?= $tujuan ? esc(($unitMap[(int) $tujuan->unit_id] ?? '') . ' – ' . $tujuan->nama_akun) : '-' ?></td>
+                                <td class="text-end kb-num fw-bold text-emphasis"><?= $rp($t->jumlah) ?></td>
+                                <td class="text-center">
                                     <?php if ($t->bukti) : ?>
-                                        <a href="<?= base_url($t->bukti) ?>" target="_blank" class="btn btn-sm btn-light">Lihat</a>
+                                        <a href="<?= base_url($t->bukti) ?>" target="_blank" class="btn btn-xs btn-outline-secondary">Lihat</a>
                                     <?php else : ?>
-                                        <small class="text-muted">-</small>
+                                        <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-end">
                                     <?php if ($t->arah === 'KELUAR' && $canKelola) : ?>
                                         <form method="post" class="d-inline" action="<?= base_url('kas_bank/antar-unit/reversal/' . (int) $t->idtransaksi) ?>"
                                             onsubmit="return confirm('Batalkan pembayaran <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>? Sisa hutang/piutang pasangannya akan dikembalikan.')">
-                                            <button type="submit" class="btn btn-sm btn-danger-soft">Batalkan</button>
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2">Batalkan</button>
                                         </form>
                                     <?php endif; ?>
                                 </td>

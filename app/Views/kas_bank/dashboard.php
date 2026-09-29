@@ -1,14 +1,5 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Dashboard Kas &amp; Bank</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('kas_bank') ?>">Kas &amp; Bank</a></li>
-                <li class="breadcrumb-item active">Dashboard</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<?= $this->include('kas_bank/_nav') ?>
+<?= $this->include('kas_bank/_theme') ?>
 
 <?php
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
@@ -22,176 +13,268 @@ foreach (($akun_kas_bank ?? []) as $a) {
     $akunMap[(int) $a->idakun_kas_bank] = $a->nama_akun;
 }
 $unitDipilih = (int) ($unit_terpilih ?? 0) > 0;
-$jenisLabels = [
-    'PEMASUKAN' => 'Pemasukan',
-    'PENGELUARAN' => 'Pengeluaran',
-    'TRANSFER_INTERNAL' => 'Transfer Internal',
-    'PEMBAYARAN_ANTAR_UNIT' => 'Pembayaran Antar Unit',
-];
+$hasWarning = !empty($warning_alokasi);
+$netFlow = (int) ($net_cash_flow ?? 0);
 ?>
 
-<form class="card mb-4" method="get" action="<?= base_url('kas_bank') ?>">
-    <div class="card-body">
-        <div class="row g-2 align-items-end">
-            <?php if (($bisa_pilih_unit ?? false)) : ?>
-                <div class="col-md-2">
-                    <label class="form-label mb-1">Unit</label>
-                    <select name="unit_id" class="form-select form-select-sm">
-                        <option value="">Semua Unit</option>
-                        <?php foreach (($unit ?? []) as $u) : ?>
-                            <option value="<?= (int) $u->idunit ?>" <?= ($unit_terpilih ?? 0) == $u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            <?php endif; ?>
-            <div class="col-md-2">
-                <label class="form-label mb-1">Dari Tanggal</label>
-                <input type="date" name="tanggal_awal" class="form-control form-control-sm" value="<?= esc($f['tanggal_awal'] ?? '') ?>">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label mb-1">Sampai Tanggal</label>
-                <input type="date" name="tanggal_akhir" class="form-control form-control-sm" value="<?= esc($f['tanggal_akhir'] ?? '') ?>">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label mb-1">Akun</label>
-                <select name="akun_id" class="form-select form-select-sm">
-                    <option value="">Semua Akun</option>
-                    <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
-                        <option value="<?= (int) $a->idakun_kas_bank ?>" <?= ($f['akun_id'] ?? 0) == $a->idakun_kas_bank ? 'selected' : '' ?>>
-                            <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : 'Fisik – ') . $a->nama_akun) ?>
-                            <?= $a->tipe === 'BANK' && empty($a->unit_id) ? ' (Bersama)' : '' ?>
-                        </option>
+<!-- Filter -->
+<div class="kb-filter">
+    <form method="get" action="<?= base_url('kas_bank') ?>" class="d-flex align-items-end flex-wrap gap-2 w-100">
+        <?php if (($bisa_pilih_unit ?? false)) : ?>
+            <div class="kb-field">
+                <label class="kb-label" for="f-unit">Filter Cabang</label>
+                <select name="unit_id" id="f-unit" class="form-select form-select-sm kb-select kb-filter-select">
+                    <option value="">Semua Cabang (Konsolidasi)</option>
+                    <?php foreach (($unit ?? []) as $u) : ?>
+                        <option value="<?= (int) $u->idunit ?>" <?= ($unit_terpilih ?? 0) == $u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-1">
-                <button class="btn btn-sm btn-primary w-100">Filter</button>
-            </div>
-        </div>
-    </div>
-</form>
+        <?php endif; ?>
 
-<div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border bg-light-secondary overflow-hidden">
-            <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Total Kas <?= $unitDipilih ? '(unit terpilih)' : '' ?></p>
-                <h3 class="fw-semibold mb-0 text-primary"><?= $rp($total_kas ?? 0) ?></h3>
-                <?php if ($unitDipilih) : ?><small class="text-muted">Fisik semua unit: <?= $rp($total_fisik_kas ?? 0) ?></small><?php endif; ?>
-            </div>
+        <div class="kb-field">
+            <label class="kb-label" for="f-dari">Dari Tanggal</label>
+            <input type="date" id="f-dari" name="tanggal_awal" class="form-control form-control-sm kb-input" value="<?= esc($f['tanggal_awal'] ?? '') ?>">
         </div>
+
+        <div class="kb-field">
+            <label class="kb-label" for="f-sampai">Sampai Tanggal</label>
+            <input type="date" id="f-sampai" name="tanggal_akhir" class="form-control form-control-sm kb-input" value="<?= esc($f['tanggal_akhir'] ?? '') ?>">
+        </div>
+
+        <div class="kb-field">
+            <label class="kb-label" for="f-akun">Filter Rekening</label>
+            <select name="akun_id" id="f-akun" class="form-select form-select-sm kb-select kb-filter-select">
+                <option value="">Semua Rekening</option>
+                <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                    <option value="<?= (int) $a->idakun_kas_bank ?>" <?= ($f['akun_id'] ?? 0) == $a->idakun_kas_bank ? 'selected' : '' ?>>
+                        <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : '') . $a->nama_akun . ' (' . $a->tipe . ')') ?>
+                        <?= $a->tipe === 'BANK' && empty($a->unit_id) ? ' — Shared' : '' ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <div class="kb-field">
+            <button class="btn btn-primary btn-sm fw-semibold d-inline-flex align-items-center justify-content-center gap-1" type="submit">
+                <iconify-icon icon="bi:funnel-fill"></iconify-icon>
+                Apply Filter
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Banner konteks -->
+<div class="kb-banner">
+    <div class="kb-banner-icon text-primary">
+        <iconify-icon icon="bi:info-circle-fill"></iconify-icon>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border bg-light-warning overflow-hidden">
-            <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Total Bank <?= $unitDipilih ? '(unit terpilih)' : '' ?></p>
-                <h3 class="fw-semibold mb-0 text-warning"><?= $rp($total_bank ?? 0) ?></h3>
-                <?php if ($unitDipilih) : ?><small class="text-muted">Fisik semua unit: <?= $rp($total_fisik_bank ?? 0) ?></small><?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border bg-light-success overflow-hidden">
-            <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Total Kas &amp; Bank <?= $unitDipilih ? '(unit terpilih)' : '' ?></p>
-                <h3 class="fw-semibold mb-0 text-success"><?= $rp($total_semua ?? 0) ?></h3>
-                <?php if ($unitDipilih) : ?><small class="text-muted">Fisik semua unit: <?= $rp($total_fisik_semua ?? 0) ?></small><?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border bg-light-primary overflow-hidden">
-            <div class="card-body p-4">
-                <p class="fs-3 fw-semibold text-dark mb-2">Net Cash Flow <?= esc($f['tanggal_awal'] ?? '') ?: date('d M Y') ?></p>
-                <h3 class="fw-semibold mb-0 <?= ($net_cash_flow ?? 0) < 0 ? 'text-danger' : 'text-primary' ?>"><?= $rp($net_cash_flow ?? 0) ?></h3>
-            </div>
-        </div>
+    <div class="kb-banner-content">
+        <strong>Panduan Pembacaan Saldo:</strong>
+        <strong>Saldo Nyata</strong> adalah nominal fisik di rekening/laci.
+        <?php if ($unitDipilih) : ?>
+            Cabang aktif: <strong class="text-primary">Hak Unit Ini</strong> mencerminkan porsi kepemilikan unit dari total fisik.
+        <?php else : ?>
+            Pilih cabang tertentu pada filter untuk meninjau <strong class="text-primary">Hak Pakai per Unit</strong>.
+        <?php endif; ?>
     </div>
 </div>
 
-<?php if (!empty($warning_alokasi)) : ?>
-    <div class="alert alert-warning py-2">
-        <strong>Perhatian:</strong> total alokasi saldo awal melebihi saldo fisik pada rekening:
-        <?php foreach ($warning_alokasi as $ka) : ?>
-            <span class="badge bg-danger-subtle text-danger ms-1"><?= esc($akunMap[$ka] ?? '#' . $ka) ?></span>
-        <?php endforeach; ?>
-        (atur ulang alokasi di Master Akun).
+<!-- Metrik -->
+<div class="kb-stats">
+    <div class="kb-stat">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <span class="kb-stat-label">Kas Tunai<?= $unitDipilih ? ' (Unit)' : '' ?></span>
+            <iconify-icon icon="bi:cash-stack" class="text-primary"></iconify-icon>
+        </div>
+        <div class="kb-stat-value kb-num"><?= $rp($total_kas ?? 0) ?></div>
+        <div class="kb-stat-hint"><?= $unitDipilih ? 'Fisik semua unit: ' . $rp($total_fisik_kas ?? 0) : 'Total fisik laci &amp; brankas' ?></div>
+    </div>
+
+    <div class="kb-stat">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <span class="kb-stat-label">Saldo Bank<?= $unitDipilih ? ' (Unit)' : '' ?></span>
+            <iconify-icon icon="bi:bank2" class="text-warning-emphasis"></iconify-icon>
+        </div>
+        <div class="kb-stat-value kb-num"><?= $rp($total_bank ?? 0) ?></div>
+        <div class="kb-stat-hint"><?= $unitDipilih ? 'Fisik semua unit: ' . $rp($total_fisik_bank ?? 0) : 'Total saldo terdaftar di bank' ?></div>
+    </div>
+
+    <div class="kb-stat">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <span class="kb-stat-label">Total Posisi<?= $unitDipilih ? ' (Unit)' : '' ?></span>
+            <iconify-icon icon="bi:wallet-fill" class="text-info"></iconify-icon>
+        </div>
+        <div class="kb-stat-value kb-num"><?= $rp($total_semua ?? 0) ?></div>
+        <div class="kb-stat-hint"><?= $unitDipilih ? 'Fisik semua unit: ' . $rp($total_fisik_semua ?? 0) : 'Total konsolidasi Kas + Bank' ?></div>
+    </div>
+
+    <div class="kb-stat">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <span class="kb-stat-label">Arus Kas Bersih</span>
+            <iconify-icon
+                icon="<?= $netFlow < 0 ? 'bi:graph-down-arrow' : ($netFlow > 0 ? 'bi:graph-up-arrow' : 'bi:dash-lg') ?>"
+                class="<?= $netFlow < 0 ? 'text-danger' : ($netFlow > 0 ? 'text-success' : 'text-secondary') ?>"></iconify-icon>
+        </div>
+        <div class="kb-stat-value kb-num <?= $netFlow < 0 ? 'text-danger' : ($netFlow > 0 ? 'text-success' : '') ?>"><?= $rp($netFlow) ?></div>
+        <div class="kb-stat-hint">Pemasukan − Pengeluaran Ops.</div>
+    </div>
+</div>
+
+<!-- Peringatan alokasi -->
+<?php if ($hasWarning) : ?>
+    <div class="alert alert-warning d-flex align-items-start gap-2 mb-3 rounded-3 py-2 px-3"
+         style="font-size: var(--kb-fs-body); background: var(--bs-warning-bg-subtle); border-color: var(--bs-warning-border-subtle); color: var(--bs-warning-text-emphasis);">
+        <iconify-icon icon="bi:exclamation-triangle-fill" class="flex-shrink-0 mt-1"></iconify-icon>
+        <div>
+            <strong class="d-block">Alokasi Saldo Melebihi Saldo Fisik Rekening!</strong>
+            <div class="kb-meta">Beberapa akun bank memiliki total alokasi cabang yang melampaui saldo riil:</div>
+            <div class="kb-alloc my-2">
+                <?php foreach (($warning_alokasi ?? []) as $ka) : ?>
+                    <span class="kb-badge kb-badge-red kb-num"><?= esc($akunMap[$ka] ?? '#' . $ka) ?></span>
+                <?php endforeach; ?>
+            </div>
+            <div class="kb-meta">
+                Penyesuaian dapat dilakukan di menu
+                <a href="<?= base_url('kas_bank/akun') ?>" class="fw-semibold text-decoration-underline">Rekening &amp; Saldo</a> &rarr; Hak Unit.
+            </div>
+        </div>
     </div>
 <?php endif; ?>
 
+<!-- Tabel utama -->
 <div class="row g-3">
     <div class="col-12 col-xl-7">
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Saldo per Rekening Fisik <?= $unitDipilih ? '(termasuk alokasi unit terpilih)' : '' ?></h5>
+        <div class="kb-card h-100">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Saldo per Rekening Fisik</h5>
+                    <span class="kb-card-sub"><?= $unitDipilih ? 'Rincian kepemilikan unit terhadap saldo riil.' : 'Rincian saldo seluruh kas &amp; bank terdaftar.' ?></span>
+                </div>
+                <div class="d-flex gap-1">
+                    <span class="kb-badge kb-badge-blue">KAS</span>
+                    <span class="kb-badge kb-badge-amber">BANK</span>
+                </div>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle mb-0">
+            <div class="table-responsive">
+                <table class="table kb-table align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Akun</th>
+                            <th>Nama Rekening</th>
                             <th>Tipe</th>
                             <th>Status</th>
-                            <th class="text-end">Saldo Fisik</th>
+                            <th class="text-end">Saldo Nyata</th>
                             <?php if ($unitDipilih) : ?>
-                                <th class="text-end">Saldo Unit</th>
+                                <th class="text-end">Hak Unit Ini</th>
                             <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($akun_kas_bank)) : ?>
-                            <tr><td colspan="<?= $unitDipilih ? 5 : 4 ?>" class="text-center text-muted">Belum ada akun kas/bank. Tambahkan lewat menu Master Akun &amp; Saldo Awal.</td></tr>
-                        <?php endif; ?>
-                        <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
-                            <?php $shared = (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id)); ?>
                             <tr>
-                                <td>
-                                    <div class="fw-semibold"><?= esc($a->nama_akun) ?>
-                                        <?php if ($shared) : ?>
-                                            <span class="badge bg-secondary">Bersama</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    <small class="text-muted"><?= esc($unitMap[(int) $a->unit_id] ?? 'Fisik lintas unit') ?><?= $a->bank_idbank ? ' • ' . esc($a->bank_idbank) : '' ?></small>
+                                <td colspan="<?= $unitDipilih ? 5 : 4 ?>" class="kb-empty">
+                                    <iconify-icon icon="bi:inbox" class="kb-ico-lg d-block mx-auto mb-2"></iconify-icon>
+                                    Belum ada rekening terdaftar.
                                 </td>
-                                <td><span class="badge bg-<?= $a->tipe === 'KAS' ? 'primary-subtle text-primary' : 'warning-subtle text-warning' ?>"><?= esc($a->tipe) ?></span></td>
-                                <td><span class="badge bg-<?= $a->status === 'aktif' ? 'success-subtle text-success' : 'danger-subtle text-danger' ?>"><?= esc($a->status) ?></span></td>
-                                <td class="text-end fw-semibold"><?= $rp($saldo_fisik_per_akun[(int) $a->idakun_kas_bank] ?? 0) ?></td>
-                                <?php if ($unitDipilih) : ?>
-                                    <td class="text-end"><?= $rp($saldo_unit_per_akun[(int) $a->idakun_kas_bank] ?? 0) ?></td>
-                                <?php endif; ?>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php else : ?>
+                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                                <?php
+                                $shared = (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id));
+                                $fisik = $saldo_fisik_per_akun[(int) $a->idakun_kas_bank] ?? 0;
+                                $unitSaldo = $saldo_unit_per_akun[(int) $a->idakun_kas_bank] ?? 0;
+                                ?>
+                                <tr>
+                                    <td>
+                                        <div class="kb-name"><?= esc($a->nama_akun) ?></div>
+                                        <div class="kb-meta">
+                                            <?= esc($unitMap[(int) $a->unit_id] ?? 'Lintas Unit') ?>
+                                            <?= $a->bank_idbank ? ' · ' . esc($a->bank_idbank) : '' ?>
+                                            <?php if ($shared) : ?>
+                                                <span class="kb-badge kb-badge-muted">Shared</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <?php if ($a->tipe === 'KAS') : ?>
+                                            <span class="kb-badge kb-badge-blue">Kas</span>
+                                        <?php else : ?>
+                                            <span class="kb-badge kb-badge-amber">Bank</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($a->status === 'aktif') : ?>
+                                            <span class="kb-badge kb-badge-green">Aktif</span>
+                                        <?php else : ?>
+                                            <span class="kb-badge kb-badge-red">Nonaktif</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-end kb-amount"><?= $rp($fisik) ?></td>
+                                    <?php if ($unitDipilih) : ?>
+                                        <td class="text-end kb-amount <?= ($unitSaldo < 0) ? 'text-danger' : 'text-primary' ?>">
+                                            <?= $rp($unitSaldo) ?>
+                                            <?php if ($unitSaldo < 0) : ?>
+                                                <span class="kb-badge kb-badge-red ms-1">Minus</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endif; ?>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
     <div class="col-12 col-xl-5">
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Pergerakan Uang per Jenis</h5>
+        <div class="kb-card h-100 d-flex flex-column">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Arus Uang per Jenis</h5>
+                    <span class="kb-card-sub">Akumulasi transaksi pada periode terpilih.</span>
+                </div>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle mb-0">
+            <div class="table-responsive flex-grow-1">
+                <table class="table kb-table align-middle mb-0">
                     <thead>
-                        <tr><th>Jenis</th><th class="text-end">Jumlah (periode)</th></tr>
+                        <tr>
+                            <th>Jenis Pergerakan</th>
+                            <th class="text-end">Nominal</th>
+                        </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($jenisLabels as $k => $label) : ?>
+                        <?php
+                        $jenisLabels = [
+                            'PEMASUKAN'            => ['Pemasukan Operasional', 'bi:arrow-down-left-circle-fill', 'text-success', 'bg-success-subtle'],
+                            'PENGELUARAN'          => ['Pengeluaran Operasional', 'bi:arrow-up-right-circle-fill', 'text-danger', 'bg-danger-subtle'],
+                            'TRANSFER_INTERNAL'    => ['Transfer Internal', 'bi:arrow-left-right', 'text-info', 'bg-info-subtle'],
+                            'PEMBAYARAN_ANTAR_UNIT' => ['Pembayaran Antar Cabang', 'bi:building-fill-check', 'text-warning-emphasis', 'bg-warning-subtle'],
+                        ];
+                        ?>
+                        <?php foreach ($jenisLabels as $k => [$label, $icon, $color, $bg]) : ?>
+                            <?php $val = (int) ($ringkasan[$k] ?? 0); ?>
                             <tr>
-                                <td><?= $label ?></td>
-                                <td class="text-end fw-semibold <?= in_array($k, ['PENGELUARAN'], true) ? 'text-danger' : 'text-success' ?>">
-                                    <?= $rp($ringkasan[$k] ?? 0) ?>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="p-1 rounded-1 d-flex align-items-center justify-content-center <?= $bg ?> <?= $color ?>">
+                                            <iconify-icon icon="<?= $icon ?>" class="kb-ico"></iconify-icon>
+                                        </span>
+                                        <span class="fw-medium"><?= $label ?></span>
+                                    </div>
                                 </td>
+                                <td class="text-end kb-amount <?= $k === 'PENGELUARAN' ? 'text-danger' : '' ?>"><?= $rp($val) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
-                <small class="text-muted">
-                    Net Cash Flow = Pemasukan − Pengeluaran. Transfer internal, pembayaran antar unit, dan saldo awal tidak termasuk (bukan arus kas operasional).
-                    Sejak Finance cut-off, hanya transaksi pada/setelah <?= esc(\App\Services\Finance\FinanceScopeService::cutoffDate()) ?> yang dihitung
-                    (baris "kas awal" & histori sebelum cut-off adalah legacy, tidak ikut).
-                </small>
+            </div>
+            <div class="px-3 py-2 border-top kb-meta d-flex align-items-start gap-2">
+                <iconify-icon icon="bi:info-circle-fill" class="text-info flex-shrink-0 mt-1"></iconify-icon>
+                <div>
+                    <strong>Cut-Off Finance:</strong> Dihitung dari transaksi operasional sejak
+                    <strong><?= esc(\App\Services\Finance\FinanceScopeService::cutoffDate()) ?></strong>.
+                </div>
             </div>
         </div>
     </div>

@@ -1,14 +1,5 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Transfer Internal</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('kas_bank') ?>">Kas &amp; Bank</a></li>
-                <li class="breadcrumb-item active">Transfer Internal</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<?= $this->include('kas_bank/_nav') ?>
+<?= $this->include('kas_bank/_theme') ?>
 
 <?php
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
@@ -28,129 +19,171 @@ $labelAkun = static function ($a) use ($unitMap) {
 ?>
 
 <?php if (($bisa_pilih_unit ?? false)) : ?>
-    <form class="card mb-4" method="get" action="<?= base_url('kas_bank/transfer') ?>">
-        <div class="card-body py-2">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label mb-1">Unit Transaksi</label>
-                    <select name="unit_id" class="form-select form-select-sm">
-                        <?php foreach (($unit ?? []) as $u) : ?>
-                            <option value="<?= (int) $u->idunit ?>" <?= ($unit_terpilih ?? 0) == $u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-1">
-                    <button class="btn btn-sm btn-primary w-100">Pilih</button>
-                </div>
+    <form class="kb-card mb-4 p-3" method="get" action="<?= base_url('kas_bank/transfer') ?>">
+        <div class="row align-items-center g-2">
+            <div class="col-12 col-md-4">
+                <label class="kb-label mb-1">Unit Transaksi</label>
+                <select name="unit_id" class="form-select form-select-sm kb-select" onchange="this.form.submit()">
+                    <?php foreach (($unit ?? []) as $u) : ?>
+                        <option value="<?= (int) $u->idunit ?>" <?= ($unit_terpilih ?? 0) == $u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-            <div class="form-text mt-1">Transfer mencatat perpindahan antar rekening fisik. Jika dua unit berbagi rekening yang sama, itu BUKAN transfer internal (gunakan Pembayaran Antar Unit).</div>
+            <div class="col-12 col-md-8 text-muted d-flex align-items-center gap-2">
+                <iconify-icon icon="bi:info-circle-fill" class="text-info kb-ico flex-shrink-0"></iconify-icon>
+                <span>Transfer internal mencatat perpindahan antar rekening fisik milik sendiri (tidak memengaruhi laba/rugi perusahaan).</span>
+            </div>
         </div>
     </form>
 <?php endif; ?>
 
-<div class="row g-3">
-    <div class="col-lg-4">
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Form Transfer</h5>
+<div class="row g-4">
+    <!-- Form Transfer Column -->
+    <div class="col-12 col-lg-5 col-xl-4">
+        <div class="kb-card h-100">
+            <div class="kb-card-header bg-tertiary">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="kb-step-badge bg-primary">
+                        <iconify-icon icon="bi:arrow-left-right"></iconify-icon>
+                    </div>
+                    <div>
+                        <h6 class="kb-card-title mb-0">Form Transfer Saldo</h6>
+                        <span class="kb-card-sub text-muted">Perpindahan antar akun sendiri</span>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="p-3">
                 <?php if (!$canInput) : ?>
-                    <div class="alert alert-warning py-2 mb-3">Anda hanya dapat melihat data. Hubungi Admin Center / Direktur / Manager untuk input.</div>
+                    <div class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2 mb-3">
+                        <iconify-icon icon="bi:shield-lock-fill" class="kb-ico"></iconify-icon>
+                        <span>Mode Lihat Saja. Anda tidak memiliki akses untuk menambah transaksi.</span>
+                    </div>
                 <?php endif; ?>
+
                 <form method="post" action="<?= base_url('kas_bank/transfer/save') ?>" enctype="multipart/form-data">
                     <input type="hidden" name="submit_token" value="<?= esc($submit_token ?? '') ?>">
                     <input type="hidden" name="unit_id" value="<?= (int) ($unit_terpilih ?? 0) ?>">
+
                     <?php if (($bisa_pilih_unit ?? false)) : ?>
-                        <div class="mb-2">
-                            <label class="form-label mb-1">Unit Transaksi</label>
-                            <input type="text" class="form-control form-control-sm bg-light" value="<?= esc($unitMap[(int) ($unit_terpilih ?? 0)] ?? '-') ?>" readonly>
+                        <div class="mb-3">
+                            <label class="kb-label mb-1">Unit Cabang Transaksi</label>
+                            <input type="text" class="form-control form-control-sm kb-input bg-tertiary" value="<?= esc($unitMap[(int) ($unit_terpilih ?? 0)] ?? '-') ?>" readonly>
                         </div>
                     <?php endif; ?>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Dari Akun</label>
-                        <select name="akun_asal_id" class="form-select form-select-sm" required <?= $canInput ? '' : 'disabled' ?>>
-                            <option value="">Pilih Akun Asal</option>
-                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
-                                <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkun($a)) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Ke Akun</label>
-                        <select name="akun_tujuan_id" class="form-select form-select-sm" required <?= $canInput ? '' : 'disabled' ?>>
-                            <option value="">Pilih Akun Tujuan</option>
-                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
-                                <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkun($a)) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Jumlah</label>
-                        <input type="text" name="jumlah" class="form-control form-control-sm rupiah" placeholder="cth: 5.000.000" required <?= $canInput ? '' : 'disabled' ?>>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Tanggal</label>
-                        <input type="date" name="tanggal" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" <?= $canInput ? '' : 'disabled' ?>>
-                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label mb-1">Keterangan</label>
-                        <input type="text" name="keterangan" class="form-control form-control-sm">
+                        <label class="kb-label mb-1">Dari Akun (Pengirim)</label>
+                        <select name="akun_asal_id" class="form-select form-select-sm kb-select" required <?= $canInput ? '' : 'disabled' ?>>
+                            <option value="">Pilih Rekening Asal</option>
+                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                                <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkun($a)) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label mb-1">Bukti Transfer (opsional)</label>
-                        <input type="file" name="bukti" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canInput ? '' : 'disabled' ?>>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Ke Akun (Penerima)</label>
+                        <select name="akun_tujuan_id" class="form-select form-select-sm kb-select" required <?= $canInput ? '' : 'disabled' ?>>
+                            <option value="">Pilih Rekening Tujuan</option>
+                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                                <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkun($a)) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
-                    <button type="submit" class="btn btn-sm btn-primary w-100" <?= $canInput ? '' : 'disabled' ?>>Simpan Transfer</button>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Nominal Transfer (Rp)</label>
+                        <input type="text" name="jumlah" class="form-control form-control-sm kb-input rupiah" placeholder="cth: 5.000.000" required <?= $canInput ? '' : 'disabled' ?>>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Tanggal Transaksi</label>
+                        <input type="date" name="tanggal" class="form-control form-control-sm kb-input" value="<?= date('Y-m-d') ?>" <?= $canInput ? '' : 'disabled' ?>>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Keterangan / Catatan</label>
+                        <input type="text" name="keterangan" class="form-control form-control-sm kb-input" placeholder="Peruntukan transfer..." <?= $canInput ? '' : 'disabled' ?>>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Bukti Transfer <small class="text-muted">(Opsional)</small></label>
+                        <input type="file" name="bukti" class="form-control form-control-sm kb-input" accept=".jpg,.jpeg,.png,.pdf,.webp" <?= $canInput ? '' : 'disabled' ?>>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-sm text-white w-100 fw-semibold d-flex align-items-center justify-content-center gap-1" <?= $canInput ? '' : 'disabled' ?>>
+                        <iconify-icon icon="bi:arrow-left-right"></iconify-icon>
+                        Proses Transfer Saldo
+                    </button>
                 </form>
-                <small class="text-muted d-block mt-2">Transfer internal tidak memengaruhi Net Cash Flow dan bukan pembayaran hutang/piutang.</small>
             </div>
         </div>
     </div>
 
-    <div class="col-lg-8">
-        <div class="card shadow-none border">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0">Riwayat Transfer Internal</h5>
+    <!-- Riwayat Table Column -->
+    <div class="col-12 col-lg-7 col-xl-8">
+        <div class="kb-card h-100">
+            <div class="kb-card-header">
+                <div>
+                    <h5 class="kb-card-title mb-0">Riwayat Transfer Internal</h5>
+                    <span class="kb-card-sub text-muted">Daftar transaksi perpindahan saldo antar rekening fisik.</span>
+                </div>
             </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle mb-0">
+            <div class="table-responsive">
+                <table class="table kb-table align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Ref</th>
+                            <th>Kode Ref</th>
                             <th>Tanggal</th>
-                            <th>Dari</th>
-                            <th>Ke</th>
-                            <th class="text-end">Jumlah</th>
-                            <th>Bukti</th>
+                            <th>Pengirim</th>
+                            <th>Penerima</th>
+                            <th class="text-end">Jumlah Nominal</th>
+                            <th class="text-center">Bukti</th>
                             <th class="text-end">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($transaksi)) : ?>
-                            <tr><td colspan="7" class="text-center text-muted">Belum ada transfer internal.</td></tr>
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    <iconify-icon icon="bi:inbox" class="kb-ico-lg d-block mx-auto mb-2"></iconify-icon>
+                                    Belum ada data riwayat transfer internal.
+                                </td>
+                            </tr>
                         <?php endif; ?>
                         <?php foreach (($transaksi ?? []) as $t) :
                             $asal = $akunMap[(int) $t->akun_kas_bank_id] ?? null;
                             $tujuan = $akunMap[(int) $t->akun_tujuan_id] ?? null; ?>
                             <tr>
-                                <td class="fw-semibold"><?= esc($t->transfer_ref) ?></td>
-                                <td><?= esc($t->tanggal) ?></td>
-                                <td><?= $asal ? esc($labelAkun($asal)) : '.' ?></td>
-                                <td><?= $tujuan ? esc($labelAkun($tujuan)) : '-' ?></td>
-                                <td class="text-end fw-semibold"><?= $rp($t->jumlah) ?></td>
                                 <td>
+                                    <span class="kb-badge kb-badge-blue fw-semibold"><?= esc($t->transfer_ref) ?></span>
+                                </td>
+                                <td class="text-secondary fw-medium"><?= esc($t->tanggal) ?></td>
+                                <td>
+                                    <div class="fw-semibold text-emphasis"><?= $asal ? esc($labelAkun($asal)) : '-' ?></div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-emphasis"><?= $tujuan ? esc($labelAkun($tujuan)) : '-' ?></div>
+                                </td>
+                                <td class="text-end kb-num fw-bold text-emphasis"><?= $rp($t->jumlah) ?></td>
+                                <td class="text-center">
                                     <?php if ($t->bukti) : ?>
-                                        <a href="<?= base_url($t->bukti) ?>" target="_blank" class="btn btn-sm btn-light">Lihat</a>
+                                        <a href="<?= base_url($t->bukti) ?>" target="_blank" class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1">
+                                            <iconify-icon icon="bi:file-earmark-image"></iconify-icon>
+                                            Lihat
+                                        </a>
                                     <?php else : ?>
-                                        <small class="text-muted">-</small>
+                                        <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-end">
                                     <?php if ($t->arah === 'KELUAR' && $canKelola) : ?>
                                         <form method="post" class="d-inline" action="<?= base_url('kas_bank/transfer/reversal/' . (int) $t->idtransaksi) ?>"
                                             onsubmit="return confirm('Batalkan transfer <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>?')">
-                                            <button type="submit" class="btn btn-sm btn-danger-soft">Batalkan</button>
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 d-inline-flex align-items-center gap-1">
+                                                <iconify-icon icon="bi:x-circle-fill"></iconify-icon>
+                                                Batalkan
+                                            </button>
                                         </form>
                                     <?php endif; ?>
                                 </td>
