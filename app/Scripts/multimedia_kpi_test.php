@@ -185,6 +185,41 @@ $camp3 = $CampaignModel->insert([
 $ContentModel->update((int)$b, ['campaign_id' => (int)$camp3]);
 ok('Campaign done terlibat dibuat (B terhubung, target 1)', $camp3 > 0);
 
+// ── Regression: target_jumlah_konten KOSONG ────────────────────────────────
+// Bug nyata: kolom target opsional di form campaign. Kalau kosong, penyebut
+// lama = 0 → achievement null → badge "N/A" dan 10% bobot hilang diam-diam
+// dari skor (KpiScoreService me-skip null, bukan menganggapnya 0).
+// Dipakai periode sendiri (7/2026 & 6/2026) supaya ekspektasi bulan 9 utuh.
+// Konten X/Y punya deadline di bulan masing-masing supaya tidak mengotori KPI
+// Deadline/Kualitas periode 9.
+$x = $ContentModel->insert([
+    'judul' => '[KPI] Konten X fallback done', 'jenis_konten' => 'REGULAR',
+    'target_scope' => 'ALL', 'deadline' => '2026-07-15', 'status' => 'COMPLETED',
+    'published_at' => '2026-07-14 08:00:00', 'completed_at' => '2026-07-14 08:30:00', 'created_by' => EMP,
+]);
+$y = $ContentModel->insert([
+    'judul' => '[KPI] Konten Y fallback active', 'jenis_konten' => 'REGULAR',
+    'target_scope' => 'ALL', 'deadline' => '2026-06-15', 'status' => 'COMPLETED',
+    'published_at' => '2026-06-14 08:00:00', 'completed_at' => '2026-06-14 08:30:00', 'created_by' => EMP,
+]);
+$PersonModel->replaceForContent((int)$x, [], [EMP]);
+$PersonModel->replaceForContent((int)$y, [], [EMP]);
+
+// done + target NULL → penyebut fallback = jumlah konten campaign (1) → 1/1.
+$camp4 = $CampaignModel->insert([
+    'nama' => '[KPI] Campaign Done Tanpa Target', 'period_month' => 7, 'period_year' => PERIODE_Y,
+    'target_jumlah_konten' => null, 'target_deadline' => '2026-12-31', 'status' => 'done', 'created_by' => EMP,
+]);
+$ContentModel->update((int)$x, ['campaign_id' => (int)$camp4]);
+// active + target NULL → penyebut 0 → null (cakupan masih berjalan, menghukum
+// employee karena konten yang belum sempat dibuat tidak fair).
+$camp5 = $CampaignModel->insert([
+    'nama' => '[KPI] Campaign Active Tanpa Target', 'period_month' => 6, 'period_year' => PERIODE_Y,
+    'target_jumlah_konten' => null, 'target_deadline' => '2026-12-31', 'status' => 'active', 'created_by' => EMP,
+]);
+$ContentModel->update((int)$y, ['campaign_id' => (int)$camp5]);
+ok('Campaign tanpa target dibuat (done 7/2026, active 6/2026)', $camp4 > 0 && $camp5 > 0);
+
 echo "\n== MULTIMEDIA KPI SERVICE (per akun uji " . EMP . ") ==\n";
 // Realisasi:
 //   total assigned = 3 (A,B,C).  on-time = A(1) => 33.33
@@ -227,6 +262,14 @@ ok('Isolasi: improvement PEER = null (tidak ada data)', $impPeer === null, (stri
 // Null behavior: campaign EMP, periode tanpa campaign = null.
 $capNone = $Svc->achievement('SUPPORT_CAMPAIGN', EMP, 50, 2, PERIODE_Y);
 ok('Campaign periode tanpa data = null', $capNone === null, (string)$capNone);
+
+// Fallback penyebut saat target_jumlah_konten kosong (regression).
+// done tanpa target: 1 konten campaign, COMPLETED on-time → 1/1 = 100.
+$capFb = $Svc->achievement('SUPPORT_CAMPAIGN', EMP, 50, 7, PERIODE_Y);
+ok('Campaign done tanpa target = 100 (fallback 1/1)', near($capFb, 100), (string)$capFb);
+// active tanpa target: tetap null, bukan 0 dan bukan error.
+$capFbAct = $Svc->achievement('SUPPORT_CAMPAIGN', EMP, 50, 6, PERIODE_Y);
+ok('Campaign active tanpa target = null (menunggu target)', $capFbAct === null, (string)$capFbAct);
 
 // Divisi ringkasan: 6 item dgn nama/bobot benar, total ≥ 0.
 $sum = $Svc->monthlySummary(PERIODE_M, PERIODE_Y);
@@ -285,12 +328,14 @@ foreach ($result['items'] as $it) {
 ok('Komponen lama TIDAK ada di posisi 44', !$hasOld);
 
 echo "\n== ROLLBACK DATA UJI ==\n";
-foreach ([$a, $b, $c, $d] as $cid) {
+foreach ([$a, $b, $c, $d, $x, $y] as $cid) {
     $ContentModel->delete((int)$cid);
 }
 $CampaignModel->delete((int)$camp);
 $CampaignModel->delete((int)$camp2);
 $CampaignModel->delete((int)$camp3);
+$CampaignModel->delete((int)$camp4);
+$CampaignModel->delete((int)$camp5);
 foreach ([$imp1, $imp2, $imp3] as $iid) {
     $ImprovementModel->delete((int)$iid);
 }

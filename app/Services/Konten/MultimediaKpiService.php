@@ -207,13 +207,51 @@ class MultimediaKpiService
     }
 
     /**
+     * Penyebut (target) Support Campaign = Σ target_jumlah_konten campaign
+     * terpilih.
+     *
+     * target_jumlah_konten bersifat opsional di form campaign, jadi kosong
+     * tidak boleh membuat KPI ini hilang diam-diam. Fallback:
+     *   - campaign `done`  → jumlah konten di campaign itu. Cakupannya
+     *     sudah final, jadi ini target yang paling mendekati kenyataan.
+     *   - campaign `active` tanpa target → 0. Cakupan masih berjalan, jadi
+     *     menghitungnya sekarang akan menghukum employee karena konten yang
+     *     belum sempat dibuat. Kalau tidak ada campaign `done` yang bisa
+     *     dipakai, pemanggil dapat null (menunggu target), bukan angka.
+     */
+    private function campaignTargetTotal(array $campaigns): int
+    {
+        $total = 0;
+        $fallbackIds = [];
+        foreach ($campaigns as $c) {
+            $explicit = (int)($c->target_jumlah_konten ?? 0);
+            if ($explicit > 0) {
+                $total += $explicit;
+            } elseif ($c->status === 'done') {
+                $fallbackIds[] = (int)$c->id;
+            }
+        }
+
+        if ($fallbackIds !== []) {
+            $in = implode(',', $fallbackIds);
+            $row = \Config\Database::connect()
+                ->query("SELECT COUNT(*) AS jml FROM contents WHERE campaign_id IN ({$in})")
+                ->getRow();
+            $total += (int)($row->jml ?? 0);
+        }
+
+        return $total;
+    }
+
+    /**
      * Support Campaign: hanya campaign yang "terpilih" employee (berisi konten
      * miliknya via content_people) yang dihitung — campaign ber-status
      * active ATAU done (campaign selesai tetap dinilai; hanya draft yang
      * dikecualikan). Konten campaign yang DISELESAIKAN (status COMPLETED)
      * tepat waktu (completed_at ≤ target_deadline campaign) dibanding target
-     * jumlah konten campaign tsb (campaign.target_jumlah_konten). Tanpa
-     * campaign terpilih → null (tidak menghukum, menunggu data keterlibatan).
+     * jumlah konten campaign tsb. Tanpa campaign terpilih → null (tidak
+     * menghukum, menunggu data keterlibatan). Penyebut dihitung oleh
+     * campaignTargetTotal() (ada fallback bila target tidak diisi).
      */
     private function campaignAchievement(int $employeeId, int $month, int $year, int $unitId): ?float
     {
@@ -233,10 +271,7 @@ class MultimediaKpiService
         $in = implode(',', $campaignIds);
 
         $selesai = 0;
-        $target = 0;
-        foreach ($campaigns as $c) {
-            $target += (int)($c->target_jumlah_konten ?? 0);
-        }
+        $target = $this->campaignTargetTotal($campaigns);
 
         $rows = $db->query(
             "SELECT c.id, c.status, c.published_at, c.completed_at, c.campaign_id
@@ -476,9 +511,9 @@ $briefRows = $db->query(
             $in = implode(',', array_map(static fn($c) => (int)$c->id, $campaigns));
             $deadlineMap = [];
             foreach ($campaigns as $c) {
-                $campaignTarget += (int)($c->target_jumlah_konten ?? 0);
                 $deadlineMap[(int)$c->id] = $c->target_deadline;
             }
+            $campaignTarget += $this->campaignTargetTotal($campaigns);
             $rows = $db->query(
                 "SELECT c.id, c.status, c.completed_at, c.published_at, c.campaign_id
                  FROM contents c
