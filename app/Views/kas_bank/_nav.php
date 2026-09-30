@@ -103,14 +103,14 @@ $__t = $__titles[$__active] ?? $__titles['ringkasan'];
 /* ===== Navigasi Kas & Bank =====
    Ukuran font memakai token dari kas_bank/_theme.php agar konsisten
    dengan keempat halaman modul ini.
-   Komponen (kb-num, kb-pill, dll) didefinisikan di _theme.php. */
+   Komponen (kb-num, kb-pill, dll) didefinisikan di _theme.php.
+
+   .kb-header-card hanya memuat padding di sini: latar, border, radius, dan
+   bayangannya sudah satu aturan di _theme.php "1b. Elevasi panel" supaya
+   kartu ini tidak berbeda dari kartu modul lain. */
 
 .kb-header-card {
-    background: var(--bs-card-bg);
-    border: 1px solid var(--bs-border-color-translucent);
-    border-radius: 0.875rem;
     padding: 1.25rem 1.5rem;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
 }
 
 .kb-header-icon {
@@ -155,7 +155,7 @@ $__t = $__titles[$__active] ?? $__titles['ringkasan'];
 .kb-nav-tabs {
     display: flex;
     gap: 0.375rem;
-    background: var(--bs-tertiary-bg);
+    background: var(--kb-soft);
     border-radius: 0.75rem;
     padding: 0.3125rem;
     overflow-x: auto;
@@ -184,7 +184,7 @@ $__t = $__titles[$__active] ?? $__titles['ringkasan'];
 }
 
 .kb-nav-tab.active {
-    background: var(--bs-card-bg);
+    background: var(--kb-surface);
     color: var(--bs-primary);
     font-weight: 600;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);

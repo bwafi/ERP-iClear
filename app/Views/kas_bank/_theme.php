@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Design system bersama Kas & Bank.
  *
@@ -18,22 +19,62 @@
  * Catatan: skala `fs-*` di template ini terbalik dari Bootstrap 5.3 standar
  * (fs-1 = terkecil, bukan terbesar). Jangan memakai fs-6/fs-7/fs-8 untuk
  * teks kecil — nilainya jauh lebih besar dari body.
+ *
+ * Permukaan: satu aturan elevate (lihat "1b") yang berlaku untuk kartu,
+ * metrik, filter, banner, dan header navigasi, memakai bayangan yang sama
+ * dengan .card aplikasi. Tanpa itu panel putih Kas & Bank larut ke warna
+ * latar halaman.
  */
 ?>
 
 <style>
-    /* ===== 1. Token ===== */
+    /* ===== 1. Token =====
+       Kanvas konten aplikasi adalah #main-wrapper (styles.css:16466):
+       #f0f5f9 terang, #15263a gelap. Kartu putih di atas kanvas itu hanya
+       1.10:1 — tidak ada bedanya secara warna, jadi satu-satunya yang membuat
+       kartu terbaca sebagai PANEL dan bukan bagian dari latar adalah
+       bayangan. Kartu halaman lain (.card, styles.css:5460) memakai
+       `0px 2px 6px rgba(37,83,185,.1)`; nilai itu yang dipakai di sini
+       supaya modul ini tidak terlihat berbeda dari halaman lain.
+       Sudut modul tetap 0.5rem (bukan 1.125rem .card) karena density-nya
+       memang lebih rapat — itu disengaja, bukan sisa. */
     body {
         --kb-fs-metric: 1.125rem;
         --kb-fs-title: 1rem;
         --kb-fs-body: 0.875rem;
         --kb-fs-meta: 0.75rem;
         --kb-fs-micro: 0.625rem;
-        --kb-border: var(--bs-border-color, #dee2e6);
-        --kb-surface: var(--bs-body-bg, #fff);
-        --kb-soft: var(--bs-tertiary-bg, #f8f9fa);
+        --kb-canvas: #f0f5f9;
+        --kb-border: var(--bs-border-color, #e6ecf1);
+        --kb-surface: var(--bs-card-bg, var(--bs-body-bg, #fff));
+        --kb-soft: var(--bs-tertiary-bg, #e7ecf0);
+        --kb-radius: 0.5rem;
+        --kb-shadow: 0px 2px 6px rgba(37, 83, 185, 0.1);
         --kb-text: var(--bs-body-color, #212529);
         --kb-muted: var(--bs-secondary-color, #6c757d);
+    }
+
+    /* .card tidak punya padanan bayangan untuk mode gelap, dan biru 10%
+       hilang di atas #111c2d — pakai versi netral seperti .dm-surface. */
+    [data-bs-theme="dark"] body {
+        --kb-canvas: #15263a;
+        --kb-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+    }
+
+    /* ===== 1b. Elevasi panel =====
+       Satu aturan untuk seluruh panel modul: kartu, metrik, filter, banner,
+       dan header navigasi. Panel yang berdiri sendiri (tidak dibungkus kartu
+       putih) WAJIB ikut aturan ini — warna --kb-soft (#e7ecf0) hanya berselisih
+       1.08:1 dari kanvas #f0f5f9, jadi tanpa elevasi ia menghilang. */
+    .kb-card,
+    .kb-stat,
+    .kb-filter,
+    .kb-banner,
+    .kb-header-card {
+        background: var(--kb-surface);
+        border: 1px solid var(--kb-border);
+        border-radius: var(--kb-radius);
+        box-shadow: var(--kb-shadow);
     }
 
     /* Wrapper opsional (dipakai akun.php) */
@@ -82,9 +123,6 @@
 
     /* ===== 2. Kartu ===== */
     .kb-card {
-        background: var(--kb-surface);
-        border: 1px solid var(--kb-border);
-        border-radius: 0.5rem;
         overflow: hidden;
     }
 
@@ -101,7 +139,18 @@
         gap: 0.75rem;
         padding: 0.75rem 1rem;
         border-bottom: 1px solid var(--kb-border);
+        background: var(--kb-surface);
+    }
+
+    .kb-card-footer {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        border-top: 1px solid var(--kb-border);
         background: var(--kb-soft);
+        font-size: var(--kb-fs-meta);
+        color: var(--kb-muted);
     }
 
     /* kb-title (akun.php) dan kb-card-title (transfer/antar_unit) */
@@ -129,9 +178,6 @@
     }
 
     .kb-stat {
-        background: var(--kb-surface);
-        border: 1px solid var(--kb-border);
-        border-radius: 0.5rem;
         padding: 0.75rem 1rem;
         display: flex;
         flex-direction: column;
@@ -174,9 +220,6 @@
         gap: 0.5rem 0.75rem;
         margin-bottom: 1rem;
         padding: 0.75rem 1rem;
-        background: var(--kb-soft);
-        border: 1px solid var(--kb-border);
-        border-radius: 0.5rem;
     }
 
     .kb-filter .kb-field {
@@ -211,6 +254,20 @@
         }
     }
 
+    /* Dua panel sejajar (dashboard: saldo rekening | arus uang) */
+    .kb-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+        align-items: start;
+    }
+
+    @media (min-width: 1200px) {
+        .kb-split {
+            grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        }
+    }
+
     /* ===== 6. Banner konteks ===== */
     .kb-banner {
         display: flex;
@@ -218,9 +275,17 @@
         gap: 0.75rem;
         padding: 0.75rem 1rem;
         margin-bottom: 1rem;
-        background: var(--bs-tertiary-bg, #f8f9fa);
-        border: 1px solid var(--kb-border);
-        border-radius: 0.5rem;
+    }
+
+    /* Varian bahaya: tint semantik, bukan garis sisi tebal. */
+    .kb-banner.is-danger {
+        background: var(--bs-danger-bg-subtle, #f8d7da);
+        border-color: var(--bs-danger-border-subtle, #f1aeb5);
+    }
+
+    .kb-banner.is-danger .kb-banner-content,
+    .kb-banner.is-danger .kb-banner-content .text-secondary {
+        color: var(--bs-danger-text-emphasis, #842029);
     }
 
     .kb-banner-icon {
@@ -316,6 +381,29 @@
         color: #fff;
     }
 
+    /* Ubah ikon jadi petak: 2rem di kartu metrik, 1.5rem di sel tabel */
+    .kb-tile {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--kb-radius);
+        font-size: var(--kb-fs-title);
+    }
+
+    .kb-tile-sm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 0.375rem;
+        font-size: var(--kb-fs-meta);
+    }
+
     .kb-pane-head {
         display: flex;
         justify-content: space-between;
@@ -400,7 +488,7 @@
         font-size: var(--kb-fs-title);
         font-weight: 600;
         color: var(--kb-text);
-        background: var(--kb-soft);
+        background: var(--kb-surface);
         padding: 0.5rem 0.75rem;
         border-bottom: 1px solid var(--kb-border);
         white-space: nowrap;
