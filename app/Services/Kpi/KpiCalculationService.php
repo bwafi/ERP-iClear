@@ -24,6 +24,18 @@ use App\Services\Marketing\MarketingKpiService;
  */
 class KpiCalculationService
 {
+    /** Jabatan Customer Service. */
+    public const CS_POSITION_ID = 42;
+
+    /**
+     * Unit sumber OMSET_TOKO untuk Customer Service.
+     *
+     * CS ditempatkan di Head Office (unit 50) yang tidak mencatat penjualan,
+     * sehingga OMSET_TOKO selalu bernilai 0 bila memakai unit penempatan sendiri.
+     * CS dinilai dari omset toko unit 1 (ICLEAR Probolinggo).
+     */
+    public const CS_OMSET_UNIT_ID = 1;
+
     protected $componentModel;
     protected $targetModel;
     protected $weightModel;
@@ -126,8 +138,10 @@ class KpiCalculationService
                 if ($calculator === null) {
                     continue; // strategy belum terdaftar
                 }
-                $actualValue = $calculator->calculate($employeeId, $unitId, $month, $year);
-                $target = $this->targetModel->getTargetByKpiAndUnit($component->id, $unitId, $targetContext, $date);
+                // Unit sumber omset: default unit penempatan, kecuali CS (unit 1).
+                $omsetUnitId = $this->resolveOmsetUnitId($positionId, $component->code, (int)$unitId);
+                $actualValue = $calculator->calculate($employeeId, $omsetUnitId, $month, $year);
+                $target = $this->targetModel->getTargetByKpiAndUnit($component->id, $omsetUnitId, $targetContext, $date);
                 if (!$target) {
                     continue; // belum ada target utk KPI ini
                 }
@@ -402,6 +416,25 @@ class KpiCalculationService
         $model = new \App\Models\ModelAuth();
         $emp = $model->where('ID_AKUN', $employeeId)->first();
         return $emp ? (int)$emp->ID_JABATAN : null;
+    }
+
+    /**
+     * Unit sumber untuk perhitungan omset sebuah komponen.
+     *
+     * Default memakai unit penempatan employee. Pengecualian: Customer Service
+     * (jabatan 42) memakai unit 1 untuk OMSET_TOKO karena unit penempatannya
+     * Head Office (50) tidak bertransaksi penjualan.
+     *
+     * Dipakai untuk BOTH actual dan target supaya pembandingnya konsisten:
+     * actual omset unit 1 harus dibandingkan dengan target unit 1.
+     */
+    protected function resolveOmsetUnitId(?int $positionId, string $componentCode, int $unitId): int
+    {
+        if ($positionId === self::CS_POSITION_ID && $componentCode === 'OMSET_TOKO') {
+            return self::CS_OMSET_UNIT_ID;
+        }
+
+        return $unitId;
     }
 
     public function calculateAchievement($actualValue, $targetValue)
