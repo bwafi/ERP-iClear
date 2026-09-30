@@ -52,16 +52,10 @@ class ManualKpiScorer
                 // rekap harian (SEMUA cabang) sebagai pembanding, di-cap 100.
                 return $this->marketingClosingRate($month, $year);
             case 'UPSELLING':
-                return $this->cappedRatio(
-                    $this->metrics->sumAspekScore($emp, 'upselling', $month, $year),
-                    $this->targetValue(5, $unit, $context, $date)
-                );
+                // Sumber = kpi_evaluations (grid harian), bukan tabel penilaian.
+                // achieved langsung skala 0-100: SUM(normalized_score)/jumlah hari.
             case 'FOLLOWUP':
-                $aspek = ($context === 'penilaian_kinerja' || $context === 'slip_gaji') ? 'follow up' : 'followup';
-                return $this->cappedRatio(
-                    $this->metrics->sumAspekScore($emp, $aspek, $month, $year),
-                    $this->targetValue(6, $unit, $context, $date)
-                );
+                return $this->manualEvaluationScore($emp, $ctx, $code);
             case 'ROAS':
                 // legacy: gaji = SUM*100, non-gaji = SUM*20 (uncapped)
                 $sum = $this->metrics->sumAspekScore($emp, 'roas', $month, $year);
