@@ -500,14 +500,15 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         // BCA Bersama (akun 5) dialokasikan ke unit 1 -> menjadi "rekening unit 1".
         $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal) VALUES (5, 1, 300000)");
 
-        // Visibility (model): unit 1 hanya melihat KAS 1, BANK milik 2, dan
-        // rekening bersama 5 yang dialokasikan; akun 3/4 (unit 2) tidak ada.
+        // Visibility: user scope unit 1 diiriskan dengan account scope.
+        // Rekening non-shared Unit 1 (akun 2) + rekening bersama 5 yang
+        // dialokasikan ke unit 1. Akun 3/4 (unit 2) tidak ada.
         $db = \Config\Database::connect('tests', false);
         $model = new \App\Models\ModelAkunKasBank($db);
-        $ids = array_map('intval', array_column($model->getAllWithUnitTerbatas(1), 'idakun_kas_bank'));
+        $ids = array_map('intval', array_column($model->getDalamScopeUnit([1]), 'idakun_kas_bank'));
         sort($ids);
         $this->assertSame([1, 2, 5], $ids);
-        $idsAktif = array_map('intval', array_column($model->getAktifUntukUnitTerbatas(1), 'idakun_kas_bank'));
+        $idsAktif = array_map('intval', array_column($model->getDalamScopeUnit([1], null, true), 'idakun_kas_bank'));
         sort($idsAktif);
         $this->assertSame([1, 2, 5], $idsAktif);
 

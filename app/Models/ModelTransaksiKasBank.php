@@ -78,9 +78,24 @@ class ModelTransaksiKasBank extends Model
      * Saldo alokasi per unit pada satu rekening fisik: alokasi saldo awal unit
      * (tabel alokasi_saldo_kas_bank) + pemasukan unit - pengeluaran unit.
      * TIDAK mengubah saldo fisik; hanya atribusi untuk laporan/KPI per unit.
+     *
+     * GUARD ACCOUNT SCOPE: unit yang tidak punya HAK atas rekening ini
+     * (non-shared milik unit lain, atau shared tanpa baris alokasi untuk unit
+     * tsb) selalu bernilai 0 — bukan "hak 0" karena tidak ada alokasi, tapi
+     * karena unit tsb memang tidak berhak atas rekening tersebut. Ini
+     * mencegah total per unit terlihat seolah-asyncron dengan saldo fisik.
      */
     public function getSaldoUnitAkun(int $akunId, int $unitId): int
     {
+        $akun = (new ModelAkunKasBank())->find($akunId);
+        if (! $akun) {
+            return 0;
+        }
+
+        if (! $this->unitBerhak($akun, $unitId)) {
+            return 0;
+        }
+
         $db = db_connect();
         $alokasi = $db->table('alokasi_saldo_kas_bank')
             ->select('COALESCE(SUM(nominal), 0) as total')
@@ -108,6 +123,26 @@ class ModelTransaksiKasBank extends Model
             ->getRow();
 
         return (int)($alokasi->total ?? 0) + (int)($masuk->total ?? 0) - (int)($keluar->total ?? 0);
+    }
+
+    /**
+     * Account scope: apakah unit punya hak atas rekening fisik ini?
+     * non-shared -> hanya unit pemilik; shared -> harus ada baris alokasi.
+     */
+    private function unitBerhak(object $akun, int $unitId): bool
+    {
+        if ($unitId <= 0) {
+            return false;
+        }
+
+        if ((int) $akun->is_shared !== 1) {
+            return (int) $akun->unit_id === $unitId;
+        }
+
+        return (new ModelAlokasiSaldoKasBank())
+            ->where('akun_kas_bank_id', (int) $akun->idakun_kas_bank)
+            ->where('unit_id', $unitId)
+            ->first() !== null;
     }
 
     /**

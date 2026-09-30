@@ -578,6 +578,19 @@
         color: var(--bs-danger-text-emphasis, #58151c);
     }
 
+    /* Rekening Finance/HO (mis. IRA): bukan milik unit, tanpa alokasi.
+       Warna ungu supaya tidak tertukar dengan Shared Antar Unit (muted)
+       maupun rekening unit biasa. */
+    .kb-badge-purple {
+        background: #ede9fe;
+        color: #4c1d95;
+    }
+
+    [data-bs-theme="dark"] .kb-badge-purple {
+        background: #2e1065;
+        color: #ddd6fe;
+    }
+
     /* Pill konteks di navigasi (_nav.php) */
     .kb-pill {
         display: inline-flex;

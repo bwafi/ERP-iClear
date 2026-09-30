@@ -101,14 +101,16 @@ class FinanceScopeService
 
     /**
      * ID unit yang boleh dilihat (cocok dengan param, atau fallback pertama).
+     *
+     * CATATAN: metode ini TIDAK pernah mengembalikan null untuk user dengan
+     * lebih dari satu unit — selalu mengembalikan unit pertama yang diizinkan.
+     * Modul Dashboard Finance / HutangPiutang bergantung pada perilaku itu.
+     * Jangan dipakai sebagai "user scope" modul yang butuh mode konsolidasi
+     * (null); pakai resolveSelectedUnitIdAtauKosolidasi().
      */
     public function resolveSelectedUnitId(?string $requestUnit): ?int
     {
-        $allowed = $this->resolveAllowedUnits();
-        $allowedIds = array_map('intval', array_column(
-            array_map('get_object_vars', $allowed),
-            'idunit'
-        ));
+        $allowedIds = $this->allowedUnitIds();
 
         if (empty($allowedIds)) {
             return null;
@@ -120,6 +122,48 @@ class FinanceScopeService
         }
 
         return count($allowedIds) === 1 ? $allowedIds[0] : $allowedIds[0];
+    }
+
+    /**
+     * USER SCOPE dengan mode konsolidasi yang jujur.
+     *
+     * Return unit yang dipilih user bila valid. Bila user tidak memilih /
+     * memilih tidak valid:
+     *   - hanya boleh 1 unit  -> dipaksa ke unit itu (tidak ada pilihan lain),
+     *   - boleh >1 unit      -> null = KONSOLIDASI.
+     *
+     * null berarti "semua unit dalam user scope" dan itu HANYA bermakna
+     * setelah data difilter dengan ACCOUNT SCOPE (lihat KasBankScopeService).
+     * Memakai null sebagai konsolidasi tanpa filter account scope akan
+     * membocorkan seluruh rekening perusahaan.
+     */
+    public function resolveSelectedUnitIdAtauKosolidasi(?string $requestUnit): ?int
+    {
+        $allowedIds = $this->allowedUnitIds();
+
+        if (empty($allowedIds)) {
+            return null;
+        }
+
+        $req = (int) ($requestUnit ?: 0);
+        if ($req && in_array($req, $allowedIds, true)) {
+            return $req;
+        }
+
+        return count($allowedIds) === 1 ? $allowedIds[0] : null;
+    }
+
+    /**
+     * @return int[] id unit yang boleh diakses user login
+     */
+    public function allowedUnitIds(): array
+    {
+        $ids = array_map('intval', array_column(
+            array_map('get_object_vars', $this->resolveAllowedUnits()),
+            'idunit'
+        ));
+
+        return array_values(array_filter($ids, static fn ($id) => $id > 0));
     }
 
     /**

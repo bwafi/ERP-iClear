@@ -24,80 +24,144 @@ class ModelAkunKasBank extends Model
     ];
 
     /**
-     * Daftar rekening fisik (akun_kas_bank) dilihat dari sudut satu unit.
-     * - KAS: fisik per unit -> hanya KAS milik unit tsb.
-     * - BANK: rekening fisik -> semua BANK aktif (bisa lintas unit), sehingga
-     *   rekening bersama TIDAK tampil seolah-olah milik eksklusif satu unit.
+     * Rekening fisik yang berada di dalam SCOPE GANDUNG:
+     * irisan antara user scope (unit mana yang boleh diakses user) dan
+     * account scope (unit mana yang punya hak atas rekening).
+     *
+     * ACCOUNT SCOPE (aturan bisnis):
+     *   is_shared = 0 -> hanya akun.unit_id
+     *   is_shared = 1 -> unit yang punya baris di alokasi_saldo_kas_bank
+     *
+     * $unitTerpilih null = konsolidasi, yaitu seluruh rekening yang account
+     * scope-nya beririsan dengan user scope (BUKAN seluruh rekening).
+     *
+     * Rekening non-shared milik unit lain TIDAK ikut, dan rekening shared yang
+     * hanya dialokasikan ke unit lain juga TIDAK ikut — meskipun user punya
+     * akses ke unit-unit tersebut.
+     *
+     * @param int[]  $userUnitIds               user scope
+     * @param int|null $unitTerpilih            null = konsolidasi
+     * @param bool   $aktifOnly                 form transaksi: hanya akun aktif
+     * @param bool   $includeUnallocatedShared  sertakan rekening shared yang
+     *                                            belum punya alokasi sama sekali
+     *                                            (halaman master, supaya
+     *                                            alokasi bisa dikonfigurasi)
      */
-    public function getAllWithUnit(?int $unitId = null)
-    {
+    public function getDalamScopeUnit(
+        array $userUnitIds,
+        ?int $unitTerpilih = null,
+        bool $aktifOnly = false,
+        bool $includeUnallocatedShared = false
+    ) {
+        $userUnitIds = array_values(array_filter(array_map('intval', $userUnitIds), static fn ($id) => $id > 0));
+
+        $akunTbl = $this->db->prefixTable('akun_kas_bank');
+        $alokasi = $this->db->prefixTable('alokasi_saldo_kas_bank');
+
         $builder = $this->select('akun_kas_bank.*, unit.NAMA_UNIT, bank.nama_bank, bank.norek, no_akun.nama_akun as nama_akun_coa')
             ->join('unit', 'unit.idunit = akun_kas_bank.unit_id', 'left')
             ->join('bank', 'bank.idbank = akun_kas_bank.bank_idbank', 'left')
-            ->join('no_akun', 'no_akun.no_akun = akun_kas_bank.no_akun_coa', 'left')
-            ->orderBy('akun_kas_bank.tipe', 'ASC')
-            ->orderBy('akun_kas_bank.unit_id', 'ASC');
+            ->join('no_akun', 'no_akun.no_akun = akun_kas_bank.no_akun_coa', 'left');
 
-        if (!empty($unitId)) {
-            $unitId = (int)$unitId;
-            $builder->groupStart()
-                ->groupStart()
-                    ->where('akun_kas_bank.tipe', 'KAS')
-                    ->where('akun_kas_bank.unit_id', $unitId)
-                ->groupEnd()
-                ->orGroupStart()
-                    ->where('akun_kas_bank.tipe', 'BANK')
-                ->groupEnd()
-            ->groupEnd();
+        if ($aktifOnly) {
+            $builder->where('akun_kas_bank.status', 'aktif');
         }
 
-        return $builder->findAll();
-    }
+        if (empty($userUnitIds)) {
+            // User tanpa satu pun unit: tidak ada rekening yang boleh tampil,
+            // kecuali mode master untuk melihat rekening shared yang belum
+            // dialokasikan (tetap perlu unit agar bisa diisi alokasinya).
+            if (! $includeUnallocatedShared) {
+                return [];
+            }
 
-    /**
-     * Akun aktif yang bisa dipakai satu unit (untuk form transaksi).
-     * KAS unit tsb + semua rekening BANK fisik aktif.
-     */
-    public function getAktifUntukUnit(int $unitId)
-    {
-        return $this->select('akun_kas_bank.*, unit.NAMA_UNIT, bank.nama_bank, bank.norek')
-            ->join('unit', 'unit.idunit = akun_kas_bank.unit_id', 'left')
-            ->join('bank', 'bank.idbank = akun_kas_bank.bank_idbank', 'left')
-            ->where('akun_kas_bank.status', 'aktif')
-            ->groupStart()
+            $builder->where('1 = 0');
+        } else {
+            $in = implode(',', $userUnitIds);
+
+            // ---- ACCOUNT SCOPE ∩ USER SCOPE ----
+            $builder->groupStart()
                 ->groupStart()
-                    ->where('akun_kas_bank.tipe', 'KAS')
-                    ->where('akun_kas_bank.unit_id', (int)$unitId)
+                    // non-shared: unit pemilik rekening ada di user scope
+                    ->where('akun_kas_bank.is_shared', 0)
+                    ->where('akun_kas_bank.is_finance_ho', 0)
+                    ->whereIn('akun_kas_bank.unit_id', $userUnitIds)
                 ->groupEnd()
-                ->orWhere('akun_kas_bank.tipe', 'BANK')
-            ->groupEnd()
+                ->orGroupStart()
+                    // shared: ada alokasi ke unit dalam user scope
+                    ->where('akun_kas_bank.is_shared', 1)
+                    ->where('akun_kas_bank.is_finance_ho', 0)
+                    ->where(
+                        'EXISTS (SELECT 1 FROM ' . $alokasi . ' a ' .
+                        'WHERE a.akun_kas_bank_id = ' . $akunTbl . '.idakun_kas_bank ' .
+                        'AND a.unit_id IN (' . $in . '))',
+                        null,
+                        false
+                    )
+                ->groupEnd()
+                ->orGroupStart()
+                    // Finance/HO: bukan milik unit, TIDAK butuh alokasi, dan
+                    // boleh jadi tujuan dari unit mana pun. Karena itu begitu
+                    // user punya minimal satu unit dalam user scope, rekening
+                    // HO selalu terlihat.
+                    ->where('akun_kas_bank.is_finance_ho', 1)
+                ->groupEnd();
+
+            if ($includeUnallocatedShared) {
+                // shared tanpa alokasi apa pun -> tampilkan agar bisa dikonfigurasi
+                $builder->orGroupStart()
+                    ->where('akun_kas_bank.is_shared', 1)
+                    ->where('akun_kas_bank.is_finance_ho', 0)
+                    ->where(
+                        'NOT EXISTS (SELECT 1 FROM ' . $alokasi . ' a ' .
+                        'WHERE a.akun_kas_bank_id = ' . $akunTbl . '.idakun_kas_bank)',
+                        null,
+                        false
+                    )
+                ->groupEnd();
+            }
+
+            $builder->groupEnd();
+
+            // ---- FILTER UNIT TERPILIH (bukan konsolidasi) ----
+            if ($unitTerpilih !== null && $unitTerpilih > 0) {
+                $builder->groupStart()
+                    ->groupStart()
+                        ->where('akun_kas_bank.is_shared', 0)
+                        ->where('akun_kas_bank.is_finance_ho', 0)
+                        ->where('akun_kas_bank.unit_id', $unitTerpilih)
+                    ->groupEnd()
+                    ->orGroupStart()
+                        ->where('akun_kas_bank.is_shared', 1)
+                        ->where('akun_kas_bank.is_finance_ho', 0)
+                        ->where(
+                            'EXISTS (SELECT 1 FROM ' . $alokasi . ' a ' .
+                            'WHERE a.akun_kas_bank_id = ' . $akunTbl . '.idakun_kas_bank ' .
+                            'AND a.unit_id = ' . (int) $unitTerpilih . ')',
+                            null,
+                            false
+                        )
+                    ->groupEnd()
+                    ->orGroupStart()
+                        // Finance/HO tetap relevan untuk unit mana pun yang
+                        // dipilih: transfer ke HO sah dari unit tsb.
+                        ->where('akun_kas_bank.is_finance_ho', 1)
+                    ->groupEnd()
+                ->groupEnd();
+            }
+        }
+
+        return $builder
             ->orderBy('akun_kas_bank.tipe', 'ASC')
             ->orderBy('akun_kas_bank.unit_id', 'ASC')
             ->orderBy('akun_kas_bank.nama_akun', 'ASC')
             ->findAll();
     }
 
-    public function getAktifByUnit(int $unitId)
-    {
-        return $this->where('unit_id', $unitId)
-            ->where('status', 'aktif')
-            ->orderBy('tipe', 'ASC')
-            ->findAll();
-    }
-
-    public function getAktifAll()
-    {
-        return $this->select('akun_kas_bank.*, unit.NAMA_UNIT')
-            ->join('unit', 'unit.idunit = akun_kas_bank.unit_id', 'left')
-            ->where('akun_kas_bank.status', 'aktif')
-            ->orderBy('akun_kas_bank.tipe', 'ASC')
-            ->orderBy('akun_kas_bank.unit_id', 'ASC')
-            ->findAll();
-    }
-
     /**
      * Rekening BANK fisik untuk satu idbank (maksimal satu baris: 1 rekening
-     * fisik = 1 akun). Dipakai resolveAkun lintas unit.
+     * fisik = 1 akun). Dipakai resolveAkun. Hanya mengembalikan baris AKTIF;
+     * bank tanpa rekening aktif harus diperbaiki di master, bukan dialihkan.
      */
     public function getBankByBankIdbank(string $bankId)
     {
@@ -105,76 +169,5 @@ class ModelAkunKasBank extends Model
             ->where('bank_idbank', $bankId)
             ->where('status', 'aktif')
             ->first();
-    }
-
-    /**
-     * Rekening yang boleh diakses SATU unit (admin cabang / user non-lintas):
-     * - KAS milik unit tsb,
-     * - BANK yang memang milik unit tsb (unit_id = unit),
-     * - BANK rekening fisik bersama yang dialokasikan ke unit tsb
-     *   (ada baris di alokasi_saldo_kas_bank untuk unit tsb).
-     * Rekening fisik milik unit lain TIDAK terlihat.
-     */
-    public function getAllWithUnitTerbatas(int $unitId)
-    {
-        $unitId = (int)$unitId;
-        $akunTbl  = $this->db->prefixTable('akun_kas_bank');
-        $alokasi  = $this->db->prefixTable('alokasi_saldo_kas_bank');
-
-        return $this->select('akun_kas_bank.*, unit.NAMA_UNIT, bank.nama_bank, bank.norek, no_akun.nama_akun as nama_akun_coa')
-            ->join('unit', 'unit.idunit = akun_kas_bank.unit_id', 'left')
-            ->join('bank', 'bank.idbank = akun_kas_bank.bank_idbank', 'left')
-            ->join('no_akun', 'no_akun.no_akun = akun_kas_bank.no_akun_coa', 'left')
-            ->groupStart()
-                ->where('akun_kas_bank.tipe', 'KAS')
-                ->where('akun_kas_bank.unit_id', $unitId)
-                ->orGroupStart()
-                    ->where('akun_kas_bank.tipe', 'BANK')
-                    ->where('akun_kas_bank.unit_id', $unitId)
-                ->groupEnd()
-                ->orWhere(
-                    'EXISTS (SELECT 1 FROM ' . $alokasi . ' a ' .
-                    'WHERE a.akun_kas_bank_id = ' . $akunTbl . '.idakun_kas_bank ' .
-                    'AND a.unit_id = ' . $unitId . ')',
-                    null,
-                    false
-                )
-            ->groupEnd()
-            ->orderBy('akun_kas_bank.tipe', 'ASC')
-            ->orderBy('akun_kas_bank.unit_id', 'ASC')
-            ->findAll();
-    }
-
-    /**
-     * Versi aktif (untuk form transaksi) dari daftar rekening satu unit.
-     */
-    public function getAktifUntukUnitTerbatas(int $unitId)
-    {
-        $unitId = (int)$unitId;
-        $akunTbl  = $this->db->prefixTable('akun_kas_bank');
-        $alokasi = $this->db->prefixTable('alokasi_saldo_kas_bank');
-
-        return $this->select('akun_kas_bank.*, unit.NAMA_UNIT, bank.nama_bank, bank.norek')
-            ->join('unit', 'unit.idunit = akun_kas_bank.unit_id', 'left')
-            ->join('bank', 'bank.idbank = akun_kas_bank.bank_idbank', 'left')
-            ->where('akun_kas_bank.status', 'aktif')
-            ->groupStart()
-                ->where('akun_kas_bank.tipe', 'KAS')
-                ->where('akun_kas_bank.unit_id', $unitId)
-                ->orGroupStart()
-                    ->where('akun_kas_bank.tipe', 'BANK')
-                    ->where('akun_kas_bank.unit_id', $unitId)
-                ->groupEnd()
-                ->orWhere(
-                    'EXISTS (SELECT 1 FROM ' . $alokasi . ' a ' .
-                    'WHERE a.akun_kas_bank_id = ' . $akunTbl . '.idakun_kas_bank ' .
-                    'AND a.unit_id = ' . $unitId . ')',
-                    null,
-                    false
-                )
-            ->groupEnd()
-            ->orderBy('akun_kas_bank.tipe', 'ASC')
-            ->orderBy('akun_kas_bank.nama_akun', 'ASC')
-            ->findAll();
     }
 }

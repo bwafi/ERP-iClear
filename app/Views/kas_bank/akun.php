@@ -15,19 +15,27 @@ $canInput = $bisa_pilih_unit ?? false;
 
 // Ringkasan untuk strip statistik
 $daftarAkun   = $akun_kas_bank ?? [];
+$akunJenis    = $akun_jenis ?? [];
 $totalAkun    = count($daftarAkun);
 $totalFisik   = 0;
 $jumlahShared = 0;
+$jumlahHO     = 0;
 $jumlahOver   = 0;
 foreach ($daftarAkun as $a) {
     $id     = (int) $a->idakun_kas_bank;
     $fisik  = (float) ($saldo_fisik_akun[$id] ?? 0);
+    $jenis  = $akunJenis[$id] ?? (\App\Services\Finance\KasBankScopeService::KIND_UNIT);
     $totalFisik += $fisik;
-    if ((int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id))) {
+    if ($jenis === \App\Services\Finance\KasBankScopeService::KIND_SHARED) {
         $jumlahShared++;
+    } elseif ($jenis === \App\Services\Finance\KasBankScopeService::KIND_FINANCE_HO) {
+        $jumlahHO++;
     }
     $sumAlokasi = array_sum(array_map(fn($al) => (int) $al->nominal, $alokasi[$id] ?? []));
-    if ($a->tipe === 'BANK' && $sumAlokasi > $fisik) {
+    // Rekening Finance/HO tidak memakai alokasi, jadi tidak bisa "melebihi".
+    if ($a->tipe === 'BANK'
+        && $jenis !== \App\Services\Finance\KasBankScopeService::KIND_FINANCE_HO
+        && $sumAlokasi > $fisik) {
         $jumlahOver++;
     }
 }
@@ -48,6 +56,10 @@ foreach ($daftarAkun as $a) {
         <div class="kb-stat">
             <span class="kb-stat-label">Rekening bersama</span>
             <span class="kb-stat-value"><?= $jumlahShared ?></span>
+        </div>
+        <div class="kb-stat">
+            <span class="kb-stat-label">Rekening Finance/HO</span>
+            <span class="kb-stat-value"><?= $jumlahHO ?></span>
         </div>
         <div class="kb-stat <?= $jumlahOver > 0 ? 'is-warn' : '' ?>">
             <span class="kb-stat-label">Alokasi melebihi saldo</span>
@@ -218,19 +230,27 @@ foreach ($daftarAkun as $a) {
 
                     <!-- Langkah 3 -->
                     <div class="tab-pane fade" id="step3-pane" role="tabpanel">
-                        <div class="kb-pane-head">
-                            <div>
-                                <div class="kb-pane-title">Bagi hak per unit</div>
-                                <div class="kb-hint">Tentukan porsi saldo bank bersama untuk tiap cabang.</div>
+                            <div class="kb-pane-head">
+                                <div>
+                                    <div class="kb-pane-title">Bagi hak per unit</div>
+                                    <div class="kb-hint">Tentukan porsi saldo bank bersama untuk tiap cabang.
+                                        Rekening Finance/HO tidak termasuk karena tidak memakai alokasi.</div>
+                                </div>
                             </div>
-                        </div>
-                        <form method="post" action="<?= base_url('kas_bank/saldo-alokasi/save') ?>">
+                            <form method="post" action="<?= base_url('kas_bank/saldo-alokasi/save') ?>">
                             <div class="kb-field">
                                 <label class="kb-label">Rekening bank <span class="kb-req">*</span></label>
                                 <select name="akun_kas_bank_id" class="form-select kb-input" required>
                                     <option value="">Pilih rekening</option>
                                     <?php foreach ($daftarAkun as $a) : ?>
-                                        <?php if ($a->tipe === 'BANK') : ?>
+                                        <?php
+                                        // Rekening Finance/HO tidak butuh & tidak boleh
+                                        // punya alokasi unit — jangan tawarkan di sini.
+                                        $jenisOpsi = $akunJenis[(int) $a->idakun_kas_bank]
+                                            ?? \App\Services\Finance\KasBankScopeService::KIND_UNIT;
+                                        ?>
+                                        <?php if ($a->tipe === 'BANK'
+                                            && $jenisOpsi !== \App\Services\Finance\KasBankScopeService::KIND_FINANCE_HO) : ?>
                                             <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($a->nama_akun) ?></option>
                                         <?php endif; ?>
                                     <?php endforeach; ?>
@@ -303,15 +323,44 @@ foreach ($daftarAkun as $a) {
                                     $fisik        = $saldo_fisik_akun[$idAkun] ?? 0;
                                     $alokasiAkun  = $alokasi[$idAkun] ?? [];
                                     $totalAlokasi = array_sum(array_map(fn($al) => (int) $al->nominal, $alokasiAkun));
-                                    $shared       = (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id));
+                                    $shared       = (int) ($a->is_shared ?? 0) === 1;
+                                    $jenis        = $akunJenis[$idAkun]
+                                        ?? \App\Services\Finance\KasBankScopeService::KIND_UNIT;
+                                    $isHO         = $jenis === \App\Services\Finance\KasBankScopeService::KIND_FINANCE_HO;
+                                    $isShared     = $jenis === \App\Services\Finance\KasBankScopeService::KIND_SHARED;
+                                    // Account scope = unit yang punya alokasi.
+                                    // Untuk Finance/HO ini SELALU kosong — bukan
+                                    //artinya salah: rekening HO memang tidak punya
+                                    // unit pemilik dan tidak butuh alokasi.
+                                    $entitled     = $akun_scope[$idAkun] ?? [];
+                                    $entitledNama = implode(', ', array_map(
+                                        static fn ($uid) => (string) ($unitMap[(int) $uid] ?? ('Unit ' . $uid)),
+                                        $entitled
+                                    ));
                                     $bankInfo     = $bankMap[(string) $a->bank_idbank] ?? null;
                                     ?>
-                                    <tr class="kb-row-main" data-search="<?= esc(strtolower($a->nama_akun . ' ' . ($unitMap[(int) $a->unit_id] ?? '') . ' ' . ($a->no_akun_coa ?? '') . ' ' . ($bankInfo->nama_bank ?? ''))) ?>">
+                                    <tr class="kb-row-main" data-search="<?= esc(strtolower($a->nama_akun . ' ' . ($unitMap[(int) $a->unit_id] ?? '') . ' ' . ($a->no_akun_coa ?? '') . ' ' . ($bankInfo->nama_bank ?? '') . ' finance ho shared unit')) ?>">
                                         <td class="ps-3">
                                             <div class="kb-name">
                                                 <?= esc($a->nama_akun) ?>
-                                                <?php if ($shared) : ?><span class="kb-badge kb-badge-muted">Bersama</span><?php endif; ?>
+                                                <?php if ($isHO) : ?>
+                                                    <span class="kb-badge kb-badge-purple">Finance/HO</span>
+                                                <?php elseif ($isShared) : ?>
+                                                    <span class="kb-badge kb-badge-muted">
+                                                        <?= $entitledNama !== ''
+                                                            ? 'Shared Antar Unit · ' . esc($entitledNama)
+                                                            : 'Shared Antar Unit · belum dialokasikan' ?>
+                                                    </span>
+                                                <?php else : ?>
+                                                    <span class="kb-badge kb-badge-muted">Unit</span>
+                                                <?php endif; ?>
                                             </div>
+                                            <?php if ($isHO) : ?>
+                                                <div class="kb-meta">
+                                                    Tanpa alokasi unit · tujuan transfer semua unit ·
+                                                    sumber hanya Admin Root / Admin Center
+                                                </div>
+                                            <?php endif; ?>
                                             <div class="kb-meta">COA <span class="kb-mono"><?= esc($a->no_akun_coa ?: '-') ?></span></div>
                                         </td>
                                         <td class="kb-sub"><?= esc($unitMap[(int) $a->unit_id] ?? 'Lintas unit') ?></td>
@@ -339,7 +388,9 @@ foreach ($daftarAkun as $a) {
                                         </td>
                                         <td class="text-end">
                                             <div class="kb-amount"><?= $rp($fisik) ?></div>
-                                            <?php if ($a->tipe === 'BANK' && $totalAlokasi > 0) : ?>
+                                            <?php if ($isHO) : ?>
+                                                <div class="kb-meta">Tanpa alokasi unit</div>
+                                            <?php elseif ($a->tipe === 'BANK' && $totalAlokasi > 0) : ?>
                                                 <div class="kb-meta kb-mono">
                                                     Dialokasikan <?= $rp($totalAlokasi) ?>
                                                     <?php if ($totalAlokasi > $fisik) : ?><span class="kb-badge kb-badge-red ms-1">Melebihi saldo</span><?php endif; ?>

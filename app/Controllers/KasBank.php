@@ -15,6 +15,7 @@ use App\Models\ModelTransaksiKasBank;
 use App\Models\ModelUnit;
 use App\Libraries\ModeKasBank;
 use App\Services\Finance\FinanceScopeService;
+use App\Services\Finance\KasBankScopeService;
 
 /**
  * Kas & Bank + Pembayaran Antar Unit.
@@ -37,6 +38,7 @@ class KasBank extends BaseController
     protected $AuthModel;
     protected $UnitModel;
     protected $scopeService;
+    protected $AkunScope;
     protected $KasBankLib;
 
     public function __construct()
@@ -53,6 +55,7 @@ class KasBank extends BaseController
         $this->AuthModel = new ModelAuth();
         $this->UnitModel = new ModelUnit();
         $this->scopeService = new FinanceScopeService();
+        $this->AkunScope = new KasBankScopeService($this->scopeService);
         $this->KasBankLib = new ModeKasBank();
     }
 
@@ -72,15 +75,25 @@ class KasBank extends BaseController
         return in_array((int) session('ID_JABATAN'), [0, 1, 2, 34, 35, 40, 41, 47], true);
     }
 
+    /**
+     * Unit hasil pilihan user, dibatasi USER SCOPE.
+     *
+     * null = KONSOLIDASI (user punya akses >1 unit dan tidak memilih). null
+     * TIDAK berarti "semua rekening" — pemanggil WAJIB memfilter daftar
+     * rekening dengan ACCOUNT SCOPE lewat akunListUntuk()/akunAktifUntuk().
+     */
     private function unitTerpilih(): ?int
     {
         $unit = $this->request->getGet('unit_id') ?? $this->request->getPost('unit_id');
-        return $this->scopeService->resolveSelectedUnitId($unit !== null ? (string) $unit : null);
+        return $this->scopeService->resolveSelectedUnitIdAtauKosolidasi($unit !== null ? (string) $unit : null);
     }
 
     /**
-     * Apakah pengguna lintas unit (bisa pilih unit lain). Admin Center/Root/
+     * Apakah pengguna lintas unit (bisa memilih unit lain). Admin Center/Root/
      * Direktur/Manager = lintas; admin cabang/SPV = terikat unit sendiri.
+     *
+     * CATATAN: ini soal HAK INPUT, bukan soal rekening mana yang terlihat.
+     * Visibility rekening ditentukan ACCOUNT SCOPE, bukan peran ini.
      */
     private function lintas(): bool
     {
@@ -88,32 +101,103 @@ class KasBank extends BaseController
     }
 
     /**
-     * Daftar rekening fisik menurut hak akses:
-     * - lintas unit: KAS unit pilihan + SEMUA rekening BANK fisik;
-     * - admin cabang (non-lintas): hanya rekening unitnya (KAS + BANK milik
-     *   unit + rekening bersama yang dialokasikan ke unit tsb).
+     * @return int[] user scope
      */
-    private function akunListUntuk(?int $unit): array
+    private function unitIdsUser(): array
     {
-        if ($this->lintas()) {
-            return $unit ? $this->AkunModel->getAllWithUnit($unit) : $this->AkunModel->getAllWithUnit();
-        }
-
-        return $this->AkunModel->getAllWithUnitTerbatas($unit ?: (int) session('ID_UNIT'));
+        return $this->AkunScope->userUnitIds();
     }
 
     /**
-     * Daftar rekening aktif untuk form transaksi (sesuai hak akses unit).
+     * Rekening yang boleh dipakai user = irisan USER SCOPE & ACCOUNT SCOPE.
+     *
+     * Konsolidasi (null) = seluruh rekening yang account scope-nya beririsan
+     * dengan user scope. Rekening non-shared unit lain & rekening shared yang
+     * hanya dialokasikan ke unit lain TIDAK ikut.
+     *
+     * @param bool $aktifOnly              form transaksi: hanya akun aktif
+     * @param bool $termasukBelumAlokasi  halaman master: sertakan rekening
+     *                                    shared yang belum punya alokasi
+     *                                    (supaya alokasi bisa dikonfigurasi)
+     */
+    private function akunListUntuk(?int $unit, bool $aktifOnly = false, bool $termasukBelumAlokasi = false): array
+    {
+        return $this->AkunScope->akunTerlihat(
+            $this->unitIdsUser(),
+            $unit,
+            $aktifOnly,
+            $termasukBelumAlokasi
+        );
+    }
+
+    /**
+     * Rekening AKTIF untuk form transaksi — selalu hasil irisan dua scope.
      */
     private function akunAktifUntuk(?int $unit): array
     {
-        $unitId = $unit ?: (int) session('ID_UNIT');
+        return $this->akunListUntuk($unit, true, false);
+    }
 
-        if ($this->lintas()) {
-            return $this->AkunModel->getAktifUntukUnit($unitId);
+    /**
+     * Rekening yang boleh jadi SUMBER (akun asal / akun pengirim).
+     *
+     * Menyaring daftar aktif dengan canUseAsSource() sehingga:
+     *   - rekening Finance/HO (IRA) TAMPIL hanya untuk ROOT / ADMIN CENTER;
+     *   - rekening unit/shared mengikuti irisan user scope & account scope.
+     */
+    private function akunSumberUntuk(?int $unit): array
+    {
+        $role = (int) session('ID_JABATAN');
+
+        return array_values(array_filter(
+            $this->akunAktifUntuk($unit),
+            fn ($a) => $this->AkunScope->canUseAsSource($a, $unit, $role)
+        ));
+    }
+
+    /**
+     * Rekening yang boleh jadi TUJUAN (akun tujuan / akun penerima).
+     *
+     * Menyaring dengan canUseAsDestination(). Rekening Finance/HO (IRA)
+     * ikut untuk semua unit yang boleh bertransaksi — inilah yang membuat
+     * "Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-sama sah.
+     */
+    private function akunTujuanUntuk(?int $unit): array
+    {
+        $role = (int) session('ID_JABATAN');
+
+        return array_values(array_filter(
+            $this->akunAktifUntuk($unit),
+            fn ($a) => $this->AkunScope->canUseAsDestination($a, $unit, $role)
+        ));
+    }
+
+    /**
+     * Boleh dikelola/diedit di halaman master? Rekening non-shared hanya bila
+     * unit pemiliknya dalam user scope. Rekening shared boleh bila ada alokasi
+     * ke unit dalam scope, ATAU belum punya alokasi sama sekali (kalau tidak,
+     * tidak akan pernah bisa dikonfigurasi dari UI).
+     */
+    private function akunBolehDiKelola($akun): bool
+    {
+        // Rekening Finance/HO tidak dimiliki unit mana pun dan tidak punya
+        // baris alokasi, sehingga cek unit di bawah ini selalu lolos. Supaya
+        // itu tidak jadi celah (admin cabang mengedit rekening HO), pengelolaan
+        // HO ikut memakai daftar role yang sudah dikonfigurasi.
+        if ($this->AkunScope->isFinanceHo($akun)) {
+            return KasBankScopeService::roleBolehFinanceHoSource((int) session('ID_JABATAN'));
         }
 
-        return $this->AkunModel->getAktifUntukUnitTerbatas($unitId);
+        if ((int) ($akun->is_shared ?? 0) !== 1) {
+            return $this->AkunScope->userBolehUnit((int) ($akun->unit_id ?? 0));
+        }
+
+        $entitled = $this->AkunScope->entitledUnitIds((int) $akun->idakun_kas_bank);
+        if (empty($entitled)) {
+            return true;
+        }
+
+        return count(array_intersect($entitled, $this->unitIdsUser())) > 0;
     }
 
     private function pageData(): array
@@ -164,12 +248,20 @@ class KasBank extends BaseController
     /**
      * Dashboard Kas & Bank.
      *
-     * - Tiap akun = rekening KAS/BANK FISIK. Saldo akun adalah saldo fisik
-     *   (gabungan semua unit). Rekening bersama tampil apa adanya, tidak
-     *   di-klaim eksklusif milik satu unit.
-     * - Saat unit dipilih: total Kas/Bank dihitung per unit (alokasi saldo
-     *   awal unit + transaksi unit), difilter via unit_id.
-     * - Peringatan bila total alokasi saldo awal unit melebihi saldo fisik.
+     * TIGA ANGKA YANG HARUS TIDAK DICAMPUR:
+     *   1. saldo FISIK rekening   = saldo awal + seluruh arus rekening
+     *   2. HAK/ALOKASI unit       = alokasi saldo awal + arus unit tsb
+     *   3. total KONSOLIDASI       = jumlah saldo FISIK atas rekening distinct
+     *
+     * Konsolidasi TIDAK boleh menjumlahkan hak unit per unit: rekening shared
+     * Rp15jt yang dialokasikan 10jt/5jt akan terhitung 25jt kalau approach
+     * lama dipakai. Konsolidasi memakai saldo fisik per rekening, satu kali.
+     *
+     * Rekening yang ditampilkan selalu hasil irisan USER SCOPE (unit mana yang
+     * boleh diakses user) dan ACCOUNT SCOPE (unit mana yang punya hak atas
+     * rekening) — lihat KasBankScopeService.
+     *
+     * @param int|null $unitTerpilih null = konsolidasi
      */
     public function index()
     {
@@ -178,11 +270,23 @@ class KasBank extends BaseController
         $tanggalAkhir = $this->request->getGet('tanggal_akhir') ?: date('Y-m-d');
         $akunId       = (int)$this->request->getGet('akun_id');
 
-        $akun = $this->akunListUntuk($unitTerpilih > 0 ? $unitTerpilih : null);
+        // Dashboard menampilkan rekening yang bisa dipakai (aktif saja) —
+        // rekening nonaktif tidak bisa jadi sumber atau tujuan transaksi apa pun.
+        $akun = $this->akunListUntuk($unitTerpilih, true, false);
+
+        if ($akunId > 0) {
+            $akun = array_values(array_filter(
+                $akun,
+                static fn ($a) => (int) $a->idakun_kas_bank === $akunId
+            ));
+        }
+
+        $akunIds = array_map('intval', array_column($akun, 'idakun_kas_bank'));
 
         $saldoFisikPerAkun = [];
         $saldoUnitPerAkun  = [];
         $alokasiTotal      = [];
+        $belumDialokasikan = [];
         $warningAlokasi    = [];
         $totalKas = 0;
         $totalBank = 0;
@@ -190,6 +294,8 @@ class KasBank extends BaseController
         $totalFisikKas = 0;
         $totalFisikBank = 0;
         $totalFisikSemua = 0;
+
+        $konsolidasi = ($unitTerpilih === null || $unitTerpilih <= 0);
 
         foreach ($akun as $a) {
             $aid = (int)$a->idakun_kas_bank;
@@ -199,6 +305,8 @@ class KasBank extends BaseController
             if ($alokasiTotal[$aid] > $fisik) {
                 $warningAlokasi[] = $aid;
             }
+            // Sisa saldo fisik yang belum menjadi hak unit manapun.
+            $belumDialokasikan[$aid] = $fisik - $alokasiTotal[$aid];
 
             $totalFisikSemua += $fisik;
             if ($a->tipe === 'KAS') {
@@ -207,7 +315,8 @@ class KasBank extends BaseController
                 $totalFisikBank += $fisik;
             }
 
-            if ($unitTerpilih > 0) {
+            if (! $konsolidasi) {
+                // Tampilan per unit: hak unit (alokasi + arus unit).
                 $unitSaldo = $this->TransaksiModel->getSaldoUnitAkun($aid, $unitTerpilih);
                 $saldoUnitPerAkun[$aid] = $unitSaldo;
                 $totalSemua += $unitSaldo;
@@ -217,6 +326,7 @@ class KasBank extends BaseController
                     $totalBank += $unitSaldo;
                 }
             } else {
+                // Konsolidasi: saldo FISIK per rekening, satu kali per rekening.
                 $totalSemua += $fisik;
                 if ($a->tipe === 'KAS') {
                     $totalKas += $fisik;
@@ -230,7 +340,15 @@ class KasBank extends BaseController
             ->select('transaksi_kas_bank.jenis, SUM(transaksi_kas_bank.jumlah) as total')
             ->groupBy('transaksi_kas_bank.jenis');
 
-        if ($unitTerpilih > 0) {
+        // Ringkasan arus WAJIB dibatasi rekening dalam scope, kalau tidak
+        // transaksi rekening yang tidak terlihat pun ikut terhitung.
+        if (empty($akunIds)) {
+            $builder->where('1 = 0');
+        } else {
+            $builder->whereIn('transaksi_kas_bank.akun_kas_bank_id', $akunIds);
+        }
+
+        if (! $konsolidasi) {
             $builder->where('transaksi_kas_bank.unit_id', $unitTerpilih);
         }
         if ($tanggalAwal) {
@@ -238,9 +356,6 @@ class KasBank extends BaseController
         }
         if ($tanggalAkhir) {
             $builder->where('transaksi_kas_bank.tanggal <=', $tanggalAkhir);
-        }
-        if ($akunId > 0) {
-            $builder->where('transaksi_kas_bank.akun_kas_bank_id', $akunId);
         }
 
         // Finance cut-off: Net Cash Flow & ringkasan pemasukan/pengeluaran yang
@@ -270,10 +385,13 @@ class KasBank extends BaseController
 
         $data = array_merge($this->pageData(), [
             'unit_terpilih'        => $unitTerpilih,
+            'konsolidasi'          => $konsolidasi,
             'akun_kas_bank'        => $akun,
+            'akun_scope'           => $this->AkunScope->petaAccountScope($akun),
             'saldo_fisik_per_akun' => $saldoFisikPerAkun,
             'saldo_unit_per_akun'  => $saldoUnitPerAkun,
             'alokasi_total'        => $alokasiTotal,
+            'belum_dialokasikan'   => $belumDialokasikan,
             'warning_alokasi'      => $warningAlokasi,
             'total_kas'            => $totalKas,
             'total_bank'           => $totalBank,
@@ -296,21 +414,31 @@ class KasBank extends BaseController
 
     /**
      * Master akun kas/bank + saldo awal + alokasi saldo awal per unit.
+     *
+     * Ini halaman KONFIGURASI, jadi menampilkan rekening shared yang belum
+     * punya alokasi sama sekali — tanpa itu alokasi tidak akan pernah bisa
+     * diisi dari UI. Rekening non-shared milik unit lain tetap tidak muncul.
+     * Saldo yang ditampilkan adalah saldo FISIK (bukan penjumlahan hak unit).
      */
     public function akun()
     {
         $unitTerpilih = $this->unitTerpilih();
 
-        $akun = $this->akunListUntuk($unitTerpilih ?: null);
+        $akun = $this->akunListUntuk($unitTerpilih, false, true);
 
         $fisikSaldo = [];
+        $jenisRek   = [];
         foreach ($akun as $a) {
-            $fisikSaldo[(int)$a->idakun_kas_bank] = $this->TransaksiModel->getSaldoFisikAkun((int)$a->idakun_kas_bank);
+            $id = (int) $a->idakun_kas_bank;
+            $fisikSaldo[$id] = $this->TransaksiModel->getSaldoFisikAkun($id);
+            $jenisRek[$id]   = $this->AkunScope->accountKind($a);
         }
 
         $data = array_merge($this->pageData(), [
             'unit_terpilih'     => $unitTerpilih,
             'akun_kas_bank'     => $akun,
+            'akun_scope'        => $this->AkunScope->petaAccountScope($akun),
+            'akun_jenis'        => $jenisRek,
             'saldo_fisik_akun'  => $fisikSaldo,
             'bank'              => $this->BankModel->getBank(),
             'no_akun'           => $this->NoAkunModel->getAkun(),
@@ -356,6 +484,45 @@ class KasBank extends BaseController
         }
         if ($tipe === 'KAS') {
             $shared = false;
+        }
+
+        // User scope: unit yang dicantumkan harus berada dalam scope user.
+        // Menolak di sini mencegah user membuat rekening milik unit di luar
+        // haknya (mis. admin cabang mendaftarkan rekening unit lain).
+        if ($unitId > 0 && ! $this->AkunScope->userBolehUnit($unitId)) {
+            return $this->gagal('Unit tersebut tidak berada dalam cakupan Anda.');
+        }
+
+        // Edit: rekening yang diubah harus dalam scope (account scope bila
+        // shared, atau unit pemiliknya).
+        if ($id > 0) {
+            $existing = $this->AkunModel->find($id);
+            if (! $existing) {
+                return $this->gagal('Akun tidak ditemukan');
+            }
+            if ((int) ($existing->is_shared ?? 0) === 1) {
+                if (! $this->akunBolehDiKelola($existing)) {
+                    return $this->gagal('Rekening bersama ini tidak terkait dengan unit dalam cakupan Anda.');
+                }
+            } elseif (! $this->AkunScope->userBolehUnit((int) ($existing->unit_id ?? 0))) {
+                return $this->gagal('Rekening ini milik unit di luar cakupan Anda.');
+            }
+
+            // Rekening Finance/HO adalah rekening arsitektur: bentuknya terkunci
+            // (unit NULL + shared) supaya tetap dikenali sebagai HO. Admin boleh
+            // mengubah nama/keterangan, TIDAK boleh mengubahnya menjadi rekening
+            // unit atau KAS lewat form ini.
+            if ($this->AkunScope->isFinanceHo($existing)) {
+                if ($tipe !== 'BANK') {
+                    return $this->gagal('Rekening Finance/HO tidak dapat diubah menjadi rekening KAS.');
+                }
+                if ($unitId > 0) {
+                    return $this->gagal('Rekening Finance/HO "' . $existing->nama_akun
+                        . '" bukan milik unit manapun dan tidak bisa diberi unit pemilik.');
+                }
+                $unitId = 0;
+                $shared = true;
+            }
         }
 
         $noAkunCoa = trim((string)$this->request->getPost('no_akun_coa'));
@@ -431,6 +598,24 @@ class KasBank extends BaseController
         if (!$akun || $akun->tipe !== 'BANK' || $akun->status !== 'aktif') {
             return $this->gagal('Alokasi khusus untuk rekening BANK aktif');
         }
+        if (! $this->akunBolehDiKelola($akun)) {
+            return $this->gagal('Rekening ini tidak terkait dengan unit dalam cakupan Anda.');
+        }
+
+        // Rekening Finance/HO TIDAK memakai alokasi unit: bukan milik unit
+        // mana pun dan tidak boleh dibuat "berpunya" unit. Guard di server —
+        // disembunyikan dari form saja tidak cukup.
+        if ($this->AkunScope->isFinanceHo($akun)) {
+            return $this->gagal('Rekening Finance/HO "' . $akun->nama_akun
+                . '" tidak memakai alokasi unit. Alokasi hanya untuk rekening Shared Antar Unit.');
+        }
+
+        // Unit tujuan alokasi harus dalam user scope — inilah yang menentukan
+        // siapa yang berhak atas rekening shared, jadi tidak boleh berasal dari
+        // unit di luar jangkauan user.
+        if (! $this->AkunScope->userBolehUnit($unitId)) {
+            return $this->gagal('Unit alokasi berada di luar cakupan Anda.');
+        }
 
         $saldoFisik = $this->TransaksiModel->getSaldoFisikAkun($akunId);
         $sekarang = $this->AlokasiModel->sumByAkun($akunId);
@@ -484,6 +669,9 @@ class KasBank extends BaseController
         if (!$akun || $akun->status !== 'aktif') {
             return $this->gagal('Akun tidak ditemukan / tidak aktif');
         }
+        if (! $this->akunBolehDiKelola($akun)) {
+            return $this->gagal('Rekening ini tidak terkait dengan unit dalam cakupan Anda.');
+        }
 
         $existing = $this->SaldoAwalModel->getByAkun($akunId);
         $data = [
@@ -508,8 +696,8 @@ class KasBank extends BaseController
     }
 
     /**
-     * Halaman transfer internal. Akun yang bisa dipilih = yang bisa dipakai
-     * unit terpilih (KAS unit + semua rekening BANK fisik).
+     * Halaman transfer internal. Akun yang bisa dipilih = yang ada dalam
+     * irisan USER SCOPE x ACCOUNT SCOPE.
      */
     public function transfer()
     {
@@ -517,18 +705,50 @@ class KasBank extends BaseController
 
         $data = array_merge($this->pageData(), [
             'unit_terpilih' => $unitTerpilih,
+            // Daftar SUMBER dan TUJUAN sengaja dipisah: rekening Finance/HO
+            // (IRA) boleh jadi tujuan dari unit mana pun, tapi hanya ROOT /
+            // ADMIN CENTER yang boleh men takers docketnya.
+            'akun_sumber'   => $this->akunSumberUntuk($unitTerpilih),
+            'akun_tujuan'   => $this->akunTujuanUntuk($unitTerpilih),
             'akun_kas_bank' => $this->akunAktifUntuk($unitTerpilih),
             'can_transaksi' => $this->bisaTransaksi(),
-            'transaksi'     => $this->TransaksiModel
-                ->where('jenis', ModeKasBank::JENIS_TRANSFER)
-                ->orderBy('idtransaksi', 'DESC')
-                ->limit(200)
-                ->findAll(),
+            'transaksi'     => $this->transaksiTerlihat(ModeKasBank::JENIS_TRANSFER, $unitTerpilih),
             'submit_token'  => $this->buatSubmitToken(),
             'body'          => 'kas_bank/transfer',
         ]);
 
         return view('template', $data);
+    }
+
+    /**
+     * Daftar transaksi kas/bank yang boleh dilihat: DIBATASI rekening dalam
+     * scope. Tanpa ini user akan melihat mutasi rekening yang account
+     * scope-nya di luar haknya.
+     */
+    private function transaksiTerlihat(string $jenis, ?int $unitTerpilih)
+    {
+        $akunIds = $this->AkunScope->akunIdsTerlihat(
+            $this->unitIdsUser(),
+            $unitTerpilih,
+            true,
+            false
+        );
+
+        if (empty($akunIds)) {
+            return [];
+        }
+
+        return $this->TransaksiModel
+            ->where('jenis', $jenis)
+            ->groupStart()
+                ->whereIn('akun_kas_bank_id', $akunIds)
+                ->orGroupStart()
+                    ->whereIn('akun_tujuan_id', $akunIds)
+                ->groupEnd()
+            ->groupEnd()
+            ->orderBy('idtransaksi', 'DESC')
+            ->limit(200)
+            ->findAll();
     }
 
     public function saveTransfer()
@@ -543,13 +763,18 @@ class KasBank extends BaseController
         $ket       = trim((string)$this->request->getPost('keterangan'));
         $token     = (string)$this->request->getPost('submit_token');
 
-        // Unit transaksi di-stamp dari form (default akun sesi).
+        // Unit transaksi di-stamp dari form. User non-lintas TIDAK boleh
+        // memilih unit bebas: unitnya dipaksa ke unit sesinya, kalau tidak
+        // form bisa meng-stamp leg ke unit yang di luar haknya.
         $unitId = (int)$this->request->getPost('unit_id');
         if ($unitId <= 0) {
             $unitId = (int)session()->get('ID_UNIT');
         }
         if ($unitId <= 0) {
-            $unitId = $this->unitTerpilih();
+            $unitId = (int)$this->unitTerpilih();
+        }
+        if (! $this->AkunScope->userBolehUnit($unitId)) {
+            return $this->gagal('Unit transaksi berada di luar cakupan Anda.');
         }
 
         if (!$this->klaimSubmitToken($token)) {
@@ -572,19 +797,27 @@ class KasBank extends BaseController
             return $this->gagal('Akun asal / tujuan tidak valid atau tidak aktif');
         }
 
-        // Admin cabang: hanya boleh memindahkan antar rekening unitnya sendiri.
-        if (!$this->lintas()) {
-            $boleh = $this->AkunModel->getAktifUntukUnitTerbatas((int) session('ID_UNIT'));
-            $bolehIds = array_map('intval', array_column($boleh, 'idakun_kas_bank'));
-            if (!in_array($asalId, $bolehIds, true) || !in_array($tujuanId, $bolehIds, true)) {
-                return $this->gagal('Transfer hanya boleh antar rekening unit Anda');
-            }
-        }
-
         // Unit per leg: KAS terikat unit pemilik rekening; BANK (rekening
-        // fisik) di-stamp unit transaksi dari form (default sesi/unit terpilih).
+        // fisik) di-stamp unit transaksi dari form.
         $unitKeluar = $asal->tipe === 'KAS' ? (int)$asal->unit_id : $unitId;
         $unitMasuk  = $tujuan->tipe === 'KAS' ? (int)$tujuan->unit_id : $unitId;
+        $role       = (int) session('ID_JABATAN');
+
+        // GUARD BERARAH — "boleh transfer KE IRA" tidak berarti boleh memakai
+        // IRA sebagai SUMBER.
+        //   FINANCE_HO/IRA: sebagai tujuan = unit mana pun yang boleh
+        //     bertransaksi (Unit 1 -> IRA dan Unit 2 -> IRA sama-sama sah);
+        //     sebagai sumber = HANYA ROOT / ADMIN CENTER.
+        //   UNIT   : hanya unit pemiliknya, dua arah.
+        //   SHARED : hanya unit yang punya baris alokasi, dua arah.
+        if (! $this->AkunScope->canUseAsSource($asal, $unitKeluar, $role)) {
+            return $this->gagal('Akun asal tidak dapat dipakai. '
+                . $this->alasanRekeningDitolak($asal, $unitKeluar, 'source', $role));
+        }
+        if (! $this->AkunScope->canUseAsDestination($tujuan, $unitMasuk, $role)) {
+            return $this->gagal('Akun tujuan tidak dapat dipakai. '
+                . $this->alasanRekeningDitolak($tujuan, $unitMasuk, 'destination', $role));
+        }
 
         $transferRef = 'TRF-' . date('ymd') . '-' . strtoupper(substr(uniqid(), -6));
         $bukti       = $this->uploadBukti();
@@ -653,6 +886,14 @@ class KasBank extends BaseController
             return $this->gagal('Transaksi transfer tidak ditemukan');
         }
 
+        // Reversal menghapus SELURUH pasangan transfer_ref, jadi kedua rekening
+        // dan unit leg-nya harus berada dalam scope user.
+        foreach ($this->TransaksiModel->getByTransferRef((string) $row->transfer_ref) as $leg) {
+            if (! $this->AkunScope->userBolehUnit((int) $leg->unit_id)) {
+                return $this->gagal('Transaksi transfer ini involve unit di luar cakupan Anda.');
+            }
+        }
+
         $db = \Config\Database::connect();
         $db->transStart();
         $this->TransaksiModel->where('transfer_ref', $row->transfer_ref)->delete();
@@ -717,15 +958,12 @@ class KasBank extends BaseController
             'unit_terpilih'    => $unitTerpilih,
             'akun_kas_bank'    => $this->akunAktifUntuk($unitTerpilih),
             'can_transaksi'    => $this->bisaTransaksi(),
-            'akun_penerima'    => $this->akunListUntuk($unitTerpilih),
+            'akun_pengirim'    => $this->akunSumberUntuk($unitTerpilih),
+            'akun_penerima'    => $this->akunTujuanUntuk($unitTerpilih),
             'hp_hutang'        => $hp,
             'hp_piutang'       => $piutang,
             'detail_mutasi_map'=> $detailMutasiMap,
-            'pembayaran'       => $this->TransaksiModel
-                ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
-                ->orderBy('idtransaksi', 'DESC')
-                ->limit(200)
-                ->findAll(),
+            'pembayaran'       => $this->transaksiTerlihat(ModeKasBank::JENIS_ANTAR_UNIT, $unitTerpilih),
             'histori'          => $this->PembayaranModel->findAll(),
             'histori_atribusi' => $atribusi,
             'submit_token'     => $this->buatSubmitToken(),
@@ -736,15 +974,38 @@ class KasBank extends BaseController
     }
 
     /**
-     * Cek akun fisik bisa dipakai satu unit: KAS harus milik unit tsb;
-     * BANK (rekening fisik) bebas dipakai lintas unit.
+     * Pesan error yang menyebut alasan penolakan rekening secara SPESIFIK
+     * menurut jenis & arah, supaya user tahu harus memperbaiki apa.
+     *
+     * @param string $arah 'source' | 'destination'
      */
-    private function cekAkunUntukUnit($akun, int $unitId): bool
+    private function alasanRekeningDitolak($akun, int $unitId, string $arah = 'source', ?int $role = null): string
     {
-        if ($akun->tipe === 'KAS') {
-            return (int)$akun->unit_id === $unitId;
+        $nama = (string) ($akun->nama_akun ?? 'rekening tersebut');
+        $role = $role ?? (int) session('ID_JABATAN');
+        $kind = $this->AkunScope->accountKind($akun);
+
+        if ($kind === KasBankScopeService::KIND_FINANCE_HO) {
+            if ($arah === 'source') {
+                return 'Rekening Finance/HO "' . $nama . '" hanya boleh mengeluarkan dana oleh '
+                    . 'Admin Root atau Admin Center. Jabatan Anda tidak berwenang menarik dana '
+                    . 'dari rekening HO — Anda tetap boleh mentransfer DANA KE rekening ini.';
+            }
+
+            return 'Rekening Finance/HO "' . $nama . '" tidak dapat dipakai: unit ' . $unitId
+                . ' berada di luar cakupan Anda.';
         }
-        return true; // rekening BANK fisik
+
+        if ($arah === 'source') {
+            return 'Rekening "' . $nama . '" tidak boleh menjadi SUMBER dana untuk unit ' . $unitId . '.';
+        }
+
+        if ($kind === KasBankScopeService::KIND_SHARED) {
+            return 'Rekening "' . $nama . '" tidak dialokasikan ke unit ' . $unitId . '. '
+                . 'Tambahkan alokasi unit tersebut di Master Akun Kas & Bank terlebih dahulu.';
+        }
+
+        return 'Rekening "' . $nama . '" hanya milik unit ' . (int) ($akun->unit_id ?? 0) . '.';
     }
 
     /**
@@ -801,21 +1062,29 @@ class KasBank extends BaseController
             return $this->gagal('Pasangan piutang tidak ditemukan');
         }
 
-        // Kelayakan akun fisik per unit (KAS unit tsb / BANK bebas).
-        if (!$this->cekAkunUntukUnit($akunKirim, (int)$hp->unit_id)) {
-            return $this->gagal('Akun pengirim harus KAS milik unit yang punya hutang atau rekening BANK fisik');
+        // Rekening pengirim harus berarah-SUMBER atas unit yang punya hutang,
+        // rekening penerima berarah-TUJUAN atas unit yang berpiutang.
+        //   Finance/HO sebagai pengirim -> hanya ROOT / ADMIN CENTER.
+        //   Finance/HO sebagai penerima   -> unit mana pun (sah).
+        //   Rekening non-shared milik unit lain DITOLAK; rekening shared harus
+        //   dialokasikan ke unit tsb lebih dulu.
+        $role = (int) session('ID_JABATAN');
+
+        if (!$this->AkunScope->canUseAsSource($akunKirim, (int)$hp->unit_id, $role)) {
+            return $this->gagal('Akun pengirim ditolak. '
+                . $this->alasanRekeningDitolak($akunKirim, (int)$hp->unit_id, 'source', $role));
         }
-        if (!$this->cekAkunUntukUnit($akunTerima, (int)$piutang->unit_id)) {
-            return $this->gagal('Akun penerima harus KAS milik unit yang berpiutang atau rekening BANK fisik');
+        if (!$this->AkunScope->canUseAsDestination($akunTerima, (int)$piutang->unit_id, $role)) {
+            return $this->gagal('Akun penerima ditolak. '
+                . $this->alasanRekeningDitolak($akunTerima, (int)$piutang->unit_id, 'destination', $role));
         }
 
-        // Admin cabang: hanya boleh memakai rekening unitnya sendiri.
-        if (!$this->lintas()) {
-            $boleh = $this->AkunModel->getAktifUntukUnitTerbatas((int) session('ID_UNIT'));
-            $bolehIds = array_map('intval', array_column($boleh, 'idakun_kas_bank'));
-            if (!in_array($akunKirimId, $bolehIds, true) || !in_array($akunTerimaId, $bolehIds, true)) {
-                return $this->gagal('Pembayaran hanya boleh pakai rekening unit Anda');
-            }
+        // User scope: unit yang punya hutang/piutang WAJIB dalam cakupan user.
+        // Tanpa ini admin cabang bisa menyelesaikan hutang unit lain, dan leg
+        // kasnya ter-stamp ke unit yang bukan haknya.
+        if (!$this->AkunScope->userBolehUnit((int)$hp->unit_id)
+            || !$this->AkunScope->userBolehUnit((int)$piutang->unit_id)) {
+            return $this->gagal('Hutang antar unit ini involve unit di luar cakupan Anda.');
         }
 
         $bukti = $this->uploadBukti();
@@ -965,6 +1234,12 @@ class KasBank extends BaseController
             return $this->gagal('Catatan pembayaran atribusi tidak ditemukan');
         }
 
+        // Reversal atribusi mengembalikan sisa H/P -> unit H/P harus dalam scope.
+        $hp = $this->HPModel->find($idHp);
+        if (!$hp || ! $this->AkunScope->userBolehUnit((int) $hp->unit_id)) {
+            return $this->gagal('Hutang antar unit ini involve unit di luar cakupan Anda.');
+        }
+
         $db = \Config\Database::connect();
         $db->transStart();
 
@@ -994,6 +1269,14 @@ class KasBank extends BaseController
         $row = $this->TransaksiModel->find($id);
         if (!$row || $row->jenis !== ModeKasBank::JENIS_ANTAR_UNIT || $row->arah !== ModeKasBank::ARAH_KELUAR) {
             return $this->gagal('Transaksi pembayaran antar unit tidak ditemukan');
+        }
+
+        // Reversal men-HAPUS saldo kedua rekening + mengembalikan sisa H/P
+        // milik unit lawan, jadi seluruh leg harus dalam scope user.
+        foreach ($this->TransaksiModel->getByTransferRef((string) $row->transfer_ref) as $leg) {
+            if (! $this->AkunScope->userBolehUnit((int) $leg->unit_id)) {
+                return $this->gagal('Transaksi ini involve unit di luar cakupan Anda.');
+            }
         }
 
         $transferRef = $row->transfer_ref;

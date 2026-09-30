@@ -83,7 +83,7 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                         <label class="kb-label mb-1">Akun Pengirim (Kas/Bank)</label>
                         <select name="akun_pengirim_id" id="akun_pengirim" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
                             <option value="">Pilih Rekening Pengirim</option>
-                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                            <?php foreach (($akun_pengirim ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>" data-unit="<?= (int) $a->unit_id ?>">
                                     [<?= esc($unitMap[(int) $a->unit_id] ?? 'U' . $a->unit_id) ?>] <?= esc($a->nama_akun) ?> (<?= esc($a->tipe) ?>)
                                 </option>
@@ -97,7 +97,7 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                             <option value="">Pilih Rekening Penerima</option>
                             <?php foreach (($akun_penerima ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>">
-                                    <?= esc($kelAkun($a)) ?> <?= (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id)) ? '(Bersama)' : '' ?>
+                                    <?= esc($kelAkun($a)) ?> <?= (int) ($a->is_shared ?? 0) === 1 ? '(Bersama)' : '' ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

@@ -102,4 +102,24 @@ class Finance extends BaseConfig
      * miliknya sendiri (separation of duties).
      */
     public array $financeApproveRoles = [1, 34];
+
+    /**
+     * ID_JABATAN yang boleh MENARIK DANA dari rekening Finance/HO (mis. IRA).
+     *
+     * Rekening Finance/HO (akun_kas_bank.is_finance_ho = 1) bukan milik unit
+     * mana pun dan tidak butuh alokasi_saldo_kas_bank. Akses-nya BERARAH:
+     *
+     *   - sebagai TUJUAN  : unit mana pun yang memang boleh bertransaksi
+     *                      (mis. "Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-sama
+     *                      valid). Tidak butuh izin-role apa pun.
+     *   - sebagai SUMBER  : HANYA role di bawah ini.
+     *
+     * 0 = ADMIN CENTER, 1 = Admin root.
+     *
+     * PENTING: "boleh transfer KE IRA" TIDAK berarti user tersebut boleh
+     * memakai IRA sebagai rekening sumber. Jangan gunakan resolveAllowedUnits()
+     * sebagai pengganti permission rekening Finance/HO — itu user scope,
+     * bukan permission penarikan dana.
+     */
+    public array $financeHoSourceRoles = [0, 1];
 }

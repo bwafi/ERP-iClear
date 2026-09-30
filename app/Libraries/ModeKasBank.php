@@ -12,6 +12,7 @@ use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPembayaranPiutang;
 use App\Models\ModelTransaksiKasBank;
 use App\Models\ModelUnit;
+use App\Services\Finance\KasBankScopeService;
 
 /**
  * ModeKasBank:
@@ -46,6 +47,7 @@ class ModeKasBank
     protected $KasKeluarModel;
     protected $PembayaranHutangModel;
     protected $PembayaranPiutangModel;
+    protected $Scope;
 
     public function __construct()
     {
@@ -59,35 +61,77 @@ class ModeKasBank
         $this->KasKeluarModel = new ModelKasKeluar();
         $this->PembayaranHutangModel = new ModelPembayaranHutang();
         $this->PembayaranPiutangModel = new ModelPembayaranPiutang();
+        $this->Scope = new KasBankScopeService();
     }
 
     /**
      * Resolve rekening FISIK dari unit & bank.
-     * - Prioritas: akun BANK aktif dengan bank_idbank tsb (rekening fisik,
-     *   dipakai lintas unit -> TIDAK dibatasi unit).
-     * - Jika tidak ada / bankId kosong: akun KAS pertama aktif milik unit.
-     * Return idakun_kas_bank atau null jika tidak ada -> posting di-skip.
+     *
+     * - $bankId diberikan : WAJIB rekening BANK aktif dengan bank_idbank tsb,
+     *   DAN unit tsb harus punya HAK atas rekening itu (account scope:
+     *   non-shared -> unit pemilik; shared -> ada baris alokasi). Kalau bank
+     *   tidak terdaftar / nonaktif / unit tidak berhak -> null (posting
+     *   di-skip). TIDAK boleh fallback ke KAS: bank yang hilang bukan alasan
+     *   uang tunai yang salah classify ke laci kas.
+     * - $bankId kosong    : akun KAS pertama aktif milik unit tsb.
+     *
+     * Null berarti "tidak terkonfigurasi" -> posting di-skip, bukan dipaksa
+     * masuk ke rekening lain.
      *
      * Backward compatible: guard sudahTerposting (sumber, akun, arah) menjaga
      * baris yang sudah diposting TIDAK diubah; perubahan berimbas hanya pada
      * baris yang belum terposting.
      */
-    public function resolveAkun(int $unitId, ?string $bankId = null): ?int
+    /**
+     * Tentukan rekening fisik untuk satu leg transaksi.
+     *
+     * PERILAKU YANG WAJIB DIPERTAHANKAN (fix sebelumnya):
+     *   - $bankId diberikan tapi rekeningnya tidak ditemukan / nonaktif  -> FAIL
+     *     (return null). TIDAK boleh fallback ke KAS: memindahkan uang bank ke
+     *     rekening kas tunai adalah salah klasifikasi.
+     *   - fallback KAS hanya bila $bankId memang TIDAK diberikan.
+     *
+     * ARAH menentukan izin (lihat KasBankScopeService):
+     *   - ARAH_MASUK  -> canUseAsDestination: rekening Finance/HO (IRA)
+     *     diterima dari unit mana pun.
+     *   - ARAH_KELUAR -> canUseAsSource: rekening Finance/HO hanya boleh
+     *     ditarik oleh ROOT / ADMIN CENTER.
+     *
+     * @param string $arah self::ARAH_MASUK | self::ARAH_KELUAR
+     * @param int|null $role ID_JABATAN; null = ambil dari session
+     */
+    public function resolveAkun(int $unitId, ?string $bankId = null, string $arah = self::ARAH_KELUAR, ?int $role = null): ?int
     {
-        if (!empty($bankId)) {
-            $bank = $this->AkunModel->getBankByBankIdbank((string)$bankId);
-            if ($bank) {
-                return (int)$bank->idakun_kas_bank;
+        $unitId = (int) $unitId;
+        $role   = $role ?? (int) session('ID_JABATAN');
+        $sebagai = $arah === self::ARAH_MASUK ? 'destination' : 'source';
+
+        if (! empty($bankId)) {
+            $bank = $this->AkunModel->getBankByBankIdbank((string) $bankId);
+            if (! $bank) {
+                return null;
             }
+
+            // Account scope BERARAH + user scope.
+            $boleh = $sebagai === 'destination'
+                ? $this->Scope->canUseAsDestination($bank, $unitId, $role)
+                : $this->Scope->canUseAsSource($bank, $unitId, $role);
+
+            if (! $boleh) {
+                return null;
+            }
+
+            return (int) $bank->idakun_kas_bank;
         }
 
         $kas = $this->AkunModel
-            ->where('unit_id', (int)$unitId)
+            ->where('unit_id', $unitId)
             ->where('tipe', 'KAS')
+            ->where('is_finance_ho', 0)
             ->where('status', 'aktif')
             ->first();
         if ($kas) {
-            return (int)$kas->idakun_kas_bank;
+            return (int) $kas->idakun_kas_bank;
         }
 
         return null;
@@ -220,7 +264,7 @@ class ModeKasBank
             return ['status' => 'failed', 'reason' => 'kas masuk tidak ditemukan', 'id' => $id];
         }
 
-        $akunId = $this->resolveAkun((int)$row->idunit, $row->idbank ?? null);
+        $akunId = $this->resolveAkun((int)$row->idunit, $row->idbank ?? null, self::ARAH_MASUK);
         if (!$akunId) {
             return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $id];
         }
@@ -258,7 +302,7 @@ class ModeKasBank
             return ['status' => 'failed', 'reason' => 'kas keluar tidak ditemukan', 'id' => $id];
         }
 
-        $akunId = $this->resolveAkun((int)$row->idunit, $row->idbank ?? null);
+        $akunId = $this->resolveAkun((int)$row->idunit, $row->idbank ?? null, self::ARAH_KELUAR);
         if (!$akunId) {
             return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $id];
         }
@@ -312,10 +356,10 @@ class ModeKasBank
 
         $legs = [];
         if ($tunai > 0) {
-            $legs[] = ['akun' => $this->resolveAkun($unitId, null), 'jumlah' => $tunai, 'bank' => null];
+            $legs[] = ['akun' => $this->resolveAkun($unitId, null, self::ARAH_KELUAR), 'jumlah' => $tunai, 'bank' => null];
         }
         if ($bank > 0) {
-            $legs[] = ['akun' => $this->resolveAkun($unitId, $row->bank_idbank ?? null), 'jumlah' => $bank, 'bank' => $row->bank_idbank ?? null];
+            $legs[] = ['akun' => $this->resolveAkun($unitId, $row->bank_idbank ?? null, self::ARAH_KELUAR), 'jumlah' => $bank, 'bank' => $row->bank_idbank ?? null];
         }
 
         $inserted = 0;
@@ -367,7 +411,7 @@ class ModeKasBank
             return ['status' => 'failed', 'reason' => 'pembayaran piutang tidak ditemukan', 'id' => $idPembayaranPiutang];
         }
 
-        $akunId = $this->resolveAkun($unitId, $row->bank_idbank ?? null);
+        $akunId = $this->resolveAkun($unitId, $row->bank_idbank ?? null, self::ARAH_MASUK);
         if (!$akunId) {
             return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $idPembayaranPiutang];
         }

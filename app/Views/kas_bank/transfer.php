@@ -75,7 +75,7 @@ $labelAkun = static function ($a) use ($unitMap) {
                         <label class="kb-label mb-1">Dari Akun (Pengirim)</label>
                         <select name="akun_asal_id" class="form-select form-select-sm kb-select" required <?= $canInput ? '' : 'disabled' ?>>
                             <option value="">Pilih Rekening Asal</option>
-                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                            <?php foreach (($akun_sumber ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkun($a)) ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -84,8 +84,8 @@ $labelAkun = static function ($a) use ($unitMap) {
                     <div class="mb-3">
                         <label class="kb-label mb-1">Ke Akun (Penerima)</label>
                         <select name="akun_tujuan_id" class="form-select form-select-sm kb-select" required <?= $canInput ? '' : 'disabled' ?>>
-                            <option value="">Pilih Rekening Tujuan</option>
-                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                            <option value="">— Pilih rekening tujuan —</option>
+                            <?php foreach (($akun_tujuan ?? []) as $a) : ?>
                                 <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkun($a)) ?></option>
                             <?php endforeach; ?>
                         </select>

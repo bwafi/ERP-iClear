@@ -189,20 +189,32 @@ $netFlow = (int) ($net_cash_flow ?? 0);
                         <?php else : ?>
                             <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
                                 <?php
-                                $shared = (int) ($a->is_shared ?? 0) === 1 || ($a->tipe === 'BANK' && empty($a->unit_id));
-                                $fisik = $saldo_fisik_per_akun[(int) $a->idakun_kas_bank] ?? 0;
-                                $unitSaldo = $saldo_unit_per_akun[(int) $a->idakun_kas_bank] ?? 0;
+                                $akunIdRow   = (int) $a->idakun_kas_bank;
+                                $shared      = (int) ($a->is_shared ?? 0) === 1;
+                                // Account scope: unit yang benar-benar punya hak
+                                // atas rekening ini (alokasi), bukan "semua unit".
+                                $entitled    = $akun_scope[$akunIdRow] ?? [];
+                                $entitledNama = implode(', ', array_map(
+                                    static fn ($uid) => (string) ($unitMap[(int) $uid] ?? ('Unit ' . $uid)),
+                                    $entitled
+                                ));
+                                $fisik = $saldo_fisik_per_akun[$akunIdRow] ?? 0;
+                                $unitSaldo = $saldo_unit_per_akun[$akunIdRow] ?? 0;
                                 ?>
                                 <tr class="kb-row-main">
                                     <td>
                                         <div class="kb-name">
                                             <?= esc($a->nama_akun) ?>
                                             <?php if ($shared) : ?>
-                                                <span class="kb-badge kb-badge-muted">Shared</span>
+                                                <span class="kb-badge kb-badge-muted"><?= $entitledNama !== '' ? 'Shared · ' . esc($entitledNama) : 'Shared · belum dialokasikan' ?></span>
                                             <?php endif; ?>
                                         </div>
                                         <div class="kb-sub kb-meta">
-                                            <?= esc($unitMap[(int) $a->unit_id] ?? 'Lintas Unit') ?>
+                                            <?php if ($shared) : ?>
+                                                Dialokasikan ke: <?= $entitledNama !== '' ? esc($entitledNama) : 'belum ada unit' ?>
+                                            <?php else : ?>
+                                                <?= esc($unitMap[(int) $a->unit_id] ?? 'Tanpa unit') ?>
+                                            <?php endif; ?>
                                             <?= $a->bank_idbank ? ' · ' . esc($a->bank_idbank) : '' ?>
                                         </div>
                                     </td>
