@@ -33,6 +33,7 @@
                                     <th>Warna</th>
                                     <th>Nama Unit</th>
                                     <th>HPP</th>
+                                    <th>Stok Akhir</th>
                                     <th>Harga</th>
                                 </tr>
                             </thead>
@@ -57,6 +58,7 @@
             <tr>
                 <th>Nama Sparepart</th>
                 <th>Harga</th>
+                <th>Stok Akhir</th>
                 <th>Qty</th>
                 <th>Diskon</th>
                 <th>Total</th>
@@ -133,7 +135,7 @@
         if (oldSpareparts && oldSpareparts.length > 0) {
             oldSpareparts.forEach((sp) => {
                 addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
-                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan));
+                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.stok_akhir || 0));
                 const checkbox = document.querySelector(`.sparepart-check[data-id="${sp.barang_idbarang}"]`);
                 if (checkbox) checkbox.checked = true;
             });
@@ -177,14 +179,14 @@
                                     <input type="checkbox" class="sparepart-check" 
                                         data-id="${item.idbarang}" 
                                         data-nama="${item.nama_barang}" 
-                                        data-harga="${item.harga}"
+                                        data-harga="${item.harga}" data-stok="${item.stok_akhir ?? 0}"
                                         ${isChecked}>
                                 </td>
                                 <td>${item.nama_barang}</td>
                                 <td>${item.warna || '-'}</td>
                                 <td>${item.nama_unit || '-'}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_beli)}</td>
-                                
+                                <td>${item.stok_akhir ?? 0}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}</td>
                             </tr>
                         `;
@@ -213,10 +215,11 @@
             const id = checkbox.getAttribute('data-id');
             const nama = checkbox.getAttribute('data-nama');
             const harga = parseFloat(checkbox.getAttribute('data-harga'));
+            const stokAkhir = parseFloat(checkbox.getAttribute('data-stok')) || 0;
 
             // Cek apakah sparepart sudah ada di tabel
             if (!document.getElementById(`row-${id}`)) {
-                addSparepartRow(id, nama, harga, 1, 0);
+                addSparepartRow(id, nama, harga, 1, 0, stokAkhir);
             }
         });
 
@@ -224,7 +227,7 @@
     });
 
     // Tambahkan baris sparepart
-    function addSparepartRow(id, nama, harga, jumlah = 1, diskon = 0) {
+    function addSparepartRow(id, nama, harga, jumlah = 1, diskon = 0, stokAkhir = 0) {
         const tbody = document.getElementById('sparepart-table-body');
 
         // Tentukan index terakhir yang belum terpakai
@@ -239,6 +242,7 @@
                 <input type="hidden" name="produk[${nextIndex}][id]" value="${id}">
             </td>
             <td><input type="text" class="form-control harga" name="produk[${nextIndex}][harga]" value="Rp ${formatNumber(harga)}"></td>
+            <td><input type="text" class="form-control" value="${formatNumber(stokAkhir)}" readonly></td>
             <td><input type="number" class="form-control qty" name="produk[${nextIndex}][jumlah]" value="${jumlah}" min="1"></td>
             <td><input type="text" class="form-control diskon-item" name="produk[${nextIndex}][diskon]" value="Rp ${formatNumber(diskon)}" min="0"></td>
             <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>
