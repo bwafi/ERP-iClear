@@ -95,7 +95,7 @@ private function userScope()
     }
 
     $allowed = [$myId];
-    $targets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+    $targets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
     if (!empty($targets)) {
         $db = Database::connect();
 

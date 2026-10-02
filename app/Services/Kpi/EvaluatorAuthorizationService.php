@@ -15,6 +15,10 @@ use App\Models\ModelAuth;
  *                        dan CS(42) — khusus Admin/Kasir yang berada di Unit 1.
  *   - Kepala Toko (41): non-Kehadiran utk Admin Cabang(35), Teknisi(36),
  *                       serta CS(42) — khusus Kepala Toko yang berada di Unit 1.
+ *   - Kepala Toko (41) di UNIT 1 (ICLEAR Probolinggo) merangkap Admin/Kasir,
+ *     jadi SELAIN non-Kehadiran ia juga boleh mengisi KEHADIRAN utk Admin/Kasir(35),
+ *     Teknisi(36), CS(42), dan dirinya sendiri(41). Kepala Toko unit lain TIDAK
+ *     mendapat tambahan akses ini (lihat UNIT_EXTRA_COMPONENT_RULES).
  *   - SPV (40)        : non-Kehadiran utk Kepala Toko(41).
  *
  * ATURAN PUSAT (HQ):
@@ -60,6 +64,25 @@ class EvaluatorAuthorizationService
         34, // Manager
         43, // Kepala Divisi
         45, // Team IT
+    ];
+
+    /**
+     * Tambahan komponen yang HANYA berlaku bila evaluator berada di unit tertentu.
+     * Struktur: unit_id => evaluatorJabatan => targetJabatan => [kode komponen].
+     *
+     * Kepala Toko (41) di Unit 1 (ICLEAR Probolinggo) merangkap Admin/Kasir,
+     * sehingga ia mengisi KEHADIRAN (tidak hanya komponen non-Kehadiran) untuk
+     * Admin/Kasir, Teknisi, CS, dan dirinya sendiri. Unit lain tidak tersentuh.
+     */
+    private const UNIT_EXTRA_COMPONENT_RULES = [
+        1 => [
+            41 => [
+                35 => self::HADIR, // Admin/Kasir unit 1
+                36 => self::HADIR, // Teknisi unit 1
+                41 => self::HADIR, // dirinya sendiri
+                42 => self::HADIR, // Customer Service
+            ],
+        ],
     ];
 
     /**
@@ -132,13 +155,36 @@ class EvaluatorAuthorizationService
     /**
      * Daftar jabatan target yang boleh dievaluasi oleh sebuah jabatan.
      *
+     * @param int|null $evaluatorUnit unit evaluator; bila diisi, sertakan jabatan
+     *                               target tambahan dari UNIT_EXTRA_COMPONENT_RULES.
+     *
      * @return int[]
      */
-    public static function allowedTargetJabatans(int $evaluatorJabatan): array
+    public static function allowedTargetJabatans(int $evaluatorJabatan, ?int $evaluatorUnit = null): array
     {
         $targets = array_keys(self::COMPONENT_RULES[$evaluatorJabatan] ?? []);
 
+        if ($evaluatorUnit !== null) {
+            foreach (array_keys(self::UNIT_EXTRA_COMPONENT_RULES[$evaluatorUnit][$evaluatorJabatan] ?? []) as $target) {
+                $targets[] = $target;
+            }
+        }
+
         return array_values(array_unique(array_map('intval', $targets)));
+    }
+
+    /**
+     * Komponen yang boleh diisi evaluator (jabatan+unit) untuk jabatan target tertentu.
+     * Gabungan COMPONENT_RULES dengan tambahan khusus unit.
+     *
+     * @return string[]
+     */
+    public static function allowedComponents(int $evaluatorJabatan, int $evaluatorUnit, int $targetJabatan): array
+    {
+        $base  = self::COMPONENT_RULES[$evaluatorJabatan][$targetJabatan] ?? [];
+        $extra = self::UNIT_EXTRA_COMPONENT_RULES[$evaluatorUnit][$evaluatorJabatan][$targetJabatan] ?? [];
+
+        return array_values(array_unique(array_merge($base, $extra)));
     }
 
     /**
@@ -155,12 +201,13 @@ class EvaluatorAuthorizationService
 
         $evaluatorJabatan = (int)($evaluator->ID_JABATAN ?? 0);
         $employeeJabatan  = (int)($employee->ID_JABATAN ?? 0);
+        $evaluatorUnit    = (int)($evaluator->ID_UNIT ?? 0);
 
         if (in_array($evaluatorJabatan, [1, 2], true)) {
             return true;
         }
 
-        $allowed = self::allowedTargetJabatans($evaluatorJabatan);
+        $allowed = self::allowedTargetJabatans($evaluatorJabatan, $evaluatorUnit);
 
         if (!in_array($employeeJabatan, $allowed, true)) {
             return false;
@@ -169,7 +216,7 @@ class EvaluatorAuthorizationService
         // CS (42) KEHADIRAN dinilai Admin/Kasir (35) di UNIT 1;
         // CS (42) non-Kehadiran dinilai Kepala Toko (41) yang berada di UNIT 1.
         if ($employeeJabatan === 42) {
-            if (($evaluatorJabatan === 35 || $evaluatorJabatan === 41) && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
+            if (($evaluatorJabatan === 35 || $evaluatorJabatan === 41) && $evaluatorUnit !== 1) {
                 return false;
             }
         }
@@ -202,36 +249,31 @@ class EvaluatorAuthorizationService
 
         $evaluatorJabatan = (int)($evaluator->ID_JABATAN ?? 0);
         $employeeJabatan  = (int)($employee->ID_JABATAN ?? 0);
+        $evaluatorUnit    = (int)($evaluator->ID_UNIT ?? 0);
 
         // Admin root & Direktur: akses penuh.
         if (in_array($evaluatorJabatan, [1, 2], true)) {
             return true;
         }
 
-        $rules = self::COMPONENT_RULES[$evaluatorJabatan] ?? null;
-        if ($rules === null) {
-            // Tanpa aturan spesifik: TIDAK boleh menilai siapa pun
-            // (termasuk diri sendiri) — jabatan ini hanya target/lihat read-only.
-            return false;
-        }
+        // Komponen yang diizinkan = matriks dasar + tambahan khusus unit evaluator.
+        $allowedComponents = self::allowedComponents($evaluatorJabatan, $evaluatorUnit, $employeeJabatan);
 
-        if (!isset($rules[$employeeJabatan])) {
+        if (empty($allowedComponents)) {
             return false;
         }
 
         // Kasus khusus: CS (42) KEHADIRAN dinilai Admin/Kasir (35) di UNIT 1;
         // CS (42) non-Kehadiran dinilai Kepala Toko (41) yang berada di UNIT 1.
-        if ($evaluatorJabatan === 35 && $employeeJabatan === 42 && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
+        if ($evaluatorJabatan === 35 && $employeeJabatan === 42 && $evaluatorUnit !== 1) {
             return false;
         }
-        if ($evaluatorJabatan === 41 && $employeeJabatan === 42 && (int)($evaluator->ID_UNIT ?? 0) !== 1) {
+        if ($evaluatorJabatan === 41 && $employeeJabatan === 42 && $evaluatorUnit !== 1) {
             return false;
         }
 
         // Scope unit. Jabatan pusat boleh dinilai lintas unit.
         if (!self::isHqTargetJabatan($employeeJabatan)) {
-            $evaluatorUnit = (int)($evaluator->ID_UNIT ?? 0);
-
             if ($evaluatorJabatan === 40) {
                 $db = \Config\Database::connect();
                 $mappings = $db->table('spv_units')
@@ -251,6 +293,6 @@ class EvaluatorAuthorizationService
             }
         }
 
-        return in_array($componentCode, $rules[$employeeJabatan], true);
+        return in_array($componentCode, $allowedComponents, true);
     }
 }

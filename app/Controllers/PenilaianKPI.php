@@ -215,7 +215,7 @@ class PenilaianKPI extends BaseController
             ->groupEnd();
 
         // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
-        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
 
         if (in_array($myRole, [1, 2], true)) {
             // Admin root / Direktur: semua pegawai, semua unit.
@@ -909,7 +909,7 @@ class PenilaianKPI extends BaseController
             ->groupEnd();
 
         // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
-        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
 
         if (in_array($myRole, [1, 2], true)) {
             // Admin root / Direktur: semua pegawai, semua unit.
@@ -998,7 +998,7 @@ class PenilaianKPI extends BaseController
             return true;
         }
 
-        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
 
         if (!empty($allowedTargets) && in_array((int)$employee->ID_JABATAN, $allowedTargets, true)) {
             // Kasus khusus: CS (42) KEHADIRAN diisi Admin/Kasir, non-Kehadiran diisi Kepala Toko — keduanya hanya di Unit 1.
@@ -1566,7 +1566,7 @@ class PenilaianKPI extends BaseController
             ->groupEnd();
 
         // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
-        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
 
         if (in_array($myRole, [1, 2], true)) {
             // Admin root / Direktur: semua pegawai, semua unit.
@@ -2263,7 +2263,7 @@ class PenilaianKPI extends BaseController
 
         // Scope employees yang boleh diinput absensinya
         $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
-        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
 
         $builder = $this->db->table('akun a')
             ->select('a.ID_AKUN, a.NAMA_AKUN, a.ID_JABATAN, j.NAMA_JABATAN, a.ID_UNIT, u.NAMA_UNIT')
@@ -2276,13 +2276,19 @@ class PenilaianKPI extends BaseController
             ->groupEnd();
 
         if (!in_array($myRole, [1, 2], true) && !empty($allowedTargets)) {
-            // Filter hanya target yang boleh dinilai KEHADIRAN
-            $kehadiranTargets = [];
-            foreach ($allowedTargets as $j) {
-                if (\App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent($myId, 0, 'KEHADIRAN')) {
-                    $kehadiranTargets[] = $j;
+            // Filter hanya target yang boleh dinilai KEHADIRAN oleh evaluator ini.
+            $kehadiranTargets = array_values(array_filter($allowedTargets, function ($j) use ($myRole, $myUnit) {
+                // CS (42) hanya boleh dinilai KEHADIRAN oleh Admin/Kasir (35) & Kepala Toko (41) di Unit 1.
+                if ((int)$j === 42 && in_array($myRole, [35, 41], true) && $myUnit !== 1) {
+                    return false;
                 }
-            }
+
+                return in_array(
+                    'KEHADIRAN',
+                    \App\Services\Kpi\EvaluatorAuthorizationService::allowedComponents($myRole, $myUnit, (int)$j),
+                    true
+                );
+            }));
             if (!empty($kehadiranTargets)) {
                 $builder->whereIn('a.ID_JABATAN', $kehadiranTargets);
             }

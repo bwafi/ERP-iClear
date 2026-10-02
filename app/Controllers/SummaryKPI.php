@@ -54,7 +54,7 @@ class SummaryKPI extends BaseController
         $allowedIds = $isLintas ? null : [$myId];
 
         if (!$isLintas) {
-            $targets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole);
+            $targets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
             if (!empty($targets)) {
                 $db = \Config\Database::connect();
 
