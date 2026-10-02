@@ -511,26 +511,33 @@ class Service extends BaseController
         $search = $this->request->getPost('search') ?? '';
         $unitId = session('ID_UNIT');
 
-        $builder = $this->StokBarangModel;
+        $db = \Config\Database::connect();
+        $builder = $db->table('stok_barang sb')
+            ->select('sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT, sup.nama_suplier')
+            ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
+            ->join('unit u', 'u.idunit = sb.id_unit', 'left')
+            ->join('(SELECT barang_idbarang, suplier_id_suplier FROM stok_awal WHERE suplier_id_suplier != 0 GROUP BY barang_idbarang, suplier_id_suplier) sa', 'sa.barang_idbarang = b.idbarang', 'left')
+            ->join('suplier sup', 'sup.id_suplier = sa.suplier_id_suplier', 'left');
         
         if (!empty($search)) {
             $builder->groupStart()
-                ->like('nama_barang', $search)
-                ->orLike('kode_barang', $search)
-                ->orLike('warna', $search)
+                ->like('b.nama_barang', $search)
+                ->orLike('b.kode_barang', $search)
+                ->orLike('b.warna', $search)
                 ->groupEnd();
         }
 
         $sparepart = $builder
-            ->where('id_unit', $unitId)
-            ->where('stok_akhir >', 0)
+            ->where('sb.id_unit', $unitId)
+            ->where('sb.stok_akhir >', 0)
             ->groupStart()
-                ->like('kode_barang', 'sprt')
-                ->orLike('kode_barang', 'acc')
+                ->like('b.kode_barang', 'sprt')
+                ->orLike('b.kode_barang', 'acc')
             ->groupEnd()
-            ->orderBy('nama_barang', 'ASC')
+            ->orderBy('b.nama_barang', 'ASC')
             ->limit(50)
-            ->findAll();
+            ->get()
+            ->getResult();
 
         return $this->response->setJSON($sparepart);
     }
