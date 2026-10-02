@@ -471,14 +471,22 @@
         /* tab restore from ?tab= + localStorage (kept behavior) */
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
+        let targetTab = null;
         if (tabParam) {
-            localStorage.setItem('activeTab', '#' + tabParam);
+            targetTab = '#' + tabParam;
+            localStorage.setItem('activeTab', targetTab);
         }
-        const lastTab = localStorage.getItem('activeTab');
-        if (lastTab && lastTab.indexOf('#') === 0) {
-            const trigger = document.querySelector('#service-rail a[href="' + lastTab + '"]');
+        if (!targetTab) {
+            targetTab = localStorage.getItem('activeTab');
+        }
+        if (targetTab && targetTab.indexOf('#') === 0) {
+            const trigger = document.querySelector('#service-rail a[href="' + targetTab + '"]');
             if (trigger && !trigger.closest('.is-locked') && !trigger.closest('.disabled-tab')) {
                 new bootstrap.Tab(trigger).show();
+                // juga set active class pada item rail
+                document.querySelectorAll('#service-rail .service-rail-item').forEach(i => i.classList.remove('is-active'));
+                const item = trigger.closest('.service-rail-item');
+                if (item) item.classList.add('is-active');
             }
         }
 
