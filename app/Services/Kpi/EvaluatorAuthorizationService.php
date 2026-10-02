@@ -22,13 +22,13 @@ use App\Models\ModelAuth;
  *   - SPV (40)        : non-Kehadiran utk Kepala Toko(41).
  *
  * ATURAN PUSAT (HQ):
- *   - SPV(40), Kepala Divisi(43), IT(45), Admin Center(0):
- *       KEHADIRAN dinilai Admin Center, selain kehadiran dinilai Manager(34).
- *   - Multimedia(44): KEHADIRAN dinilai Admin Center, selain kehadiran dinilai Kadiv(43).
+ *   - SPV(40), Kepala Divisi(43), IT(45), Finance(0):
+ *       KEHADIRAN dinilai Finance, selain kehadiran dinilai Manager(34).
+ *   - Multimedia(44): KEHADIRAN dinilai Finance, selain kehadiran dinilai Kadiv(43).
  *   - CS(42): KEHADIRAN dinilai Admin/Kasir Unit 1, selain kehadiran dinilai Kadiv(43).
- *   - Manager(34): KEHADIRAN dinilai Admin Center; selain kehadiran TIDAK diinput manual,
+ *   - Manager(34): KEHADIRAN dinilai Finance; selain kehadiran TIDAK diinput manual,
  *       melainkan dihitung otomatis = rata-rata skor absen per komponen dari
- *       SPV(40), Kadiv(43), IT(45), dan Admin Center(0)
+ *       SPV(40), Kadiv(43), IT(45), dan Finance(0)
  *       (lihat AttendanceAggregationService::managerTeamAverage).
  *
  * Role tanpa aturan spesifik: TIDAK bisa menilai siapa pun (diri sendiri pun tidak) —
@@ -49,7 +49,7 @@ class EvaluatorAuthorizationService
 
     /** Jabatan pusat: boleh dinilai lintas unit (tidak terikat unit evaluator). */
     private const HQ_TARGET_JABATANS = [
-        0,  // Admin Center
+        0,  // Finance
         34, // Manager
         40, // SPV (berada di cabang, tapi dinilai pusat lintas unit)
         42, // Customer Service
@@ -60,7 +60,7 @@ class EvaluatorAuthorizationService
 
     /** Supervisor/Manajemen pusat yang listing-nya lintas unit. */
     private const LINTAS_UNIT_EVALUATOR = [
-        0,  // Admin Center
+        0,  // Finance
         34, // Manager
         43, // Kepala Divisi
         45, // Team IT
@@ -90,8 +90,8 @@ class EvaluatorAuthorizationService
      *
      * CATATAN: skor Manager "selain kehadiran" TIDAK diinput manual oleh siapa pun —
      * dihitung otomatis sebagai rata-rata skor absen per komponen dari SPV, Kepala
-     * Divisi, IT, dan Admin Center (lihat AttendanceAggregationService::managerTeamAverage).
-     * Karena itu Manager (34) TIDAK menjadi target input SPV/Kadiv/IT; Admin Center
+     * Divisi, IT, dan Finance (lihat AttendanceAggregationService::managerTeamAverage).
+     * Karena itu Manager (34) TIDAK menjadi target input SPV/Kadiv/IT; Finance
      * tetap menginput KEHADIRAN Manager.
      */
     private const COMPONENT_RULES = [
@@ -112,17 +112,17 @@ class EvaluatorAuthorizationService
         40 => [
             41 => self::NON_HADIR,
         ],
-        // Admin Center (0): Kehadiran utk target pusat; KEHADIRAN utk Manager.
+        // Finance (0): Kehadiran utk target pusat; KEHADIRAN utk Manager.
         // (Selain kehadiran Manager = rata-rata otomatis, bukan input manual.)
         0 => [
-            0  => self::HADIR,                          // Admin Center (self)
+            0  => self::HADIR,                          // Finance (self)
             34 => self::HADIR,                          // Manager (hanya Kehadiran)
             40 => self::HADIR,                          // SPV
             43 => self::HADIR,                          // Kepala Divisi
             44 => self::HADIR,                          // Multimedia
             45 => self::HADIR,                          // Team IT
         ],
-        // Manager (34): non-Kehadiran utk Admin Center, SPV, Kadiv, IT.
+        // Manager (34): non-Kehadiran utk Finance, SPV, Kadiv, IT.
         34 => [
             0  => self::NON_HADIR,
             40 => ['KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP', 'KUALITAS_PELAYANAN', 'CUSTOMER_SATISFACTION'],

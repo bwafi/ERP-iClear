@@ -141,7 +141,7 @@ $isFinal = ($periode ?? null) && $periode->status === 'FINAL';
     </div>
     <div class="card-body">
         <?php if ($s['totalAset'] === 0) : ?>
-            <div class="alert alert-light border mb-0">Belum ada aset master aktif untuk unit ini. Hubungi Admin Center untuk menambah aset master.</div>
+            <div class="alert alert-light border mb-0">Belum ada aset master aktif untuk unit ini. Hubungi Finance untuk menambah aset master.</div>
         <?php else : ?>
             <form method="post" action="<?= base_url('penilaian/kpi/kontrol_aset/save') ?>" id="formAudit">
                 <input type="hidden" name="unit" value="<?= $unitId ?>">

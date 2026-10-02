@@ -10,7 +10,7 @@ use Config\Finance;
 /**
  * Bekas unit Dashboard Finance (replika scopeInfo SummaryKPI).
  *
- * - Role "lintas unit" (Admin Center/Root/Direktur/Manager): 0, 1, 2, 34
+ * - Role "lintas unit" (Finance/Root/Direktur/Manager): 0, 1, 2, 34
  * - Manager Keuangan (41): hanya unit sendiri (ID_UNIT dari akun)
  * - SPV (40): hanya unit SPV (tabel spv_units)
  */

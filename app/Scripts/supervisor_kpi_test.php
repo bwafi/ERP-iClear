@@ -359,7 +359,7 @@ $ss0 = $db->query("SELECT ss.base_value FROM salary_structures ss
     JOIN salary_components sc ON sc.id = ss.salary_component_id
     WHERE ss.position_id = 0 AND sc.code = 'TUNJANGAN_KINERJA'
     ORDER BY ss.effective_from ASC, ss.unit_id ASC LIMIT 1")->getRow();
-ok('Tunjangan kinerja Admin Center (0) = Rp1.250.000', near((float)($ss0->base_value ?? 0), 1250000), var_export($ss0->base_value ?? null, true));
+ok('Tunjangan kinerja Finance (0) = Rp1.250.000', near((float)($ss0->base_value ?? 0), 1250000), var_export($ss0->base_value ?? null, true));
 $ss34 = $db->query("SELECT ss.base_value FROM salary_structures ss
     JOIN salary_components sc ON sc.id = ss.salary_component_id
     WHERE ss.position_id = 34 AND sc.code = 'TUNJANGAN_KINERJA'

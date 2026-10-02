@@ -148,7 +148,7 @@ class ModelKpiEvaluation extends Model
     {
         // Daily uniqueness: employee + component + EVALUATOR + evaluation_date.
         // Memungkinkan beberapa evaluator menilai pegawai/komponen/tanggal yang sama
-        // (utk kasus rata-rata, mis. Manager dinilai SPV+Kadiv+IT+Admin Center).
+        // (utk kasus rata-rata, mis. Manager dinilai SPV+Kadiv+IT+Finance).
         $existing = $this->where('employee_id', $data['employee_id'])
                          ->where('kpi_component_id', $data['kpi_component_id'])
                          ->where('evaluator_id', $data['evaluator_id'] ?? null)

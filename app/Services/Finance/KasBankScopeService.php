@@ -18,7 +18,7 @@ use App\Models\ModelAlokasiSaldoKasBank;
  *    Aksesnya BERARAH:
  *      - destination : unit mana pun yang memang boleh bertransaksi
  *                      ("Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-sama valid);
- *      - source      : HANYA role financeHoSourceRoles (ROOT / ADMIN CENTER).
+ *      - source      : HANYA role financeHoSourceRoles (ROOT / Finance).
  *    "Boleh transfer KE IRA" TIDAK berarti boleh memakai IRA sebagai sumber.
  *
  * 2. UNIT (is_shared = 0, unit_id = X): hanya unit X, dua arah.
@@ -227,7 +227,7 @@ class KasBankScopeService
     /**
      * Boleh dipakai sebagai rekening SUMBER (dana keluar)?
      *
-     *   FINANCE_HO -> HANYA role financeHoSourceRoles (ROOT / ADMIN CENTER).
+     *   FINANCE_HO -> HANYA role financeHoSourceRoles (ROOT / Finance).
      *                 Sengaja TIDAK memakai resolveAllowedUnits(): user scope
      *                 bukan permission menarik dana dari rekening HO.
      *   UNIT       -> unit leg harus = akun.unit_id DAN dalam user scope.

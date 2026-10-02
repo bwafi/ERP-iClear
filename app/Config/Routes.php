@@ -473,7 +473,7 @@ $routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 
 $routes->post('penilaian/kpi/save_daily', 'PenilaianKPI::save_manual_daily', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_customer_satisfaction', 'PenilaianKPI::save_customer_satisfaction', ['filter' => 'auth']);
 
-// Asset Master (Admin Center/Root/Direktur/Manager: 0,1,2,34)
+// Asset Master (Finance/Root/Direktur/Manager: 0,1,2,34)
 $routes->get('penilaian/kpi/aset_master', 'PenilaianKPI::aset_master_index', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/aset_master/insert', 'PenilaianKPI::aset_master_insert', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/aset_master/update', 'PenilaianKPI::aset_master_update', ['filter' => 'auth']);

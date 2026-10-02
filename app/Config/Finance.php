@@ -114,7 +114,7 @@ class Finance extends BaseConfig
      *                      valid). Tidak butuh izin-role apa pun.
      *   - sebagai SUMBER  : HANYA role di bawah ini.
      *
-     * 0 = ADMIN CENTER, 1 = Admin root.
+     * 0 = Finance, 1 = Admin root.
      *
      * PENTING: "boleh transfer KE IRA" TIDAK berarti user tersebut boleh
      * memakai IRA sebagai rekening sumber. Jangan gunakan resolveAllowedUnits()

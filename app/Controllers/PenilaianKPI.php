@@ -389,7 +389,7 @@ class PenilaianKPI extends BaseController
 
     /*
      * ─────────────────────────────────────────────────────────────────────────
-     * ASSET MASTER — Baseline Aset (Admin Center / Root / Direktur / Manager)
+     * ASSET MASTER — Baseline Aset (Finance / Root / Direktur / Manager)
      * ─────────────────────────────────────────────────────────────────────────
      * CRUD baseline aset (unit, nama, kode, quantity, aktif/nonaktif, keterangan).
      * Quantity master TIDAK pernah berubah otomatis hasil audit.
@@ -622,9 +622,9 @@ class PenilaianKPI extends BaseController
         $id = (int)$this->request->getPost('id');
         $unitId = (int)$this->request->getPost('unit');
 
-        // Hanya Admin Center / root / Direktur yang boleh hapus.
+        // Hanya Finance / root / Direktur yang boleh hapus.
         if (!in_array($myRole, [0, 1, 2], true)) {
-            return redirect()->to('/penilaian/kpi/aset_master?unit=' . $unitId)->with('error', 'Hanya Admin Center yang dapat menghapus aset master.');
+            return redirect()->to('/penilaian/kpi/aset_master?unit=' . $unitId)->with('error', 'Hanya Finance yang dapat menghapus aset master.');
         }
 
         $result = $svc->deleteMaster($id);

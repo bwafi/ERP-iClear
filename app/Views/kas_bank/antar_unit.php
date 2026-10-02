@@ -56,7 +56,7 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                 <?php if (!$canTransaksi) : ?>
                     <div class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2 mb-3">
                         <iconify-icon icon="bi:shield-lock-fill" class="kb-ico"></iconify-icon>
-                        <span>Mode Lihat Saja. Hubungi Admin Center / Manager untuk input.</span>
+                        <span>Mode Lihat Saja. Hubungi Finance / Manager untuk input.</span>
                     </div>
                 <?php endif; ?>
 

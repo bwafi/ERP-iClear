@@ -95,7 +95,7 @@ class ModeKasBank
      *   - ARAH_MASUK  -> canUseAsDestination: rekening Finance/HO (IRA)
      *     diterima dari unit mana pun.
      *   - ARAH_KELUAR -> canUseAsSource: rekening Finance/HO hanya boleh
-     *     ditarik oleh ROOT / ADMIN CENTER.
+     *     ditarik oleh ROOT / Finance.
      *
      * @param string $arah self::ARAH_MASUK | self::ARAH_KELUAR
      * @param int|null $role ID_JABATAN; null = ambil dari session

@@ -703,7 +703,7 @@ class KPIConfigurationSeeder extends Seeder
         // Root (1) & Direktur (2): fallback 250k (old else-branch), skor 0 → 0 rupiah
         $data[] = $mk(1, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
         $data[] = $mk(2, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi');
-        // Admin Center (0): 1.25jt
+        // Finance (0): 1.25jt
         $data[] = $mk(0, 'TUNJANGAN_KINERJA', 1250000, 'percent_of_kpi');
         // Manager (34): 2.25jt
         $data[] = $mk(34, 'TUNJANGAN_KINERJA', 2250000, 'percent_of_kpi');

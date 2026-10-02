@@ -11,7 +11,7 @@ use App\Models\ModelAuditAsetItem;
  *
  * Dua bagian yang benar-benar terpisah:
  *
- * 1. ASSET MASTER (Admin Center / Root / Direktur / Manager)
+ * 1. ASSET MASTER (Finance / Root / Direktur / Manager)
  *    - Mengelola baseline aset: lokasi (unit), asal (dari_unit), nama,
  *      kode otomatis AST-{KODE_UNIT}-XXXX (mengikuti asal), quantity,
  *      is_active (aktif/nonaktif), keterangan.
@@ -56,7 +56,7 @@ class AsetKpiService
 
     /**
      * Unit yang boleh dikelola:
-     *   - 0 / 1 / 2 (Admin Center / Root / Direktur) → semua unit.
+     *   - 0 / 1 / 2 (Finance / Root / Direktur) → semua unit.
      *   - 40 (SPV) → unit di spv_units, fallback unit sendiri.
      *   - selain itu → [] (tidak berhak).
      *

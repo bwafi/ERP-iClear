@@ -358,7 +358,7 @@ foreach ($daftarAkun as $a) {
                                             <?php if ($isHO) : ?>
                                                 <div class="kb-meta">
                                                     Tanpa alokasi unit · tujuan transfer semua unit ·
-                                                    sumber hanya Admin Root / Admin Center
+                                                    sumber hanya Admin Root / Finance
                                                 </div>
                                             <?php endif; ?>
                                             <div class="kb-meta">COA <span class="kb-mono"><?= esc($a->no_akun_coa ?: '-') ?></span></div>

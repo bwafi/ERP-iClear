@@ -6,7 +6,7 @@ namespace App\Services\SocialMedia;
  * Scope & permission modul Social Media KPI — memakai session existing
  * (ID_JABATAN / ID_UNIT) tanpa sistem permission baru.
  *
- *   - View KPI  : Admin Center (0), Root (1), Direktur (2), Manager (34),
+ *   - View KPI  : Finance (0), Root (1), Direktur (2), Manager (34),
  *                 Kepala Divisi Digital Marketing (43)
  *   - Kelola akun & target: 0, 1, 2, 34, 43
  *

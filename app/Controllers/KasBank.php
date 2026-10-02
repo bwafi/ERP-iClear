@@ -66,7 +66,7 @@ class KasBank extends BaseController
 
     /**
      * Siapa yang boleh MENCATAT transaksi kas &amp; bank. Selain lintas unit
-     * (root/direktur/manager/admin center), admin cabang juga boleh mengisi
+     * (finance/root/direktur/manager), admin cabang juga boleh mengisi
      * Transfer Internal dan Pembayaran Antar Unit — tapi hanya memakai
      * rekening unitnya sendiri (dibatasi guard akun Terbatas).
      */
@@ -89,7 +89,7 @@ class KasBank extends BaseController
     }
 
     /**
-     * Apakah pengguna lintas unit (bisa memilih unit lain). Admin Center/Root/
+     * Apakah pengguna lintas unit (bisa memilih unit lain). Finance/Root/
      * Direktur/Manager = lintas; admin cabang/SPV = terikat unit sendiri.
      *
      * CATATAN: ini soal HAK INPUT, bukan soal rekening mana yang terlihat.
@@ -142,7 +142,7 @@ class KasBank extends BaseController
      * Rekening yang boleh jadi SUMBER (akun asal / akun pengirim).
      *
      * Menyaring daftar aktif dengan canUseAsSource() sehingga:
-     *   - rekening Finance/HO (IRA) TAMPIL hanya untuk ROOT / ADMIN CENTER;
+     *   - rekening Finance/HO (IRA) TAMPIL hanya untuk ROOT / Finance;
      *   - rekening unit/shared mengikuti irisan user scope & account scope.
      */
     private function akunSumberUntuk(?int $unit): array
@@ -707,7 +707,7 @@ class KasBank extends BaseController
             'unit_terpilih' => $unitTerpilih,
             // Daftar SUMBER dan TUJUAN sengaja dipisah: rekening Finance/HO
             // (IRA) boleh jadi tujuan dari unit mana pun, tapi hanya ROOT /
-            // ADMIN CENTER yang boleh men takers docketnya.
+            // Finance yang boleh men takers docketnya.
             'akun_sumber'   => $this->akunSumberUntuk($unitTerpilih),
             'akun_tujuan'   => $this->akunTujuanUntuk($unitTerpilih),
             'akun_kas_bank' => $this->akunAktifUntuk($unitTerpilih),
@@ -807,7 +807,7 @@ class KasBank extends BaseController
         // IRA sebagai SUMBER.
         //   FINANCE_HO/IRA: sebagai tujuan = unit mana pun yang boleh
         //     bertransaksi (Unit 1 -> IRA dan Unit 2 -> IRA sama-sama sah);
-        //     sebagai sumber = HANYA ROOT / ADMIN CENTER.
+        //     sebagai sumber = HANYA ROOT / Finance.
         //   UNIT   : hanya unit pemiliknya, dua arah.
         //   SHARED : hanya unit yang punya baris alokasi, dua arah.
         if (! $this->AkunScope->canUseAsSource($asal, $unitKeluar, $role)) {
@@ -988,7 +988,7 @@ class KasBank extends BaseController
         if ($kind === KasBankScopeService::KIND_FINANCE_HO) {
             if ($arah === 'source') {
                 return 'Rekening Finance/HO "' . $nama . '" hanya boleh mengeluarkan dana oleh '
-                    . 'Admin Root atau Admin Center. Jabatan Anda tidak berwenang menarik dana '
+                    . 'Admin Root atau Finance. Jabatan Anda tidak berwenang menarik dana '
                     . 'dari rekening HO — Anda tetap boleh mentransfer DANA KE rekening ini.';
             }
 
@@ -1064,7 +1064,7 @@ class KasBank extends BaseController
 
         // Rekening pengirim harus berarah-SUMBER atas unit yang punya hutang,
         // rekening penerima berarah-TUJUAN atas unit yang berpiutang.
-        //   Finance/HO sebagai pengirim -> hanya ROOT / ADMIN CENTER.
+        //   Finance/HO sebagai pengirim -> hanya ROOT / Finance.
         //   Finance/HO sebagai penerima   -> unit mana pun (sah).
         //   Rekening non-shared milik unit lain DITOLAK; rekening shared harus
         //   dialokasikan ke unit tsb lebih dulu.

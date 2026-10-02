@@ -45,7 +45,7 @@ class DashboardFinance extends BaseController
     {
         $info = $this->scopeService->scopeInfo();
 
-        // Halaman hanya boleh diakses Admin Center/Root/Direktur/Manager.
+        // Halaman hanya boleh diakses Finance/Root/Direktur/Manager.
         if (!$info['isLintas']) {
             return redirect()->back()->with('gagal', 'Anda tidak berhak mengakses Dashboard Finance.');
         }

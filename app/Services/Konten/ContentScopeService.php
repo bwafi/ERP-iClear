@@ -7,7 +7,7 @@ namespace App\Services\Konten;
  *
  * Memakai session existing (ID_JABATAN / ID_UNIT / ID_AKUN) — tanpa membuat
  * sistem permission baru. Sesuai beberapa modul existing (PenilaianKPI):
- *   - Role 0,1,2,34 (Admin Center/Root, Direktur, Manager) → akses penuh
+ *   - Role 0,1,2,34 (Finance/Root, Direktur, Manager) → akses penuh
  *   - Role 1,34,43 (Admin root, Manager, Kepala Divisi)  → SATU-SATUNYA yang boleh
  *     QC (PASS/REJECT) & menilai Kesesuaian Brief
  *   - Status "selesai" untuk hitungan KPI = COMPLETED saja (APPROVED belum dihitung)

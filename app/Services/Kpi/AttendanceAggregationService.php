@@ -146,7 +146,7 @@ class AttendanceAggregationService
         }
 
         // Komponen non-Kehadi  ran utk MANAGER dihitung otomatis dari rata-rata
-        // skor komponen tsb milik SPV, Kepala Divisi, IT, dan Admin Center.
+        // skor komponen tsb milik SPV, Kepala Divisi, IT, dan Finance.
         $isManager = ($positionId === 34);
         $managerTeamCodes = $isManager ? ['KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'] : [];
 
@@ -241,7 +241,7 @@ class AttendanceAggregationService
      *
      * Skor non-kehadiran Manager TIDAK diinput manual — dihitung sebagai
      * rata-rata skor komponen yang SAMA (monthly normalized) dari pegawai
-     * SPV(40), Kepala Divisi(43), Team IT(45), dan Admin Center(0).
+     * SPV(40), Kepala Divisi(43), Team IT(45), dan Finance(0).
      *
      * Tiap jabatan diberi bobot rata-rata yang sama: rata-rata per jabatan,
      * lalu dirata-ratakan antar 4 jabatan (jabatan tanpa data dilewati).
@@ -338,7 +338,7 @@ class AttendanceAggregationService
     /**
      * Calculate SPV attendance using hybrid logic:
      * - KEHADIRAN: Dari penilaian KEHADIRAN ke SPV sendiri
-     *   (diinput Admin Center via penilaian absen).
+     *   (diinput Finance via penilaian absen).
      * - KEBERSIHAN, SERAGAM, KEPATUHAN_SOP: penilaian eksplisit ke SPV
      *   (diinput Manager), bila belum ada fallback ke AVG Kepala Toko + Kadiv.
      * 
