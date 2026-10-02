@@ -17,7 +17,16 @@ $(function () {
 /****************************************
  *       Basic Table                   *
  ****************************************/
-if ($("#zero_config").length) {
+// Halaman yang memakai #zero_config umumnya sudah menginisialisasi tabelnya
+// sendiri di dalam view (untuk searchPlaceholder, responsive, dan handler
+// klik). Karena file ini dimuat di footer, sedangkan script di dalam view
+// berjalan lebih dulu, pemanggilan kedua akan memicu peringatan "Cannot
+// reinitialise DataTable". Jadi inisialisasi di sini hanya untuk halaman
+// yang belum mengaturnya sendiri.
+if (
+  $("#zero_config").length &&
+  !$.fn.dataTable.isDataTable("#zero_config")
+) {
   $("#zero_config").DataTable();
 }
 
