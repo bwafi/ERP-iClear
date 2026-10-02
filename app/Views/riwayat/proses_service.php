@@ -338,7 +338,7 @@
                         } else if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
                             editBtn = `<a href="<?= base_url('service_by_garansi/') ?>${row.idservice}"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
                         } else {
-                            editBtn = `<a href="<?= base_url('detail/riwayat_service/') ?>${row.idservice}"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
+                            editBtn = `<a href="<?= base_url('detail/riwayat_service/') ?>${row.idservice}?tab=sparepart"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
                         }
 
                         return `
