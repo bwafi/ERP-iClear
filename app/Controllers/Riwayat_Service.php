@@ -1271,11 +1271,35 @@ class Riwayat_Service extends BaseController
 
         $idPenjualan = $detail->penjualan_idpenjualan;
 
+        $db = \Config\Database::connect();
+        $db->transStart();
+
         // hapus detail penjualan (stok VIEW otomatis menyesuaikan)
         $this->DetailPenjualanModel->deleteDetail($idDetail);
 
-        // Update total pada tabel penjualan (induk)
-        $db = \Config\Database::connect();
+        $remaining = $db->table('detail_penjualan')
+            ->where('penjualan_idpenjualan', $idPenjualan)
+            ->countAllResults();
+
+        if ($remaining === 0) {
+            // Detail terakhir → invoice penjualan jadi kosong, hapus header-nya
+            // beserta jurnal yang mereferensikannya agar tidak ada sisa di laporan.
+            $db->table('jurnal')
+                ->where('tabel_referensi', 'penjualan')
+                ->where('id_referensi', $idPenjualan)
+                ->delete();
+
+            $db->table('penjualan')
+                ->where('idpenjualan', $idPenjualan)
+                ->delete();
+
+            $db->transComplete();
+
+            session()->setFlashdata('sukses', 'Data sparepart & invoice penjualan berhasil dihapus. Stok otomatis disesuaikan.');
+            return redirect()->to(base_url('sparepart_keluar'));
+        }
+
+        //Masih ada detail lain → update total pada tabel penjualan (induk)
         $recalc = $db->table('detail_penjualan')
             ->selectSum('sub_total', 'total_sub')
             ->where('penjualan_idpenjualan', $idPenjualan)
@@ -1290,6 +1314,8 @@ class Riwayat_Service extends BaseController
                 'total_penjualan' => $newTotal,
                 'harus_dibayar'   => $newTotal,
             ]);
+
+        $db->transComplete();
 
         session()->setFlashdata('sukses', 'Data sparepart berhasil dihapus. Stok & total penjualan otomatis disesuaikan.');
         return redirect()->to(base_url('sparepart_keluar'));
