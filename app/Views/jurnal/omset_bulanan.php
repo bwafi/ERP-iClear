@@ -162,7 +162,7 @@
                         <iconify-icon icon="solar:calculator-minimalistic-bold-duotone" width="28" height="28"></iconify-icon>
                     </div>
                 </div>
-                <small class="text-muted">Berdasarkan <?= date('t', mktime(0, 0, 0, $bulan, 1, $tahun)) ?> hari kerja</small>
+                <small class="text-muted"><?php if ($isBulanBerjalan ?? false): ?>Rata-rata <?= (int) ($hari_rata_rata ?? 0) ?> hari berjalan (s/d <?= date('j F Y') ?>)<?php else: ?>Rata-rata <?= (int) ($hari_rata_rata ?? 0) ?> hari pada bulan ini<?php endif; ?></small>
             </div>
         </div>
     </div>

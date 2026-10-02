@@ -512,7 +512,13 @@ class TutupKasir extends BaseController
         // ==========================
         // STATISTIK TAMBAHAN
         // ==========================
-        $omset_rata_rata = $jumlahHari > 0 ? round($omset_bulan / $jumlahHari) : 0;
+        // Rata-rata per hari memakai jumlah hari yang benar-benar sudah lewat,
+        // bukan seluruh jumlah hari bulan. Untuk bulan berjalan (mis. 2 Okt
+        // dari 31) membagi dengan 31 membuat rata-rata jadi terlalu kecil;
+        // untuk bulan yang sudah lewat dipakai seluruh hari bulan tersebut.
+        $hariRataRata = $isBulanBerjalan ? min((int) date('j'), $jumlahHari) : $jumlahHari;
+
+        $omset_rata_rata = $hariRataRata > 0 ? round($omset_bulan / $hariRataRata) : 0;
 
         $hariTerbaik = null;
         $omsetTerbaik = 0;
@@ -549,6 +555,7 @@ class TutupKasir extends BaseController
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
             'omset_rata_rata'   => $omset_rata_rata,
+            'hari_rata_rata'    => $hariRataRata,
             'hariTerbaik'       => $hariTerbaik,
             'omsetTerbaik'      => $omsetTerbaik,
             'body'              => 'jurnal/omset_bulanan'
