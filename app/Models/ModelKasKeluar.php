@@ -54,14 +54,29 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
         return $builder->get()->getResult();
     }
 
-    /** Query dasar kas keluar + join kategori/bank/unit/COA. */
+    /**
+     * Query dasar kas keluar + join kategori/bank/unit/COA.
+     *
+     * Kolom `kas_keluar.penerima` dipakai dua arti sekaligus, tergantung
+     * halaman mana yang membuat barisnya:
+     *
+     *   - dari /kas_keluar -> teks atas_nama pemilik rekening pilihan
+     *   - dari /payroll2   -> akun.ID_AKUN karyawan (kasbon/lembur)
+     *
+     * Karena itu `akun` di-join dan diambil sebagai `penerima_akun`, supaya
+     * pemanggil bisa menampilkan nama karyawan untuk baris payroll. Join-nya
+     * mengikuti yang sudah dipakai Payroll::index(). Isian non-angka tidak
+     * akan cocok apa pun dan menghasilkan NULL, jadi teks aslinya tetap bisa
+     * dipakai sebagai cadangan.
+     */
     private function baseKasKeluarQuery()
     {
-        return $this->select('kas_keluar.*, kategori_kas.kategori, bank.nama_bank, bank.norek, unit.NAMA_UNIT, no_akun.nama_akun')
+        return $this->select('kas_keluar.*, kategori_kas.kategori, bank.nama_bank, bank.norek, unit.NAMA_UNIT, no_akun.nama_akun, akun.NAMA_AKUN as penerima_akun')
             ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left')
             ->join('bank', 'bank.idbank = kas_keluar.idbank', 'left')
             ->join('unit', 'unit.idunit = kas_keluar.idunit', 'left')
-            ->join('no_akun', 'no_akun.no_akun = kas_keluar.no_akun', 'left');
+            ->join('no_akun', 'no_akun.no_akun = kas_keluar.no_akun', 'left')
+            ->join('akun', 'akun.ID_AKUN = kas_keluar.penerima', 'left');
     }
 
     /**
@@ -87,6 +102,9 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
                     ->orLike('bank.norek', $search)
                     ->orLike('unit.NAMA_UNIT', $search)
                     ->orLike('kas_keluar.penerima', $search)
+                    // Baris payroll menyimpan ID_AKUN di `penerima`, jadi
+                    // nama karyawannya harus ikut bisa dicari.
+                    ->orLike('akun.NAMA_AKUN', $search)
                     ->groupEnd();
             }
         }

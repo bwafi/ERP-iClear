@@ -162,7 +162,7 @@ class Kas_Keluar extends BaseController
                 'deskripsi' => (string)($r->deskripsi ?? ''),
                 'nama_bank' => (string)($r->nama_bank ?? ''),
                 'norek'     => (string)($r->norek ?? ''),
-                'penerima'  => (string)($r->penerima ?? ''),
+                'penerima'  => $this->namaPenerimaUntukTabel($r),
                 'jumlah'    => (float)$r->jumlah,
                 'jenis'     => trim((string)($r->jenis ?? '')),
                 // Kolom Aksi tidak menyimpan apa pun, tapi DataTables server-side
@@ -180,6 +180,28 @@ class Kas_Keluar extends BaseController
             'idHit'           => $idHit,
             'data'            => $data,
         ]);
+    }
+
+    /**
+     * Nama penerima untuk ditampilkan di tabel kas keluar.
+     *
+     * `kas_keluar.penerima` tidak seragam: baris yang dibuat dari halaman ini
+     * mengisi teks atas_nama pemilik rekening, sedangkan baris dari /payroll2
+     * mengisi akun.ID_AKUN karyawan (kasbon, lembur, gaji). Kalau isinya angka
+     * dan cocok dengan sebuah akun, yang ditampilkan adalah nama karyawannya —
+     * kalau tidak cocok, teks mentahnya tetap ditampilkan supaya tidak ada
+     * data yang hilang (mis. angka yang bukan ID_AKUN).
+     */
+    private function namaPenerimaUntukTabel($row): string
+    {
+        $mentah = trim((string)($row->penerima ?? ''));
+        $nama   = trim((string)($row->penerima_akun ?? ''));
+
+        if ($mentah !== '' && $nama !== '' && ctype_digit($mentah)) {
+            return $nama;
+        }
+
+        return $mentah;
     }
 
     public function insert_kas_keluar()
@@ -288,8 +310,19 @@ class Kas_Keluar extends BaseController
         $penerima = $this->request->getPost('penerima'); //idbank
 
         $databank = $this->BankModel->getById($penerima);
-        $atasnama = $databank->atas_nama;
+        $atasnama = $databank ? (string)$databank->atas_nama : '';
         $posisi_drk = $this->request->getPost('posisi_drk');
+
+        // Baris yang dibuat dari /payroll2 menyimpan akun.ID_AKUN di `penerima`.
+        // Select "Penerima / Rekening" di form edit ini menunjuk rekening
+        // (idbank), jadi untuk baris seperti itu `penerima` TIDAK ditimpa dengan
+        // atas_nama — kalau ditimpa, hubungan ke karyawan putus dan namanya
+        // hilang lagi di /payroll2. Rekeningnya tetap berubah lewat `idbank`.
+        $barisLama    = $this->KasKeluarModel->getById((int)$id);
+        $penerimaLama = $barisLama ? trim((string)$barisLama->penerima) : '';
+        if ($penerimaLama !== '' && ctype_digit($penerimaLama)) {
+            $atasnama = $penerimaLama;
+        }
 
 
 
