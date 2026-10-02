@@ -458,6 +458,8 @@ $routes->post('penilaian/save_spv_kpi', 'Penilaian::save_spv_kpi', ['filter' => 
 
 //payroll
 $routes->get('payroll2', 'Payroll::index', ['filter' => 'auth']);
+$routes->post('payroll2/generate', 'Payroll::generateRegister', ['filter' => 'auth']);
+$routes->post('payroll2/update-register', 'Payroll::updateRegister', ['filter' => 'auth']);
 $routes->post('insert_payroll2', 'Payroll::insert', ['filter' => 'auth']);
 $routes->post('update_payroll2', 'Payroll::update', ['filter' => 'auth']);
 $routes->post('delete_payroll2', 'Payroll::delete', ['filter' => 'auth']);

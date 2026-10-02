@@ -327,8 +327,12 @@ class FinanceKpiCalculationService
     /**
      * Simpan satu catatan pembayaran gaji untuk sebuah unit.
      * paid_date diisi → status 'dibayar', kosong → 'rencana'.
+     *
+     * $sumber menandai asal baris: 'manual' untuk input Finance seperti
+     * sebelumnya, 'auto' untuk draft yang disusun PayrollGenerator dari
+     * salary_structures.
      */
-    public function savePayroll(int $unitId, string $dueDate, float $total, ?string $paidDate = null, string $notes = '', ?int $pegawaiId = null): bool
+    public function savePayroll(int $unitId, string $dueDate, float $total, ?string $paidDate = null, string $notes = '', ?int $pegawaiId = null, string $sumber = 'manual'): bool
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
             throw new \InvalidArgumentException('due_date tidak valid.');
@@ -343,14 +347,15 @@ class FinanceKpiCalculationService
         }
 
         return $this->payrollModel->insert([
-            'unit_id' => $unitId,
-            'pegawai_id' => $pegawaiId,
-            'due_date' => $dueDate,
-            'paid_date' => $paidDate,
-            'status' => $status,
-            'total' => (int) round($total),
-            'notes' => $notes,
-            'created_by' => (int) session('ID_AKUN'),
+            'unit_id'     => $unitId,
+            'pegawai_id'  => $pegawaiId,
+            'due_date'    => $dueDate,
+            'paid_date'   => $paidDate,
+            'status'      => $status,
+            'total'       => (int) round($total),
+            'notes'       => $notes,
+            'sumber'      => $sumber === 'auto' ? 'auto' : 'manual',
+            'created_by'  => (int) session('ID_AKUN'),
         ]);
     }
 

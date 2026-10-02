@@ -200,6 +200,22 @@ $bank           = $bank ?? [];
 
                 <button
                     type="button"
+                    class="btn btn-outline-primary me-2"
+                    data-bs-toggle="modal"
+                    data-bs-target="#generate-payroll-modal">
+
+                    <iconify-icon
+                        icon="solar:magic-stick-2-bold-duotone"
+                        width="24"
+                        height="24">
+                    </iconify-icon>
+
+                    Susun Otomatis
+
+                </button>
+
+                <button
+                    type="button"
                     class="btn btn-primary"
                     data-bs-toggle="modal"
                     data-bs-target="#input-payroll-finance-modal">
@@ -298,10 +314,36 @@ $bank           = $bank ?? [];
                                 Rp <?= number_format((float) $row->total, 0, ',', '.') ?>
                             </td>
 
-                            <td><?= esc($row->notes ?? '-') ?></td>
+                            <td>
+                                <?php if (($row->sumber ?? 'manual') === 'auto'): ?>
+
+                                    <span class="badge bg-info-subtle text-info">
+                                        Otomatis
+                                    </span>
+
+                                <?php endif; ?>
+
+                                <?= esc($row->notes ?? '-') ?>
+                            </td>
 
                             <td>
                                 <?php if ($row->status !== 'dibayar' && $can_input): ?>
+
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline-primary btn-sm edit-register-button"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#edit-register-modal"
+                                        data-id="<?= esc($row->id) ?>"
+                                        data-karyawan="<?= esc($row->NAMA_AKUN ?? '-') ?>"
+                                        data-total="<?= esc($row->total) ?>"
+                                        data-due="<?= esc($row->due_date) ?>"
+                                        data-notes="<?= esc($row->notes ?? '') ?>">
+
+                                        <i class="ti ti-pencil"></i>
+                                        Koreksi
+
+                                    </button>
 
                                     <button
                                         type="button"
@@ -559,6 +601,282 @@ $bank           = $bank ?? [];
             </tbody>
 
         </table>
+
+    </div>
+
+</div>
+
+
+<!-- ====================================================== -->
+<!-- MODAL SUSUN PAYROLL OTOMATIS -->
+<!-- ====================================================== -->
+
+<div class="modal fade"
+    id="generate-payroll-modal"
+    tabindex="-1">
+
+    <div class="modal-dialog">
+
+        <div class="modal-content">
+
+            <form
+                action="<?= base_url('payroll2/generate') ?>"
+                method="post">
+
+                <div class="modal-header">
+
+                    <h5 class="modal-title">
+                        Susun Payroll dari Salary Structure
+                    </h5>
+
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal">
+                    </button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <p class="text-muted">
+                        Nominal setiap karyawan dihitung dari master
+                        <code>salary_structures</code> (gaji pokok +
+                        tunjangan mengikuti skor KPI bulan itu) ditambah
+                        lembur yang sudah tercatat di Kas Keluar.
+                        Semua baris dibuat berstatus Rencana — tinggal
+                        ditinjau, dikoreksi bila perlu, lalu ditandai
+                        sudah dibayar.
+                    </p>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Bulan Payroll
+                        </label>
+
+                        <input
+                            type="month"
+                            class="form-control"
+                            name="bulan"
+                            value="<?= esc($bulan !== '' ? $bulan : date('Y-m')) ?>"
+                            required>
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Jatuh Tempo
+                        </label>
+
+                        <input
+                            type="date"
+                            class="form-control"
+                            name="due_date"
+                            value="<?= esc(date('Y-m-t', strtotime(($bulan !== '' ? $bulan : date('Y-m')) . '-01'))) ?>">
+
+                        <div class="form-text">
+                            Kosongkan untuk memakai tanggal akhir bulan itu.
+                        </div>
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Batasi Unit
+                        </label>
+
+                        <select
+                            class="form-control select"
+                            name="unit_ids[]"
+                            multiple
+                            size="6">
+
+                            <option value="" selected>
+                                Semua unit
+                            </option>
+
+                            <?php foreach ($unit as $u): ?>
+
+                                <option value="<?= esc($u->idunit) ?>">
+                                    <?= esc($u->NAMA_UNIT) ?>
+                                </option>
+
+                            <?php endforeach; ?>
+
+                        </select>
+
+                        <div class="form-text">
+                            Tanpa memilih unit, seluruh karyawan langsung
+                            disusun.
+                        </div>
+
+                    </div>
+
+                    <div class="alert alert-warning mb-0">
+                        <iconify-icon
+                            icon="solar:info-circle-linear"
+                            width="18"
+                            height="18"
+                            class="flex-shrink-0 mt-1">
+                        </iconify-icon>
+
+                        Karyawan yang sudah punya baris payroll di bulan
+                        tersebut akan dilewati, tidak ditimpa. Jadi tombol
+                        ini aman ditekan lebih dari sekali.
+
+                        <div class="mt-2">
+                            Jabatan <strong>Admin root</strong> dan
+                            <strong>Direktur</strong> tidak ikut digaji, jadi
+                            mereka tidak muncul di daftar.
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                        Batal
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary">
+                        Susun Payroll
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ====================================================== -->
+<!-- MODAL KOREKSI PAYROLL -->
+<!-- ====================================================== -->
+
+<div class="modal fade"
+    id="edit-register-modal"
+    tabindex="-1">
+
+    <div class="modal-dialog">
+
+        <div class="modal-content">
+
+            <form
+                action="<?= base_url('payroll2/update-register') ?>"
+                method="post">
+
+                <div class="modal-header">
+
+                    <h5 class="modal-title">
+                        Koreksi Payroll
+                    </h5>
+
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal">
+                    </button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <input
+                        type="hidden"
+                        name="id"
+                        id="edit_register_id">
+
+                    <p class="mb-3">
+                        Koreksi payroll gaji
+                        <strong id="edit_register_karyawan">-</strong>
+                    </p>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Total Gaji
+                        </label>
+
+                        <input
+                            type="number"
+                            class="form-control"
+                            name="total"
+                            id="edit_register_total"
+                            min="0"
+                            required>
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Jatuh Tempo
+                        </label>
+
+                        <input
+                            type="date"
+                            class="form-control"
+                            name="due_date"
+                            id="edit_register_due"
+                            required>
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Catatan
+                        </label>
+
+                        <textarea
+                            class="form-control"
+                            name="notes"
+                            id="edit_register_notes"
+                            rows="3"></textarea>
+
+                        <div class="form-text">
+                            Catatan otomatis akan hilang setelah baris ini
+                            dikoreksi. Isi ulang bila masih perlu
+                            penjelasan angkanya.
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                        Batal
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary">
+                        Simpan
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
 
     </div>
 
@@ -1444,6 +1762,27 @@ $(document).ready(function() {
             $('#bayar_id').val(btn.data('id'));
             $('#bayar_karyawan').text(btn.data('karyawan'));
             $('#bayar_tanggal').val('<?= date('Y-m-d') ?>');
+
+        }
+    );
+
+
+    // ============================
+    // KOREKSI PAYROLL
+    // ============================
+
+    $('#table-payroll-fp').on(
+        'click',
+        '.edit-register-button',
+        function() {
+
+            const btn = $(this);
+
+            $('#edit_register_id').val(btn.data('id'));
+            $('#edit_register_karyawan').text(btn.data('karyawan'));
+            $('#edit_register_total').val(btn.data('total'));
+            $('#edit_register_due').val(btn.data('due'));
+            $('#edit_register_notes').val(btn.data('notes') || '');
 
         }
     );

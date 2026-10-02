@@ -295,6 +295,169 @@ class Payroll extends BaseController
 
 
     /**
+     * Susun draft payroll gaji dari master salary_structures.
+     *
+     * Finance tidak lagi mengetik nominal satu per satu: sistem menghitung
+     * dari master gaji + skor KPI bulan itu, membuat baris berstatus
+     * 'rencana', lalu Finance tinggal mengoreksi bila perlu dan menekan
+     * "Sudah Dibayar". Baris yang sudah ada tidak pernah ditimpa, jadi
+     * generator ini aman dijalankan berulang kali untuk bulan yang sama.
+     */
+    public function generateRegister()
+    {
+        $scope = new \App\Services\Finance\FinanceScopeService();
+
+        if (!$scope->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak menyusun payroll.');
+        }
+
+        $bulan = trim((string) ($this->request->getPost('bulan') ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}$/', $bulan)) {
+            return redirect()->back()->with('gagal', 'Bulan payroll tidak valid.');
+        }
+
+        // Unit di luar lingkup Finance tidak boleh ikut tersusun diam-diam.
+        $allowedIds = array_map('intval', array_column(
+            array_map('get_object_vars', $scope->resolveAllowedUnits()),
+            'idunit'
+        ));
+
+        $unitIds = array_values(array_filter(array_map(
+            'intval',
+            (array) ($this->request->getPost('unit_ids') ?? [])
+        )));
+
+        foreach ($unitIds as $unitId) {
+            if (!in_array($unitId, $allowedIds, true)) {
+                return redirect()->back()->with('gagal', 'Unit tidak diperbolehkan.');
+            }
+        }
+
+        try {
+            $generator = new \App\Services\Payroll\PayrollGenerator();
+            $hasil = $generator->generate($bulan, [
+                'due_date' => (string) ($this->request->getPost('due_date') ?? ''),
+                'unit_ids' => $unitIds,
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Payroll: generate register gagal: ' . $e->getMessage());
+            return redirect()->back()->with('gagal', 'Payroll gagal disusun: ' . $e->getMessage());
+        }
+
+        return redirect()
+            ->to(base_url('payroll2') . '?bulan=' . $bulan)
+            ->with('sukses', $this->pesanGenerate($hasil));
+    }
+
+    /** Ringkasan hasil generate dalam bahasa yang bisa langsung dibaca. */
+    private function pesanGenerate(array $hasil): string
+    {
+        $bulanLabel = date('F Y', strtotime($hasil['bulan'] . '-01'));
+
+        $pesan = sprintf(
+            'Payroll %s disusun dari salary_structures: %d karyawan jadi baris baru',
+            $bulanLabel,
+            $hasil['created']
+        );
+
+        if ($hasil['created'] > 0) {
+            $pesan .= sprintf(' (total Rp %s)', number_format($hasil['total_nominal'], 0, ',', '.'));
+        }
+
+        if ($hasil['skipped'] > 0) {
+            $pesan .= sprintf(', %d dilewati karena sudah ada', $hasil['skipped']);
+        }
+
+        if (($hasil['dikecualikan'] ?? 0) > 0) {
+            $excluded = array_values(array_filter($hasil['rows'], static function ($row) {
+                return $row['status'] === 'excluded';
+            }));
+            $nama = array_slice(array_column($excluded, 'nama'), 0, 3);
+
+            $pesan .= sprintf(
+                ', %d tidak digaji karena jabatannya (%s%s)',
+                $hasil['dikecualikan'],
+                implode(', ', $nama),
+                count($excluded) > 3 ? ', ...' : ''
+            );
+        }
+
+        if ($hasil['errors'] !== []) {
+            $nama = array_slice(array_column($hasil['errors'], 'nama'), 0, 3);
+            $pesan .= sprintf(
+                ', %d gagal (%s)',
+                count($hasil['errors']),
+                implode(', ', $nama) . (count($hasil['errors']) > 3 ? ', ...' : '')
+            );
+        }
+
+        if ($hasil['created'] === 0) {
+            return $pesan . '. Tidak ada angka baru yang perlu ditinjau.';
+        }
+
+        return $pesan . '. Tinjau nominalnya, lalu tandai yang sudah dibayar.';
+    }
+
+    /**
+     * Koreksi satu baris register gaji (total / jatuh tempo / catatan).
+     *
+     * Baris yang sudah lunas dikunci: nominal dan jatuh temponya sudah
+     * terpakai untuk memotong kasbon dan menghitung KPI, jadi mengubahnya
+     * diam-diam akan membuat angka yang tercatat jadi tidak cocok.
+     */
+    public function updateRegister()
+    {
+        $scope = new \App\Services\Finance\FinanceScopeService();
+
+        if (!$scope->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengubah payroll.');
+        }
+
+        $id       = (int) ($this->request->getPost('id') ?? 0);
+        $total    = preg_replace('/[^0-9]/', '', (string) ($this->request->getPost('total') ?? ''));
+        $dueDate  = trim((string) ($this->request->getPost('due_date') ?? ''));
+        $notes    = trim((string) ($this->request->getPost('notes') ?? ''));
+
+        if ($id <= 0) {
+            return redirect()->back()->with('gagal', 'Data payroll tidak valid.');
+        }
+        if ($total === '' || $total === '0') {
+            return redirect()->back()->with('gagal', 'Total gaji harus lebih dari nol.');
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
+            return redirect()->back()->with('gagal', 'Tanggal jatuh tempo tidak valid.');
+        }
+
+        $model = new \App\Models\ModelFinancePayroll();
+        $row   = $model->find($id);
+
+        if (!$row) {
+            return redirect()->back()->with('gagal', 'Data payroll tidak ditemukan.');
+        }
+
+        $allowedIds = array_map('intval', array_column(
+            array_map('get_object_vars', $scope->resolveAllowedUnits()),
+            'idunit'
+        ));
+
+        if (!in_array((int) $row->unit_id, $allowedIds, true)) {
+            return redirect()->back()->with('gagal', 'Unit tidak diperbolehkan.');
+        }
+
+        if ($row->status === 'dibayar') {
+            return redirect()->back()->with('gagal', 'Payroll yang sudah dibayar tidak bisa diubah.');
+        }
+
+        $model->updateRegister($id, [
+            'total'    => (int) $total,
+            'due_date' => $dueDate,
+            'notes'    => $notes,
+        ]);
+
+        return redirect()->back()->with('sukses', 'Perubahan payroll tersimpan.');
+    }
+
+    /**
      * DELETE
      */
     public function delete()
