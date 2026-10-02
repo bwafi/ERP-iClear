@@ -355,7 +355,7 @@ class Riwayat_Service extends BaseController
                     ->deleteByServiceAndBarang($idservice, $barangId);
             }
         }
-        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=pembayaran'))->with('sukses', 'Data pembayaran berhasil disimpan.');
+        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('sukses', 'Data sparepart berhasil diperbarui.');
     }
 
     private function buatPenjualanDariService($idservice, $produkData)
