@@ -33,12 +33,12 @@
                                     <th>Warna</th>
                                     <th>Nama Unit</th>
                                     <th>HPP</th>
-                                    <th>Harga</th>
+                                    <th>Supplier</th><th>Stok Akhir</th><th>Harga</th>
                                 </tr>
                             </thead>
                             <tbody id="sparepart-modal-body">
                                 <tr>
-                                    <td colspan="6" class="text-center py-3">Ketik untuk mencari sparepart...</td>
+                                    <td colspan="8" class="text-center py-3">Ketik untuk mencari sparepart...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -146,11 +146,11 @@
             const query = this.value.trim();
 
             if (query.length < 2) {
-                modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3">Ketik minimal 2 karakter untuk mencari...</td></tr>';
+                modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Ketik minimal 2 karakter untuk mencari...</td></tr>';
                 return;
             }
 
-            modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Mencari...</td></tr>';
+            modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Mencari...</td></tr>';
 
             searchTimeout = setTimeout(function() {
                 fetch('<?= base_url('service/search_sparepart') ?>', {
@@ -164,7 +164,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.length === 0) {
-                        modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Tidak ada sparepart ditemukan</td></tr>';
+                        modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">Tidak ada sparepart ditemukan</td></tr>';
                         return;
                     }
 
@@ -184,6 +184,8 @@
                                 <td>${item.warna || '-'}</td>
                                 <td>${item.nama_unit || '-'}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_beli)}</td>
+                                <td>${item.nama_supplier || '-'}</td>
+                                <td>${item.stok_akhir || 0}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}</td>
                             </tr>
                         `;
@@ -192,7 +194,7 @@
                 })
                 .catch(err => {
                     console.error(err);
-                    modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Gagal memuat data</td></tr>';
+                    modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-danger">Gagal memuat data</td></tr>';
                 });
             }, 300);
         });
