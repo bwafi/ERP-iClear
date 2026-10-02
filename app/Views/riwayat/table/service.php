@@ -339,7 +339,7 @@
         <div class="card w-100 position-relative overflow-hidden h-100">
             <div class="card-body">
                 <div class="tab-content mt-0">
-                    <div class="tab-pane fade show active" id="pelanggan" role="tabpanel" aria-labelledby="pelanggan-tab">
+                    <div class="tab-pane fade" id="pelanggan" role="tabpanel" aria-labelledby="pelanggan-tab">
                         <?= view('riwayat/table/pelanggan_table') ?>
                     </div>
                     <div class="tab-pane fade" id="kerusakan" role="tabpanel" aria-labelledby="kerusakan-tab">
@@ -482,6 +482,12 @@
         if (targetTab && targetTab.indexOf('#') === 0) {
             const trigger = document.querySelector('#service-rail a[href="' + targetTab + '"]');
             if (trigger && !trigger.closest('.is-locked') && !trigger.closest('.disabled-tab')) {
+                // hapus semua show active dari tab-pane
+                document.querySelectorAll('.tab-pane').forEach(tp => tp.classList.remove('show', 'active'));
+                const targetPane = document.querySelector(targetTab);
+                if (targetPane) {
+                    targetPane.classList.add('show', 'active');
+                }
                 new bootstrap.Tab(trigger).show();
                 // juga set active class pada item rail
                 document.querySelectorAll('#service-rail .service-rail-item').forEach(i => i.classList.remove('is-active'));
