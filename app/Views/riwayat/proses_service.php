@@ -23,6 +23,7 @@
                 <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
                 <input type="date" id="endDate" class="form-control">
             </div>
+            <?php if (!empty($is_ho) && $is_ho): ?>
             <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold mb-2">Unit</label>
                 <select id="unitFilter" class="form-select">
@@ -32,6 +33,7 @@
                     <?php endforeach; ?>
                 </select>
             </div>
+            <?php endif; ?>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-semibold mb-2">Search</label>
                 <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, tipe HP...">
@@ -245,7 +247,7 @@
                 data: function(d) {
                     d.startDate = startDateInput.value;
                     d.endDate = endDateInput.value;
-                    d.unitFilter = unitFilter.value;
+                    d.unitFilter = unitFilter ? unitFilter.value : '';
                     d.search = {
                         value: searchBox.value
                     };
@@ -373,7 +375,7 @@
 
         startDateInput.addEventListener('change', filterData);
         endDateInput.addEventListener('change', filterData);
-        unitFilter.addEventListener('change', filterData);
+        if (unitFilter) unitFilter.addEventListener('change', filterData);
 
         $(document).on('click', '.btn-wa', function() {
             let nomor = $(this).data('nohp').toString().trim();
@@ -514,7 +516,7 @@
 
         document.getElementById('startDate').value = toDateInputValue(thirtyDaysAgo);
         document.getElementById('endDate').value = toDateInputValue(today);
-        document.getElementById('unitFilter').value = '';
+        const uf = document.getElementById('unitFilter'); if (uf) uf.value = '';
         document.getElementById('searchBox').value = '';
         document.getElementById('exportStartDate').value = toDateInputValue(thirtyDaysAgo);
         document.getElementById('exportEndDate').value = toDateInputValue(today);

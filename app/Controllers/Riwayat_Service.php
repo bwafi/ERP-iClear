@@ -762,12 +762,15 @@ class Riwayat_Service extends BaseController
 
     public function proses_service()
     {
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
 
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
-            'unit' => $this->UnitModel->getUnit(),
+            'unit' => $isHO ? $this->UnitModel->getUnit() : [],
+            'is_ho' => $isHO,
             'body'  => 'riwayat/proses_service'
         );
         return view('template', $data);

@@ -29,7 +29,7 @@
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th width="40"></th>
-                                    <th>ID Sparepart</th>
+                                    <th>Kode Sparepart</th>
                                     <th>Nama Sparepart</th>
                                     <th>Warna</th>
                                     <th>Nama Unit</th>
@@ -183,7 +183,7 @@
                                         data-harga="${item.harga}" data-stok="${item.stok_akhir ?? 0}"
                                         ${isChecked}>
                                 </td>
-                                <td>${item.idbarang}</td>
+                                <td>${item.kode_barang || '-'}</td>
                                 <td>${item.nama_barang}</td>
                                 <td>${item.warna || '-'}</td>
                                 <td>${item.nama_unit || '-'}</td>
