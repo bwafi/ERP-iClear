@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\ModelTutupKasir;
+use App\Services\Finance\DailyCashFlowService;
 use CodeIgniter\Controller;
 
 class TutupKasir extends BaseController
@@ -380,25 +381,25 @@ class TutupKasir extends BaseController
         // PRODUCT SERVICE FAST MOVING
         // ==========================
         $bestsellerproduct = $this->db->table('service')
-            ->select("
-                LOWER(
-                    CONCAT(
-                        SUBSTRING_INDEX(tipe_hp,' ',1),
-                        ' ',
-                        REGEXP_SUBSTR(tipe_hp,'[0-9]+')
-                    )
-                ) AS keyword_hp,
+            ->select('
+                TRIM(service.tipe_hp) AS tipe_hp_label,
                 COUNT(*) AS total
-            ")
+            ')
             ->where('MONTH(tanggal_selesai)', $bulan)
             ->where('YEAR(tanggal_selesai)', $tahun)
             ->where('unit_idunit', $unit)
-            ->groupBy('keyword_hp')
+            ->where('status_service', 4)
+            ->groupStart()
+                ->where('service.tipe_hp IS NOT NULL', null, false)
+                ->where("TRIM(service.tipe_hp) != ''", null, false)
+            ->groupEnd()
+            ->groupBy('tipe_hp_label')
             ->orderBy('total', 'DESC')
+            ->orderBy('tipe_hp_label', 'ASC')
             ->limit(1)
             ->get()
             ->getRow() ?? (object)[
-                'keyword_hp' => 'Belum ada',
+                'tipe_hp_label' => 'Belum ada',
                 'total' => 0
             ];
 
@@ -551,6 +552,41 @@ class TutupKasir extends BaseController
             'hariTerbaik'       => $hariTerbaik,
             'omsetTerbaik'      => $omsetTerbaik,
             'body'              => 'jurnal/omset_bulanan'
+        ]);
+    }
+
+    /**
+     * Data "Arus Kas Harian" untuk satu tanggal (JSON), dipakai drill-down
+     * Detail Omset Harian. Read-only: tidak mengubah omset maupun transaksi.
+     */
+    public function arusKasHarian()
+    {
+        $unit = (int)($this->request->getGet('unit') ?: 0);
+        if ($unit <= 0) {
+            $unit = (int)session()->get('ID_UNIT');
+        }
+
+        if ($this->db->table('unit')->where('idunit', $unit)->countAllResults() === 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'success' => false,
+                'message' => 'Unit tidak valid',
+            ]);
+        }
+
+        $tanggal = (string)$this->request->getGet('tanggal');
+        $timestamp = $tanggal !== '' ? strtotime($tanggal) : false;
+        if ($timestamp === false) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'success' => false,
+                'message' => 'Tanggal tidak valid',
+            ]);
+        }
+
+        $service = new DailyCashFlowService();
+
+        return $this->response->setJSON([
+            'success' => true,
+            'data'    => $service->getForDate($unit, date('Y-m-d', $timestamp)),
         ]);
     }
 
