@@ -288,6 +288,18 @@
         color: var(--bs-danger-text-emphasis, #842029);
     }
 
+    /* Varian peringatan: dipakai Opening KAS yang belum terverifikasi dan
+       yang hasil cocoknya sudah bergeser karena Tutup Kasir dicocokkan ulang. */
+    .kb-banner.is-warning {
+        background: var(--bs-warning-bg-subtle, #fff3cd);
+        border-color: var(--bs-warning-border-subtle, #ffe69c);
+    }
+
+    .kb-banner.is-warning .kb-banner-content,
+    .kb-banner.is-warning .kb-banner-content .text-secondary {
+        color: var(--bs-warning-text-emphasis, #664d03);
+    }
+
     .kb-banner-icon {
         display: flex;
         align-items: center;

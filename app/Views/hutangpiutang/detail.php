@@ -17,6 +17,27 @@ $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
 $authoritative = in_array($row->sumber_tipe, HutangPiutangService::AUTHORITATIVE_SUMBER, true);
 $statusClass = $row->status === 'lunas' ? 'success' : ($row->status === 'sebagian' ? 'warning' : 'secondary');
 $bisaKompensasi = $can_input && $authoritative && $row->status !== 'lunas' && !empty($lawan_kompensasi);
+
+// Pelunasan legacy: hanya hutang Outstanding bertanggal <= cut-off Finance,
+// dan hanya yang BUKAN proksi (proksi ditimpa sync dari transaksi sumber).
+$cutoffFinance = \App\Services\Finance\FinanceScopeService::cutoffDate();
+// Pakai helper service, bukan `$row->cutoff_reason` mentah: pembatalan
+// mengosongkan cutoff_reason tetapi tetap meninggalkan jejak settlement,
+// jadi hanya helper yang tahu bedanya "aktif" vs "pernah dibatalkan".
+$hpService     = new HutangPiutangService();
+$settledLegacy = $hpService->settlementLegacyAktif($row);
+$pernahLegacy  = $settledLegacy
+    || (! empty($row->tanggal_settlement_legacy) && ! empty($row->legacy_dibatalkan_at));
+$outstanding   = $row->status !== 'lunas' && (float) $row->sisa > 0;
+$bisaLegacy    = $can_input && $outstanding && ! $settledLegacy
+    && (int) $row->is_projection === 0
+    && \App\Services\Finance\FinanceScopeService::tanggalStr($row->tanggal) <= $cutoffFinance;
+$alasanLegacy  = 'Hanya hutang outstanding bertanggal pada atau sebelum ' . $cutoffFinance . ' yang bisa ditandai lunas legacy.';
+if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
+    $alasanLegacy = 'Posisi ini proksi dari transaksi sumber, sehingga penandaan akan ditimpa saat sinkronisasi.';
+} elseif ($can_input && ! $settledLegacy && ! $outstanding) {
+    $alasanLegacy = 'Hutang ini sudah lunas.';
+}
 ?>
 
 <div class="row">
@@ -39,7 +60,39 @@ $bisaKompensasi = $can_input && $authoritative && $row->status !== 'lunas' && !e
                     <tr><td class="text-muted">Sisa</td><td class="text-end fw-semibold text-danger"><?= $rp($row->sisa) ?></td></tr>
                     <tr><td class="text-muted">Keterangan</td><td class="text-end"><?= esc($row->keterangan ?: '-') ?></td></tr>
                 </table>
-                <div class="mt-3 d-flex gap-2">
+
+                <?php if ($settledLegacy || $pernahLegacy) : ?>
+                    <div class="alert alert-<?= $settledLegacy ? 'warning' : 'secondary' ?> mt-3 mb-0">
+                        <h6 class="fw-semibold mb-2"><iconify-icon icon="solar:shield-check-bold" width="18"></iconify-icon>
+                            <?= $settledLegacy ? 'Ditandai Lunas Legacy' : 'Pelunasan Legacy Pernah Dibatalkan' ?>
+                        </h6>
+                        <table class="table table-sm mb-0">
+                            <tr><td class="text-muted">Tanggal settlement</td><td class="text-end fw-semibold"><?= $row->tanggal_settlement_legacy ? date('d-m-Y', strtotime($row->tanggal_settlement_legacy)) : '-' ?></td></tr>
+                            <tr><td class="text-muted">Jenis settlement</td><td class="text-end"><code>legacy</code></td></tr>
+                            <tr><td class="text-muted">Dicatat oleh</td><td class="text-end"><?= esc($row->cutoff_closed_by ? ('#' . $row->cutoff_closed_by) : '-') ?></td></tr>
+                            <tr><td class="text-muted">Waktu pencatatan</td><td class="text-end"><?= $row->cutoff_closed_at ? date('d-m-Y H:i', strtotime($row->cutoff_closed_at)) : '-' ?></td></tr>
+                            <tr><td class="text-muted">Sisa sebelum settlement</td><td class="text-end"><?= $rp($row->sisa_legacy_sebelum) ?></td></tr>
+                        </table>
+                        <?php if (! $settledLegacy) : ?>
+                            <hr class="my-2">
+                            <table class="table table-sm mb-0">
+                                <tr><td class="text-muted">Status</td><td class="text-end"><span class="badge bg-secondary">Sudah dibatalkan — kembali outstanding</span></td></tr>
+                                <tr><td class="text-muted">Waktu pembatalan</td><td class="text-end fw-semibold"><?= $row->legacy_dibatalkan_at ? date('d-m-Y H:i', strtotime($row->legacy_dibatalkan_at)) : '-' ?></td></tr>
+                                <tr><td class="text-muted">Dibatalkan oleh</td><td class="text-end"><?= esc($row->legacy_dibatalkan_by ? ('#' . $row->legacy_dibatalkan_by) : '-') ?></td></tr>
+                                <tr><td class="text-muted">Alasan pembatalan</td><td class="text-end"><?= esc($row->legacy_alasan_pembatalan ?: '-') ?></td></tr>
+                            </table>
+                        <?php endif; ?>
+                        <div class="small text-muted mt-2 mb-0">
+                            Penandaan administratif — bukan transaksi pembayaran. Tidak ada jurnal,
+                            tidak ada movement Kas/Bank, dan saldo kas/bank tidak berubah.
+                            <?php if (! $settledLegacy) : ?>
+                                Jejak settlement tetap disimpan sebagai riwayat.
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="<?= base_url('hutangpiutang/cetak/' . $row->id) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">Cetak Bukti</a>
                     <?php if ($can_input && $authoritative && $row->status !== 'lunas') : ?>
                         <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bayar-modal">Catat Pembayaran</button>
@@ -47,7 +100,15 @@ $bisaKompensasi = $can_input && $authoritative && $row->status !== 'lunas' && !e
                     <?php if ($bisaKompensasi) : ?>
                         <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#kompensasi-modal">Kompensasi</button>
                     <?php endif; ?>
+                    <?php if ($settledLegacy && $can_input) : ?>
+                        <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#batal-legacy-modal">Batalkan Pelunasan Legacy</button>
+                    <?php elseif ($bisaLegacy) : ?>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#legacy-modal">Tandai Lunas Legacy</button>
+                    <?php endif; ?>
                 </div>
+                <?php if ($can_input && ! $settledLegacy && ! $bisaLegacy && ! $outstanding) : ?>
+                    <div class="small text-muted mt-2 mb-0"><?= esc($alasanLegacy) ?></div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -166,6 +227,101 @@ $bisaKompensasi = $can_input && $authoritative && $row->status !== 'lunas' && !e
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
                 <button type="submit" class="btn btn-primary">Simpan Kompensasi</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($bisaLegacy) : ?>
+<div class="modal fade" id="legacy-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content" method="post" action="<?= base_url('hutangpiutang/tandai-lunas-legacy') ?>">
+            <?= csrf_field() ?>
+            <input type="hidden" name="hutang_piutang_id" value="<?= (int) $row->id ?>">
+            <div class="modal-header">
+                <h5 class="modal-title">Tandai Lunas Legacy — <?= esc($row->kode) ?></h5>
+                <button type="button" class="btn-close" data-ds-dismiss="modal" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning py-2 px-3 small">
+                    <strong>Ini bukan transaksi pembayaran.</strong>
+                    Aksi ini hanya menandai posisi hutang sebagai sudah lunas secara faktual
+                    (mis. sudah dikompensasi atau saling hapus). Tidak ada jurnal,
+                    tidak ada pembukuan kas/bank, dan saldo Kas/Bank
+                    <strong>tidak berubah</strong>.
+                </div>
+
+                <p class="mb-3">Sisa outstanding: <strong><?= $rp($row->sisa) ?></strong></p>
+
+                <div class="mb-3">
+                    <label class="form-label">Tanggal Settlement</label>
+                    <input type="date" name="tanggal_settlement" class="form-control"
+                           value="<?= esc($row->tanggal_settlement_legacy ?: $cutoffFinance) ?>"
+                           min="<?= esc($row->tanggal) ?>" max="<?= esc($cutoffFinance) ?>" required>
+                    <div class="form-text">
+                        Harus pada atau sebelum Finance cut-off <strong><?= esc($cutoffFinance) ?></strong>.
+                        Settlement setelah cut-off bukan transaksi legacy.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Keterangan / Alasan</label>
+                    <textarea name="keterangan" class="form-control" rows="2"
+                              placeholder="mis. Sudah dikompensasi dengan mutasi antar unit, diverifikasi Finance."></textarea>
+                    <div class="form-text">Tercatat permanen di audit trail bersama nama dan waktu pencatatan.</div>
+                </div>
+
+                <div class="small text-muted">
+                    Terdata pada tabel <code>hutang_piutang</code>: status, sisa,
+                    tanggal settlement, jenis settlement <code>legacy</code>, dan pencatat.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-warning">
+                    Tandai Lunas Legacy
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($settledLegacy && $can_input) : ?>
+<div class="modal fade" id="batal-legacy-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content" method="post" action="<?= base_url('hutangpiutang/batalkan-lunas-legacy') ?>">
+            <?= csrf_field() ?>
+            <input type="hidden" name="hutang_piutang_id" value="<?= (int) $row->id ?>">
+            <div class="modal-header">
+                <h5 class="modal-title">Batalkan Pelunasan Legacy — <?= esc($row->kode) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-secondary py-2 px-3 small">
+                    Posisi hutang akan dikembalikan jadi outstanding sebesar
+                    <strong><?= $rp($row->sisa_legacy_sebelum) ?></strong>.
+                    Settlement dicatat pada
+                    <strong><?= $row->tanggal_settlement_legacy ? date('d-m-Y', strtotime($row->tanggal_settlement_legacy)) : '-' ?></strong>.
+                    <br><br>
+                    Jejak settlement <strong>tidak dihapus</strong> — hanya penanda aktifnya yang dicabut,
+                    dan pembatalan ini dicatat sebagai audit trail terpisah.
+                    Tidak ada jurnal, tidak ada kas/bank, saldo tidak berubah.
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Alasan Pembatalan</label>
+                    <textarea name="alasan" class="form-control" rows="2"
+                              placeholder="mis. Bukan faktual lunas — masih ada sisa yang belum diterima."></textarea>
+                    <div class="form-text">
+                        Disimpan permanen bersama nama dan waktu pembatalan.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-outline-warning">Ya, Batalkan Pelunasan</button>
             </div>
         </form>
     </div>

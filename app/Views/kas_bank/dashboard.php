@@ -152,6 +152,9 @@ $netFlow = (int) ($net_cash_flow ?? 0);
         </div>
     <?php endif; ?>
 
+    <!-- Diagnosa konfigurasi rekening yang belum bisa dipakai transaksi -->
+    <?= $this->include('kas_bank/_diagnostik') ?>
+
     <div class="kb-split">
         <!-- Saldo per rekening fisik -->
         <section class="kb-card">

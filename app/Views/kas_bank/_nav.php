@@ -8,13 +8,15 @@ $__seg2 = $__uri->getSegment(2) ?? '';
 $__active = $__seg2 === '' ? 'ringkasan'
     : ($__seg2 === 'akun' ? 'rekening'
     : ($__seg2 === 'transfer' ? 'pindah'
-    : (in_array($__seg2, ['antar-unit', 'antar_unit'], true) ? 'antar' : 'ringkasan')));
+    : (in_array($__seg2, ['antar-unit', 'antar_unit'], true) ? 'antar'
+    : (in_array($__seg2, ['setor-tunai', 'penarikan-tunai'], true) ? 'tunai' : 'ringkasan'))));
 
 $__ctxBadges = [
     'ringkasan' => '',
     'rekening'  => '',
     'pindah'    => '',
     'antar'     => '',
+    'tunai'     => '',
 ];
 if (isset($akun_kas_bank) && is_array($akun_kas_bank)) {
     $aktifCount = array_reduce($akun_kas_bank, fn($c, $a) => $c + (($a->status ?? '') === 'aktif' ? 1 : 0), 0);
@@ -53,6 +55,12 @@ $__tabs = [
         'label' => 'Bayar Antar Unit',
         'badge' => $__ctxBadges['antar'],
     ],
+    'tunai' => [
+        'url'   => base_url('kas_bank/setor-tunai'),
+        'icon'  => 'bi:cash-stack',
+        'label' => 'Setor / Tarik Tunai',
+        'badge' => $__ctxBadges['tunai'],
+    ],
 ];
 
 $__titles = [
@@ -60,6 +68,7 @@ $__titles = [
     'rekening'  => ['Rekening & Saldo Awal', 'Kelola master rekening fisik, saldo awal, dan pembagian hak alokasi per cabang.'],
     'pindah'    => ['Pindah Saldo (Transfer Internal)', 'Transfer antar rekening milik sendiri tanpa memengaruhi laporan laba rugi.'],
     'antar'     => ['Pembayaran Antar Unit (H/P)', 'Penyelesaian hutang/piutang mutasi stok antar cabang (real transfer vs atribusi).'],
+    'tunai'     => ['Setor & Penarikan Tunai', 'Pindahkan uang antara laci kas unit dan rekening bank, dengan batas entitlement per unit.'],
 ];
 $__t = $__titles[$__active] ?? $__titles['ringkasan'];
 ?>

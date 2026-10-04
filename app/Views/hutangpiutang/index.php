@@ -17,6 +17,18 @@ $canInput = $can_input ?? false;
 use App\Services\Finance\HutangPiutangService;
 
 $isPiutang = $jenis === 'piutang';
+// Kriteria "boleh ditandai lunas legacy" untuk tombol cepat di list.
+// Aturan yang sama persis dengan service — ini hanya pembantu tampilan.
+$cutoffFinance = \App\Services\Finance\FinanceScopeService::cutoffDate();
+$bisaLegacyRow = static function (array $r) use ($canInput, $cutoffFinance): bool {
+    return $canInput
+        && (int) ($r['is_projection'] ?? 0) === 0
+        && $r['status'] !== HutangPiutangService::STATUS_LUNAS
+        && (float) ($r['sisa'] ?? 0) > 0
+        && ($r['cutoff_reason'] ?? null) !== HutangPiutangService::SETTLEMENT_LEGACY
+        && \App\Services\Finance\FinanceScopeService::tanggalStr($r['tanggal'] ?? null) !== ''
+        && \App\Services\Finance\FinanceScopeService::tanggalStr($r['tanggal'] ?? null) <= $cutoffFinance;
+};
 $labelSumber = [
     'pembelian' => HutangPiutangService::labelSumber('pembelian'),
     'piutang_pelanggan' => HutangPiutangService::labelSumber('piutang_pelanggan'),
@@ -144,6 +156,15 @@ $labelSumber = [
                                 <?php endif; ?>
                                 <?php if ($authoritative) : ?>
                                     <a href="<?= base_url('hutangpiutang/cetak/' . $row['id']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">Bukti</a>
+                                <?php endif; ?>
+                                <?php if (($row['cutoff_reason'] ?? null) === HutangPiutangService::SETTLEMENT_LEGACY) : ?>
+                                    <a href="<?= base_url('hutangpiutang/detail/' . $row['id']) ?>"
+                                       class="btn btn-sm btn-outline-warning"
+                                       title="Ditandai lunas legacy pada <?= $row['tanggal_settlement_legacy'] ? date('d-m-Y', strtotime($row['tanggal_settlement_legacy'])) : '-' ?> (bukan transaksi pembayaran)">Lunas Legacy</a>
+                                <?php elseif ($bisaLegacyRow($row)) : ?>
+                                    <a href="<?= base_url('hutangpiutang/detail/' . $row['id']) ?>"
+                                       class="btn btn-sm btn-outline-secondary"
+                                       title="Tandai lunas legacy (tanpa pembayaran, tanpa jurnal, tanpa perubahan saldo kas/bank)">Lunas Legacy</a>
                                 <?php endif; ?>
                             </td>
                         </tr>

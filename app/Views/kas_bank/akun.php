@@ -13,6 +13,17 @@ foreach (($bank ?? []) as $b) {
 }
 $canInput = $bisa_pilih_unit ?? false;
 
+// Opening KAS per rekening laci pada tanggal cut-off.
+$openingKas    = $opening_kas ?? [];
+$openingKasById = $opening_kas_by_akun ?? [];
+$openingKasBelum = (int) ($opening_kas_belum ?? 0);
+$openingKasBergeser = $opening_kas_bergeser ?? [];
+$cutoffOpening = $opening_kas_cutoff ?? \App\Services\Finance\FinanceScopeService::cutoffDate();
+$daftarKas     = array_values(array_filter(
+    $akun_kas_bank ?? [],
+    static fn($a) => (string) $a->tipe === 'KAS'
+));
+
 // Ringkasan untuk strip statistik
 $daftarAkun   = $akun_kas_bank ?? [];
 $akunJenis    = $akun_jenis ?? [];
@@ -42,6 +53,9 @@ foreach ($daftarAkun as $a) {
 ?>
 
 <div class="kb">
+
+    <!-- Diagnosa konfigurasi rekening yang belum bisa dipakai transaksi -->
+    <?= $this->include('kas_bank/_diagnostik') ?>
 
     <!-- Ringkasan -->
     <div class="kb-stats">
@@ -105,6 +119,11 @@ foreach ($daftarAkun as $a) {
                     <li class="nav-item" role="presentation">
                         <button class="kb-tab" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3-pane" type="button" role="tab">
                             <span class="kb-step">3</span>Hak unit
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="kb-tab" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4-pane" type="button" role="tab">
+                            <span class="kb-step">4</span>Opening KAS
                         </button>
                     </li>
                 </ul>
@@ -210,8 +229,21 @@ foreach ($daftarAkun as $a) {
 
                             <div class="kb-row">
                                 <div class="kb-field">
-                                    <label class="kb-label">Tanggal</label>
-                                    <input type="date" name="tanggal" class="form-control kb-input" value="<?= date('Y-m-d') ?>">
+                                    <label class="kb-label">Tanggal <span class="kb-req">*</span></label>
+                                    <?php
+                                    // Default TANGGAL CUT-OFF, bukan hari ini. saveSaldoAwal()
+                                    // menolak tanggal selain cut-off, jadi default date('Y-m-d')
+                                    // membuat operator gagal menyimpan dengan pesan yang membingungkan.
+                                    $tanggalCutoffForm = \App\Services\Finance\FinanceScopeService::cutoffDate();
+                                    ?>
+                                    <input type="date" name="tanggal" class="form-control kb-input"
+                                        value="<?= esc($tanggalCutoffForm) ?>"
+                                        min="<?= esc($tanggalCutoffForm) ?>" max="<?= esc($tanggalCutoffForm) ?>"
+                                        required>
+                                    <div class="kb-hint">
+                                        Opening balance — saldo riil terverifikasi pada akhir
+                                        <?= esc($tanggalCutoffForm) ?>, bukan hasil SUM transaksi.
+                                    </div>
                                 </div>
                                 <div class="kb-field">
                                     <label class="kb-label">Nominal (Rp) <span class="kb-req">*</span></label>
@@ -279,6 +311,175 @@ foreach ($daftarAkun as $a) {
 
                             <button type="submit" class="btn btn-info text-white kb-btn">Simpan hak unit</button>
                         </form>
+                    </div>
+
+                    <!-- Langkah 4: Opening KAS -->
+                    <div class="tab-pane fade" id="step4-pane" role="tabpanel">
+                        <div class="kb-pane-head">
+                            <div>
+                                <div class="kb-pane-title">Baseline laci kas</div>
+                                <div class="kb-hint">
+                                    Opening yang ditetapkan Finance pada akhir
+                                    <?= esc($cutoffOpening) ?>, lalu dicocokkan dengan hasil hitung
+                                    laci saat Tutup Kasir. Tanggalnya dikunci karena
+                                    harus sama dengan opening bank.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="kb-hint mb-2">
+                            Opening ini <strong>bukan</strong> transaksi kas dan tidak ikut masuk
+                            cash-in. Laci kas tidak punya statement bank.
+                        </div>
+
+                        <?php if (! $canInput) : ?>
+                            <div class="kb-hint">Anda tidak punya hak input. Hubungi Finance untuk menetapkan opening KAS.</div>
+                        <?php endif; ?>
+
+                        <?php if ($openingKasBelum > 0) : ?>
+                            <div class="kb-banner is-warning mb-2">
+                                <div class="kb-banner-icon">
+                                    <iconify-icon icon="bi:exclamation-triangle-fill"></iconify-icon>
+                                </div>
+                                <div class="kb-banner-content">
+                                    <strong><?= $openingKasBelum ?> laci belum punya opening KAS terverifikasi</strong>
+                                    <div class="mt-1">
+                                        Saldo laci itu belum boleh jadi acuan Setor maupun Penarikan.
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($openingKasBergeser !== []) : ?>
+                            <div class="kb-banner is-danger mb-2">
+                                <div class="kb-banner-icon text-danger">
+                                    <iconify-icon icon="bi:exclamation-triangle-fill"></iconify-icon>
+                                </div>
+                                <div class="kb-banner-content">
+                                    <strong>Hitung laci berubah sejak verifikasi</strong>
+                                    <div class="mt-1">
+                                        Tutup Kasir dicocokkan ulang untuk
+                                        <?= count($openingKasBergeser) ?> laci sejak diverifikasi, jadi
+                                        hasil cocok yang tersimpan sudah tidak berlaku. Cocokkan ulang di tabel bawah.
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($daftarKas === []) : ?>
+                            <div class="kb-hint">Belum ada rekening laci kas.</div>
+                        <?php else : ?>
+                            <div class="table-responsive">
+                                <table class="table kb-table align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Laci kas</th>
+                                            <th class="text-end">Opening</th>
+                                            <th class="text-end">Real cash</th>
+                                            <th class="text-end">Selisih</th>
+                                            <th>Status</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($daftarKas as $a) :
+                                            $id  = (int) $a->idakun_kas_bank;
+                                            $row = $openingKasById[$id] ?? [];
+                                            $opening = $row['opening'] ?? null;
+                                            $real    = $row['real_cash'] ?? null;
+                                            $selisih = $row['selisih'] ?? null;
+                                            $status  = (string) ($row['status'] ?? 'BELUM_ADA');
+                                            ?>
+                                            <tr>
+                                                <td>
+                                                    <?= esc($a->nama_akun) ?>
+                                                    <div class="kb-hint">
+                                                        Unit <?= esc($unitMap[(int) ($row['unit_id'] ?? $a->unit_id)] ?? '—') ?>
+                                                    </div>
+                                                </td>
+                                                <td class="text-end kb-mono">
+                                                    <?= $opening === null ? '—' : esc($rp($opening)) ?>
+                                                </td>
+                                                <td class="text-end kb-mono">
+                                                    <?= $real === null ? '—' : esc($rp($real)) ?>
+                                                </td>
+                                                <td class="text-end kb-mono">
+                                                    <?= $selisih === null ? '—' : esc($rp($selisih)) ?>
+                                                </td>
+                                                <td>
+                                                    <?php if ($status === 'TERVERIFIKASI') : ?>
+                                                        <span class="kb-badge kb-badge-green">Cocok</span>
+                                                    <?php elseif ($status === 'TIDAK_COCOK') : ?>
+                                                        <span class="kb-badge kb-badge-red">Tidak cocok</span>
+                                                    <?php elseif ($status === 'BELUM_VERIFIKASI') : ?>
+                                                        <span class="kb-badge kb-badge-amber">Belum dicocokkan</span>
+                                                    <?php else : ?>
+                                                        <span class="kb-badge kb-badge-muted">Belum ada opening</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-end">
+                                                    <?php if ($canInput && $status !== 'BELUM_ADA') : ?>
+                                                        <form method="post" action="<?= base_url('kas_bank/opening-kas/verifikasi') ?>" class="d-inline">
+                                                            <input type="hidden" name="akun_kas_bank_id" value="<?= $id ?>">
+                                                            <button type="submit" class="btn btn-sm btn-outline-secondary kb-btn">
+                                                                Cocokkan ulang
+                                                            </button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <hr class="my-3">
+
+                            <div class="kb-pane-title mb-2">Tetapkan / ubah opening</div>
+                            <form method="post" action="<?= base_url('kas_bank/opening-kas/save') ?>">
+                                <div class="kb-field">
+                                    <label class="kb-label">Laci kas <span class="kb-req">*</span></label>
+                                    <select name="akun_kas_bank_id" class="form-select kb-input" required>
+                                        <option value="">Pilih laci kas</option>
+                                        <?php foreach ($daftarKas as $a) : ?>
+                                            <option value="<?= (int) $a->idakun_kas_bank ?>">
+                                                <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : '') . $a->nama_akun) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <div class="kb-row">
+                                    <div class="kb-field">
+                                        <label class="kb-label">Tanggal <span class="kb-req">*</span></label>
+                                        <input type="date" name="tanggal_display" class="form-control kb-input"
+                                            value="<?= esc($cutoffOpening) ?>"
+                                            min="<?= esc($cutoffOpening) ?>" max="<?= esc($cutoffOpening) ?>"
+                                            readonly aria-readonly="true">
+                                        <div class="kb-hint">
+                                            Dikunci di tanggal cut-off, sama dengan opening bank.
+                                        </div>
+                                    </div>
+                                    <div class="kb-field">
+                                        <label class="kb-label">Opening (Rp) <span class="kb-req">*</span></label>
+                                        <input type="text" name="opening" class="form-control kb-input rupiah kb-mono"
+                                            placeholder="0" inputmode="numeric" required>
+                                    </div>
+                                </div>
+
+                                <div class="kb-field">
+                                    <label class="kb-label">Keterangan</label>
+                                    <input type="text" name="keterangan" class="form-control kb-input" placeholder="Opsional">
+                                </div>
+
+                                <div class="kb-hint mb-2">
+                                    Mengubah angka opening akan mengembalikan status ke
+                                    “belum dicocokkan” — cocokkan ulang dengan hasil hitung laci.
+                                </div>
+
+                                <button type="submit" class="btn btn-success kb-btn">Simpan opening KAS</button>
+                            </form>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
