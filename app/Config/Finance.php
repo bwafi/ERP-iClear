@@ -68,15 +68,41 @@ class Finance extends BaseConfig
     public int $omzetTolerance = 0;
 
     /**
-     * Tanggal Financial Cut-off / release engine Finance baru (YYYY-MM-DD).
+     * Tanggal DASAR / statement cut-off Kas & Bank (YYYY-MM-DD).
      *
-     * Prinsip: seluruh hutang/piutang/mutasi/kas dengan tanggal transaksi
-     * SEBELUM tanggal ini diperlakukan sebagai data legacy/histori (tidak
-     * dihitung sebagai saldo aktif). Transaksi pada/≥ tanggal ini diproses
-     * normal oleh engine Finance baru. Satu-satunya sumber tanggal cut-off
-     * (diubah cukup di sini).
+     * Ini adalah tanggal SALDOKORAN yang disepakati, bukan tanggal mulai
+     * operasional. Saldo kas per unit pada tanggal ini (dari tutup_kasir
+     * .akhir_cash) dan saldo statement tiap rekening fisik (dari
+     * saldo_awal_kas_bank) adalah BASELINE — keduanya baseline, bukan
+     * transaksi ledger.
+     *
+     * PENTING: tanggal ini BUKAN batas bawah ledger. Transaksi ledger
+     * transaksi_kas_bank hanya dihitung mulai $periodeMulaiDate. Jangan
+     * memakai cutoffDate untuk filter "tanggal >= ..." — itu batas salah.
+     *
+     * CUT-OFF 2026-10-05. Saldo yang diinput di tanggal ini adalah SALDO
+     * RIIL yang diverifikasi Finance pada akhir 5 Okt — bukan hasil SUM
+     * transaksi legacy. Transaksi 1–5 Okt TIDAK diposting sebagai transaksi
+     * Finance baru; semuanya sudah terserap di saldo riil tersebut.
      */
-    public string $cutoffDate = '2026-10-01';
+    public string $cutoffDate = '2026-10-05';
+
+    /**
+     * Hari pertama periode operasional baru (YYYY-MM-DD).
+     *
+     * Inilah batas bawah yang dipakai SEMUA filter ledger
+     * (`tanggal >= periodeMulaiDate`). Transaksi sebelum tanggal ini
+     * adalah legacy dan TIDAK boleh ikut menghitung saldo aktif; transaksi
+     * tepat pada tanggal cut-off (5 Okt) juga legacy karena tanggal itu
+     * hanya baseline statement.
+     *
+     * Cut-off 5 Okt → periode ledger mulai 6 Okt. KPI Keuangan/Cash Flow/
+     * Hutang-Piutang yang berbasis periodeMulaiDate otomatis mulai 6 Okt.
+     *
+     * Harus = cutoffDate + 1 hari. Nilai ini tidak di-hardcode di tempat lain:
+     * semua pemakai filtering memanggil FinanceScopeService::periodeMulaiDate().
+     */
+    public string $periodeMulaiDate = '2026-10-06';
 
     /**
      * ID_JABATAN yang boleh mengisi (input) Dashboard Finance.
@@ -122,4 +148,87 @@ class Finance extends BaseConfig
      * bukan permission penarikan dana.
      */
     public array $financeHoSourceRoles = [0, 1];
+
+    // =====================================================================
+    // PETA REKENING RESMI (ground truth bisnis, sudah dikonfirmasi Finance)
+    // =====================================================================
+    //
+    // Kunci = akun_kas_bank.idakun_kas_bank. Nilai = daftar unit_id yang
+    // MEMILIKI HAK memakai rekening fisik tersebut.
+    //
+    // PENTING —bedakan tiga hal yang sering tercampur:
+    //   1. HAK memakai rekening  -> peta di bawah ini + alokasi_saldo_kas_bank
+    //   2. SALDO REAL rekening   -> saldo_awal_kas_bank status VERIFIED
+    //   3. ALOKASI saldo unit   -> alokasi_saldo_kas_bank.nominal
+    //
+    // Ketiganya TIDAK boleh disimpulkan satu dari yang lain:
+    //   - unit ada di peta ini        => punya hak memakai
+    //   - nominal alokasi = 0        => punya HAK, tapi belum ada saldo
+    //                                  dialokasikan. BUKAN "tidak punya hak".
+    //   - nominal alokasi = 0        => TIDAK berarti saldo fisik rekening 0.
+    //
+    // Peta ini adalah definisi POLICY untuk migration dan untuk validasi
+    // entitlement. Runtime scope tetap membaca entitlement dari
+    // alokasi_saldo_kas_bank (sumber data), memakai peta ini sebagai rujukan
+    // silang — supayayi Anda tidak mengunci seluruh scope ke array hardcoded
+    // sementara tabel alokasi belum terisi.
+    //
+    // Sejarah transaksi TIDAK boleh dipakai menurunkan peta ini. Transaksi
+    // hanya dipakai menemukan anomali historis untuk dilaporkan.
+    // KUNCI = bank_idbank, BUKAN idakun_kas_bank.
+    //
+    // KENAPA bukan idakun_kas_bank. Kolom itu berasal dari AUTO_INCREMENT:
+    // migration 2026-09-21-000200 membuat rekening bank tanpa id eksplisit,
+    // jadi nomor urutnya TIDAK deterministik antar-linse data. Dump lama
+    // punya CV=16/SABRINA=15; dump produksi yang lain bisa CV=12/SABRINA=11
+    // hanya karena AUTO_INCREMENT-nya berbeda. Kunci policy di idakun_kas_bank
+    // karena itu pecah begitu dump diganti.
+    //
+    // Yang stabil itu bank_idbank: FK ke master `bank`, nilainya sudah
+    // disahkan Finance (nomor rekening + pemilik). Policy di-key di situ,
+    // lalu EntitlementPolicyService me-resolve ke idakun_kas_bank saat runtime.
+    //
+    // Konsekuensi: config ini TIDAK LAGI bisa dipakai tanpa DB. Selalu lewat
+    // EntitlementPolicyService, yang me-resolve dan cache per request.
+    public array $rekeningResmiByBank = [
+        '2' => [1, 2], // CV       — shared 2 unit
+        '5' => [3],    // ALFARIZKI — unit 3 saja
+        '1' => [4],    // SABRINA  — unit 4 saja
+        '3' => [],     // FINANCE  — BUKAN rekening operasional unit
+        // GENTENG (unit 5) BELUM ADA di sini: nomor rekening 1802016123
+        // belum diverifikasi Finance. Jangan menambahkan sebelum konfirmasi.
+    ];
+
+    /**
+     * Rekening yang tunduk pada mekanisme SALDO REAL (statement VERIFIED).
+     *
+     * Rekening Finance/HO dikecualikan: itu rekening kas Direksi, bukan
+     * rekening operasional unit, dan tidak punya statement cutoff.
+     */
+    public array $rekeningWajibStatementByBank = ['2', '5', '1'];
+
+    /**
+     * Bentuk master rekening resmi, di-key bank_idbank.
+     *
+     * Dipakai migration sebagai target assertions. Nilai =
+     * ['unit_id' => .., 'is_shared' => ..].
+     *
+     * `unit_id` null = rekening lintas unit; `is_shared` 1 wajib mengikutinya.
+     */
+    public array $rekeningResmiMasterByBank = [
+        '2' => ['unit_id' => null, 'is_shared' => 1], // CV
+        '5' => ['unit_id' => 3,    'is_shared' => 0], // ALFARIZKI
+        '1' => ['unit_id' => 4,    'is_shared' => 0], // SABRINA
+        '3' => ['unit_id' => null, 'is_shared' => 1], // FINANCE
+    ];
+
+    /**
+     * Akun Finance/HO — rekening kas Direksi, BUKAN rekening operasional unit.
+     *
+     * Tidak boleh punya alokasi unit, dan tidak boleh ikut mekanisme saldo
+     * real. Aksesnya berasal dari ROLE ($financeHoSourceRoles), bukan dari
+     * unitId — user unit 50 (Head Office) TIDAK otomatis mendapat akses
+     * hanya karena is_finance_ho = 1.
+     */
+    public array $financeHoBankIds = ['3'];
 }

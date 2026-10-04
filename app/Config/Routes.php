@@ -414,6 +414,12 @@ $routes->group('kas_bank', ['filter' => 'auth'], function ($routes) {
     $routes->post('akun/save', 'KasBank::saveAkun', ['filter' => 'auth']);
     $routes->post('saldo-awal/save', 'KasBank::saveSaldoAwal', ['filter' => 'auth']);
     $routes->post('saldo-alokasi/save', 'KasBank::saveAlokasiSaldo', ['filter' => 'auth']);
+
+    // Opening KAS: baseline laci kas yang ditetapkan Finance, lalu dicocokkan
+    // dengan real cash hasil hitung laci saat Tutup Kasir. Berdiri sendiri dari
+    // statement bank: rekening KAS tidak punya statement.
+    $routes->post('opening-kas/save', 'KasBank::saveOpeningKas', ['filter' => 'auth']);
+    $routes->post('opening-kas/verifikasi', 'KasBank::verifikasiOpeningKas', ['filter' => 'auth']);
     $routes->get('transfer', 'KasBank::transfer');
     $routes->post('transfer/save', 'KasBank::saveTransfer', ['filter' => 'auth']);
     $routes->post('transfer/reversal/(:num)', 'KasBank::reversalTransfer/$1', ['filter' => 'auth']);
@@ -422,6 +428,30 @@ $routes->group('kas_bank', ['filter' => 'auth'], function ($routes) {
     $routes->post('antar-unit/save', 'KasBank::saveAntarUnit', ['filter' => 'auth']);
     $routes->post('antar-unit/reversal/(:num)', 'KasBank::reversalAntarUnit/$1', ['filter' => 'auth']);
     $routes->post('antar-unit/reversal-atribusi/(:num)', 'KasBank::reversalAtribusi/$1', ['filter' => 'auth']);
+
+    // =====================================================================
+    // SETOR TUNAI & PENARIKAN TUNAI
+    //
+    // Dipisah dari Transfer Internal karena model datanya berbeda: Transfer
+    // Internal memindahkan antara dua rekening yang sama-sama milik sendiri
+    // tanpa_analysis posisi unit, sedangkan Setor/Penarik TUNAI selalu punya
+    // satu kaki KAS unit — jadi posisi unit dan entitlement ikut bergerak.
+    //
+    // POST (bukan hanya GET) pada path form dipakai untuk PREVIEW: halaman
+    // dirender ulang dengan angka saldo/entitlement sebelum user menekan
+    // simpan. Tidak ada AJAX, sama seperti halaman lain di modul ini.
+    //
+    // Route simpan memakai filter `csrf` secara eksplisit. Modul ini
+    // sebelumnya hanya mengandalkan submit_token; untuk route yang menulis
+    // ke ledger, CSRF Filter layak diaktifkan langsung di route-nya.
+    // =====================================================================
+    $routes->get('setor-tunai', 'KasBank::setorTunai');
+    $routes->post('setor-tunai', 'KasBank::setorTunai', ['filter' => ['auth', 'csrf']]);
+    $routes->post('setor-tunai/save', 'KasBank::saveSetorTunai', ['filter' => ['auth', 'csrf']]);
+
+    $routes->get('penarikan-tunai', 'KasBank::penarikanTunai');
+    $routes->post('penarikan-tunai', 'KasBank::penarikanTunai', ['filter' => ['auth', 'csrf']]);
+    $routes->post('penarikan-tunai/save', 'KasBank::savePenarikanTunai', ['filter' => ['auth', 'csrf']]);
 });
 
 $routes->get('asset', 'Asset::index', ['filter' => 'auth']);
@@ -566,6 +596,9 @@ $routes->post('hutangpiutang/store', 'HutangPiutang::store', ['filter' => 'auth'
 $routes->get('hutangpiutang/detail/(:num)', 'HutangPiutang::detail/$1', ['filter' => 'auth']);
 $routes->post('hutangpiutang/bayar', 'HutangPiutang::bayar', ['filter' => 'auth']);
 $routes->post('hutangpiutang/kompensasi', 'HutangPiutang::kompensasi', ['filter' => 'auth']);
+// Pelunasan legacy: settle TANPA pembayaran (tidak ada jurnal / movement kas-bank).
+$routes->post('hutangpiutang/tandai-lunas-legacy', 'HutangPiutang::tandaiLunasLegacy', ['filter' => 'auth']);
+$routes->post('hutangpiutang/batalkan-lunas-legacy', 'HutangPiutang::batalkanLunasLegacy', ['filter' => 'auth']);
 $routes->get('hutangpiutang/cetak/(:num)', 'HutangPiutang::cetak/$1', ['filter' => 'auth']);
 
 $routes->get('tutup_kasir', 'TutupKasir::index',  ['filter' => 'auth']);
