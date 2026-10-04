@@ -450,18 +450,27 @@ class KasBankCutoffService
     // 3. MOVEMENT SETELAH CUT-OFF
     // =====================================================================
 
-    /**
-     * Net movement satu rekening sejak periode aktif.
+/**
+     * Net movement satu rekening sejak periode aktif, opsional sampai tanggal
+     * tertentu.
      *
      * $unitId null = seluruh unit (dipakai untuk saldo fisik).
      * $unitId diisi = hanya mutasi unit itu (dipakai untuk posisi unit).
      *
+     * $sampai hanya membatasi sisi ATAS rentang. Tanpa ini, jawaban untuk
+     * tanggal 7 Okt ikut naik begitu ada transaksi 8 Okt.
+     *
      * Filter lower bound wajib periodeMulaiDate(), BUKAN cutoffDate():
      * tanggal 30 Sep adalah tanggal statement, bukan mutasi.
      */
-    public function netMovement(int $akunId, ?int $unitId = null): int
+    public function netMovement(int $akunId, ?int $unitId = null, ?string $sampai = null): int
     {
-        return $this->sourceMovement()->netMovement($akunId, $unitId);
+        return $this->sourceMovement()->netMovement(
+            $akunId,
+            $unitId,
+            FinanceScopeService::periodeMulaiDate(),
+            $sampai
+        );
     }
 
     /**
@@ -496,10 +505,66 @@ class KasBankCutoffService
      * muncul sebagai baris transaksi.
      *
      * Tidak ada dimensi unit di sini: satu rekening fisik = satu saldo.
+     *
+     * $tanggal dipakai untuk KEDUA suku: opening pada tanggal itu dan
+     * movement HINGGA tanggal itu. Dulu $tanggal hanya masuk ke opening
+     * sementara movement tetap dihitung tanpa batas atas, sehingga
+     * `saldoFisik($akun, '2026-10-07')` diam-diam mengembalikan saldo
+     * 8 Okt dan seterusnya.
      */
     public function saldoFisik(int $akunId, ?string $tanggal = null): int
     {
-        return $this->opening($akunId, $tanggal) + $this->netMovement($akunId);
+        return $this->opening($akunId, $tanggal) + $this->netMovement($akunId, null, $tanggal);
+    }
+
+    /**
+     * Alur KAS sampai tanggal tertentu, dipecah per komponen:
+     *
+     *   Opening (baseline) + Cash In - Cash Out ± Setor/Tarik = Saldo Buku
+     *
+     * Opening dibaca dari baseline yang berlaku pada $sampai. Opening BUKAN
+     * bagian movement dan tidak pernah dihitung dua kali.
+     *
+     * @return array{
+     *     akun_id:int, unit_id:int, tanggal:string,
+     *     opening:int, opening_ada:bool,
+     *     cash_in:int, cash_out:int,
+     *     transfer_masuk:int, transfer_keluar:int,
+     *     movement:int, saldo_buku:int
+     * }
+     */
+    public function alurKasSampai(int $akunId, string $sampai): array
+    {
+        $akun    = $this->akunModel->find($akunId);
+        $opening = $this->opening($akunId, $sampai);
+        $rincian = $this->sourceMovement()->rincianMovement(
+            $akunId,
+            null,
+            FinanceScopeService::periodeMulaiDate(),
+            $sampai
+        );
+
+        $movement   = (int) $rincian['net'];
+        $openingRow = $this->tipeRekening($akunId) === TutupKasirSourceDefinition::TIPE_KAS
+            ? $this->openingSrc()->openingAt($akunId, FinanceScopeService::cutoffDate())
+            : null;
+
+        return [
+            'akun_id'         => $akunId,
+            'unit_id'         => (int) ($akun->unit_id ?? 0),
+            'tanggal'         => $sampai,
+            'opening'         => $opening,
+            // Opening KAS hanya sah kalau baris cut-off-nya benar-benar ada
+            // dan terverifikasi. Tanpa ini, saldo "0" bisa terbaca sebagai
+            // laci kosong padahal opening-nya belum diinput.
+            'opening_ada'     => $openingRow !== null,
+            'cash_in'         => (int) $rincian['cash_in'],
+            'cash_out'        => (int) $rincian['cash_out'],
+            'transfer_masuk'  => (int) $rincian['transfer_masuk'],
+            'transfer_keluar' => (int) $rincian['transfer_keluar'],
+            'movement'        => $movement,
+            'saldo_buku'      => $opening + $movement,
+        ];
     }
 
     /**
@@ -613,7 +678,9 @@ class KasBankCutoffService
             ? $this->openingSrc()->opening($akunId, $tanggal)
             : $alokasi;
 
-        return $pembuka + $this->netMovement($akunId, $unitId);
+        // Sama seperti saldoFisik(): $tanggal membatasi KEDUA suku, bukan
+        // hanya opening.
+        return $pembuka + $this->netMovement($akunId, $unitId, $tanggal);
     }
 
     /**

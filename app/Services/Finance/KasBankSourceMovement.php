@@ -148,14 +148,21 @@ class KasBankSourceMovement
     // =================================================================
 
     /**
-     * Net movement satu rekening sejak $dari (default: periode aktif).
+     * Net movement satu rekening dalam rentang [$dari, $sampai].
      *
-     * Masuk - keluar, dalam rupiah, sudah INCLUDING transaksi 1-5 Okt bila
-     * $dari diberikan lebih awal.
+     * Masuk - keluar, dalam rupiah.
      *
-     * @param int|null $unitId null = seluruh unit yang condemnasi ke rekening ini
+     * BATAS ATAS ($sampai) sengaja opsional: pemanggil lama memakai
+     * panggilan tanpa batas atas dan maknanya tidak berubah — movement dari
+     * cutoff sampai sekarang. Parameter ini hanya untuk pemanggil yang
+     * membutuhkan saldo buku pada tanggal tertentu, misalnya "alur KAS
+     * sampai 7 Okt", supaya transaksi 8 Okt tidak ikut terhitung. Tanpa
+     * batas atas, angka untuk 7 Okt ikut naik setiap ada transaksi 8 Okt.
+     *
+     * @param int|null    $unitId null = seluruh unit yang punya hak atas rekening ini
+     * @param string|null $sampai batas atas TANGGAL (YYYY-MM-DD), null = tanpa batas atas
      */
-    public function netMovement(int $akunId, ?int $unitId = null, ?string $dari = null): int
+    public function netMovement(int $akunId, ?int $unitId = null, ?string $dari = null, ?string $sampai = null): int
     {
         $akun = $this->akun($akunId);
 
@@ -166,15 +173,21 @@ class KasBankSourceMovement
         $dari = $dari ?? FinanceScopeService::periodeMulaiDate();
         $tipe = strtoupper((string) $akun->tipe);
 
-        // Lihat movementTransferInternal(): ini satu-satunya bagian angka yang
-        // masih membaca transaksi_kas_bank, dan hanya untuk transfer internal.
-        $internal = $this->movementTransferInternal($akunId, $unitId, $dari);
-
-        if ($tipe === TutupKasirSourceDefinition::TIPE_KAS) {
-            return $this->movementKas($akun, $unitId, $dari) + $internal;
+        // Batas atas yang lebih kecil dari batas bawah berarti tidak ada
+        // transaksi sama sekali (mis. diminta tanggal sebelum cutoff).
+        if ($sampai !== null && $sampai < $dari) {
+            return 0;
         }
 
-        return $this->movementBank($akun, $unitId, $dari) + $internal;
+        // Lihat movementTransferInternal(): ini satu-satunya bagian angka yang
+        // masih membaca transaksi_kas_bank, dan hanya untuk transfer internal.
+        $internal = $this->movementTransferInternal($akunId, $unitId, $dari, $sampai);
+
+        if ($tipe === TutupKasirSourceDefinition::TIPE_KAS) {
+            return $this->movementKas($akun, $unitId, $dari, $sampai) + $internal;
+        }
+
+        return $this->movementBank($akun, $unitId, $dari, $sampai) + $internal;
     }
 
     /**
@@ -200,7 +213,25 @@ class KasBankSourceMovement
      * Sisi KAS tidak perlu penyesuaian: `arah` sudah benar — setor = KAS
      * KELUAR, tarik = KAS MASUK.
      */
-    private function movementTransferInternal(int $akunId, ?int $unitId, string $dari): int
+    private function movementTransferInternal(int $akunId, ?int $unitId, string $dari, ?string $sampai = null): int
+    {
+        $t = $this->transferInternal($akunId, $unitId, $dari, $sampai);
+
+        return $t['masuk'] - $t['keluar'];
+    }
+
+    /**
+     * Transfer internal satu rekening, dipecah per arah.
+     *
+     * Dipakai dua pemanggil (movementTransferInternal() dan
+     * rincianMovement()) supaya definisi "transfer internal" hanya ada di
+     * satu tempat. Kalau query-nya diduplikasi, perbaikan batas atas hanya
+     * akan diterapkan ke salah satu jalur dan angka Cash Flow diam-diam
+     * berbeda dari rinciannya.
+     *
+     * @return array{masuk:int, keluar:int}
+     */
+    private function transferInternal(int $akunId, ?int $unitId, string $dari, ?string $sampai = null): array
     {
         $db = $this->db;
         $b  = $db->table('transaksi_kas_bank')
@@ -210,13 +241,22 @@ class KasBankSourceMovement
             ->where('transfer_ref IS NOT NULL', null, false)
             ->where('tanggal >=', $dari);
 
+        // Kolom `tanggal` di ledger bertipe DATE, bukan DATETIME, jadi `<=`
+        // sudah mencakup seluruh hari tersebut tanpa perlu `23:59:59`.
+        if ($sampai !== null) {
+            $b->where('tanggal <=', $sampai);
+        }
+
         if ($unitId !== null) {
             $b->where('unit_id', $unitId);
         }
 
         $row = $b->get()->getRow();
 
-        return (int) ($row->masuk ?? 0) - (int) ($row->keluar ?? 0);
+        return [
+            'masuk'  => (int) ($row->masuk ?? 0),
+            'keluar' => (int) ($row->keluar ?? 0),
+        ];
     }
 
     /**
@@ -224,7 +264,7 @@ class KasBankSourceMovement
      * keluar dari kas_keluar idbank IS NULL. Tidak ada asumsi apa pun —
      * `idbank IS NULL` persis sama dengan definisi TutupKasir.
      */
-    private function movementKas(object $akun, ?int $unitId, string $dari): int
+    private function movementKas(object $akun, ?int $unitId, string $dari, ?string $sampai = null): int
     {
         // KAS account always milik satu unit.
         $unit = (int) ($akun->unit_id ?? 0);
@@ -237,14 +277,19 @@ class KasBankSourceMovement
             return 0;
         }
 
-        $masuk = $this->cashMasuk($unit, $dari);
-        $keluar = (int) ($this->db->table('kas_keluar')
+        $masuk = $this->cashMasuk($unit, $dari, $sampai);
+
+        $qKeluar = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 's')
             ->where('DATE(tanggal) >=', $dari)
             ->where('idunit', $unit)
-            ->where('idbank', null)
-            ->get()
-            ->getRow()->s ?? 0);
+            ->where('idbank', null);
+
+        if ($sampai !== null) {
+            $qKeluar->where('DATE(tanggal) <=', $sampai);
+        }
+
+        $keluar = (int) ($qKeluar->get()->getRow()->s ?? 0);
 
         return $masuk - $keluar;
     }
@@ -253,7 +298,7 @@ class KasBankSourceMovement
      * BANK: transfer keluar dari kas_keluar.idbank (idbank asli, jadi pasti),
      * transfer masuk dari penjualan + service yang DEFAULT-nya rekening ini.
      */
-    private function movementBank(object $akun, ?int $unitId, string $dari): int
+    private function movementBank(object $akun, ?int $unitId, string $dari, ?string $sampai = null): int
     {
         $bankId = $akun->bank_idbank;
 
@@ -271,6 +316,10 @@ class KasBankSourceMovement
             ->where('DATE(tanggal) >=', $dari)
             ->where('idbank', $bankId);
 
+        if ($sampai !== null) {
+            $qKeluar->where('DATE(tanggal) <=', $sampai);
+        }
+
         if ($unitId !== null) {
             $qKeluar->where('idunit', $unitId);
         }
@@ -287,7 +336,7 @@ class KasBankSourceMovement
             if ($this->rekeningDefaultUnit($u) !== (int) $akun->idakun_kas_bank) {
                 continue;
             }
-            $masuk += $this->transferMasuk($u, $dari);
+            $masuk += $this->transferMasuk($u, $dari, $sampai);
         }
 
         return $masuk - $keluar;
@@ -297,48 +346,64 @@ class KasBankSourceMovement
     // NOMINAL — definisi identik TutupKasir, tanpa dimensi rekening
     // =================================================================
 
-    /** SUM(bayar_tunai) penjualan + service, filter TutupKasir, sejak $dari. */
-    private function cashMasuk(int $unitId, string $dari): int
+    /**
+     * SUM(bayar_tunai) penjualan + service, filter Tutup Kasir, rentang
+     * [$dari, $sampai].
+     *
+     * Kolom tanggal dan filter status PERSIS sama dengan
+     * TutupKasirSourceDefinition (penjualan `tanggal`, service
+     * `tanggal_selesai` + `status_service = 4`) supaya angka Cash In di
+     * sini tidak pernah berbeda dari Tutup Kasir.
+     */
+    private function cashMasuk(int $unitId, string $dari, ?string $sampai = null): int
     {
-        $p = (int) ($this->db->table('penjualan')
+        $p = $this->db->table('penjualan')
             ->selectSum('bayar_tunai', 's')
             ->where('DATE(tanggal) >=', $dari)
             ->where('unit_idunit', $unitId)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow()->s ?? 0);
+            ->notLike('kode_invoice', 'srv', 'after');
 
-        $s = (int) ($this->db->table('service')
+        if ($sampai !== null) {
+            $p->where('DATE(tanggal) <=', $sampai);
+        }
+
+        $s = $this->db->table('service')
             ->selectSum('bayar_tunai', 's')
             ->where('DATE(tanggal_selesai) >=', $dari)
             ->where('status_service', 4)
-            ->where('unit_idunit', $unitId)
-            ->get()
-            ->getRow()->s ?? 0);
+            ->where('unit_idunit', $unitId);
 
-        return $p + $s;
+        if ($sampai !== null) {
+            $s->where('DATE(tanggal_selesai) <=', $sampai);
+        }
+
+        return (int) ($p->get()->getRow()->s ?? 0) + (int) ($s->get()->getRow()->s ?? 0);
     }
 
-    /** SUM(bayar_bank) penjualan + residual service, sejak $dari. */
-    private function transferMasuk(int $unitId, string $dari): int
+    /** SUM(bayar_bank) penjualan + residual service, rentang [$dari, $sampai]. */
+    private function transferMasuk(int $unitId, string $dari, ?string $sampai = null): int
     {
-        $p = (int) ($this->db->table('penjualan')
+        $p = $this->db->table('penjualan')
             ->selectSum('bayar_bank', 's')
             ->where('DATE(tanggal) >=', $dari)
             ->where('unit_idunit', $unitId)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow()->s ?? 0);
+            ->notLike('kode_invoice', 'srv', 'after');
 
-        $s = (int) ($this->db->table('service')
+        if ($sampai !== null) {
+            $p->where('DATE(tanggal) <=', $sampai);
+        }
+
+        $s = $this->db->table('service')
             ->select('COALESCE(SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)),0) AS s')
             ->where('DATE(tanggal_selesai) >=', $dari)
             ->where('status_service', 4)
-            ->where('unit_idunit', $unitId)
-            ->get()
-            ->getRow()->s ?? 0);
+            ->where('unit_idunit', $unitId);
 
-        return $p + $s;
+        if ($sampai !== null) {
+            $s->where('DATE(tanggal_selesai) <=', $sampai);
+        }
+
+        return (int) ($p->get()->getRow()->s ?? 0) + (int) ($s->get()->getRow()->s ?? 0);
     }
 
     // =================================================================
@@ -373,6 +438,87 @@ class KasBankSourceMovement
         }
 
         return $out;
+    }
+
+    // =================================================================
+    // RINGKASAN ALUR KAS SAMPAI TANGGAL TERTENTU
+    // =================================================================
+
+    /**
+     * Movement satu rekening KAS dipecah per komponen, dalam rentang
+     * [$dari, $sampai].
+     *
+     * Dipisah-pisah supaya UI bisa menampilkan alurnya (Cash In / Cash Out /
+     * Setor / Tarik) alih-alih satu angka movement bersih. Nominalnya memakai
+     * sumber yang sama persis dengan netMovement() — ini memecah angka, bukan
+     * menghitung ulang dengan definisi lain.
+     *
+     * Opening TIDAK termasuk di sini. Opening adalah baseline, bukan
+     * transaksi, dan tidak pernah muncul sebagai movement.
+     *
+     * @return array{cash_in:int,cash_out:int,transfer_masuk:int,transfer_keluar:int,net:int}
+     */
+    public function rincianMovement(int $akunId, ?int $unitId = null, ?string $dari = null, ?string $sampai = null): array
+    {
+        $akun = $this->akun($akunId);
+
+        $nol = [
+            'cash_in' => 0, 'cash_out' => 0,
+            'transfer_masuk' => 0, 'transfer_keluar' => 0, 'net' => 0,
+        ];
+
+        if ($akun === null) {
+            return $nol;
+        }
+
+        $dari = $dari ?? FinanceScopeService::periodeMulaiDate();
+
+        if ($sampai !== null && $sampai < $dari) {
+            return $nol;
+        }
+
+        // Cash In / Cash Out hanya KAS. Rekening BANK memakai transfer, jadi
+        // komponennya sudah tercakup oleh transfer_masuk / transfer_keluar.
+        $cashIn  = 0;
+        $cashOut = 0;
+
+        if (strtoupper((string) $akun->tipe) === TutupKasirSourceDefinition::TIPE_KAS) {
+            $unit = (int) ($akun->unit_id ?? 0);
+
+            if ($unit > 0 && ($unitId === null || $unitId === $unit)) {
+                $cashIn  = $this->cashMasuk($unit, $dari, $sampai);
+                $cashOut = $this->cashOutKas($unit, $dari, $sampai);
+            }
+        }
+
+        // Definisi transfer internal yang SAMA dengan movementTransferInternal().
+        $transfer           = $this->transferInternal($akunId, $unitId, $dari, $sampai);
+        $transferMasuk      = $transfer['masuk'];
+        $transferKeluar     = $transfer['keluar'];
+
+        return [
+            'cash_in'         => $cashIn,
+            'cash_out'        => $cashOut,
+            'transfer_masuk'  => $transferMasuk,
+            'transfer_keluar' => $transferKeluar,
+            'net'             => $cashIn - $cashOut + $transferMasuk - $transferKeluar,
+        ];
+    }
+
+    /** SUM(jumlah) kas_keluar tunai (idbank IS NULL) pada rentang [$dari, $sampai]. */
+    private function cashOutKas(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        $b = $this->db->table('kas_keluar')
+            ->selectSum('jumlah', 's')
+            ->where('DATE(tanggal) >=', $dari)
+            ->where('idunit', $unitId)
+            ->where('idbank', null);
+
+        if ($sampai !== null) {
+            $b->where('DATE(tanggal) <=', $sampai);
+        }
+
+        return (int) ($b->get()->getRow()->s ?? 0);
     }
 
     /**
