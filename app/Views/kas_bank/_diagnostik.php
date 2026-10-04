@@ -2,9 +2,11 @@
 /**
  * Banner diagnosa konfigurasi akun kas/bank.
  *
- * Muncul hanya kalau ada rekening yang belum bisa dipakai transaksi. Isinya
- * murni konfigurasi — tidak ada angka saldo atau arus kas di sini, jadi
- * halaman ini tidak mengubah laporan mana pun.
+ * Muncul hanya kalau ada konfigurasi rekening/akun yang belum lengkap
+ * (pemilihan rekening, alokasi shared account, atau verifikasi baseline/opening)
+ * sehingga beberapa transaksi tidak bisa dipromosikan ke ledger `transaksi_kas_bank`.
+ * Banner ini bersifat konfiguratif, bukan berarti seluruh jurnal operasional
+ * wajib masuk `transaksi_kas_bank`.
  *
  * @var array<int, array{level:string, judul:string, detail:array<int,string>, aksi:string}> $diagnostik_konfigurasi
  */
@@ -16,11 +18,13 @@ $diagnostik = $diagnostik_konfigurasi ?? [];
             <iconify-icon icon="bi:exclamation-triangle-fill"></iconify-icon>
         </div>
         <div class="kb-banner-content">
-            <strong>Ada rekening yang belum bisa dipakai transaksi</strong>
+            <strong>Konfigurasi rekening kas/bank belum lengkap</strong>
             <div class="mt-1">
-                Transaksi tetap tersimpan di jurnal aslinya, tapi <span class="fw-semibold">tidak masuk ke ledger
-                <code>transaksi_kas_bank</code></span>. Perbaiki dulu, lalu jalankan
-                <code>php spark kasbank:backfill</code> untuk mem-posting ulang yang tertinggal.
+                Ini berkaitan dengan <span class="fw-semibold">konfigurasi rekening, alokasi shared account,
+                atau verifikasi opening/baseline KAS</span>. Beberapa transaksi yang membutuhkan
+                penentuan rekening fisik <span class="fw-semibold">tidak dapat diposting ke
+                <code>transaksi_kas_bank</code></span> hingga konfigurasi diperbaiki.
+                Transaksi jurnal aslinya tetap tersimpan sesuai sumbernya.
             </div>
 
             <?php foreach ($diagnostik as $d) : ?>

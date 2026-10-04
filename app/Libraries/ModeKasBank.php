@@ -419,6 +419,11 @@ class ModeKasBank
             return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $id];
         }
 
+        $transferRef = $row->transfer_ref ?? null;
+        if (empty($transferRef)) {
+            return ['status' => 'skipped', 'reason' => 'transfer_ref tidak terjamin (bukan internal transfer) - tidak dipromosikan ke transaksi_kas_bank', 'id' => $id];
+        }
+
         $idTransaksi = $this->insertIdempotent([
             'tanggal'          => $row->tanggal,
             'unit_id'          => (int)$row->idunit,
@@ -426,6 +431,7 @@ class ModeKasBank
             'jenis'            => self::JENIS_PEMASUKAN,
             'arah'             => self::ARAH_MASUK,
             'jumlah'           => (int)$row->jumlah,
+            'transfer_ref'     => $transferRef,
             'sumber_tipe'      => 'kas_masuk',
             'sumber_id'        => (int)$id,
             'keterangan'       => $row->deskripsi,
@@ -458,6 +464,11 @@ class ModeKasBank
             return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $id];
         }
 
+        $transferRef = $row->transfer_ref ?? null;
+        if (empty($transferRef)) {
+            return ['status' => 'skipped', 'reason' => 'kas_keluar operasional (transfer_ref kosong) - tidak dipromosikan ke transaksi_kas_bank', 'id' => $id];
+        }
+
         $idTransaksi = $this->insertIdempotent([
             'tanggal'          => $row->tanggal,
             'unit_id'          => (int)$row->idunit,
@@ -465,6 +476,7 @@ class ModeKasBank
             'jenis'            => self::JENIS_PENGELUARAN,
             'arah'             => self::ARAH_KELUAR,
             'jumlah'           => (int)$row->jumlah,
+            'transfer_ref'     => $transferRef,
             'sumber_tipe'      => 'kas_keluar',
             'sumber_id'        => (int)$id,
             'keterangan'       => $row->deskripsi ?? $row->penerima,
@@ -533,6 +545,11 @@ class ModeKasBank
                 $skipped++;
                 continue;
             }
+            $transferRef = $row->transfer_ref ?? null;
+            if (empty($transferRef)) {
+                $skipped++;
+                continue;
+            }
             $idTransaksi = $this->insertIdempotent([
                 'tanggal'          => $row->tanggal_bayar ?? date('Y-m-d'),
                 'unit_id'          => $unitId,
@@ -540,6 +557,7 @@ class ModeKasBank
                 'jenis'            => self::JENIS_PENGELUARAN,
                 'arah'             => self::ARAH_KELUAR,
                 'jumlah'           => (int)$leg['jumlah'],
+                'transfer_ref'     => $transferRef,
                 'sumber_tipe'      => 'pembayaran_hutang',
                 'sumber_id'        => (int)$idPembayaranHutang,
                 'keterangan'       => 'Pembayaran hutang pembelian',
@@ -607,6 +625,11 @@ class ModeKasBank
             return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $idPembayaranPiutang];
         }
 
+        $transferRef = $row->transfer_ref ?? null;
+        if (empty($transferRef)) {
+            return ['status' => 'skipped', 'reason' => 'transfer_ref tidak terjamin (bukan internal transfer) - tidak dipromosikan ke transaksi_kas_bank', 'id' => $idPembayaranPiutang];
+        }
+
         $idTransaksi = $this->insertIdempotent([
             'tanggal'          => date('Y-m-d'),
             'unit_id'          => $unitId,
@@ -614,6 +637,7 @@ class ModeKasBank
             'jenis'            => self::JENIS_PEMASUKAN,
             'arah'             => self::ARAH_MASUK,
             'jumlah'           => (int)$row->jumlah_bayar,
+            'transfer_ref'     => $transferRef,
             'sumber_tipe'      => 'pembayaran_piutang',
             'sumber_id'        => (int)$idPembayaranPiutang,
             'keterangan'       => 'Pembayaran piutang',
