@@ -4,6 +4,7 @@ namespace Config;
 
 use CodeIgniter\Database\Config;
 use App\Database\Connection;
+use RuntimeException;
 /**
  * Database Configuration
  */
@@ -88,6 +89,45 @@ class Database extends Config
         // we don't overwrite live data on accident.
         if (ENVIRONMENT === 'testing') {
             $this->defaultGroup = 'tests';
+
+            $this->tolakTestYangTunjukProduksi();
+        }
+    }
+
+    /**
+     * Fail-closed: group `tests` tidak boleh menunjuk database yang sama
+     * dengan group `default`.
+     *
+     * Kenapa perlu. CI4 memaksa defaultGroup = 'tests' saat ENVIRONMENT
+     * 'testing', jadi test SUDAH aman secara default. Tapi group `tests`
+     * boleh dioverride lewat env (`database.tests.database=...`), dan
+     * override itulah yang pernah membuat test berjalan di atas database
+     * produksi. Menyalin satu baris env itu cukup untuk menghapus data asli.
+     *
+     * Karena itu dicek di sini, di satu tempat, berlaku ke semua pemanggil
+     * dan tidak bisa dilewati dengan sengaja atau tidak sengaja. Kalau group
+     * `tests` memang butuh database tetap, buat database terpisah dengan
+     * nama yang jelas (mis. `erp_xxx_test`) dan override group `tests` ke
+     * situ -- bukan ke `erp_local`.
+     *
+     * @throws RuntimeException
+     */
+    private function tolakTestYangTunjukProduksi(): void
+    {
+        $tests   = trim((string) ($this->tests['database'] ?? ''), " '\"");
+        $produksi = trim((string) ($this->default['database'] ?? ''), " '\"");
+
+        if ($tests === '' || $produksi === '') {
+            // Belum terkonfigurasi; biarkan driver yang melapor dengan jelas.
+            return;
+        }
+
+        if (strtolower($tests) === strtolower($produksi)) {
+            throw new RuntimeException(
+                'Group database "tests" menunjuk ke database yang sama dengan produksi ("' . $produksi . '"). '
+                . 'Test DDL/DML akan merusak data asli. Buat database test terpisah dan override '
+                . 'group "tests" ke sana.'
+            );
         }
     }
 }
