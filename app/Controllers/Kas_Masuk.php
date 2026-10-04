@@ -16,6 +16,8 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelUnit;
 use App\Libraries\ModeKasBank;
+use App\Services\Finance\BankRekeningValidator;
+use App\Exceptions\PostingLedgerException;
 
 
 class Kas_Masuk extends BaseController
@@ -69,69 +71,128 @@ class Kas_Masuk extends BaseController
 
         $akunData = $this->request->getPost('akun');
 
-        foreach ($akunData as $data) {
-            $noAkun = $data['no_akun'];
-            $jenisAkun = $data['jenis_akun'];
-            $noRekening = isset($data['no_rekening']) ? $data['no_rekening'] : null;
-            if (empty($noRekening)) {
-                $noRekening = null;
-            }
-            $jumlah = preg_replace('/[^0-9]/', '', $data['jumlah']);
-            $penerima = $data['penerima'];
-            $jenis = $data['posisi_drk']; // debet/kredit
-            $kategori_idkategori = $data['kategori_idkategori'];
+        // Simpan source + posting ledger + jurnal dalam SATU transaksi.
+        //
+        // KENAPA transStart DI SINI: alur lama tidak punya batas transaksi.
+        // kas_masuk tersimpan, posting diabaikan (status 'skipped' tidak
+        // dilempar), user tetap dapat flash "berhasil disimpan" padahal
+        // transaksi_kas_bank kosong. Resolve yang gagal sekarang melempar
+        // PostingLedgerException dan membatalkan SELURUH batch.
+        $db = \Config\Database::connect();
+        $db->transStart();
 
-            // Simpan data kas masuk
-            $dataKasMasuk = [
-                'tanggal' => $tanggal,
-                'kategori_idkategori' => $kategori_idkategori,
-                'no_akun' => $noAkun,
-                'deskripsi' => $deskripsi,
-                'jumlah' => $jumlah,
-                'jenis' => $jenis,
-                'penerima' => $penerima,
-                'idbank' => $noRekening,
-                'idunit' => $idunit,
-                'created_on' => date('Y-m-d H:i:s')
-            ];
-
-            $this->KasMasukModel->insert_KasMasuk($dataKasMasuk);
-
-            // Ambil ID kas masuk terakhir
-            $insertId = $this->KasMasukModel->insertID();
-
-            // Posting ringkas ke ledger kas/bank (best effort, idempotent).
-            if ($insertId) {
-                try {
-                    $this->KasBankLib->postingKasMasuk((int)$insertId);
-                } catch (\Throwable $e) {
-                    log_message('error', 'KasBank: gagal posting kas_masuk #' . $insertId . ': ' . $e->getMessage());
+        try {
+            foreach ($akunData as $data) {
+                $noAkun = $data['no_akun'];
+                $noRekening = isset($data['no_rekening']) ? $data['no_rekening'] : null;
+                if (empty($noRekening)) {
+                    $noRekening = null;
                 }
+                $jumlah = preg_replace('/[^0-9]/', '', $data['jumlah']);
+                $penerima = $data['penerima'];
+                $jenis = $data['posisi_drk']; // debet/kredit
+                $kategori_idkategori = $data['kategori_idkategori'];
+
+                // Validasi rekening SEBELUM sumber disimpan.
+                //
+                // Dulu idbank diteruskan apa adanya, lalu kalau tidak
+                // terpetakan ModeKasBank::resolveAkunDetail() hanya log warning
+                // dan skip. Sumber tetap "berhasil" tapi uangnya tidak pernah
+                // masuk ledger. Sekarang format salah ketahuan di tempat yang
+                // tepat, dengan pesan yang bisa ditindaklanjuti user.
+                //
+                // Perhatikan: TIDAK ada cast ke int. idbank itu VARCHAR, jadi
+                // 'BNI-001' bukan 0 dan ' 15 ' bukan 15.
+                //
+                // $idunit ikut diteruskan supaya rekening yang tidak dialokasikan
+                // ke unit ini ditolak. Tanpa itu setiap unit bisa menulis ke
+                // rekening unit lain — sumber seluruh polusi histori.
+                $cekRek = (new BankRekeningValidator())->validateUntukUnit(
+                    $noRekening,
+                    (int) $idunit
+                );
+                if (! $cekRek['ok']) {
+                    throw new PostingLedgerException(
+                        [
+                            'status' => 'failed',
+                            'reason' => $cekRek['alasan'],
+                        ],
+                        'Validasi rekening kas masuk'
+                    );
+                }
+                $noRekening = $cekRek['idbank'];
+
+                // Simpan data kas masuk
+                $dataKasMasuk = [
+                    'tanggal' => $tanggal,
+                    'kategori_idkategori' => $kategori_idkategori,
+                    'no_akun' => $noAkun,
+                    'deskripsi' => $deskripsi,
+                    'jumlah' => $jumlah,
+                    'jenis' => $jenis,
+                    'penerima' => $penerima,
+                    'idbank' => $noRekening,
+                    'idunit' => $idunit,
+                    'created_on' => date('Y-m-d H:i:s')
+                ];
+
+                $this->KasMasukModel->insert_KasMasuk($dataKasMasuk);
+
+                // Ambil ID kas masuk terakhir
+                $insertId = $this->KasMasukModel->insertID();
+
+                // Posting ringkas ke ledger kas/bank (idempotent).
+                if ($insertId) {
+                    $posting = $this->KasBankLib->postingKasMasuk((int)$insertId);
+
+                    // Lempar HANYA kalau ledger tidak terisi. Idempotent skip
+                    // ('sudah terposting') tetap lolos.
+                    PostingLedgerException::wajibBerhasil($posting, 'Kas masuk');
+                }
+
+                // Ambil nama akun
+                $data_akunjurnal = $this->NoAkunModel->getByNoAkun($noAkun);
+                $nama_akun = $data_akunjurnal->nama_akun;
+
+                // Tentukan debet & kredit
+                $debet = ($jenis === 'debet') ? $jumlah : 0;
+                $kredit = ($jenis === 'kredit') ? $jumlah : 0;
+
+                // Simpan jurnal
+                $datajurnal = [
+                    'tanggal' => $tanggal,
+                    'no_akun' => $noAkun,
+                    'nama_akun' => $nama_akun,
+                    'debet' => $debet,
+                    'kredit' => $kredit,
+                    'keterangan' => $deskripsi,
+                    'id_referensi' => $insertId,
+                    'tabel_referensi' => 'kas_masuk',
+                    'id_unit' => session('ID_UNIT'),
+                    'id_akun' => session('ID_AKUN')
+                ];
+
+                $this->JurnalModel->insert_biasah($datajurnal);
             }
 
-            // Ambil nama akun
-            $data_akunjurnal = $this->NoAkunModel->getByNoAkun($noAkun);
-            $nama_akun = $data_akunjurnal->nama_akun;
+            $db->transComplete();
+        } catch (PostingLedgerException $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: kas masuk dibatalkan karena posting ledger gagal: ' . $e->getAlasan());
+            session()->setFlashdata('gagal', $e->getMessage());
 
-            // Tentukan debet & kredit
-            $debet = ($jenis === 'debet') ? $jumlah : 0;
-            $kredit = ($jenis === 'kredit') ? $jumlah : 0;
+            return redirect()->to(base_url('/kas_masuk'));
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal menyimpan kas masuk: ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menyimpan data kas masuk.');
 
-            // Simpan jurnal
-            $datajurnal = [
-                'tanggal' => $tanggal,
-                'no_akun' => $noAkun,
-                'nama_akun' => $nama_akun,
-                'debet' => $debet,
-                'kredit' => $kredit,
-                'keterangan' => $deskripsi,
-                'id_referensi' => $insertId,
-                'tabel_referensi' => 'kas_masuk',
-                'id_unit' => session('ID_UNIT'),
-                'id_akun' => session('ID_AKUN')
-            ];
+            return redirect()->to(base_url('/kas_masuk'));
+        }
 
-            $this->JurnalModel->insert_biasah($datajurnal);
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal menyimpan data kas masuk.');
+            return redirect()->to(base_url('/kas_masuk'));
         }
 
         session()->setFlashdata('sukses', 'Data kas masuk berhasil disimpan.');
@@ -148,9 +209,26 @@ class Kas_Masuk extends BaseController
         $kategori_idkategori = $this->request->getPost('kategori_idkategori');
         $jumlah = $this->request->getPost('jumlah');
         $penerima = $this->request->getPost('penerima'); //idbank
+        $idunit   = $this->request->getPost('idunit');
 
-        $databank = $this->BankModel->getById($penerima);
-        $atasnama = $databank->atas_nama;
+        // Sama seperti create: validasi rekening dulu, sekalian cek hak unit.
+        //
+        // Versi lama langsung $this->BankModel->getById($penerima) lalu
+        // membaca ->atas_nama. Kalau idbank tidak terdaftar, getById()
+        // mengembalikan null dan pembacaan property itu fatal error 500 —
+        // pesan errornya tidak pernah sampai ke user.
+        $cekRek = (new BankRekeningValidator())->validateUntukUnit(
+            $penerima,
+            (int) $idunit
+        );
+        if (! $cekRek['ok']) {
+            session()->setFlashdata('gagal', $cekRek['alasan']);
+
+            return redirect()->to(base_url('/kas_masuk'));
+        }
+
+        $penerima  = $cekRek['idbank'];
+        $atasnama  = $cekRek['bank']->atas_nama ?? null;
         $posisi_drk = $this->request->getPost('posisi_drk');
 
 
@@ -166,16 +244,27 @@ class Kas_Masuk extends BaseController
             'updated_on' => date('Y-m-d H:i:s')
         ];
 
-        // Source update + refresh posting ledger dalam SATU transaksi:
-        // hapus posting lama, posting ulang (idempotent). Jika posting gagal,
-        // update sumber ikut di-rollback.
+        // Source update + refresh posting ledger dalam SATU transaksi.
+        //
+        // ATOMIK: bila posting ulang gagal, `hapusPosting` yang barusan
+        // dijalankan HARUS ikut rollback. Kalau tidak, sumber ter-update tapi
+        // ledger kosong permanen. hapusPosting + postingKasMasuk keduanya
+        // memakai koneksi default, jadi satu transStart sudah cukup.
         $db = \Config\Database::connect();
         $db->transStart();
         try {
             $this->KasMasukModel->update($id, $data);
             $this->KasBankLib->hapusPosting('kas_masuk', (int)$id);
-            $this->KasBankLib->postingKasMasuk((int)$id);
+
+            $posting = $this->KasBankLib->postingKasMasuk((int)$id);
+            PostingLedgerException::wajibBerhasil($posting, 'Kas masuk');
+
             $db->transComplete();
+        } catch (PostingLedgerException $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: update kas_masuk #' . $id . ' dibatalkan, posting ledger gagal: ' . $e->getAlasan());
+            session()->setFlashdata('gagal', $e->getMessage());
+            return redirect()->to(base_url('/kas_masuk'));
         } catch (\Throwable $e) {
             $db->transRollback();
             log_message('error', 'KasBank: gagal update kas_masuk #' . $id . ': ' . $e->getMessage());

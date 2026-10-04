@@ -17,6 +17,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPembelian;
 use App\Libraries\ModeKasBank;
+use App\Exceptions\PostingLedgerException;
 
 
 
@@ -178,45 +179,92 @@ class PembayaranHutang extends BaseController
             'input_by' => session('ID_AKUN')
 
         );
-        $this->PembayaranHutangModel->insert($data);
-        $idPembayaran = $this->PembayaranHutangModel->insertID();
-
-        // Posting ringkas ke ledger kas/bank (best effort, idempotent).
-        if ($idPembayaran) {
-            try {
-                $this->KasBankLib->postingCicilanHutang((int)$idPembayaran);
-            } catch (\Throwable $e) {
-                log_message('error', 'KasBank: gagal posting cicilan hutang #' . $idPembayaran . ': ' . $e->getMessage());
-            }
-        }
-
+        // KENAPA read dulu di luar transaksi: kita butuh total_pembayaran lama
+        // untuk menghitung status lunas, dan nilainya tidak boleh ikut berubah
+        // kalau transaksi ini nanti di-rollback.
         $datapembelian = $this->PembelianModel->getById($idpembelian);
         $total_bayar_lama = $datapembelian->total_bayar;
         $bayar_tunai_lama = $datapembelian->bayar_tunai;
         $bayar_bank_lama = $datapembelian->bayar_bank;
-        $status_hutang = '';
-        if ($sisa_hutang <= 0) {
-            $status_hutang = 'Lunas';
-        } else {
-            $status_hutang = 'Belum Lunas';
-        }
 
+        // ATOMIK: payment + ledger kas/bank + status lunas hutang + mirror
+        // hutang_piutang dalam SATU transaksi.
+        //
+        // Ini alur paling berbahaya dari A1. Sebelum ini tidak ada transaksi:
+        // pembayaran tersimpan, posting diabaikan, lalu pembelian ditandai
+        // 'Lunas' — hutang dianggap selesai padahal uangnya tidak pernah masuk
+        // ke saldo kas/bank. Resolve yang gagal sekarang melempar
+        // PostingLedgerException sehingga TIDAK ADA hutang yang bisa lunas
+        // tanpa baris ledger.
+        $db = \Config\Database::connect();
+        $db->transStart();
 
-        $data2 = array(
-            'total_bayar' => $total_bayar_lama + $total_bayar,
-            'bayar' => $total_bayar_lama + $total_bayar,
-            'bayar_tunai' => $bayar_tunai_lama + $bayar_tunai,
-            'bayar_bank' => $bayar_bank_lama + $bayar_bank,
-            'sisa' => $sisa_hutang,
-            'status' => $status_hutang
-        );
+        // Di-set di dalam try, tapi dibaca lagi di catch untuk logging. Tanpa
+        // inisialisasi, kegagalan pada insert() sendiri akan memicu warning
+        // "undefined variable" dan mencatat id 0.
+        $idPembayaran = 0;
 
-        $this->PembelianModel->update($idpembelian, $data2);
         try {
-            (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian((int) $idpembelian);
+            $this->PembayaranHutangModel->insert($data);
+            $idPembayaran = $this->PembayaranHutangModel->insertID();
+
+            // Posting ringkas ke ledger kas/bank (idempotent).
+            if ($idPembayaran) {
+                $posting = $this->KasBankLib->postingCicilanHutang((int)$idPembayaran);
+
+                // Lempar HANYA kalau ledger tidak lengkap. Partial posting
+                // (salah satu leg gagal) juga terlempar, dan karena masih di
+                // dalam transaksi, leg yang sudah terlanjur ditulis ikut
+                // hilang saat rollback.
+                PostingLedgerException::wajibBerhasil($posting, 'Cicilan hutang');
+            }
+
+            $status_hutang = '';
+            if ($sisa_hutang <= 0) {
+                $status_hutang = 'Lunas';
+            } else {
+                $status_hutang = 'Belum Lunas';
+            }
+
+            $data2 = array(
+                'total_bayar' => $total_bayar_lama + $total_bayar,
+                'bayar' => $total_bayar_lama + $total_bayar,
+                'bayar_tunai' => $bayar_tunai_lama + $bayar_tunai,
+                'bayar_bank' => $bayar_bank_lama + $bayar_bank,
+                'sisa' => $sisa_hutang,
+                'status' => $status_hutang
+            );
+
+            $this->PembelianModel->update($idpembelian, $data2);
+
+            try {
+                (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian((int) $idpembelian);
+            } catch (\Throwable $e) {
+                // Mirror hutang_piutang bukan ledger kas/bank: kegagalannya
+                // tidak boleh membatalkan pembayaran yang sudah benar.
+                log_message('error', 'syncFromPembelian #' . $idpembelian . ' gagal: ' . $e->getMessage());
+            }
+
+            $db->transComplete();
+        } catch (PostingLedgerException $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: cicilan hutang #' . (int)$idPembayaran . ' dibatalkan, posting ledger gagal: ' . $e->getAlasan());
+            session()->setFlashdata('gagal', $e->getMessage());
+
+            return redirect()->to(base_url('daftar_tagihan'));
         } catch (\Throwable $e) {
-            log_message('error', 'syncFromPembelian #' . $idpembelian . ' gagal: ' . $e->getMessage());
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal menyimpan cicilan hutang: ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menyimpan cicilan hutang.');
+
+            return redirect()->to(base_url('daftar_tagihan'));
         }
+
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal menyimpan cicilan hutang.');
+            return redirect()->to(base_url('daftar_tagihan'));
+        }
+
         session()->setFlashdata('sukses', 'Data Berhasil Diupdate');
         return redirect()->to(base_url('daftar_tagihan'));
     }

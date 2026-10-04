@@ -240,6 +240,56 @@ class HutangPiutang extends BaseController
         return redirect()->to(base_url('hutangpiutang/detail/' . $id))->with('sukses', $result['message']);
     }
 
+    /**
+     * Tandai hutang sebagai LUNAS LEGACY (settle tanpa pembayaran).
+     *
+     * Hanya menutup posisinya: tidak ada pembayaran, tidak ada jurnal, tidak
+     * ada movement Kas/Bank.
+     */
+    public function tandaiLunasLegacy()
+    {
+        if (!$this->scopeService->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak menandai pelunasan legacy.');
+        }
+
+        $id = (int) $this->request->getPost('hutang_piutang_id');
+
+        $result = $this->service->tandaiLunasLegacy($id, [
+            'tanggal_settlement' => $this->request->getPost('tanggal_settlement'),
+            'keterangan'         => $this->request->getPost('keterangan'),
+        ], (int) session('ID_AKUN'));
+
+        if (!$result['success']) {
+            return redirect()->back()->with('gagal', $result['message']);
+        }
+
+        return redirect()->to(base_url('hutangpiutang/detail/' . $id))->with('sukses', $result['message']);
+    }
+
+    /**
+     * Batalkan pelunasan legacy — hutang kembali outstanding.
+     *
+     * Tetap tanpa transaksi: hanya status hutang + audit trail yang diubah.
+     */
+    public function batalkanLunasLegacy()
+    {
+        if (!$this->scopeService->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak membatalkan pelunasan legacy.');
+        }
+
+        $id = (int) $this->request->getPost('hutang_piutang_id');
+
+        $result = $this->service->batalkanLunasLegacy($id, (int) session('ID_AKUN'), [
+            'alasan' => (string) $this->request->getPost('alasan'),
+        ]);
+
+        if (!$result['success']) {
+            return redirect()->back()->with('gagal', $result['message']);
+        }
+
+        return redirect()->to(base_url('hutangpiutang/detail/' . $id))->with('sukses', $result['message']);
+    }
+
     public function riwayat()
     {
         $filters = [
