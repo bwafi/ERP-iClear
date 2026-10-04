@@ -33,7 +33,7 @@ class PiutangTimelinessCalculator implements FinanceCalculatorInterface
         $endDate = date('Y-m-t', strtotime($startDate));
         $today = date('Y-m-d');
 
-        $cutoff = FinanceScopeService::cutoffDate();
+        $cutoff = FinanceScopeService::periodeMulaiDate();
         $items = $this->db->table('piutang')
             ->select('
                 piutang.idpiutang,

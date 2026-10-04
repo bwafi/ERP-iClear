@@ -453,6 +453,266 @@ class HutangPiutangService
         return $this->bayar->getByPosition($positionId);
     }
 
+    // =====================================================================
+    // PELUNASAN LEGACY (settle tanpa pembayaran)
+    // =====================================================================
+    //
+    // INI BUKAN TRANSAKSI PEMBAYARAN.
+    //
+    //hutang/mutasi antar-unit (`mutasi_unit`) yang secara faktual sudah
+    // lunas, tapi record ERP masih `belum_lunas`. Contoh nyatanya sudah
+    // dibayar dengan kompensasi atau saling hapus — uang tidak pernah lewat
+    // rekening, jadi tidak ada yang bisa diposting sebagai kas/bank.
+    //
+    // Yang dilakukan di sini HANYA menutup posisinya:
+    //   - status  -> 'lunas'
+    //   - sisa    -> 0
+    //   - metadata settlement
+    //
+    // Yang SENGAJA TIDAK dilakukan:
+    //   - insert ke `pembayaran_hutang_piutang`   (tidak ada pembayaran)
+    //   - postJurnal()                            (tidak ada jurnal)
+    //   - insert ke `transaksi_kas_bank`           (tidak ada movement)
+    //   - sentuh `saldo_awal_kas_bank`            (opening balance)
+    //   - ubah histori sumber (`pembelian`/`piutang`/`service`)
+    //
+    // `total_dibayar` juga tidak diubah: tidak ada uang yang dibayar, jadi
+    // menaikkan "sudah dibayar" justru berbohong. Yang diklaim benar adalah
+    // posisinya sudah tertutup.
+    //
+    // Audit trail memakai kolom yang sudah ada dan tadinya kosong semua:
+    //   cutoff_closed_by  -> user yang menandai
+    //   cutoff_closed_at  -> timestamp aksi
+    //   cutoff_reason     -> 'legacy' (jenis settlement)
+    // plus tanggal settlement faktual di `tanggal_settlement_legacy`.
+
+    /** Nilai `hutang_piutang.cutoff_reason` untuk settlement legacy. */
+    public const SETTLEMENT_LEGACY = 'legacy';
+
+    /** Settlement tanggal setelah cut-off berarti bukan fakta legacy. */
+    private const ALASAN_TANGGAL_AKHIR_CUTOFF = 'Tanggal settlement harus pada atau sebelum Finance cut-off (%s). Settlement setelah cut-off bukan transaksi legacy.';
+
+    /**
+     * Apakah baris ini sedang aktif ditandai lunas legacy?
+     *
+     * `cutoff_reason` sengaja TIDAK menjadi penanda tunggal: pembatalan
+     * mengosongkan kolom itu supaya baris kembali outstanding, tapi jejak
+     * settlement-nya tetap disimpan. Karena itu baris yang pembatalannya
+     * sudah dicatat (`legacy_dibatalkan_at`) dianggap tidak aktif lagi meski
+     * `cutoff_reason` masih berisi 'legacy'.
+     */
+    public function settlementLegacyAktif($row): bool
+    {
+        if ($row === null) {
+            return false;
+        }
+
+        $get = static function (string $key) use ($row) {
+            return is_object($row) ? ($row->{$key} ?? null) : ($row[$key] ?? null);
+        };
+
+        $reason = $get('cutoff_reason');
+        if ($reason === null || (string) $reason !== self::SETTLEMENT_LEGACY) {
+            return false;
+        }
+
+        // Sudah pernah dibatalkan -> penanda aktifnya sudah dicabut.
+        return $get('legacy_dibatalkan_at') === null;
+    }
+
+    /**
+     * Tandai hutang sebagai lunas LEGACY sebelum Finance cut-off.
+     *
+     * Hanya menutup posisi; tidak membuat pembayaran apa pun.
+     *
+     * @param array $in ['tanggal_settlement' => 'Y-m-d', 'keterangan' => '...']
+     *
+     * @return array{success:bool,message:string}
+     */
+    public function tandaiLunasLegacy(int $positionId, array $in = [], ?int $inputBy = null): array
+    {
+        $cutoff    = FinanceScopeService::cutoffDate();
+        $tglSettle = FinanceScopeService::tanggalStr($in['tanggal_settlement'] ?? '') ?: $cutoff;
+
+        if ($tglSettle > $cutoff) {
+            return ['success' => false, 'message' => sprintf(self::ALASAN_TANGGAL_AKHIR_CUTOFF, $cutoff)];
+        }
+
+        $this->db->transBegin();
+        try {
+            $row = $this->db->query(
+                'SELECT * FROM hutang_piutang WHERE id = ? AND deleted = 0 FOR UPDATE',
+                [$positionId]
+            )->getRow();
+
+            if (!$row) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Transaksi tidak ditemukan.'];
+            }
+
+            // Projection disinkron dari `pembelian`/`piutang` oleh
+            // syncFrom*()/refreshProjections(); menandainya lunas akan ditimpa
+            // kembali saat sync. Tolak, jangan diam-diam sia-sia.
+            if ((int) $row->is_projection === 1) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Posisi ini proksi dari transaksi sumber. Tandai lunas di transaksi sumbernya, bukan di sini.'];
+            }
+
+            if ($this->settlementLegacyAktif($row)) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Hutang ini sudah ditandai lunas legacy.'];
+            }
+
+            if ($row->status === self::STATUS_LUNAS || (int) $row->sisa <= 0) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Hutang ini sudah lunas.'];
+            }
+
+            // Aturan 6: hanya hutang bertanggal <= cut-off.
+            if (FinanceScopeService::tanggalStr($row->tanggal) > $cutoff) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => sprintf(
+                    'Hutang bertanggal %s berada setelah Finance cut-off (%s). Hutang periode baru tidak boleh diselesaikan sebagai legacy.',
+                    FinanceScopeService::tanggalStr($row->tanggal),
+                    $cutoff
+                )];
+            }
+
+            // Simpan sisa SEBELUM settlement; ini yang dipakai pembatalan
+            // untuk mengembalikan jumlah yang tepat.
+            $sisaSebelum = (int) $row->sisa;
+
+            $ket = trim((string) ($in['keterangan'] ?? ''));
+
+            $update = [
+                'status'                    => self::STATUS_LUNAS,
+                'sisa'                      => 0,
+                'sisa_legacy_sebelum'       => $sisaSebelum,
+                'tanggal_settlement_legacy' => $tglSettle,
+                'cutoff_reason'             => self::SETTLEMENT_LEGACY,
+                'cutoff_closed_at'          => date('Y-m-d H:i:s'),
+                'cutoff_closed_by'          => $inputBy,
+                // Settlement baru menggantikan jejak pembatalan sebelumnya:
+                // yang berlaku sekarang adalah settlement yang baru dicatat.
+                'legacy_dibatalkan_at'      => null,
+                'legacy_dibatalkan_by'      => null,
+                'legacy_alasan_pembatalan'  => null,
+                'updated_at'                => date('Y-m-d H:i:s'),
+            ];
+
+            if ($ket !== '') {
+                $update['keterangan'] = trim(((string) ($row->keterangan ?? '')) . ' | [LUNAS LEGACY ' . $tglSettle . '] ' . $ket);
+            }
+
+            $this->hp->update($positionId, $update);
+
+            $this->db->transCommit();
+
+            return [
+                'success' => true,
+                'message' => 'Hutang ' . $row->kode . ' ditandai lunas legacy (settlement ' . $tglSettle
+                    . ', tanpa transaksi kas/bank).',
+                'sisa'    => 0,
+                'status'  => self::STATUS_LUNAS,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['success' => false, 'message' => 'Gagal menandai lunas legacy: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Batalkan pelunasan legacy — hutang kembali outstanding.
+     *
+     * Tetap hanya mengubah status hutang: tidak membuat transaksi baru dan
+     * tidak menyentuh saldo kas/bank. Boleh dilakukan setelah Finance mulai
+     * (cut-off sudah lewat); yang penting penandaan settlement dicabut dan
+     * tercatat.
+     *
+     * Jejak settlement ASLI tidak dihapus: `tanggal_settlement_legacy` dan
+     * `sisa_legacy_sebelum` tetap disimpan supaya yang dicabut hanya
+     * penanda AKTIF (`cutoff_reason`/`cutoff_closed_at`/`cutoff_closed_by`),
+     * sedangkan pembatalannya dicatat di `legacy_dibatalkan_*`. Dengan begitu
+     * kedua event tetap bisa dibaca, sesuai aturan "pembatalan wajib tercatat
+     * di audit trail".
+     *
+     * @param array $in ['alasan' => '...']
+     *
+     * @return array{success:bool,message:string}
+     */
+    public function batalkanLunasLegacy(int $positionId, ?int $inputBy = null, array $in = []): array
+    {
+        $this->db->transBegin();
+        try {
+            $row = $this->db->query(
+                'SELECT * FROM hutang_piutang WHERE id = ? AND deleted = 0 FOR UPDATE',
+                [$positionId]
+            )->getRow();
+
+            if (!$row) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Transaksi tidak ditemukan.'];
+            }
+
+            if (! $this->settlementLegacyAktif($row)) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Hutang ini tidak ditandai lunas legacy, jadi tidak ada yang perlu dibatalkan.'];
+            }
+
+            $sisa = $row->sisa_legacy_sebelum === null ? null : (int) $row->sisa_legacy_sebelum;
+
+            if ($sisa === null) {
+                $this->db->transRollback();
+                return ['success' => false, 'message' => 'Snapshot sisa sebelum settlement tidak tersedia, jadi pembatalan tidak bisa restoring jumlah yang tepat.'];
+            }
+
+            // Status sebelum settlement diturunkan persis dari total_dibayar
+            // memakai aturan yang sama dengan statusFromSisa().
+            $status = $this->statusFromSisa((int) $row->total, $sisa, (int) $row->total_dibayar);
+
+            $alasan = trim((string) ($in['alasan'] ?? ''));
+
+            $update = [
+                'status'       => $status,
+                'sisa'         => $sisa,
+                'updated_at'   => date('Y-m-d H:i:s'),
+                // Cabut penanda AKTIF supaya baris kembali outstanding dan
+                // settlementLegacyAktif() jadi false.
+                'cutoff_reason'            => null,
+                'cutoff_closed_at'         => null,
+                'cutoff_closed_by'         => null,
+                // Jejak settlement asli sengaja TIDAK dikosongkan.
+                'legacy_dibatalkan_at'     => date('Y-m-d H:i:s'),
+                'legacy_dibatalkan_by'     => $inputBy,
+                'legacy_alasan_pembatalan' => $alasan !== '' ? $alasan : null,
+            ];
+
+            // Catatan kronologis pada keterangan, supaya riwayat settlement
+            // tetap terbaca walau kolom-kolom dedicated dirotasi.
+            $ket = ' | [BATAL LUNAS LEGACY ' . date('Y-m-d H:i:s') . ']'
+                . ($alasan !== '' ? ' ' . $alasan : '')
+                . ' (settlement ' . $row->tanggal_settlement_legacy
+                . ', dikembalikan ke Rp' . number_format($sisa, 0, ',', '.') . ')';
+
+            $update['keterangan'] = trim(((string) ($row->keterangan ?? '')) . $ket);
+
+            $this->hp->update($positionId, $update);
+
+            $this->db->transCommit();
+
+            return [
+                'success' => true,
+                'message' => 'Pelunasan legacy hutang ' . $row->kode . ' dibatalkan; kembali outstanding'
+                    . ' Rp' . number_format($sisa, 0, ',', '.') . '.',
+                'sisa'    => $sisa,
+                'status'  => $status,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['success' => false, 'message' => 'Gagal membatalkan pelunasan legacy: ' . $e->getMessage()];
+        }
+    }
+
     /**
      * Total sisa kasbon aktif seorang pegawai (untuk slip gaji).
      */
@@ -512,11 +772,20 @@ class HutangPiutangService
         //    kelebihan transfer, retur barang) — dibaca dari registry.
         //    Kasbon lama yang masih outstanding masuk scope 'opening' sehingga
         //    tetap terhitung; data legacy (sebelum cut-off) diabaikan.
+        //
+        //    Filter outstanding WAJIB di sini juga, bukan hanya di query 1 & 3:
+        //    tanpa itu `jml` ikut menghitung hutang yang sudah lunas (mis.
+        //    yang ditandai lunas legacy) sementara `sisa`-nya sudah 0 — jadi
+        //    dashboard menampilkan "N transaksi" padahal outstanding-nya 0.
         $auth = $this->db->table('hutang_piutang')
             ->select('sumber_tipe, jenis, COUNT(*) AS jml, COALESCE(SUM(sisa),0) AS sisa')
             ->where('deleted', 0)
             ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
             ->whereIn('sumber_tipe', self::AUTHORITATIVE_SUMBER)
+            ->groupStart()
+                ->where('sisa >', 0)
+                ->orWhere('status !=', self::STATUS_LUNAS)
+            ->groupEnd()
             ->groupBy('sumber_tipe, jenis');
         if ($unitIds) {
             $auth->whereIn('unit_id', $unitIds);

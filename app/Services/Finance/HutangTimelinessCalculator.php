@@ -42,7 +42,7 @@ class HutangTimelinessCalculator implements FinanceCalculatorInterface
         $lastPayment = $this->lastPaymentMap();
         // Hanya pembelian aktif (pada/setelah cut-off). Pembelian sebelum
         // cut-off adalah legacy dan tidak ikut dinilai ulang.
-        $cutoff = FinanceScopeService::cutoffDate();
+        $cutoff = FinanceScopeService::periodeMulaiDate();
         $purchases = $this->db->table('pembelian')
             ->select('
                 pembelian.idpembelian,
