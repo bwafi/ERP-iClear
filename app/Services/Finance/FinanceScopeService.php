@@ -183,12 +183,28 @@ class FinanceScopeService
     public const SCOPE_LEGACY = 'legacy';
 
     /**
-     * Tanggal Financial Cut-off (YYYY-MM-DD). Data sebelum tanggal ini =
-     * legacy; mulai tanggal ini = active. Sumber tunggal: Config\Finance.
+     * Tanggal DASAR / statement cut-off (YYYY-MM-DD).
+     *
+     * Hanya untuk ditampilkan dan untuk menandai baris statement reference
+     * (saldo_awal_kas_bank) serta baseline kas per unit. BUKAN batas bawah
+     * ledger — untuk itu pakai periodeMulaiDate().
      */
     public static function cutoffDate(): string
     {
         return (string) (new Finance())->cutoffDate;
+    }
+
+    /**
+     * Hari pertama periode operasional baru (YYYY-MM-DD) = batas bawah ledger.
+     *
+     * Semua query saldo/mutasi Kas & Bank WAJIB memfilter
+     * `tanggal >= periodeMulaiDate()`. Memakai cutoffDate() di sana akan
+     * menghitung transaksi pada tanggal baseline statement sebagai mutasi
+     * baru, sehingga saldo fisik terhitung dua kali.
+     */
+    public static function periodeMulaiDate(): string
+    {
+        return (string) (new Finance())->periodeMulaiDate;
     }
 
     /**
@@ -209,22 +225,26 @@ class FinanceScopeService
     }
 
     /**
-     * Apakah tanggal transaksi masuk kategori legacy (sebelum cut-off).
+     * Apakah tanggal transaksi termasuk LEGACY.
+     *
+     * Legacy = sebelum periode operasional baru. Perhatikan batasnya adalah
+     * periodeMulaiDate(), BUKAN cutoffDate(): transaksi bertanggal 30 Sep
+     * (tanggal baseline statement) masih legacy.
      */
     public static function isLegacyTransaction($tanggal): bool
     {
         $t = self::tanggalStr($tanggal);
 
-        return $t !== '' && $t < self::cutoffDate();
+        return $t !== '' && $t < self::periodeMulaiDate();
     }
 
     /**
-     * Apakah tanggal transaksi masuk kategori active (pada/setelah cut-off).
+     * Apakah tanggal transaksi termasuk AKTIF (periode operasional baru).
      */
     public static function isActiveTransaction($tanggal): bool
     {
         $t = self::tanggalStr($tanggal);
 
-        return $t !== '' && $t >= self::cutoffDate();
+        return $t !== '' && $t >= self::periodeMulaiDate();
     }
 }
