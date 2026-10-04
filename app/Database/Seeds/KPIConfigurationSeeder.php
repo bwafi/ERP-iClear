@@ -748,8 +748,8 @@ class KPIConfigurationSeeder extends Seeder
     private function seedSpvUnits()
     {
         $area = [
-            49 => [2, 3],   // Mario R: ICLEAR Jember & Banyuwangi
-            56 => [1, 4],   // Bima:    ICLEAR Probolinggo & Pandaan
+            49 => [2, 3, 5], // Mario R: ICLEAR Jember, Banyuwangi & Genteng
+            56 => [1, 4],    // Bima:    ICLEAR Probolinggo & Pandaan
         ];
 
         $spvRows = $this->db->table('akun')

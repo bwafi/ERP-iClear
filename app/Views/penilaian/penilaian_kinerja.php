@@ -76,7 +76,7 @@
                     </div>
                     <h6 class="text-white-50 fw-medium mb-1">Omset Global</h6>
                     <h2 class="fw-bold mb-2 text-white">
-                        Rp <?= number_format($aktual_omset_unit[1] + $aktual_omset_unit[2] + $aktual_omset_unit[3] + $aktual_omset_unit[4], 0, ',', '.') ?>
+                        Rp <?= number_format($omset_global, 0, ',', '.') ?>
                     </h2>
                 </div>
                 <div class="mt-3 pt-3 border-top border-white border-opacity-10 d-flex align-items-center gap-2 small text-white-50">
@@ -93,19 +93,11 @@
                     <i class="fa fa-store text-primary"></i> Rincian Omset Cabang
                 </h6>
                 <div class="row g-3">
-                    <?php
-                    $cabang_list = [
-                        1 => ['nama' => 'Probolinggo', 'val' => $aktual_omset_unit[1]],
-                        2 => ['nama' => 'Jember', 'val' => $aktual_omset_unit[2]],
-                        3 => ['nama' => 'Banyuwangi', 'val' => $aktual_omset_unit[3]],
-                        4 => ['nama' => 'Pandaan', 'val' => $aktual_omset_unit[4]],
-                    ];
-                    foreach ($cabang_list as $cb):
-                    ?>
+                    <?php foreach ($omset_cabang as $cb): ?>
                         <div class="col-sm-6">
                             <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center">
                                 <span class="text-secondary small fw-medium"><?= $cb['nama'] ?></span>
-                                <span class="fw-bold text-dark small">Rp <?= number_format($cb['val'], 0, ',', '.') ?></span>
+                                <span class="fw-bold text-dark small">Rp <?= number_format((float)$cb['omset'], 0, ',', '.') ?></span>
                             </div>
                         </div>
                     <?php endforeach; ?>

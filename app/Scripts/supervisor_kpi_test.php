@@ -301,7 +301,8 @@ ok('Detail Absensi SPV bobot = 40/20/20/20', $absenWeightsOk, json_encode($detai
 $compIdOmset = (int)$db->query("SELECT id FROM kpi_components WHERE code = 'OMSET_CABANG'")->getRow()->id;
 
 // Scope masing-masing SPV (tidak boleh hardcode semua unit).
-ok('Scope SPV 49 = [2,3]', $svc->scopeUnits($SPV49, 50) === [2, 3], json_encode($svc->scopeUnits($SPV49, 50)));
+// SPV 49 (Mario) memegang ICLEAR Jember, Banyuwangi, dan Genteng (unit 5).
+ok('Scope SPV 49 = [2,3,5]', $svc->scopeUnits($SPV49, 50) === [2, 3, 5], json_encode($svc->scopeUnits($SPV49, 50)));
 ok('Scope SPV 56 = [1,4]', $svc->scopeUnits($SPV56, 50) === [1, 4], json_encode($svc->scopeUnits($SPV56, 50)));
 
 // Adjust per cabang: 2 cabang dalam scope = +Rp14.000.000 total.

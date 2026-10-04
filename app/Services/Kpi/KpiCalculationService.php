@@ -36,6 +36,14 @@ class KpiCalculationService
      */
     public const CS_OMSET_UNIT_ID = 1;
 
+    /**
+     * NAMA_UNIT Head Office — unit pusat, bukan cabang.
+     *
+     * HO tidak bertransaksi penjualan sehingga omsetnya 0; memaksakan HO
+     * masuk daftar cabang akan menambah baris kosong pada ringkasan omset.
+     */
+    public const HO_UNIT_NAME = 'Head Office';
+
     protected $componentModel;
     protected $targetModel;
     protected $weightModel;
@@ -254,9 +262,18 @@ class KpiCalculationService
                 }
                 if ($omzetInfo) {
                     if ($component->code === 'TARGET_CABANG') {
-                        $n = count($omzetInfo['cabang']);
+                        // Hanya cabang yang punya target yang dihitung, sama
+                        // seperti SupervisorKpiService::targetCabang(). Cabang
+                        // tanpa target (mis. Unit 5 yang belum punya
+                        // kpi_targets) tidak boleh tampil sebagai "kurang",
+                        // karena nilainya memang tidak pernah masuk skor.
+                        $terhitung = array_values(array_filter(
+                            $omzetInfo['cabang'],
+                            static fn ($cb) => $cb['target_ho'] !== null
+                        ));
+                        $n = count($terhitung);
                         $reached = 0;
-                        foreach ($omzetInfo['cabang'] as $cb) {
+                        foreach ($terhitung as $cb) {
                             if (!empty($cb['reached'])) {
                                 $reached++;
                             }
@@ -266,7 +283,7 @@ class KpiCalculationService
                             'reached'    => $reached,
                             'shortfall'  => max($n - $reached, 0),
                             'ho'         => true,
-                            'cabang'     => $omzetInfo['cabang'],
+                            'cabang'     => $terhitung,
                         ];
                     } else {
                         $targetInfo = [
@@ -437,6 +454,44 @@ class KpiCalculationService
         return $unitId;
     }
 
+    /**
+     * Unit CABANG (seluruh unit master kecuali Head Office), urut idunit.
+     *
+     * Dipakai untuk ringkasan "Rincian Omset Cabang" / "Omset Global" pada
+     * halaman penilaian kinerja. Daftar diambil dari master `unit`, bukan
+     * id hardcoded, supaya cabang yang baru terdaftar (Unit 5 ICLEAR Genteng)
+     * otomatis ikut tanpa perlu mengubah kode.
+     *
+     * @return list<array{unit:int, nama:string}>
+     */
+    public function branchUnits(): array
+    {
+        static $cache = null;
+
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $rows = \Config\Database::connect()
+            ->table('unit')
+            ->select('idunit, NAMA_UNIT')
+            ->where('NAMA_UNIT !=', self::HO_UNIT_NAME)
+            ->where('idunit >', 0)
+            ->orderBy('idunit', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $cache = [];
+        foreach ($rows as $row) {
+            $cache[] = [
+                'unit' => (int) $row['idunit'],
+                'nama' => (string) $row['NAMA_UNIT'],
+            ];
+        }
+
+        return $cache;
+    }
+
     public function calculateAchievement($actualValue, $targetValue)
     {
         return $this->scoreService()->achievementScore((float)$actualValue, (float)$targetValue);
@@ -542,10 +597,21 @@ class KpiCalculationService
         }
 
         // ── Omset per unit (for views) ────────────────────────
+        // Daftar cabang diambil dari master `unit` (kecuali Head Office),
+        // bukan daftar id hardcoded, supaya cabang baru — misalnya Unit 5
+        // ICLEAR Genteng — langsung ikut terhitung tanpa ubah kode.
         $omsetCalc   = new OmsetTokoCalculator();
         $aktualOmset = [];
-        for ($u = 1; $u <= 4; $u++) {
-            $aktualOmset[$u] = $omsetCalc->calculate($employeeId, $u, $month, $year);
+        $omsetCabang = [];
+        foreach ($this->branchUnits() as $branch) {
+            $branchUnit  = $branch['unit'];
+            $branchOmset = $omsetCalc->calculate($employeeId, $branchUnit, $month, $year);
+            $aktualOmset[$branchUnit] = $branchOmset;
+            $omsetCabang[] = [
+                'unit'  => $branchUnit,
+                'nama'  => $branch['nama'],
+                'omset' => $branchOmset,
+            ];
         }
 
         // ── Incentive via IncentiveCalculationService ──────────
@@ -565,6 +631,7 @@ class KpiCalculationService
             'jabatan'           => $positionId,
             'unit'              => $unit,
             'aktual_omset_unit' => $aktualOmset,
+            'omset_cabang'      => $omsetCabang,
             'detail_kpi'        => $detailKpi,
             'detail_absen'      => $detailAbsen,
             'skor_total'        => round($skorTotal, 2),
@@ -660,7 +727,7 @@ class KpiCalculationService
             $db = \Config\Database::connect();
             $totalIncentive = 0.0;
             // Scope SPV (jabatan 40) = unit dari spv_units per supervisor,
-            // BUKAN semua unit. SPV 49 → [2,3], SPV 56 → [1,4].
+            // BUKAN semua unit. SPV 49 → [2,3,5], SPV 56 → [1,4].
             $units = $this->supervisorService()->scopeUnits($employeeId, $unit);
 
             foreach ($units as $uId) {

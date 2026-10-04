@@ -1523,6 +1523,10 @@ class PenilaianKPI extends BaseController
             $compByCode[$comp['component_code']] = (float) $comp['amount'];
         }
 
+        // Rincian omset seluruh cabang + total omset global.
+        $omsetCabang = $kpi['omset_cabang'] ?? [];
+        $omsetGlobal = array_sum(array_column($omsetCabang, 'omset'));
+
         return view('template', [
             'list_karyawan'        => $list_karyawan,
             'selected_karyawan'    => $selected_karyawan,
@@ -1530,6 +1534,8 @@ class PenilaianKPI extends BaseController
             'detail_kpi'           => $kpi['detail_kpi'],
             'detail_absen'         => $kpi['detail_absen'],
             'aktual_omset_unit'    => $kpi['aktual_omset_unit'],
+            'omset_cabang'         => $omsetCabang,
+            'omset_global'         => $omsetGlobal,
             'skor_total'           => $kpi['skor_total'],
             'tunjangan_kinerja'    => $compByCode['TUNJANGAN_KINERJA'] ?? 0,
             'tunjangan_absen'      => $compByCode['TUNJANGAN_ABSEN'] ?? 0,
