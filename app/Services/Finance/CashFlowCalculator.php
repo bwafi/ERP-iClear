@@ -8,14 +8,25 @@ use Config\Finance;
 /**
  * Cash Flow KPI — arus transaksi periode berjalan.
  *
- * Sumber Penerimaan (kas masuk):
- *  - Penjualan : SUM(penjualan.harus_dibayar) per unit per hari
- *  - Service   : SUM(service.bayar) per unit per hari
- *  (Tidak lagi memakai kas_masuk — di lapangan tabel kas_masuk mayoritas
- *  berisi baris saldo "kas awal", bukan transaksi penerimaan.)
+ * SEMUA angkakas/transfer diambil dari TutupKasirSourceDefinition, bukan
+ * query ulang di kelas ini. Satu sumber definisi = satu angka; kalau KPI
+ * menulis query sendiri, KPI akan menyimpang dari Tutup Kasir dan dari
+ * core Finance movement.
  *
- * Pengeluaran (kas keluar) tetap dari tabel kas_keluar, mengecualikan baris
- * otomatis "kas awal".
+ * Aturan yang dijaga (lihat TutupKasirSourceDefinition):
+ *  - Penjualan  : SUM(bayar_tunai) + SUM(bayar_bank), kode_invoice bukan srv.
+ *                 Filter `notLike(...,'srv','after')` -> SQL `NOT LIKE 'srv%'`
+ *                 (PREFIX, bukan suffix) pada CodeIgniter4 versi ini.
+ *                 TIDAK memakai harus_dibayar — itu nilai invoice, bukan
+ *                 uang yang benar-benar diterima.
+ *  - Service    : SUM(bayar_tunai) + SUM(harus_dibayar - bayar_tunai),
+ *                 dihitung per tanggal_selesai dengan status_service = 4.
+ *                 TIDAK memakai SUM(bayar) per created_at — tanggal dibuat
+ *                 bukan tanggal settle, dan tanpa status filter semua
+ *                 status service ikut terhitung.
+ *  - Kas keluar : SUM(kas_keluar.jumlah) tanpa filter apa pun.
+ *  - kas_masuk  : tidak dipakai. Di lapangan tabel itu hanya baris saldo
+ *                 "kas awal", bukan penerimaan.
  *
  * Net Cash Flow  = Penerimaan - Kas Keluar
  * Cash Flow %    = Net Cash Flow / Penerimaan x 100
@@ -26,17 +37,21 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     protected $db;
     protected $config;
 
-    public function __construct()
+    /** @var TutupKasirSourceDefinition */
+    protected $src;
+
+    public function __construct(?TutupKasirSourceDefinition $src = null)
     {
-        $this->db = Database::connect();
+        $this->db     = Database::connect();
         $this->config = new Finance();
+        $this->src    = $src ?? new TutupKasirSourceDefinition($this->db);
     }
 
     public function calculate(int $unitId, int $month, int $year): array
     {
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
-        $cutoff = FinanceScopeService::cutoffDate();
+        $cutoff = FinanceScopeService::periodeMulaiDate();
 
         $penjualan = $this->sumPenjualan($unitId, $startDate, $endDate, $cutoff);
         $service = $this->sumService($unitId, $startDate, $endDate, $cutoff);
@@ -81,178 +96,85 @@ class CashFlowCalculator implements FinanceCalculatorInterface
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $cutoff = FinanceScopeService::cutoffDate();
-        $penjualanByDate = $this->groupPenjualanByDate($unitId, $startDate, $endDate, $cutoff);
-        $serviceByDate = $this->groupServiceByDate($unitId, $startDate, $endDate, $cutoff);
-        $keluarByDate = $this->groupKasKeluarByDate($unitId, $startDate, $endDate, $cutoff);
+        $cutoff = FinanceScopeService::periodeMulaiDate();
+        $dari   = max($startDate, $cutoff);
+        $harian = $this->src->harianRange($unitId, $dari, $endDate);
 
-        $map = [];
-        foreach (array_unique(array_merge(array_keys($penjualanByDate), array_keys($serviceByDate))) as $tgl) {
-            $map[$tgl] = [
-                'masuk' => ($penjualanByDate[$tgl] ?? 0.0) + ($serviceByDate[$tgl] ?? 0.0),
-                'keluar' => 0.0,
-            ];
-        }
-        foreach ($keluarByDate as $tgl => $total) {
-            if (isset($map[$tgl])) {
-                $map[$tgl]['keluar'] = $total;
-            } else {
-                $map[$tgl] = ['masuk' => 0.0, 'keluar' => $total];
-            }
-        }
-
-        ksort($map);
-
-        $labels = array_keys($map);
-        $masuk = [];
+        // Masuk = kas + transfer (penjualan + service), keluar = seluruh
+        // kas_keluar. Split cash/transfer tidak perlu di sini karena KPI ini
+        // menghitung arus, bukan saldo rekening.
+        $masuk  = [];
         $keluar = [];
-        $net = [];
-        foreach ($map as $values) {
-            $masuk[] = $values['masuk'];
-            $keluar[] = $values['keluar'];
-            $net[] = $values['masuk'] - $values['keluar'];
+
+        foreach ($harian['cash'] as $tgl => $nilai) {
+            $masuk[$tgl] = (float) $nilai;
+        }
+        foreach ($harian['transfer'] as $tgl => $nilai) {
+            $masuk[$tgl] = ($masuk[$tgl] ?? 0.0) + (float) $nilai;
+        }
+        foreach ($harian['keluar'] as $tgl => $nilai) {
+            $keluar[$tgl] = (float) $nilai;
+        }
+
+        $labels = array_keys($masuk + $keluar);
+        sort($labels);
+
+        $outMasuk  = [];
+        $outKeluar = [];
+        $outNet    = [];
+        foreach ($labels as $tgl) {
+            $m = (float) ($masuk[$tgl] ?? 0.0);
+            $k = (float) ($keluar[$tgl] ?? 0.0);
+            $outMasuk[]  = $m;
+            $outKeluar[] = $k;
+            $outNet[]    = $m - $k;
         }
 
         return [
             'labels' => $labels,
-            'masuk' => $masuk,
-            'keluar' => $keluar,
-            'net' => $net,
+            'masuk' => $outMasuk,
+            'keluar' => $outKeluar,
+            'net' => $outNet,
         ];
     }
 
     /**
-     * Penerimaan penjualan = SUM(penjualan.harus_dibayar) dalam rentang.
+     * Penerimaan penjualan = kas + transfer penjualan dalam rentang.
+     *
+     * Cut-off periode aktif diterapkan sebagai batas bawah (`max`), sama
+     * seperti sebelumnya — angka sebelum 2026-10-06 tidak masuk KPI.
      */
     private function sumPenjualan(int $unitId, string $startDate, string $endDate, string $cutoff): float
     {
-        $row = $this->db->table('penjualan')
-            ->selectSum('harus_dibayar', 'total')
-            ->where('unit_idunit', $unitId)
-            ->where('DATE(tanggal) >=', $startDate)
-            ->where('DATE(tanggal) <=', $endDate)
-            ->where('DATE(tanggal) >=', $cutoff)
-            ->get()
-            ->getRow();
+        $dari = max($startDate, $cutoff);
 
-        return (float) ($row->total ?? 0);
+        return (float) $this->src->cashPenjualanRange($unitId, $dari, $endDate)
+            + (float) $this->src->transferPenjualanRange($unitId, $dari, $endDate);
     }
 
     /**
-     * Penerimaan service = SUM(service.bayar) dalam rentang.
+     * Penerimaan service = kas + residual transfer, per tanggal_selesai,
+     * hanya service berstatus 4 (selesai).
      */
     private function sumService(int $unitId, string $startDate, string $endDate, string $cutoff): float
     {
-        $row = $this->db->table('service')
-            ->selectSum('bayar', 'total')
-            ->where('unit_idunit', $unitId)
-            ->where('DATE(created_at) >=', $startDate)
-            ->where('DATE(created_at) <=', $endDate)
-            ->where('DATE(created_at) >=', $cutoff)
-            ->get()
-            ->getRow();
+        $dari = max($startDate, $cutoff);
 
-        return (float) ($row->total ?? 0);
+        return (float) $this->src->cashServiceRange($unitId, $dari, $endDate)
+            + (float) $this->src->transferServiceRange($unitId, $dari, $endDate);
     }
 
     /**
-     * Kas keluar = SUM(kas_keluar.jumlah), mengecualikan baris "kas awal".
+     * Kas keluar = seluruh SUM(kas_keluar.jumlah) dalam rentang.
+     *
+     * Tidak lagi menyaring baris "kas awal": TutupKasir menjumlahkan utuh,
+     * jadi penyaringan di sini membuat KPI berbeda dari tutup kasir.
      */
     private function sumKasKeluar(int $unitId, string $startDate, string $endDate, string $cutoff): float
     {
-        $row = $this->applyKasAwalFilter(
-            $this->db->table('kas_keluar')
-                ->selectSum('jumlah', 'total')
-                ->where('idunit', $unitId)
-                ->where('tanggal >=', $startDate)
-                ->where('tanggal <=', $endDate)
-                ->where('tanggal >=', $cutoff)
-        )
-            ->get()
-            ->getRow();
+        $dari = max($startDate, $cutoff);
 
-        return (float) ($row->total ?? 0);
-    }
-
-    /**
-     * @return array<string, float>
-     */
-    private function groupPenjualanByDate(int $unitId, string $startDate, string $endDate, string $cutoff): array
-    {
-        return $this->mapByDate(
-            $this->db->table('penjualan')
-                ->select('DATE(tanggal) AS tanggal, SUM(harus_dibayar) AS total')
-                ->where('unit_idunit', $unitId)
-                ->where('DATE(tanggal) >=', $startDate)
-                ->where('DATE(tanggal) <=', $endDate)
-                ->where('DATE(tanggal) >=', $cutoff)
-                ->groupBy('DATE(tanggal)')
-        );
-    }
-
-    /**
-     * @return array<string, float>
-     */
-    private function groupServiceByDate(int $unitId, string $startDate, string $endDate, string $cutoff): array
-    {
-        return $this->mapByDate(
-            $this->db->table('service')
-                ->select('DATE(created_at) AS tanggal, SUM(bayar) AS total')
-                ->where('unit_idunit', $unitId)
-                ->where('DATE(created_at) >=', $startDate)
-                ->where('DATE(created_at) <=', $endDate)
-                ->where('DATE(created_at) >=', $cutoff)
-                ->groupBy('DATE(created_at)')
-        );
-    }
-
-    /**
-     * @return array<string, float>
-     */
-    private function groupKasKeluarByDate(int $unitId, string $startDate, string $endDate, string $cutoff): array
-    {
-        return $this->mapByDate(
-            $this->applyKasAwalFilter(
-                $this->db->table('kas_keluar')
-                    ->select('DATE(tanggal) AS tanggal, SUM(jumlah) AS total')
-                    ->where('idunit', $unitId)
-                    ->where('tanggal >=', $startDate)
-                    ->where('tanggal <=', $endDate)
-                    ->where('tanggal >=', $cutoff)
-                    ->groupBy('DATE(tanggal)')
-            )
-        );
-    }
-
-    /**
-     * @param object $builder Query builder setelah select/where/groupBy.
-     * @return array<string, float>
-     */
-    private function mapByDate($builder): array
-    {
-        $rows = $builder->orderBy('tanggal', 'ASC')->get()->getResult();
-
-        $map = [];
-        foreach ($rows as $row) {
-            $map[$row->tanggal] = (float) ($row->total ?? 0);
-        }
-
-        return $map;
-    }
-
-    /**
-     * Baris otomatis "kas awal" (TutupKasir) memiliki kategori/no_akun/jenis
-     * semuanya NULL dan deskripsi 'kas awal' — harus dibuang dari arus kas.
-     */
-    private function applyKasAwalFilter($builder)
-    {
-        return $builder->groupStart()
-            ->where('deskripsi !=', 'kas awal')
-            ->groupStart()
-                ->where('kategori_idkategori IS NOT NULL')
-                ->orWhere('no_akun IS NOT NULL')
-                ->orWhere('jenis IS NOT NULL')
-            ->groupEnd()
-        ->groupEnd();
+        return (float) $this->src->kasKeluarCashRange($unitId, $dari, $endDate)
+            + (float) $this->src->kasKeluarTransferRange($unitId, $dari, $endDate);
     }
 }

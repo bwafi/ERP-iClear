@@ -17,6 +17,12 @@ use Config\Database;
  * sama seperti TutupKasir — agar invoice bertanda "srv" tidak terhitung dua kali
  * (sudah masuk lewat tabel service).
  *
+ * CATATAN SEMANTIKA: pada CodeIgniter4 versi ini side 'after' berarti PREFIX,
+ * jadi SQL yang dihasilkan adalah `NOT LIKE 'srv%'` — BUKAN `NOT LIKE '%srv'`.
+ * Efeknya: invoice berawalan "SRV"/"srv" (kode service) dibuang, sedangkan
+ * kode berakhiran "srv" (mis. INV-srv) tetap dihitung. Kolom memakai
+ * collation *_ci, jadi pencocokan tidak membedakan huruf besar/kecil.
+ *
  * Status hasil (HASIL, bukan approval):
  *  belum | belum_lengkap | lengkap_cocok | lengkap_selisih
  * Status proses approval (TERPISAH):
@@ -61,7 +67,7 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
      * mengindeks hasilnya per tanggal.
      *
      * Hasil WAJIB identik dengan erpValues() per tanggal, termasuk filter
-     * `kode_invoice NOT LIKE '%srv%'`. both-dijaga oleh tes pembanding di
+     * `kode_invoice NOT LIKE 'srv%'`. both-dijaga oleh tes pembanding di
      * app/Scripts/rekon_daily_test.php (F9).
      *
      * Tanggal tanpa transaksi TIDAK muncul di hasil — caller yang memutuskan

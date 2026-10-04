@@ -7,22 +7,29 @@ use Config\Database;
 /**
  * Arus kas harian untuk drill-down "Detail Omset Harian" (/omset_bulanan).
  *
+ * SATU DEFINISI SAJA dengan TutupKasirSourceDefinition. Drill-down ini
+ * menampilkan source table yang sama, bukan salinan lain dari ledger.
+ *
  * Prinsip:
  *  - Read-only. Tidak membuat tabel, tidak menulis transaksi, tidak menyentuh
  *    perhitungan omset maupun cutoff Finance.
- *  - Hanya memakai sumber kas/bank yang sudah ada di ERP:
- *      MASUK  : penjualan (bayar_tunai / bayar_bank),
- *               service status 4 (bayar_tunai / harus_dibayar - bayar_tunai),
- *               kas_masuk non-"kas awal", transaksi_kas_bank (ledger).
- *      KELUAR : kas_keluar, transaksi_kas_bank (ledger).
- *  - Transaksi penjualan/service TIDAK dibuat ulang di ledger. Baris yang sudah
- *    dipromosikan ke transaksi_kas_bank (sumber_tipe + sumber_id) dari
- *    kas_masuk/kas_keluar tidak dihitung dua kali.
- *  - Baris deskripsi 'kas awal' (carry-over TutupKasir) dibuang: itu saldo
- *    awal periode berikutnya, bukan penerimaan kas baru.
- *  - Transfer internal antar kas/rekening (jenis TRANSFER_INTERNAL atau
- *    PEMBAYARAN_ANTAR_UNIT) ditandai terpisah dan tidak masuk subtotal/net
- *    karena bukan pendapatan maupun beban.
+ *  - Sumber arus operasional (MASUK & KELUAR):
+ *      MASUK  : penjualan non-"srv" (bayar_tunai / bayar_bank),
+ *               service status 4 per tanggal_selesai
+ *               (bayar_tunai / harus_dibayar - bayar_tunai).
+ *      KELUAR : seluruh kas_keluar.
+ *  - `transaksi_kas_bank` HANYA dibaca untuk transfer internal
+ *    (`transfer_ref IS NOT NULL`). Mirror lama kas_masuk/kas_keluar yang
+ *    tidak punya `transfer_ref` diabaikan supaya satu transaksi tidak
+ *    tampil dua kali. Tidak ada lagi penggantian baris sumber dengan
+ *    baris mirror.
+ *  - Baris deskripsi 'kas awal' TIDAK dipakai sebagai penerimaan harian:
+ *    itu saldo awal periode berikutnya. `kas_masuk` tidak menjadi subtotal
+ *    masuk karena TutupKasir, core Finance movement, dan RekonDaily
+ *    sama-sama tidak menghitungnya — kalau dihitung di sini, drill-down
+ *    tidak akan sama dengan angka tutup kasir.
+ *  - Transfer internal antar kas/rekening ditandai terpisah dan tidak masuk
+ *    subtotal/net karena bukan pendapatan maupun beban.
  *  - Klasifikasi tunai vs transfer mengikuti TutupKasir: idbank NULL = tunai,
  *    idbank terisi = transfer. Baris ledger memakai akun_kas_bank.tipe
  *    (KAS = tunai, BANK = transfer).
@@ -56,7 +63,6 @@ class DailyCashFlowService
             'unit_id'    => $unitId,
             'penjualan' => $this->fetchPenjualan($unitId, $tanggal),
             'service'   => $this->fetchService($unitId, $tanggal),
-            'kas_masuk' => $this->fetchKasMasuk($unitId, $tanggal),
             'kas_keluar' => $this->fetchKasKeluar($unitId, $tanggal),
             'ledger'    => $this->fetchLedger($unitId, $tanggal),
         ]);
@@ -67,22 +73,13 @@ class DailyCashFlowService
      *
      * Dipisah dari query agar logika klasifikasi bisa diuji tanpa database.
      *
-     * @param array $sources ['penjualan','service','kas_masuk','kas_keluar','ledger']
+     * @param array $sources ['penjualan','service','kas_keluar','ledger']
      */
     public function assemble(array $sources): array
     {
         $masuk = ['tunai' => [], 'transfer' => []];
         $keluar = ['tunai' => [], 'transfer' => []];
         $internal = [];
-
-        // Baris kas_masuk/kas_keluar yang sudah dipromosikan ke ledger
-        // dihitung dari ledger (bukan dari tabel asalnya) supaya tidak dobel.
-        $ledgerRefs = [];
-        foreach ($sources['ledger'] ?? [] as $row) {
-            if (! empty($row->sumber_tipe) && isset($row->sumber_id)) {
-                $ledgerRefs[$row->sumber_tipe . '#' . (int) $row->sumber_id] = true;
-            }
-        }
 
         foreach ($sources['penjualan'] ?? [] as $row) {
             $referensi = trim((string)($row->kode_invoice ?? ''));
@@ -93,7 +90,7 @@ class DailyCashFlowService
             $tunai = (int)($row->bayar_tunai ?? 0);
             $transfer = (int)($row->bayar_bank ?? 0);
 
-            if ($tunai > 0) {
+            if ($tunai !== 0) {
                 $masuk['tunai'][] = $this->row(
                     $this->waktu($row->tanggal ?? null),
                     'Penjualan',
@@ -101,7 +98,7 @@ class DailyCashFlowService
                     $tunai
                 );
             }
-            if ($transfer > 0) {
+            if ($transfer !== 0) {
                 $masuk['transfer'][] = $this->row(
                     $this->waktu($row->tanggal ?? null),
                     'Penjualan',
@@ -119,50 +116,21 @@ class DailyCashFlowService
 
             $waktu = $this->waktu($row->tanggal_selesai ?? null);
 
+            // Residual transfer MENGIKUTI TutupKasir apa adanya: tidak di
+            // max(0, ...). Overpay (residual negatif) harus mengurangi
+            // subtotal transfer supaya totals sama dengan tutup kasir.
             $tunai = (int)($row->bayar_tunai ?? 0);
-            $transfer = max(0, (int)($row->harus_dibayar ?? 0) - $tunai);
+            $transfer = (int)($row->harus_dibayar ?? 0) - $tunai;
 
-            if ($tunai > 0) {
+            if ($tunai !== 0) {
                 $masuk['tunai'][] = $this->row($waktu, 'Service', $keterangan, $tunai);
             }
-            if ($transfer > 0) {
+            if ($transfer !== 0) {
                 $masuk['transfer'][] = $this->row($waktu, 'Service', $keterangan, $transfer);
             }
         }
 
-        foreach ($sources['kas_masuk'] ?? [] as $row) {
-            if ($this->sudahDiLedger($ledgerRefs, 'kas_masuk', $row->idkas_masuk ?? null)) {
-                continue;
-            }
-
-            $jumlah = (int)($row->jumlah ?? 0);
-            if ($jumlah === 0) {
-                continue;
-            }
-
-            $metode = $this->isTunai($row) ? 'tunai' : 'transfer';
-            $keterangan = trim((string)($row->deskripsi ?? ''));
-            if ($keterangan === '') {
-                $keterangan = 'Penerimaan kas';
-            }
-            $penerima = trim((string)($row->penerima ?? ''));
-            if ($penerima !== '') {
-                $keterangan .= ' — ' . $penerima;
-            }
-
-            $masuk[$metode][] = $this->row(
-                $this->waktu($row->created_on ?? null, $row->updated_on ?? null),
-                'Kas Masuk',
-                $keterangan,
-                $jumlah
-            );
-        }
-
         foreach ($sources['kas_keluar'] ?? [] as $row) {
-            if ($this->sudahDiLedger($ledgerRefs, 'kas_keluar', $row->idkas_keluar ?? null)) {
-                continue;
-            }
-
             $jumlah = (int)($row->jumlah ?? 0);
             if ($jumlah === 0) {
                 continue;
@@ -186,45 +154,35 @@ class DailyCashFlowService
             );
         }
 
+        // Ledger HANYA boleh menyumbang transfer internal. Query fetchLedger()
+        // sudah membatasi `transfer_ref IS NOT NULL`; gerbang di bawah
+        // menjaga kelas ini tetap aman kalau dipanggil dengan row mentah.
         foreach ($sources['ledger'] ?? [] as $row) {
+            if (! $this->isTransferInternal($row)) {
+                continue;
+            }
+
             $jumlah = (int)($row->jumlah ?? 0);
             $arah = strtoupper((string)($row->arah ?? ''));
             if ($jumlah === 0 || ($arah !== 'MASUK' && $arah !== 'KELUAR')) {
                 continue;
             }
 
-            $metode = strtoupper((string)($row->tipe ?? '')) === 'KAS' ? 'tunai' : 'transfer';
             $keterangan = trim((string)($row->keterangan ?? ''));
             if ($keterangan === '') {
                 $keterangan = trim((string)($row->nama_akun ?? ''));
             }
             if ($keterangan === '') {
-                $keterangan = 'Transaksi kas/bank';
+                $keterangan = 'Transfer antar kas/bank';
             }
 
-            if ($this->isTransferInternal($row)) {
-                $internal[] = $this->row(
-                    $this->waktu($row->created_at ?? null),
-                    $arah === 'MASUK' ? 'Kas Masuk' : 'Kas Keluar',
-                    $keterangan,
-                    $jumlah,
-                    true
-                );
-                continue;
-            }
-
-            $baris = $this->row(
+            $internal[] = $this->row(
                 $this->waktu($row->created_at ?? null),
                 $arah === 'MASUK' ? 'Kas Masuk' : 'Kas Keluar',
                 $keterangan,
-                $jumlah
+                $jumlah,
+                true
             );
-
-            if ($arah === 'MASUK') {
-                $masuk[$metode][] = $baris;
-            } else {
-                $keluar[$metode][] = $baris;
-            }
         }
 
         $subtotal = [
@@ -259,6 +217,14 @@ class DailyCashFlowService
     /**
      * Penjualan non-service: invoice "srv..." sudah tercakup tabel service,
      * jadi dikecualikan agar tidak dobel (memakai aturan TutupKasir).
+     *
+     * `kode_invoice` NULL juga TIDAK ikut: TutupKasir memakai `notLike`
+     * yang di SQL mengecualikan NULL, sehingga drill-down harus sama.
+     * Sebelumnya NULL ikut masuk dan summarised 6 baris / Rp2.750.000.
+     *
+     * CATATAN SEMANTIKA: side 'after' pada CodeIgniter4 versi ini = PREFIX,
+     * jadi SQL-nya `NOT LIKE 'srv%'`, bukan `NOT LIKE '%srv'`. Invoice
+     * berawalan SRV dibuang; kode berakhiran 'srv' tetap dihitung.
      */
     protected function fetchPenjualan(int $unitId, string $tanggal): array
     {
@@ -266,10 +232,7 @@ class DailyCashFlowService
             ->select('kode_invoice, tanggal, bayar_tunai, bayar_bank')
             ->where('unit_idunit', $unitId)
             ->where('DATE(tanggal)', $tanggal)
-            ->groupStart()
-                ->where('kode_invoice IS NULL')
-                ->orNotLike('kode_invoice', 'srv', 'after')
-            ->groupEnd()
+            ->notLike('kode_invoice', 'srv', 'after')
             ->orderBy('tanggal', 'ASC')
             ->get()
             ->getResult();
@@ -292,30 +255,12 @@ class DailyCashFlowService
     }
 
     /**
-     * kas_masuk manual (bukan carry-over TutupKasir), untuk tanggal+unit ini.
-     */
-    protected function fetchKasMasuk(int $unitId, string $tanggal): array
-    {
-        return $this->db->table('kas_masuk')
-            ->select('kas_masuk.idkas_masuk, kas_masuk.tanggal, kas_masuk.deskripsi, kas_masuk.jumlah, kas_masuk.penerima, kas_masuk.idbank, kas_masuk.created_on, kas_masuk.updated_on')
-            ->where('kas_masuk.idunit', $unitId)
-            ->where('DATE(kas_masuk.tanggal)', $tanggal)
-            ->groupStart()
-                ->where('kas_masuk.deskripsi IS NULL')
-                ->orWhere('kas_masuk.deskripsi !=', 'kas awal')
-            ->groupEnd()
-            ->where('NOT EXISTS (
-                SELECT 1 FROM transaksi_kas_bank tkb_m
-                WHERE tkb_m.sumber_tipe = \'kas_masuk\'
-                  AND tkb_m.sumber_id = kas_masuk.idkas_masuk
-            )', null, false)
-            ->orderBy('kas_masuk.tanggal', 'ASC')
-            ->get()
-            ->getResult();
-    }
-
-    /**
      * kas_keluar untuk tanggal+unit ini; kategori dipakai sebagai keterangan.
+     *
+     * Tidak menyaring deskripsi 'kas awal' dan tidak lagi memakai
+     * `NOT EXISTS` mirror ledger: TutupKasir menjumlahkan seluruh
+     * kas_keluar apa adanya, dan mirror ledger-lama tidak boleh
+     * menggantikan/suppress baris sumber.
      */
     protected function fetchKasKeluar(int $unitId, string $tanggal): array
     {
@@ -324,49 +269,44 @@ class DailyCashFlowService
             ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left')
             ->where('kas_keluar.idunit', $unitId)
             ->where('DATE(kas_keluar.tanggal)', $tanggal)
-            ->groupStart()
-                ->where('kas_keluar.deskripsi IS NULL')
-                ->orWhere('kas_keluar.deskripsi !=', 'kas awal')
-            ->groupEnd()
-            ->where('NOT EXISTS (
-                SELECT 1 FROM transaksi_kas_bank tkb_k
-                WHERE tkb_k.sumber_tipe = \'kas_keluar\'
-                  AND tkb_k.sumber_id = kas_keluar.idkas_keluar
-            )', null, false)
             ->orderBy('kas_keluar.tanggal', 'ASC')
             ->get()
             ->getResult();
     }
 
     /**
-     * Ledger kas/bank. Baris asal kas_masuk/kas_keluar tetap ikut diambil karena
-     * ledger-lah yang dipakai untuk tampilan; baris legacy-nya yang dibuang
-     * (lihat assemble()) supaya satu transaksi tidak terhitung dua kali.
+     * Transfer internal saja dari transaksi_kas_bank.
+     *
+     * Pembatasnya `transfer_ref IS NOT NULL` — marker yang ditulis
+     * KasBankSetorTarikService. Baris mirror lama (jenis PEMASUKAN/
+     * PENGELUARAN) tidak punya transfer_ref sehingga otomatis tersaring;
+     * begitu juga 'kas awal'. Arus operasional tetap dibaca dari
+     * source table, bukan dari ledger.
      */
     protected function fetchLedger(int $unitId, string $tanggal): array
     {
         return $this->db->table('transaksi_kas_bank')
-            ->select('transaksi_kas_bank.tanggal, transaksi_kas_bank.jenis, transaksi_kas_bank.arah, transaksi_kas_bank.jumlah, transaksi_kas_bank.keterangan, transaksi_kas_bank.created_at, transaksi_kas_bank.sumber_tipe, transaksi_kas_bank.sumber_id, akun_kas_bank.nama_akun, akun_kas_bank.tipe')
+            ->select('transaksi_kas_bank.tanggal, transaksi_kas_bank.jenis, transaksi_kas_bank.arah, transaksi_kas_bank.jumlah, transaksi_kas_bank.keterangan, transaksi_kas_bank.created_at, transaksi_kas_bank.sumber_tipe, transaksi_kas_bank.sumber_id, transaksi_kas_bank.transfer_ref, akun_kas_bank.nama_akun, akun_kas_bank.tipe')
             ->join('akun_kas_bank', 'akun_kas_bank.idakun_kas_bank = transaksi_kas_bank.akun_kas_bank_id', 'left')
             ->where('transaksi_kas_bank.unit_id', $unitId)
             ->where('transaksi_kas_bank.tanggal', $tanggal)
+            ->where('transaksi_kas_bank.transfer_ref IS NOT NULL', null, false)
             ->orderBy('transaksi_kas_bank.created_at', 'ASC')
             ->get()
             ->getResult();
     }
 
     /**
-     * Apakah baris legacy ini sudah punya Salinan di transaksi_kas_bank?
-     *
-     * @param array<string, bool> $ledgerRefs
+     * Baris ledger hanya qualifies sebagai transfer internal bila punya
+     * `transfer_ref` — marker yang ditulis KasBankSetorTarikService
+     * (`jenis=TRANSFER_INTERNAL`, `transfer_ref` = uuid, `sumber_tipe`
+     * SETOR_TUNAI/PENARIKAN_TUNAI). Mirror legacy tidak punya marker itu.
      */
-    protected function sudahDiLedger(array $ledgerRefs, string $tipe, $id): bool
+    protected function isTransferInternal($row): bool
     {
-        if ($id === null || $id === '') {
-            return false;
-        }
+        $ref = $row->transfer_ref ?? null;
 
-        return isset($ledgerRefs[$tipe . '#' . (int) $id]);
+        return $ref !== null && $ref !== '';
     }
 
     protected function row(?string $waktu, string $sumber, string $keterangan, int $jumlah, bool $transferInternal = false): array
@@ -387,15 +327,6 @@ class DailyCashFlowService
     protected function isTunai($row): bool
     {
         return $row->idbank === null || $row->idbank === '';
-    }
-
-    protected function isTransferInternal($row): bool
-    {
-        return in_array(
-            strtoupper((string)($row->jenis ?? '')),
-            ['TRANSFER_INTERNAL', 'PEMBAYARAN_ANTAR_UNIT'],
-            true
-        );
     }
 
     /**
