@@ -16,9 +16,14 @@ use App\Models\ModelAlokasiSaldoKasBank;
  * 1. FINANCE_HO (akun_kas_bank.is_finance_ho = 1), mis. IRA/BCA.
  *    Bukan milik unit mana pun, TIDAK butuh alokasi_saldo_kas_bank.
  *    Aksesnya BERARAH:
- *      - destination : unit mana pun yang memang boleh bertransaksi
- *                      ("Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-sama valid);
  *      - source      : HANYA role financeHoSourceRoles (ROOT / Finance).
+ *                      User scope TIDAK dipakai di sini — Itu permission
+ *                      menarik dana dari kas Direksi, bukan sekadar akses unit.
+ *      - destination : unit yang MEMILIKI REKENING OPERASIONAL sendiri.
+ *                      Cabang boleh ("Unit 1 -> IRA"). Head Office TIDAK
+ *                      otomatis boleh: HO tidak punya rekening operasional,
+ *                      jadi user unit 50 tidak melihat kas Direksi hanya
+ *                      karena is_finance_ho = 1.
  *    "Boleh transfer KE IRA" TIDAK berarti boleh memakai IRA sebagai sumber.
  *
  * 2. UNIT (is_shared = 0, unit_id = X): hanya unit X, dua arah.
@@ -26,6 +31,8 @@ use App\Models\ModelAlokasiSaldoKasBank;
  * 3. SHARED (is_shared = 1): unit yang berhak dari alokasi_saldo_kas_bank.
  *    Unit lain TIDAK otomatis punya hak walaupun ada di resolveAllowedUnits().
  *    Akses efektif = irisan user scope & account scope.
+ *    Baris alokasi dengan nominal 0 unit itu tetap dihitung sebagai entitlement: unit
+ *    itu punya hak memakai rekening, hanya belum ada saldo yang dialokasikan.
  *
  * PENTING: FINANCE_HO dan SHARED sama-sama berbentuk `unit_id NULL,
  * is_shared = 1`, jadi keduanya WAJIB dibedakan lewat flag eksplisit
@@ -52,6 +59,9 @@ class KasBankScopeService
 
     /** Cache userUnitIds. */
     protected ?array $userUnitIdsCache = null;
+
+    /** Cache unitPunyaRekeningOperasional per unitId. */
+    protected array $operasionalCache = [];
 
     public function __construct(?FinanceScopeService $userScope = null)
     {
@@ -175,6 +185,69 @@ class KasBankScopeService
     }
 
     /**
+     * Apakah unit ini punya rekening OPERASIONAL sendiri?
+     *
+     * Yang dihitung "operasional" HANYA rekening BANK aktif yang bukan
+     * Finance/HO. Account KAS sengaja TIDAK dihitung: punya laci kas tidak
+     * berarti berhak memindahkan uang lewat rekening bank Direksi. Tanpa
+     * syarat ini, Head Office dan Unit 5 tetap lolos hanya karena punya akun
+     * KAS — persis hal yang harus ditutup.
+     *
+     * Bedakan unit cabang dari Head Office tanpa daftar unit hardcoded: HO
+     * hanya punya akun KAS (nonaktif), tanpa rekening bank dan tanpa alokasi
+     * ke rekening bank mana pun, jadi tidak lolos. Unit 5 juga tidak lolos
+     * selama rekening banknya belum dibuat dan diverifikasi Finance.
+     */
+    public function unitPunyaRekeningOperasional(int $unitId): bool
+    {
+        if ($unitId <= 0) {
+            return false;
+        }
+
+        if (isset($this->operasionalCache[$unitId])) {
+            return $this->operasionalCache[$unitId];
+        }
+
+        $akunMilik = $this->akun->select('idakun_kas_bank')
+            ->where('unit_id', $unitId)
+            ->where('is_finance_ho', 0)
+            ->where('tipe', 'BANK')
+            ->where('status', 'aktif')
+            ->countAllResults() > 0;
+
+        if ($akunMilik) {
+            return $this->operasionalCache[$unitId] = true;
+        }
+
+        // Alokasi shared: baris alokasi ADA berarti unit punya hak — tapi haknya
+        // hanya berlaku kalau rekeningnya benar-benar rekening bank aktif.
+        // Verifikasi ini penting: alokasi bisa tertinggal untuk rekening yang
+        // sudah nonaktif atau bukan bank, dan alokasi basi seperti itu tidak
+        // boleh membuka akses Finance.
+        $akunIds = $this->alokasi->select('akun_kas_bank_id')
+            ->where('unit_id', $unitId)
+            ->get()
+            ->getResultArray();
+
+        $ids = [];
+        foreach ($akunIds as $a) {
+            $ids[] = (int) ($a['akun_kas_bank_id'] ?? 0);
+        }
+        $ids = array_values(array_filter($ids));
+
+        if ($ids === []) {
+            return $this->operasionalCache[$unitId] = false;
+        }
+
+        return $this->operasionalCache[$unitId] = $this->akun->select('idakun_kas_bank')
+            ->whereIn('idakun_kas_bank', $ids)
+            ->where('is_finance_ho', 0)
+            ->where('tipe', 'BANK')
+            ->where('status', 'aktif')
+            ->countAllResults() > 0;
+    }
+
+    /**
      * Unit-unit yang punya baris alokasi pada satu rekening.
      *
      * @return int[]
@@ -227,9 +300,8 @@ class KasBankScopeService
     /**
      * Boleh dipakai sebagai rekening SUMBER (dana keluar)?
      *
-     *   FINANCE_HO -> HANYA role financeHoSourceRoles (ROOT / Finance).
-     *                 Sengaja TIDAK memakai resolveAllowedUnits(): user scope
-     *                 bukan permission menarik dana dari rekening HO.
+     *   FINANCE_HO -> role financeHoSourceRoles (ROOT / Finance) DAN unit leg
+     *                 harus valid serta berada dalam user scope.
      *   UNIT       -> unit leg harus = akun.unit_id DAN dalam user scope.
      *   SHARED     -> unit leg harus punya baris alokasi DAN dalam user scope.
      *                 Unit yang cuma ada di resolveAllowedUnits() TIDAK
@@ -243,8 +315,18 @@ class KasBankScopeService
         $kind = $this->accountKind($akun);
 
         if ($kind === self::KIND_FINANCE_HO) {
-            // Unit tidak relevan untuk HO; yang menentukan hanya role.
-            return self::roleBolehFinanceHoSource($role);
+            // Role menentukan boleh MENCAIRKAN. Tapi role saja tidak cukup:
+            // rekening HO tidak punya unit asal (unit_id NULL), jadi kalau
+            // unit leg tidak divalidasi, form bisa mengirim unit_id sembarang
+            // -- 0, 99, atau unit yang tidak ada -- dan tetap lolos karena
+            // role-nya Finance. Unit WAJIB ada dan WAJIB dalam user scope,
+            // persis seperti canUseAsDestination().
+            if ($unitId === null || $unitId <= 0) {
+                return false;
+            }
+
+            return self::roleBolehFinanceHoSource($role)
+                && $this->userBolehUnit($unitId);
         }
 
         if ($unitId === null || $unitId <= 0) {
@@ -257,10 +339,14 @@ class KasBankScopeService
     /**
      * Boleh dipakai sebagai rekening TUJUAN (dana masuk)?
      *
-     *   FINANCE_HO -> unit mana pun yang memang boleh bertransaksi. TIDAK ada
-     *                 syarat role: "Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-
-     *                 sama valid. Permission yang dibutuhkan adalah permission
-     *                 transaksi dari rekening ASAL-nya, bukan dari IRA.
+     *   FINANCE_HO -> unit yang memang punya rekening operasional sendiri.
+     *                 "Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-sama valid
+     *                 karena keduanya punya rekening bank. Unit yang TIDAK
+     *                 punya rekening operasional — Head Office, dan Unit 5
+     *                 selama rekeningnya belum diverifikasi — TIDAK otomatis
+     *                 mendapat akses. Jadi `is_finance_ho` bukan lagi bypass
+     *                 universal, dan user unit 50 tidak otomatis melihat kas
+     *                 Direksi.
      *   UNIT       -> unit leg harus = akun.unit_id DAN dalam user scope.
      *   SHARED     -> unit leg harus punya baris alokasi DAN dalam user scope.
      *
@@ -272,8 +358,13 @@ class KasBankScopeService
         $kind = $this->accountKind($akun);
 
         if ($kind === self::KIND_FINANCE_HO) {
-            // HO menerima dana dari unit mana pun yang boleh bertransaksi.
-            return $unitId === null || $unitId <= 0 || $this->userBolehUnit($unitId);
+            if ($unitId === null || $unitId <= 0) {
+                // Tanpa unit leg tidak ada arah transfer yang bisa dipastikan.
+                return false;
+            }
+
+            return $this->userBolehUnit($unitId)
+                && $this->unitPunyaRekeningOperasional($unitId);
         }
 
         if ($unitId === null || $unitId <= 0) {
@@ -385,7 +476,8 @@ class KasBankScopeService
      */
     public function flushCache(): void
     {
-        $this->entitledCache   = [];
+        $this->entitledCache    = [];
+        $this->operasionalCache = [];
         $this->userUnitIdsCache = null;
     }
 }
