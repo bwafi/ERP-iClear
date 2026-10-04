@@ -14,8 +14,13 @@ use App\Models\ModelSaldoAwalKasBank;
 use App\Models\ModelTransaksiKasBank;
 use App\Models\ModelUnit;
 use App\Libraries\ModeKasBank;
+use CodeIgniter\HTTP\ResponseInterface;
 use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\KasBankScopeService;
+use App\Services\Finance\KasBankCutoffService;
+use App\Services\Finance\KasBankSetorTarikService;
+use App\Services\Finance\KasBankSourceMovement;
+use App\Services\Finance\TutupKasirSourceDefinition;
 
 /**
  * Kas & Bank + Pembayaran Antar Unit.
@@ -40,7 +45,9 @@ class KasBank extends BaseController
     protected $scopeService;
     protected $AkunScope;
     protected $KasBankLib;
-
+    protected $SetorTarikLib;
+    /** @var \CodeIgniter\Database\Connection */
+    protected $db;
     public function __construct()
     {
         $this->AkunModel = new ModelAkunKasBank();
@@ -57,6 +64,8 @@ class KasBank extends BaseController
         $this->scopeService = new FinanceScopeService();
         $this->AkunScope = new KasBankScopeService($this->scopeService);
         $this->KasBankLib = new ModeKasBank();
+        $this->SetorTarikLib = new KasBankSetorTarikService();
+        $this->db = \Config\Database::connect();
     }
 
     private function canInput(): bool
@@ -159,8 +168,11 @@ class KasBank extends BaseController
      * Rekening yang boleh jadi TUJUAN (akun tujuan / akun penerima).
      *
      * Menyaring dengan canUseAsDestination(). Rekening Finance/HO (IRA)
-     * ikut untuk semua unit yang boleh bertransaksi — inilah yang membuat
-     * "Unit 1 -> IRA" dan "Unit 2 -> IRA" sama-sama sah.
+     * TIDAK lagi ikut untuk semua unit — hanya unit yang benar-benar punya
+     * rekening operasional sendiri, DAN user itu berwenang atas unit tsb.
+     * Itu yang membuat "Unit 1 -> IRA" sah, sementara Unit 5 (rekening
+     * banknya belum diverifikasi) dan Head Office tidak otomatis mendapat
+     * kas Direksi hanya karena `is_finance_ho` = 1.
      */
     private function akunTujuanUntuk(?int $unit): array
     {
@@ -336,11 +348,79 @@ class KasBank extends BaseController
             }
         }
 
-        $builder = db_connect()->table('transaksi_kas_bank')
-            ->select('transaksi_kas_bank.jenis, SUM(transaksi_kas_bank.jumlah) as total')
-            ->groupBy('transaksi_kas_bank.jenis');
+        // -----------------------------------------------------------------
+        // RINGKASAN ARUS: source table, bukan ledger.
+        //
+        // `transaksi_kas_bank` DULU jadi sumber angka pemasukan/pengeluaran
+        // di kartu ringkasan. Itu salah untuk dua alasan:
+        //   1. isinya baraikan mirror penjualan/service/kas_keluar, sehingga
+        //      ringkasan bisa menyimpang dari TutupKasir dan dari drill-down
+        //      harian yang sekarang baca source table; dan
+        //   2. tidak ada dimensi unit yang konsisten dengan account scope.
+        // Arus operasional kini dihitung dari TutupKasirSourceDefinition —
+        // definisi yang sama dengan tutup kasir, core Finance movement,
+        // RekonDailyCalculator, dan CashFlowCalculator.
+        //
+        // Transfer internal TETAP dari ledger, karena memang tidak ada di
+        // source table: hanya baris `transfer_ref IS NOT NULL` yang dihitung
+        // (marker KasBankSetorTarikService). Mirror legacy tidak punya marker
+        // itu sehingga tidak masuk dan tidak dobel.
+        // -----------------------------------------------------------------
+        $cutoff = FinanceScopeService::periodeMulaiDate();
+        $dari   = $tanggalAwal !== '' ? max($tanggalAwal, $cutoff) : $cutoff;
+        $sampai = $tanggalAkhir !== '' ? $tanggalAkhir : date('Y-m-d');
 
-        // Ringkasan arus WAJIB dibatasi rekening dalam scope, kalau tidak
+        // Unit yang boleh dihitung: unit terpilih, atau unit turunan dari
+        // rekening yang terlihat (KAS -> unit-nya, BANK -> unit yang punya
+        // alokasi). Setiap unit dihitung SATU kali walau rekeningnya banyak.
+        $unitIds = [];
+        if (! $konsolidasi && $unitTerpilih > 0) {
+            $unitIds = [$unitTerpilih];
+        } else {
+            $movementSrc = new KasBankSourceMovement();
+            foreach ($akun as $a) {
+                $aid = (int)$a->idakun_kas_bank;
+                if (($a->tipe ?? '') === 'KAS') {
+                    if (! empty($a->unit_id)) {
+                        $unitIds[(int)$a->unit_id] = true;
+                    }
+                } else {
+                    foreach ($movementSrc->unitDialokasikanKe($aid) as $uid) {
+                        $unitIds[(int)$uid] = true;
+                    }
+                }
+            }
+            $unitIds = array_keys($unitIds);
+        }
+
+        $ringkasan = [];
+        if (! empty($unitIds)) {
+            $srcDef = new TutupKasirSourceDefinition();
+            foreach ($unitIds as $uid) {
+                $h = $srcDef->ringkasanRange((int)$uid, $dari, $sampai);
+                $ringkasan[ModeKasBank::JENIS_PEMASUKAN] =
+                    ($ringkasan[ModeKasBank::JENIS_PEMASUKAN] ?? 0)
+                    + (int)$h['cash'] + (int)$h['transfer'];
+                $ringkasan[ModeKasBank::JENIS_PENGELUARAN] =
+                    ($ringkasan[ModeKasBank::JENIS_PENGELUARAN] ?? 0)
+                    + (int)$h['pengeluarancash'] + (int)$h['pengeluarantf'];
+            }
+        }
+
+        // Transfer internal: NET terhadap rekening yang terlihat
+        // (MASUK positif, KELUAR negatif). Kalau	source dan tujuan keduanya
+        // terlihat, angkanya saling meniadakan — bukan terhitung dua kali
+        // sebagai "+2x".
+        $builder = db_connect()->table('transaksi_kas_bank')
+            ->select("COALESCE(SUM(CASE WHEN transaksi_kas_bank.arah = 'MASUK' THEN transaksi_kas_bank.jumlah ELSE -transaksi_kas_bank.jumlah END), 0) AS total", false)
+            ->where('transaksi_kas_bank.transfer_ref IS NOT NULL', null, false)
+            ->where('transaksi_kas_bank.tanggal >=', $dari);
+
+        if ($sampai !== '') {
+            $builder->where('transaksi_kas_bank.tanggal <=', $sampai);
+        }
+
+        // Ringkasan WAJIB dibatasi rekening dalam scope, kalau tidak
         // transaksi rekening yang tidak terlihat pun ikut terhitung.
         if (empty($akunIds)) {
             $builder->where('1 = 0');
@@ -351,37 +431,14 @@ class KasBank extends BaseController
         if (! $konsolidasi) {
             $builder->where('transaksi_kas_bank.unit_id', $unitTerpilih);
         }
-        if ($tanggalAwal) {
-            $builder->where('transaksi_kas_bank.tanggal >=', $tanggalAwal);
-        }
-        if ($tanggalAkhir) {
-            $builder->where('transaksi_kas_bank.tanggal <=', $tanggalAkhir);
+
+        $netInternal = (int)($builder->get()->getRow()->total ?? 0);
+        if ($netInternal !== 0) {
+            $ringkasan[ModeKasBank::JENIS_TRANSFER] = $netInternal;
         }
 
-        // Finance cut-off: Net Cash Flow & ringkasan pemasukan/pengeluaran yang
-        // ditampilkan adalah arus kas OPERASIONAL pada/setelah cut-off. Baris
-        // "kas awal" (penanda saldo dari backfill sistem lama) bukan transaksi;
-        // transaksi sebelum cut-off adalah legacy dan tidak dihitung ulang.
-        $cutoff = FinanceScopeService::cutoffDate();
-        $builder->where('transaksi_kas_bank.tanggal >=', $cutoff);
-        $builder->groupStart()
-            ->where('transaksi_kas_bank.keterangan !=', 'kas awal')
-            ->groupStart()
-                ->where('transaksi_kas_bank.keterangan IS NOT NULL')
-                ->where('transaksi_kas_bank.keterangan !=', '')
-            ->groupEnd()
-        ->groupEnd();
-
-        $ringkasan = [];
-        $netCashFlow = 0;
-        foreach ($builder->get()->getResult() as $row) {
-            $ringkasan[$row->jenis] = (int)$row->total;
-            if ($row->jenis === ModeKasBank::JENIS_PEMASUKAN) {
-                $netCashFlow += (int)$row->total;
-            } elseif ($row->jenis === ModeKasBank::JENIS_PENGELUARAN) {
-                $netCashFlow -= (int)$row->total;
-            }
-        }
+        $netCashFlow = ((int)($ringkasan[ModeKasBank::JENIS_PEMASUKAN] ?? 0))
+            - ((int)($ringkasan[ModeKasBank::JENIS_PENGELUARAN] ?? 0));
 
         $data = array_merge($this->pageData(), [
             'unit_terpilih'        => $unitTerpilih,
@@ -393,6 +450,7 @@ class KasBank extends BaseController
             'alokasi_total'        => $alokasiTotal,
             'belum_dialokasikan'   => $belumDialokasikan,
             'warning_alokasi'      => $warningAlokasi,
+            'diagnostik_konfigurasi' => $this->diagnostikKonfigurasi(),
             'total_kas'            => $totalKas,
             'total_bank'           => $totalBank,
             'total_semua'          => $totalSemua,
@@ -410,6 +468,188 @@ class KasBank extends BaseController
         ]);
 
         return view('template', $data);
+    }
+
+    /**
+     * Diagnosa konfigurasi akun kas/bank yang MENCEGAH transaksi masuk ledger.
+     *
+     * Ini murni baca-saja dan tidak mengubah angka laporan. Gunanya supaya
+     * kegagalan posting yang sebelumnya hanya muncul sebagai angka yang
+     * tidak cocok bisa langsung terlihat oleh admin/developer: setiap butir
+     * di sini punya penyebab dan cara memperbaikinya.
+     *
+     * Dipasang di halaman Kas & Bank (bukan dashboard laba rugi) karena itu
+     * halaman konfigurasi rekening.
+     *
+     * @return array<int, array{level:string, judul:string, detail:array<int,string>, aksi:string}>
+     */
+    private function diagnostikKonfigurasi(): array
+    {
+        $db = db_connect();
+        $out = [];
+
+        // 1. Unit tanpa akun KAS -> transaksi tunai unit itu tidak bisa diposting.
+        $unitTanpaKas = $db->query(
+            'SELECT u.idunit, u.NAMA_UNIT FROM unit u
+              WHERE u.idunit > 0
+                AND NOT EXISTS (
+                    SELECT 1 FROM akun_kas_bank a
+                     WHERE a.unit_id = u.idunit AND a.tipe = \'KAS\'
+                       AND a.status = \'aktif\' AND a.is_finance_ho = 0
+                )
+              ORDER BY u.idunit'
+        )->getResult();
+
+        if ($unitTanpaKas !== []) {
+            $nama = array_map(static fn ($u) => $u->NAMA_UNIT . ' (#' . $u->idunit . ')', $unitTanpaKas);
+            $out[] = [
+                'level'  => 'danger',
+                'judul'  => count($nama) . ' unit belum punya akun KAS aktif',
+                'detail' => $nama,
+                'aksi'   => 'Jalankan `php spark migrate` untuk membuat akun "Kas <UNIT>" (COA 1010101000) per unit. `kasbank:backfill` hanya mem-posting ulang transaksi, tidak membuat akun baru.',
+            ];
+        }
+
+        // 2. Rekening bank di master yang belum dipetakan ke akun fisik.
+        $bankTanpaAkun = $db->query(
+            'SELECT b.idbank, b.nama_bank, b.norek, b.atas_nama FROM bank b
+              WHERE b.jenis_bank = \'bank\'
+                AND NOT EXISTS (
+                    SELECT 1 FROM akun_kas_bank a WHERE a.bank_idbank = b.idbank
+                )
+              ORDER BY b.idbank'
+        )->getResult();
+
+        if ($bankTanpaAkun !== []) {
+            $detail = [];
+            foreach ($bankTanpaAkun as $b) {
+                $detail[] = trim('idbank ' . $b->idbank . ' — ' . (string) $b->nama_bank . ' ' . (string) $b->norek
+                    . ' (' . (string) $b->atas_nama . ')');
+            }
+            $out[] = [
+                'level'  => 'danger',
+                'judul'  => count($detail) . ' rekening bank belum punya akun fisik',
+                'detail' => $detail,
+                'aksi'   => 'Tambahkan lewat ' . base_url('kas_bank/akun') . ' atau `php spark migrate`.',
+            ];
+        }
+
+        // 3. Rekening shared tanpa alokasi unit -> tidak ada unit yang berhak,
+        //    jadi resolveAkun() selalu gagal padahal rekeningnya aktif.
+        $sharedTanpaAlokasi = $db->query(
+            'SELECT a.idakun_kas_bank, a.nama_akun FROM akun_kas_bank a
+              WHERE a.is_shared = 1 AND a.is_finance_ho = 0 AND a.status = \'aktif\'
+                AND NOT EXISTS (
+                    SELECT 1 FROM alokasi_saldo_kas_bank al WHERE al.akun_kas_bank_id = a.idakun_kas_bank
+                )
+              ORDER BY a.idakun_kas_bank'
+        )->getResult();
+
+        if ($sharedTanpaAlokasi !== []) {
+            $out[] = [
+                'level'  => 'danger',
+                'judul'  => count($sharedTanpaAlokasi) . ' rekening shared belum punya unit yang berhak',
+                'detail' => array_map(static fn ($a) => $a->nama_akun . ' (#' . $a->idakun_kas_bank . ')', $sharedTanpaAlokasi),
+                'aksi'   => 'Tentukan Hak Unit di ' . base_url('kas_bank/akun') . '. Tanpa itu rekening tidak bisa jadi sumber maupun tujuan.',
+            ];
+        }
+
+        // 4. Bentuk rekening yang tidak konsisten: bukan milik unit tapi juga
+        //    bukan shared. Ownershinya kosong, jadi tidak ada unit yang punya hak.
+        //    Hanya akun AKTIF: rekening nonaktif memang tidak bisa dipakai, dan
+        //    itu status yang sudah disengaja, bukan konfigurasi rusak.
+        $tanpaPemilik = $db->query(
+            'SELECT a.idakun_kas_bank, a.nama_akun FROM akun_kas_bank a
+              WHERE a.unit_id IS NULL AND a.is_shared = 0 AND a.status = \'aktif\'
+              ORDER BY a.idakun_kas_bank'
+        )->getResult();
+
+        if ($tanpaPemilik !== []) {
+            $out[] = [
+                'level'  => 'danger',
+                'judul'  => count($tanpaPemilik) . ' rekening tidak punya pemilik unit',
+                'detail' => array_map(static fn ($a) => $a->nama_akun . ' (#' . $a->idakun_kas_bank . ')', $tanpaPemilik),
+                'aksi'   => 'Rekening ini tidak punya unit pemilik dan tidak ditandai shared, sehingga tidak bisa dipakai transaksi mana pun. Perbaiki di ' . base_url('kas_bank/akun') . '.',
+            ];
+        }
+
+        // 5. Baseline statement pada tanggal CUT-OFF belum diinput.
+        //
+        // Ini bukan error konfigurasi, tapi kondisi yang WAJIB diselesaikan
+        // Finance sebelum cut-off dipakai: saldo riil akhir tanggal cut-off
+        // adalah opening balance, jadi tanpa baris statement di tanggal itu
+        // tidak ada angka yang bisa dipakai. Level-nya 'warning' (bukan
+        // 'danger') karena guard statement di KasBankSetorTarikService sudah
+        // menolak Setor/Penarikan selama belum VERIFIED — jadi tidak ada
+        // transaksi yang bisa salah memakai angka nol.
+        $baseline = (new \App\Services\Finance\KasBankCutoffService())->diagnostikBaseline();
+
+        $baselineBelum = array_values(array_filter($baseline, static fn ($b) => ! $b['baseline_terverifikasi']));
+
+        if ($baselineBelum !== []) {
+            $detail     = [];
+            $adaKasus   = false;
+            $adaBank    = false;
+
+            foreach ($baselineBelum as $b) {
+                $kondisi = $b['baseline_ada']
+                    ? sprintf('sudah ada baris %s tapi BELUM VERIFIKASI', $b['tanggal_baseline'])
+                    : sprintf(
+                        'belum ada baris pada %s; angka yang terbaca sekarang berasal dari baris lama tanggal %s, bukan baseline',
+                        FinanceScopeService::cutoffDate(),
+                        $b['tertagih'] ?? '(tidak ada baris)'
+                    );
+
+                // Rekening KAS dan BANK punya jalur baseline yang BERBEDA,
+                // jadi ikutannya juga harus beda. Kalau tidak, operator laci
+                // kas disuruh mengisi Statement — padahal statement hanya
+                // untuk rekening bank.
+if (($b['tipe'] ?? '') === 'KAS') {
+                    $adaKasus = true;
+
+                    $detail[] = sprintf(
+                        '%s (#%d) — %s; opening %s, real cash %s, selisih %s',
+                        $b['nama_akun'],
+                        $b['akun_id'],
+                        $kondisi,
+                        KasBankCutoffService::rupiah($b['opening'] ?? 0),
+                        ($b['real_cash_ada'] ?? false)
+                            ? KasBankCutoffService::rupiah($b['real_cash'] ?? 0)
+                            : 'belum ada Tutup Kasir',
+                        $b['selisih'] === null ? '-' : KasBankCutoffService::rupiah($b['selisih'] ?? 0)
+                    );
+
+                    continue;
+                }
+
+                $adaBank = true;
+                $detail[] = sprintf('%s (#%d) — %s', $b['nama_akun'], $b['akun_id'], $kondisi);
+            }
+
+            // Aksi dipisah per jenis baseline supaya tidak menyuruh operator
+            // melakukan hal yang memang tidak bisa dilakukan di form itu.
+            $aksi = [];
+            if ($adaBank) {
+                $aksi[] = 'Rekening bank: input SALDO RIIL akhir ' . FinanceScopeService::cutoffDate()
+                    . ' di ' . base_url('kas_bank/akun') . ' (tab Saldo awal), lalu set status "Terverifikasi".'
+                    . ' Saldo riil itu sudah memabsorpsi transaksi 1–' . FinanceScopeService::cutoffDate()
+                    . ', jadi jangan input hasil SUM transaksi legacy.';
+            }
+            if ($adaKasus) {
+                $aksi[] = 'Laci kas: tetapkan OPENING KAS di ' . base_url('kas_bank/akun') . '#opening-kas'
+                    . ', lalu cocokkan dengan hasil hitung laci saat Tutup Kasir pada ' . FinanceScopeService::cutoffDate()
+                    . '. Laci kas tidak punya statement bank.';
+            }
+
+            $out[] = [
+                'level'  => 'warning',
+                'judul'  => count($baselineBelum) . ' rekening belum punya opening balance terverifikasi untuk ' . FinanceScopeService::cutoffDate(),
+                'detail' => $detail,
+                'aksi'   => implode(' ', $aksi),
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -434,6 +674,32 @@ class KasBank extends BaseController
             $jenisRek[$id]   = $this->AkunScope->accountKind($a);
         }
 
+// Opening KAS per rekening laci pada tanggal cut-off. Disajikan lewat
+        // KasOpeningService supaya angka yang tampil di form, angka yang dipakai
+        // service, dan angka yang dipakai cutoff service semuanya berasal dari
+        // satu sumber yang sama.
+        //
+        // `rekonsiliasiSemua()` dipakai, BUKAN `belumTerverifikasi()`: halaman
+        // ini harus menunjukkan laci mana yang sudah selesai juga. Kalau hanya
+        // yang belum, operator tidak pernah melihat "yang ini sudah cocok" dan
+        // tidak bisa memastikan laci yang sudah beres tidak ikut hilang dari
+        // daftar.
+        $openingKasSvc = new \App\Services\Finance\KasOpeningService();
+        $openingKas    = $openingKasSvc->rekonsiliasiSemua();
+        $openingKasById = [];
+        $openingKasBelum = 0;
+        $openingKasBergeser = [];
+        foreach ($openingKas as $baris) {
+            $openingKasById[(int) $baris['akun_id']] = $baris;
+
+            if ($baris['terverifikasi'] !== true) {
+                $openingKasBelum++;
+            }
+            if (($baris['selisih_bergeser'] ?? null) === true) {
+                $openingKasBergeser[] = (int) $baris['akun_id'];
+            }
+        }
+
         $data = array_merge($this->pageData(), [
             'unit_terpilih'     => $unitTerpilih,
             'akun_kas_bank'     => $akun,
@@ -445,6 +711,13 @@ class KasBank extends BaseController
             'saldo_awal'        => $this->SaldoAwalModel->findAll(),
             'alokasi'           => $this->AlokasiModel->indexByAkun(),
             'unit_list'         => $this->scopeService->resolveAllowedUnits(),
+            'diagnostik_konfigurasi' => $this->diagnostikKonfigurasi(),
+            'opening_kas'           => $openingKas,
+            'opening_kas_by_akun'   => $openingKasById,
+            'opening_kas_belum'    => $openingKasBelum,
+            'opening_kas_bergeser'  => $openingKasBergeser,
+            'opening_kas_cutoff'    => FinanceScopeService::cutoffDate(),
+            'bisa_input'            => $this->canInput(),
             'body'              => 'kas_bank/akun',
         ]);
 
@@ -602,30 +875,26 @@ class KasBank extends BaseController
             return $this->gagal('Rekening ini tidak terkait dengan unit dalam cakupan Anda.');
         }
 
-        // Rekening Finance/HO TIDAK memakai alokasi unit: bukan milik unit
-        // mana pun dan tidak boleh dibuat "berpunya" unit. Guard di server —
-        // disembunyikan dari form saja tidak cukup.
         if ($this->AkunScope->isFinanceHo($akun)) {
             return $this->gagal('Rekening Finance/HO "' . $akun->nama_akun
                 . '" tidak memakai alokasi unit. Alokasi hanya untuk rekening Shared Antar Unit.');
         }
 
-        // Unit tujuan alokasi harus dalam user scope — inilah yang menentukan
-        // siapa yang berhak atas rekening shared, jadi tidak boleh berasal dari
-        // unit di luar jangkauan user.
         if (! $this->AkunScope->userBolehUnit($unitId)) {
             return $this->gagal('Unit alokasi berada di luar cakupan Anda.');
         }
 
-        $saldoFisik = $this->TransaksiModel->getSaldoFisikAkun($akunId);
-        $sekarang = $this->AlokasiModel->sumByAkun($akunId);
+        $cutoff = new \App\Services\Finance\KasBankCutoffService();
 
-        $existing = $this->AlokasiModel->getByAkunUnit($akunId, $unitId);
-        $sebelum  = $existing ? (int)$existing->nominal : 0;
-
-        if ($sekarang - $sebelum + $nominal > $saldoFisik) {
-            return $this->gagal('Total alokasi unit melebihi saldo fisik rekening (' .
-                number_format($saldoFisik) . ').');
+        // Opening allocation hanya sah kalau ada statement yang sudah
+        // diverifikasi Finance. Tanpa cek ini pesan errornya jadi menyesatkan:
+        // "total alokasi melebihi statement" padahal statement-nya memang belum
+        // diisi (placeholder 0 dengan status BELUM_VERIFIKASI).
+        if (! $cutoff->statementVerified($akunId)) {
+            return $this->gagal(
+                'Statement rekening ini belum diverifikasi Finance, jadi alokasi belum bisa diisi. '
+                . 'Isi dan verifikasi statement ' . $cutoff->tanggalCutoff() . ' terlebih dahulu.'
+            );
         }
 
         $data = [
@@ -636,16 +905,155 @@ class KasBank extends BaseController
             'updated_at'       => date('Y-m-d H:i:s'),
         ];
 
-        if ($existing) {
-            $this->AlokasiModel->update($existing->id, $data);
-        } else {
-            $data['input_by']   = (int)session()->get('ID_AKUN');
-            $data['created_at'] = date('Y-m-d H:i:s');
-            $this->AlokasiModel->insert($data);
+        $db = \Config\Database::connect();
+
+        try {
+            $db->transStart();
+
+            // Lock baris statement milik rekening ini. Baris itu adalah anchor
+            // yang UNIQUE per (akun, tanggal), jadi mengunciNYA membuat semua
+            // penulisan alokasi untuk rekening tersebut saling menunggu.
+            // Tanpa lock, dua user bisa membaca total alokasi yang sama lalu
+            // dua-duanya lolos guard, lalu total alokasi melebihi statement.
+            $cutoff->lockRekening($akunId);
+
+            // Baca baris alokasi di dalam transaksi, SETELAH lock statement
+            // diambil. Ini menutup celah TOCTOU: nilai $sebelum yang dipakai
+            // menghitung $tambahan dijamin sama dengan yang akan di-update.
+            $existing = $db->table('alokasi_saldo_kas_bank')
+                ->select('id, nominal')
+                ->where('akun_kas_bank_id', $akunId)
+                ->where('unit_id', $unitId)
+                ->get()
+                ->getRow();
+
+            $sebelum  = $existing ? (int) $existing->nominal : 0;
+            $tambahan = $nominal - $sebelum;
+
+            // Guard DI DALAM transaksi. Versi lama menghitung $tambahan dan
+            // cek guard sebelum transStart(), jadi ada celah di mana total
+            // alokasi berubah setelah dicek tapi sebelum disimpan.
+            $guard = $cutoff->cekOpeningAllocation($akunId, $tambahan);
+            if (! $guard['ok']) {
+                $db->transRollback();
+
+                return $this->gagal($guard['alasan']);
+            }
+
+            if ($existing) {
+                $db->table('alokasi_saldo_kas_bank')->update($data, ['id' => $existing->id]);
+            } else {
+                $data['input_by']   = (int) session()->get('ID_AKUN');
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $db->table('alokasi_saldo_kas_bank')->insert($data);
+            }
+
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+
+            return $this->gagal('Gagal menyimpan alokasi saldo: ' . $e->getMessage());
+        }
+
+        if ($db->transStatus() === false) {
+            return $this->gagal('Gagal menyimpan alokasi saldo (transaksi gagal).');
         }
 
         session()->setFlashdata('sukses', 'Alokasi saldo awal unit berhasil disimpan');
         return redirect()->to(base_url('kas_bank/akun'));
+    }
+
+    // =====================================================================
+    // OPENING KAS
+    //
+    // Baseline laci kas yang ditetapkan Finance pada tanggal cut-off, lalu
+    // dicocokkan dengan real cash hasil hitung laci saat Tutup Kasir.
+    //
+    // Berdiri sendiri dari statement bank: rekening tipe KAS tidak punya
+    // statement, dan `tutup_kasir.akhir_cash` TIDAK pernah jadi sumber
+    // opening — hanya bahan pembanding saat verifikasi.
+    // =====================================================================
+
+    /**
+     * Simpan/ubah baseline opening KAS.
+     *
+     * Satu rekening hanya boleh punya satu baris opening pada satu tanggal
+     * (dijamin UNIQUE di database), jadi "simpan" di sini selalu berarti
+     * upsert. Mengubah angka opening mereset verifikasi: begitu baseline
+     * bergerak, cocokkan dengan real cash lama sudah tidak berlaku.
+     */
+    public function saveOpeningKas()
+    {
+        if (! $this->canInput()) {
+            return $this->gagal('Anda tidak berhak menetapkan opening KAS.');
+        }
+
+        $akunId   = (int) $this->request->getPost('akun_kas_bank_id');
+        $opening  = (int) preg_replace('/[^0-9]/', '', (string) $this->request->getPost('opening'));
+        $keterangan = trim((string) $this->request->getPost('keterangan'));
+        $tanggal  = FinanceScopeService::cutoffDate();
+
+        $svc = new \App\Services\Finance\KasOpeningService();
+
+        $hasil = $svc->inputOpening(
+            $akunId,
+            $opening,
+            $keterangan === '' ? null : $keterangan,
+            (int) (session()->get('ID_AKUN') ?? 0),
+            $tanggal
+        );
+
+        if (! $hasil['ok']) {
+            return $this->gagal($hasil['alasan']);
+        }
+
+        $akun = $this->AkunModel->find($akunId);
+
+        session()->setFlashdata(
+            'sukses',
+            'Opening KAS ' . (string) ($akun->nama_akun ?? $akunId) . ' tanggal ' . $tanggal
+            . ' disimpan. Verifikasi ulang dengan hasil hitung laci saat Tutup Kasir sebelum dipakai jadi acuan.'
+        );
+
+        return redirect()->to(base_url('kas_bank/akun') . '#opening-kas');
+    }
+
+    /**
+     * Cocokkan opening KAS dengan real cash hasil hitung laci.
+     *
+     * Service yang menentukan: dia membaca Tutup Kasir pada tanggal cut-off,
+     * menghitung selisih, dan hanya menandai TERVERIFIKASI kalau selisihnya
+     * nol. Controller tidak menghitung ulang apa pun supaya tidak ada dua
+     * tempat yang bisa beda jawaban.
+     */
+    public function verifikasiOpeningKas()
+    {
+        if (! $this->canInput()) {
+            return $this->gagal('Anda tidak berhak memverifikasi opening KAS.');
+        }
+
+        $akunId  = (int) $this->request->getPost('akun_kas_bank_id');
+        $tanggal = FinanceScopeService::cutoffDate();
+
+        $svc = new \App\Services\Finance\KasOpeningService();
+
+        $hasil = $svc->verifikasi($akunId, (int) (session()->get('ID_AKUN') ?? 0), $tanggal);
+
+        if (! $hasil['ok']) {
+            return $this->gagal($hasil['alasan']);
+        }
+
+        $akun  = $this->AkunModel->find($akunId);
+        $nama  = (string) ($akun->nama_akun ?? $akunId);
+        $cocok = ($hasil['data']['status'] ?? '') === \App\Services\Finance\KasOpeningService::STATUS_SUDAH;
+
+        $pesan = $cocok
+            ? 'Opening KAS ' . $nama . ' cocok dengan hasil hitung laci. Saldo laci siap jadi acuan.'
+            : 'Opening KAS ' . $nama . ' TIDAK cocok dengan hasil hitung laci. Opening masih dipakai sebagai pembanding, belum jadi acuan transaksi.';
+
+        session()->setFlashdata('sukses', $pesan);
+
+        return redirect()->to(base_url('kas_bank/akun') . '#opening-kas');
     }
 
     public function saveSaldoAwal()
@@ -658,11 +1066,11 @@ class KasBank extends BaseController
         $tanggal = $this->request->getPost('tanggal') ?: date('Y-m-d');
         $ket     = trim((string)$this->request->getPost('keterangan'));
 
+        $cutoff  = new \App\Services\Finance\KasBankCutoffService();
+        $tanggal = \App\Services\Finance\FinanceScopeService::tanggalStr($tanggal);
+
         if ($akunId <= 0) {
             return $this->gagal('Akun wajib dipilih');
-        }
-        if ($saldo <= 0) {
-            return $this->gagal('Saldo awal harus lebih dari 0');
         }
 
         $akun = $this->AkunModel->find($akunId);
@@ -673,23 +1081,57 @@ class KasBank extends BaseController
             return $this->gagal('Rekening ini tidak terkait dengan unit dalam cakupan Anda.');
         }
 
-        $existing = $this->SaldoAwalModel->getByAkun($akunId);
+        // Statement hanya boleh diisi/diubah pada tanggal cut-off, dan hanya
+        // oleh user yang boleh input. Setelah migration 2026-10-03-000400 satu
+        // rekening bisa punya BANYAK baris statement (satu per tanggal), jadi
+        // `getByAkun()` tanpa tanggal sudah tidak unambiguously benar: dia
+        // bisa saja update statement dari periode lain. Migrasi ini membuat
+        // edit selalu menyasar baris (akun, tanggal cut-off) yang benar.
+        if ($tanggal !== $cutoff->tanggalCutoff()) {
+            return $this->gagal(
+                'Tanggal statement harus ' . $cutoff->tanggalCutoff()
+                . ' (tanggal cut-off). Tanggal yang dipilih: ' . $tanggal . '.'
+            );
+        }
+
+        // Saldo 0 TIDAK otomatis berarti rekening kosong. Karena itu 0 hanya
+        // boleh disimpan kalau Finance justru menyatakan rekening itu nol
+        // (dengan status terverifikasi). Kolom `status` yang menjelaskan mana
+        // placeholder dan mana fakta.
+        $verifikasi = (string) $this->request->getPost('status') === KasBankCutoffService::STATEMENT_SUDAH;
+
+        if ($saldo === 0 && ! $verifikasi) {
+            return $this->gagal(
+                'Saldo 0 hanya boleh disimpan sebagai hasil verifikasi Finance '
+                . '(pilih status "Terverifikasi"). Nilai 0 tanpa verifikasi akan '
+                . 'dianggap placeholder, bukan fakta.'
+            );
+        }
+
+        $existing = $this->SaldoAwalModel->getByAkunTanggal($akunId, $tanggal);
         $data = [
             'akun_kas_bank_id' => $akunId,
             'tanggal'          => $tanggal,
             'saldo'            => $saldo,
             'keterangan'       => $ket,
+            'status'           => $verifikasi
+                ? KasBankCutoffService::STATEMENT_SUDAH
+                : KasBankCutoffService::STATEMENT_BELUM,
             'updated_at'       => date('Y-m-d H:i:s'),
         ];
 
-        if ($existing) {
-            $this->SaldoAwalModel->update($existing->id, $data);
-            session()->setFlashdata('sukses', 'Saldo awal berhasil diperbarui');
-        } else {
-            $data['input_by']   = (int)session()->get('ID_AKUN');
-            $data['created_at'] = date('Y-m-d H:i:s');
-            $this->SaldoAwalModel->insert($data);
-            session()->setFlashdata('sukses', 'Saldo awal berhasil disimpan');
+        try {
+            if ($existing) {
+                $this->SaldoAwalModel->update($existing->id, $data);
+                session()->setFlashdata('sukses', 'Statement ' . $tanggal . ' berhasil diperbarui');
+            } else {
+                $data['input_by']   = (int) session()->get('ID_AKUN');
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $this->SaldoAwalModel->insert($data);
+                session()->setFlashdata('sukses', 'Statement ' . $tanggal . ' berhasil disimpan');
+            }
+        } catch (\Throwable $e) {
+            return $this->gagal('Gagal menyimpan statement: ' . $e->getMessage());
         }
 
         return redirect()->to(base_url('kas_bank/akun'));
@@ -706,8 +1148,9 @@ class KasBank extends BaseController
         $data = array_merge($this->pageData(), [
             'unit_terpilih' => $unitTerpilih,
             // Daftar SUMBER dan TUJUAN sengaja dipisah: rekening Finance/HO
-            // (IRA) boleh jadi tujuan dari unit mana pun, tapi hanya ROOT /
-            // Finance yang boleh men takers docketnya.
+            // (IRA) boleh jadi tujuan dari unit yang punya rekening
+            // operasional sendiri, tapi hanya ROOT / Finance yang boleh
+            // men takers docketnya.
             'akun_sumber'   => $this->akunSumberUntuk($unitTerpilih),
             'akun_tujuan'   => $this->akunTujuanUntuk($unitTerpilih),
             'akun_kas_bank' => $this->akunAktifUntuk($unitTerpilih),
@@ -805,8 +1248,9 @@ class KasBank extends BaseController
 
         // GUARD BERARAH — "boleh transfer KE IRA" tidak berarti boleh memakai
         // IRA sebagai SUMBER.
-        //   FINANCE_HO/IRA: sebagai tujuan = unit mana pun yang boleh
-        //     bertransaksi (Unit 1 -> IRA dan Unit 2 -> IRA sama-sama sah);
+        //   FINANCE_HO/IRA: sebagai tujuan = unit yang punya rekening
+        //     operasional sendiri (Unit 1 -> IRA dan Unit 2 -> IRA sah;
+        //     Unit 5 & Head Office tidak, sampai rekeningnya terverifikasi);
         //     sebagai sumber = HANYA ROOT / Finance.
         //   UNIT   : hanya unit pemiliknya, dua arah.
         //   SHARED : hanya unit yang punya baris alokasi, dua arah.
@@ -907,6 +1351,864 @@ class KasBank extends BaseController
         return redirect()->to(base_url('kas_bank/transfer'));
     }
 
+    // =====================================================================
+    // SETOR TUNAI & PENARIKAN TUNAI
+    //
+    // Aturan yang dipegang controller di bagian ini:
+    //
+    //   1. Controller TIDAK menghitung saldo, entitlement, legacy, atau posisi
+    //      unit. Semua angka berasal dari KasBankCutoffService.
+    //   2. Controller TIDAK mengarang keputusan. Guard yang menolak transaksi
+    //      tetap milik KasBankSetorTarikService; UI hanya menjelaskan alasan
+    //      bisnisnya sebelum user menekan simpan.
+    //   3. Idempotensi memakai submission_key yang STABIL antar reload, bukan
+    //      token acak per render. Lihat operationKey() untuk alasannya.
+    // =====================================================================
+
+    /**
+     * Slot session untuk menyimpan operation key per jenis transaksi + unit.
+     */
+    private const SLOT_SETOR     = 'setor';
+    private const SLOT_PENARIKAN = 'penarikan';
+
+    /**
+     * Halaman Setor Tunai (GET) + preview (POST).
+     */
+    public function setorTunai()
+    {
+        if (! $this->bisaTransaksi()) {
+            return $this->gagal('Anda tidak berhak melakukan setor tunai.');
+        }
+
+        $unitTerpilih = $this->unitTerpilih();
+        $operationKey = $this->operationKey(self::SLOT_SETOR, $unitTerpilih);
+
+        $data = array_merge($this->pageData(), [
+            'unit_terpilih'  => $unitTerpilih,
+            'akun_kas'        => $this->akunKasUntukUnit($unitTerpilih),
+            'akun_bank'       => $this->akunTujuanUntuk($unitTerpilih),
+            'can_transaksi'   => true,
+            'submit_token'    => $this->buatSubmitToken(),
+            'operation_key'   => $operationKey,
+            'transaksi'       => $this->transaksiSetorTarik($unitTerpilih),
+            'cutoff_info'     => $this->infoCutoff(),
+            'preview'         => null,
+            'body'            => 'kas_bank/setor_tunai',
+        ]);
+
+        // POST berarti user menekan "Tampilkan Pratinjau": form diisi ulang
+        // dengan input yang sama PLUS angka pratinjau. Belum ada yang ditulis.
+        if ($this->request->getMethod() === 'post') {
+            $input = $this->inputSetorTarik();
+
+            $data['input']   = $input;
+            $data['preview'] = $this->pratinjauSetor($input, $unitTerpilih);
+        } else {
+            $data['input'] = $this->inputSetorTarikLama();
+        }
+
+        return view('template', $data);
+    }
+
+    /**
+     * Simpan Setor Tunai. Satu-satunya tempat yang memanggil service untuk
+     * SETOR; tidak ada perhitungan saldo di sini.
+     */
+    public function saveSetorTunai()
+    {
+        if (! $this->bisaTransaksi()) {
+            return $this->gagal('Anda tidak berhak melakukan setor tunai.');
+        }
+
+        $unitTerpilih = $this->unitTerpilih();
+        $input        = $this->inputSetorTarik();
+
+        // Unit transaksi di-stamp dari form, TAPI hanya setelah dicek masih
+        // di dalam cakupan user. Tanpa cek ini user non-lintas bisa
+        // men-stamp leg ke unit lain.
+        $unitId = $this->unitTransaksiDariForm($input, $unitTerpilih);
+        if ($unitId === null) {
+            return $this->gagal('Unit transaksi berada di luar cakupan Anda.');
+        }
+
+        // Rekening hasil POST harus benar-benar rekening yang tampil di
+        // dropdown. Tanpa cek ini, POST yang dimanipulasi bisa memakai
+        // rekening unit lain atau rekening yang bukan KAS/BANK.
+        $masalahRekening = $this->masalahScopeRekening($input, $unitId, 'setor');
+        if ($masalahRekening !== null) {
+            return $this->gagal($masalahRekening);
+        }
+
+        // Anti double-submit: token dibuat saat form dirender dan dikonsumsi
+        // di sini. Klik kedua atas tombol Simpan akan ditolak.
+        if (! $this->klaimSubmitToken((string) ($input['submit_token'] ?? ''))) {
+            return $this->gagal('Form sudah dikirim atau tidak valid. Muat ulang halaman untuk mencoba lagi.');
+        }
+
+        $hasil   = $this->SetorTarikLib->setorTunai(
+            $unitId,
+            (int) $input['akun_kas_id'],
+            (int) $input['akun_bank_id'],
+            (int) $input['nominal'],
+            (string) $input['tanggal'],
+            $this->operationKey(self::SLOT_SETOR, $unitId),
+            (string) $input['keterangan'],
+            (int) session()->get('ID_AKUN')
+        );
+
+        return $this->selesaiSetorTarik($hasil, self::SLOT_SETOR, $unitId, 'setor', $input);
+    }
+
+    /**
+     * Halaman Penarikan Tunai (GET) + preview (POST).
+     */
+    public function penarikanTunai()
+    {
+        if (! $this->bisaTransaksi()) {
+            return $this->gagal('Anda tidak berhak melakukan penarikan tunai.');
+        }
+
+        $unitTerpilih = $this->unitTerpilih();
+        $operationKey = $this->operationKey(self::SLOT_PENARIKAN, $unitTerpilih);
+
+        $data = array_merge($this->pageData(), [
+            'unit_terpilih'  => $unitTerpilih,
+            'akun_bank'      => $this->akunSumberUntuk($unitTerpilih),
+            'akun_kas'       => $this->akunKasUntukUnit($unitTerpilih),
+            'can_transaksi'  => true,
+            'submit_token'   => $this->buatSubmitToken(),
+            'operation_key'  => $operationKey,
+            'transaksi'      => $this->transaksiSetorTarik($unitTerpilih),
+            'cutoff_info'    => $this->infoCutoff(),
+            'preview'        => null,
+            'body'           => 'kas_bank/penarikan_tunai',
+        ]);
+
+        if ($this->request->getMethod() === 'post') {
+            $input = $this->inputSetorTarik();
+
+            $data['input']   = $input;
+            $data['preview'] = $this->pratinjauPenarikan($input, $unitTerpilih);
+        } else {
+            $data['input'] = $this->inputSetorTarikLama();
+        }
+
+        return view('template', $data);
+    }
+
+    /**
+     * Simpan Penarikan Tunai.
+     */
+    public function savePenarikanTunai()
+    {
+        if (! $this->bisaTransaksi()) {
+            return $this->gagal('Anda tidak berhak melakukan penarikan tunai.');
+        }
+
+        $unitTerpilih = $this->unitTerpilih();
+        $input        = $this->inputSetorTarik();
+
+        $unitId = $this->unitTransaksiDariForm($input, $unitTerpilih);
+        if ($unitId === null) {
+            return $this->gagal('Unit transaksi berada di luar cakupan Anda.');
+        }
+
+        $masalahRekening = $this->masalahScopeRekening($input, $unitId, 'penarikan');
+        if ($masalahRekening !== null) {
+            return $this->gagal($masalahRekening);
+        }
+
+        if (! $this->klaimSubmitToken((string) ($input['submit_token'] ?? ''))) {
+            return $this->gagal('Form sudah dikirim atau tidak valid. Muat ulang halaman untuk mencoba lagi.');
+        }
+
+        $hasil   = $this->SetorTarikLib->tarikTunai(
+            $unitId,
+            (int) $input['akun_kas_id'],
+            (int) $input['akun_bank_id'],
+            (int) $input['nominal'],
+            (string) $input['tanggal'],
+            $this->operationKey(self::SLOT_PENARIKAN, $unitId),
+            (string) $input['keterangan'],
+            (int) session()->get('ID_AKUN')
+        );
+
+        return $this->selesaiSetorTarik($hasil, self::SLOT_PENARIKAN, $unitId, 'penarikan', $input);
+    }
+
+    // ---------------------------------------------------------------------
+    // Helper: input & unit
+    // ---------------------------------------------------------------------
+
+    /**
+     * Normalisasi input POST. Tidak ada validasi bisnis di sini — semua
+     * aturan saldo/entitlement milik service. Yang dinormalisasi hanya bentuk
+     * (angka jadi integer, tanggal jadi Y-m-d).
+     *
+     * @return array<string, mixed>
+     */
+    private function inputSetorTarik(): array
+    {
+        $tanggal = (string) $this->request->getPost('tanggal');
+
+        return [
+            'unit_id'       => (int) $this->request->getPost('unit_id'),
+            'akun_kas_id'   => (int) $this->request->getPost('akun_kas_id'),
+            'akun_bank_id'  => (int) $this->request->getPost('akun_bank_id'),
+            'nominal'       => (int) preg_replace('/[^0-9]/', '', (string) $this->request->getPost('nominal')),
+            'tanggal'       => FinanceScopeService::tanggalStr($tanggal !== '' ? $tanggal : date('Y-m-d')),
+            'keterangan'    => trim((string) $this->request->getPost('keterangan')),
+            'submit_token'  => (string) $this->request->getPost('submit_token'),
+            'operation_key' => trim((string) $this->request->getPost('operation_key')),
+        ];
+    }
+
+    /**
+     * Input yang harus dipulihkan setelah submit gagal, supaya user tidak
+     * perlu mengetik ulang.
+     *
+     * @return array<string, mixed>
+     */
+    private function inputSetorTarikLama(): array
+    {
+        $old = session()->getFlashdata('kb_setor_tarik_input');
+
+        if (! is_array($old)) {
+            return [
+                'unit_id'      => 0,
+                'akun_kas_id'  => 0,
+                'akun_bank_id' => 0,
+                'nominal'      => 0,
+                'tanggal'      => date('Y-m-d'),
+                'keterangan'   => '',
+            ];
+        }
+
+        return $old;
+    }
+
+    /**
+     * Unit transaksi yang sah: dari form, jatuh ke unit terpilih/sesi, tapi
+     * SELALU diverifikasi terhadap cakupan user.
+     *
+     * null = di luar cakupan.
+     */
+    private function unitTransaksiDariForm(array $input, ?int $unitTerpilih): ?int
+    {
+        $unitId = (int) ($input['unit_id'] ?? 0);
+
+        if ($unitId <= 0) {
+            $unitId = (int) $unitTerpilih;
+        }
+        if ($unitId <= 0) {
+            $unitId = (int) session()->get('ID_UNIT');
+        }
+
+        return $this->AkunScope->userBolehUnit($unitId) ? $unitId : null;
+    }
+
+    /**
+     * Cek bahwa rekening hasil POST benar-benar rekening yang tampil di form.
+     *
+     * Ini bukan aturan saldo. Yang diperiksa hanya scope: kalau angka
+     * rekening diubah di browser, request harus ditolak di sini, bukan
+     * diteruskan ke service.
+     *
+     * @return string|null pesan penolakan, atau null bila aman
+     */
+    private function masalahScopeRekening(array $input, ?int $unitId, string $arah): ?string
+    {
+        if ($unitId === null) {
+            return 'Unit transaksi berada di luar cakupan Anda.';
+        }
+
+        $kas  = $this->AkunModel->find((int) ($input['akun_kas_id'] ?? 0));
+        $bank = $this->AkunModel->find((int) ($input['akun_bank_id'] ?? 0));
+
+        if ($kas === null || (string) $kas->tipe !== 'KAS' || (string) $kas->status !== 'aktif') {
+            return 'Akun kas tidak valid atau sudah tidak aktif.';
+        }
+        if ($bank === null || (string) $bank->tipe !== 'BANK' || (string) $bank->status !== 'aktif') {
+            return 'Rekening bank tidak valid atau sudah tidak aktif.';
+        }
+
+        // KAS punya satu unit pemilik yang pasti, jadi harus unit pemohon.
+        if ((int) ($kas->unit_id ?? 0) !== $unitId) {
+            return 'Akun kas bukan milik unit yang dipilih.';
+        }
+
+        // Rekening bank harus lolos filter scope + entitlement yang sama dengan
+        // dropdown: canUseAsDestination() untuk setor, canUseAsSource() untuk
+        // penarikan.
+        $daftar = $arah === 'penarikan'
+            ? $this->akunSumberUntuk($unitId)
+            : $this->akunTujuanUntuk($unitId);
+
+        foreach ($daftar as $a) {
+            if ((int) $a->idakun_kas_bank === (int) $bank->idakun_kas_bank) {
+                return null;
+            }
+        }
+
+        return 'Rekening bank di luar cakupan Anda. Pilih ulang dari daftar.';
+    }
+
+    /**
+     * Akun KAS milik unit — hanya rekening laci kas, bukan rekening bank.
+     *
+     * Sengaja memakai KAS milik unit saja, bukan "semua akun unit", supaya
+     * form setor/penarikan tidak bisa salah pilih rekening bank sebagai laci
+     * kas.
+     */
+    private function akunKasUntukUnit(?int $unit): array
+    {
+        $userUnits = $this->unitIdsUser();
+
+        return array_values(array_filter(
+            $this->akunListUntuk($unit, true, false),
+            static function ($a) use ($unit, $userUnits) {
+                if ((string) $a->tipe !== 'KAS' || (string) $a->status !== 'aktif') {
+                    return false;
+                }
+
+                // KAS selalu punya satu unit pemilik yang pasti.
+                $pemilik = (int) ($a->unit_id ?? 0);
+                if ($pemilik <= 0) {
+                    return false;
+                }
+
+                // Konsolidasi (null): tampilkan KAS semua unit dalam cakupan.
+                if ($unit !== null && $pemilik !== $unit) {
+                    return false;
+                }
+
+                return in_array($pemilik, $userUnits, true);
+            }
+        ));
+    }
+
+    // ---------------------------------------------------------------------
+    // Helper: idempotensi
+    // ---------------------------------------------------------------------
+
+    /**
+     * Operation key yang STABIL untuk satu (jenis transaksi, unit).
+     *
+     * Kenapa tidak pakai submit_token sebagai submission_key: token itu dibuat
+     * baru setiap kali form dirender. Kalau user menekan refresh setelah
+     * request timeout, halaman render ulang -> token baru -> key baru ->
+     * transaksi DUPLIKAT.persis masalah yang harus dicegah.
+     *
+     * Solusinya: key disimpan di session per (jenis, unit) dan hanya diganti
+     * setelah ada hasil terminal. Dengan begitu:
+     *   - refresh / re-submit dengan halaman yang sama -> key sama -> no-op;
+     *   - transaksi yang gagal (tidak ada yang ditulis) -> key tetap, retry aman;
+     *   - transaksi yang berhasil -> key di-rotasi agar transaksi berikutnya
+     *     dengan nominal sama bukan dianggap duplikat.
+     *
+     * @see putarOperationKey()
+     */
+    private function operationKey(string $slot, ?int $unit): string
+    {
+        $sessionKey = 'kb_op_' . $slot . '_' . ($unit ?? 0);
+        $existing   = session()->get($sessionKey);
+
+        if (is_string($existing) && $existing !== '') {
+            return $existing;
+        }
+
+        $key = strtoupper($slot === self::SLOT_SETOR ? 'STR' : 'PNK')
+            . '-' . date('ymd') . '-' . bin2hex(random_bytes(8));
+
+        session()->set($sessionKey, $key);
+
+        return $key;
+    }
+
+    /**
+     * Ganti operation key setelah transaksi selesai, supaya transaksi berikutnya
+     * tidak tertahan oleh key lama.
+     */
+    private function putarOperationKey(string $slot, ?int $unit): void
+    {
+        session()->remove('kb_op_' . $slot . '_' . ($unit ?? 0));
+    }
+
+    // ---------------------------------------------------------------------
+    // Helper: pratinjau (read-only, semua angka dari service)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Pratinjau SETOR TUNAI.
+     *
+     * Tidak menulis apa pun. Semua angka (saldo kas, saldo bank, posisi unit)
+     * dibaca dari KasBankCutoffService supaya angka yang tampil di layar sama
+     * persis dengan angka yang nanti dipakai service saat menyimpan.
+     *
+     * @param  array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function pratinjauSetor(array $input, ?int $unitTerpilih): array
+    {
+        $svc  = new KasBankCutoffService();
+        $unit = $this->unitTransaksiDariForm($input, $unitTerpilih);
+
+        $kas  = $this->AkunModel->find((int) $input['akun_kas_id']);
+        $bank = $this->AkunModel->find((int) $input['akun_bank_id']);
+        $nominal = (int) $input['nominal'];
+
+        $kasDipakai  = ($kas !== null && (string) $kas->tipe === 'KAS') ? $kas : null;
+        $bankDipakai = ($bank !== null && (string) $bank->tipe === 'BANK') ? $bank : null;
+
+        $unitNama = $unit !== null ? $this->namaUnit($unit) : null;
+
+        // Saldo laci kas. Kalau cut-off unit belum ada, saldo TIDAK boleh
+        // ditampilkan sebagai 0 — itu akan membuat user mengira lacinya
+        // memang kosong.
+        $kasCutoffAda = $this->kasCutoffUnit($unit);
+
+        // Baseline laci kas adalah OPENING KAS, bukan statement bank: opening yang
+        // ditetapkan Finance lalu dicocokkan dengan real cash Tutup Kasir pada
+        // cut-off yang sama. Laci kas tidak punya statement.
+        //
+        // Gate ini harus PERSIS sama dengan yang dipakai
+        // KasBankSetorTarikService, kalau tidak request yang sama akan dapat
+        // dua jawaban berbeda tergantung lewat mana dia datang.
+        $kasTerverifikasi = $kasDipakai !== null && $svc->openingTerverifikasi((int) $kasDipakai->idakun_kas_bank);
+        $kasSaldo      = ($kasDipakai !== null && $unit !== null) ? $svc->saldoFisik((int) $kasDipakai->idakun_kas_bank) : null;
+        $bankTerverifikasi = $bankDipakai !== null && $svc->statementVerified((int) $bankDipakai->idakun_kas_bank);
+        $bankSaldo     = $bankDipakai !== null ? $svc->saldoFisik((int) $bankDipakai->idakun_kas_bank) : null;
+        $posisiUnit    = ($bankDipakai !== null && $unit !== null)
+            ? $svc->posisiUnit((int) $bankDipakai->idakun_kas_bank, $unit)
+            : null;
+
+        $blokir  = [];
+        $bisaSubmit = true;
+
+        if ($unit === null) {
+            $blokir[] = 'Unit transaksi berada di luar cakupan Anda.';
+            $bisaSubmit = false;
+        }
+        if ($kasDipakai === null) {
+            $blokir[] = 'Pilih akun kas sumber.';
+            $bisaSubmit = false;
+        }
+        if ($bankDipakai === null) {
+            $blokir[] = 'Pilih rekening bank tujuan.';
+            $bisaSubmit = false;
+        }
+        if ($nominal <= 0) {
+            $blokir[] = 'Nominal harus lebih dari 0.';
+            $bisaSubmit = false;
+        }
+        if ($kasDipakai !== null && $unit !== null && (int) ($kasDipakai->unit_id ?? 0) !== $unit) {
+            $blokir[] = 'Akun kas bukan milik unit yang dipilih.';
+            $bisaSubmit = false;
+        }
+
+        // Sumber angka saldo laci adalah OPENING KAS yang sudah dicocokkan dengan
+        // real cash, sama seperti yang dipakai service. Kalau opening-nya belum
+        // diverifikasi Finance, angkanya belum boleh jadi acuan setor -- dan
+        // tidak boleh ditampilkan sebagai 0.
+        //
+        // `tutup_kasir.akhir_cash` (kasCutoffUnit) hanya cross-check tingkat
+        // unit, ditampilkan di banner, BUKAN syarat simpan. Kalau controller
+        // memblokir berdasarkan itu sementara service mengizinkan, keduanya
+        // akan berbeda jawaban untuk request yang sama.
+        if ($kasDipakai !== null && ! $kasTerverifikasi) {
+            $blokir[] = 'Opening KAS laci unit belum ditetapkan dan dicocokkan dengan hasil hitung laci saat Tutup Kasir, jadi saldo laci belum tersedia sebagai acuan setor.';
+            $bisaSubmit = false;
+        } elseif ($kasSaldo !== null && $kasSaldo < $nominal && $nominal > 0) {
+            $blokir[] = 'Saldo kas unit tidak cukup untuk disetor (tersedia '
+                . KasBankCutoffService::rupiah($kasSaldo) . ', diminta ' . KasBankCutoffService::rupiah($nominal) . ').';
+            $bisaSubmit = false;
+        }
+
+        // Setor ke rekening bank TIDAK butuh statement terverifikasi — uang
+        // masuk boleh dicatat sebelum koran bank datang. Yang ditampilkan
+        // hanya statusnya, supaya user tahu saldo rekening belum terverifikasi.
+        $tanggal = (string) $input['tanggal'];
+        if ($tanggal !== '' && $tanggal < FinanceScopeService::periodeMulaiDate()) {
+            $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
+                . FinanceScopeService::periodeMulaiDate() . ').';
+            $bisaSubmit = false;
+        }
+
+        return [
+            'arah'               => 'setor',
+            'bisa_submit'        => $bisaSubmit,
+            'blokir'             => $blokir,
+            'unit_id'            => $unit,
+            'unit_nama'          => $unitNama,
+            'nominal'            => $nominal,
+            'kas'                => [
+                'akun_id'      => $kasDipakai !== null ? (int) $kasDipakai->idakun_kas_bank : null,
+                'nama'         => $kasDipakai->nama_akun ?? null,
+                'terverifikasi' => $kasTerverifikasi,
+                'saldo'        => $kasTerverifikasi ? $kasSaldo : null,
+                'cutoff_ada'   => $kasCutoffAda['ada'],
+            ],
+            'bank'               => [
+                'akun_id'     => $bankDipakai !== null ? (int) $bankDipakai->idakun_kas_bank : null,
+                'nama'        => $bankDipakai->nama_akun ?? null,
+                'norek'       => $bankDipakai->bank_idbank ?? null,
+                'is_shared'   => $bankDipakai !== null && (int) ($bankDipakai->is_shared ?? 0) === 1,
+                'terverifikasi' => $bankTerverifikasi,
+                'saldo'       => $bankTerverifikasi ? $bankSaldo : null,
+            ],
+            'posisi_unit_sebelum' => $posisiUnit,
+            'posisi_unit_setelah' => $posisiUnit !== null ? $posisiUnit + $nominal : null,
+            'posisi_unit_bertambah' => true,
+        ];
+    }
+
+    /**
+     * Pratinjau PENARIKAN TUNAI.
+     *
+     * @param  array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function pratinjauPenarikan(array $input, ?int $unitTerpilih): array
+    {
+        $svc  = new KasBankCutoffService();
+        $unit = $this->unitTransaksiDariForm($input, $unitTerpilih);
+
+        $kas  = $this->AkunModel->find((int) $input['akun_kas_id']);
+        $bank = $this->AkunModel->find((int) $input['akun_bank_id']);
+        $nominal = (int) $input['nominal'];
+
+        $kasDipakai  = ($kas !== null && (string) $kas->tipe === 'KAS') ? $kas : null;
+        $bankDipakai = ($bank !== null && (string) $bank->tipe === 'BANK') ? $bank : null;
+
+        $bankTerverifikasi = $bankDipakai !== null && $svc->statementVerified((int) $bankDipakai->idakun_kas_bank);
+        $bankSaldo     = $bankDipakai !== null ? $svc->saldoFisik((int) $bankDipakai->idakun_kas_bank) : null;
+        $entitlement   = ($bankDipakai !== null && $unit !== null)
+            ? $svc->posisiUnit((int) $bankDipakai->idakun_kas_bank, $unit)
+            : null;
+
+        $kasCutoffAda = $this->kasCutoffUnit($unit);
+        // Sama seperti setor: gate laci kas adalah opening KAS terverifikasi, bukan
+        // statement bank. Laci kas memang tidak punya statement.
+        $kasTerverifikasiPenarikan = $kasDipakai !== null
+            && $svc->openingTerverifikasi((int) $kasDipakai->idakun_kas_bank);
+
+        $blokir  = [];
+        $bisaSubmit = true;
+
+        if ($unit === null) {
+            $blokir[] = 'Unit transaksi berada di luar cakupan Anda.';
+            $bisaSubmit = false;
+        }
+        if ($bankDipakai === null) {
+            $blokir[] = 'Pilih rekening bank sumber.';
+            $bisaSubmit = false;
+        }
+        if ($kasDipakai === null) {
+            $blokir[] = 'Pilih akun kas tujuan.';
+            $bisaSubmit = false;
+        }
+        if ($nominal <= 0) {
+            $blokir[] = 'Nominal harus lebih dari 0.';
+            $bisaSubmit = false;
+        }
+        if ($kasDipakai !== null && $unit !== null && (int) ($kasDipakai->unit_id ?? 0) !== $unit) {
+            $blokir[] = 'Akun kas bukan milik unit yang dipilih.';
+            $bisaSubmit = false;
+        }
+
+        // Penarikan BERHUJUNG pada guard entitlement. Alasan ditanyakan ke
+        // service yang sama dengan saat menyimpan, supaya tidak mungkin
+        // berbeda: kalau service bilang tidak boleh, form ini juga menonaktifkan tombol.
+        if ($bankDipakai !== null && $unit !== null && $nominal > 0) {
+            $cek = $svc->cekTarikUnit((int) $bankDipakai->idakun_kas_bank, $unit, $nominal);
+            if (! $cek['ok']) {
+                $blokir[] = $cek['alasan'];
+                $bisaSubmit = false;
+            }
+        }
+
+        // Rekening non-shared milik unit lain tidak punya hak sama sekali.
+        if ($bankDipakai !== null && $unit !== null
+            && (int) ($bankDipakai->is_shared ?? 0) !== 1
+            && (int) ($bankDipakai->unit_id ?? 0) !== $unit
+        ) {
+            $blokir[] = 'Rekening bank ini bukan milik unit yang dipilih.';
+            $bisaSubmit = false;
+        }
+
+        // Sama seperti setor: yang menentukan adalah opening KAS yang sudah
+        // dicocokkan dengan real cash. Laci tujuan jadi acuan penarikan, jadi
+        // baseline-nya harus sudah diverifikasi. `tutup_kasir` tetap hanya
+        // cross-check.
+        if ($kasDipakai !== null && ! $kasTerverifikasiPenarikan) {
+            $blokir[] = 'Opening KAS laci tujuan belum ditetapkan dan dicocokkan dengan hasil hitung laci saat Tutup Kasir, jadi saldo laci belum tersedia sebagai acuan.';
+            $bisaSubmit = false;
+        }
+
+        $tanggal = (string) $input['tanggal'];
+        if ($tanggal !== '' && $tanggal < FinanceScopeService::periodeMulaiDate()) {
+            $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
+                . FinanceScopeService::periodeMulaiDate() . ').';
+            $bisaSubmit = false;
+        }
+
+        return [
+            'arah'               => 'penarikan',
+            'bisa_submit'        => $bisaSubmit,
+            'blokir'             => $blokir,
+            'unit_id'            => $unit,
+            'unit_nama'          => $unit !== null ? $this->namaUnit($unit) : null,
+            'nominal'            => $nominal,
+            'kas'                => [
+                'akun_id'      => $kasDipakai !== null ? (int) $kasDipakai->idakun_kas_bank : null,
+                'nama'         => $kasDipakai->nama_akun ?? null,
+                'terverifikasi' => $kasTerverifikasiPenarikan,
+                'saldo'        => $kasTerverifikasiPenarikan
+                    ? (($kasDipakai !== null && $unit !== null) ? $svc->saldoFisik((int) $kasDipakai->idakun_kas_bank) : null)
+                    : null,
+                'cutoff_ada'   => $kasCutoffAda['ada'],
+            ],
+            'bank'               => [
+                'akun_id'      => $bankDipakai !== null ? (int) $bankDipakai->idakun_kas_bank : null,
+                'nama'         => $bankDipakai->nama_akun ?? null,
+                'norek'        => $bankDipakai->bank_idbank ?? null,
+                'is_shared'    => $bankDipakai !== null && (int) ($bankDipakai->is_shared ?? 0) === 1,
+                'terverifikasi' => $bankTerverifikasi,
+                'saldo'        => $bankTerverifikasi ? $bankSaldo : null,
+            ],
+            'entitlement_sebelum' => $entitlement,
+            'entitlement_setelah' => $entitlement !== null ? $entitlement - $nominal : null,
+            'entitlement_berkurang' => true,
+        ];
+    }
+
+    // ---------------------------------------------------------------------
+    // Helper: konteks cut-off
+    // ---------------------------------------------------------------------
+
+    /**
+     * Status cut-off kas untuk sebuah unit.
+     *
+     * Bedakan "tidak punya akun" dari "punya akun tapi closing belum ada".
+     * Keduanya sama-sama memblokir, tapi untuk HO yang belum pernah tutup
+     * kasir pesannya harus menyebut cut-off, bukan akun.
+     *
+     * @return array{ada:bool, saldo:?int, alasan:string}
+     */
+    private function kasCutoffUnit(?int $unit): array
+    {
+        if ($unit === null || $unit <= 0) {
+            return ['ada' => false, 'saldo' => null, 'alasan' => 'Unit belum ditentukan.'];
+        }
+
+        foreach (KasBankCutoffService::querySaldoKasCutoff() as $row) {
+            if ((int) $row['unit_id'] === $unit) {
+                return [
+                    'ada'    => true,
+                    'saldo'  => (int) $row['saldo'],
+                    'alasan' => '',
+                ];
+            }
+        }
+
+        return [
+            'ada'    => false,
+            'saldo'  => null,
+            'alasan' => 'Belum ada closing kas pada tanggal '
+                . FinanceScopeService::cutoffDate() . ' untuk unit ini.',
+        ];
+    }
+
+    /**
+     * Ringkasan cut-off untuk banner di halaman form.
+     *
+     * @return array<string, mixed>
+     */
+    private function infoCutoff(): array
+    {
+        $cutoff     = FinanceScopeService::cutoffDate();
+        $mulai      = FinanceScopeService::periodeMulaiDate();
+        $tanpaUnit  = KasBankCutoffService::unitTanpaClosingCutoff();
+        $namaTanpa  = [];
+
+        foreach ($tanpaUnit as $idUnit) {
+            $namaTanpa[] = $this->namaUnit((int) $idUnit);
+        }
+
+        return [
+            'tanggal_cutoff'      => $cutoff,
+            'tanggal_mulai'       => $mulai,
+            'unit_tanpa_closing'  => $namaTanpa,
+        ];
+    }
+
+    private function namaUnit(int $unitId): string
+    {
+        static $cache = [];
+
+        if (! isset($cache[$unitId])) {
+            $row = $this->UnitModel->find($unitId);
+            $cache[$unitId] = $row !== null ? (string) $row->NAMA_UNIT : ('Unit #' . $unitId);
+        }
+
+        return $cache[$unitId];
+    }
+
+    // ---------------------------------------------------------------------
+    // Helper: daftar transaksi & hasil simpan
+    // ---------------------------------------------------------------------
+
+    /**
+     * Riwayat Setor / Penarikan Tunai, dikelompokkan per operation.
+     *
+     * Kedua leg diikat lewat `transfer_ref`. Satu baris tabel = satu
+     * operation, dengan kedua sisipan ditunjukkan sebagai "+nama rekening"
+     * dan "-nama rekening" supaya user bisa menelusuri keduanya tanpa
+     * membuka detail.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function transaksiSetorTarik(?int $unitTerpilih): array
+    {
+        $akunIds = $this->AkunScope->akunIdsTerlihat(
+            $this->unitIdsUser(),
+            $unitTerpilih,
+            true,
+            false
+        );
+
+        if ($akunIds === []) {
+            return [];
+        }
+
+        $baris = $this->db->table('transaksi_kas_bank t')
+            ->select('t.*, a.nama_akun, a.tipe, a.is_shared, a.bank_idbank, u.NAMA_UNIT')
+            ->join('akun_kas_bank a', 'a.idakun_kas_bank = t.akun_kas_bank_id', 'left')
+            ->join('unit u', 'u.idunit = t.unit_id', 'left')
+            ->whereIn('t.akun_kas_bank_id', $akunIds)
+            ->whereIn('t.sumber_tipe', [
+                KasBankSetorTarikService::SUMBER_TIPE_SETOR,
+                KasBankSetorTarikService::SUMBER_TIPE_TARIK,
+            ])
+            ->orderBy('t.tanggal', 'DESC')
+            ->orderBy('t.idtransaksi', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        // Kelompokkan per transfer_ref: satu operation = satu baris.
+        $groups = [];
+        foreach ($baris as $r) {
+            $ref = (string) ($r['transfer_ref'] ?? '');
+            if ($ref === '') {
+                continue;
+            }
+            if (! isset($groups[$ref])) {
+                $groups[$ref] = [
+                    'transfer_ref' => $ref,
+                    'tanggal'      => (string) $r['tanggal'],
+                    'jenis'        => (string) $r['sumber_tipe'],
+                    'jumlah'       => (int) $r['jumlah'],
+                    'unit_nama'    => (string) ($r['NAMA_UNIT'] ?? ''),
+                    'keterangan'   => (string) ($r['keterangan'] ?? ''),
+                    'legs'         => [],
+                ];
+            }
+            $groups[$ref]['legs'][] = [
+                'arah'      => (string) $r['arah'],
+                'nama'      => (string) ($r['nama_akun'] ?? '-'),
+                'tipe'      => (string) ($r['tipe'] ?? ''),
+                'is_shared' => (int) ($r['is_shared'] ?? 0) === 1,
+                'norek'     => (string) ($r['bank_idbank'] ?? ''),
+            ];
+        }
+
+        return array_values($groups);
+    }
+
+    /**
+     * Memetakan hasil service ke flash + redirect.
+     *
+     * PENTING: pesan yang ditampilkan ke user SELALU berasal dari field
+     * `alasan` milik service, yang sudah bahasa bisnis. Detail teknis hanya
+     * masuk log server. Tidak ada exception yang diteruskan ke layar.
+     *
+     * @param array{ok:bool, status:string, alasan:string, transfer_ref:string} $hasil
+     */
+    private function selesaiSetorTarik(array $hasil, string $slot, ?int $unit, string $jenis, array $input): ResponseInterface
+    {
+        $label = $jenis === self::SLOT_SETOR ? 'Setor Tunai' : 'Penarikan Tunai';
+        $url   = base_url('kas_bank/' . ($jenis === self::SLOT_SETOR ? 'setor-tunai' : 'penarikan-tunai'));
+
+        if ($hasil['ok'] && $hasil['status'] === ModeKasBank::STATUS_INSERTED) {
+            // Sukses: key di-rotasi supaya transaksi berikutnya dengan nominal
+            // sama tidak dianggap duplikat.
+            $this->putarOperationKey($slot, $unit);
+            session()->setFlashdata(
+                'sukses',
+                $label . ' berhasil disimpan. Referensi ' . $hasil['transfer_ref'] . '.'
+            );
+
+            return redirect()->to($url);
+        }
+
+        if ($hasil['ok'] && $hasil['status'] === ModeKasBank::STATUS_SKIPPED) {
+            // Sudah pernah diproses dengan key yang sama: tidak ada duplikasi.
+            $this->putarOperationKey($slot, $unit);
+            session()->setFlashdata(
+                'sukses',
+                $label . ' ini sudah pernah diproses (referensi ' . $hasil['transfer_ref'] . '). '
+                . 'Transaksi tidak digandakan.'
+            );
+
+            return redirect()->to($url);
+        }
+
+        // Gagal: key TIDAK di-rotasi supaya user bisa memperbaiki lalu retry
+        // tanpa membuat operasi kedua.
+        // Input asli dikembalikan ke form supaya user tidak perlu mengetik
+        // ulang setelah failed. Token yang gagal DIMALAKAN dengan sengaja:
+        // form yang dirender ulang selalu mendapat token baru, jadi nilai
+        // kosong di sini tidak bisa dipakai mengirim ulang request lama.
+        session()->setFlashdata('kb_setor_tarik_input', [
+            'unit_id'      => (int) ($input['unit_id'] ?? 0),
+            'akun_kas_id'  => (int) ($input['akun_kas_id'] ?? 0),
+            'akun_bank_id' => (int) ($input['akun_bank_id'] ?? 0),
+            'nominal'      => (int) ($input['nominal'] ?? 0),
+            'tanggal'      => (string) ($input['tanggal'] ?? date('Y-m-d')),
+            'keterangan'   => (string) ($input['keterangan'] ?? ''),
+        ]);
+        session()->setFlashdata('gagal', $this->pesanGagalSetorTarik($hasil['alasan'], $jenis));
+
+        return redirect()->to($url);
+    }
+
+    /**
+     * Pastikan pesan yang sampai ke user selalu bisa ditindaklanjuti.
+     *
+     * Service sudah mengembalikan bahasa bisnis, tapi tetap ada jaring
+     * pengaman: apa pun yang terasa seperti dump teknis dibuang dan diganti
+     * kalimat generik, sementara aslinya ditulis ke log.
+     */
+    private function pesanGagalSetorTarik(string $alasan, string $jenis): string
+    {
+        $label = $jenis === self::SLOT_SETOR ? 'setor tunai' : 'penarikan tunai';
+
+        $bocor = ['SQLSTATE', 'QueryException', 'Undefined property', 'Undefined index',
+            'mysqli_', 'Call to undefined', 'stack trace', '#0 ', 'PDOException'];
+
+        foreach ($bocor as $tanda) {
+            if (stripos($alasan, $tanda) !== false) {
+                log_message('error', 'Pesan ' . $label . ' keluar sebagai teks teknis: ' . $alasan);
+
+                return 'Terjadi kendala teknis saat menyimpan ' . $label
+                    . '. Transaksi tidak tersimpan dan tidak ada saldo yang berubah. '
+                    . 'Coba lagi; bila tetap gagal, hubungi administrator.';
+            }
+        }
+
+        return $alasan !== '' ? $alasan : 'Gagal menyimpan ' . $label . '.';
+    }
+
     /**
      * Halaman pembayaran antar unit + daftar hutang/piutang antar unit.
      */
@@ -992,8 +2294,18 @@ class KasBank extends BaseController
                     . 'dari rekening HO — Anda tetap boleh mentransfer DANA KE rekening ini.';
             }
 
-            return 'Rekening Finance/HO "' . $nama . '" tidak dapat dipakai: unit ' . $unitId
-                . ' berada di luar cakupan Anda.';
+            // Sebagai TUJUAN, syaratnya bukan "unit ada di cakupan user" tapi
+            // "unit punya rekening operasional sendiri". Bedakan keduanya,
+            // karena sebabnya berbeda dan user perlu tahu yang mana.
+            if (! $this->AkunScope->userBolehUnit($unitId)) {
+                return 'Rekening Finance/HO "' . $nama . '" tidak dapat dipakai: unit ' . $unitId
+                    . ' berada di luar cakupan Anda.';
+            }
+
+            return 'Rekening Finance/HO "' . $nama . '" tidak dapat dipakai untuk unit ' . $unitId
+                . ': unit ini belum punya rekening bank operasional sendiri. '
+                . 'Hubungi Finance untuk memverifikasi rekening unit tersebut — '
+                . 'rekening HO bukan pengganti hak akses.';
         }
 
         if ($arah === 'source') {
@@ -1064,8 +2376,9 @@ class KasBank extends BaseController
 
         // Rekening pengirim harus berarah-SUMBER atas unit yang punya hutang,
         // rekening penerima berarah-TUJUAN atas unit yang berpiutang.
-        //   Finance/HO sebagai pengirim -> hanya ROOT / Finance.
-        //   Finance/HO sebagai penerima   -> unit mana pun (sah).
+// Finance/HO sebagai pengirim -> hanya ROOT / Finance.
+        //   Finance/HO sebagai penerima   -> unit yang punya rekening
+        //   operasional sendiri (bukan semua unit).
         //   Rekening non-shared milik unit lain DITOLAK; rekening shared harus
         //   dialokasikan ke unit tsb lebih dulu.
         $role = (int) session('ID_JABATAN');
