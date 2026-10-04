@@ -73,7 +73,8 @@ class KasBankTest extends CIUnitTestCase
         $q('CREATE TABLE IF NOT EXISTS db_saldo_awal_kas_bank (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 akun_kas_bank_id INT NULL, tanggal TEXT NULL, saldo REAL NULL,
-                keterangan TEXT NULL, input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+                keterangan TEXT NULL, status TEXT DEFAULT \'BELUM_VERIFIKASI\',
+                input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_transaksi_kas_bank (
                 idtransaksi INTEGER PRIMARY KEY AUTO_INCREMENT,
                 tanggal TEXT NULL, unit_id INT NULL, akun_kas_bank_id INT NULL,
@@ -192,7 +193,7 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         // TIDAK punya hak atas rekening ini meski user-nya boleh mengaksesnya.
         $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal) VALUES (2, 1, 200000), (2, 2, 300000)");
 
-        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan) VALUES (2, '2026-01-01', 500000, 'Saldo awal BNI Bersama')");
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES (2, '2026-01-01', 500000, 'Saldo awal BNI Bersama', 'VERIFIED')");
     }
 
     public function testResolveAkunBankHanyaUnitYangPunyaHak(): void
@@ -263,11 +264,24 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->assertSame('skipped', $r2['status']);
     }
 
-    public function testPostingKasMasukSkipSaatAkunBelumDikonfigurasi(): void
+    /**
+     * [A1] Akun belum terkonfigurasi adalah KEGAGALAN, bukan skip.
+     *
+     * Dulu statusnya 'skipped' sehingga caller menganggap transaksi berhasil
+     * tanpa menulis baris ledger sama sekali. Sekarang wajib 'failed' supaya
+     * source bisa di-rollback.
+     */
+    public function testPostingKasMasukGagalSaatAkunBelumDikonfigurasi(): void
     {
         $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank) VALUES (2, '2026-02-01', 'Unit tanpa akun', 50000, 99, NULL)");
         $r = $this->kasbank->postingKasMasuk(2);
-        $this->assertSame('skipped', $r['status']);
+        $this->assertSame('failed', $r['status']);
+        $this->assertArrayHasKey('reason', $r);
+        $this->assertSame(
+            0,
+            (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe = 'kas_masuk' AND sumber_id = 2")->getRow()->c,
+            'gagal resolve tidak boleh dikarang menjadi baris ledger'
+        );
     }
 
     public function testPostingCicilanHutangPakaiAkunBank(): void
@@ -327,6 +341,139 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $r2 = $this->kasbank->seedAkunDefault();
         $this->assertSame(0, $r2['created']);
         $this->assertSame(4, $r2['skipped']);
+    }
+
+    // =====================================================================
+    // KAS BESAR DIPILIH DETERMINISTIK
+    // =====================================================================
+
+    /**
+     * Resolver harus memprioritaskan Kas Besar. Kalau tidak, first() tanpa
+     * urutan bisa mengembalikan Kas Kecil dan uang Kas Besar jadi salah laci.
+     */
+    public function testResolveAkunPilihKasBesarKalauUnitPunyaDuaKas(): void
+    {
+        // Unit 1 sudah punya "Kas Unit A" (akun 1). Tambahkan Kas Kecil dengan
+        // id LEBIH KECIL supaya urutan id saja tidak bisa menyelamatkan hasil.
+        $this->db->query(
+            "INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared)
+             VALUES (20, 1, 'KAS', 'Kas Kecil Unit A', NULL, '1010103000', 'aktif', 0)"
+        );
+
+        // Dipanggil dua kali supaya hasilnya harus stabil, bukan kebetulan.
+        for ($i = 0; $i < 2; $i++) {
+            $this->assertSame(1, $this->kasbank->resolveAkun(1, null, ModeKasBank::ARAH_KELUAR));
+        }
+    }
+
+    /** Kas Kecil saja (tanpa Kas Besar) tetap boleh dipakai sebagai rekening KAS. */
+    public function testResolveAkunKasKecilSajaTetapDitemukan(): void
+    {
+        $this->db->query("DELETE FROM db_akun_kas_bank WHERE unit_id = 3 AND tipe = 'KAS'");
+        $this->db->query(
+            "INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared)
+             VALUES (21, 3, 'KAS', 'Kas Kecil Unit C', NULL, '1010103000', 'aktif', 0)"
+        );
+
+        $this->assertSame(21, $this->kasbank->resolveAkun(3, null, ModeKasBank::ARAH_KELUAR));
+    }
+
+    // =====================================================================
+    // GAGALAN TIDAK LAGI SENYAP
+    // =====================================================================
+
+    public function testResolveAkunDetailMemberiAlasanSaatUnitBelumPunyaKas(): void
+    {
+        $h = $this->kasbank->resolveAkunDetail(4, null, ModeKasBank::ARAH_KELUAR, 1);
+
+        $this->assertNull($h['akun'], 'unit tanpa akun KAS harus tetap gagal');
+        $this->assertNotNull($h['reason'], 'kegagalan harus punya alasan yang bisa ditampilkan');
+        $this->assertStringContainsString('1010101000', $h['reason']);
+        $this->assertStringContainsString('unit 4', $h['reason']);
+    }
+
+    public function testResolveAkunDetailMemberiAlasanSaatBankBelumDipetakan(): void
+    {
+        $h = $this->kasbank->resolveAkunDetail(1, 'TIDAK-ADA', ModeKasBank::ARAH_KELUAR, 1);
+
+        $this->assertNull($h['akun']);
+        $this->assertStringContainsString('TIDAK-ADA', $h['reason']);
+        $this->assertStringContainsString('belum dipetakan', $h['reason']);
+    }
+
+    public function testResolveAkunDetailMemberiAlasanSaatUnitTidakPunyaHak(): void
+    {
+        // Rekening bersama (akun 2) hanya dialokasikan ke unit 1 + 2.
+        $h = $this->kasbank->resolveAkunDetail(3, 'BNI-001', ModeKasBank::ARAH_KELUAR, 1);
+
+        $this->assertNull($h['akun']);
+        $this->assertStringContainsString('tidak punya hak', $h['reason']);
+        $this->assertStringContainsString('Bank BNI Bersama', $h['reason']);
+    }
+
+    public function testResolveAkunDetailSuksesTidakPunyaAlasan(): void
+    {
+        $h = $this->kasbank->resolveAkunDetail(1, null, ModeKasBank::ARAH_KELUAR, 1);
+
+        $this->assertSame(1, $h['akun']);
+        $this->assertNull($h['reason']);
+    }
+
+    /**
+     * Kegagalan harus sampai ke pemanggil sebagai reason yang SPESIFIK,
+     * bukan teks generik "akun tidak terkonfigurasi" yang tidak membantu.
+     */
+    public function testPostingKasKeluarGagalCarryAlasanSpesifik(): void
+    {
+        $this->db->query(
+            "INSERT INTO db_kas_keluar (idkas_keluar, tanggal, deskripsi, jumlah, idbank, idunit)
+             VALUES (901, '2026-10-03', 'Beli ATK', 75000, 'TIDAK-ADA', 1)"
+        );
+
+        $r = $this->kasbank->postingKasKeluar(901);
+
+        $this->assertSame('failed', $r['status']);
+        $this->assertStringContainsString('TIDAK-ADA', $r['reason']);
+
+        // WAJIB: transaksi sumber tetap utuh, ledger tidak dikarang.
+        $this->assertSame('1', (string) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_keluar WHERE idkas_keluar = 901')->getRow()->c);
+        $this->assertSame('0', (string) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe = 'kas_keluar' AND sumber_id = 901")->getRow()->c);
+    }
+
+    /** Pembayaran hutang: leg yang gagal resolve tidak boleh hilang dari laporan. */
+    public function testPostingCicilanHutangMelaporkanLegYangGagal(): void
+    {
+        // bayar_tunai OK (unit 1 punya Kas), bayar_bank ke bank tak dikenal.
+        $this->db->query(
+            "INSERT INTO db_pembayaran_hutang (idpembayaran_hutang, tanggal_bayar, bayar, bayar_tunai, bayar_bank, pembelian_idpembelian, bank_idbank)
+             VALUES (77, '2026-10-03', 200000, 100000, 100000, 1, 'TIDAK-ADA')"
+        );
+        $this->db->query("INSERT INTO db_pembelian (idpembelian, unit_idunit, jatuh_tempo) VALUES (1, 1, '2026-12-31')");
+
+        $r = $this->kasbank->postingCicilanHutang(77);
+
+        // Leg tunai boleh terlanjur ditulis, tapi status WAJIB 'failed' supaya
+        // caller membatalkan transaksi dan leg itu ikut hilang saat rollback.
+        // Dulu statusnya 'inserted' sehingga hutang bisa tercatat lunas tanpa
+        // uangnya masuk ke ledger.
+        $this->assertSame('failed', $r['status']);
+        $this->assertArrayHasKey('reason', $r, 'kegagalan sebagian harus dilaporkan, bukan disamarkan');
+        $this->assertStringContainsString('bank:', $r['reason']);
+        $this->assertStringContainsString('TIDAK-ADA', $r['reason']);
+        $this->assertArrayHasKey('transaksi_ids', $r);
+        $this->assertNotEmpty($r['inserted'], 'leg yang sukses tetap dicatat agar bisa di-rollback');
+
+        $rows = $this->db->query("SELECT * FROM db_transaksi_kas_bank WHERE sumber_tipe = 'pembayaran_hutang' AND sumber_id = 77")->getResult();
+        $this->assertCount(1, $rows, 'hanya leg tunai yang boleh masuk ledger');
+        $this->assertSame('100000', (string) $rows[0]->jumlah);
+    }
+
+    /** Resolve Akun tidak boleh melempar exception apa pun saat data bermasalah. */
+    public function testResolveAkunTidakMelemparException(): void
+    {
+        $this->expectNotToPerformAssertions();
+        $this->kasbank->resolveAkun(0, '', ModeKasBank::ARAH_MASUK, 0);
+        $this->kasbank->resolveAkun(-1, 'BNI-001', ModeKasBank::ARAH_KELUAR, 999);
     }
 
     public function testPostingBayarPiutang(): void
@@ -739,11 +886,12 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
     public function testInvalidBankIdTidakFallbackKeKas(): void
     {
         // Sudah ada di testResolveAkunTidakFallbackKeKasSaatBankTidakDitemukan;
-        // di sini pastikan posting benar-benar di-skip, bukan salah classify.
+        // di sini pastikan posting benar-benar GAGAL, bukan salah classify
+        // dan bukan dianggap sukses lewat status 'skipped'.
         $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank) VALUES (50, '2026-10-05', 'Setoran bank tanpa rekening', 90000, 1, 'BANK-TIDAK-ADA')");
 
         $r = $this->kasbank->postingKasMasuk(50);
-        $this->assertSame('skipped', $r['status']);
+        $this->assertSame('failed', $r['status']);
         $this->assertSame(0, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe = 'kas_masuk' AND sumber_id = 50")->getRow()->c);
     }
 
@@ -1107,6 +1255,238 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
 
         // Hanya tanpa bankId-lah KAS yang dipakai.
         $this->assertSame(1, $this->kasbank->resolveAkun(1, null, ModeKasBank::ARAH_KELUAR));
+    }
+
+    // =====================================================================
+    // VERIFIKASI WAJIB — konfigurasi kas/bank di data produksi
+    //
+    // Test di bawah membaca DB `default` (produksi) dan hanya dibaca. Tujuannya
+    // menjaga dua hal yang mudah hilang diam-diam:
+    //   1. setiap unit punya rekening KAS, jadi transaksi tunai bisa diposting;
+    //   2. setiap rekening bank yang dipakai kas_keluar punya unit yang berhak,
+    //      jadi resolveAkun() tidak lagi null untuk rekening itu.
+    // =====================================================================
+
+    private function produksi(string $sql, array $bind = []): array
+    {
+        return \Config\Database::connect('default', false)->query($sql, $bind)->getResult();
+    }
+
+    public function testProduksiSemuaUnitPunyaRekeningKasAktif(): void
+    {
+        $tanpaKas = $this->produksi(
+            "SELECT u.idunit, u.NAMA_UNIT FROM unit u
+              WHERE u.idunit > 0
+                AND NOT EXISTS (
+                    SELECT 1 FROM akun_kas_bank a
+                     WHERE a.unit_id = u.idunit AND a.tipe = 'KAS'
+                       AND a.status = 'aktif' AND a.is_finance_ho = 0
+                )"
+        );
+
+        $this->assertSame(
+            [],
+            array_map(static fn ($u) => $u->NAMA_UNIT . ' (#' . $u->idunit . ')', $tanpaKas),
+            'semua unit harus punya rekening KAS aktif, kalau tidak kas_keluar tunai tidak bisa diposting'
+        );
+    }
+
+    public function testProduksiSemuaRekeningBankTerpetakan(): void
+    {
+        $belum = $this->produksi(
+            "SELECT b.idbank, b.nama_bank, b.norek FROM bank b
+              WHERE b.jenis_bank = 'bank'
+                AND NOT EXISTS (SELECT 1 FROM akun_kas_bank a WHERE a.bank_idbank = b.idbank)"
+        );
+
+        $this->assertSame(
+            [],
+            array_map(static fn ($b) => 'idbank ' . $b->idbank, $belum),
+            'setiap rekening bank harus punya akun fisik, kalau tidak resolveAkun() selalu null'
+        );
+    }
+
+    /** idbank yang dipetakan migration 2026-10-03-000200. */
+    private const BANK_BARU = ['1', '2'];
+
+    /**
+     * Untuk setiap (bank, unit) yang PERNAH dipakai di kas_keluar, rekening itu
+     * harus AKTIF dan unitnya harus punya hak. Inilah kasus yang sebelumnya
+     * gagal diam-diam karena resolveAkun() selalu null.
+     *
+     * Dicek dengan SQL langsung (bukan resolveAkun) supaya yang diuji benar-benar
+     * data produksi, bukan fixture erp_test yang dipakai test lain.
+     *
+     * @param string[] $idBanks
+     * @return string[]
+     */
+    private function pasanganTanpaHak(array $idBanks): array
+    {
+        $gagal = [];
+
+        foreach ($idBanks as $idBank) {
+            $pairs = $this->produksi(
+                'SELECT DISTINCT idunit FROM kas_keluar WHERE idbank = ? AND idunit > 0 ORDER BY idunit',
+                [$idBank]
+            );
+
+            foreach ($pairs as $p) {
+                $ada = $this->produksi(
+                    "SELECT a.idakun_kas_bank
+                       FROM akun_kas_bank a
+                      WHERE a.bank_idbank = ? AND a.status = 'aktif'
+                        AND (
+                            -- rekening milik unit: unit HARUS sama dengan pemilik
+                            (a.is_shared = 0 AND a.unit_id = ?)
+                            -- rekening shared: unit harus punya baris entitlement
+                         OR (a.is_shared = 1 AND a.is_finance_ho = 0 AND EXISTS (
+                                SELECT 1 FROM alokasi_saldo_kas_bank al
+                                 WHERE al.akun_kas_bank_id = a.idakun_kas_bank
+                                   AND al.unit_id = ?))
+                            -- rekening Finance/HO: semua unit boleh, tapi hanya
+                            -- sebagai TUJUAN; sebagai SUMBER khusus role HO
+                         OR (a.is_shared = 1 AND a.is_finance_ho = 1)
+                        )",
+                    [$idBank, (int) $p->idunit, (int) $p->idunit]
+                );
+
+                if ($ada === []) {
+                    $gagal[] = 'idbank ' . $idBank . ' @ unit ' . $p->idunit;
+                }
+            }
+        }
+
+        return $gagal;
+    }
+
+    /**
+     * Rekening bank 1 dan 2 dibuat oleh migration 2026-10-03-000200, jadi
+     * cakupannya harus TEPAT: semua unit yang pernah memakainya berhak, dan
+     * tidak ada unit lain yang ikut campur.
+     */
+    public function testProduksiPemetaanBaruSeluruhUnitPemakaiBerhak(): void
+    {
+        $this->assertSame(
+            [],
+            $this->pasanganTanpaHak(self::BANK_BARU),
+            'setiap unit yang pernah memakai idbank 1/2 harus punya hak atas rekeningnya'
+        );
+    }
+
+    /**
+     * TEMUAN DATA YANG BELUM PUTUSUS.
+     *
+     * idbank 5 ("Bank BCA WAHID ALFARIZKI 1802016667", atas nama WAHID
+     * ALFARIZKI) terpetakan ke akun_fisik milik UNIT 3 (ICLEAR Banyuwangi) dan
+     * TIDAK shared. Terdapat 8 baris kas_keluar milik UNIT 5 (ICLEAR Genteng)
+     * yang tercatat memakai idbank 5, yaitu 2026-09-28 s/d 2026-09-30.
+     *
+     * Akar masalahnya belum jelas dan TIDAK boleh diputuskan sepihak di level
+     * konfigurasi rekening:
+     *   (a) 8 baris itu salah pilih bank, seharusnya unit 3 atau bank lain; atau
+     *   (b) idbank 5 sebenarnya dipakai bersama unit 3 + unit 5.
+     *
+     * Opsi (b) berarti mengubah akun milik unit 3 jadi shared, yang berdampak ke
+     * 242 baris kas_keluar lain. Itu keputusan bisnis, bukan perbaikan teknis.
+     * Sampai diputuskan, posting 8 baris itu akan di-skip dengan warning.
+     *
+     * Test ini sengaja INCOMPLETE (bukan PASS dan bukan FAIL) supaya temuan
+     * tetap terlihat di laporan test. Kalau muncul ketidaksesuaian BARU
+     * selain idbank 5, test ini tetap gagal sebagai pengaman.
+     */
+    public function testProduksiTemuanIdbank5DipakaiUnitLain(): void
+    {
+        $gagalLain = array_values(array_filter(
+            $this->pasanganTanpaHak(['1', '2', '3', '4', '5']),
+            static fn ($x) => ! str_contains($x, 'idbank 5')
+        ));
+        $this->assertSame([], $gagalLain, 'harus tidak ada ketidaksesuaian selain temuan idbank 5');
+
+        $pakaiLain = $this->produksi(
+            "SELECT DISTINCT idunit FROM kas_keluar WHERE idbank = '5' AND idunit <> 3 ORDER BY idunit"
+        );
+        if ($pakaiLain !== []) {
+            $this->markTestIncomplete(
+                'TEMUAN: idbank 5 (milik unit 3) juga dipakai unit '
+                    . implode(', ', array_map(static fn ($u) => (int) $u->idunit, $pakaiLain))
+                    . ' — perlu keputusan bisnis: perbaiki idunit baris tsb, atau jadikan idbank 5 shared.'
+            );
+        }
+    }
+
+    /** Tunai: setiap unit yang punya kas_keluar tunai harus punya rekening KAS. */
+    public function testProduksiKasKeluarTunaiSelaluBisaDiResolve(): void
+    {
+        $tanpaKas = $this->produksi(
+            "SELECT DISTINCT k.idunit FROM kas_keluar k
+              WHERE (k.idbank IS NULL OR k.idbank = '') AND k.idunit > 0
+                AND NOT EXISTS (
+                    SELECT 1 FROM akun_kas_bank a
+                     WHERE a.unit_id = k.idunit AND a.tipe = 'KAS'
+                       AND a.status = 'aktif' AND a.is_finance_ho = 0
+                )
+              ORDER BY k.idunit"
+        );
+
+        $this->assertSame(
+            [],
+            array_map(static fn ($u) => 'unit ' . $u->idunit, $tanpaKas),
+            'setiap unit yang punya kas_keluar tunai harus punya rekening KAS'
+        );
+    }
+
+    /**
+     * Rekening shared hanya boleh menjadi HAK unit yang memang punya alokasi.
+     * Menjaga agar perbaikan scope tidak melebar diam-diam ke unit lain.
+     */
+    public function testProduksiEntitlementSharedTidakMelebar(): void
+    {
+        $shared = $this->produksi(
+            "SELECT a.idakun_kas_bank, a.nama_akun, a.is_finance_ho,
+                    (SELECT GROUP_CONCAT(al.unit_id ORDER BY al.unit_id)
+                       FROM alokasi_saldo_kas_bank al
+                      WHERE al.akun_kas_bank_id = a.idakun_kas_bank) AS unit_berhak
+               FROM akun_kas_bank a
+              WHERE a.is_shared = 1 AND a.status = 'aktif'
+              ORDER BY a.idakun_kas_bank"
+        );
+
+        $tanpaHak = [];
+        foreach ($shared as $a) {
+            // Finance/HO memang tidak butuh alokasi — itu definisinya.
+            if ((int) $a->is_finance_ho === 1) {
+                continue;
+            }
+            if ($a->unit_berhak === null || $a->unit_berhak === '') {
+                $tanpaHak[] = $a->nama_akun . ' (#' . $a->idakun_kas_bank . ')';
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $tanpaHak,
+            'rekening shared non-HO yang aktif harus punya minimal satu unit berhak, kalau tidak tidak ada yang bisa memakainya'
+        );
+    }
+
+    /**
+     * Rekening AKTIF harus punya pemilik unit atau ditandai shared. Bentuk
+     * `unit_id NULL` + `is_shared 0` berarti tidak ada unit yang bisa memakainya.
+     * Rekening NONAKTIF dikecualikan: tidak bisa dipakai memang disengaja.
+     */
+    public function testProduksiRekeningAktifSelaluAdaPemilik(): void
+    {
+        $tanpaPemilik = $this->produksi(
+            "SELECT a.idakun_kas_bank, a.nama_akun FROM akun_kas_bank a
+              WHERE a.unit_id IS NULL AND a.is_shared = 0 AND a.status = 'aktif'
+              ORDER BY a.idakun_kas_bank"
+        );
+
+        $this->assertSame(
+            [],
+            array_map(static fn ($a) => $a->nama_akun . ' (#' . $a->idakun_kas_bank . ')', $tanpaPemilik),
+            'rekening aktif harus punya pemilik unit atau ditandai shared, kalau tidak tidak ada unit yang bisa memakainya'
+        );
     }
 
     public function testRoleBolehFinanceHoSourceSesuaiKonfigurasi(): void

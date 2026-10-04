@@ -53,6 +53,17 @@ class KasBankControllerTest extends CIUnitTestCase
             'db_mutasi',
             'db_detail_mutasi',
             'db_barang',
+            // Tabel pendukung BaseController ikut di-drop supaya skema test
+            // selalu sama dengan yang ditulis di bawah. Kalau tidak, tabel versi
+            // lama dari run sebelumnya bertahan karena dipakai CREATE IF NOT EXISTS
+            // dan test gagal dengan "Unknown column" yang menyesatkan.
+            'db_stok_barang',
+            'db_service',
+            'db_pelanggan',
+            'db_jabatan',
+            'db_jurnal',
+            'db_pembelian',
+            'db_pembayaran_hutang',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -65,11 +76,18 @@ class KasBankControllerTest extends CIUnitTestCase
                 unit_id INT NULL, tipe TEXT NULL, nama_akun TEXT NULL,
                 bank_idbank TEXT NULL, no_akun_coa TEXT NULL, status TEXT NULL,
                 is_shared TINYINT(1) DEFAULT 0,
+                -- wajib: KasBankScopeService memfilter kolom ini untuk membedakan
+                -- Finance/HO dari SHARED biasa.
+                is_finance_ho TINYINT(1) DEFAULT 0,
                 created_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+        // `status` menandai statement sudah diverifikasi Finance atau masih
+        // placeholder. Tanpa kolom ini, service tidak bisa membedakan "rekening
+        // memang nol" dari "saldo belum diisi".
         $q('CREATE TABLE db_saldo_awal_kas_bank (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 akun_kas_bank_id INT NULL, tanggal TEXT NULL, saldo REAL NULL,
-                keterangan TEXT NULL, input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+                keterangan TEXT NULL, status TEXT DEFAULT \'BELUM_VERIFIKASI\',
+                input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
         $q('CREATE TABLE db_alokasi_saldo_kas_bank (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 akun_kas_bank_id INT NULL, unit_id INT NULL, nominal REAL NULL,
@@ -113,9 +131,15 @@ class KasBankControllerTest extends CIUnitTestCase
         // pada setiap request. Dibuat minimal agar FeatureTest tidak gagal.
         $q('CREATE TABLE IF NOT EXISTS db_stok_barang (
                 idbarang INT PRIMARY KEY, id_unit INT NULL, stok_akhir REAL NULL, stok_minimum REAL NULL)');
+        // tanggal_selesai / tanggal_bisa_diambil WAJIB ada: BaseController.initController
+        // memanggil ServiceModel->getExpiredService() pada setiap request, dan
+        // query itu memfilter kedua kolom itu. Tanpa keduanya semua controller
+        // test gagal dengan "Unknown column".
         $q('CREATE TABLE IF NOT EXISTS db_service (
                 id_service INT PRIMARY KEY, no_service TEXT NULL, status_service INT NULL,
-                pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL, created_at TEXT NULL)');
+                pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL,
+                tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
+                created_at TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_spv_units (spv_id INT NULL, unit_id INT NULL)');
@@ -131,6 +155,27 @@ class KasBankControllerTest extends CIUnitTestCase
                 satuan TEXT NULL, harga_mutasi REAL NULL, hpp_barang REAL NULL, barang_idbarang INT NULL,
                 kirim_idunit INT NULL, terima_idunit INT NULL)');
         $q('CREATE TABLE db_barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL)');
+        $q('CREATE TABLE db_jurnal (
+                idjurnal INTEGER PRIMARY KEY AUTO_INCREMENT,
+                tanggal TEXT NULL, no_akun TEXT NULL, nama_akun TEXT NULL,
+                debet REAL NULL, kredit REAL NULL, keterangan TEXT NULL,
+                id_referensi INT NULL, tabel_referensi TEXT NULL,
+                id_unit INT NULL, id_akun INT NULL)');
+
+        // Siklus hutang: dipakai test A1 insert_cicilan (payment + status lunas
+        // + ledger harus satu transaksi).
+        $q('CREATE TABLE db_pembelian (
+                idpembelian INTEGER PRIMARY KEY AUTO_INCREMENT,
+                unit_idunit INT NULL, no_nota TEXT NULL, tanggal TEXT NULL,
+                jatuh_tempo TEXT NULL, total REAL NULL, sisa REAL NULL,
+                total_bayar REAL NULL, bayar REAL NULL,
+                bayar_tunai REAL NULL, bayar_bank REAL NULL, status TEXT NULL)');
+        $q('CREATE TABLE db_pembayaran_hutang (
+                idpembayaran_hutang INTEGER PRIMARY KEY AUTO_INCREMENT,
+                tanggal_bayar TEXT NULL, bayar REAL NULL,
+                bayar_tunai REAL NULL, bayar_bank REAL NULL,
+                bank_idbank TEXT NULL, pembelian_idpembelian INT NULL,
+                sisa_hutang REAL NULL, input_by INT NULL)');
     }
 
     protected function sebarData(): void
@@ -166,8 +211,10 @@ class KasBankControllerTest extends CIUnitTestCase
             (3, 2, 'KAS', 'Kas Unit B', NULL, '1010102000', 'aktif', 0),
             (4, 2, 'BANK', 'BNI Unit B', 'BNI-001', '1010202010', 'aktif', 0),
             (5, NULL, 'BANK', 'BCA Bersama Jember', 'BCA-001', '1010202020', 'aktif', 1)");
-        $q("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan) VALUES
-            (5, '2026-01-01', 800000, 'Saldo awal BCA Bersama')");
+        // Statement terverifikasi: sudah disahkan Finance, jadi alokasi opening
+        // boleh diisi terhadap angka ini.
+        $q("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
+            (5, '2026-01-01', 800000, 'Saldo awal BCA Bersama', 'VERIFIED')");
         $q("INSERT INTO db_hutang_piutang (id, kode, jenis, sumber_tipe, sumber_id, is_projection, pihak_tipe, pihak_id, lawan_unit_id, nama_pihak, tanggal, uraian, total, total_dibayar, sisa, status, unit_id, input_by, deleted, created_at) VALUES
             (901, 'H-901', 'hutang', 'mutasi_unit', 999, 0, 'unit', 1, 2, 'Unit A', '2026-09-01', 'Transfer barang', 500000, 0, 500000, 'belum_lunas', 1, 43, 0, '2026-09-01 08:00:00'),
             (902, 'P-902', 'piutang', 'mutasi_unit', 999, 0, 'unit', 2, 1, 'Unit B', '2026-09-01', 'Transfer barang', 500000, 0, 500000, 'belum_lunas', 2, 43, 0, '2026-09-01 08:00:00')");
@@ -623,6 +670,14 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $tok = 'tok-shared-but';
         $this->sesiDenganToken($tok);
 
+        // Rekening SHARED (akun 5) tidak punya unit pemilik: hak aksesnya
+        // SEPENUHNYA dari tabel alokasi. Tanpa baris alokasi, save ditolak
+        // dengan "Akun pengirim ditolak" — jadi disetup di sini, mengikuti
+        // model produksi di mana Bank 1/2 dialokasikan ke unit rightful-nya.
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan, input_by) VALUES
+            (5, 1, 0, 'Alokasi unit 1', 43),
+            (5, 2, 0, 'Alokasi unit 2', 43)");
+
         // BCA Bersama (akun 5) untuk pengirim & penerima: H/P antar unit
         // diselesaikan TANPA gerakan kas (uang tidak berpindah rekening).
         $payload = [
@@ -755,9 +810,13 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     public function testGetSaldoAkunHanyaMenghitungTransaksiSetelahCutoff(): void
     {
         $db = \Config\Database::connect('tests');
+        // Statement baseline dihitung pada tanggal CUT-OFF (30 Sep), bukan
+        // tanggal mulai periode. Pernah test ini menaruh statement di
+        // '2026-10-01', yang membuat mutasi 15 Sep terhitung sebagai "legacy
+        // yang masih dihitung" — dua kali menghitung saldo yang sama.
         $db->table('saldo_awal_kas_bank')->insert([
-            'akun_kas_bank_id' => 1, 'tanggal' => '2026-10-01', 'saldo' => 500000,
-            'keterangan' => 'OPENING',
+            'akun_kas_bank_id' => 1, 'tanggal' => '2026-09-30', 'saldo' => 500000,
+            'keterangan' => 'OPENING', 'status' => 'VERIFIED',
         ]);
 
         $m = $this->model(ModelTransaksiKasBank::class);
@@ -768,5 +827,289 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $m->insert(['tanggal' => '2026-11-01', 'unit_id' => 1, 'akun_kas_bank_id' => 1, 'jenis' => 'kas_keluar', 'arah' => 'KELUAR', 'jumlah' => 20000]);
 
         $this->assertSame(530000, $m->getSaldoAkun(1));
+    }
+
+    // =====================================================================
+    // [A1] ATOMIKITAS SOURCE <-> LEDGER
+    //
+    // Aturan yang diuji: kalau posting ke transaksi_kas_bank gagal, source
+    // WAJIB dibatalkan. Dulu return posting diabaikan (atau 'skipped' tidak
+    // dilempar), jadi user melihat "berhasil" padahal saldo tidak bergerak.
+    // =====================================================================
+
+    /**
+     * Bank yang ADA di db_bank tapi tidak punya akun kas_bank: resolve pasti
+     * gagal. Sengaja dibuat per-test supaya tidak mengganggu test lain yang
+     * menghitung isi db_bank.
+     */
+    private function seedBankTanpaAkun(string $kode = 'BCA-X'): void
+    {
+        $this->db->query(
+            "INSERT INTO db_bank (idbank, jenis_bank, nama_bank, atas_nama, norek) "
+            . "VALUES ('{$kode}', 'BANK', 'BCA X', 'PT Contoh', '9999')"
+        );
+    }
+
+    private function seedNoAkun(string $no = '5-1010'): void
+    {
+        $this->db->query(
+            "INSERT INTO db_no_akun (no_akun, nama_akun) VALUES ('{$no}', 'Beban Operasional')"
+        );
+    }
+
+    private function flashGagal(): string
+    {
+        // FeatureTestTrait populate $_SESSION langsung, dan flash CI4 disimpan
+        // sebagai key biasa + penanda di __ci_vars. session('flashdata') tidak
+        // bisa dipakai karena session() mengembalikan FlashMock kosong.
+        return (string) ($_SESSION['gagal'] ?? '');
+    }
+
+    private function flashSukses(): string
+    {
+        return (string) ($_SESSION['sukses'] ?? '');
+    }
+
+    // ---- [A1-1] CREATE kas keluar: resolve gagal -> source dibatalkan ----
+
+    public function testA1CreateKasKeluarRollbackSaatPostingGagal(): void
+    {
+        $this->sesi();
+        $this->seedBankTanpaAkun();
+        $this->seedNoAkun();
+
+        $r = $this->post('insert_kas_keluar', [
+            'tanggal'         => '2026-10-05',
+            'deskripsi'       => 'Beli ATK',
+            'unit_idunit'     => '1',
+            'akun'            => [[
+                'no_akun'           => '5-1010',
+                'jumlah'            => '75000',
+                'posisi_drk'        => 'debet',
+                'penerima'          => 'BCA-X',
+                'no_rekening'       => 'BCA-X',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+        $r->assertStatus(302);
+
+        // Inti A1: source TIDAK boleh tersisa tanpa ledger.
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_keluar')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_jurnal')->getRow()->c);
+
+        // Flash harus 'gagal' (template hanya render 'sukses'/'gagal') dan
+        // alasan resolver harus sampai ke user.
+        $this->assertStringContainsString('BCA-X', $this->flashGagal());
+        $this->assertSame('', $this->flashSukses(), 'flash sukses tidak boleh muncul saat ledger gagal');
+    }
+
+    // ---- [A1-2] UPDATE kas keluar: posting gagal -> posting lama pulih ----
+
+    public function testA1UpdateKasKeluarMemulihkanPostingLamaSaatGagal(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+
+        // Sumber valid + ledger lama (BNI-001 -> akun 2).
+        $this->db->query("INSERT INTO db_kas_keluar (idkas_keluar, tanggal, deskripsi, jumlah, jenis, penerima, idbank, idunit)
+            VALUES (1, '2026-10-05', 'Belanja lama', 75000, 'debet', 'PT Contoh', 'BNI-001', 1)");
+        $this->model(\App\Libraries\ModeKasBank::class);
+        $lib = new \App\Libraries\ModeKasBank();
+        $lib->postingKasKeluar(1);
+        $this->assertSame(1, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe='kas_keluar' AND sumber_id=1")->getRow()->c);
+
+        // Edit ke rekening yang TIDAK bisa di-resolve.
+        $this->seedBankTanpaAkun();
+        $r = $this->post('update_kas_keluar', [
+            'idkas_keluar'      => '1',
+            'tanggal'           => '2026-10-06',
+            'deskripsi'         => 'Belanja BARU',
+            'kategori_idkategori' => '1',
+            'jumlah'            => '99000',
+            'penerima'          => 'BCA-X',
+            'posisi_drk'        => 'debet',
+        ]);
+        $r->assertStatus(302);
+
+        // Sumber harus BALIK ke nilai lama (update ikut rollback).
+        $row = $this->db->query('SELECT * FROM db_kas_keluar WHERE idkas_keluar=1')->getRow();
+        $this->assertSame('BNI-001', $row->idbank);
+        $this->assertSame('2026-10-05', $row->tanggal);
+        $this->assertSame('75000', (string) (int)$row->jumlah);
+
+        // Posting lama harus DIPULIHKAN — inilah yang hilang sebelum A1.
+        $this->assertSame(
+            1,
+            (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe='kas_keluar' AND sumber_id=1")->getRow()->c,
+            'hapusPosting harus ikut rollback supaya ledger lama tidak hilang'
+        );
+        $this->assertStringContainsString('BCA-X', $this->flashGagal());
+    }
+
+    // ---- [A1-3] CREATE kas masuk: resolve gagal -> source dibatalkan ----
+
+    public function testA1CreateKasMasukRollbackSaatPostingGagal(): void
+    {
+        $this->sesi();
+        $this->seedBankTanpaAkun();
+        $this->seedNoAkun();
+
+        $r = $this->post('insert_kas_masuk', [
+            'tanggal'     => '2026-10-05',
+            'deskripsi'   => 'Setoran tak terpetakan',
+            'unit_idunit' => '1',
+            'akun'        => [[
+                'no_akun'             => '5-1010',
+                'jumlah'              => '90000',
+                'posisi_drk'          => 'debet',
+                'penerima'            => 'BCA-X',
+                'no_rekening'         => 'BCA-X',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+        $r->assertStatus(302);
+
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_masuk')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
+        $this->assertStringContainsString('BCA-X', $this->flashGagal());
+    }
+
+    // ---- [A1-4] UPDATE kas masuk: posting gagal -> posting lama pulih ----
+
+    public function testA1UpdateKasMasukMemulihkanPostingLamaSaatGagal(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, jenis, penerima, idbank, idunit)
+            VALUES (1, '2026-10-05', 'Setoran lama', 90000, 'debet', 'PT Contoh', 'BNI-001', 1)");
+        $lib = new \App\Libraries\ModeKasBank();
+        $lib->postingKasMasuk(1);
+        $this->assertSame(1, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe='kas_masuk' AND sumber_id=1")->getRow()->c);
+
+        $this->seedBankTanpaAkun();
+        $r = $this->post('update_kas_masuk', [
+            'idkas_masuk'        => '1',
+            'tanggal'           => '2026-10-06',
+            'deskripsi'         => 'Setoran BARU',
+            'kategori_idkategori' => '1',
+            'jumlah'            => '120000',
+            'penerima'          => 'BCA-X',
+            'posisi_drk'        => 'debet',
+        ]);
+        $r->assertStatus(302);
+
+        $row = $this->db->query('SELECT * FROM db_kas_masuk WHERE idkas_masuk=1')->getRow();
+        $this->assertSame('BNI-001', $row->idbank);
+        $this->assertSame('90000', (string) (int)$row->jumlah);
+        $this->assertSame(
+            1,
+            (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe='kas_masuk' AND sumber_id=1")->getRow()->c,
+            'hapusPosting harus ikut rollback supaya ledger lama tidak hilang'
+        );
+        $this->assertStringContainsString('BCA-X', $this->flashGagal());
+    }
+
+    // ---- [A1-5] Cicilan hutang gagal -> hutang TIDAK boleh jadi Lunas ----
+
+    public function testA1CicilanHutangGagalTidakMenandaiLunas(): void
+    {
+        $this->sesi();
+        $this->seedBankTanpaAkun();
+
+        $this->db->query("INSERT INTO db_pembelian (idpembelian, unit_idunit, total, sisa, total_bayar, bayar, bayar_tunai, bayar_bank, status, jatuh_tempo)
+            VALUES (1, 1, 1000000, 1000000, 0, 0, 0, 0, 'Belum Lunas', '2026-12-31')");
+
+        $r = $this->post('update_cicilan_hutang', [
+            'bayar_tunai'  => '0',
+            'bayar_bank'   => '1000000',
+            'bank_idbank'  => 'BCA-X',
+            'idpembelian'  => '1',
+            'sisa'         => '0', // UI ingin LUNAS
+        ]);
+        $r->assertStatus(302);
+
+        // Tidak boleh ada pembayaran tersimpan...
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_pembayaran_hutang')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
+
+        // ...dan yang paling penting: hutang TIDAK boleh berstatus Lunas.
+        $p = $this->db->query('SELECT * FROM db_pembelian WHERE idpembelian=1')->getRow();
+        $this->assertNotSame('Lunas', $p->status);
+        $this->assertSame(0, (int)$p->total_bayar);
+        $this->assertStringContainsString('BCA-X', $this->flashGagal());
+    }
+
+    // ---- [A1-6] Partial cicilan: leg sukses juga harus hilang ----
+
+    public function testA1CicilanHutangPartialRollbackSeluruhLeg(): void
+    {
+        $this->sesi();
+        $this->seedBankTanpaAkun();
+
+        $this->db->query("INSERT INTO db_pembelian (idpembelian, unit_idunit, total, sisa, total_bayar, bayar, bayar_tunai, bayar_bank, status, jatuh_tempo)
+            VALUES (2, 1, 1000000, 1000000, 0, 0, 0, 0, 'Belum Lunas', '2026-12-31')");
+
+        // bayar_tunai OK (unit 1 punya Kas akun 1), bayar_bank GAGAL (BCA-X).
+        $r = $this->post('update_cicilan_hutang', [
+            'bayar_tunai'  => '400000',
+            'bayar_bank'   => '600000',
+            'bank_idbank'  => 'BCA-X',
+            'idpembelian'  => '2',
+            'sisa'         => '0',
+        ]);
+        $r->assertStatus(302);
+
+        // Leg tunai sempat berhasil ditulis sebelum leg bank gagal. Karena
+        // masih satu transaksi, leg itu HARUS hilang juga — kalau tidak, ada
+        // 400rb keluar tanpa 600rb dan saldo meleset.
+        $this->assertSame(
+            0,
+            (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c,
+            'partial posting harus dibatalkan seluruhnya, bukan hanya leg yang gagal'
+        );
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_pembayaran_hutang')->getRow()->c);
+
+        $p = $this->db->query('SELECT * FROM db_pembelian WHERE idpembelian=2')->getRow();
+        $this->assertNotSame('Lunas', $p->status);
+        $this->assertSame(0, (int)$p->bayar_tunai);
+        $this->assertSame(0, (int)$p->bayar_bank);
+    }
+
+    // ---- [A1-7]Happy path tetap commit; posting ulang tetap idempoten ----
+
+    public function testA1KasMasukValidTetapCommitDanIdempoten(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+
+        $r = $this->post('insert_kas_masuk', [
+            'tanggal'     => '2026-10-05',
+            'deskripsi'   => 'Penjualan tunai',
+            'unit_idunit' => '1',
+            'akun'        => [[
+                'no_akun'             => '5-1010',
+                'jumlah'              => '50000',
+                'posisi_drk'          => 'debet',
+                'penerima'            => 'BNI-001',
+                'no_rekening'         => 'BNI-001',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+        $r->assertStatus(302);
+
+        // Guard pembeda: transStart tidak boleh membuat alur valid ikut gagal.
+        $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_masuk')->getRow()->c);
+        $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
+        $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_jurnal')->getRow()->c);
+        $this->assertSame('', $this->flashGagal());
+
+        // Idempotent: posting kedua harus 'skipped' (lolos, bukan rollback).
+        $lib = new \App\Libraries\ModeKasBank();
+        $r2 = $lib->postingKasMasuk(1);
+        $this->assertSame('skipped', $r2['status']);
+        $this->assertSame('sudah terposting', $r2['reason']);
+        $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
     }
 }

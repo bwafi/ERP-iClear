@@ -240,4 +240,81 @@ class RenderProbeTest extends CIUnitTestCase
         $this->assertStringNotContainsString('value="9"', $alokasi, 'rekening HO tidak boleh masuk form alokasi');
         $this->assertStringContainsString('value="4"', $alokasi, 'rekening shared boleh masuk form alokasi');
     }
+
+    /**
+     * Banner diagnosa harus muncul kalau ada masalah konfigurasi, dan TIDAK
+     * muncul sama sekali kalau semua rekening sudah rapi — supaya halaman
+     * Kas & Bank tidak perpetually berantakan setelah config-nya dibenahi.
+     */
+    public function testBannerDiagnostikHanyaMunculKalauAdaMasalah(): void
+    {
+        // CI4 membungkus output view dengan komentar DEBUG-VIEW saat debug aktif,
+        // jadi yang diperiksa adalah isi banner-nya, bukan string kosong absolut.
+        $sehat = $this->render('kas_bank/_diagnostik', ['diagnostik_konfigurasi' => []]);
+        $this->assertStringNotContainsString('Ada rekening yang belum bisa dipakai transaksi', $sehat);
+        $this->assertStringNotContainsString('kb-banner', $sehat);
+
+        $bermasalah = $this->render('kas_bank/_diagnostik', [
+            'diagnostik_konfigurasi' => [
+                [
+                    'level'  => 'danger',
+                    'judul'  => '2 unit belum punya akun KAS aktif',
+                    'detail' => ['Unit A (#1)', 'Unit B (#2)'],
+                    'aksi'   => 'Jalankan `php spark migrate`.',
+                ],
+            ],
+        ]);
+
+        $this->assertStringContainsString('2 unit belum punya akun KAS aktif', $bermasalah);
+        $this->assertStringContainsString('Unit A (#1)', $bermasalah);
+        $this->assertStringContainsString('Unit B (#2)', $bermasalah);
+        $this->assertStringContainsString('php spark migrate', $bermasalah);
+        $this->assertStringContainsString('transaksi_kas_bank', $bermasalah, 'harus jelas ini bukan kegagalan jurnal');
+    }
+
+    /** Halaman master harus merender banner tanpa error walau datanya kosong. */
+    public function testHalamanAkunTetapRenderSaatDiagnostikTidakDiberi(): void
+    {
+        $html = $this->render('kas_bank/akun', $this->dataMaster(), 'akun');
+        $this->assertStringNotContainsString('Notice:', $html);
+        $this->assertStringNotContainsString('Undefined', $html);
+    }
+
+    /**
+     * Halaman /kas_bank (dashboard) juga memuat banner diagnostik. Smoke test
+     * ini menangkap regresi include (mis. nama view salah ketik) yang tidak
+     * akan terlihat dari unit test controller mana pun.
+     */
+    public function testDashboardKasBankMerenderBannerDiagnostik(): void
+    {
+        $vars = $this->dataMaster() + [
+            'total_kas'             => 5000,
+            'total_bank'            => 25300000,
+            'total_semua'           => 25305000,
+            'total_fisik_kas'       => 5000,
+            'total_fisik_bank'      => 25300000,
+            'total_fisik_semua'     => 25305000,
+            'saldo_fisik_per_akun'  => [1 => 5000, 9 => 25000000, 4 => 3000],
+            'saldo_unit_per_akun'   => [],
+            'ringkasan'             => [],
+            'net_cash_flow'         => 0,
+            'filter'                => [],
+        ];
+
+        $sehat = $this->render('kas_bank/dashboard', $vars + ['diagnostik_konfigurasi' => []], '');
+        $this->assertStringNotContainsString('Ada rekening yang belum bisa dipakai transaksi', $sehat);
+        $this->assertStringNotContainsString('Notice:', $sehat);
+        $this->assertStringNotContainsString('Undefined', $sehat);
+
+        $bermasalah = $this->render('kas_bank/dashboard', $vars + [
+            'diagnostik_konfigurasi' => [[
+                'level'  => 'danger',
+                'judul'  => '1 rekening bank belum punya akun fisik',
+                'detail' => ['idbank 7 — Bank X (ATAS NAMA)'],
+                'aksi'   => 'Tambahkan lewat /kas_bank/akun.',
+            ]],
+        ], '');
+        $this->assertStringContainsString('1 rekening bank belum punya akun fisik', $bermasalah);
+        $this->assertStringContainsString('idbank 7', $bermasalah);
+    }
 }

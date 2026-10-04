@@ -98,13 +98,46 @@ provides one class that you may use directly:
 Most of the time you will want to write your own test cases that extend `CIUnitTestCase`
 to hold functions and services common to your test suites.
 
-## Creating Tests
+## Aturan Isolasi Database Test (Fase 1)
 
-All tests go in the **tests/** directory. Each test file is a class that extends a
-**Test Case** (see above) and contains methods for the individual tests. These method
-names must start with the word "test" and should have descriptive names for precisely what
-they are testing:
-`testUserCanModifyFile()` `testOutputColorMatchesInput()` `testIsLoggedInFailsWithInvalidUser()`
+Bagian ini menggantikan bagian "Setting Up" bawaan CodeIgniter untuk repo ini.
+Aturan di sini mengikat; pelanggaran akan menggagalkan test.
+
+### 1. Test TIDAK BOLEH menyentuh `erp_local`
+
+Group `tests` di `app/Config/Database.php` secara default sudah aman:
+`:memory:` dengan prefix `db_`, dan `Config\Database::__construct()` memaksa
+`defaultGroup = 'tests'` selama `ENVIRONMENT === 'testing'`.
+
+Yang berbahaya adalah **override env**. `phpunit.xml.dist` punya blok
+`database.tests.*` yang sengaja dikomentari supaya tidak aktif diam-diam.
+Kalau itu diaktifkan, isinya harus database KHUSUS, misalnya:
+
+```console
+> database.tests.database=erp_fase1_test
+> database.tests.DBDriver=MySQLi
+> database.tests.DBPrefix=db_
+```
+
+`Config\Database` sekarang menolak keras (`RuntimeException`) kalau group
+`tests` resolved ke database yang sama dengan group `default`/`erp_local`.
+Jadi menunjuk ke produksi akan berhenti sebelum DDL pertama jalan, bukan
+setelah tabel terlanjur dihapus.
+
+### 2. Namanya harus jelas dan berakhiran `_test`
+
+`erp_fase1_test` dipakai test Fase 1. Database itu boleh dihapus dan dibuat
+ulang sesuka hati; isinya tidak pernah berarti apa-apa.
+
+### 3. Kalau PHPUnit gagal karena ekstensi, itu bukan hasil test
+
+Kalau `phpunit` gagal dengan "requires the dom, json, libxml, mbstring,
+tokenizer, xml, xmlwriter extensions", itu masalah interpreter, bukan test.
+Jangan menjalankan test lewat PHP lain hanya karena ekstensi ada di
+sana — perilaku laporan bisa berbeda, dan hasilnya tidak bisa dipakai sebagai
+bukti.
+
+## Creating Tests
 
 Writing tests is an art, and there are many resources available to help learn how.
 Review the links above and always pay attention to your code coverage.
