@@ -37,6 +37,29 @@ class ModeKasBank
     public const ARAH_MASUK = 'MASUK';
     public const ARAH_KELUAR = 'KELUAR';
 
+    /**
+     * COA Kas Besar — akun KAS default per unit (lihat seedAkunDefault()).
+     * Dipakai juga sebagai ACUAN resolver: kalau suatu saat unit punya lebih
+     * dari satu akun KAS aktif, Kas Besar selalu yang dipilih lebih dulu.
+     */
+    public const COA_KAS_BESAR = '1010101000';
+
+    /**
+     * COA Kas di Bank — dipakai saat membuat akun rekening fisik bank,
+     * mis. lewat migration PetakanRekeningBankYangBelumTerpetakan atau form
+     * /kas_bank/akun. Disimpan di sini supaya tidak ada yang keliru memakai
+     * COA KAS untuk rekening bank.
+     */
+    public const COA_KAS_BANK = '1010102000';
+
+    /**
+     * COA Kas Kecil — untuk petty cash. Sengaja TIDAK dipakai resolveAkun()
+     * sebagai pilihan utama: uang laci kas besar tidak boleh otomatis
+     * tercatat di kas kecil. Dipakai hanya kalau unit memang punya akun
+     * Kas Kecil dan tidak punya Kas Besar.
+     */
+    public const COA_KAS_KECIL = '1010103000';
+
     protected $AkunModel;
     protected $TransaksiModel;
     protected $HPModel;
@@ -102,6 +125,22 @@ class ModeKasBank
      */
     public function resolveAkun(int $unitId, ?string $bankId = null, string $arah = self::ARAH_KELUAR, ?int $role = null): ?int
     {
+        return $this->resolveAkunDetail($unitId, $bankId, $arah, $role)['akun'];
+    }
+
+    /**
+     * Sama seperti resolveAkun(), tetapi juga mengembalikan ALASAN kegagalan.
+     *
+     * Kegagalan resolve SELALU di-log sebagai warning supaya tidak ada transaksi
+     * yang gagal nge-leder secara diam-diam. Prinsipnya:
+     *   - transaksi sumber (kas_masuk/kas_keluar/pembayaran) tetap berhasil disimpan;
+     *   - ledger TIDAK dikarang / dipaksa masuk rekening lain;
+     *   - konfigurasi akun kas/bank yang diperbaiki, lalu post ulang.
+     *
+     * @return array{akun:int|null, reason:string|null}
+     */
+    public function resolveAkunDetail(int $unitId, ?string $bankId = null, string $arah = self::ARAH_KELUAR, ?int $role = null): array
+    {
         $unitId = (int) $unitId;
         $role   = $role ?? (int) session('ID_JABATAN');
         $sebagai = $arah === self::ARAH_MASUK ? 'destination' : 'source';
@@ -109,7 +148,13 @@ class ModeKasBank
         if (! empty($bankId)) {
             $bank = $this->AkunModel->getBankByBankIdbank((string) $bankId);
             if (! $bank) {
-                return null;
+                return $this->gagalResolve(
+                    $unitId,
+                    (string) $bankId,
+                    $arah,
+                    $role,
+                    'rekening bank idbank=' . $bankId . ' belum dipetakan ke akun_kas_bank'
+                );
             }
 
             // Account scope BERARAH + user scope.
@@ -118,23 +163,77 @@ class ModeKasBank
                 : $this->Scope->canUseAsSource($bank, $unitId, $role);
 
             if (! $boleh) {
-                return null;
+                return $this->gagalResolve(
+                    $unitId,
+                    (string) $bankId,
+                    $arah,
+                    $role,
+                    'unit ' . $unitId . ' tidak punya hak atas akun "' . $bank->nama_akun
+                        . '" sebagai ' . $sebagai . ' (role ' . $role . ')'
+                );
             }
 
-            return (int) $bank->idakun_kas_bank;
+            return ['akun' => (int) $bank->idakun_kas_bank, 'reason' => null];
         }
+
+        // Urutan WAJIB eksplisit. Tanpa orderBy, first() mengembalikan baris
+        // yang urutannya tidak dijamin, dan rekening yang terpilih bisa berubah
+        // antar-request begitu unit punya lebih dari satu akun KAS aktif.
+        //
+        // Prioritas: Kas Besar (1010101000) > rekening lama tanpa COA >
+        //           Kas Kecil / COA lainnya.
+        // Kas Besar selalu menang supaya uang laci kas besar tidak pernah
+        // tercatat di kas kecil. Rekening tanpa COA diperlakukan sebagai
+        // "kas besar" karena itulah bentuknya sebelum COA diisi, dan tidak
+        // boleh mendahului Kas Besar.
+        $coas = "'" . self::COA_KAS_BESAR . "'"; // konstanta internal, bukan input pengguna
 
         $kas = $this->AkunModel
             ->where('unit_id', $unitId)
             ->where('tipe', 'KAS')
             ->where('is_finance_ho', 0)
             ->where('status', 'aktif')
+            ->orderBy('CASE WHEN no_akun_coa = ' . $coas . ' THEN 0 ELSE 1 END', 'ASC', false)
+            ->orderBy('CASE WHEN no_akun_coa IS NULL THEN 1 ELSE 2 END', 'ASC', false)
+            ->orderBy('idakun_kas_bank', 'ASC')
             ->first();
         if ($kas) {
-            return (int) $kas->idakun_kas_bank;
+            return ['akun' => (int) $kas->idakun_kas_bank, 'reason' => null];
         }
 
-        return null;
+        return $this->gagalResolve(
+            $unitId,
+            null,
+            $arah,
+            $role,
+            'belum ada akun KAS aktif milik unit ' . $unitId
+                . ' (acuannya Kas Besar COA ' . self::COA_KAS_BESAR . ')'
+        );
+    }
+
+    /**
+     * Catat kegagalan resolve sebagai warning, lalu kembalikan null + alasannya.
+     *
+     * Pesan log sengaja memuat unit, bank, arah, dan role supaya developer/
+     * admin bisa langsung tahu transaksi mana yang belum punya rekening tanpa
+     * harus menelusuri isi tabel secara manual.
+     *
+     * CATATAN KONTRAK: ini BUKAN skip yang aman. pemanggil wajib memperlakukan
+     * hasil resolve null sebagai kegagalan dan membatalkan transaksinya.
+     */
+    private function gagalResolve(int $unitId, ?string $bankId, string $arah, int $role, string $reason): array
+    {
+        log_message('warning', sprintf(
+            '[KasBank] posting ledger GAGAL: %s. unit=%d bank=%s arah=%s role=%d. '
+                . 'Caller wajib rollback supaya source tidak tersimpan tanpa ledger.',
+            $reason,
+            $unitId,
+            $bankId ?? '(tunai)',
+            $arah,
+            $role
+        ));
+
+        return ['akun' => null, 'reason' => $reason];
     }
 
     /**
@@ -173,7 +272,7 @@ class ModeKasBank
                 'tipe'        => 'KAS',
                 'nama_akun'   => 'Kas ' . $nama,
                 'bank_idbank' => null,
-                'no_akun_coa' => '1010101000',
+                'no_akun_coa' => self::COA_KAS_BESAR,
                 'status'      => 'aktif',
                 'created_at'  => date('Y-m-d H:i:s'),
                 'updated_at'  => date('Y-m-d H:i:s'),
@@ -254,6 +353,52 @@ class ModeKasBank
     }
 
     /**
+     * INTEGRASI KAS/BANK — kontrak status posting
+     * =============================================
+     * Perbedaan 'skipped' vs 'failed' itu PENTING dan dulu tercampur:
+     *
+     *   'inserted'  Ledger baris ini ditulis sekarang. Transaksi sukses.
+     *   'skipped'   HANYA berarti 'sudah terposting' — ledger sudah benar dan
+     *               posting ulang tidak melakukan apa-apa. Aman dianggap sukses,
+     *               jadi tidak boleh menggagalkan transaksi.
+     *   'failed'    Resolve akun GAGAL, jadi ledger TIDAK ditulis. Transaksi
+     *               WAJIB dianggap gagal: caller wajib rollback dan menampilkan
+     *               pesan error ke user.
+     *
+     * Kegagalan resolve pernah dikembalikan sebagai 'skipped' sambil
+     * membawa reason dari resolver. Caller yang mengabaikan return value lalu
+     * menampilkan "berhasil" padahal `transaksi_kas_bank` kosong. Sekarang
+     * keduanya terpisah, dan `reason` selalu memuat reason asli resolver apa
+     * adanya: akun tidak ditemukan, bank tidak terdaftar, unit tidak punya
+     * entitlement, atau tidak boleh dipakai sebagai source/destination.
+     */
+    public const STATUS_INSERTED = 'inserted';
+    public const STATUS_SKIPPED  = 'skipped';
+    public const STATUS_FAILED   = 'failed';
+
+    /** Alasan tunggal untuk 'skipped', supaya tidak tertukar dengan kegagalan. */
+    public const ALASAN_SUDAH_TERPOSTING = 'sudah terposting';
+
+    /**
+     * Bentuk return untuk kegagalan posting yang WAJIB menggagalkan transaksi.
+     *
+     * `transient` sengaja false:posting yang sama tidak akan pernah berhasil
+     * bila dicoba ulang. Sumber masalahnya di konfigurasi rekening, bukan di
+     * kondisi sementara, jadi tidak ada gunanya retry.
+     *
+     * @return array{status:string, reason:string, id:int, transient:bool}
+     */
+    private function gagalPosting(int $id, string $reason): array
+    {
+        return [
+            'status'    => self::STATUS_FAILED,
+            'reason'    => $reason,
+            'id'        => $id,
+            'transient' => false,
+        ];
+    }
+
+    /**
      * Integrasi kas_masuk existing -> transaksi_kas_bank (PEMASUKAN/MASUK).
      * Jurnal existing TIDAK diubah. Idempotent.
      */
@@ -264,10 +409,11 @@ class ModeKasBank
             return ['status' => 'failed', 'reason' => 'kas masuk tidak ditemukan', 'id' => $id];
         }
 
-        $akunId = $this->resolveAkun((int)$row->idunit, $row->idbank ?? null, self::ARAH_MASUK);
-        if (!$akunId) {
-            return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $id];
+        $resolve = $this->resolveAkunDetail((int)$row->idunit, $row->idbank ?? null, self::ARAH_MASUK);
+        if (!$resolve['akun']) {
+            return $this->gagalPosting((int)$id, $resolve['reason']);
         }
+        $akunId = $resolve['akun'];
 
         if ($this->sudahTerposting('kas_masuk', (int)$id, $akunId, self::ARAH_MASUK)) {
             return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $id];
@@ -302,10 +448,11 @@ class ModeKasBank
             return ['status' => 'failed', 'reason' => 'kas keluar tidak ditemukan', 'id' => $id];
         }
 
-        $akunId = $this->resolveAkun((int)$row->idunit, $row->idbank ?? null, self::ARAH_KELUAR);
-        if (!$akunId) {
-            return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $id];
+        $resolve = $this->resolveAkunDetail((int)$row->idunit, $row->idbank ?? null, self::ARAH_KELUAR);
+        if (!$resolve['akun']) {
+            return $this->gagalPosting((int)$id, $resolve['reason']);
         }
+        $akunId = $resolve['akun'];
 
         if ($this->sudahTerposting('kas_keluar', (int)$id, $akunId, self::ARAH_KELUAR)) {
             return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $id];
@@ -345,7 +492,10 @@ class ModeKasBank
 
         $unitId = (int)($row->unit_idunit ?? null);
         if (!$unitId) {
-            return ['status' => 'skipped', 'reason' => 'unit tidak diketahui', 'id' => $idPembayaranHutang];
+            // Unit tidak diketahui = ledger tidak bisa terisi. Ini kegagalan,
+            // bukan no-op: pembayaran yang disimpan tanpa unit akan hilang dari
+            // saldo kas tanpa jejak.
+            return $this->gagalPosting((int)$idPembayaranHutang, 'unit tidak diketahui, tidak bisa menentukan akun kas/bank');
         }
 
         $tunai = (int)($row->bayar_tunai ?? 0);
@@ -355,11 +505,20 @@ class ModeKasBank
         }
 
         $legs = [];
+        $alasanGagal = [];
         if ($tunai > 0) {
-            $legs[] = ['akun' => $this->resolveAkun($unitId, null, self::ARAH_KELUAR), 'jumlah' => $tunai, 'bank' => null];
+            $r = $this->resolveAkunDetail($unitId, null, self::ARAH_KELUAR);
+            $legs[] = ['akun' => $r['akun'], 'jumlah' => $tunai, 'bank' => null];
+            if (!$r['akun']) {
+                $alasanGagal[] = 'tunai: ' . $r['reason'];
+            }
         }
         if ($bank > 0) {
-            $legs[] = ['akun' => $this->resolveAkun($unitId, $row->bank_idbank ?? null, self::ARAH_KELUAR), 'jumlah' => $bank, 'bank' => $row->bank_idbank ?? null];
+            $r = $this->resolveAkunDetail($unitId, $row->bank_idbank ?? null, self::ARAH_KELUAR);
+            $legs[] = ['akun' => $r['akun'], 'jumlah' => $bank, 'bank' => $row->bank_idbank ?? null];
+            if (!$r['akun']) {
+                $alasanGagal[] = 'bank: ' . $r['reason'];
+            }
         }
 
         $inserted = 0;
@@ -391,14 +550,41 @@ class ModeKasBank
             }
         }
 
-        if ($inserted > 0) {
-            return ['status' => 'inserted', 'id' => $idPembayaranHutang, 'transaksi_ids' => $ids, 'skipped' => $skipped];
-        }
-        if ($skipped > 0) {
-            return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $idPembayaranHutang];
+        // ADA leg yang gagal resolve -> SELURUH pembayaran dianggap gagal.
+        // Dicek lebih dulu sebelum inserted/skipped, karena dua-duanya bisa
+        // bernilai > 0 pada skenario parsial: leg tunai masuk ledger tapi leg
+        // bank tidak, atau leg satu sudah terposting sementara leg lain gagal
+        // resolve. Melaporkannya sebagai sukses akan membuat hutang tercatat lunas
+        // padahal uangnya tidak ada di ledger. Caller wajib rollback supaya
+        // baris ledger yang sudah terlanjur ditulis ikut hilang.
+        if ($alasanGagal !== []) {
+            return [
+                'status'         => self::STATUS_FAILED,
+                'reason'         => 'sebagian leg gagal: ' . implode('; ', $alasanGagal),
+                'id'             => $idPembayaranHutang,
+                'transient'      => false,
+                'transaksi_ids'  => $ids,
+                'inserted'       => $inserted,
+                'skipped'        => $skipped,
+            ];
         }
 
-        return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $idPembayaranHutang];
+        if ($inserted > 0) {
+            return ['status' => self::STATUS_INSERTED, 'id' => $idPembayaranHutang, 'transaksi_ids' => $ids, 'skipped' => $skipped];
+        }
+
+        if ($skipped > 0) {
+            return ['status' => self::STATUS_SKIPPED, 'reason' => self::ALASAN_SUDAH_TERPOSTING, 'id' => $idPembayaranHutang];
+        }
+
+        // Tidak ada leg yang bisa diposting padahal tidak ada juga yang gagal
+        // resolve: tidak ada komponen pembayaran (tunai/bank) sama sekali.
+        return [
+            'status'    => self::STATUS_FAILED,
+            'reason'    => 'tidak ada komponen pembayaran (tunai/bank) yang bisa diposting',
+            'id'        => $idPembayaranHutang,
+            'transient' => false,
+        ];
     }
 
     /**
@@ -411,10 +597,11 @@ class ModeKasBank
             return ['status' => 'failed', 'reason' => 'pembayaran piutang tidak ditemukan', 'id' => $idPembayaranPiutang];
         }
 
-        $akunId = $this->resolveAkun($unitId, $row->bank_idbank ?? null, self::ARAH_MASUK);
-        if (!$akunId) {
-            return ['status' => 'skipped', 'reason' => 'akun kas/bank tidak terkonfigurasi', 'id' => $idPembayaranPiutang];
+        $resolve = $this->resolveAkunDetail($unitId, $row->bank_idbank ?? null, self::ARAH_MASUK);
+        if (!$resolve['akun']) {
+            return ['status' => 'skipped', 'reason' => $resolve['reason'], 'id' => $idPembayaranPiutang];
         }
+        $akunId = $resolve['akun'];
 
         if ($this->sudahTerposting('pembayaran_piutang', (int)$idPembayaranPiutang, $akunId, self::ARAH_MASUK)) {
             return ['status' => 'skipped', 'reason' => 'sudah terposting', 'id' => $idPembayaranPiutang];

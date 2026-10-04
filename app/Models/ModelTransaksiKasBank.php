@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\Finance\FinanceScopeService;
+use App\Services\Finance\KasBankCutoffService;
 use CodeIgniter\Model;
 
 class ModelTransaksiKasBank extends Model
@@ -30,40 +30,36 @@ class ModelTransaksiKasBank extends Model
         'updated_at',
     ];
 
+    protected ?KasBankCutoffService $cutoff = null;
+
     /**
-     * Saldo fisik satu rekening (saldo awal fisik + pemasukan - pengeluaran,
-     * lintas unit). Rekening bersama = gabungan semua unit.
+     * Sumber tunggal perhitungan saldo periode baru. Semua angka saldo di
+     * modul ini berasal dari sana, supaya tidak ada dua definisi "saldo"
+     * yang bisa berbeda defraudasi.
+     */
+    public function cutoffService(): KasBankCutoffService
+    {
+        return $this->cutoff ??= new KasBankCutoffService();
+    }
+
+    /**
+     * Saldo fisik satu rekening (seluruh unit).
      *
-     * Sejak Finance cut-off, `saldo_awal_kas_bank` adalah saldo riil as-of
-     * tanggal cut-off (opening balance). Transaksi yang dijumlahkan HANYA yang
-     * tanggal-nya pada/setelah cut-off; transaksi sebelum cut-off adalah legacy
-     * dan tidak boleh ikut menghitung ulang saldo aktif.
+     * Delegates ke KasBankCutoffService::saldoFisik():
+     *
+     *     statement(akun, tanggal cut-off) + net movement sejak periode mulai
+     *
+     * Statement adalah BASELINE dari `saldo_awal_kas_bank`, bukan transaksi —
+     * tidak ada baris ledger yang mewakili saldo cut-off. Batas bawah
+     * movement adalah FinanceScopeService::periodeMulaiDate() (2026-10-06),
+     * BUKAN cutoffDate() (2026-10-05): tanggal cut-off adalah tanggal
+     * statement, dan menghitungnya sebagai mutasi akan menjumlahkan saldo
+     * dua kali. Transaksi 1–5 Okt pun tidak ikut dihitung — saldonya sudah
+     * terserap di baseline.
      */
     public function getSaldoAkun(int $akunId): int
     {
-        $saldoAwal = db_connect()->table('saldo_awal_kas_bank')
-            ->select('COALESCE(SUM(saldo), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->get()
-            ->getRow();
-
-        $cutoff = FinanceScopeService::cutoffDate();
-
-        $masuk = $this->select('COALESCE(SUM(jumlah), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->where('arah', 'MASUK')
-            ->where('tanggal >=', $cutoff)
-            ->get()
-            ->getRow();
-
-        $keluar = $this->select('COALESCE(SUM(jumlah), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->where('arah', 'KELUAR')
-            ->where('tanggal >=', $cutoff)
-            ->get()
-            ->getRow();
-
-        return (int)($saldoAwal->total ?? 0) + (int)($masuk->total ?? 0) - (int)($keluar->total ?? 0);
+        return $this->cutoffService()->saldoFisik($akunId);
     }
 
     /**
@@ -75,88 +71,63 @@ class ModelTransaksiKasBank extends Model
     }
 
     /**
-     * Saldo alokasi per unit pada satu rekening fisik: alokasi saldo awal unit
-     * (tabel alokasi_saldo_kas_bank) + pemasukan unit - pengeluaran unit.
+     * Saldo statement (baseline) satu rekening pada tanggal cut-off.
+     */
+    public function getSaldoStatement(int $akunId): int
+    {
+        return $this->cutoffService()->saldoStatement($akunId);
+    }
+
+    /**
+     * LEGACY / UNASSIGNED = statement - SUM(opening allocation).
+     *
+     * Residual milik kelompok yang tidak diketahui. BUKAN saldo unit dan tidak
+     * bisa dipakai menarik: tidak ada baris alokasi yang memegang bagian ini,
+     * jadi tidak ada unit yang entitled atasnya.
+     */
+    public function getLegacyUnassigned(int $akunId): int
+    {
+        return $this->cutoffService()->legacyUnassigned($akunId);
+    }
+
+    /**
+     * Saldo alokasi per unit pada satu rekening fisik:
+     * opening allocation + net movement unit sejak cut-off.
+     *
      * TIDAK mengubah saldo fisik; hanya atribusi untuk laporan/KPI per unit.
      *
      * GUARD ACCOUNT SCOPE: unit yang tidak punya HAK atas rekening ini
      * (non-shared milik unit lain, atau shared tanpa baris alokasi untuk unit
      * tsb) selalu bernilai 0 — bukan "hak 0" karena tidak ada alokasi, tapi
      * karena unit tsb memang tidak berhak atas rekening tersebut. Ini
-     * mencegah total per unit terlihat seolah-asyncron dengan saldo fisik.
+     * mencegah total per unit terlihat asynchronous dengan saldo fisik, dan
+     * mencegah saldo LEGACY ikut terhitung sebagai saldo seseorang.
      */
     public function getSaldoUnitAkun(int $akunId, int $unitId): int
     {
-        $akun = (new ModelAkunKasBank())->find($akunId);
-        if (! $akun) {
-            return 0;
-        }
-
-        if (! $this->unitBerhak($akun, $unitId)) {
-            return 0;
-        }
-
-        $db = db_connect();
-        $alokasi = $db->table('alokasi_saldo_kas_bank')
-            ->select('COALESCE(SUM(nominal), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->where('unit_id', $unitId)
-            ->get()
-            ->getRow();
-
-        $cutoff = FinanceScopeService::cutoffDate();
-
-        $masuk = $this->select('COALESCE(SUM(jumlah), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->where('unit_id', $unitId)
-            ->where('arah', 'MASUK')
-            ->where('tanggal >=', $cutoff)
-            ->get()
-            ->getRow();
-
-        $keluar = $this->select('COALESCE(SUM(jumlah), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->where('unit_id', $unitId)
-            ->where('arah', 'KELUAR')
-            ->where('tanggal >=', $cutoff)
-            ->get()
-            ->getRow();
-
-        return (int)($alokasi->total ?? 0) + (int)($masuk->total ?? 0) - (int)($keluar->total ?? 0);
+        return $this->cutoffService()->posisiUnit($akunId, $unitId);
     }
 
     /**
-     * Account scope: apakah unit punya hak atas rekening fisik ini?
-     * non-shared -> hanya unit pemilik; shared -> harus ada baris alokasi.
-     */
-    private function unitBerhak(object $akun, int $unitId): bool
-    {
-        if ($unitId <= 0) {
-            return false;
-        }
-
-        if ((int) $akun->is_shared !== 1) {
-            return (int) $akun->unit_id === $unitId;
-        }
-
-        return (new ModelAlokasiSaldoKasBank())
-            ->where('akun_kas_bank_id', (int) $akun->idakun_kas_bank)
-            ->where('unit_id', $unitId)
-            ->first() !== null;
-    }
-
-    /**
-     * Total alokasi saldo awal lintas unit untuk satu rekening fisik.
+     * Total opening allocation lintas unit untuk satu rekening fisik.
+     *
+     * Hanya OPENING ALLOCATION (keputusan Finance saat cut-off). Angka harian
+     * tidak pernah ditulis ke sana; posisinya bergerak sendiri karena ledger.
      */
     public function getTotalAlokasiUnit(int $akunId): int
     {
-        $row = db_connect()->table('alokasi_saldo_kas_bank')
-            ->select('COALESCE(SUM(nominal), 0) as total')
-            ->where('akun_kas_bank_id', $akunId)
-            ->get()
-            ->getRow();
+        return $this->cutoffService()->totalOpeningAllocation($akunId);
+    }
 
-        return (int)($row->total ?? 0);
+    /**
+     * Periksa invariant satu rekening:
+     * saldo_fisik == LEGACY + SUM(posisi unit entitled).
+     *
+     * @return array<string, mixed>
+     */
+    public function cekInvariant(int $akunId): array
+    {
+        return $this->cutoffService()->cekInvariant($akunId);
     }
 
     public function getByTransferRef(string $transferRef)
