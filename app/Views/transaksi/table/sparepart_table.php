@@ -83,6 +83,7 @@
             <option value="0">Tidak Ada</option>
             <option value="7">1 Minggu</option>
             <option value="30">1 Bulan</option>
+            <option value="60">2 Bulan</option>
             <option value="180">6 Bulan</option>
             <option value="360">1 Tahun</option>
             <option value="720">2 Tahun</option>
