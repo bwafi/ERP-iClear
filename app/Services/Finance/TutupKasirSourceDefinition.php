@@ -126,7 +126,20 @@ class TutupKasirSourceDefinition
     // =================================================================
 
     /**
-     * Replika TutupKasir baris 29-36. getRow() = baris PERTAMA.
+     * Saldo KAS pembawa dari Tutup Kasir sebelumnya.
+     *
+     * LEGACY — masih dipakai `angka()` untuk reports `kas_awalcash`, tapi
+     * BUKAN sumber kebenaran untuk perhitungan closing:
+     * `TutupKasirSaldoAwal::saldoAwalKas()` yang jadi acuan, karena
+     * `getRow()` di sini membaca baris PERTAMA tanpa urutan yang dijamin.
+     *
+     * Kalau `kas_masuk` punya >1 baris `deskripsi = 'kas awal'` untuk
+     * (tanggal, unit) yang sama, fungsi ini diam-diam mengambil satu baris
+     * secara tidak deterministik. Ketidakjelasan itu tidak boleh ikut
+     * dibawa ke angka yang dipakai untuk tutup buku.
+     *
+     * @deprecated Accessor legacy. Jangan dipakai sebagai sumber saldo awal
+     *             closing; panggil `TutupKasirSaldoAwal::saldoAwalKas()`.
      */
     public function kasAwalCash(int $unitId, string $tanggal): int
     {
@@ -143,7 +156,21 @@ class TutupKasirSourceDefinition
     }
 
     /**
-     * Replika TutupKasir baris 39-46. getRow() = baris PERTAMA.
+     * Saldo TRANSFER pembawa dari Tutup Kasir sebelumnya.
+     *
+     * LEGACY, dengan masalah yang sama seperti `kasAwalCash()`: `getRow()`
+     * membaca baris PERTAMA tanpa urutan yang dijamin. Yang jadi sumber
+     * kebenaran untuk closing adalah `TutupKasirSaldoAwal::saldoAwalTransfer()`.
+     *
+     * Catatan tambahan untuk accessors ini: `where('idbank !=', null)` di CI4
+     * diterjemahkan menjadi `idbank != NULL`, yang di SQL selalu NULL/tidak
+     * pernah true. Jadi secara praktis accessor ini mengembalikan 0 untuk
+     * data yang `idbank`-nya terisi. Nilai yang dipakai untuk closing TIDAK
+     * bergantung pada behavior itu karena closing memakai
+     * `TutupKasirSaldoAwal`, bukan accessor ini.
+     *
+     * @deprecated Accessor legacy. Jangan dipakai sebagai sumber saldo awal
+     *             transfer closing; panggil `TutupKasirSaldoAwal::saldoAwalTransfer()`.
      */
     public function kasAwalTransfer(int $unitId, string $tanggal): int
     {

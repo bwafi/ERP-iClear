@@ -52,6 +52,23 @@ class KasBankSetorTarikService
     public const SUMBER_TIPE_SETOR = 'SETOR_TUNAI';
     public const SUMBER_TIPE_TARIK = 'PENARIKAN_TUNAI';
 
+    /**
+     * Subtype TRANSFER_INTERNAL untuk "Pindah Saldo" (BANK -> BANK).
+     *
+     * Ditaruh di kelas ini, bukan di controller, supaya ketiga nilai
+     * `sumber_tipe` untuk `jenis = TRANSFER_INTERNAL` punya satu tempat
+     * definisi. Nilai `jenis` sengaja TIDAK diubah: Setor/Tarik dan Pindah
+     * Saldo sama-sama perpindahan antar rekening milik sendiri tanpa
+     * perubahan kepemilikan unit, jadi secara ledger memang satu jenis.
+     * Yang membedakan adalah `sumber_tipe` - itulah diskriminator resminya.
+     *
+     * PINDAH_SALDO selalu BANK -> BANK. KAS <-> BANK TIDAK boleh lewat
+     * sumber_tipe ini: itu fitur Setor/Tarik dan harus memakai
+     * `setorTunai()` / `tarikTunai()` supaya semua guard baseline, saldo,
+     * dan idempotensi ikut jalan.
+     */
+    public const SUMBER_TIPE_PINDAH_SALDO = 'PINDAH_SALDO';
+
     protected ModelAkunKasBank $akunModel;
     protected KasBankCutoffService $cutoff;
     protected EntitlementPolicyService $policy;

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Konfigurasi sementara, KHAS untuk test saldo awal Tutup Kasir.
+
+  Bedanya dari phpunit.xml:
+    - database.tests.database = erp_finance_test  (WAJIB, bukan erp_test)
+    - database.tests.DBPrefix = ''                (tabel di DB ini tanpa prefix)
+    - hanya menjalankan tests/TutupKasirSaldoAwalTest.php, supaya suite lama
+      yang DROP/CREATE tabel tidak ikut jalan.
+
+  File ini tidak di-commit dan dihapus setelah selesai.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        bootstrap="vendor/codeigniter4/framework/system/Test/bootstrap.php"
+        backupGlobals="false"
+        colors="true"
+        convertErrorsToExceptions="true"
+        convertNoticesToExceptions="true"
+        convertWarningsToExceptions="true"
+        stopOnError="false"
+        stopOnFailure="false"
+        stopOnIncomplete="false"
+        stopOnSkipped="false"
+        cacheResult="false"
+        xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd">
+    <testsuites>
+        <testsuite name="TutupKasirSaldoAwal">
+            <file>./tests/TutupKasirSaldoAwalTest.php</file>
+        </testsuite>
+    </testsuites>
+    <php>
+        <server name="app.baseURL" value="http://example.com/"/>
+        <const name="HOMEPATH" value="./"/>
+        <const name="CONFIGPATH" value="./app/Config/"/>
+        <const name="PUBLICPATH" value="./public/"/>
+        <env name="database.tests.hostname" value="localhost"/>
+        <env name="database.tests.database" value="erp_finance_test"/>
+        <env name="database.tests.username" value="root"/>
+        <env name="database.tests.password" value=""/>
+        <env name="database.tests.DBDriver" value="MySQLi"/>
+        <env name="database.tests.DBPrefix" value=""/>
+    </php>
+</phpunit>

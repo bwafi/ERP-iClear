@@ -51,16 +51,18 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         parent::setUp();
 
         $this->db = Database::connect();
+
+        // Service dibuat sebelum seed() karena seed() memakai $this->opening.
+        $this->cutoff  = new KasBankCutoffService();
+        $this->pindah  = new KasBankSetorTarikService();
+        $this->opening = new KasOpeningService();
+
         $this->schema();
         $this->seed();
 
         $_SESSION['ID_AKUN']    = 43;
         $_SESSION['ID_UNIT']    = 1;
         $_SESSION['ID_JABATAN'] = 1;
-
-        $this->cutoff  = new KasBankCutoffService();
-        $this->pindah  = new KasBankSetorTarikService();
-        $this->opening = new KasOpeningService();
     }
 
     private function q(string $sql): void
@@ -73,7 +75,7 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         foreach ([
             'db_transaksi_kas_bank', 'db_alokasi_saldo_kas_bank', 'db_saldo_awal_kas_bank',
             'db_akun_kas_bank', 'db_tutup_kasir', 'db_unit', 'db_bank', 'db_akun',
-            'db_opening_kas', 'db_penjualan', 'db_kas_keluar',
+            'db_opening_kas', 'db_penjualan', 'db_kas_keluar', 'db_service',
         ] as $t) {
             $this->q('DROP TABLE IF EXISTS ' . $t);
         }
@@ -318,8 +320,14 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         $this->assertSame(self::OPENING + $alur['movement'], $alur['saldo_buku']);
 
         // Opening juga bukan movement di ledger, sehingga tidak akan terhitung
-        // dua kali lewat transfer internal.
-        $this->assertSame(0, $this->cutoff->netMovement(self::AKUN_KAS));
+        // dua kali lewat transfer internal. Yang dihitung hanya penjualan
+        // Rp300.000 - angka opening Rp1.500.000 tidak ikut di dalamnya.
+        $this->assertSame(300000, $this->cutoff->netMovement(self::AKUN_KAS));
+        $this->assertNotSame(
+            self::OPENING + 300000,
+            $this->cutoff->netMovement(self::AKUN_KAS),
+            'Opening tidak boleh masuk ke netMovement'
+        );
     }
 
     // =================================================================

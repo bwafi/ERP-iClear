@@ -601,9 +601,29 @@ $routes->post('hutangpiutang/tandai-lunas-legacy', 'HutangPiutang::tandaiLunasLe
 $routes->post('hutangpiutang/batalkan-lunas-legacy', 'HutangPiutang::batalkanLunasLegacy', ['filter' => 'auth']);
 $routes->get('hutangpiutang/cetak/(:num)', 'HutangPiutang::cetak/$1', ['filter' => 'auth']);
 
+// =====================================================================
+// TUTUP KASIR
+// ---------------------------------------------------------------------
+// `tutup` MEMERIKSA auth + CSRF. Alasannya, bukan sekadar formalitas:
+//   - endpoint ini menulis angka SALDO AWAL laci besok, jadi harus milik
+//     kasir yang login;
+//   - tanpa CSRF, request sah bisa di-replay atau dipaksa dari halaman lain,
+//     sehingga closing bisa dibuat tanpa pengetahuan kasir;
+//   - Global CSRF dimatikan di Config/Filters.php, jadi per-route adalah
+//     satu-satunya mekanisme yang tersedia tanpa mengubah perilaku seluruh
+//     aplikasi.
+//
+// Pola `['filter' => ['auth', 'csrf']]` ini sama dengan route Setor/Tarik
+// di modul Kas & Bank (lihat blok `setor-tunai/save` di file ini).
+// AuthFilter TIDAK diubah secara global — cukup per-route.
+//
+// `cetak_tutup_kasir` juga wajib auth: tanpa itu, PDF closing (laci +
+// transfer + selisih) terbuka untuk siapa pun yang menebak id. Pembatasan
+// unit sudah ada di `ModelTutupKasir::getById()` dan tidak diubah di sini.
+// =====================================================================
 $routes->get('tutup_kasir', 'TutupKasir::index',  ['filter' => 'auth']);
-$routes->get('cetak-tutup-kasir/(:num)', 'TutupKasir::cetak_tutup_kasir/$1');
-$routes->post('tutupkasir/tutup', 'TutupKasir::tutup');
+$routes->get('cetak-tutup-kasir/(:num)', 'TutupKasir::cetak_tutup_kasir/$1', ['filter' => 'auth']);
+$routes->post('tutupkasir/tutup', 'TutupKasir::tutup', ['filter' => ['auth', 'csrf']]);
 $routes->get('kasir_bulanan', 'TutupKasir::kasirbulanan',  ['filter' => 'auth']);
 
 $routes->get('omset_bulanan', 'TutupKasir::omsetbulanan',  ['filter' => 'auth']);

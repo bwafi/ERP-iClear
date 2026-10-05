@@ -73,7 +73,7 @@ class SetorTarikStatementGuardTest extends CIUnitTestCase
 
         $hasil = $this->setor(1, Fase1::AKUN_KAS_1, Fase1::AKUN_CV, 100000, 'stmt-3');
 
-        $this->assertTrue($hasil['ok'], 'Guard harus لكنه: ' . $hasil['alasan']);
+        $this->assertTrue($hasil['ok'], 'Guard harus lolosnya: ' . $hasil['alasan']);
     }
 
     /**

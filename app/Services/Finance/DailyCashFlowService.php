@@ -18,9 +18,12 @@ use Config\Database;
  *               service status 4 per tanggal_selesai
  *               (bayar_tunai / harus_dibayar - bayar_tunai).
  *      KELUAR : seluruh kas_keluar.
- *  - `transaksi_kas_bank` HANYA dibaca untuk transfer internal
- *    (`transfer_ref IS NOT NULL`). Mirror lama kas_masuk/kas_keluar yang
- *    tidak punya `transfer_ref` diabaikan supaya satu transaksi tidak
+ *  - `transaksi_kas_bank` HANYA dibaca untuk perpindahan uang antar rekening
+ *    fisik (`transfer_ref IS NOT NULL`) — Setor/Tarik, Pindah Saldo, dan
+ *    pelunasan H/P antar unit yang menyentuh rekening berbeda. Predicate-nya
+ *    dipinjam dari `KasBankSourceMovement::scopeInternalUnion()` supaya
+ *    definisinya hanya ada di satu tempat. Mirror lama kas_masuk/kas_keluar
+ *    yang tidak punya `transfer_ref` diabaikan supaya satu transaksi tidak
  *    tampil dua kali. Tidak ada lagi penggantian baris sumber dengan
  *    baris mirror.
  *  - Baris deskripsi 'kas awal' TIDAK dipakai sebagai penerimaan harian:
@@ -28,7 +31,7 @@ use Config\Database;
  *    masuk karena TutupKasir, core Finance movement, dan RekonDaily
  *    sama-sama tidak menghitungnya — kalau dihitung di sini, drill-down
  *    tidak akan sama dengan angka tutup kasir.
- *  - Transfer internal antar kas/rekening ditandai terpisah dan tidak masuk
+ *  - Perpindahan antar kas/rekening ditandai terpisah dan tidak masuk
  *    subtotal/net karena bukan pendapatan maupun beban.
  *  - Klasifikasi tunai vs transfer mengikuti TutupKasir: idbank NULL = tunai,
  *    idbank terisi = transfer. Baris ledger memakai akun_kas_bank.tipe
@@ -154,9 +157,10 @@ class DailyCashFlowService
             );
         }
 
-        // Ledger HANYA boleh menyumbang transfer internal. Query fetchLedger()
-        // sudah membatasi `transfer_ref IS NOT NULL`; gerbang di bawah
-        // menjaga kelas ini tetap aman kalau dipanggil dengan row mentah.
+        // Ledger HANYA boleh menyumbang perpindahan antar rekening. Query
+        // fetchLedger() sudah memakai predicate scopeInternalUnion() yang sama;
+        // gerbang di bawah menjaga kelas ini tetap aman kalau dipanggil dengan
+        // row mentah.
         foreach ($sources['ledger'] ?? [] as $row) {
             if (! $this->isTransferInternal($row)) {
                 continue;
@@ -275,32 +279,42 @@ class DailyCashFlowService
     }
 
     /**
-     * Transfer internal saja dari transaksi_kas_bank.
+     * Baris ledger yang memindahkan uang antar rekening fisik — drill-down.
      *
-     * Pembatasnya `transfer_ref IS NOT NULL` — marker yang ditulis
-     * KasBankSetorTarikService. Baris mirror lama (jenis PEMASUKAN/
-     * PENGELUARAN) tidak punya transfer_ref sehingga otomatis tersaring;
-     * begitu juga 'kas awal'. Arus operasional tetap dibaca dari
-     * source table, bukan dari ledger.
+     * Bedanya dengan agregat di `KasBankSourceMovement::movementInternalUnion()`:
+     * method itu menjumlahkan, sedangkan drill-down ini butuh detail per baris
+     * (nama rekening, tipe, keterangan, jam) untuk ditampilkan. Karena itu
+     * query-nya tetap di sini, TAPI Predicate-nya diambil dari
+     * `KasBankSourceMovement::scopeInternalUnion()` — definisi
+     * `transfer_ref IS NOT NULL` hanya boleh ada di satu tempat, supaya
+     * Finance dan Cash Flow tidak diam-diam berbeda saat definisinya berubah.
+     *
+     * Cakupannya: TRANSFER_INTERNAL (Setor/Tarik + Pindah Saldo) DAN
+     * `PEMBAYARAN_ANTAR_UNIT`. Keduanya benar-benar memindahkan uang antar
+     * rekening. Yang TIDAK ikut: baris mirror legacy `PEMASUKAN`/
+     * `PENGELUARAN` (tanpa `transfer_ref`) dan arus operasional, karena itu
+     * sudah dibaca dari tabel source di atas.
      */
     protected function fetchLedger(int $unitId, string $tanggal): array
     {
-        return $this->db->table('transaksi_kas_bank')
+        $builder = $this->db->table('transaksi_kas_bank')
             ->select('transaksi_kas_bank.tanggal, transaksi_kas_bank.jenis, transaksi_kas_bank.arah, transaksi_kas_bank.jumlah, transaksi_kas_bank.keterangan, transaksi_kas_bank.created_at, transaksi_kas_bank.sumber_tipe, transaksi_kas_bank.sumber_id, transaksi_kas_bank.transfer_ref, akun_kas_bank.nama_akun, akun_kas_bank.tipe')
             ->join('akun_kas_bank', 'akun_kas_bank.idakun_kas_bank = transaksi_kas_bank.akun_kas_bank_id', 'left')
             ->where('transaksi_kas_bank.unit_id', $unitId)
-            ->where('transaksi_kas_bank.tanggal', $tanggal)
-            ->where('transaksi_kas_bank.transfer_ref IS NOT NULL', null, false)
+            ->where('transaksi_kas_bank.tanggal', $tanggal);
+
+        return KasBankSourceMovement::scopeInternalUnion($builder)
             ->orderBy('transaksi_kas_bank.created_at', 'ASC')
             ->get()
             ->getResult();
     }
 
     /**
-     * Baris ledger hanya qualifies sebagai transfer internal bila punya
-     * `transfer_ref` — marker yang ditulis KasBankSetorTarikService
-     * (`jenis=TRANSFER_INTERNAL`, `transfer_ref` = uuid, `sumber_tipe`
-     * SETOR_TUNAI/PENARIKAN_TUNAI). Mirror legacy tidak punya marker itu.
+     * Baris ini movement antar rekening fisik, bukan mirror legacy.
+     *
+     * Sama dengan predicate di `fetchLedger()`: `transfer_ref IS NOT NULL`,
+     * yang ditulis `KasBankSourceMovement` — hanya Setor/Tarik, Pindah Saldo,
+     * dan pelunasan H/P antar unit yang menyertainya.
      */
     protected function isTransferInternal($row): bool
     {

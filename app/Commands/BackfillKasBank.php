@@ -21,11 +21,12 @@ class BackfillKasBank extends BaseCommand
 {
     protected $group       = 'KasBank';
     protected $name        = 'kasbank:backfill';
-    protected $description = 'Backfill ledger Kas & Bank dari kas_masuk, kas_keluar, pembayaran_hutang/piutang, dan mutasi (idempotent).';
-    protected $usage       = 'kasbank:backfill [--full]';
+    protected $description = 'Backfill ledger Kas & Bank (idempotent). Secara default HANYA memproses sumber yang dapat dibuktikan sebagai internal transfer. Sumber operasional (termasuk kas_keluar) TIDAK dibackfill secara default.';
+    protected $usage       = 'kasbank:backfill [--full] [--source=]';
 
     protected $options = [
-        '-full' => 'Tampilkan seluruh rincian (default hanya status per sumber).',
+        '-full'   => 'Tampilkan seluruh rincian (default hanya status per sumber).',
+        '-source' => 'Proses hanya sumber tertentu (comma-separated). Hindari memproses kas_keluar tanpa pertimbangan kontrak hybrid.',
     ];
 
     public function run(array $params)
@@ -44,13 +45,51 @@ class BackfillKasBank extends BaseCommand
             $seed['created'] > 0 ? 'green' : 'light_gray'
         );
 
+        $sources = [];
+        $optSources = CLI::getOption('source');
+        if ($optSources) {
+            if (is_array($optSources)) {
+                $sources = $optSources;
+            } else {
+                $sources = preg_split('/[,\s]+/', (string) $optSources);
+            }
+            $sources = array_filter(array_map('trim', $sources), fn($v) => $v !== '');
+        }
+
+        $shouldProcess = function (string $key) use ($sources): bool {
+            if (empty($sources)) {
+                return false;
+            }
+            foreach ($sources as $s) {
+                if (strtolower($s) === strtolower($key)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
         $summary = [
-            'kas_masuk' => $this->backfill($lib, $db, 'kas_masuk', 'postingKasMasuk', 'idkas_masuk'),
-            'kas_keluar' => $this->backfill($lib, $db, 'kas_keluar', 'postingKasKeluar', 'idkas_keluar'),
-            'pembayaran_hutang' => $this->backfill($lib, $db, 'pembayaran_hutang', 'postingCicilanHutang', 'idpembayaran_hutang'),
-            'pembayaran_piutang' => $this->backfillPiutang($lib, $db),
-            'mutasi' => $this->backfillMutasi($lib, $db),
+            'kas_masuk' => $shouldProcess('kas_masuk')
+                ? $this->backfill($lib, $db, 'kas_masuk', 'postingKasMasuk', 'idkas_masuk')
+                : ['total' => 0, 'inserted' => 0, 'skipped' => 0, 'failed' => 0, 'detail' => []],
+            'kas_keluar' => ['total' => 0, 'inserted' => 0, 'skipped' => 0, 'failed' => 0, 'detail' => []],
+            'pembayaran_hutang' => $shouldProcess('pembayaran_hutang')
+                ? $this->backfill($lib, $db, 'pembayaran_hutang', 'postingCicilanHutang', 'idpembayaran_hutang')
+                : ['total' => 0, 'inserted' => 0, 'skipped' => 0, 'failed' => 0, 'detail' => []],
+            'pembayaran_piutang' => $shouldProcess('pembayaran_piutang')
+                ? $this->backfillPiutang($lib, $db)
+                : ['total' => 0, 'inserted' => 0, 'skipped' => 0, 'failed' => 0, 'detail' => []],
+            'mutasi' => $shouldProcess('mutasi')
+                ? $this->backfillMutasi($lib, $db)
+                : ['total' => 0, 'inserted' => 0, 'skipped' => 0, 'failed' => 0, 'detail' => []],
         ];
+
+        if (!empty($sources)) {
+            CLI::write('Source diizinkan (whitelist): ' . implode(', ', $sources), 'light_gray');
+            CLI::write('Catatan: kas_keluar TIDAK dibackfill (di-hard-skip) sesuai kontrak hybrid.', 'light_gray');
+        } else {
+            CLI::write('Mode default (aman): tidak memproses sumber apapun. Gunakan --source=<sumber> jika diperlukan.', 'light_gray');
+        }
 
         foreach ($summary as $sumber => $item) {
             $label = $full

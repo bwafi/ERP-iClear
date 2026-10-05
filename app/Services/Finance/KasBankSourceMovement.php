@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Libraries\ModeKasBank;
 use App\Models\ModelAkunKasBank;
 use Config\Database;
 
@@ -179,9 +180,11 @@ class KasBankSourceMovement
             return 0;
         }
 
-        // Lihat movementTransferInternal(): ini satu-satunya bagian angka yang
-        // masih membaca transaksi_kas_bank, dan hanya untuk transfer internal.
-        $internal = $this->movementTransferInternal($akunId, $unitId, $dari, $sampai);
+        // Lihat movementInternalUnion(): ini satu-satunya bagian angka yang
+        // masih membaca transaksi_kas_bank, dan hanya untuk perpindahan uang
+        // antar rekening fisik (Setor/Tarik, Pindah Saldo, dan pelunasan
+        // H/P antar unit yang menyentuh rekening berbeda).
+        $internal = $this->movementInternalUnion($akunId, $unitId, $dari, $sampai);
 
         if ($tipe === TutupKasirSourceDefinition::TIPE_KAS) {
             return $this->movementKas($akun, $unitId, $dari, $sampai) + $internal;
@@ -190,56 +193,136 @@ class KasBankSourceMovement
         return $this->movementBank($akun, $unitId, $dari, $sampai) + $internal;
     }
 
+    // =================================================================
+    // PERPINDAHAN UANG ANTAR REKENING — DUA MAKNA, DUA METHOD
+    // =================================================================
+    //
+    // Basis pemisahan: `transfer_ref IS NOT NULL` (semua perpindahan uang
+    // antar rekening fisik yang kita catat sendiri) vs
+    // `jenis = TRANSFER_INTERNAL` (hanya Setor/Tarik/Pindah Saldo, yaitu
+    // perpindahan yang TIDAK ikut memindahkan kepemilikan unit).
+    //
+    // Kenapa keduanya harus bernama dan tidak boleh jadi satu method dengan
+    // parameter opsional:
+    //
+    //   - Finance menghitung POSISI REKENING secara utuh. Di sana arus
+    //     `PEMBAYARAN_ANTAR_UNIT` juga benar-benar memindahkan uang antar
+    //     rekening fisik, jadi HARUS ikut terhitung.
+    //   - Tutup Kasir & Rekon menghitung SALDO LACI. Pelunasan H/P antar unit
+    //     yang menyentuh laci BUKAN Setor/Tarik laci, jadi TIDAK boleh ikut.
+    //
+    // Dulu kedua makna ini berbagi `transferInternal(..., ?string $jenis)`
+    // dengan default null, sehingga nama "transfer internal" berarti dua
+    // hal berbeda tergantung pemanggilnya — dan DailyCashFlowService
+    // menduplikasi literal-nya sendiri. Sekarang maknanya dipisah di method
+    // terpisah; `internalLedger()` di bawah tetap query builder tunggal,
+    // jadi definisi SQL hanya ada di satu tempat.
+
     /**
-     * Transfer internal KAS <-> BANK (Setor / Tarik).
+     * SEMUA perpindahan uang antar rekening fisik — basis `movementInternalUnion()`.
      *
-     * KENAPA BACA LEDGER: Setor/Tarik adalah perpindahan saldo antara dua
-     * rekening milik kita sendiri. Itu BUKAN pengeluaran dan BUKAN pendapatan,
-     * jadi tidak ada baris di penjualan / service / kas_keluar yang bisa
-     * merepresentasikannya — dan tidak boleh dibuatkan, karena akan mengotori
-     * `pengeluaran` TutupKasir dan merusak parity.
+     * Mencakup TRANSFER_INTERNAL (Setor/Tarik + Pindah Saldo) DAN
+     * `PEMBAYARAN_ANTAR_UNIT` yang menyentuh rekening fisik berbeda, karena
+     * keduanya benar-benar memindahkan uang antar rekening kita.
      *
-     * `KasBankSetorTarikService` hanya menulis ke `transaksi_kas_bank`
-     * (0 referensi ke kas_keluar/kas_masuk — sudah diverifikasi). Jadi ledger
-     * di sini bukan "sumber kebenaran ganda", melainkan SATU-SATUNYA tempat
-     * transfer internal terekam.
+     * TIDAK termasuk: baris `sumber_tipe = kas_keluar / kas_masuk` yang ada
+     * di ledger sebagai CERMINAN tabel source (sudah dihitung lewat
+     * movementKas()/movementBank() — menghitung dua kali = double count),
+     * dan legacy dump tanpa `transfer_ref` (otomatis tertinggal).
      *
-     * FILTER: hanya `transfer_ref IS NOT NULL`. Baris `sumber_tipe =
-     * kas_keluar` / `kas_masuk` yang ada di ledger adalah CERMINAN tabel
-     * source dan sudah dihitung lewat movementKas()/movementBank() — menghitung
-     * dua kali akan jadi double count. Legacy dump tanpa transfer_ref karena
-     * itu juga otomatis tertinggal.
-     *
-     * Sisi KAS tidak perlu penyesuaian: `arah` sudah benar — setor = KAS
-     * KELUAR, tarik = KAS MASUK.
+     * @return array{masuk:int, keluar:int}
      */
-    private function movementTransferInternal(int $akunId, ?int $unitId, string $dari, ?string $sampai = null): int
-    {
-        $t = $this->transferInternal($akunId, $unitId, $dari, $sampai);
+    public function movementInternalUnionRincian(
+        int $akunId,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): array {
+        return $this->internalLedger($akunId, $unitId, $dari, $sampai, null);
+    }
+
+    /**
+     * Net `movementInternalUnionRincian()` (MASUK - KELUAR).
+     */
+    public function movementInternalUnion(
+        int $akunId,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): int {
+        $t = $this->movementInternalUnionRincian($akunId, $unitId, $dari, $sampai);
 
         return $t['masuk'] - $t['keluar'];
     }
 
     /**
-     * Transfer internal satu rekening, dipecah per arah.
+     * HANYA Setor/Tarik (dan Pindah Saldo) — `jenis = TRANSFER_INTERNAL`.
      *
-     * Dipakai dua pemanggil (movementTransferInternal() dan
-     * rincianMovement()) supaya definisi "transfer internal" hanya ada di
-     * satu tempat. Kalau query-nya diduplikasi, perbaikan batas atas hanya
-     * akan diterapkan ke salah satu jalur dan angka Cash Flow diam-diam
-     * berbeda dari rinciannya.
+     * Ini method yang dipakai Tutup Kasir & Rekon. `PEMBAYARAN_ANTAR_UNIT`
+     * SENGAJA dikecualikan: pelunasan hutang/piutang antar unit bukan
+     * Setor/Tarik laci, dan kalau ikut dihitung akan mengurangi saldo laci
+     * dengan angka yang bukan setoran.
      *
      * @return array{masuk:int, keluar:int}
      */
-    private function transferInternal(int $akunId, ?int $unitId, string $dari, ?string $sampai = null): array
-    {
+    public function movementSetorTarikRincian(
+        int $akunId,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): array {
+        return $this->internalLedger(
+            $akunId,
+            $unitId,
+            $dari,
+            $sampai,
+            ModeKasBank::JENIS_TRANSFER
+        );
+    }
+
+    /**
+     * Net `movementSetorTarikRincian()`.
+     */
+    public function movementSetorTarik(
+        int $akunId,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): int {
+        $t = $this->movementSetorTarikRincian($akunId, $unitId, $dari, $sampai);
+
+        return $t['masuk'] - $t['keluar'];
+    }
+
+    /**
+     * Query builder tunggal untuk seluruh pembacaan `transaksi_kas_bank`.
+     *
+     * Pivate dengan sengaja: pemanggil TIDAK boleh memilih `$jenis` sendiri.
+     * Akses dibatasi ke dua makna yang sudah bernama di atas lewat
+     * movementInternalUnionRincian() / movementSetorTarikRincian(), supaya
+     * tidak ada caller yang bisa diam-diam memakai definisi ketiga.
+     *
+     * @param string|null $jenis null = union (tanpa filter jenis)
+     */
+    private function internalLedger(
+        int $akunId,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null,
+        ?string $jenis = null
+    ): array {
         $db = $this->db;
         $b  = $db->table('transaksi_kas_bank')
             ->select('COALESCE(SUM(CASE WHEN arah = \'MASUK\' THEN jumlah ELSE 0 END), 0) as masuk')
             ->select('COALESCE(SUM(CASE WHEN arah = \'KELUAR\' THEN jumlah ELSE 0 END), 0) as keluar', false)
             ->where('akun_kas_bank_id', $akunId)
-            ->where('transfer_ref IS NOT NULL', null, false)
             ->where('tanggal >=', $dari);
+
+        self::scopeInternalUnion($b);
+
+        if ($jenis !== null && $jenis !== '') {
+            $b->where('jenis', $jenis);
+        }
 
         // Kolom `tanggal` di ledger bertipe DATE, bukan DATETIME, jadi `<=`
         // sudah mencakup seluruh hari tersebut tanpa perlu `23:59:59`.
@@ -257,6 +340,26 @@ class KasBankSourceMovement
             'masuk'  => (int) ($row->masuk ?? 0),
             'keluar' => (int) ($row->keluar ?? 0),
         ];
+    }
+
+    /**
+     * Predikat SQL "perpindahan uang antar rekening fisik yang kita catat
+     * sendiri": `transfer_ref IS NOT NULL`.
+     *
+     * Dipisah sebagai helper supaya definisinya hanya ada di SATU tempat.
+     * `DailyCashFlowService` memakainya untuk query drill-down baris-per-baris
+     * (yang butuh detail rekening untuk ditampilkan, bukan hasil SUM), dan
+     * `internalLedger()` memakainya untuk agregat. Menulis memakai literal
+     * `transfer_ref IS NOT NULL` di kedua tempat persislah kondisi yang
+     * membuat Finance dan Cash Flow diam-diam berbeda saat definisinya
+     * berubah.
+     *
+     * @param object $builder query builder CodeIgniter
+     * @return object builder yang sama
+     */
+    public static function scopeInternalUnion($builder)
+    {
+        return $builder->where('transfer_ref IS NOT NULL', null, false);
     }
 
     /**
@@ -456,10 +559,35 @@ class KasBankSourceMovement
      * Opening TIDAK termasuk di sini. Opening adalah baseline, bukan
      * transaksi, dan tidak pernah muncul sebagai movement.
      *
+     * `$jenisTransfer` — DEPRECATED, hanya untuk backward compatibility.
+     *
+     * Nilai yang diterima HANYA `ModeKasBank::JENIS_TRANSFER`, yang berarti
+     * komponen transfer dihitung dengan definisi Setor/Tarik
+     * (`movementSetorTarikRincian()`). Nilai lain — termasuk null — berarti
+     * union (`movementInternalUnionRincian()`).
+     *
+     * Parameter ini tidak pernah dipakai untuk pertanyaan "berapa movement untuk
+     * jenis/free-form apa pun". Itu sebabnya ia tidak lagi jadi parameter
+     * publik yang bebas: makna transfer dipisah ke dua method bernama,
+     * `movementSetorTarikRincian()` dan `movementInternalUnionRincian()`.
+     * Pemanggil baru WAJIB memakai salah satu dari keduanya secara langsung.
+     *
+     * Diperlukan hanya untuk satu caller yang kontraknya dibekukan pada fase
+     * ini: `TutupKasirTransferInternal::hariIni()` yang meneruskan
+     * `ModeKasBank::JENIS_TRANSFER` sebagai argumen ke-5. Angka Tutup Kasir
+     * TIDAK berubah: dispatch ke movementSetorTarikRincian() menghasilkan
+     * query yang identik dengan yang sebelumnya dibangun oleh
+     * `transferInternal(..., TRANSFER_INTERNAL)`.
+     *
      * @return array{cash_in:int,cash_out:int,transfer_masuk:int,transfer_keluar:int,net:int}
      */
-    public function rincianMovement(int $akunId, ?int $unitId = null, ?string $dari = null, ?string $sampai = null): array
-    {
+    public function rincianMovement(
+        int $akunId,
+        ?int $unitId = null,
+        ?string $dari = null,
+        ?string $sampai = null,
+        ?string $jenisTransfer = null
+    ): array {
         $akun = $this->akun($akunId);
 
         $nol = [
@@ -491,8 +619,16 @@ class KasBankSourceMovement
             }
         }
 
-        // Definisi transfer internal yang SAMA dengan movementTransferInternal().
-        $transfer           = $this->transferInternal($akunId, $unitId, $dari, $sampai);
+        // Dispatch ke dua makna yang sudah bernama. `$jenisTransfer` hanya
+        // diwariskan untuk satu caller yang dibekukan kontraknya
+        // (TutupKasirTransferInternal, yang tidak boleh diubah pada fase ini)
+        // dan campernya secara eksplisit ModeKasBank::JENIS_TRANSFER.
+        // Setiap pemanggil baru WAJIB memanggil movementSetorTarikRincian()
+        // atau movementInternalUnionRincian() secara langsung.
+        $transfer = $jenisTransfer === ModeKasBank::JENIS_TRANSFER
+            ? $this->movementSetorTarikRincian($akunId, $unitId, $dari, $sampai)
+            : $this->movementInternalUnionRincian($akunId, $unitId, $dari, $sampai);
+
         $transferMasuk      = $transfer['masuk'];
         $transferKeluar     = $transfer['keluar'];
 

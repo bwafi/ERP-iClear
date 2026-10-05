@@ -1,0 +1,498 @@
+<?php
+
+namespace App\Services\Finance;
+
+use Config\Database;
+
+/**
+ * Sumber tunggal saldo awal Tutup Kasir.
+ *
+ * KONSEP:
+ *   Saldo awal = saldo kas yang benar-benar diteruskan. Bukan angka tetap,
+ *   bukan sisa penghitung, dan bukan angka yang dikarang sistem.
+ *
+ * URUTAN SUMBER (berhenti di yang pertama yang tersedia):
+ *
+ *   1. CLOSING SEBELUMNYA  `tutup_kasir.akhir_cash` untuk unit yang sama pada
+ *                         tanggal paling akhir yang strictly < tanggalClosing.
+ *                         Ini carry-forward: saldo akhir hari N menjadi saldo
+ *                         awal hari N+1.
+ *
+ *   2. BASELINE PERIODE   `opening_kas.opening` pada rekening KAS unit tsb,
+ *                         HANYA kalau baris itu berstatus `TERVERIFIKASI`.
+ *                         Dipakai `KasOpeningService` supaya definisi
+ *                         baseline TIDAK diduplikasi di sini.
+ *
+ *   3. BELUM DITETAPKAN    Tidak ada fallback. Tidak ke Rp1.000.000, tidak ke
+ *                         `kas_masuk`, tidak ke 0, tidak ke saldo lama.
+ *                         Pemanggil wajib menampilkan kondisinya supaya
+ *                         angka palsu tidak pernah dibaca sebagai saldo riil.
+ *
+ * Kenapa baseline WAJIB `TERVERIFIKASI`:
+ *   `opening_kas.status` punya tiga nilai: `BELUM_VERIFIKASI`, `TERVERIFIKASI`,
+ *   dan `TIDAK_COCOK`. Dua nilai terakhir yang pertama TIDAK boleh jadi saldo
+ *   awal Tutup Kasir:
+ *     - `BELUM_VERIFIKASI` = Finance belum mencocokkan baseline dengan real cash.
+ *     - `TIDAK_COCOK`       = Finance SUDAH mencocokkan dan hasilnya MELESET.
+ *                              Baseline yang sudah dinyatakan meleset jelas
+ *                              tidak boleh jadi titik awal laci.
+ *   Ini prinsip yang sama dengan guard Setor/Tarik
+ *   (`KasBankCutoffService::openingTerverifikasi()`), jadi kedua sisi tidak
+ *   memakai dua standar berbeda untuk masalah yang sama.
+ *
+ * Kenapa tanggal baseline harus BERLAKU pada tanggal closing:
+ *   Baseline opening dicatat pada `Finance::cutoffDate()` — posisi laci PADA
+ *   tanggal itu. Memakainya untuk closing yang tanggalnya lebih awal berarti
+ *   memakai informasi dari masa depan: baseline 5 Okt tidak boleh jadi saldo
+ *   awal closing 4 Okt. Sebaliknya, menutup kasir pada 5 Okt itu justru
+ *   harus boleh memakai baseline 5 Okt — itu HARI PERTAMA, dan baseline
+ *   tersebut memang tercatat pada tanggal itu.
+ *
+ *   Syaratnya karena itu `tanggal_baseline <= tanggal_closing`, persis sama
+ *   dengan `KasOpeningService::openingBerlaku()` yang dipakai Finance untuk
+ *   membaca baseline di jalur lain. Dua jenis baseline (Opening KAS dan
+ *   statement bank) memakai aturan tanggal yang sama, supaya tidak ada
+ *   standar ketiga yang muncul diam-diam.
+ *
+ * Kenapa `closing sebelumnya` DI UTAMAKAN dari `opening_kas`:
+ *   Opening KAS itu BASELINE posisi kas pada awal periode — baseline yang SAMA
+ *   yang dipegang `KasOpeningService` / `KasBankCutoffService` untuk saldo buku.
+ *   Opening bukan tambahan transaksi dan tidak boleh dijumlahkan dengan apa pun.
+ *   Setelah hari pertama ditutup, posisi kas digerakkan `akhir_cash`, bukan
+ *   opening lagi — kalau tidak, setiap hari akan memakai baseline periode
+ *   sehingga saldo melenceng dari saldo bendahara.
+ *
+ * Kenapa TIDAK `getRow()` tanpa ordering:
+ *   Ada closing ganda di data lama (unit 3 tgl 2 Okt, unit 5 tgl 1 Okt).
+ *   `getRow()` tanpa ORDER BY mengembalikan baris yang tidak dijamin, jadi
+ *   saldo awal bisa berubah-ubah antar request. Karena itu closing terakhir
+ *  WAJIB dipilih dengan `ORDER BY tanggal DESC, id DESC LIMIT 1`.
+ *
+ * @see \App\Controllers\TutupKasir::index()
+ */
+class TutupKasirSaldoAwal
+{
+    /** Sumber saldo awal. */
+    public const SUMBER_CLOSING = 'closing_sebelumnya';
+    public const SUMBER_OPENING = 'opening_kas';
+    public const SUMBER_BELUM  = 'belum_ditetapkan';
+
+    /** Opening KAS dengan status ini TIDAK boleh jadi saldo awal. */
+    public const STATUS_BELUM_DIPERCAYA = [
+        KasOpeningService::STATUS_BELUM,
+        KasOpeningService::STATUS_GAGAL,
+    ];
+
+    /** Nilai opening yang berarti "dipakai" oleh Tutup Kasir. */
+    public const BELUM_ADA = null;
+
+    /**
+     * COA Kas Besar, acuannya ModeKasBank::COA_KAS_BESAR.
+     *
+     * Disalin sebagai konstanta lokal supaya file yang dilarang tidak perlu
+     * disentuh. Nilainya internal, bukan input pengguna.
+     */
+    private const COA_KAS_BESAR = '1010101000';
+
+    protected $db;
+
+    public function __construct($db = null)
+    {
+        $this->db = $db ?? Database::connect();
+    }
+
+    // =================================================================
+    // PENENTUAN SALDO AWAL
+    // =================================================================
+
+    /**
+     * Saldo awal KAS unit pada $tanggal.
+     *
+     * @param int    $unitId  unit pemilik laci
+     * @param string $tanggal YYYY-MM-DD
+     *
+     * @return array{
+     *     ada:bool,
+     *     nilai:int|null,
+     *     sumber:string,
+     *     tanggal:string|null,
+     *     akun_kas_bank_id:int|null,
+     *     closing_id:int|null,
+     *     pesan:string
+     * }
+     *   `nilai` bernilai null bila belum ditetapkan. PEMANGGIL WAJIB
+     *   memeriksa `ada` dulu — nilai 0 yang sah (laci kosong) tetap `ada`=true.
+     */
+    public function saldoAwalKas(int $unitId, string $tanggal): array
+    {
+        $closing = $this->closingTerakhir($unitId, $tanggal);
+
+        if ($closing !== null) {
+            return [
+                'ada'              => true,
+                'nilai'            => (int) $closing['akhir_cash'],
+                'sumber'           => self::SUMBER_CLOSING,
+                'tanggal'          => (string) $closing['tanggal'],
+                'akun_kas_bank_id' => null,
+                'closing_id'       => (int) $closing['idtutupkasir'],
+                'pesan'            => 'Saldo awal diteruskan dari tutup kasir '
+                    . $closing['tanggal'] . ' (saldo akhir saat itu).',
+            ];
+        }
+
+        $akunId  = $this->akunKasUnit($unitId);
+        $opening = $this->openingKas($akunId, $tanggal);
+
+        if ($opening['ada']) {
+            return [
+                'ada'              => true,
+                'nilai'            => $opening['nilai'],
+                'sumber'           => self::SUMBER_OPENING,
+                'tanggal'          => $opening['tanggal'],
+                'akun_kas_bank_id' => $akunId === null ? null : (int) $akunId,
+                'closing_id'       => null,
+                'pesan'            => 'Saldo awal memakai baseline Opening KAS periode ini (Rp '
+                    . number_format($opening['nilai'], 0, ',', '.') . ').',
+            ];
+        }
+
+        return [
+            'ada'              => false,
+            'nilai'            => self::BELUM_ADA,
+            'sumber'           => self::SUMBER_BELUM,
+            'tanggal'          => null,
+            'akun_kas_bank_id' => $akunId === null ? null : (int) $akunId,
+            'closing_id'       => null,
+            'pesan'            => $this->pesanBelumTersedia($akunId, $opening['alasan']),
+        ];
+    }
+
+    /**
+     * Pesan "belum bisa jadi saldo awal".
+     *
+     * Kalau baseline-nya ADA tapi ditolak (belum terverifikasi / TIDAK COK /
+     * bertanggal di masa depan), alasannya dihitung lebih dulu supaya
+     * kasir tahu apa yang harus diperbaiki — bukan hanya "belum ada".
+     */
+    private function pesanBelumTersedia(?int $akunId, string $alasan): string
+    {
+        if ($akunId === null) {
+            return 'Belum ada rekening KAS aktif untuk unit ini, jadi saldo awal belum bisa ditetapkan. '
+                . 'Tambahkan rekening dulu di menu Kas & Bank.';
+        }
+
+        if ($alasan !== '') {
+            return $alasan . ' Saldo awal Tutup Kasir belum ditetapkan.';
+        }
+
+        return 'Belum ada baseline Opening KAS untuk rekening KAS unit ini, dan belum ada tutup kasir '
+            . 'sebelumnya. Saldo awal belum ditetapkan — ZERO TIDAK boleh disimpulkan dari halaman ini.';
+    }
+
+    /**
+     * Saldo awal BANK/TRANSFER unit pada $tanggal.
+     *
+     * Sumbernya sama persis dengan kas (closing dulu, opening KAS baseline
+     * Depois) supaya kedua sisi Tutup Kasir tidak bisa berbeda aturan.
+     * Yang berbeda HANYA definisi baseline-nya: untuk transfer yang memakai
+     * statement bank terverifikasi, bukan Opening KAS laci.
+     *
+     * @return array{ada:bool, nilai:int|null, sumber:string, tanggal:string|null, pesan:string}
+     */
+    public function saldoAwalTransfer(int $unitId, string $tanggal): array
+    {
+        $closing = $this->closingTerakhirTransfer($unitId, $tanggal);
+
+        if ($closing !== null) {
+            return [
+                'ada'     => true,
+                'nilai'   => (int) $closing['akhir_transfer'],
+                'sumber'  => self::SUMBER_CLOSING,
+                'tanggal' => (string) $closing['tanggal'],
+                'pesan'   => 'Saldo transfer awal diteruskan dari tutup kasir '
+                    . $closing['tanggal'] . '.',
+            ];
+        }
+
+        // Rekening bank milik unit (tipe BANK, bukan shared HO).
+        $akunBank = $this->akunBankUnit($unitId);
+
+        if ($akunBank === null) {
+            return [
+                'ada'     => false,
+                'nilai'   => self::BELUM_ADA,
+                'sumber'  => self::SUMBER_BELUM,
+                'tanggal' => null,
+                'pesan'   => 'Belum ada rekening bank milik unit ini, jadi saldo transfer awal belum ditetapkan.',
+            ];
+        }
+
+        // Baseline statement bank, bukan Opening KAS laci.
+        // Delegasi ke KasBankCutoffService supaya definisi "baseline rekening"
+        // hanya punya satu implementasi.
+        //
+        // Syarat tanggalnya SAMA dengan opening KAS: `tanggal <= $tanggal`.
+        // Baseline berlaku pada tanggal closing atau sebelumnya; yang
+        // terlarang adalah baseline bertanggal SETELAH closing (data masa
+        // depan). Statement cut-off 5 Okt tidak boleh jadi saldo awal closing
+        // 4 Okt, tapi boleh jadi saldo awal closing 5 Okt.
+        $statement = $this->baselineBank($akunBank, $tanggal);
+
+        // `baselineBank()` mengembalikan baris PLUS `alasan` kalau baris itu ada
+        // tapi tidak boleh dipakai (tanggalnya di masa depan). Dulu baris
+        // bertanggal masa depan tetap dianggap sah karena pemanggil hanya
+        // mengecek `!== null` — jadi baseline 2 Nov bisa jadi saldo awal
+        // closing 8 Okt. `alasan` yang terisi = DITOLAK.
+        if ($statement !== null && (string) ($statement['alasan'] ?? '') === '') {
+            return [
+                'ada'     => true,
+                'nilai'   => (int) $statement['saldo'],
+                'sumber'  => self::SUMBER_OPENING,
+                'tanggal' => (string) $statement['tanggal'],
+                'pesan'   => 'Saldo transfer awal memakai baseline statement bank (Rp '
+                    . number_format((int) $statement['saldo'], 0, ',', '.') . ').',
+            ];
+        }
+
+        return [
+            'ada'     => false,
+            'nilai'   => self::BELUM_ADA,
+            'sumber'  => self::SUMBER_BELUM,
+            'tanggal' => null,
+            'pesan'   => ($statement['alasan'] ?? '')
+                ?: ('Belum ada baseline statement bank untuk rekening unit ini, dan belum ada '
+                    . 'tutup kasir sebelumnya. Saldo transfer awal belum ditetapkan.'),
+        ];
+    }
+
+    // =================================================================
+    // CLOSING SEBELUMNYA (carry-forward yang jujur)
+    // =================================================================
+
+    /**
+     * Closing KAS terakhir unit SEBELUM $tanggal.
+     *
+     * Syarat: unit sama, tanggal < $tanggal, diurutkan tanggal DESC lalu id DESC,
+     * ambil satu. `akhir_cash` NULL TIDAK dipakai — closing yang belum punya
+     * saldo bukan posisi kas yang bisa diteruskan.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function closingTerakhir(int $unitId, string $tanggal): ?array
+    {
+        return $this->closingTerakhirFor('akhir_cash', $unitId, $tanggal);
+    }
+
+    /** Sama seperti closingTerakhir(), untuk sisi transfer. */
+    public function closingTerakhirTransfer(int $unitId, string $tanggal): ?array
+    {
+        return $this->closingTerakhirFor('akhir_transfer', $unitId, $tanggal);
+    }
+
+    private function closingTerakhirFor(string $kolom, int $unitId, string $tanggal): ?array
+    {
+        if ($unitId <= 0 || $kolom === '' || ! preg_match('/^[a-z_]+$/', $kolom)) {
+            return null;
+        }
+
+        $row = $this->db->table('tutup_kasir')
+            ->select('idtutupkasir, tanggal, ' . $kolom . ' as nilai')
+            ->where('unit', $unitId)
+            ->where('tanggal <', $tanggal)
+            ->where($kolom . ' IS NOT NULL', null, false)
+            ->orderBy('tanggal', 'DESC')
+            ->orderBy('idtutupkasir', 'DESC')
+            ->limit(1)
+            ->get()
+            ->getRowArray();
+
+        if ($row === null) {
+            return null;
+        }
+
+        return [
+            'idtutupkasir' => (int) $row['idtutupkasir'],
+            'tanggal'     => (string) $row['tanggal'],
+            'nilai'       => (int) $row['nilai'],
+            $kolom        => (int) $row['nilai'],
+        ];
+    }
+
+    // =================================================================
+    // REKENING & BASELINE
+    // =================================================================
+
+    /**
+     * Rekening KAS aktif milik unit.
+     *
+     * Urutan WAJIB eksplisit (sama dengan resolveAkun() ModeKasBank, tapi
+     * ditulis ulang di sini supaya file yang dilarang tidak perlu disentuh):
+     * Kas Besar (COA 1010101000) > rekening tanpa COA > Kas Kecil / COA lain.
+     * Abaikan rekening shared & milik Finance/HO — itu bukan laci unit ini.
+     */
+    public function akunKasUnit(int $unitId): ?int
+    {
+        return $this->akunUnitTipe($unitId, 'KAS');
+    }
+
+    /** Rekening BANK aktif milik unit (bukan shared HO). */
+    public function akunBankUnit(int $unitId): ?int
+    {
+        return $this->akunUnitTipe($unitId, 'BANK');
+    }
+
+    private function akunUnitTipe(int $unitId, string $tipe): ?int
+    {
+        if ($unitId <= 0) {
+            return null;
+        }
+
+        // CATATAN: `orderBy(..., escape: false)` tidak mengikat placeholder `?`.
+        // CASE-nya harus ditulis lengkap dengan nilai literalnya.
+        $coa = $this->db->escape(self::COA_KAS_BESAR);
+
+        $row = $this->db->table('akun_kas_bank')
+            ->select('idakun_kas_bank')
+            ->where('unit_id', $unitId)
+            ->where('tipe', $tipe)
+            ->where('status', 'aktif')
+            ->where('is_shared', 0)
+            ->where('is_finance_ho', 0)
+            ->orderBy('CASE WHEN no_akun_coa = ' . $coa . ' THEN 0 ELSE 1 END', 'ASC', false)
+            ->orderBy('CASE WHEN no_akun_coa IS NULL THEN 1 ELSE 2 END', 'ASC', false)
+            ->orderBy('idakun_kas_bank', 'ASC')
+            ->get()
+            ->getRow();
+
+        return $row === null ? null : (int) $row->idakun_kas_bank;
+    }
+
+    /**
+     * Baseline Opening KAS pada tanggal cut-off, lewat KasOpeningService.
+     *
+     * Tiga syarat WAJIB, semua dicek di sini:
+     *
+     *   1. Baris ada di `Finance::cutoffDate()`.
+     *   2. Statusnya `TERVERIFIKASI`. `BELUM_VERIFIKASI` belum dicocokkan
+     *      dengan real cash; `TIDAK_COCOK` sudah dicocokkan dan meleset.
+     *   3. Tanggal baseline STRICTLY sebelum $tanggalClosing. Baseline 5 Okt
+     *      tidak boleh jadi saldo awal closing 4 Okt.
+     *
+     * Sengaja TIDAK memakai `opening()`: method itu mengembalikan 0 kalau
+     * baris tidak ada, dan 0 itu sah (laci kosong) — sehingga tidak bisa
+     * membedakan "tidak ada baseline". Yang dibedakan di sini justru kondisi
+     * TIDAK BOLEH dipakai, dan itu dikembalikan lewat flag `ada` = false
+     * plus `alasan` supaya pesan yang tampil menyebut penyebabnya.
+     *
+     * @return array{ada:bool, nilai:int, tanggal:string|null, alasan:string}
+     */
+    private function openingKas(?int $akunId, string $tanggalClosing): array
+    {
+        $kosong = ['ada' => false, 'nilai' => 0, 'tanggal' => null, 'alasan' => ''];
+
+        if ($akunId === null || $akunId <= 0) {
+            return $kosong;
+        }
+
+        $cutoff = FinanceScopeService::cutoffDate();
+        $row    = (new KasOpeningService())->openingAt($akunId, $cutoff);
+
+        if ($row === null) {
+            return $kosong;
+        }
+
+        // --- syarat 2: status harus TERVERIFIKASI ---
+        $status = (string) ($row->status ?? '');
+
+        if ($status !== KasOpeningService::STATUS_SUDAH) {
+            return [
+                'ada'     => false,
+                'nilai'   => 0,
+                'tanggal' => (string) $row->tanggal,
+                'alasan'  => $status === KasOpeningService::STATUS_GAGAL
+                    ? 'Baseline Opening KAS di ' . $cutoff . ' sudah diverifikasi sebagai TIDAK COK '
+                        . '(selisih terhadap real cash), jadi tidak boleh jadi saldo awal. '
+                        . 'Perbaiki baselinenya di menu Kas & Bank → Opening KAS.'
+                    : 'Baseline Opening KAS di ' . $cutoff . ' belum diverifikasi (status: '
+                        . ($status === '' ? '(kosong)' : $status) . '), jadi tidak boleh jadi '
+                        . 'saldo awal Tutup Kasir. Verifikasikan dulu di menu Kas & Bank → Opening KAS.',
+            ];
+        }
+
+        // --- syarat 3: baseline tidak boleh ber Tanggal di masa depan ---
+        //
+        // Aturannya `tanggal_baseline <= tanggal_closing` — sama dengan
+        // `KasOpeningService::openingBerlaku()` yang dipakai Finance untuk
+        // membaca baseline. Baseline dicatat sebagai POSISI KAS pada tanggal
+        // itu, jadi menutup kasir pada tanggal yang sama memakainya bukan
+        // memakai data masa depan.
+        //
+        // Dulu aturan ini `>=` (harus strictly sebelum). Akibatnya menutup
+        // kasir pada tanggal cut-off — yaitu HARI PERTAMA periode — selalu
+        // ditolak, karena baseline juga bertanggal cut-off. Hari pertama
+        // justru hari yang paling butuh baseline.
+        $tanggalBaseline = (string) ($row->tanggal ?? $cutoff);
+
+        if ($tanggalBaseline > $tanggalClosing) {
+            return [
+                'ada'     => false,
+                'nilai'   => 0,
+                'tanggal' => $tanggalBaseline,
+                'alasan'  => 'Baseline Opening KAS bertanggal ' . $tanggalBaseline . ' berada setelah '
+                    . 'tanggal closing ' . $tanggalClosing . ', jadi tidak bisa dipakai sebagai '
+                    . 'saldo awal (baseline harus berlaku pada tanggal closing atau sebelumnya).',
+            ];
+        }
+
+        return [
+            'ada'     => true,
+            'nilai'   => (int) $row->opening,
+            'tanggal' => $tanggalBaseline,
+            'alasan'  => '',
+        ];
+    }
+
+    /**
+     * Baseline statement bank milik rekening tsb.
+     *
+     * Kolom `saldo_awal_kas_bank` memang "statement/mirror bank", bukan
+     * Opening KAS laci — jadi keduanya sengaja tidak dicampur.
+     *
+     * Syarat tanggal sama seperti opening KAS: baseline `cutoffDate()` boleh
+     * dipakai untuk closing yang tanggalnya SAMA DENGAN atau setelah baseline.
+     * Closing yang tanggalnya SEBELUM baseline tidak punya sumber yang sah,
+     * jadi dikembalikan sebagai belum tersedia — bukan memakai angka masa depan.
+     *
+     * @return array{saldo:int, tanggal:string, alasan:string}|null
+     *   `null` = tidak ada baris sama sekali. `alasan` terisi kalau baris
+     *   ADA tapi tidak boleh dipakai (mis. tanggalnya di masa depan).
+     */
+    private function baselineBank(int $akunId, string $tanggalClosing): ?array
+    {
+        $cutoff = FinanceScopeService::cutoffDate();
+        $row    = $this->db->table('saldo_awal_kas_bank')
+            ->select('saldo, tanggal')
+            ->where('akun_kas_bank_id', $akunId)
+            ->where('tanggal', $cutoff)
+            ->get()
+            ->getRow();
+
+        if ($row === null) {
+            return null;
+        }
+
+        $tanggalBaseline = (string) ($row->tanggal ?? $cutoff);
+
+        if ($tanggalBaseline > $tanggalClosing) {
+            return [
+                'saldo'   => (int) $row->saldo,
+                'tanggal' => $tanggalBaseline,
+                'alasan'  => 'Baseline statement bank bertanggal ' . $tanggalBaseline . ' berada setelah '
+                    . 'tanggal closing ' . $tanggalClosing
+                    . ', jadi tidak bisa dipakai sebagai saldo awal.',
+            ];
+        }
+
+        return ['saldo' => (int) $row->saldo, 'tanggal' => $tanggalBaseline, 'alasan' => ''];
+    }
+}

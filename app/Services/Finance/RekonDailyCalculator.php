@@ -31,6 +31,45 @@ use Config\Database;
  * KPI Score = (hari lengkap+VERIFIED / hari kerja) × 100.
  * - Sen–Sab (hari libur BELUM diperhitungkan).
  * - Selisih TIDAK mengurangi skor; disimpan sebagai temuan untuk KPI Akurasi.
+ *
+ * ================================================================
+ * SETOR / TARIK TIDAK DIHITUNG DI SINI — ITU PILIHAN, BUKAN KELALUAN
+ * ================================================================
+ * `TutupKasirClosing` (server-side Tutup Kasir) mengurangi `akhir_cash` dengan
+ * Setor dan menambahnya dengan Tarik. Audit parity yang menyeluruh saat
+ * hardening Tutup Kasir menemukan celah: apakah tiga kelompok Rekon
+ * seharusnya ikut memotret Setor/Tarik?
+ *
+ * Jawabannya: TIDAK, dan alasannya bukan sekadar "kalau tidak ada buktinya".
+ *
+ * 1. KETIGA KELOMPOK REKON ADALAH FLOW DARI LUAR (UANG MASUK DARI PELANGGAN
+ *    DAN UANG KELUAR KE SUPPLIER/OPERASIONAL). Setor dan Tarik adalah movement
+ *    INTERNAL: uang yang sudah ada di laci dipindah ke rekening bank, atau
+ *    sebaliknya. Tidak ada customer, tidak ada supplier, tidak ada rupiah baru
+ *    masuk atau keluar perusahaan. Kalau Setor ikut `kas_keluar`, Rp2.000.000
+ *    yang dipindah dari laci ke bank akan terbaca sebagai pengeluaran — dan
+ *    KPI akurasi Rekon akan menyimpang karena bendahara justru rapi.
+ *
+ * 2. ANGKA REKON SUDAH TERSIMPAN. `RekonDailyCalculator` menyimpan snapshot
+ *    per hari ke `finance_rekon_daily` beserta hasil approval-nya. Mengubah
+ *    definisi di tengah jalan tidak mengubah baris yang sudah tersimpan —
+ *    jadi setelah perubahan, report harian yang sama akan menampilkan dua
+ *    definisi berbeda tergantung tanggal saat itu. Itu lebih buruk dari
+ * ketidakkonsistenan yang muncul di awal.
+ *
+ * 3. YANG MEMANG SEHARUSNYA MENCAKAP SETOR/TARIK ADALAH SALDO REKENING, DAN
+ *    ITU SUDAH DIPUNYA. `KasBankSourceMovement` + `DailyCashFlowService`
+ *    sudah menghitung movement per rekening KAS termasuk Setor/Tarik, dengan
+ *    filter `jenis = TRANSFER_INTERNAL` supaya arus antar unit tidak ikut
+ *    terhitung. Rekon sengaja tidak mengulangi angka itu supaya tidak ada dua
+ *    definisi yang harus dijaga sinkron.
+ *
+ * KONSEKUENSINYA: `saldo Tutup Kasir` dan `Cash Flow Rekon` memang berbeda
+ * definisi, dan itu disengaja. Perbedaannya harus dibaca sebagai:
+ *   - Tutup Kasir = posisi LACI (termasuk perpindahan internal)
+ *   - Rekon       = FLOW EKSTERNAL hari itu
+ * Yang dibandingkan apples-to-apples adalah Tutup Kasir vs saldo rekening
+ * KAS dari `DailyCashFlowService`, bukan Tutup Kasir vs Rekon.
  */
 class RekonDailyCalculator implements FinanceCalculatorInterface
 {
