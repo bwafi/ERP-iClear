@@ -9,6 +9,12 @@ $unitMap = [];
 foreach (($unit ?? []) as $u) {
     $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
 }
+// Lookup label rekening untuk tabel riwayat. Controller mengirim GABUNGAN
+// daftar source + destination (keduanya sudah BANK-only), jadi setiap baris
+// Pindah Saldo yang sah punya nama rekening di kedua kolomnya. Kalau daftar
+// ini tidak sinkron dengan rekening yang dipakai form, kolom render "-" untuk
+// rekening yang sah. KAS tidak boleh masuk ke sini hanya untuk melengkapi
+// label: Pindah Saldo wajib BANK -> BANK, jadi tidak ada baris KAS di tab ini.
 $akunMap = [];
 foreach (($akun_kas_bank ?? []) as $a) {
     $akunMap[(int) $a->idakun_kas_bank] = $a;

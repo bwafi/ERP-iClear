@@ -165,6 +165,41 @@ class KasBank extends BaseController
     }
 
     /**
+     * Rekening yang boleh jadi SUMBER di form PINDAH SALDO.
+     *
+     * `akunSumberUntuk()` sudah menegakkan `canUseAsSource()`, jadi filter
+     * tambahan di sini HANYA mempersempit ke BANK (Pindah Saldo bukan
+     * Setor/Tarik — lihat `saveTransfer()`). Urutan itu penting: menyaring
+     * `tipe` dulu lalu policy, atau policy dilewati, membuat rekening
+     * Finance/HO yang tidak diizinkan sebagai sumber tetap muncul di
+     * dropdown lalu ditolak server saat submit.
+     */
+    private function akunSumberPindahSaldo(?int $unit): array
+    {
+        return array_values(array_filter(
+            $this->akunSumberUntuk($unit),
+            static fn ($a) => (string) ($a->tipe ?? '') === 'BANK'
+        ));
+    }
+
+    /**
+     * Rekening yang boleh jadi TUJUAN di form PINDAH SALDO.
+     *
+     * Sengaja memakai `akunTujuanUntuk()` (policy `canUseAsDestination()`),
+     * BUKAN policy source. "Boleh transfer KE IRA" tidak berarti boleh
+     * memakai IRA sebagai sumber — lihat `KasBankScopeService`. Kalau kedua
+     * sisi memakai helper yang sama, user KASIR kehilangan akses ke IRA
+     * sebagai tujuan sah.
+     */
+    private function akunTujuanPindahSaldo(?int $unit): array
+    {
+        return array_values(array_filter(
+            $this->akunTujuanUntuk($unit),
+            static fn ($a) => (string) ($a->tipe ?? '') === 'BANK'
+        ));
+    }
+
+    /**
      * Rekening yang boleh jadi TUJUAN (akun tujuan / akun penerima).
      *
      * Menyaring dengan canUseAsDestination(). Rekening Finance/HO (IRA)
@@ -1145,17 +1180,39 @@ if (($b['tipe'] ?? '') === 'KAS') {
     {
         $unitTerpilih = $this->unitTerpilih();
 
+        $akunSumberPindah = $this->akunSumberPindahSaldo($unitTerpilih);
+        $akunTujuanPindah = $this->akunTujuanPindahSaldo($unitTerpilih);
+
+        // Lookup label di tabel riwayat memakai GABUNGAN kedua daftar, bukan
+        // salah satunya. Kalau hanya `akun_sumber`, rekening yang hanya sah
+        // sebagai tujuan (mis. IRA untuk ROOT) tidak punya nama di tabel dan
+        // kolomnya render "-". Union ini tetap BANK-only, tidak memasukkan KAS.
+        $akunLabelPindah = $akunSumberPindah;
+        foreach ($akunTujuanPindah as $a) {
+            $akunLabelPindah[(int) $a->idakun_kas_bank] = $a;
+        }
+
         $data = array_merge($this->pageData(), [
             'unit_terpilih' => $unitTerpilih,
-            // Daftar SUMBER dan TUJUAN sengaja dipisah: rekening Finance/HO
-            // (IRA) boleh jadi tujuan dari unit yang punya rekening
-            // operasional sendiri, tapi hanya ROOT / Finance yang boleh
-            // men takers docketnya.
-            'akun_sumber'   => $this->akunSumberUntuk($unitTerpilih),
-            'akun_tujuan'   => $this->akunTujuanUntuk($unitTerpilih),
-            'akun_kas_bank' => $this->akunAktifUntuk($unitTerpilih),
+            // SUMBER dan TUJUAN memakai policy BERBEDA, bukan satu helper.
+            // Rekening Finance/HO (IRA) sah jadi tujuan dari unit yang punya
+            // rekening operasional sendiri, tapi hanya ROOT / Finance yang
+            // boleh menarik dananya — lihat KasBankScopeService.
+            'akun_sumber'   => $akunSumberPindah,
+            'akun_tujuan'   => $akunTujuanPindah,
+            // KHUSUS label tabel riwayat. Jangan dipakai untuk dropdown, dan
+            // jangan diisi KAS hanya demi kelengkapan label: baris KAS tidak
+            // pernah ada di tab ini karena Pindah Saldo wajib BANK -> BANK.
+            'akun_kas_bank' => array_values($akunLabelPindah),
             'can_transaksi' => $this->bisaTransaksi(),
-            'transaksi'     => $this->transaksiTerlihat(ModeKasBank::JENIS_TRANSFER, $unitTerpilih),
+            'transaksi'     => $this->transaksiTerlihat(
+                ModeKasBank::JENIS_TRANSFER,
+                $unitTerpilih,
+                // Hanya Pindah Saldo. Setor/Tarik punya sumber_tipe sendiri
+                // (SETOR_TUNAI / PENARIKAN_TUNAI) dan tampil di tab "Setor /
+                // Tarik Tunai" — bukan di sini.
+                KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO
+            ),
             'submit_token'  => $this->buatSubmitToken(),
             'body'          => 'kas_bank/transfer',
         ]);
@@ -1167,8 +1224,18 @@ if (($b['tipe'] ?? '') === 'KAS') {
      * Daftar transaksi kas/bank yang boleh dilihat: DIBATASI rekening dalam
      * scope. Tanpa ini user akan melihat mutasi rekening yang account
      * scope-nya di luar haknya.
+     *
+     * `$sumberTipe` (opsional) adalah PENYARING SUBTYPE. Itu wajib diisi
+     * untuk `TRANSFER_INTERNAL`, karena `jenis` itu dipakai bersama oleh
+     * Setor/Tarik, Pindah Saldo, dan (sebelum fase ini) keduanya tercampur di
+     * tab yang sama. Tanpa penyaring, tab "Pindah Saldo" menampilkan Setor
+     * dan Tarik seolah-olah itu Pindah Saldo — dan link reversal-nya ikut
+     * memakai subtype yang salah.
+     *
+     * Null = jangan filter `sumber_tipe` (untuk jenis yang punya satu
+     * subtype saja, mis. `PEMBAYARAN_ANTAR_UNIT`).
      */
-    private function transaksiTerlihat(string $jenis, ?int $unitTerpilih)
+    private function transaksiTerlihat(string $jenis, ?int $unitTerpilih, ?string $sumberTipe = null)
     {
         $akunIds = $this->AkunScope->akunIdsTerlihat(
             $this->unitIdsUser(),
@@ -1181,19 +1248,49 @@ if (($b['tipe'] ?? '') === 'KAS') {
             return [];
         }
 
-        return $this->TransaksiModel
+        $builder = $this->TransaksiModel
             ->where('jenis', $jenis)
             ->groupStart()
                 ->whereIn('akun_kas_bank_id', $akunIds)
                 ->orGroupStart()
                     ->whereIn('akun_tujuan_id', $akunIds)
                 ->groupEnd()
-            ->groupEnd()
+            ->groupEnd();
+
+        if ($sumberTipe !== null && $sumberTipe !== '') {
+            $builder->where('sumber_tipe', $sumberTipe);
+        }
+
+        return $builder
             ->orderBy('idtransaksi', 'DESC')
             ->limit(200)
             ->findAll();
     }
 
+    /**
+     * PINDAH SALDO — BANK -> BANK.
+     *
+     * ============ BATASAN PERAN — BACA DULU ============
+     * Method ini HANYA untuk pindah saldo antar rekening BANK milik sendiri
+     * (mis. BCA -> Mandiri). KAS <-> BANK TIDAK boleh lewat sini: uang tunai
+     * masuk/kelap laci adalah fitur Setor/Tarik, dan harus lewat
+     * `saveSetorTunai()` -> `KasBankSetorTarikService` supaya guard baseline
+     * terverifikasi, cek saldo, `cekTarikUnit()`, dan idempotensi ikut jalan.
+     *
+     * Kenapa pemisahan ini wajib, bukan sekadar neatly: sebelum fase ini
+     * method ini menerima KAS <-> BANK dan menulis `jenis =
+     * TRANSFER_INTERNAL` yang sama persis dengan Setor/Tarik, tanpa satu pun
+     * guard tersebut. Efeknya pada rekening shared: Unit 2 bisa menarik
+     * `KAS(Unit 2)` dari rekening CV yang saldonya milik Unit 1, karena
+     * `cekTarikUnit()` tidak pernah dipanggil. Itu persis skenario yang
+     * harus dilarang aturan "Tarik milik 1 unit, tidak boleh lintas unit".
+     *
+     * Yang TIDAK berubah: nilai `jenis` tetap `TRANSFER_INTERNAL` (tidak ada
+     * migrasi enum), dan kedua kaki tetap memakai `transfer_ref` yang sama.
+     * Subtype-nya dibedakan lewat `sumber_tipe = PINDAH_SALDO`.
+     *
+     * @see \App\Services\Finance\KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO
+     */
     public function saveTransfer()
     {
         if (!$this->bisaTransaksi()) {
@@ -1209,6 +1306,10 @@ if (($b['tipe'] ?? '') === 'KAS') {
         // Unit transaksi di-stamp dari form. User non-lintas TIDAK boleh
         // memilih unit bebas: unitnya dipaksa ke unit sesinya, kalau tidak
         // form bisa meng-stamp leg ke unit yang di luar haknya.
+        //
+        // Catatan: POST ini BUKAN otoritas. Ia hanya kandidat yang langsung
+        // diuji `userBolehUnit()` + `canUseAsSource/Destination()` di bawah,
+        // jadi user tidak bisa memakai rekening milik Unit lain lewat forged POST.
         $unitId = (int)$this->request->getPost('unit_id');
         if ($unitId <= 0) {
             $unitId = (int)session()->get('ID_UNIT');
@@ -1240,10 +1341,39 @@ if (($b['tipe'] ?? '') === 'KAS') {
             return $this->gagal('Akun asal / tujuan tidak valid atau tidak aktif');
         }
 
-        // Unit per leg: KAS terikat unit pemilik rekening; BANK (rekening
-        // fisik) di-stamp unit transaksi dari form.
-        $unitKeluar = $asal->tipe === 'KAS' ? (int)$asal->unit_id : $unitId;
-        $unitMasuk  = $tujuan->tipe === 'KAS' ? (int)$tujuan->unit_id : $unitId;
+        // ---- BATASAN PERAN: PINDAH SALDO itu BANK -> BANK ----
+        //
+        // Sumber dari KAS atau tujuan ke KAS berarti uang masuk/keluar laci,
+        // dan itu fitur Setor/Tarik. Kalau dibiarkan lewat sini, guard
+        // baseline + cek saldo + cekTarikUnit() pada
+        // KasBankSetorTarikService semuanya dilewati.
+        if ((string) $asal->tipe !== 'BANK') {
+            return $this->gagal('Pindah Saldo hanya untuk antar rekening BANK. '
+                . 'KAS ke BANK adalah SETOR — pakai menu "Setor / Tarik Tunai" '
+                . 'supaya baseline terverifikasi dan saldo laci ikut diperiksa.');
+        }
+        if ((string) $tujuan->tipe !== 'BANK') {
+            return $this->gagal('Pindah Saldo hanya untuk antar rekening BANK. '
+                . 'BANK ke KAS adalah TARIK — pakai menu "Setor / Tarik Tunai" '
+                . 'supaya posisi unit dan saldo laci ikut diperiksa.');
+        }
+
+        // ---- TANGGAL: hanya dalam periode operasional ----
+        // Hanya batas BAWAH, konsisten dengan KasBankSetorTarikService dan
+        // dengan saveTransfer() di file ini. Catatan lengkap soal kenapa tidak
+        // ada batas atas "tanggal <= hari ini" ada di saveTransfer().
+        $tanggal = FinanceScopeService::tanggalStr($tanggal);
+        $mulai   = FinanceScopeService::periodeMulaiDate();
+
+
+        if ($tanggal < $mulai) {
+            return $this->gagal('Tanggal ' . $tanggal . ' berada sebelum periode operasional baru (' . $mulai . '). '
+                . 'Mutasi sebelum cut-off tidak boleh masuk ledger periode baru.');
+        }
+
+        // Karena kedua kaki sudah dipastikan BANK, unit leg = unit transaksi.
+        $unitKeluar = $unitId;
+        $unitMasuk  = $unitId;
         $role       = (int) session('ID_JABATAN');
 
         // GUARD BERARAH — "boleh transfer KE IRA" tidak berarti boleh memakai
@@ -1263,6 +1393,35 @@ if (($b['tipe'] ?? '') === 'KAS') {
                 . $this->alasanRekeningDitolak($tujuan, $unitMasuk, 'destination', $role));
         }
 
+        // ---- GUARD SALDO & BASELINE (yang sebelumnya tidak ada) ----
+        //
+        // Tanpa dua blok ini, method ini bisa jadi jalur bypass Setor/Tarik:
+        // pada rekening shared, `canUseAsSource()` hanya membuktikan unit
+        // punya AKSES, bukan bahwa saldonya cukup miliknya.
+        $cutoff = new \App\Services\Finance\KasBankCutoffService();
+        $policy = new \App\Services\Finance\EntitlementPolicyService();
+
+        // Rekening yang memang wajib punya statement: saldo yang dipindah
+        // harus berdasar angka yang sudah diverifikasi Finance, bukan
+        // placeholder 0. Daftar rekeningnya datang dari config, bukan tebakan.
+        foreach ([[$asal, 'asal'], [$tujuan, 'tujuan']] as [$akun, $namaKaki]) {
+            if ($policy->wajibStatementVerifikasi((int) $akun->idakun_kas_bank)
+                && ! $cutoff->statementVerified((int) $akun->idakun_kas_bank, $tanggal)
+            ) {
+                return $this->gagal('Rekening ' . $namaKaki . ' "' . $akun->nama_akun . '" belum punya '
+                    . 'statement yang diverifikasi Finance pada ' . $cutoff->tanggalCutoff() . '. '
+                    . 'Isi dan verifikasi statement di menu "Rekening & Saldo Awal" dulu.');
+            }
+        }
+
+        // Cek POSISI UNIT, bukan saldo fisik rekening. Di rekening shared,
+        // saldo fisik bisa cukup sementara posisi unit ini nol — dan itu
+        // harus ditolak, persis seperti Tarik.
+        $cek = $cutoff->cekTarikUnit($asalId, $unitKeluar, $jumlah);
+        if (! $cek['ok']) {
+            return $this->gagal($cek['alasan']);
+        }
+
         $transferRef = 'TRF-' . date('ymd') . '-' . strtoupper(substr(uniqid(), -6));
         $bukti       = $this->uploadBukti();
 
@@ -1276,7 +1435,12 @@ if (($b['tipe'] ?? '') === 'KAS') {
                 return $this->gagal('Kode transfer sudah terpakai, coba lagi');
             }
 
-            $this->TransaksiModel->insert([
+            // `sumber_tipe` wajib diisi supaya baris ini bisa dibedakan dari
+            // Setor/Tarik (yang memakai SETOR_TUNAI / PENARIKAN_TUNAI) walau
+            // `jenis`-nya sama-sama TRANSFER_INTERNAL. Tanpa ini, tab Pindah
+            // Saldo ikut menampilkan Setor/Tarik — persis duplikasi yang
+            // dipisah di fase ini.
+            $legKeluar = $this->TransaksiModel->insert([
                 'tanggal'          => $tanggal,
                 'unit_id'          => $unitKeluar,
                 'akun_kas_bank_id' => $asalId,
@@ -1286,24 +1450,33 @@ if (($b['tipe'] ?? '') === 'KAS') {
                 'akun_tujuan_id'   => $tujuanId,
                 'transfer_ref'     => $transferRef,
                 'submission_key'   => $token,
+                'sumber_tipe'      => KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO,
                 'keterangan'       => $ket,
                 'bukti'            => $bukti,
                 'input_by'         => (int)session()->get('ID_AKUN'),
                 'created_at'       => date('Y-m-d H:i:s'),
             ]);
 
-            $this->TransaksiModel->insert([
-                'tanggal'          => $tanggal,
-                'unit_id'          => $unitMasuk,
-                'akun_kas_bank_id' => $tujuanId,
-                'jenis'            => ModeKasBank::JENIS_TRANSFER,
-                'arah'             => ModeKasBank::ARAH_MASUK,
-                'jumlah'           => $jumlah,
-                'transfer_ref'     => $transferRef,
-                'keterangan'       => $ket,
-                'input_by'         => (int)session()->get('ID_AKUN'),
-                'created_at'       => date('Y-m-d H:i:s'),
-            ]);
+            // Insert kedua kaki hanya kalau kaki pertama benar-benar masuk.
+            // Kalau kaki pertama ditolak, transaksi sudah pasti di-rollback;
+            // mencoba insert kedua hanya menambah lock yang tidak perlu.
+            $legMasuk = $legKeluar !== false
+                ? $this->TransaksiModel->insert([
+                    'tanggal'          => $tanggal,
+                    'unit_id'          => $unitMasuk,
+                    'akun_kas_bank_id' => $tujuanId,
+                    'jenis'            => ModeKasBank::JENIS_TRANSFER,
+                    'arah'             => ModeKasBank::ARAH_MASUK,
+                    'jumlah'           => $jumlah,
+                    'transfer_ref'     => $transferRef,
+                    // submission_key UNIQUE: kaki kedua harus NULL.
+                    'submission_key'   => null,
+                    'sumber_tipe'      => KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO,
+                    'keterangan'       => $ket,
+                    'input_by'         => (int)session()->get('ID_AKUN'),
+                    'created_at'       => date('Y-m-d H:i:s'),
+                ])
+                : false;
 
             $db->transComplete();
         } catch (\Throwable $e) {
@@ -1312,11 +1485,13 @@ if (($b['tipe'] ?? '') === 'KAS') {
             return $this->gagal('Gagal menyimpan transfer. Silakan coba lagi.');
         }
 
-        if ($db->transStatus() === false) {
+        // transComplete() sudah me-rollback kalau ada query yang gagal, tapi
+        // dia tidak melempar apa pun, jadi statusnya wajib diperiksa.
+        if ($db->transStatus() === false || $legKeluar === false || $legMasuk === false) {
             return $this->gagal('Gagal menyimpan transfer');
         }
 
-        session()->setFlashdata('sukses', 'Transfer internal berhasil (tidak memengaruhi Net Cash Flow)');
+        session()->setFlashdata('sukses', 'Pindah saldo berhasil (tidak memengaruhi Net Cash Flow)');
         return redirect()->to(base_url('kas_bank/transfer'));
     }
 
@@ -1328,6 +1503,15 @@ if (($b['tipe'] ?? '') === 'KAS') {
         $row = $this->TransaksiModel->find($id);
         if (!$row || $row->jenis !== ModeKasBank::JENIS_TRANSFER) {
             return $this->gagal('Transaksi transfer tidak ditemukan');
+        }
+
+        // Hanya Pindah Saldo yang boleh dibatalkan dari tab ini. Setor/Tarik
+        // ber-jenis sama (TRANSFER_INTERNAL) tapi pembatalannya milik tab
+        // "Setor / Tarik Tunai" — kalau lolos ke sini, guard baseline dan
+        // cekTarikUnit() yang biasanya melindungi posisi unit jadi dilewati.
+        if ((string) ($row->sumber_tipe ?? '') !== KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO) {
+            return $this->gagal('Transaksi ini bukan Pindah Saldo. '
+                . 'Setor/Tarik dibatalkan dari menu "Setor / Tarik Tunai".');
         }
 
         // Reversal menghapus SELURUH pasangan transfer_ref, jadi kedua rekening
@@ -2362,6 +2546,22 @@ if (($b['tipe'] ?? '') === 'KAS') {
             return $this->gagal('Jumlah melebihi sisa hutang');
         }
 
+        // ---- TANGGAL: hanya dalam periode operasional ----
+        // Hanya batas BAWAH, sengaja tidak ada batas atas "tanggal <= hari
+        // ini". Alasannya konvensi, bukan kelalaian: KasBankSetorTarikService
+        // (implementasi referensi Setor/Tarik) juga hanya menolak tanggal
+        // sebelum periode mulai. Menambah batas atas di sini hanya di sini
+        // akan membuat Pindah Saldo jadi satu-satunya mutasi yang terkunci,
+        // dan karena `periodeMulaiDate()` = cutoff + 1 hari, seluruh fitur
+        // mati selama periode baru belum dibuka.
+        $tanggal = FinanceScopeService::tanggalStr($tanggal);
+        $mulai   = FinanceScopeService::periodeMulaiDate();
+
+        if ($tanggal < $mulai) {
+            return $this->gagal('Tanggal ' . $tanggal . ' berada sebelum periode operasional baru (' . $mulai . '). '
+                . 'Mutasi sebelum cut-off tidak boleh masuk ledger periode baru.');
+        }
+
         $akunKirim  = $this->AkunModel->find($akunKirimId);
         $akunTerima = $this->AkunModel->find($akunTerimaId);
         if (!$akunKirim || $akunKirim->status !== 'aktif' || !$akunTerima || $akunTerima->status !== 'aktif') {
@@ -2398,6 +2598,38 @@ if (($b['tipe'] ?? '') === 'KAS') {
         if (!$this->AkunScope->userBolehUnit((int)$hp->unit_id)
             || !$this->AkunScope->userBolehUnit((int)$piutang->unit_id)) {
             return $this->gagal('Hutang antar unit ini involve unit di luar cakupan Anda.');
+        }
+
+        // ---- GUARD SALDO & BASELINE ----
+        // `canUseAsSource()` hanya membuktikan unit punya AKSES ke rekening,
+        // bukan bahwa saldonya cukup miliknya. Di rekening shared keduanya
+        // berbeda, jadi tanpa cek ini unit bisa mengirim>dari posisi unitnya.
+        //
+        // Catatan skenario: kalau rekening pengirim == rekening penerima, tidak
+        // ada gerakan kas/bank sama sekali (atribusi internal), jadi cek saldo
+        // per unit TIDAK relevan di sana dan hanya rekening pengirim yang dipakai.
+        $rekeningDipakai = $akunKirimId === $akunTerimaId
+            ? [$akunKirim]
+            : [$akunKirim, $akunTerima];
+
+        $cutoff = new KasBankCutoffService();
+        $policy = new \App\Services\Finance\EntitlementPolicyService();
+
+        foreach ($rekeningDipakai as $akun) {
+            if ($policy->wajibStatementVerifikasi((int) $akun->idakun_kas_bank)
+                && ! $cutoff->statementVerified((int) $akun->idakun_kas_bank, $tanggal)
+            ) {
+                return $this->gagal('Rekening "' . $akun->nama_akun . '" belum punya statement yang '
+                    . 'diverifikasi Finance pada ' . $cutoff->tanggalCutoff() . '. '
+                    . 'Isi dan verifikasi statement di menu "Rekening & Saldo Awal" dulu.');
+            }
+        }
+
+        if ($akunKirimId !== $akunTerimaId) {
+            $cek = $cutoff->cekTarikUnit($akunKirimId, (int) $hp->unit_id, $jumlah);
+            if (! $cek['ok']) {
+                return $this->gagal($cek['alasan']);
+            }
         }
 
         $bukti = $this->uploadBukti();

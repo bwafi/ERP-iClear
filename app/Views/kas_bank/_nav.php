@@ -20,10 +20,14 @@ $__ctxBadges = [
 ];
 if (isset($akun_kas_bank) && is_array($akun_kas_bank)) {
     $aktifCount = array_reduce($akun_kas_bank, fn($c, $a) => $c + (($a->status ?? '') === 'aktif' ? 1 : 0), 0);
-    $kasCount   = array_reduce($akun_kas_bank, fn($c, $a) => $c + (($a->tipe ?? '') === 'KAS' ? 1 : 0), 0);
     $bankCount  = array_reduce($akun_kas_bank, fn($c, $a) => $c + (($a->tipe ?? '') === 'BANK' ? 1 : 0), 0);
     $__ctxBadges['rekening'] = $aktifCount > 0 ? "<span class='kb-pill kb-pill-primary'>{$aktifCount} Rekening</span>" : '';
-    $__ctxBadges['pindah']   = ($kasCount + $bankCount) > 1 ? "<span class='kb-pill kb-pill-info'>{$kasCount} Kas · {$bankCount} Bank</span>" : '';
+    // Pindah Saldo menerima HANYA rekening BANK, jadi dataset halaman ini
+    // tidak pernah punya baris KAS. Badge kategori Kas/Bank lama selalu
+    // merender "0 Kas · N Bank" — menyesatkan karena tak ada pilihan KAS
+    // sama sekali. Badge Bank saja; KAS dihitung untuk halaman lain yang
+    // datanya memang bercampur.
+    $__ctxBadges['pindah']   = $bankCount > 0 ? "<span class='kb-pill kb-pill-info'>{$bankCount} Rekening Bank</span>" : '';
 }
 if (isset($hp_hutang) && is_array($hp_hutang)) {
     $openHutang = array_reduce($hp_hutang, fn($c, $h) => $c + (((int)($h->sisa ?? 0) > 0 && ($h->status ?? '') !== 'lunas') ? 1 : 0), 0);
