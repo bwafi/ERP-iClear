@@ -509,10 +509,6 @@ document.addEventListener("DOMContentLoaded", function () {
         };
     }
 
-    function kunciTanggal(n) {
-        return n.tanggal;
-    }
-
     function cekWaktu() {
 
         const peringatan = document.getElementById('peringatanTerlambat');
@@ -544,25 +540,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         const now = waktuWib();
-
-        // tanggal hari ini menurut WIB
-        const today = kunciTanggal(now);
-
-        // Cek apakah sudah pernah tutup kasir hari ini.
-        // Ini PINGGIRAN saja: idempotensi sesungguhnya ada di server
-        // (TutupKasirClosing::simpan()), jadi localStorage di sini hanya
-        // menghemat request dan memberi umpan balik lebih cepat.
-        const sudahKlik = localStorage.getItem('tutupKasirTanggal');
-
-        if (sudahKlik === today) {
-            btn.disabled = true;
-            btn.innerHTML = `
-                <iconify-icon icon="solar:check-circle-bold" width="20"></iconify-icon>
-                Sudah Tutup Kasir
-            `;
-            sembunyikanPeringatan();
-            return;
-        }
 
         const totalMenit = now.jam * 60 + now.menit;
 
@@ -625,10 +602,14 @@ document.addEventListener("DOMContentLoaded", function () {
     // saat form submit
     form.addEventListener('submit', function () {
 
-        // simpan ke localStorage memakai tanggal WIB
-        localStorage.setItem('tutupKasirTanggal', kunciTanggal(waktuWib()));
-
-        // disable tombol setelah submit berjalan
+        // Cegah double submit selama POST berjalan. Tidak ada penandaan
+        // tanggal di localStorage: versi lama menulis flag di sini SEBELUM
+        // server menjawab, jadi submit yang gagal (selisih laci, CSRF
+        // kedaluwarsa, unit tidak cocok) tetap menyisakan flag dan membuat
+        // tombol mati "Sudah Tutup Kasir" sampai akhir hari, padahal DB
+        // tidak punya closing. Status tutup hanya dari `sudahDitutup`
+        // (query DB di server). Kalau POST gagal, controller redirect
+        // kembali dan `sudahDitutup` = false, jadi tombol hidup lagi.
         btn.disabled = true;
 
         btn.innerHTML = `
