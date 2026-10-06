@@ -1,96 +1,4 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div>
-            <h4 class="fw-semibold mb-0">Stok Opname</h4>
-            <span class="text-muted small">Pencatatan stok fisik bertahap (DRAFT) lalu difinalisasi (FINAL) — riwayat & KPI hanya memakai hasil final</span>
-        </div>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Stok</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Stok Opname</li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
-<?php if (session()->getFlashdata('sukses')) : ?>
-    <div class="alert alert-success alert-dismissible fade show"><?= session()->getFlashdata('sukses') ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-<?php endif; ?>
-<?php if (session()->getFlashdata('gagal')) : ?>
-    <div class="alert alert-danger alert-dismissible fade show"><?= session()->getFlashdata('gagal') ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-<?php endif; ?>
-
-<!-- Banner lanjutkan DRAFT yang menggantung lintas hari -->
-<?php if (!empty($canMutate) && !empty($draftTerbuka) && (string)$draftTerbuka->tanggal !== $tanggal) : ?>
-    <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <div>
-            <i class="bi bi-pencil-square"></i>
-            Ada stok opname <strong>belum difinalisasi</strong> untuk unit ini
-            (tanggal <strong><?= esc(date('d/m/Y', strtotime($draftTerbuka->tanggal))) ?></strong>,
-            <?= (int)$draftTerbuka->terisi_barang ?>/<?= (int)$draftTerbuka->total_barang ?> terisi).
-            One unit hanya boleh punya satu draft terbuka.
-        </div>
-        <a class="btn btn-sm btn-warning" href="<?= base_url('stok_opname?unit=' . (int)$unit . '&tanggal=' . esc($draftTerbuka->tanggal)) ?>">
-            <i class="bi bi-arrow-right-circle"></i> Lanjutkan draft ini
-        </a>
-    </div>
-<?php endif; ?>
-
-<!-- Progres KPI stok opname bulan ini -->
-<?php if (!empty($kpiBulanIni)) : ?>
-    <?php $kpi = $kpiBulanIni; ?>
-    <div class="card shadow-sm border-0 mb-3">
-        <div class="card-body py-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="fw-semibold">
-                    <i class="bi bi-trophy"></i> KPI Stok Opname — <?= esc(date('F Y', strtotime($kpi['bulan'] . '-01'))) ?>
-                </span>
-                <span class="small text-muted">
-                    <strong><?= (int)$kpi['final'] ?></strong> periode FINAL / target <?= (int)$kpi['target'] ?>
-                    (<?= (int)$kpi['pct'] ?>%)
-                </span>
-            </div>
-            <div class="progress progress-so rounded-3" style="height:8px">
-                <div class="progress-bar <?= $kpi['final'] >= $kpi['target'] ? 'bg-success' : 'bg-primary' ?>"
-                     role="progressbar" style="width: <?= (int)$kpi['pct'] ?>%"></div>
-            </div>
-            <small class="text-muted">
-                Hanya periode yang seluruh barang berstok terisi dan sudah difinalisasi yang dihitung.
-            </small>
-        </div>
-    </div>
-<?php endif; ?>
-
-<!-- Pilih unit & tanggal (hanya role lintas-unit; operator mengikuti unit & tanggal sendiri) -->
-<?php if (!empty($canPickUnit)) : ?>
-    <div class="card shadow-sm border-0 mb-3">
-        <div class="card-body py-3">
-            <form method="get" action="<?= base_url('stok_opname') ?>" class="row g-2 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label mb-1 fw-semibold">Unit</label>
-                    <select name="unit" class="form-select">
-                        <?php foreach ($unitList as $u) : ?>
-                            <option value="<?= (int)$u->idunit ?>" <?= (int)$u->idunit === (int)$unit ? 'selected' : '' ?>>
-                                <?= esc($u->NAMA_UNIT) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label mb-1 fw-semibold">Tanggal Opname</label>
-                    <input type="date" name="tanggal" class="form-control" value="<?= esc($tanggal) ?>" max="<?= date('Y-m-d') ?>">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary"><iconify-icon icon="solar:magnifer-bold" class="me-1"></iconify-icon>Tampilkan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-<?php endif; ?>
+<?= $this->include('stok/_opname_theme') ?>
 
 <?php
 $isDraft   = $periode && $periode->status === 'DRAFT';
@@ -103,406 +11,565 @@ $namaUnit  = '';
 foreach ($unitList as $u) {
     if ((int)$u->idunit === (int)$unit) { $namaUnit = $u->NAMA_UNIT; break; }
 }
+$kompTotal = $periode ? (float)$periode->jumlah_komp : null;
+$selisih   = ($periode && $periode->jumlah_selisih !== null) ? (float)$periode->jumlah_selisih : null;
+
+// Stempel pembekuan: kapan stok komputer disalin dari stok_barang ke daftar opname.
+$freezeTs  = $periode ? strtotime((string)($periode->created_at ?? '')) : false;
+$freezeBy  = $periode ? (int)($periode->mulai_by ?? 0) : 0;
+$freezeTxt = ($freezeTs !== false && $freezeTs > 0) ? date('d/m/Y H:i', $freezeTs) : '';
 ?>
 
-<!-- Kartu status + indikator -->
-<div class="card shadow-sm border-0 mb-3">
-    <div class="card-body">
-        <div class="row align-items-center g-3">
-            <div class="col-md-7">
-                <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <div>
+<div class="stok-opname">
+
+    <!-- Header halaman -->
+    <header class="card so-head mb-3">
+        <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-2">
+            <div>
+                <h4 class="fw-semibold mb-1">Stok Opname</h4>
+                <p class="text-muted mb-0">Pencatatan stok fisik bertahap (DRAFT) lalu difinalisasi (FINAL) — riwayat &amp; KPI hanya memakai hasil final</p>
+            </div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Stok</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Stok Opname</li>
+                </ol>
+            </nav>
+        </div>
+
+        <?php if (!empty($canPickUnit)) : ?>
+            <div class="so-scope">
+                <form method="get" action="<?= base_url('stok_opname') ?>" class="row g-2 align-items-end">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label">Unit</label>
+                        <select name="unit" class="form-select form-select-sm">
+                            <?php foreach ($unitList as $u) : ?>
+                                <option value="<?= (int)$u->idunit ?>" <?= (int)$u->idunit === (int)$unit ? 'selected' : '' ?>>
+                                    <?= esc($u->NAMA_UNIT) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <label class="form-label">Tanggal Opname</label>
+                        <input type="date" name="tanggal" class="form-control form-control-sm" value="<?= esc($tanggal) ?>" max="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="col-md-2 col-auto">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            <iconify-icon icon="solar:magnifer-bold" class="me-1"></iconify-icon>Tampilkan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        <?php endif; ?>
+    </header>
+
+    <?php if (session()->getFlashdata('sukses')) : ?>
+        <div class="alert alert-success alert-dismissible fade show d-flex align-items-start gap-2">
+            <i class="bi bi-check-circle-fill mt-1"></i>
+            <div class="flex-grow-1"><?= session()->getFlashdata('sukses') ?></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+        </div>
+    <?php endif; ?>
+    <?php if (session()->getFlashdata('gagal')) : ?>
+        <div class="alert alert-danger alert-dismissible fade show d-flex align-items-start gap-2">
+            <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+            <div class="flex-grow-1"><?= session()->getFlashdata('gagal') ?></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+        </div>
+    <?php endif; ?>
+
+    <!-- Banner lanjutkan DRAFT yang menggantung lintas hari -->
+    <?php if (!empty($canMutate) && !empty($draftTerbuka) && (string)$draftTerbuka->tanggal !== $tanggal) : ?>
+        <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+                <i class="bi bi-pencil-square"></i>
+                Ada stok opname <strong>belum difinalisasi</strong> untuk unit ini
+                (tanggal <strong><?= esc(date('d/m/Y', strtotime($draftTerbuka->tanggal))) ?></strong>,
+                <?= (int)$draftTerbuka->terisi_barang ?>/<?= (int)$draftTerbuka->total_barang ?> terisi).
+                One unit hanya boleh punya satu draft terbuka.
+            </div>
+            <a class="btn btn-sm btn-warning" href="<?= base_url('stok_opname?unit=' . (int)$unit . '&tanggal=' . esc($draftTerbuka->tanggal)) ?>">
+                <i class="bi bi-arrow-right-circle"></i> Lanjutkan draft ini
+            </a>
+        </div>
+    <?php endif; ?>
+
+    <!-- Papan kendali: empat angka periode -->
+    <section class="card so-board mb-3" aria-label="Ringkasan periode stok opname">
+        <div class="card-body">
+            <div class="so-board__grid">
+
+                <div class="so-cell">
+                    <span class="so-cell__label">Total Barang</span>
+                    <span class="so-cell__value"><?= number_format($totalItem, 0, ',', '.') ?></span>
+                    <span class="so-cell__note">
                         <?php if (!$periode) : ?>
-                            <span class="badge bg-secondary fs-6">BELUM DIMULAI</span>
+                            Daftar dibuat saat Mulai Opname
                         <?php elseif ($isDraft) : ?>
-                            <span class="badge bg-warning-subtle text-warning fs-6">DRAFT</span>
+                            <?= number_format($terisi, 0, ',', '.') ?> terisi · <?= number_format($sisa, 0, ',', '.') ?> sisa
                         <?php else : ?>
-                            <span class="badge bg-success-subtle text-success fs-6">FINAL</span>
+                            Seluruh barang berstok terisi
                         <?php endif; ?>
-                    </div>
-                    <div>
-                        <h6 class="mb-0"><?= esc($namaUnit) ?></h6>
-                        <small class="text-muted"><?= esc($tanggal) ?></small>
-                    </div>
-                    <?php if ($periode && $isFinal && $periode->tanggal_finalisasi) : ?>
-                        <div class="text-muted small">
-                            <i class="bi bi-shield-check"></i>
-                            Difinalisasi oleh user #<?= (int)$periode->finalisasi_by ?> pada
-                            <?= esc(date('d/m/Y H:i', strtotime($periode->tanggal_finalisasi))) ?>
+                    </span>
+                </div>
+
+                <div class="so-cell">
+                    <span class="so-cell__label">Stok Komputer</span>
+                    <span class="so-cell__value <?= $kompTotal === null ? 'is-empty' : '' ?>">
+                        <?= $kompTotal === null ? '—' : number_format($kompTotal, 0, ',', '.') ?>
+                    </span>
+                    <span class="so-cell__note">
+                        <?php if ($periode) : ?>
+                            <iconify-icon icon="solar:lock-keyhole-bold" width="14" height="14"></iconify-icon>
+                            Dibekukan saat mulai opname
+                        <?php else : ?>
+                            Disalin dari stok kartu saat mulai
+                        <?php endif; ?>
+                    </span>
+                </div>
+
+                <div class="so-cell">
+                    <span class="so-cell__label">Total Selisih</span>
+                    <?php if ($selisih === null) : ?>
+                        <span class="so-cell__value is-empty">—</span>
+                    <?php else : ?>
+                        <span class="so-cell__value <?= $selisih > 0 ? 'is-neg' : ($selisih < 0 ? 'is-pos' : '') ?>">
+                            <?= $selisih > 0 ? '+' : '' ?><?= number_format($selisih, 0, ',', '.') ?>
+                        </span>
+                    <?php endif; ?>
+                    <span class="so-cell__note">
+                        <?= $selisih === null ? 'Terhitung setiap kali jumlah real disimpan' : 'Real − komputer, seluruh baris' ?>
+                    </span>
+                </div>
+
+                <div class="so-cell">
+                    <span class="so-cell__label">KPI Stok Opname<?php if (!empty($kpiBulanIni)) : ?> — <?= esc(date('F Y', strtotime($kpiBulanIni['bulan'] . '-01'))) ?><?php endif; ?></span>
+                    <?php if (!empty($kpiBulanIni)) : ?>
+                        <?php $kpi = $kpiBulanIni; ?>
+                        <span class="so-cell__value">
+                            <?= (int)$kpi['final'] ?><span class="so-den"> / <?= (int)$kpi['target'] ?> periode FINAL</span>
+                        </span>
+                        <div class="so-meter" role="img" aria-label="KPI <?= (int)$kpi['pct'] ?> persen dari target bulanan">
+                            <div class="so-meter__bar" style="width: <?= (int)$kpi['pct'] ?>%"></div>
                         </div>
+                        <span class="so-cell__note"><?= (int)$kpi['pct'] ?>% target bulanan · hanya periode FINAL yang dihitung</span>
+                    <?php else : ?>
+                        <span class="so-cell__value is-empty">—</span>
+                        <span class="so-cell__note">Belum ada data KPI bulan ini</span>
                     <?php endif; ?>
                 </div>
 
-                <?php if ($periode && $isDraft) : ?>
-                    <?php
-                        $wajibTotal = 0; $wajibTerisi = 0;
-                        foreach ($items as $it) {
-                            $komp = (float)($it['jumlah_komp'] ?? 0);
-                            if ($komp != 0) { $wajibTotal++; if ($it['terisi']) $wajibTerisi++; }
-                        }
-                        $wpct = $wajibTotal > 0 ? min(100, round(($wajibTerisi / $wajibTotal) * 100)) : 100;
-                        $wk = max(0, $wajibTotal - $wajibTerisi);
-                    ?>
-                    <div class="mt-3">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="fw-semibold">Progres input</span>
-                            <span id="soProgText"><?= $wajibTerisi ?> dari <?= $wajibTotal ?> barang berstok terisi (<?= $wpct ?>%)</span>
-                        </div>
-                        <div class="progress progress-so rounded-3 mb-2">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="soProgBar" style="width: <?= $wpct ?>%"></div>
-                        </div>
-                        <?php if ($wk > 0) : ?>
-                            <small class="text-danger mt-1 d-inline-block" id="soSisaHint">
-                                <i class="bi bi-exclamation-triangle"></i> Masih ada <?= $wk ?> barang berstok (stok > 0) yang belum diisi jumlah real.
-                            </small>
-                        <?php else : ?>
-                            <small class="text-success mt-1 d-inline-block" id="soSisaHint"><i class="bi bi-check-circle"></i> Semua barang berstok sudah terisi — siap difinalisasi.</small>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
             </div>
+        </div>
+    </section>
 
-            <div class="col-md-5">
-                <div class="row text-center g-2">
-                    <div class="col-4">
-                        <div class="border rounded-3 p-2 bg-light">
-                            <div class="fs-5 fw-bold text-primary"><?= number_format($totalItem, 0, ',', '.') ?></div>
-                            <div class="small text-muted">Total Barang</div>
-                        </div>
+    <!-- Status periode + aksi -->
+    <section class="card so-status mb-3">
+        <div class="card-body">
+            <div class="so-status__top">
+                <div class="so-status__id">
+                    <?php if (!$periode) : ?>
+                        <span class="so-state-chip is-idle">BELUM DIMULAI</span>
+                    <?php elseif ($isDraft) : ?>
+                        <span class="so-state-chip is-draft">DRAFT — dapat diedit</span>
+                    <?php else : ?>
+                        <span class="so-state-chip is-final">FINAL — kunci data</span>
+                    <?php endif; ?>
+
+                    <div class="so-status__unit">
+                        <h6><?= esc($namaUnit) ?></h6>
+                        <small><?= esc(date('d/m/Y', strtotime($tanggal))) ?> · <?= esc($tanggal) ?></small>
                     </div>
-                    <div class="col-4">
-                        <div class="border rounded-3 p-2 bg-light">
-                            <div class="fs-5 fw-bold <?= ($periode && $isFinal) ? 'text-success' : 'text-warning' ?>">
-                                <?= $periode ? number_format($periode->jumlah_komp ?? 0, 0, ',', '.') : '-' ?>
-                            </div>
-                            <div class="small text-muted">Stok Komputer</div>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="border rounded-3 p-2 bg-light">
-                            <div class="fs-5 fw-bold <?= ($periode && (float)($periode->jumlah_selisih ?? 0) > 0) ? 'text-danger' : (($periode && (float)($periode->jumlah_selisih ?? 0) < 0) ? 'text-success' : 'text-muted') ?>">
-                                <?= $periode && $periode->jumlah_selisih !== null ? number_format((float)$periode->jumlah_selisih, 0, ',', '.') : '-' ?>
-                            </div>
-                            <div class="small text-muted">Total Selisih</div>
-                        </div>
-                    </div>
+
+                    <?php if ($periode) : ?>
+                        <span class="so-freeze">
+                            <iconify-icon icon="solar:lock-keyhole-bold" width="14" height="14"></iconify-icon>
+                            <?php if ($freezeTxt !== '') : ?>
+                                Stok komputer dibekukan <strong><?= $freezeTxt ?></strong><?= $freezeBy > 0 ? ' oleh <strong>user #' . $freezeBy . '</strong>' : '' ?>
+                            <?php else : ?>
+                                Stok komputer dibekukan saat periode dimulai
+                            <?php endif; ?>
+                        </span>
+                    <?php endif; ?>
+
+                    <?php if ($periode && $isFinal && $periode->tanggal_finalisasi) : ?>
+                        <span class="so-finalised">
+                            <i class="bi bi-shield-check"></i>
+                            Difinalisasi oleh user #<?= (int)$periode->finalisasi_by ?> pada
+                            <?= esc(date('d/m/Y H:i', strtotime($periode->tanggal_finalisasi))) ?>
+                        </span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="so-status__actions">
+                    <?php if (empty($canMutate)) : ?>
+                        <span class="so-state-chip is-idle">
+                            <i class="bi bi-eye"></i> Mode lihat — role ini tidak dapat mengubah/simpan/finalisasi
+                        </span>
+                    <?php elseif (!$periode) : ?>
+                        <form method="post" action="<?= base_url('stok_opname/mulai') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="unit" value="<?= (int)$unit ?>">
+                            <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
+                            <button type="button" class="btn btn-primary" id="btnMulaiOpname">
+                                <iconify-icon icon="solar:play-bold" class="me-1"></iconify-icon>Mulai Opname
+                            </button>
+                        </form>
+                    <?php elseif ($isDraft) : ?>
+                        <button type="submit" form="formOpname" name="aksi" value="simpan" class="btn btn-primary">
+                            <iconify-icon icon="solar:save-bold" class="me-1"></iconify-icon>Simpan Draft
+                        </button>
+                        <?php if ($sisa > 0) : ?>
+                            <button type="button" class="btn btn-success" disabled
+                                title="Finalisasi hanya bisa dilakukan setelah semua barang berstok terisi.">
+                                <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
+                            </button>
+                        <?php else : ?>
+                            <button type="submit" form="formOpname" name="aksi" value="finalisasi" class="btn btn-success btn-finalize">
+                                <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
+                            </button>
+                        <?php endif; ?>
+                    <?php else : ?>
+                        <?php if (!empty($canReopen)) : ?>
+                            <form method="post" action="<?= base_url('stok_opname/reopen') ?>" class="d-flex flex-wrap gap-2 align-items-center"
+                                id="formReopen">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="unit" value="<?= (int)$unit ?>">
+                                <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
+                                <label class="visually-hidden" for="soAlasanReopen">Alasan reopen</label>
+                                <input type="text" id="soAlasanReopen" name="alasan" class="form-control form-control-sm" maxlength="255"
+                                    placeholder="Alasan reopen (wajib)" required style="min-width:16rem">
+                                <button type="submit" class="btn btn-outline-warning btn-sm">
+                                    <iconify-icon icon="solar:refresh-bold" class="me-1"></iconify-icon>Reopen / Koreksi
+                                </button>
+                            </form>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
             </div>
-        </div>
 
-        <!-- Tombol aksi (hanya untuk yang boleh mengubah; role mode-lihat hanya melihat) -->
-        <div class="border-top pt-3 mt-3 d-flex gap-2 flex-wrap align-items-center">
-            <?php if (empty($canMutate)) : ?>
-                <span class="badge bg-info-subtle text-info fs-6">
-                    <i class="bi bi-eye"></i> Mode lihat — role ini tidak dapat mengubah/simpan/finalisasi.
+            <?php if ($isDraft) : ?>
+                <?php
+                    $wajibTotal = 0; $wajibTerisi = 0;
+                    foreach ($items as $it) {
+                        $komp = (float)($it['jumlah_komp'] ?? 0);
+                        if ($komp != 0) { $wajibTotal++; if ($it['terisi']) $wajibTerisi++; }
+                    }
+                    $wpct = $wajibTotal > 0 ? min(100, round(($wajibTerisi / $wajibTotal) * 100)) : 100;
+                    $wk = max(0, $wajibTotal - $wajibTerisi);
+                ?>
+                <div class="so-status__meter">
+                    <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-1">
+                        <span class="fw-semibold" style="font-size:.875rem">Progres input</span>
+                        <span class="so-progress-text text-muted" id="soProgText"><?= $wajibTerisi ?> dari <?= $wajibTotal ?> barang berstok terisi (<?= $wpct ?>%)</span>
+                    </div>
+                    <div class="progress progress-so">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                             id="soProgBar" style="width: <?= $wpct ?>%; --so-prog: <?= (float) $wpct / 100 ?>"></div>
+                    </div>
+                    <?php if ($wk > 0) : ?>
+                        <small class="so-hint text-danger" id="soSisaHint">
+                            <i class="bi bi-exclamation-triangle"></i> Masih ada <?= $wk ?> barang berstok (stok &gt; 0) yang belum diisi jumlah real.
+                        </small>
+                    <?php else : ?>
+                        <small class="so-hint text-success" id="soSisaHint">
+                            <i class="bi bi-check-circle"></i> Semua barang berstok sudah terisi — siap difinalisasi.
+                        </small>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <!-- Ledger barang opname -->
+    <section class="card so-ledger">
+        <div class="card-header">
+            <h5 class="mb-0">Daftar Barang Opname</h5>
+            <?php if ($periode) : ?>
+                <span class="so-state-chip <?= $isFinal ? 'is-final' : 'is-draft' ?>">
+                    <?= $isFinal ? 'FINAL — kunci data' : 'DRAFT — dapat diedit' ?>
                 </span>
-            <?php elseif (!$periode) : ?>
-                <form method="post" action="<?= base_url('stok_opname/mulai') ?>">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="unit" value="<?= (int)$unit ?>">
-                    <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
-                    <button type="button" class="btn btn-primary" id="btnMulaiOpname">
-                        <iconify-icon icon="solar:play-bold" class="me-1"></iconify-icon>Mulai Opname
-                    </button>
-                </form>
-            <?php elseif ($isDraft) : ?>
-                <button type="submit" form="formOpname" name="aksi" value="simpan" class="btn btn-primary">
-                    <iconify-icon icon="solar:save-bold" class="me-1"></iconify-icon>Simpan Draft
-                </button>
-                <?php if ($sisa > 0) : ?>
-                    <button type="button" class="btn btn-success" disabled
-                        title="Finalisasi hanya bisa dilakukan setelah semua barang berstok terisi.">
-                        <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
-                    </button>
-                <?php else : ?>
-                    <button type="submit" form="formOpname" name="aksi" value="finalisasi" class="btn btn-success btn-finalize">
-                        <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
-                    </button>
-                <?php endif; ?>
-            <?php else : ?>
-                <?php if (!empty($canReopen)) : ?>
-                <form method="post" action="<?= base_url('stok_opname/reopen') ?>" class="d-flex flex-wrap gap-2 align-items-start"
-                    id="formReopen">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="unit" value="<?= (int)$unit ?>">
-                    <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
-                    <div class="me-2" style="min-width:320px">
-                        <input type="text" name="alasan" class="form-control form-control-sm" maxlength="255"
-                            placeholder="Alasan reopen (wajib)" required>
-                    </div>
-                    <button type="submit" class="btn btn-outline-warning">
-                        <iconify-icon icon="solar:refresh-bold" class="me-1"></iconify-icon>Reopen / Koreksi
-                    </button>
-                </form>
-                <?php endif; ?>
             <?php endif; ?>
         </div>
-    </div>
-</div>
 
-<!-- Tabel barang -->
-<div class="card shadow-sm border-0">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h5 class="mb-0">Daftar Barang Opname</h5>
-        <?php if ($periode) : ?>
-            <span class="badge bg-<?= $isFinal ? 'success' : 'warning' ?>-subtle text-<?= $isFinal ? 'success' : 'warning' ?>">
-                <?= $isFinal ? 'FINAL — kunci data' : 'DRAFT — dapat diedit' ?>
-            </span>
-        <?php endif; ?>
-    </div>
-    <div class="card-body">
-        <?php if (!$periode) : ?>
-            <div class="alert alert-info mb-0">
-                Belum ada periode stok opname untuk unit/tanggal ini.
-                Klik <strong>Mulai Opname</strong> untuk membuat daftar barang dari stok kartu dan mulai input secara bertahap.
-            </div>
-        <?php elseif (empty($items)) : ?>
-            <div class="alert alert-warning mb-0">Tidak ada barang untuk diopname (daftar barang kosong).</div>
-        <?php else : ?>
-            <?php if ($isDraft) : ?>
-                <form method="post" action="<?= base_url('stok_opname/simpan') ?>" id="formOpname">
-                    <?= csrf_field() ?>
-            <?php endif; ?>
-            <input type="hidden" name="unit" value="<?= (int)$unit ?>">
-            <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
+        <div class="card-body">
+            <?php if (!$periode) : ?>
+                <div class="so-empty">
+                    <span class="so-empty__icon">
+                        <iconify-icon icon="solar:clipboard-list-line-duotone"></iconify-icon>
+                    </span>
+                    <p class="so-empty__title">Belum ada daftar opname untuk tanggal ini</p>
+                    <p class="so-empty__text">
+                        Klik <strong>Mulai Opname</strong> pada panel status untuk menyalin daftar barang berstok
+                        unit ini, lalu isi <strong>Jumlah Real</strong> sesuai hitung fisik — boleh dicicil dan
+                        dilanjutkan di hari lain.
+                    </p>
+                    <span class="so-empty__stamp">
+                        <iconify-icon icon="solar:lock-keyhole-bold" width="14" height="14"></iconify-icon>
+                        Saat mulai, stok komputer tiap barang dibekukan pada saat itu juga
+                    </span>
+                </div>
+            <?php elseif (empty($items)) : ?>
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Tidak ada barang untuk diopname (daftar barang kosong).
+                </div>
+            <?php else : ?>
 
-            <?php if ($isDraft) : ?>
+                <?php if ($isDraft) : ?>
+                    <form method="post" action="<?= base_url('stok_opname/simpan') ?>" id="formOpname">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="unit" value="<?= (int)$unit ?>">
+                        <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
 
-                <!-- Toolbar list cerdas -->
-                <div class="row g-2 align-items-center mb-2">
-                    <div class="col-auto">
-                        <div class="btn-group btn-group-sm" role="group" id="soFilter">
-                            <button type="button" class="btn btn-warning fw-semibold" data-filter="belum">
-                                Belum Terisi <span class="badge text-bg-light ms-1" id="cntBelum"></span>
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary" data-filter="semua">
-                                Semua <span class="badge text-bg-light ms-1" id="cntSemua"></span>
-                            </button>
-                            <?php if (!empty($canMutate)) : ?>
-                                <button type="button" class="btn btn-outline-danger" data-filter="unsaved">
-                                    Belum Disimpan <span class="badge text-bg-light ms-1" id="cntUnsaved"></span>
+                        <div class="so-command">
+                            <div class="so-filter" role="group" aria-label="Filter status isi barang" id="soFilter">
+                                <button type="button" class="btn btn-warning fw-semibold" data-filter="belum">
+                                    Belum Terisi <span class="badge text-bg-light" id="cntBelum"></span>
                                 </button>
+                                <button type="button" class="btn btn-outline-secondary" data-filter="semua">
+                                    Semua <span class="badge text-bg-light" id="cntSemua"></span>
+                                </button>
+                                <?php if (!empty($canMutate)) : ?>
+                                    <button type="button" class="btn btn-outline-danger" data-filter="unsaved">
+                                        Belum Disimpan <span class="badge text-bg-light" id="cntUnsaved"></span>
+                                    </button>
+                                <?php endif; ?>
+                                <button type="button" class="btn btn-outline-success" data-filter="sudah">
+                                    Sudah Terisi <span class="badge text-bg-light" id="cntSudah"></span>
+                                </button>
+                            </div>
+
+                            <div class="so-search">
+                                <label class="visually-hidden" for="soSearch">Cari kode atau nama barang</label>
+                                <input type="search" id="soSearch" class="form-control form-control-sm"
+                                    placeholder="Cari kode / nama barang..." autocomplete="off">
+                            </div>
+
+                            <div class="so-spacer"></div>
+
+                            <?php if (!empty($canFilterSelisih)) : ?>
+                                <div class="so-field">
+                                    <label for="soSelisih">Selisih</label>
+                                    <select id="soSelisih" class="form-select form-select-sm w-auto">
+                                        <option value="all">Semua</option>
+                                        <option value="nz">Ada Selisih (≠ 0)</option>
+                                        <option value="plus">Lebih (+)</option>
+                                        <option value="minus">Kurang (−)</option>
+                                        <option value="zero">Presisi (= 0)</option>
+                                        <option value="stok0">Stok 0 (tidak wajib)</option>
+                                        <option value="stokplus">Stok &gt; 0 (wajib)</option>
+                                    </select>
+                                </div>
                             <?php endif; ?>
-                            <button type="button" class="btn btn-outline-success" data-filter="sudah">
-                                Sudah Terisi <span class="badge text-bg-light ms-1" id="cntSudah"></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-auto">
-                        <input type="search" id="soSearch" class="form-control form-control-sm" placeholder="Cari kode / nama barang..."
-                            autocomplete="off">
-                    </div>
-                    <div class="col-auto ms-auto d-flex align-items-center gap-3">
-                        <?php if (!empty($canFilterSelisih)) : ?>
-                            <div class="d-flex align-items-center gap-2">
-                                <label class="small text-muted mb-0">Selisih</label>
-                                <select id="soSelisih" class="form-select form-select-sm w-auto">
-                                    <option value="all">Semua</option>
-                                    <option value="nz">Ada Selisih (≠ 0)</option>
-                                    <option value="plus">Lebih (+)</option>
-                                    <option value="minus">Kurang (−)</option>
-                                    <option value="zero">Presisi (= 0)</option>
-                                    <option value="stok0">Stok 0 (tidak wajib)</option>
-                                    <option value="stokplus">Stok > 0 (wajib)</option>
+
+                            <div class="so-field">
+                                <label for="soSort">Urut</label>
+                                <select id="soSort" class="form-select form-select-sm w-auto">
+                                    <option value="recent">Terbaru diinput</option>
+                                    <option value="kode">Kode A–Z</option>
                                 </select>
                             </div>
-                        <?php endif; ?>
-                        <div class="d-flex align-items-center gap-2">
-                            <label class="small text-muted mb-0">Urut</label>
-                            <select id="soSort" class="form-select form-select-sm w-auto">
-                                <option value="recent">Terbaru diinput</option>
-                                <option value="kode">Kode A–Z</option>
-                            </select>
+
+                            <div class="so-field">
+                                <label for="soPageSize">Tampil</label>
+                                <select id="soPageSize" class="form-select form-select-sm w-auto">
+                                    <option value="50">50</option>
+                                    <option value="100" selected>100</option>
+                                    <option value="200">200</option>
+                                    <option value="500">500</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <label class="small text-muted mb-0">Tampil</label>
-                            <select id="soPageSize" class="form-select form-select-sm w-auto">
-                                <option value="50">50</option>
-                                <option value="100" selected>100</option>
-                                <option value="200">200</option>
-                                <option value="500">500</option>
-                            </select>
+
+                        <div class="table-responsive so-scroll">
+                            <table class="table so-table align-middle" id="opnameTable">
+                                <thead>
+                                    <tr>
+                                        <th scope="col" class="so-idx">#</th>
+                                        <th scope="col">Kode</th>
+                                        <th scope="col">Nama Barang</th>
+                                        <th scope="col" class="text-center">Stok Komputer</th>
+                                        <th scope="col" class="text-center">Jumlah Real</th>
+                                        <th scope="col" class="text-center">Selisih</th>
+                                        <th scope="col" class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="soBody"></tbody>
+                            </table>
                         </div>
-                    </div>
-                </div>
 
-                <div class="table-responsive so-scroll">
-                    <table class="table table-sm align-middle table-hover" id="opnameTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th width="40">#</th>
-                                <th>Kode</th>
-                                <th>Nama Barang</th>
-                                <th class="text-center">Stok Komputer</th>
-                                <th class="text-center" width="130">Jumlah Real</th>
-                                <th class="text-center" width="110">Selisih</th>
-                                <th class="text-center" width="110">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="soBody"></tbody>
-                    </table>
-                </div>
+                        <div class="so-pager">
+                            <small id="soInfo"></small>
+                            <ul class="pagination pagination-sm mb-0" id="soPagination"></ul>
+                        </div>
+                    </form>
 
-                <!-- Pagination + info -->
-                <div class="d-flex justify-content-between align-items-center flex-wrap mt-2 gap-2">
-                    <small class="text-muted" id="soInfo"></small>
-                    <ul class="pagination pagination-sm mb-0" id="soPagination"></ul>
-                </div>
+                    <p class="so-footnote">
+                        <i class="bi bi-info-circle"></i>
+                        Isi <strong>Jumlah Real</strong> sesuai hasil hitung fisik. Selisih dihitung otomatis.
+                        Simpan draft kapan saja (dicicil, boleh dilanjutkan di hari lain).
+                        <strong>Finalisasi</strong> baru bisa dilakukan setelah <strong>seluruh</strong> barang berstok terisi.
+                        Kosongkan kolom untuk membatalkan isian.
+                    </p>
 
-            <?php else : ?>
+                <?php else : ?>
 
-                <div class="table-responsive so-scroll">
-                    <table class="table table-sm align-middle table-hover" id="opnameTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th width="40">#</th>
-                                <th>Kode</th>
-                                <th>Nama Barang</th>
-                                <th class="text-center">Stok Komputer</th>
-                                <th class="text-center" width="130">Jumlah Real</th>
-                                <th class="text-center" width="110">Selisih</th>
-                                <th class="text-center" width="110">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($items as $i => $it) : ?>
-                                <tr class="<?= ($isDraft && !$it['terisi']) ? 'table-warning' : '' ?>"
-                                    data-terisi="<?= $it['terisi'] ? '1' : '0' ?>">
-                                    <td><?= $i + 1 ?></td>
-                                    <td class="fw-semibold"><?= esc($it['kode_barang']) ?></td>
-                                    <td>
-                                        <?= esc($it['nama_barang']) ?>
-                                        <?php if ($it['jenis_hp'] || $it['warna']) : ?>
-                                            <br><small class="text-muted">
-                                                <?= esc($it['jenis_hp']) ?><?= $it['warna'] ? ' · ' . esc($it['warna']) : '' ?>
-                                            </small>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="text-center fw-bold"><?= number_format($it['jumlah_komp'], 0, ',', '.') ?></td>
-                                    <td class="text-center">
-                                        <span class="fw-bold"><?= $it['jumlah_real'] !== null ? number_format($it['jumlah_real'], 0, ',', '.') : '-' ?></span>
-                                    </td>
-                                    <td class="text-center">
-                                        <?php if ($it['jumlah_selisih'] !== null) : ?>
-                                            <span class="fw-bold <?= $it['selisih_negatif'] ? 'text-danger' : ($it['selisih_positif'] ? 'text-success' : 'text-muted') ?>">
-                                                <?= $it['jumlah_selisih'] > 0 ? '+' : '' ?><?= number_format($it['jumlah_selisih'], 0, ',', '.') ?>
-                                            </span>
-                                        <?php else : ?>
-                                            <span class="text-muted">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge <?= $it['terisi'] ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary' ?>">
-                                            <?= $it['terisi'] ? 'Terisi' : 'Belum' ?>
-                                        </span>
-                                    </td>
+                    <div class="table-responsive so-scroll">
+                        <table class="table so-table align-middle" id="opnameTable">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="so-idx">#</th>
+                                    <th scope="col">Kode</th>
+                                    <th scope="col">Nama Barang</th>
+                                    <th scope="col" class="text-center">Stok Komputer</th>
+                                    <th scope="col" class="text-center">Jumlah Real</th>
+                                    <th scope="col" class="text-center">Selisih</th>
+                                    <th scope="col" class="text-center">Status</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($items as $i => $it) : ?>
+                                    <tr data-terisi="<?= $it['terisi'] ? '1' : '0' ?>">
+                                        <td class="so-idx"><?= $i + 1 ?></td>
+                                        <td class="so-kode"><?= esc($it['kode_barang']) ?></td>
+                                        <td>
+                                            <?= esc($it['nama_barang']) ?>
+                                            <?php if ($it['jenis_hp'] || $it['warna']) : ?>
+                                                <span class="so-sub">
+                                                    <?= esc($it['jenis_hp']) ?><?= $it['warna'] ? ' · ' . esc($it['warna']) : '' ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="so-num"><?= number_format($it['jumlah_komp'], 0, ',', '.') ?></td>
+                                        <td class="text-center">
+                                            <span class="so-num" style="font-size:.9375rem">
+                                                <?= $it['jumlah_real'] !== null ? number_format($it['jumlah_real'], 0, ',', '.') : '—' ?>
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            <?php if ($it['jumlah_selisih'] !== null) : ?>
+                                                <span class="so-delta <?= $it['selisih_negatif'] ? 'is-neg' : ($it['selisih_positif'] ? 'is-pos' : 'is-zero') ?>">
+                                                    <?= $it['jumlah_selisih'] > 0 ? '+' : '' ?><?= number_format($it['jumlah_selisih'], 0, ',', '.') ?>
+                                                </span>
+                                            <?php else : ?>
+                                                <span class="so-delta is-zero">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="so-state <?= $it['terisi'] ? 'is-done' : '' ?>">
+                                                <?= $it['terisi'] ? 'Terisi' : 'Belum' ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="so-footnote">
+                        <i class="bi bi-lock"></i>
+                        Periode ini sudah <strong>FINAL</strong>. Untuk mengubah data, gunakan tombol <strong>Reopen / Koreksi</strong>
+                        dengan alasan, lalu finalisasi ulang.
+                    </p>
+
+                <?php endif; ?>
 
             <?php endif; ?>
+        </div>
+    </section>
 
-            <?php if ($isDraft) : ?>
-                </form>
+    <!-- Jejak audit + riwayat periode -->
+    <?php if (!empty($auditTrail) || !empty($historis)) : ?>
+        <?php $duoCol = (!empty($auditTrail) && !empty($historis)) ? 'col-lg-6' : 'col-12'; ?>
+        <div class="row g-3 mt-1">
+
+            <?php if (!empty($auditTrail)) : ?>
+                <div class="<?= $duoCol ?>">
+                    <section class="card so-trail h-100">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-clock-history"></i> Riwayat Aktivitas Periode Ini</h6>
+                        </div>
+                        <div class="card-body">
+                            <ul>
+                                <?php foreach ($auditTrail as $a) : ?>
+                                    <li>
+                                        <span>
+                                            <span class="badge bg-<?= $a['aksi'] === 'finalisasi' ? 'success' : ($a['aksi'] === 'reopen' ? 'warning' : 'secondary') ?>-subtle text-<?= $a['aksi'] === 'finalisasi' ? 'success' : ($a['aksi'] === 'reopen' ? 'warning' : 'secondary') ?>">
+                                                <?= esc($a['aksi']) ?>
+                                            </span>
+                                            <?= (int)$a['jumlah_terisi'] ?>/<?= (int)$a['jumlah_barang'] ?> terisi
+                                            <?php if (!empty($a['catatan'])) : ?>
+                                                — <em><?= esc($a['catatan']) ?></em>
+                                            <?php endif; ?>
+                                        </span>
+                                        <span class="so-trail__meta">
+                                            user #<?= (int)$a['actor_id'] ?> ·
+                                            <?= esc(date('d/m/Y H:i', strtotime((string)$a['created_at']))) ?>
+                                        </span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
             <?php endif; ?>
 
-            <?php if ($isDraft) : ?>
-                <div class="text-muted small mt-2">
-                    <i class="bi bi-info-circle"></i>
-                    Isi <strong>Jumlah Real</strong> sesuai hasil hitung fisik. Selisih dihitung otomatis.
-                    Simpan draft kapan saja (dicicil, boleh dilanjutkan di hari lain).
-                    <strong>Finalisasi</strong> baru bisa dilakukan setelah <strong>seluruh</strong> barang berstok terisi.
-                    Kosongkan kolom untuk membatalkan isian.
-                </div>
-            <?php else : ?>
-                <div class="text-muted small mt-2">
-                    <i class="bi bi-info-circle"></i>
-                    Periode ini sudah <strong>FINAL</strong>. Untuk mengubah data, gunakan tombol <strong>Reopen / Koreksi</strong>
-                    dengan alasan, lalu finalisasi ulang.
+            <?php if (!empty($historis)) : ?>
+                <div class="<?= $duoCol ?>">
+                    <section class="card so-history h-100">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-calendar3"></i> Riwayat Periode Opname — <?= esc($namaUnit) ?></h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Tanggal</th>
+                                            <th class="text-center">Status</th>
+                                            <th class="text-center">Barang</th>
+                                            <th class="text-end">Stok Komputer</th>
+                                            <th class="text-end">Selisih</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($historis as $hp) : ?>
+                                            <?php $hpSelisih = $hp->jumlah_selisih; ?>
+                                            <tr>
+                                                <td>
+                                                    <?= esc(date('d/m/Y', strtotime($hp->tanggal))) ?>
+                                                    <?php if ((int)$hp->unit_idunit === (int)$unit && $hp->tanggal === $tanggal) : ?>
+                                                        <span class="badge bg-primary-subtle text-primary ms-1">aktif</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-center">
+                                                    <?php if ($hp->status === 'FINAL') : ?>
+                                                        <span class="so-state-chip is-final">FINAL</span>
+                                                    <?php else : ?>
+                                                        <span class="so-state-chip is-draft">DRAFT</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-center"><?= (int)$hp->total_barang ?> (<?= (int)$hp->terisi_barang ?> terisi)</td>
+                                                <td class="text-end"><?= number_format((float)$hp->jumlah_komp, 0, ',', '.') ?></td>
+                                                <td class="text-end <?= ($hpSelisih !== null && (float)$hpSelisih != 0) ? 'fw-bold' : 'text-muted' ?>">
+                                                    <?= $hpSelisih !== null ? number_format((float)$hpSelisih, 0, ',', '.') : '—' ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             <?php endif; ?>
-        <?php endif; ?>
-    </div>
+
+        </div>
+    <?php endif; ?>
+
 </div>
-
-<!-- Jejak audit periode -->
-<?php if (!empty($auditTrail)) : ?>
-    <div class="card shadow-sm border-0 mt-3">
-        <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock-history"></i> Riwayat Aktivitas Periode Ini</h6></div>
-        <div class="card-body py-2 px-4">
-            <ul class="list-unstyled mb-0 small">
-                <?php foreach ($auditTrail as $a) : ?>
-                    <li class="border-bottom py-1 d-flex flex-wrap gap-2 justify-content-between">
-                        <span>
-                            <span class="badge bg-<?= $a['aksi'] === 'finalisasi' ? 'success' : ($a['aksi'] === 'reopen' ? 'warning' : 'secondary') ?>-subtle text-<?= $a['aksi'] === 'finalisasi' ? 'success' : ($a['aksi'] === 'reopen' ? 'warning' : 'secondary') ?>">
-                                <?= esc($a['aksi']) ?>
-                            </span>
-                            <?= (int)$a['jumlah_terisi'] ?>/<?= (int)$a['jumlah_barang'] ?> terisi
-                            <?php if (!empty($a['catatan'])) : ?>
-                                — <em><?= esc($a['catatan']) ?></em>
-                            <?php endif; ?>
-                        </span>
-                        <span class="text-muted">
-                            user #<?= (int)$a['actor_id'] ?> ·
-                            <?= esc(date('d/m/Y H:i', strtotime((string)$a['created_at']))) ?>
-                        </span>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
-    </div>
-<?php endif; ?>
-
-<!-- Riwayat periode unit ini -->
-<?php if (!empty($historis)) : ?>
-    <div class="card shadow-sm border-0 mt-3">
-        <div class="card-header">
-            <h6 class="mb-0">Riwayat Periode Opname — <?= esc($namaUnit) ?></h6>
-        </div>
-        <div class="card-body py-2 px-4">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Tanggal</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Barang</th>
-                            <th class="text-center">Stok Komputer</th>
-                            <th class="text-center">Selisih</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($historis as $hp) : ?>
-                            <?php $hpSelisih = $hp->jumlah_selisih; ?>
-                            <tr>
-                                <td>
-                                    <?= esc(date('d/m/Y', strtotime($hp->tanggal))) ?>
-                                    <?php if ((int)$hp->unit_idunit === (int)$unit && $hp->tanggal === $tanggal) : ?>
-                                        <span class="badge bg-primary-subtle text-primary ms-1">aktif</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-center">
-                                    <?php if ($hp->status === 'FINAL') : ?>
-                                        <span class="badge bg-success-subtle text-success">FINAL</span>
-                                    <?php else : ?>
-                                        <span class="badge bg-warning-subtle text-warning">DRAFT</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-center"><?= (int)$hp->total_barang ?> (<?= (int)$hp->terisi_barang ?> terisi)</td>
-                                <td class="text-end"><?= number_format((float)$hp->jumlah_komp, 0, ',', '.') ?></td>
-                                <td class="text-end <?= ($hpSelisih !== null && (float)$hpSelisih != 0) ? 'fw-bold' : 'text-muted' ?>">
-                                    <?= $hpSelisih !== null ? (float)$hpSelisih : '-' ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
 
 <?php
     // Data JSON untuk table list cerdas (hanya digunakan saat DRAFT).
@@ -526,20 +593,7 @@ foreach ($unitList as $u) {
 ?>
 
 <script>
-    // Track progress bar: jangan polos/putih, tampilkan jelas.
     $(function() {
-        $('head').append(
-            '<style>' +
-            '.progress-so { background: #fde9c8 !important; height: 14px; ' +
-            '  border: 1px solid #f5d0a0; box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }' +
-            '.progress-so .progress-bar { background: linear-gradient(90deg, #fbbf24, #f97316); ' +
-            '  border-radius: 0; }' +
-            '.card-status-so { background: #fff8ec !important; border-left: 4px solid #f59e0b; }' +
-            '.so-scroll { max-height: 65vh; }' +
-            '#opnameTable thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }' +
-            '</style>'
-        );
-
         // ============================================================
         //  LIST CERDAS (hanya saat DRAFT): filter + cari + pagination
         // ============================================================
@@ -567,16 +621,16 @@ foreach ($unitList as $u) {
             return Number(n).toLocaleString('id-ID');
         }
         function soSelHtml(it) {
-            if (it.real === null || it.real === '') return '<span class="text-muted">-</span>';
+            if (it.real === null || it.real === '') return '<span class="so-delta is-zero">—</span>';
             var s = it.real - it.komp;
-            var cls = s < 0 ? 'text-danger' : (s > 0 ? 'text-success' : 'text-muted');
+            var cls = s < 0 ? 'is-neg' : (s > 0 ? 'is-pos' : 'is-zero');
             var sign = s > 0 ? '+' : '';
-            return '<span class="fw-bold ' + cls + '">' + sign + soFmt(s) + '</span>';
+            return '<span class="so-delta ' + cls + '">' + sign + soFmt(s) + '</span>';
         }
         function soStatusHtml(filled) {
             return filled
-                ? '<span class="badge bg-success-subtle text-success">Terisi</span>'
-                : '<span class="badge bg-secondary-subtle text-secondary">Belum</span>';
+                ? '<span class="so-state is-done">Terisi</span>'
+                : '<span class="so-state">Belum</span>';
         }
 
         var soState = { filter: 'belum', q: '', page: 1, size: 100, sort: 'recent', selisih: 'all' };
@@ -641,7 +695,7 @@ foreach ($unitList as $u) {
             $('#cntSudah').text(filled);
             $('#cntUnsaved').text(unsaved);
 
-            $('#soProgBar').css('width', pct + '%');
+            document.getElementById('soProgBar').style.setProperty('--so-prog', pct / 100);
             $('#soProgText').text(wajibFilled + ' dari ' + wajibTotal + ' barang berstok terisi (' + pct + '%)');
             var hint = wajibKurang > 0
                 ? '<i class="bi bi-exclamation-triangle"></i> Masih ada ' + wajibKurang + ' barang berstok (stok > 0) yang belum diisi jumlah real.'
@@ -661,13 +715,13 @@ foreach ($unitList as $u) {
                 var realVal = it.real !== null && it.real !== '' ? it.real : '';
                 var rowNo = start + i + 1;
                 html += '<tr class="' + ((it.komp != 0 && !it.terisi) ? 'table-warning' : '') + '" data-id="' + it.id + '" data-terisi="' + (it.terisi ? '1' : '0') + '">'
-                    + '<td>' + rowNo + '</td>'
-                    + '<td class="fw-semibold">' + soEsc(it.kode) + '</td>'
+                    + '<td class="so-idx">' + rowNo + '</td>'
+                    + '<td class="so-kode">' + soEsc(it.kode) + '</td>'
                     + '<td>' + soEsc(it.nama)
-                    + ((it.jenis || it.warna) ? '<br><small class="text-muted">' + soEsc(it.jenis) + (it.warna ? ' · ' + soEsc(it.warna) : '') + '</small>' : '')
+                    + ((it.jenis || it.warna) ? '<span class="so-sub">' + soEsc(it.jenis) + (it.warna ? ' · ' + soEsc(it.warna) : '') + '</span>' : '')
                     + '</td>'
-                    + '<td class="text-center fw-bold">' + soFmt(it.komp) + '</td>'
-                    + '<td class="text-center"><input type="number" step="1" min="0" class="form-control form-control-sm text-center input-real" name="items[' + it.id + '][jumlah_real]" value="' + soEsc(realVal) + '" placeholder="0"' + (soReadonly ? ' readonly' : '') + '></td>'
+                    + '<td class="so-num">' + soFmt(it.komp) + '</td>'
+                    + '<td class="text-center"><input type="number" step="1" min="0" class="form-control form-control-sm text-center input-real" name="items[' + it.id + '][jumlah_real]" value="' + soEsc(realVal) + '" placeholder="0" aria-label="Jumlah real ' + soEsc(it.kode) + '"' + (soReadonly ? ' readonly' : '') + '></td>'
                     + '<td class="text-center">' + soSelHtml(it) + '</td>'
                     + '<td class="text-center">' + soStatusHtml(it.terisi) + '</td>'
                     + '</tr>';
@@ -714,6 +768,11 @@ foreach ($unitList as $u) {
             soState.q = $(this).val();
             soState.page = 1;
             soRender();
+        });
+
+        // Enter pada pencarian tidak boleh meng-submit form opname.
+        $('#soSearch').on('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); }
         });
 
         $('#soSort').on('change', function() {
@@ -841,7 +900,7 @@ foreach ($unitList as $u) {
             if (wajibKosong > 0) {
                 html = '<div class="alert alert-warning mb-3"><i class="bi bi-exclamation-triangle"></i> Masih ada <strong>' + wajibKosong + '</strong> barang berstok (stok > 0) yang belum diisi Jumlah Real.</div>';
             }
-            html += '<p>Finalisasi stok opname ini?</p><p class="text-muted small">Setelah final, data dihitung pada KPI & riwayat dan periode terkunci. Data dapat diubah hanya dengan Reopen.</p>';
+            html += '<p>Finalisasi stok opname ini?</p><p class="text-muted small">Setelah final, data dihitung pada KPI &amp; riwayat dan periode terkunci. Data dapat diubah hanya dengan Reopen.</p>';
             if (semuaKosong > wajibKosong) {
                 html += '<p class="text-muted small">Catatan: ' + (semuaKosong - wajibKosong) + ' barang dengan stok 0 (tidak wajib) dibiarkan kosong.</p>';
             }
@@ -867,7 +926,15 @@ foreach ($unitList as $u) {
         }
         $('#btnMulaiOpname').on('click', function() {
             $('#modalMulaiTitle').text('Mulai Stok Opname');
-            $('#modalMulaiBody').html('<p>Mulai stok opname untuk unit ini pada tanggal <strong><?= esc($tanggal) ?></strong>?</p><p class="text-muted small">Daftar barang akan diambil otomatis dari barang yang berstok (termasuk stok 0 sesuai pengaturan terbaru).</p>');
+            $('#modalMulaiBody').html(
+                '<p>Mulai stok opname untuk unit ini pada tanggal <strong><?= esc($tanggal) ?></strong>?</p>'
+                + '<p class="text-muted small">Daftar barang akan diambil otomatis dari barang yang berstok (termasuk stok 0 sesuai pengaturan terbaru).</p>'
+                + '<div class="alert alert-info mb-0 d-flex gap-2"><i class="bi bi-lock-fill mt-1"></i>'
+                + '<div><strong>Stok komputer dibekukan pada saat ini juga.</strong> '
+                + 'Angka acuan tiap barang disalin dari stok kartu waktu Anda menekan Mulai, '
+                + 'sehingga penjualan atau mutasi setelahnya tidak mengubah kolom Stok Komputer di daftar opname. '
+                + 'Selisih tetap dihitung dari angka beku tersebut.</div></div>'
+            );
             $('#modalMulai').modal('show');
         });
         $('#btnModalMulaiYes').on('click', function() {
@@ -886,6 +953,7 @@ foreach ($unitList as $u) {
         });
     });
 </script>
+
 <!-- Modal Konfirmasi Finalisasi -->
 <div class="modal fade" id="modalFinalisasi" tabindex="-1" aria-labelledby="modalFinalTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
