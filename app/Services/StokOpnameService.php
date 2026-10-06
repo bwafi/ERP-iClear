@@ -142,7 +142,6 @@ class StokOpnameService
 
         $stocks = $this->db->table('stok_barang')
             ->where('id_unit', $unit)
-            ->where('stok_akhir !=', 0)
             ->orderBy('kode_barang', 'ASC')
             ->get()
             ->getResultArray();
@@ -365,11 +364,23 @@ class StokOpnameService
         if ($total === 0) {
             return ['success' => false, 'errors' => ['Tidak ada barang untuk diopname diproses.'], 'periode' => null];
         }
-        if ($terisi < $total) {
-            $kurang = $total - $terisi;
+
+        // Hanya barang dengan stok komputer (jumlah_komp) != 0 yang wajib terisi
+        $wajib = (int) $this->db->query(
+            'SELECT COUNT(*) AS c FROM stok_opname_draft WHERE periode_id = ? AND jumlah_komp != 0',
+            [(int)$periode->id]
+        )->getRow()->c;
+
+        $terisiWajib = (int) $this->db->query(
+            'SELECT COUNT(*) AS c FROM stok_opname_draft WHERE periode_id = ? AND jumlah_komp != 0 AND jumlah_real IS NOT NULL',
+            [(int)$periode->id]
+        )->getRow()->c;
+
+        if ($wajib > 0 && $terisiWajib < $wajib) {
+            $kurang = $wajib - $terisiWajib;
             return [
                 'success' => false,
-                'errors'  => ["Finalisasi ditolak: masih ada $kurang dari $total barang berstok yang belum diisi jumlah real."],
+                'errors'  => ["Finalisasi ditolak: masih ada $kurang dari $wajib barang berstok (stok > 0) yang belum diisi jumlah real."],
                 'periode' => $periode,
             ];
         }

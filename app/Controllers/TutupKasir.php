@@ -1,45 +1,4 @@
-<?php
-
-namespace App\Controllers;
-
-use App\Models\ModelTutupKasir;
-use App\Services\Finance\DailyCashFlowService;
-use App\Services\Finance\TutupKasirClosing;
-use CodeIgniter\Controller;
-
-class TutupKasir extends BaseController
-{
-    protected $db;
-    protected $TutupKasir;
-
-    public function __construct()
-    {
-        $this->db = \Config\Database::connect();
-        $this->TutupKasir = new ModelTutupKasir();
-    }
-
-    public function index()
-    {
-        $today = date('Y-m-d');
-        $besok = date('Y-m-d', strtotime('+1 day'));
-
-        // ambil unit login
-        $unit = session()->get('ID_UNIT');
-
-        // ANGKA UNTUK TAMPILAN DIAMBIL DARI SERVICE YANG SAMA DENGAN PENYIMPANAN.
-        //
-        // Dulu halaman ini menghitung sendiri dengan 6 query inline, sementara
-        // `tutup()` menyimpan angka dari hidden field form. Akibatnya apa yang
-        // terlihat dan apa yang tersimpan bisa berbeda, dan angka yang
-        // tersimpan bisa diubah dengan satu POST. Sekarang `index()` dan
-        // `tutup()` memanggil `TutupKasirClosing::hitung()` yang sama, jadi
-        // tidak ada lagi dua definisi angka dalam satu halaman.
-        //
-        // @see \App\Services\Finance\TutupKasirClosing
-        $closing = new TutupKasirClosing($this->db);
-        $h       = $closing->hitung((int) $unit, $today);
-
-        // ==============================================================
+======================================================
         // OFFSET WIB UNTUK JAVASCRIPT
         // ==============================================================
         //

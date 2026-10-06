@@ -134,20 +134,29 @@ foreach ($unitList as $u) {
                 </div>
 
                 <?php if ($periode && $isDraft) : ?>
+                    <?php
+                        $wajibTotal = 0; $wajibTerisi = 0;
+                        foreach ($items as $it) {
+                            $komp = (float)($it['jumlah_komp'] ?? 0);
+                            if ($komp != 0) { $wajibTotal++; if ($it['terisi']) $wajibTerisi++; }
+                        }
+                        $wpct = $wajibTotal > 0 ? min(100, round(($wajibTerisi / $wajibTotal) * 100)) : 100;
+                        $wk = max(0, $wajibTotal - $wajibTerisi);
+                    ?>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between small mb-1">
                             <span class="fw-semibold">Progres input</span>
-                            <span id="soProgText"><?= $terisi ?> dari <?= $totalItem ?> barang terisi (<?= $pct ?>%)</span>
+                            <span id="soProgText"><?= $wajibTerisi ?> dari <?= $wajibTotal ?> barang berstok terisi (<?= $wpct ?>%)</span>
                         </div>
                         <div class="progress progress-so rounded-3 mb-2">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="soProgBar" style="width: <?= $pct ?>%"></div>
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="soProgBar" style="width: <?= $wpct ?>%"></div>
                         </div>
-                        <?php if ($sisa > 0) : ?>
+                        <?php if ($wk > 0) : ?>
                             <small class="text-danger mt-1 d-inline-block" id="soSisaHint">
-                                <i class="bi bi-exclamation-triangle"></i> Masih ada <?= $sisa ?> barang belum diisi jumlah real.
+                                <i class="bi bi-exclamation-triangle"></i> Masih ada <?= $wk ?> barang berstok (stok > 0) yang belum diisi jumlah real.
                             </small>
                         <?php else : ?>
-                            <small class="text-success mt-1 d-inline-block" id="soSisaHint"><i class="bi bi-check-circle"></i> Semua barang sudah terisi — siap difinalisasi.</small>
+                            <small class="text-success mt-1 d-inline-block" id="soSisaHint"><i class="bi bi-check-circle"></i> Semua barang berstok sudah terisi — siap difinalisasi.</small>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
@@ -192,7 +201,7 @@ foreach ($unitList as $u) {
                     <?= csrf_field() ?>
                     <input type="hidden" name="unit" value="<?= (int)$unit ?>">
                     <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
-                    <button type="submit" class="btn btn-primary" onclick="return confirm('Mulai stok opname untuk unit ini pada tanggal ' + '<?= esc($tanggal, 'js') ?>' + '? Daftar barang akan diambil otomatis dari barang yang berstok.')">
+                    <button type="button" class="btn btn-primary" id="btnMulaiOpname">
                         <iconify-icon icon="solar:play-bold" class="me-1"></iconify-icon>Mulai Opname
                     </button>
                 </form>
@@ -206,14 +215,14 @@ foreach ($unitList as $u) {
                         <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
                     </button>
                 <?php else : ?>
-                    <button type="submit" form="formOpname" name="aksi" value="finalisasi" class="btn btn-success btn-finalize"
-                        onclick="return confirm('Finalisasi periode ini? Semua barang berstok wajib terisi. Setelah difinalisasi, stok koreksi ikut diterapkan.')">
+                    <button type="submit" form="formOpname" name="aksi" value="finalisasi" class="btn btn-success btn-finalize">
                         <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
                     </button>
                 <?php endif; ?>
             <?php else : ?>
+                <?php if (!empty($canReopen)) : ?>
                 <form method="post" action="<?= base_url('stok_opname/reopen') ?>" class="d-flex flex-wrap gap-2 align-items-start"
-                    onsubmit="return confirm('Buka kembali stok opname FINAL ini? Nilai final sebelumnya akan ditandai tidak aktif dan tetap tersimpan di riwayat. Lanjutkan?');">
+                    id="formReopen">
                     <?= csrf_field() ?>
                     <input type="hidden" name="unit" value="<?= (int)$unit ?>">
                     <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
@@ -225,6 +234,7 @@ foreach ($unitList as $u) {
                         <iconify-icon icon="solar:refresh-bold" class="me-1"></iconify-icon>Reopen / Koreksi
                     </button>
                 </form>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
@@ -292,6 +302,8 @@ foreach ($unitList as $u) {
                                     <option value="plus">Lebih (+)</option>
                                     <option value="minus">Kurang (−)</option>
                                     <option value="zero">Presisi (= 0)</option>
+                                    <option value="stok0">Stok 0 (tidak wajib)</option>
+                                    <option value="stokplus">Stok > 0 (wajib)</option>
                                 </select>
                             </div>
                         <?php endif; ?>
@@ -588,11 +600,17 @@ foreach ($unitList as $u) {
             // Filter selisih (hanya untuk role pengawas yang punya akses).
             if (soState.selisih !== 'all') {
                 var sl = soSelisih(it);
-                if (sl === null) return false;
-                if (soState.selisih === 'nz' && sl === 0) return false;
-                if (soState.selisih === 'plus' && !(sl > 0)) return false;
-                if (soState.selisih === 'minus' && !(sl < 0)) return false;
-                if (soState.selisih === 'zero' && sl !== 0) return false;
+                if (soState.selisih === 'stok0') {
+                    if (it.komp != 0) return false;
+                } else if (soState.selisih === 'stokplus') {
+                    if (it.komp == 0) return false;
+                } else {
+                    if (sl === null) return false;
+                    if (soState.selisih === 'nz' && sl === 0) return false;
+                    if (soState.selisih === 'plus' && !(sl > 0)) return false;
+                    if (soState.selisih === 'minus' && !(sl < 0)) return false;
+                    if (soState.selisih === 'zero' && sl !== 0) return false;
+                }
             }
             return true;
         }
@@ -613,19 +631,22 @@ foreach ($unitList as $u) {
         function soUpdateProgressAndCounts() {
             var total = soItems.length;
             var filled = soItems.filter(function(i) { return i.terisi; }).length;
+            var wajibTotal = soItems.filter(function(i) { return i.komp != 0; }).length;
+            var wajibFilled = soItems.filter(function(i) { return i.komp != 0 && i.terisi; }).length;
+            var wajibKurang = Math.max(0, wajibTotal - wajibFilled);
             var unsaved = soItems.filter(function(i) { return i.dirty; }).length;
-            var pct = total > 0 ? Math.round((filled / total) * 100) : 0;
+            var pct = wajibTotal > 0 ? Math.round((wajibFilled / wajibTotal) * 100) : 100;
             $('#cntSemua').text(total);
             $('#cntBelum').text(total - filled);
             $('#cntSudah').text(filled);
             $('#cntUnsaved').text(unsaved);
 
             $('#soProgBar').css('width', pct + '%');
-            $('#soProgText').text(filled + ' dari ' + total + ' barang terisi (' + pct + '%)');
-            var hint = (total - filled) > 0
-                ? '<i class="bi bi-exclamation-triangle"></i> Masih ada ' + (total - filled) + ' barang belum diisi jumlah real.'
-                : '<i class="bi bi-check-circle"></i> Semua barang sudah terisi — siap difinalisasi.';
-            $('#soSisaHint').toggleClass('text-danger text-success', (total - filled) > 0).html(hint);
+            $('#soProgText').text(wajibFilled + ' dari ' + wajibTotal + ' barang berstok terisi (' + pct + '%)');
+            var hint = wajibKurang > 0
+                ? '<i class="bi bi-exclamation-triangle"></i> Masih ada ' + wajibKurang + ' barang berstok (stok > 0) yang belum diisi jumlah real.'
+                : '<i class="bi bi-check-circle"></i> Semua barang berstok sudah terisi — siap difinalisasi.';
+            $('#soSisaHint').toggleClass('text-danger text-success', wajibKurang > 0).html(hint);
         }
 
         function soRender() {
@@ -639,7 +660,7 @@ foreach ($unitList as $u) {
             slice.forEach(function(it, i) {
                 var realVal = it.real !== null && it.real !== '' ? it.real : '';
                 var rowNo = start + i + 1;
-                html += '<tr class="' + (it.terisi ? '' : 'table-warning') + '" data-id="' + it.id + '" data-terisi="' + (it.terisi ? '1' : '0') + '">'
+                html += '<tr class="' + ((it.komp != 0 && !it.terisi) ? 'table-warning' : '') + '" data-id="' + it.id + '" data-terisi="' + (it.terisi ? '1' : '0') + '">'
                     + '<td>' + rowNo + '</td>'
                     + '<td class="fw-semibold">' + soEsc(it.kode) + '</td>'
                     + '<td>' + soEsc(it.nama)
@@ -746,7 +767,7 @@ foreach ($unitList as $u) {
             // Update selisih & badge pada baris yang terlihat.
             $tr.find('td:nth-child(6)').html(soSelHtml(it));
             $tr.find('td:last-child').html(soStatusHtml(it.terisi));
-            $tr.toggleClass('table-warning', !it.terisi);
+            $tr.toggleClass('table-warning', it.komp != 0 && !it.terisi);
             $tr.attr('data-terisi', it.terisi ? '1' : '0');
 
             // Masih mengetik angka (bukan selesai) -> jangan render ulang.
@@ -804,25 +825,39 @@ foreach ($unitList as $u) {
         }
 
         var soReadonlyGuard = soReadonly;
+        var soFinalSubmit = false;
+        $('.btn-finalize').on('click', function(e) {
+            e.preventDefault();
+            if (soReadonlyGuard) return;
+            if (soFinalSubmit) {
+                soSyncToForm();
+                $('#formOpname').submit();
+                return;
+            }
+            var wajibKosong = soItems.filter(function(i) { return i.komp != 0 && !i.terisi; }).length;
+            var semuaKosong = soItems.filter(function(i) { return !i.terisi; }).length;
+            $('#modalFinalTitle').text(wajibKosong > 0 ? 'Peringatan Finalisasi' : 'Konfirmasi Finalisasi');
+            var html = '';
+            if (wajibKosong > 0) {
+                html = '<div class="alert alert-warning mb-3"><i class="bi bi-exclamation-triangle"></i> Masih ada <strong>' + wajibKosong + '</strong> barang berstok (stok > 0) yang belum diisi Jumlah Real.</div>';
+            }
+            html += '<p>Finalisasi stok opname ini?</p><p class="text-muted small">Setelah final, data dihitung pada KPI & riwayat dan periode terkunci. Data dapat diubah hanya dengan Reopen.</p>';
+            if (semuaKosong > wajibKosong) {
+                html += '<p class="text-muted small">Catatan: ' + (semuaKosong - wajibKosong) + ' barang dengan stok 0 (tidak wajib) dibiarkan kosong.</p>';
+            }
+            $('#modalFinalBody').html(html);
+            $('#modalFinalisasi').modal('show');
+        });
         $('#formOpname').on('submit', function(e) {
             if (soReadonlyGuard) { e.preventDefault(); return; }
-            var aksi = $(this).find('button[type=submit]:focus').attr('name') || $(document.activeElement).attr('name');
-            if (aksi !== 'finalisasi') {
-                soSyncToForm();
-                return;
-            }
-            var kosong = soItems.filter(function(i) { return !i.terisi; }).length;
-            var msg = 'Finalisasi stok opname ini?\n\n' +
-                'Setelah final, data dihitung pada KPI & riwayat dan periode terkunci. Data dapat diubah hanya dengan Reopen.';
-            if (kosong > 0) {
-                msg = 'PERINGATAN: masih ada ' + kosong + ' barang yang belum diisi Jumlah Real.\n' +
-                    'Finalisasi tetap dapat dilanjutkan sesuai kebijakan.\n\n' + msg;
-            }
-            if (!confirm(msg)) {
-                e.preventDefault();
-                return;
-            }
             soSyncToForm();
+        });
+
+        $('#btnModalFinalYes').on('click', function() {
+            soSyncToForm();
+            soFinalSubmit = true;
+            $('#formOpname').append('<input type="hidden" name="aksi" value="finalisasi">');
+            $('#formOpname').submit();
         });
 
         // Inisialisasi pertama.
@@ -830,5 +865,77 @@ foreach ($unitList as $u) {
             soRender();
             if (!soReadonly) soFocusFirstInput();
         }
+        $('#btnMulaiOpname').on('click', function() {
+            $('#modalMulaiTitle').text('Mulai Stok Opname');
+            $('#modalMulaiBody').html('<p>Mulai stok opname untuk unit ini pada tanggal <strong><?= esc($tanggal) ?></strong>?</p><p class="text-muted small">Daftar barang akan diambil otomatis dari barang yang berstok (termasuk stok 0 sesuai pengaturan terbaru).</p>');
+            $('#modalMulai').modal('show');
+        });
+        $('#btnModalMulaiYes').on('click', function() {
+            $('form[action$="stok_opname/mulai"]').submit();
+        });
+        $('#formReopen').on('submit', function(e) {
+            e.preventDefault();
+            $('#modalReopenTitle').text('Buka Kembali (Reopen)');
+            $('#modalReopenBody').html('<p>Buka kembali stok opname FINAL ini?</p><p class="text-muted small">Nilai final sebelumnya akan ditandai tidak aktif dan tetap tersimpan di riwayat. Alasan wajib telah terisi.</p>');
+            $('#modalReopen').attr('data-target-form', '#formReopen');
+            $('#modalReopen').modal('show');
+        });
+        $('#btnModalReopenYes').on('click', function() {
+            var target = $('#modalReopen').attr('data-target-form');
+            $(target).off('submit').submit();
+        });
     });
 </script>
+<!-- Modal Konfirmasi Finalisasi -->
+<div class="modal fade" id="modalFinalisasi" tabindex="-1" aria-labelledby="modalFinalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalFinalTitle">Konfirmasi Finalisasi</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalFinalBody">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-success" id="btnModalFinalYes"><i class="bi bi-check-lg"></i> Ya, Finalisasi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Mulai Opname -->
+<div class="modal fade" id="modalMulai" tabindex="-1" aria-labelledby="modalMulaiTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalMulaiTitle">Mulai Stok Opname</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalMulaiBody">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-primary" id="btnModalMulaiYes"><i class="bi bi-play-fill"></i> Ya, Mulai</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Reopen -->
+<div class="modal fade" id="modalReopen" tabindex="-1" aria-labelledby="modalReopenTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalReopenTitle">Buka Kembali (Reopen)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalReopenBody">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-warning" id="btnModalReopenYes"><i class="bi bi-pencil-square"></i> Ya, Reopen</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -38,6 +38,9 @@ class StokOpname extends BaseController
     /** Role yang boleh memakai fitur pemantauan, mis. filter selisih. */
     private const MONITOR_ROLES = [0, 1, 2, 34, 40];
 
+    /** Role yang boleh melakukan reopen stok opname (koreksi hasil final). */
+    private const REOPEN_ROLES = [1];
+
     /** Target KPI stok opname per bulan. */
     private const KPI_TARGET = 4;
 
@@ -85,6 +88,7 @@ class StokOpname extends BaseController
             'canPickUnit'      => $isCrossUnit,
             'canFilterSelisih' => in_array($myJabatan, self::MONITOR_ROLES, true),
             'canMutate'        => $canMutate,
+            'canReopen'        => in_array($myJabatan, self::REOPEN_ROLES, true),
             'periode'          => $this->svc->periode($unit, $tanggal),
             'items'            => $this->svc->periodeItems($unit, $tanggal),
             'historis'         => $this->PeriodeModel->getByUnit($unit, 20),
@@ -218,6 +222,10 @@ class StokOpname extends BaseController
         if ($this->isViewOnly()) {
             return redirect()->to(base_url('stok_opname'))
                 ->with('gagal', 'Mode lihat: role ini tidak dapat membuka kembali (koreksi) stok opname.');
+        }
+        if (! in_array((int) session('ID_JABATAN'), self::REOPEN_ROLES, true)) {
+            return redirect()->to(base_url('stok_opname'))
+                ->with('gagal', 'Hanya Admin Root yang dapat membuka kembali (reopen) stok opname.');
         }
 
         $unit = $this->mutationUnit();
