@@ -130,6 +130,16 @@ class StokOpnameReopenAudit extends Migration
 
     private function replaceView(string $search, string $replace): void
     {
+        if (! $this->viewExists()) {
+            throw new \RuntimeException(
+                'Baseline view `stok_barang` tidak ditemukan di database ini. Migration '
+                . '2026-09-28-000002 membutuhkan view warisan `stok_barang` dari dump baseline '
+                . '(view ini tidak pernah dibuat oleh migration mana pun). Import dump baseline '
+                . 'yang memuat view tersebut terlebih dahulu, lalu jalankan migrate ulang. '
+                . 'Tidak ada object yang diubah.'
+            );
+        }
+
         $row = $this->db->query('SHOW CREATE VIEW stok_barang')->getRowArray();
         if ($row === null) {
             return;
@@ -149,13 +159,71 @@ class StokOpnameReopenAudit extends Migration
         if (strpos($definition, $replace) !== false) {
             return; // sudah dalam kondisi target
         }
-        if (strpos($definition, $search) === false) {
-            throw new \RuntimeException('Definisi view stok_barang tidak mengandung fragmen yang diharapkan: ' . $search);
+
+        $count = substr_count($definition, $search);
+        if ($count !== 1) {
+            throw new \RuntimeException(sprintf(
+                'Fragmen transformasi ditemukan %d kali (harus tepat 1) pada definisi view stok_barang. '
+                . 'Str_replace massal sengaja ditolak supaya tidak diam-diam mengubah SELECT lain. Fragmen: %s',
+                $count,
+                $search
+            ));
         }
 
         $updated = str_replace($search, $replace, $definition);
-        $this->db->query('DROP VIEW IF EXISTS stok_barang');
-        $this->db->query($updated);
+
+        // SHOW CREATE VIEW mengembalikan DEFINER pemilik asli (mis.
+        // DEFINER=`root`@`localhost`). Membaca view tidak butuh privilege
+        // khusus, tetapi MENCIPATKAN view dengan DEFINER asing menuntut
+        // SUPER/SET USER — itu penyebab dua kali gagal di staging. Tanpa
+        // klausul DEFINER, MariaDB menetapkan definer = user eksekusi
+        // (sah untuk user aplikasi). `SQL SECURITY DEFINER` TIDAK diubah:
+        // semantik privilege view tetap sama untuk koneksi aplikasi.
+        $replay = preg_replace('/\s+DEFINER=\S+/', '', $updated, 1);
+        if ($replay === null) {
+            throw new \RuntimeException('Gagal menormalisasi DEFINER pada definisi view stok_barang.');
+        }
+
+        // Ganti definisi tanpa pernah menjatuhkan view lebih dulu:
+        // CREATE OR REPLACE tidak membuka jendela view hilang, dan bila CREATE
+        // gagal view lama tetap utuh (tidak mungkin meninggalkan view lenyap).
+        $replay = preg_replace('/^CREATE\s+/', 'CREATE OR REPLACE ', $replay, 1);
+        if ($replay === null) {
+            throw new \RuntimeException('Gagal menyiapkan statement CREATE OR REPLACE untuk view stok_barang.');
+        }
+
+        try {
+            $result = $this->db->query($replay);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                'Gagal menulis ulang view `stok_barang`. View LAMA TIDAK dihapus dan tetap utuh. '
+                . 'Kesalahan: ' . $e->getMessage(),
+                0,
+                $e
+            );
+        }
+        if ($result === false) {
+            $err = $this->db->error();
+            throw new \RuntimeException(
+                'Gagal menulis ulang view `stok_barang`. View LAMA TIDAK dihapus dan tetap utuh. '
+                . 'Kesalahan: ' . ($err['message'] ?? 'query gagal tanpa pesan driver.')
+            );
+        }
+    }
+
+    /**
+     * Cek keberadaan view lewat information_schema dulu. SHOW CREATE VIEW
+     * langsung melempar error driver bila view tidak ada, sehingga guard
+     * `$row === null` di replaceView() tidak pernah sempat berjalan.
+     */
+    private function viewExists(): bool
+    {
+        $row = $this->db->query(
+            "SELECT COUNT(*) AS jml FROM information_schema.VIEWS "
+            . "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stok_barang'"
+        )->getRow();
+
+        return $row !== null && (int) $row->jml > 0;
     }
 
     private function addColumnIfMissing(string $table, string $column, string $definition): void
