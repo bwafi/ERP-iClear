@@ -79,6 +79,9 @@ class StokOpname extends BaseController
             $tanggal = $draftTerbuka !== null ? (string) $draftTerbuka->tanggal : date('Y-m-d');
         }
 
+        $periode = $this->svc->periode($unit, $tanggal);
+        $audit   = $this->auditTrail($unit, $tanggal);
+
         return view('template', [
             'akun'             => $this->AuthModel->getById(session('ID_AKUN')),
             'unitList'         => $this->UnitModel->getUnit(),
@@ -89,14 +92,44 @@ class StokOpname extends BaseController
             'canFilterSelisih' => in_array($myJabatan, self::MONITOR_ROLES, true),
             'canMutate'        => $canMutate,
             'canReopen'        => in_array($myJabatan, self::REOPEN_ROLES, true),
-            'periode'          => $this->svc->periode($unit, $tanggal),
+            'periode'          => $periode,
             'items'            => $this->svc->periodeItems($unit, $tanggal),
             'historis'         => $this->PeriodeModel->getByUnit($unit, 20),
             'draftTerbuka'     => $draftTerbuka,
             'kpiBulanIni'      => $this->kpiBulan($unit),
-            'auditTrail'       => $this->auditTrail($unit, $tanggal),
+            'auditTrail'       => $audit,
+            'akunNama'         => $this->akunNamaMap(array_merge(
+                [(int) ($periode->mulai_by ?? 0), (int) ($periode->finalisasi_by ?? 0)],
+                array_column($audit, 'actor_id')
+            )),
             'body'             => 'stok/stok_opname',
         ]);
+    }
+
+    /**
+     * Peta ID_AKUN => NAMA_AKUN untuk menampilkan nama (bukan "user #N")
+     * pada chip pembekuan, baris finalisasi, dan jejak audit.
+     */
+    private function akunNamaMap(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) {
+            return [];
+        }
+
+        $rows = $this->db()
+            ->table('akun')
+            ->select('ID_AKUN, NAMA_AKUN')
+            ->whereIn('ID_AKUN', $ids)
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['ID_AKUN']] = (string) $r['NAMA_AKUN'];
+        }
+
+        return $map;
     }
 
     /**

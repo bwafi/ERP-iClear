@@ -18,6 +18,16 @@ $selisih   = ($periode && $periode->jumlah_selisih !== null) ? (float)$periode->
 $freezeTs  = $periode ? strtotime((string)($periode->created_at ?? '')) : false;
 $freezeBy  = $periode ? (int)($periode->mulai_by ?? 0) : 0;
 $freezeTxt = ($freezeTs !== false && $freezeTs > 0) ? date('d/m/Y H:i', $freezeTs) : '';
+
+// Nama akun dari ID (chip freeze, finalisasi, jejak audit) — fallback "user #N".
+$akunNama = $akunNama ?? [];
+$who      = static function ($id) use ($akunNama): string {
+    $id = (int) $id;
+    if ($id <= 0) {
+        return '';
+    }
+    return $akunNama[$id] ?? 'user #' . $id;
+};
 ?>
 
 <div class="stok-opname">
@@ -186,7 +196,7 @@ $freezeTxt = ($freezeTs !== false && $freezeTs > 0) ? date('d/m/Y H:i', $freezeT
                         <span class="so-freeze">
                             <iconify-icon icon="solar:lock-keyhole-bold" width="14" height="14"></iconify-icon>
                             <?php if ($freezeTxt !== '') : ?>
-                                Stok komputer dibekukan <strong><?= $freezeTxt ?></strong><?= $freezeBy > 0 ? ' oleh <strong>user #' . $freezeBy . '</strong>' : '' ?>
+                                Stok komputer dibekukan <strong><?= $freezeTxt ?></strong><?= $freezeBy > 0 ? ' oleh <strong>' . esc($who($freezeBy)) . '</strong>' : '' ?>
                             <?php else : ?>
                                 Stok komputer dibekukan saat periode dimulai
                             <?php endif; ?>
@@ -196,7 +206,7 @@ $freezeTxt = ($freezeTs !== false && $freezeTs > 0) ? date('d/m/Y H:i', $freezeT
                     <?php if ($periode && $isFinal && $periode->tanggal_finalisasi) : ?>
                         <span class="so-finalised">
                             <i class="bi bi-shield-check"></i>
-                            Difinalisasi oleh user #<?= (int)$periode->finalisasi_by ?> pada
+                            Difinalisasi oleh <strong><?= esc($who((int) ($periode->finalisasi_by ?? 0))) ?: '—' ?></strong> pada
                             <?= esc(date('d/m/Y H:i', strtotime($periode->tanggal_finalisasi))) ?>
                         </span>
                     <?php endif; ?>
@@ -505,7 +515,7 @@ $freezeTxt = ($freezeTs !== false && $freezeTs > 0) ? date('d/m/Y H:i', $freezeT
                                             <?php endif; ?>
                                         </span>
                                         <span class="so-trail__meta">
-                                            user #<?= (int)$a['actor_id'] ?> ·
+                                            <?= esc($who($a['actor_id'])) ?: 'user #' . (int) $a['actor_id'] ?> ·
                                             <?= esc(date('d/m/Y H:i', strtotime((string)$a['created_at']))) ?>
                                         </span>
                                     </li>
