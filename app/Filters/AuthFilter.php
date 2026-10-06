@@ -12,9 +12,16 @@ class AuthFilter implements FilterInterface
     public function before(RequestInterface $request, $arguments = null)
     {
         // return redirect()->to(base_url('/maintenance/page'));
-        if (!session()->get('logged_in') && session()->get('ID_UNIT') == null) {
+
+        // Syaratnya HANYA "sudah login". Sebelumnya memakai
+        //   !logged_in && ID_UNIT == null
+        // yang berarti sesi yang punya ID_UNIT tapi belum terautentikasi tetap
+        // lolos. ID_UNIT memang selalu di-set bersamaan dengan logged_in, jadi
+        // cukup cek logged_in. Alur login "pilih gedung" (hanya menyimpan
+        // ID_GEDUNG) tetap lolos karena tetap menyertakan logged_in.
+        if (session()->get('logged_in') !== true) {
             return redirect()->to(base_url('/Login'))->with('error', "Invalid Credential Login");
-        } else {
+        }
             // $ID_AKUN = session()->get("ID_AKUN");
             // $data_user = db_connect()->table("akun")->where("ID_AKUN", "$ID_AKUN")->get()->getRow();
             // $data_jabatan = db_connect()->table("jabatan")->where("ID_JABATAN", $data_user->ID_JABATAN)->get()->getRow();
@@ -43,7 +50,6 @@ class AuthFilter implements FilterInterface
             // if (!$isaccess) {
             //     return redirect()->to(base_url('/notFound'))->with('error', "Invalid Credential");
             // }
-        }
     }
 
     //--------------------------------------------------------------------

@@ -82,14 +82,21 @@ class MetricCalculator
     }
 
     /**
-     * Count unique days of Stok Opname.
-     * Replicates: COUNT(DISTINCT DATE(tanggal)) FROM stok_opname_draft WHERE unit_idunit = ? AND month/year
+     * Count Stok Opname periods that actually count toward KPI.
+     *
+     * Replaces the old COUNT(DISTINCT DATE(tanggal)) FROM stok_opname_draft,
+     * which counted any draft — including empty ones — so it disagreed with
+     * the official StokOpnameCalculator. A period counts only if it is FINAL
+     * and every stocked item in it was filled (terisi_barang = total_barang).
      */
     public function countStokOpname(int $unitId, int $bulan, int $tahun): int
     {
-        $r = $this->db->table('stok_opname_draft')
-            ->select('COUNT(DISTINCT DATE(tanggal)) AS total')
+        $r = $this->db->table('stok_opname_periode')
+            ->select('COUNT(*) AS total')
             ->where('unit_idunit', $unitId)
+            ->where('status', 'FINAL')
+            ->where('terisi_barang = total_barang', null, false)
+            ->where('total_barang >', 0)
             ->where('MONTH(tanggal)', $bulan)
             ->where('YEAR(tanggal)', $tahun)
             ->get()

@@ -9,16 +9,27 @@ class ModelStokOpname extends Model
     protected $table = 'stok_opname';
     protected $primaryKey = 'idstok_opname';
     protected $returnType = 'object';
-    protected $allowedFields = ['idstok_opname', 'tanggal', 'hpp', 'jumlah_real', 'jumlah_komp', 'jumlah_selisih', 'satuan_terkecil', 'barang_idbarang', 'unit_idunit'];
+    protected $allowedFields = ['idstok_opname', 'tanggal', 'hpp', 'jumlah_real', 'jumlah_komp', 'jumlah_selisih', 'satuan_terkecil', 'barang_idbarang', 'unit_idunit', 'periode_id', 'is_reverted'];
+
+    /**
+     * Baris yang sudah di-reopen (is_reverted = 1) dikeluarkan dari pembacaan
+     * normal. Nilai lamanya tetap ada di tabel sebagai riwayat, tapi tidak ikut
+     * dihitung lagi — termasuk tidak ikut menjumlahkan stok, karena view
+     * stok_barang juga memfilternya.
+     */
+    private function aktif()
+    {
+        return $this->where('stok_opname.is_reverted', 0);
+    }
 
     public function getStokOpname()
     {
-        return $this->findAll();
+        return $this->aktif()->findAll();
     }
 
     public function getByIdBarang($id)
     {
-        return $this->where(['barang_idbarang' => $id])->first();
+        return $this->where(['barang_idbarang' => $id, 'is_reverted' => 0])->first();
     }
 
 
@@ -45,6 +56,7 @@ class ModelStokOpname extends Model
         ')
             ->join('barang', 'barang.idbarang = stok_opname.barang_idbarang')
             ->join('unit', 'unit.idunit = stok_opname.unit_idunit')
+            ->where('stok_opname.is_reverted', 0)
             ->orderBy('stok_opname.tanggal', 'DESC')
             ->findAll();
     }
@@ -76,7 +88,8 @@ class ModelStokOpname extends Model
                 stok_opname.unit_idunit
             ')
             ->join('barang', 'barang.idbarang = stok_opname.barang_idbarang')
-            ->join('unit', 'unit.idunit = stok_opname.unit_idunit');
+            ->join('unit', 'unit.idunit = stok_opname.unit_idunit')
+            ->where('stok_opname.is_reverted', 0);
 
         if ($search !== '') {
             $builder->groupStart()
@@ -100,7 +113,8 @@ class ModelStokOpname extends Model
     {
         $builder = $this->db->table('stok_opname')
             ->join('barang', 'barang.idbarang = stok_opname.barang_idbarang')
-            ->join('unit', 'unit.idunit = stok_opname.unit_idunit');
+            ->join('unit', 'unit.idunit = stok_opname.unit_idunit')
+            ->where('stok_opname.is_reverted', 0);
 
         if ($search !== '') {
             $builder->groupStart()
@@ -118,7 +132,7 @@ class ModelStokOpname extends Model
     }
 
 
-    public function exportfilter($tanggalAwal = null, $tanggalAkhir = null, $namaUnit = null)
+    public function exportfilter($tanggalAwal = null, $tanggalAkhir = null, $namaUnit = null, $termasukReverted = false)
     {
         $builder = $this->select('
             stok_opname.*, 
@@ -130,6 +144,12 @@ class ModelStokOpname extends Model
         ')
             ->join('barang', 'barang.idbarang = stok_opname.barang_idbarang')
             ->join('unit', 'unit.idunit = stok_opname.unit_idunit');
+
+        // Revisi yang sudah di-reopen tidak dihitung sebagai hasil opname yang
+        // berlaku, kecuali pemanggil memang meminta melihat riwayatnya.
+        if (! $termasukReverted) {
+            $builder->where('stok_opname.is_reverted', 0);
+        }
 
 
         if (!empty($tanggalAwal) && !empty($tanggalAkhir)) {

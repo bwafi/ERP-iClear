@@ -9,9 +9,18 @@ namespace App\Services\Kpi;
  * Target standar: 4 minggu
  * 
  * Formula:
- *   - Aktual = COUNT(DISTINCT DATE(tanggal)) dari tabel stok_opname_draft per unit, bulan, tahun
+ *   - Aktual = jumlah periode stok opname FINAL (distinct tanggal) per unit, bulan, tahun
  *   - Nilai = (Aktual / Target) * 100
  *   - Nilai di-cap maksimal 100%
+ * 
+ * Hanya periode yang sudah FINAL yang dihitung (draft belum final tidak ikut),
+ * konsisten dengan alur kerja Stok Opname DRAFT -> FINAL.
+ *
+ * Ditambah syarat: seluruh barang berstok pada periode itu harus terisi
+ * (terisi_barang = total_barang). Aturan ini sama dengan syarat finalisasi di
+ * StokOpnameService, jadi KPI tidak mungkin menghitung periode yang isiannya
+ * tidak genap. Ada satu periode legacy yang ter-finalize tanpa isian lengkap,
+ * dan dengan syarat ini periode tersebut tidak ikut dihitung.
  */
 class StokOpnameCalculator implements KpiCalculatorInterface
 {
@@ -24,9 +33,12 @@ class StokOpnameCalculator implements KpiCalculatorInterface
 
     public function calculate($employeeId, $unitId, $month, $year)
     {
-        $result = $this->db->table('stok_opname_draft')
-            ->select('COUNT(DISTINCT DATE(tanggal)) AS total')
+        $result = $this->db->table('stok_opname_periode')
+            ->select('COUNT(*) AS total')
             ->where('unit_idunit', (int)$unitId)
+            ->where('status', 'FINAL')
+            ->where('terisi_barang = total_barang', null, false)
+            ->where('total_barang >', 0)
             ->where('MONTH(tanggal)', (int)$month)
             ->where('YEAR(tanggal)', (int)$year)
             ->get()

@@ -105,7 +105,7 @@ gaji = gaji_pokok + tunjangan + insentif
 | `sumAspek()` | SUM(skor) per aspek per pegawai | `MetricCalculator::sumAspekScore()` | `penilaian` |
 | AVG per aspek global | AVG(skor) | `MetricCalculator::avgAspekScoreGlobal()` | `penilaian` |
 | tutup kasir | COUNT(status) | `MetricCalculator::countTutupKasir()` | `tutup_kasir` |
-| opname | COUNT(DISTINCT DATE) | `MetricCalculator::countStokOpname()` | `stok_opname_draft` |
+| opname | COUNT(periode FINAL terisi penuh) | `MetricCalculator::countStokOpname()` | `stok_opname_periode` |
 | skor_total | Σ(nilai × bobot)/100 | `KpiScoreService::totalWeightedScore()` | detail_kpi |
 | weighted score | score/100 × bobot | `KpiScoreService::weightedScore()` | per item |
 
