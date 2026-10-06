@@ -178,7 +178,7 @@ if ($akunKedua) {
     $listOther = callProtected($controller, 'rekonsiliasiData', [$infoKedua]);
     $listOther['unit_id'] = $unitId;
     check('list submitted untuk akun kedua boleh_ubah=false', ($listOther['list'][$idx]['boleh_ubah'] ?? true) === false);
-    check('list akun kedua punya kunci_alasan', str_contains((string) ($listOther['list'][$idx]['kunci_alasan'] ?? ''), 'menunggu verifikasi'));
+    check('list akun kedua punya kunci_alasan', strpos((string) ($listOther['list'][$idx]['kunci_alasan'] ?? ''), 'menunggu verifikasi') !== false);
     [$otherListView, $otherErr] = renderView(APPPATH . 'Views/dashboard/finance_rekonsiliasi.php', $listOther);
     check('list akun kedua render tanpa error', $otherErr === null, (string) $otherErr);
 

@@ -49,7 +49,7 @@ class StokOpnameCutover extends BaseCommand
         foreach ($raw as $i => $arg) {
             if ($arg === '--until' && isset($raw[$i + 1])) {
                 $until = $raw[$i + 1];
-            } elseif (str_starts_with((string)$arg, '--until=')) {
+            } elseif (strpos((string)$arg, '--until=') === 0) {
                 $until = substr((string)$arg, 8);
             }
         }

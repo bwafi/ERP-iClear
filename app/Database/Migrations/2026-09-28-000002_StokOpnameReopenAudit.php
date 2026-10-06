@@ -146,10 +146,10 @@ class StokOpnameReopenAudit extends Migration
 
         $definition = $row[$column];
 
-        if (str_contains($definition, $replace)) {
+        if (strpos($definition, $replace) !== false) {
             return; // sudah dalam kondisi target
         }
-        if (! str_contains($definition, $search)) {
+        if (strpos($definition, $search) === false) {
             throw new \RuntimeException('Definisi view stok_barang tidak mengandung fragmen yang diharapkan: ' . $search);
         }
 

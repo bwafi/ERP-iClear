@@ -111,7 +111,7 @@ class KommoWebhookService
                 $properties = $payload['properties'] ?? (is_array($payload['data'] ?? null) ? $payload['data'] : []);
                 $leadId = (int)($properties['id'] ?? 0);
             }
-            if ($leadId > 0 && str_starts_with($rawEvent, 'leads.')) {
+            if ($leadId > 0 && strpos($rawEvent, 'leads.') === 0) {
                 $map = ['add' => 'add', 'update' => 'update', 'status' => 'status', 'restore' => 'restore', 'delete' => 'delete'];
                 $ev = $map[substr($rawEvent, 6)] ?? $rawEvent;
                 if (in_array($ev, ['add', 'update', 'status', 'restore', 'delete'], true)) {

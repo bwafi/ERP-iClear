@@ -149,7 +149,7 @@ $ids = [];
 // --- 1. hanya Admin Root -------------------------------------------------
 $ids[] = $id = buatMutasiTerima($db, $unitKirim->idunit, $unitTerima->idunit, $idAdmin);
 $err = batalkan(34, (int) ($akunBiasa->ID_AKUN ?? $idAdmin), $id, ['alasan_batal' => 'saya manager']);
-check('jabatan 34 DITOLAK membatalkan', str_contains($err, 'Admin Root'), $err);
+check('jabatan 34 DITOLAK membatalkan', strpos($err, 'Admin Root') !== false, $err);
 check('mutasi tetap diterima setelah ditolak', (string) $db->table('mutasi')->where('idmutasi', $id)->get()->getRow()->status === '1');
 check('dokumen H/P utuh setelah ditolak', count($hpAktif($id)) === 2);
 
@@ -160,15 +160,15 @@ if ($akunBiasa) {
 
 // --- 2. alasan wajib -----------------------------------------------------
 $err = batalkan(1, $idAdmin, $id, ['alasan_batal' => '']);
-check('alasan kosong DITOLAK', str_contains($err, 'Alasan pembatalan wajib diisi'), $err);
+check('alasan kosong DITOLAK', strpos($err, 'Alasan pembatalan wajib diisi') !== false, $err);
 $err = batalkan(1, $idAdmin, $id, ['alasan_batal' => '   ']);
-check('alasan spasi saja DITOLAK', str_contains($err, 'wajib diisi'), $err);
+check('alasan spasi saja DITOLAK', strpos($err, 'wajib diisi') !== false, $err);
 check('mutasi tetap diterima tanpa alasan', (string) $db->table('mutasi')->where('idmutasi', $id)->get()->getRow()->status === '1');
 
 // --- 3. mutasi belum diterima -------------------------------------------
 $db->table('mutasi')->where('idmutasi', $id)->update(['status' => '0']);
 $err = batalkan(1, $idAdmin, $id, ['alasan_batal' => 'cuma cek']);
-check('mutasi belum diterima tidak bisa dibatalkan', str_contains($err, 'belum diterima'), $err);
+check('mutasi belum diterima tidak bisa dibatalkan', strpos($err, 'belum diterima') !== false, $err);
 $db->table('mutasi')->where('idmutasi', $id)->update(['status' => '1']);
 
 // --- 4. HAPPY PATH: dua efek ikut kembali -------------------------------
@@ -186,7 +186,7 @@ check('dokumen H/P tidak aktif lagi', count($hpAktif($id)) === 0, 'sisa=' . coun
 $semua = $db->table('hutang_piutang')->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', $id)->get()->getResult();
 check('dokumen H/P tidak dihapus fisik', count($semua) === 2, 'jml=' . count($semua));
 check('semua dokumen ditandai deleted', count(array_filter($semua, fn ($d) => (int) $d->deleted === 1)) === 2);
-check('alasan tersimpan di keterangan dokumen', str_contains((string) $semua[0]->keterangan, 'Salah klik tombol Terima'));
+check('alasan tersimpan di keterangan dokumen', strpos((string) $semua[0]->keterangan, 'Salah klik tombol Terima') !== false);
 
 // setelah dibatalkan, mutasi bisa DITERIMA lagi (tidak ada dokumen kembar)
 $db->table('mutasi')->where('idmutasi', $id)->update(['status' => '1', 'batal_oleh' => null, 'batal_at' => null, 'batal_alasan' => null]);
@@ -198,7 +198,7 @@ $ids[] = $id3 = buatMutasiTerima($db, $unitKirim->idunit, $unitTerima->idunit, $
 $db->table('hutang_piutang')->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', $id3)
     ->update(['total_dibayar' => 250000, 'sisa' => 500000, 'status' => 'sebagian']);
 $err = batalkan(1, $idAdmin, $id3, ['alasan_batal' => 'salah klik']);
-check('pembatalan DITOLAK kalau H/P sudah dibayar sebagian', str_contains($err, 'sudah punya pembayaran'), $err);
+check('pembatalan DITOLAK kalau H/P sudah dibayar sebagian', strpos($err, 'sudah punya pembayaran') !== false, $err);
 $row3 = $db->table('mutasi')->where('idmutasi', $id3)->get()->getRow();
 check('mutasi tetap diterima saat barrier menolak', (string) $row3->status === '1');
 check('dokumen H/P tetap aktif saat barrier menolak', count($hpAktif($id3)) === 2);
@@ -211,27 +211,27 @@ $ids[] = $id4 = buatMutasiTerima($db, $unitKirim->idunit, $unitTerima->idunit, $
 $db->table('hutang_piutang')->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', $id4)
     ->update(['total_dibayar' => 750000, 'sisa' => 0, 'status' => 'lunas']);
 $err = batalkan(1, $idAdmin, $id4, ['alasan_batal' => 'sudah lunas']);
-check('pembatalan DITOLAK kalau H/P sudah lunas', str_contains($err, 'sudah punya pembayaran'), $err);
+check('pembatalan DITOLAK kalau H/P sudah lunas', strpos($err, 'sudah punya pembayaran') !== false, $err);
 
 // --- 6. mutasi tidak ada -------------------------------------------------
 $err = batalkan(1, $idAdmin, 999999999, ['alasan_batal' => 'x']);
-check('mutasi tidak ditemukan ditolak', str_contains($err, 'tidak ditemukan'), $err);
+check('mutasi tidak ditemukan ditolak', strpos($err, 'tidak ditemukan') !== false, $err);
 
 // --- 7. model mengizinkan kolom baru (CI4 membuang yang tak terdaftar) ---
 $src = file_get_contents(APPPATH . 'Models/ModelMutasiStok.php');
-check('ModelMutasiStok mengizinkan batal_oleh', str_contains($src, "'batal_oleh'"));
-check('ModelMutasiStok mengizinkan batal_at', str_contains($src, "'batal_at'"));
-check('ModelMutasiStok mengizinkan batal_alasan', str_contains($src, "'batal_alasan'"));
+check('ModelMutasiStok mengizinkan batal_oleh', strpos($src, "'batal_oleh'") !== false);
+check('ModelMutasiStok mengizinkan batal_at', strpos($src, "'batal_at'") !== false);
+check('ModelMutasiStok mengizinkan batal_alasan', strpos($src, "'batal_alasan'") !== false);
 
 $routes = file_get_contents(APPPATH . 'Config/Routes.php');
-check('route batal-terima terdaftar', str_contains($routes, 'mutasi_stok/batal-terima/'));
+check('route batal-terima terdaftar', strpos($routes, 'mutasi_stok/batal-terima/') !== false);
 
 // --- 8. UI: tombol & alasan hanya untuk Admin Root ----------------------
 $view = file_get_contents(APPPATH . 'Views/stok/mutasi_masuk.php');
-check('view punya tombol Batal Terima', str_contains($view, 'btn-batal-terima'));
-check('view punya textarea alasan', str_contains($view, 'name="alasan_batal"'));
-check('view membungkus tombol dalam syarat Admin Root', str_contains($view, "\$bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);"));
-check('view memvalidasi alasan di sisi klien', str_contains($view, 'Alasan pembatalan wajib diisi.'));
+check('view punya tombol Batal Terima', strpos($view, 'btn-batal-terima') !== false);
+check('view punya textarea alasan', strpos($view, 'name="alasan_batal"') !== false);
+check('view membungkus tombol dalam syarat Admin Root', strpos($view, "\$bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);") !== false);
+check('view memvalidasi alasan di sisi klien', strpos($view, 'Alasan pembatalan wajib diisi.') !== false);
 
 // ------------------------------------------------------------------------
 $db->transRollback();

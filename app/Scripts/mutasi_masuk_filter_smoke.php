@@ -210,20 +210,20 @@ check('tanpa asal -> URL dasar', kembali([]) === $dasar, kembali([]));
 check('asal tanpa tanda tanya -> URL dasar', kembali(['asal' => 'abc']) === $dasar);
 
 $u = kembali(['asal' => '?search=MTS1&status=0&dari=2026-01-01&sampai=2026-12-31&page=3']);
-check('filter sah ikut terbawa', str_contains($u, 'search=MTS1') && str_contains($u, 'status=0')
-    && str_contains($u, 'dari=2026-01-01') && str_contains($u, 'page=3'), $u);
+check('filter sah ikut terbawa', strpos($u, 'search=MTS1') !== false && strpos($u, 'status=0') !== false
+    && strpos($u, 'dari=2026-01-01') !== false && strpos($u, 'page=3') !== false, $u);
 
-check('parameter di luar daftar putih dibuang', ! str_contains(kembali(['asal' => '?search=MTS1&evil=1&admin=1']), 'evil')
-    && ! str_contains(kembali(['asal' => '?search=MTS1&evil=1&admin=1']), 'admin'), kembali(['asal' => '?search=MTS1&evil=1&admin=1']));
-check('status tak valid dibuang', ! str_contains(kembali(['asal' => '?status=abc&search=MTS']), 'status'), kembali(['asal' => '?status=abc&search=MTS']));
-check('tanggal tak valid dibuang', ! str_contains(kembali(['asal' => '?dari=2026-13-45&sampai=nonsense']), 'dari')
-    && ! str_contains(kembali(['asal' => '?dari=2026-13-45&sampai=nonsense']), 'sampai'), kembali(['asal' => '?dari=2026-13-45&sampai=nonsense']));
-check('halaman negatif dinormalkan', ! str_contains(kembali(['asal' => '?search=MTS&page=-9']), '-9'), kembali(['asal' => '?search=MTS&page=-9']));
+check('parameter di luar daftar putih dibuang', strpos(kembali(['asal' => '?search=MTS1&evil=1&admin=1']), 'evil') === false
+    && strpos(kembali(['asal' => '?search=MTS1&evil=1&admin=1']), 'admin') === false, kembali(['asal' => '?search=MTS1&evil=1&admin=1']));
+check('status tak valid dibuang', strpos(kembali(['asal' => '?status=abc&search=MTS']), 'status') === false, kembali(['asal' => '?status=abc&search=MTS']));
+check('tanggal tak valid dibuang', strpos(kembali(['asal' => '?dari=2026-13-45&sampai=nonsense']), 'dari') === false
+    && strpos(kembali(['asal' => '?dari=2026-13-45&sampai=nonsense']), 'sampai') === false, kembali(['asal' => '?dari=2026-13-45&sampai=nonsense']));
+check('halaman negatif dinormalkan', strpos(kembali(['asal' => '?search=MTS&page=-9']), '-9') === false, kembali(['asal' => '?search=MTS&page=-9']));
 
 // attempts open redirect: host lain harus diabaikan, hanya query yang diambil
 $u = kembali(['asal' => 'https://evil.example.com/x?search=MTS1&page=2']);
-check('open redirect ditolak, tetap URL dasar', str_starts_with($u, $dasar) && ! str_contains($u, 'evil'), $u);
-check('query tetap terbawa walau host menyamar', str_contains($u, 'search=MTS1'), $u);
+check('open redirect ditolak, tetap URL dasar', strpos($u, $dasar) === 0 && strpos($u, 'evil') === false, $u);
+check('query tetap terbawa walau host menyamar', strpos($u, 'search=MTS1') !== false, $u);
 
 // --- 6. view benar-benar render -----------------------------------------------
 /**
@@ -257,7 +257,7 @@ function paramKe(string $html, int $page, string $key): array
     preg_match_all('/href="([^"]*)"/', $html, $m);
     $found = [];
     foreach ($m[1] as $href) {
-        if (! str_contains($href, 'mutasi_stok/masuk')) {
+        if (strpos($href, 'mutasi_stok/masuk') === false) {
             continue;
         }
         $q = [];
@@ -291,47 +291,47 @@ function item(int $id = 1, string $nota = 'MTS10001'): object
 
 $_SESSION['ID_JABATAN'] = 1;
 $html = render(['items' => [item()], 'filter' => f(), 'currentPage' => 1, 'total' => 1, 'totalPages' => 1]);
-check('form filter ada: pencarian', str_contains($html, 'name="search"'));
-check('form filter ada: status', str_contains($html, 'name="status"'));
-check('form filter ada: rentang tanggal', str_contains($html, 'name="dari"') && str_contains($html, 'name="sampai"'));
-check('form filter ada: unit (lintas)', str_contains($html, 'name="unit"'));
-check('form filter menuju halaman yang benar', str_contains($html, 'action="' . base_url('mutasi_stok/masuk') . '"'));
-check('field asal ada di form terima', str_contains($html, 'id="formTerimaMutasi"') && substr_count($html, 'name="asal"') >= 1);
-check('field asal ada di form batal', str_contains($html, 'id="formBatalTerima"') && substr_count($html, 'name="asal"') >= 2);
+check('form filter ada: pencarian', strpos($html, 'name="search"') !== false);
+check('form filter ada: status', strpos($html, 'name="status"') !== false);
+check('form filter ada: rentang tanggal', strpos($html, 'name="dari"') !== false && strpos($html, 'name="sampai"') !== false);
+check('form filter ada: unit (lintas)', strpos($html, 'name="unit"') !== false);
+check('form filter menuju halaman yang benar', strpos($html, 'action="' . base_url('mutasi_stok/masuk') . '"') !== false);
+check('field asal ada di form terima', strpos($html, 'id="formTerimaMutasi"') !== false && substr_count($html, 'name="asal"') >= 1);
+check('field asal ada di form batal', strpos($html, 'id="formBatalTerima"') !== false && substr_count($html, 'name="asal"') >= 2);
 
 // paginasi: link harus bring filter + halaman
 $_SESSION['ID_JABATAN'] = 1;
 $html = render(['items' => [item()], 'filter' => f(['search' => 'MTS1', 'status' => '0']),
     'currentPage' => 1, 'perPage' => 25, 'total' => 87, 'totalPages' => 4]);
-check('footer menampilkan rentang baris', str_contains($html, 'Menampilkan') && str_contains($html, 'dari 87 mutasi'), 'tidak ada ringkasan');
-check('link halaman 2 ada', paramKe($html, 2, 'page') !== [] || str_contains($html, 'page=2'));
+check('footer menampilkan rentang baris', strpos($html, 'Menampilkan') !== false && strpos($html, 'dari 87 mutasi') !== false, 'tidak ada ringkasan');
+check('link halaman 2 ada', paramKe($html, 2, 'page') !== [] || strpos($html, 'page=2') !== false);
 check('link halaman 2 membawa filter search', paramKe($html, 2, 'search') === ['MTS1'], json_encode(paramKe($html, 2, 'search')));
 check('link halaman 2 membawa status', paramKe($html, 2, 'status') === ['0'], json_encode(paramKe($html, 2, 'status')));
 check('link halaman 1 ikut membawa filter', paramKe($html, 1, 'search') === ['MTS1'], 'halaman 1 harus ikut membawa filter');
-check('filter terisi kembali di input', str_contains($html, 'value="MTS1"'));
+check('filter terisi kembali di input', strpos($html, 'value="MTS1"') !== false);
 check('status terpilih kembali di select', (bool) preg_match('/value="0" selected/', $html));
 
 // user satu unit: kontrol unit tidak dirender
 $_SESSION['ID_JABATAN'] = 3;
 $html = render(['items' => [item()], 'filter' => f(), 'total' => 1]);
-check('user satu unit tidak melihat kontrol unit', ! str_contains($html, 'name="unit"'));
-check('user satu unit tetap melihat pencarian & status', str_contains($html, 'name="search"') && str_contains($html, 'name="status"'));
+check('user satu unit tidak melihat kontrol unit', strpos($html, 'name="unit"') === false);
+check('user satu unit tetap melihat pencarian & status', strpos($html, 'name="search"') !== false && strpos($html, 'name="status"') !== false);
 $_SESSION['ID_JABATAN'] = 1;
 
 // empty state harus bedakan "tidak ada data" vs "filter tidak kena"
 $html = render(['items' => [], 'filter' => f(), 'total' => 0]);
-check('kosong tanpa filter -> "Belum ada mutasi masuk"', str_contains($html, 'Belum ada mutasi masuk'));
-check('kosong tanpa filter tidak menawarkan reset', ! str_contains($html, 'Reset filter'));
+check('kosong tanpa filter -> "Belum ada mutasi masuk"', strpos($html, 'Belum ada mutasi masuk') !== false);
+check('kosong tanpa filter tidak menawarkan reset', strpos($html, 'Reset filter') === false);
 $html = render(['items' => [], 'filter' => f(['search' => 'ZZZ']), 'total' => 0]);
-check('kosong karena filter -> pesan jelas', str_contains($html, 'Tidak ada mutasi yang cocok dengan filter ini'));
-check('kosong karena filter -> ada tombol reset', str_contains($html, 'Reset filter'));
+check('kosong karena filter -> pesan jelas', strpos($html, 'Tidak ada mutasi yang cocok dengan filter ini') !== false);
+check('kosong karena filter -> ada tombol reset', strpos($html, 'Reset filter') !== false);
 
 // Status '0' adalah filter paling sering dipakai di halaman ini, dan di PHP
 // string '0' itu falsy. Dua baris ini mengunci supaya `?:` atau `||` tidak
 // diam-diam menganggapnya "tidak ada filter" lagi.
 $html = render(['items' => [], 'filter' => f(['status' => '0']), 'total' => 0]);
-check('filter status 0 saja tetap dianggap filter', str_contains($html, 'Tidak ada mutasi yang cocok dengan filter ini'));
-check('filter status 0 saja tetap menawarkan reset', str_contains($html, 'Reset filter'));
+check('filter status 0 saja tetap dianggap filter', strpos($html, 'Tidak ada mutasi yang cocok dengan filter ini') !== false);
+check('filter status 0 saja tetap menawarkan reset', strpos($html, 'Reset filter') !== false);
 $html = render(['items' => [item()], 'filter' => f(['status' => '0']), 'currentPage' => 1, 'total' => 60, 'totalPages' => 3]);
 check('filter status 0 tetap ada di link paginasi', paramKe($html, 2, 'status') === ['0'], json_encode(paramKe($html, 2, 'status')));
 check('filter status 0 tetap ada di field asal', (bool) preg_match('/name="asal" value="[^"]*status=0/', $html), 'status hilang dari asal');

@@ -39,7 +39,7 @@ class OpnameVerify extends BaseCommand
         echo 'index             : ' . implode(', ', $idx) . "\n";
         echo 'view stok_barang  : ' . ($view === ''
             ? 'view tidak ditemukan'
-            : (str_contains($view, 'is_reverted') ? 'filter is_reverted AKTIF' : 'filter is_reverted NONAKTIF (v1)')) . "\n";
+            : (strpos($view, 'is_reverted') !== false ? 'filter is_reverted AKTIF' : 'filter is_reverted NONAKTIF (v1)')) . "\n";
         echo 'tabel audit       : ' . ($db->tableExists('stok_opname_audit') ? 'ADA' : 'HILANG') . "\n";
 
         echo "\n== Data ==\n";

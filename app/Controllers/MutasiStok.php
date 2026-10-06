@@ -205,7 +205,7 @@ class MutasiStok extends BaseController
     {
         $base = base_url('mutasi_stok/masuk');
         $asal = (string) ($this->request->getPost('asal') ?? '');
-        if ($asal === '' || ! str_contains($asal, '?')) {
+        if ($asal === '' || strpos($asal, '?') === false) {
             return $base;
         }
 

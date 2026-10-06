@@ -218,7 +218,7 @@ check(
 check('kunciAlasan null saat boleh ubah', $calc::kunciAlasan($rowSubmitted, $idSubmitter) === null);
 check(
     'kunciAlasan menjelaskan menunggu verifikasi',
-    str_contains((string) $calc::kunciAlasan($rowSubmitted, $idLain), 'menunggu verifikasi')
+    strpos((string) $calc::kunciAlasan($rowSubmitted, $idLain), 'menunggu verifikasi') !== false
 );
 
 // 10d. MANAGER (bukan pengirim) MENYIMPA -> DITOLAK, angka tidak berubah.
