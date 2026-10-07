@@ -501,7 +501,18 @@ class TutupKasir extends BaseController
             $dataHarian[$row->tgl] = $row->total;
         }
 
-        $jumlahHari = date('t');
+        // Cari hari dengan omset tertinggi
+        $hariTerbaik = null;
+        $omsetTerbaik = 0;
+        if (!empty($dataHarian)) {
+            arsort($dataHarian);
+            $hariTerbaikKey = array_key_first($dataHarian);
+            $hariTerbaik = $hariTerbaikKey;
+            $omsetTerbaik = $dataHarian[$hariTerbaikKey] ?? 0;
+        }
+
+
+                $jumlahHari = date('t');
         $listHari = [];
 
         for ($i = 1; $i <= $jumlahHari; $i++) {
@@ -537,6 +548,8 @@ class TutupKasir extends BaseController
             'pelanggan_bulan'   => $pelanggan_bulan,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
+            'hariTerbaik'       => $hariTerbaik,
+            'omsetTerbaik'      => $omsetTerbaik,
             'body'              => 'jurnal/omset_bulanan'
         ]);
     }
