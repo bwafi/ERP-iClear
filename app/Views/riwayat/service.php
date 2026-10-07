@@ -23,12 +23,13 @@
                 <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
                 <input type="date" id="endDate" class="form-control">
             </div>
+            <?php $isHO = !empty($is_ho) && $is_ho; ?>
             <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold mb-2">Unit</label>
-                <select id="unitFilter" class="form-select">
+                <select id="unitFilter" class="form-select" <?= $isHO ? '' : 'disabled' ?>>
                     <option value="">Semua Unit</option>
                     <?php foreach (($unit ?? []) as $u): ?>
-                        <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                        <option value="<?= (int) $u->idunit ?>" <?= (!$isHO && (int) $u->idunit === (int) ($user_unit ?? 0)) ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -433,7 +434,7 @@
 
         document.getElementById('startDate').value = toDateInputValue(thirtyDaysAgo);
         document.getElementById('endDate').value = toDateInputValue(today);
-        document.getElementById('unitFilter').value = '';
+        const uf = document.getElementById('unitFilter'); if (uf && !uf.disabled) uf.value = '';
         document.getElementById('searchBox').value = '';
         document.getElementById('exportStartDate').value = toDateInputValue(thirtyDaysAgo);
         document.getElementById('exportEndDate').value = toDateInputValue(today);

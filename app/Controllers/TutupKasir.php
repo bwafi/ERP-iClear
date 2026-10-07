@@ -1,28 +1,107 @@
-======================================================
-        // OFFSET WIB UNTUK JAVASCRIPT
-        // ==============================================================
-        //
-        // Aturan jam tutup kasir (20:45) adalah aturan bisnis WIB. Server
-        // aplikasi sendiri jalan di UTC (`Config\App::$appTimezone`), jadi
-        // offsetnya dihitung di sini dari timezone WIB secara eksplisit dan
-        // dikirim ke view. Browser di zona mana pun lalu menghitung jam yang
-        // sama dengan server.
-        //
-        // Dihitung dari difference offset TANPA hardcode menit 420, supaya
-        // perubahan kebijakan zona waktu tidak diam-diam salah.
-        $wib = new \DateTimeZone('Asia/Jakarta');
-        $wibOffsetMenit = (int) round(
-            ((new \DateTime('now', $wib))->getOffset() - (new \DateTime('now'))->getOffset()) / 60
-        );
+<?php
 
-        $awalKas  = $h['saldo_awal_kas'];
-        $awalTf   = $h['saldo_awal_tf'];
-        $transferInternal = $h['transfer_internal'];
+namespace App\Controllers;
 
-        // Bila closing tidak boleh disimpan (mis. opening belum terverifikasi),
-        // alasan dan komponennya tetap ditampilkan supaya kasir tahu apa yang
-        // harus diperbaiki. `$h['siap']` hanya mematikan tombol.
-        $a = $h['angka'];
+use App\Models\ModelTutupKasir;
+use CodeIgniter\Controller;
+
+class TutupKasir extends BaseController
+{
+    protected $db;
+    protected $TutupKasir;
+
+    public function __construct()
+    {
+        $this->db = \Config\Database::connect();
+        $this->TutupKasir = new ModelTutupKasir();
+    }
+
+    public function index()
+    {
+        $today = date('Y-m-d');
+        $besok = date('Y-m-d', strtotime('+1 day'));
+
+        // ambil unit login
+        $unit = session()->get('ID_UNIT');
+
+        // KAS AWAL CASH
+        $kasawalcash = $this->db->table('kas_masuk')
+            ->select('jumlah as total')
+            ->where('DATE(tanggal)', $today)
+            ->where('deskripsi', 'kas awal')
+            ->where('idbank', null)
+            ->where('idunit', $unit)
+            ->get()
+            ->getRow()->total ?? 0;
+
+        // KAS AWAL TRANSFER
+        $kasawaltf = $this->db->table('kas_masuk')
+            ->select('jumlah as total')
+            ->where('DATE(tanggal)', $today)
+            ->where('deskripsi', 'kas awal')
+            ->where('idbank !=', null)
+            ->where('idunit', $unit)
+            ->get()
+            ->getRow()->total ?? 0;
+
+        // PENJUALAN TRANSFER
+        $tfpenjualan = $this->db->table('penjualan')
+            ->selectSum('bayar_bank', 'total')
+            ->where('DATE(tanggal)', $today)
+            ->where('unit_idunit', $unit)
+            ->notLike('kode_invoice', 'srv', 'after')
+            ->get()
+            ->getRow()->total ?? 0;
+
+        // SERVICE TRANSFER
+        $tfservice = $this->db->table('service')
+            ->select('SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)) AS total')
+            ->where('DATE(tanggal_selesai)', $today)
+            ->where('status_service', 4)
+            ->where('unit_idunit', $unit)
+            ->get()
+            ->getRow()->total ?? 0;
+
+        $transfer = $tfpenjualan + $tfservice;
+
+        // PENJUALAN CASH
+        $cashpenjualan = $this->db->table('penjualan')
+            ->selectSum('bayar_tunai', 'total')
+            ->where('DATE(tanggal)', $today)
+            ->where('unit_idunit', $unit)
+            ->notLike('kode_invoice', 'srv', 'after')
+            ->get()
+            ->getRow()->total ?? 0;
+
+        // SERVICE CASH
+        $cashservice = $this->db->table('service')
+            ->selectSum('bayar_tunai', 'total')
+            ->where('DATE(tanggal_selesai)', $today)
+            ->where('status_service', 4)
+            ->where('unit_idunit', $unit)
+            ->get()
+            ->getRow()->total ?? 0;
+
+        $cash = $cashpenjualan + $cashservice;
+        $total = $transfer + $cash;
+
+        // PENGELUARAN CASH
+        $pengeluarancash = $this->db->table('kas_keluar')
+            ->selectSum('jumlah', 'total')
+            ->where('DATE(tanggal)', $today)
+            ->where('idbank', null)
+            ->where('idunit', $unit)
+            ->get()
+            ->getRow()->total ?? 0;
+
+        // PENGELUARAN TF
+        $pengeluarantf = $this->db->table('kas_keluar')
+            ->selectSum('jumlah', 'total')
+            ->where('DATE(tanggal)', $today)
+            ->where('idbank !=', null)
+            ->where('idunit', $unit)
+            ->get()
+            ->getRow()->total ?? 0;
 
         // tutup kasir terakhir per unit
         $tutupkasir = $this->db->table('tutup_kasir')
@@ -37,29 +116,33 @@
             ->where('unit', $unit)
             ->countAllResults();
 
-        $dataTutupKasir = [
-            'tutupkasir'        => $tutupkasir,
-            'total_pendapatan'  => $a['total_pendapatan'],
-            'transfer'          => $a['transfer_masuk'],
-            'cash'              => $a['kas_masuk'],
-            'pengeluarantf'     => $a['transfer_keluar'],
-            'pengeluarancash'   => $a['kas_keluar'],
-            'total_pengeluaran' => $a['total_pengeluaran'],
-            'setor'             => $a['setor'],
-            'tarik'             => $a['tarik'],
-            'saldo_awal_kas'    => $awalKas,
-            'saldo_awal_tf'     => $awalTf,
-            'transfer_internal' => $transferInternal,
-            'tutup_bisa_disimpan' => $h['siap'],
-            'tutup_alasan'        => $h['alasan'],
-            'sudah_ditutup'       => $cek > 0,
-            'wibOffsetMenit'      => $wibOffsetMenit,
-            'body'                => 'jurnal/tutup_kasir',
-        ];
+        if ($cek > 0) {
+            return view('template', [
+                'today'            => $today,
+                'besok'            => $besok,
+                'tutupkasir'       => $tutupkasir,
+                'kas_awaltf'       => $kasawaltf,
+                'kas_awalcash'     => $kasawalcash,
+                'total_pendapatan' => $total,
+                'transfer'         => $transfer,
+                'cash'             => $cash,
+                'pengeluarantf'    => $pengeluarantf,
+                'pengeluarancash'  => $pengeluarancash,
+                'error'            => 'Tutup kasir unit ini hari ini sudah dilakukan',
+                'body'             => 'jurnal/tutup_kasir'
+            ]);
+        }
 
-        return view('template', $dataTutupKasir + [
-            'today' => $today,
-            'besok' => $besok,
+        return view('template', [
+            'tutupkasir'       => $tutupkasir,
+            'kas_awaltf'       => $kasawaltf,
+            'kas_awalcash'     => $kasawalcash,
+            'total_pendapatan' => $total,
+            'transfer'         => $transfer,
+            'cash'             => $cash,
+            'pengeluarantf'    => $pengeluarantf,
+            'pengeluarancash'  => $pengeluarancash,
+            'body'             => 'jurnal/tutup_kasir'
         ]);
     }
 
@@ -69,14 +152,6 @@
             ?? date('Y-m-d');
 
         $unit = $this->request->getGet('unit');
-
-        // Daftar unit diambil dari tabel `unit`, bukan ditulis manual di view.
-        // Sebelumnya view meng-hardcode 4 unit, jadi unit yang baru ditambahkan
-        // (mis. ICLEAR Genteng) tidak pernah muncul di dropdown filter.
-        $list_unit = $this->db->table('unit')
-            ->orderBy('idunit', 'ASC')
-            ->get()
-            ->getResultArray();
 
         $builder = $this->db->table('tutup_kasir tk')
 
@@ -93,25 +168,9 @@
 
             ->where('DATE(tk.tanggal)', $tanggal);
 
-        // Filter unit hanya kalau nilainya unit yang benar-benar ada. Parameter
-        // `unit` datang dari query string, jadi tanpa pengecekan ini angka
-        // session seperti "5abc" akan lolos dan menghasilkan halaman kosong
-        // tanpa pesan apa pun.
-        $isUnitValid = false;
-        foreach ($list_unit as $u) {
-            if ((string) $u['idunit'] === (string) $unit) {
-                $isUnitValid = true;
-                break;
-            }
-        }
-
-        if ($isUnitValid) {
+        // filter unit jika dipilih
+        if (!empty($unit)) {
             $builder->where('tk.unit', $unit);
-        } else {
-            // Unit tidak dikenal: samakan dengan "belum memilih apa pun" supaya
-            // query tetap jalan, dan dropdown tidak menampilkan opsi aktif yang
-            // salah.
-            $unit = null;
         }
 
         $tutupkasir = $builder
@@ -126,7 +185,6 @@
                 'tutupkasir' => null,
                 'tanggal'    => $tanggal,
                 'selected_unit' => $unit,
-                'list_unit'  => $list_unit,
                 'body' => 'jurnal/kasir_bulanan'
 
             ]);
@@ -139,8 +197,6 @@
             'tanggal' => $tanggal,
 
             'selected_unit' => $unit,
-
-            'list_unit' => $list_unit,
 
             // saldo awal
             'kas_awalcash' => $tutupkasir->awal_cash ?? 0,
@@ -159,7 +215,8 @@
             'kas_akhirtf'   => $tutupkasir->akhir_transfer ?? 0,
 
             // total pendapatan
-            'total_pendapatan' => ($tutupkasir->pendapatan_cash ?? 0)
+            'total_pendapatan' =>
+                ($tutupkasir->pendapatan_cash ?? 0)
                 +
                 ($tutupkasir->pendapatan_transfer ?? 0),
 
@@ -171,23 +228,36 @@
     public function omsetbulanan()
     {
         $id_jabatan = session()->get('ID_JABATAN');
+        $id_akun    = session()->get('ID_AKUN');
+
+        // Mapping khusus untuk direktur/investor (jabatan 2) yang punya multi unit
+        $allowedUnitsByAkun = [
+            46 => [3, 5], // Wahid Alfarizki: Banyuwangi, Genteng
+            70 => [4],    // Guruh Dwi Prasetyo: Pandaan
+        ];
 
         // Ambil list unit
-        $list_unit = $this->db->table('unit')
-            ->get()
-            ->getResultArray();
-
-        // Hanya jabatan 1 dan 40 boleh memilih unit
         if (in_array($id_jabatan, [1, 40])) {
+            $list_unit = $this->db->table('unit')->get()->getResultArray();
+        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
+            $allowed = $allowedUnitsByAkun[$id_akun];
+            $list_unit = $this->db->table('unit')->whereIn('idunit', $allowed)->get()->getResultArray();
+        } else {
+            $list_unit = $this->db->table('unit')->get()->getResultArray();
+        }
 
+        // Penentuan unit
+        if (in_array($id_jabatan, [1, 40])) {
             $unit = $this->request->getGet('unit');
-
             if (!$unit) {
                 $unit = session()->get('ID_UNIT');
             }
+        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
+            $unit = $this->request->getGet('unit');
+            if (!$unit || !in_array((int)$unit, $allowedUnitsByAkun[$id_akun], true)) {
+                $unit = $allowedUnitsByAkun[$id_akun][0];
+            }
         } else {
-
-            // Selain jabatan 1 & 40 wajib unit sendiri
             $unit = session()->get('ID_UNIT');
         }
 
@@ -206,51 +276,25 @@
             ->getResultArray();
 
         // ==========================
-        // FILTER BULAN / TAHUN (default: bulan berjalan)
+        // TOTAL OMSET BULAN INI
         // ==========================
-        $bulan = (int) $this->request->getGet('bulan');
-        $tahun = (int) $this->request->getGet('tahun');
-
-        if ($bulan < 1 || $bulan > 12) {
-            $bulan = (int) date('m');
-        }
-        if ($tahun < 2000 || $tahun > 2100) {
-            $tahun = (int) date('Y');
-        }
-
-        $bulanSebelum = (int)date('m', mktime(0, 0, 0, $bulan - 1, 1, $tahun));
-        $tahunSebelum = (int)date('Y', mktime(0, 0, 0, $bulan - 1, 1, $tahun));
-
-        $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
-        $periodeLaluLabel = date('F Y', mktime(0, 0, 0, $bulanSebelum, 1, $tahunSebelum));
-
-        $isBulanBerjalan = ($bulan === (int) date('m') && $tahun === (int) date('Y'));
-
-        // ==========================
-        // TOTAL OMSET BULAN TERPILIH
-        // ==========================
-        $omset_bulan = $this->countOmset($unit, $bulan, $tahun);
-
-        // OMSET BULAN SEBELUMNYA (untuk perbandingan)
-        $omset_bulan_lalu = $this->countOmset($unit, $bulanSebelum, $tahunSebelum);
-
-        if ($omset_bulan_lalu > 0) {
-            $pertumbuhan_omset = round((($omset_bulan - $omset_bulan_lalu) / $omset_bulan_lalu) * 100, 1);
-        } elseif ($omset_bulan_lalu == 0 && $omset_bulan > 0) {
-            $pertumbuhan_omset = 100;
-        } else {
-            $pertumbuhan_omset = 0;
-        }
-
-        $selisih_omset = $omset_bulan - $omset_bulan_lalu;
+        $omset_bulan = $this->db->table('detail_penjualan')
+            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
+            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+            ->where('MONTH(penjualan.tanggal)', date('m'))
+            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('penjualan.unit_idunit', $unit)
+            ->get()
+            ->getRow()
+            ->total ?? 0;
 
         // ==========================
         // TOTAL PELANGGAN
         // ==========================
         $countService = $this->db->table('service')
             ->select('COUNT(idservice) AS total')
-            ->where('MONTH(tanggal_selesai)', $bulan)
-            ->where('YEAR(tanggal_selesai)', $tahun)
+            ->where('MONTH(tanggal_selesai)', date('m'))
+            ->where('YEAR(tanggal_selesai)', date('Y'))
             ->where('unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -258,8 +302,8 @@
 
         $countSales = $this->db->table('penjualan')
             ->select('COUNT(DISTINCT idpenjualan) AS total')
-            ->where('MONTH(tanggal)', $bulan)
-            ->where('YEAR(tanggal)', $tahun)
+            ->where('MONTH(tanggal)', date('m'))
+            ->where('YEAR(tanggal)', date('Y'))
             ->where('unit_idunit', $unit)
             ->like('kode_invoice', 'SLL', 'after')
             ->get()
@@ -282,8 +326,8 @@
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
             ->like('stok_barang.kode_barang', 'SPRT', 'after')
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
+            ->where('MONTH(penjualan.tanggal)', date('m'))
+            ->where('YEAR(penjualan.tanggal)', date('Y'))
             ->where('penjualan.unit_idunit', $unit)
             ->orderBy('stok_barang.total_penjualan', 'DESC')
             ->limit(1)
@@ -297,25 +341,25 @@
         // PRODUCT SERVICE FAST MOVING
         // ==========================
         $bestsellerproduct = $this->db->table('service')
-            ->select('
-                TRIM(service.tipe_hp) AS tipe_hp_label,
+            ->select("
+                LOWER(
+                    CONCAT(
+                        SUBSTRING_INDEX(tipe_hp,' ',1),
+                        ' ',
+                        REGEXP_SUBSTR(tipe_hp,'[0-9]+')
+                    )
+                ) AS keyword_hp,
                 COUNT(*) AS total
-            ')
-            ->where('MONTH(tanggal_selesai)', $bulan)
-            ->where('YEAR(tanggal_selesai)', $tahun)
+            ")
+            ->where('MONTH(tanggal_selesai)', date('m'))
+            ->where('YEAR(tanggal_selesai)', date('Y'))
             ->where('unit_idunit', $unit)
-            ->where('status_service', 4)
-            ->groupStart()
-                ->where('service.tipe_hp IS NOT NULL', null, false)
-                ->where("TRIM(service.tipe_hp) != ''", null, false)
-            ->groupEnd()
-            ->groupBy('tipe_hp_label')
+            ->groupBy('keyword_hp')
             ->orderBy('total', 'DESC')
-            ->orderBy('tipe_hp_label', 'ASC')
             ->limit(1)
             ->get()
             ->getRow() ?? (object)[
-                'tipe_hp_label' => 'Belum ada',
+                'keyword_hp' => 'Belum ada',
                 'total' => 0
             ];
 
@@ -326,8 +370,8 @@
             ->selectCount('b.nama_barang', 'total')
             ->join('barang b', 'b.idbarang = dp.barang_idbarang')
             ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-            ->where('MONTH(p.tanggal)', $bulan)
-            ->where('YEAR(p.tanggal)', $tahun)
+            ->where('MONTH(p.tanggal)', date('m'))
+            ->where('YEAR(p.tanggal)', date('Y'))
             ->where('p.unit_idunit', $unit)
             ->where('b.idkategori', 3)
             ->notLike('b.nama_barang', 'mesin')
@@ -355,7 +399,7 @@
             ->get()
             ->getRow()
             ->total ?? 0;
-
+            
         $hpp = $this->db->table('detail_penjualan')
             ->select('SUM(hpp_penjualan) AS total')
             ->join(
@@ -366,8 +410,8 @@
                 'barang',
                 'barang.idbarang = detail_penjualan.barang_idbarang'
             )
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
+            ->where('MONTH(penjualan.tanggal)', date('m'))
+            ->where('YEAR(penjualan.tanggal)', date('Y'))
             ->where('penjualan.unit_idunit', $unit)
             ->where('barang.idkategori =', 3)
             ->get()
@@ -375,14 +419,18 @@
             ->total ?? 0;
 
         $hpp_global = $this->db->table('detail_penjualan')
-            ->selectSum('sub_total', 'total')
+            ->select('SUM(hpp_penjualan) AS total')
             ->join(
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('penjualan.unit_idunit', $unit)
+            ->join(
+                'barang',
+                'barang.idbarang = detail_penjualan.barang_idbarang'
+            )
+            ->where('MONTH(penjualan.tanggal)', date('m'))
+            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('barang.idkategori =', 3)
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -399,8 +447,8 @@
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
+            ->where('MONTH(penjualan.tanggal)', date('m'))
+            ->where('YEAR(penjualan.tanggal)', date('Y'))
             ->where('penjualan.unit_idunit', $unit)
             ->groupBy('DATE(penjualan.tanggal)')
             ->get()
@@ -412,12 +460,12 @@
             $dataHarian[$row->tgl] = $row->total;
         }
 
-        $jumlahHari = (int) date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
+        $jumlahHari = date('t');
         $listHari = [];
 
         for ($i = 1; $i <= $jumlahHari; $i++) {
 
-            $tgl = sprintf('%04d-%02d-%02d', $tahun, $bulan, $i);
+            $tgl = date('Y-m-') . str_pad($i, 2, '0', STR_PAD_LEFT);
 
             $listHari[] = [
                 'tanggal' => $tgl,
@@ -425,40 +473,10 @@
             ];
         }
 
-        // ==========================
-        // STATISTIK TAMBAHAN
-        // ==========================
-        // Rata-rata per hari memakai jumlah hari yang benar-benar sudah lewat,
-        // bukan seluruh jumlah hari bulan. Untuk bulan berjalan (mis. 2 Okt
-        // dari 31) membagi dengan 31 membuat rata-rata jadi terlalu kecil;
-        // untuk bulan yang sudah lewat dipakai seluruh hari bulan tersebut.
-        $hariRataRata = $isBulanBerjalan ? min((int) date('j'), $jumlahHari) : $jumlahHari;
-
-        $omset_rata_rata = $hariRataRata > 0 ? round($omset_bulan / $hariRataRata) : 0;
-
-        $hariTerbaik = null;
-        $omsetTerbaik = 0;
-        foreach ($listHari as $h) {
-            if ((float)$h['total'] > $omsetTerbaik) {
-                $omsetTerbaik = (float)$h['total'];
-                $hariTerbaik = $h['tanggal'];
-            }
-        }
-
         return view('template', [
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
-            'bulan'         => $bulan,
-            'tahun'         => $tahun,
-            'bulanSebelum'  => $bulanSebelum,
-            'tahunSebelum'  => $tahunSebelum,
-            'periodeLabel'  => $periodeLabel,
-            'periodeLaluLabel' => $periodeLaluLabel,
-            'isBulanBerjalan' => $isBulanBerjalan,
-            'omset_bulan_lalu' => $omset_bulan_lalu,
-            'pertumbuhan_omset' => $pertumbuhan_omset,
-            'selisih_omset' => $selisih_omset,
             'hpp'           => $hpp,
             'hpp_global'    => $hpp_global,
             'listHari'          => $listHari,
@@ -466,101 +484,49 @@
             'bestsellerproduct' => $bestsellerproduct,
             'omset_bulan'       => $omset_bulan,
             'pelanggan_bulan'   => $pelanggan_bulan,
-            'countService'      => $countService,
-            'countSales'        => $countSales,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
-            'omset_rata_rata'   => $omset_rata_rata,
-            'hari_rata_rata'    => $hariRataRata,
-            'hariTerbaik'       => $hariTerbaik,
-            'omsetTerbaik'      => $omsetTerbaik,
             'body'              => 'jurnal/omset_bulanan'
         ]);
     }
 
-    /**
-     * Data "Arus Kas Harian" untuk satu tanggal (JSON), dipakai drill-down
-     * Detail Omset Harian. Read-only: tidak mengubah omset maupun transaksi.
-     */
-    public function arusKasHarian()
-    {
-        $unit = (int)($this->request->getGet('unit') ?: 0);
-        if ($unit <= 0) {
-            $unit = (int)session()->get('ID_UNIT');
-        }
-
-        if ($this->db->table('unit')->where('idunit', $unit)->countAllResults() === 0) {
-            return $this->response->setStatusCode(400)->setJSON([
-                'success' => false,
-                'message' => 'Unit tidak valid',
-            ]);
-        }
-
-        $tanggal = (string)$this->request->getGet('tanggal');
-        $timestamp = $tanggal !== '' ? strtotime($tanggal) : false;
-        if ($timestamp === false) {
-            return $this->response->setStatusCode(400)->setJSON([
-                'success' => false,
-                'message' => 'Tanggal tidak valid',
-            ]);
-        }
-
-        $service = new DailyCashFlowService();
-
-        return $this->response->setJSON([
-            'success' => true,
-            'data'    => $service->getForDate($unit, date('Y-m-d', $timestamp)),
-        ]);
-    }
-
-    /** Total omset (sub_total - HPP) untuk unit pada bulan/tahun tertentu. */
-    private function countOmset($unit, int $bulan, int $tahun): float
-    {
-        $row = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow();
-
-        return (float)($row->total ?? 0);
-    }
-
     public function assetberjalan()
     {
-
+        
         $db = \Config\Database::connect();
 
 
         $id_jabatan = session()->get('ID_JABATAN');
+        $id_akun    = session()->get('ID_AKUN');
 
-        // ==========================
-        // FILTER BULAN & TAHUN
-        // ==========================
-        $seleksiBulan = (int) $this->request->getGet('bulan') ?: (int) date('n');
-        $seleksiTahun = (int) $this->request->getGet('tahun') ?: (int) date('Y');
-        $seleksiBulan = ($seleksiBulan < 1 || $seleksiBulan > 12) ? (int) date('n') : $seleksiBulan;
-        $seleksiTahun = $seleksiTahun < 2000 ? (int) date('Y') : $seleksiTahun;
-        $seleksiBulanPadded = str_pad((string) $seleksiBulan, 2, '0', STR_PAD_LEFT);
+        // Mapping khusus untuk direktur/investor (jabatan 2) yang punya multi unit
+        $allowedUnitsByAkun = [
+            46 => [3, 5], // Wahid Alfarizki: Banyuwangi, Genteng
+            70 => [4],    // Guruh Dwi Prasetyo: Pandaan
+        ];
 
         // Ambil list unit
-        $list_unit = $this->db->table('unit')
-            ->get()
-            ->getResultArray();
-
-        // Hanya jabatan 1 dan 40 boleh memilih unit
         if (in_array($id_jabatan, [1, 40])) {
+            $list_unit = $this->db->table('unit')->get()->getResultArray();
+        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
+            $allowed = $allowedUnitsByAkun[$id_akun];
+            $list_unit = $this->db->table('unit')->whereIn('idunit', $allowed)->get()->getResultArray();
+        } else {
+            $list_unit = $this->db->table('unit')->get()->getResultArray();
+        }
 
+        // Penentuan unit
+        if (in_array($id_jabatan, [1, 40])) {
             $unit = $this->request->getGet('unit');
-
             if (!$unit) {
                 $unit = session()->get('ID_UNIT');
             }
+        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
+            $unit = $this->request->getGet('unit');
+            if (!$unit || !in_array((int)$unit, $allowedUnitsByAkun[$id_akun], true)) {
+                $unit = $allowedUnitsByAkun[$id_akun][0];
+            }
         } else {
-
-            // Selain jabatan 1 & 40 wajib unit sendiri
             $unit = session()->get('ID_UNIT');
         }
 
@@ -584,8 +550,8 @@
         $omset_bulan = $this->db->table('detail_penjualan')
             ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
-            ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
+            ->where('MONTH(penjualan.tanggal)', date('m'))
+            ->where('YEAR(penjualan.tanggal)', date('Y'))
             ->where('penjualan.unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -605,15 +571,15 @@
 
             // LIST KARYAWAN
 
-            $karyawan = $this->db->table('akun')
-                ->where('ID_AKUN', $selected_karyawan)
-                ->get()
-                ->getRowArray();
+        $karyawan = $this->db->table('akun')
+            ->where('ID_AKUN', $selected_karyawan)
+            ->get()
+            ->getRowArray();
 
-            $jabatan = $karyawan['ID_JABATAN'];
-            $unit    = $karyawan['ID_UNIT'];
+        $jabatan = $karyawan['ID_JABATAN'];
+        $unit    = $karyawan['ID_UNIT'];
 
-            $query = $db->query("
+        $query = $db->query("
                                 SELECT 
                                     NAMA_AKUN,
                                     ALAMAT,
@@ -622,218 +588,172 @@
                                         WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 1 THEN 1
                                         WHEN ALAMAT = 'Jember' AND ID_UNIT = 2 THEN 1
                                         WHEN ALAMAT = 'Banyuwangi' AND ID_UNIT = 3 THEN 1
-                                        WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 50 THEN 1
                                         ELSE 0
                                     END AS penempatan
                                 FROM akun
                                 WHERE ID_AKUN=$selected_karyawan
                             ");
 
-            $akun = $query->getRow();
+        $akun = $query->getRow();
 
-            if ($akun->penempatan == 0) {
-                $akun->tunjangan_penempatan = 350000;
-            } else {
-                $akun->tunjangan_penempatan = 0;
-            }
+        if ($akun->penempatan == 0) {
+            $akun->tunjangan_penempatan = 350000;
+        } else {
+            $akun->tunjangan_penempatan = 0;
+        }
 
-            //traget setiap cabang
+        //traget setiap cabang
 
-            $target_unit = [
+        $target_unit = [
 
-                1 => [
-                    'customer'  => 130,
-                    'closing'   => 111,
-                    'upselling' => 14,
-                    'followup'  => 100,
-                    'roas'      => 5,
-                ],
+            1 => [
+                'customer'  => 130,
+                'closing'   => 111,
+                'upselling' => 14,
+                'followup'  => 100,
+                'roas'      => 5,
+            ],
 
-                2 => [
-                    'customer'  => 118,
-                    'closing'   => 96,
-                    'upselling' => 14,
-                    'followup'  => 80,
-                    'roas'      => 4,
-                ],
+            2 => [
+                'customer'  => 118,
+                'closing'   => 96,
+                'upselling' => 14,
+                'followup'  => 80,
+                'roas'      => 4,
+            ],
 
-                3 => [
-                    'customer'  => 210,
-                    'closing'   => 188,
-                    'upselling' => 27,
-                    'followup'  => 60,
-                    'roas'      => 3,
-                ],
+            3 => [
+                'customer'  => 210,
+                'closing'   => 188,
+                'upselling' => 27,
+                'followup'  => 60,
+                'roas'      => 3,
+            ],
 
-                4 => [
-                    'customer'  => 118,
-                    'closing'   => 96,
-                    'upselling' => 14,
-                    'followup'  => 80,
-                    'roas'      => 4,
-                ]
-            ];
+            4 => [
+                'customer'  => 118,
+                'closing'   => 96,
+                'upselling' => 14,
+                'followup'  => 80,
+                'roas'      => 4,
+            ]
+        ];
 
-            $target = $target_unit[$unit] ?? $target_unit[1];
+        $target = $target_unit[$unit] ?? $target_unit[1];
 
-            $batas_awal = [
-                1 => 30000000, // Probolinggo
-                2 => 18000000, // Jember
-                3 => 40000000, // Banyuwangi
-                4 => 18000000, // Pandaan
-            ];
+        $batas_awal = [
+            1 => 30000000, // Probolinggo
+            2 => 18000000, // Jember
+            3 => 40000000, // Banyuwangi
+            4 => 18000000, // Pandaan
+        ];
 
-            $batas_kedua = [
-                1 => 35000000, // Probolinggo
-                2 => 22000000, // Jember
-                3 => 45000000, // Banyuwangi
-                4 => 22000000, // Pandaan
-            ];
+        $batas_kedua = [
+            1 => 35000000, // Probolinggo
+            2 => 22000000, // Jember
+            3 => 45000000, // Banyuwangi
+            4 => 22000000, // Pandaan
+        ];
 
-            $batas_ketiga = [
-                1 => 40000000, // Probolinggo
-                2 => 26000000, // Jember
-                3 => 50000000, // Banyuwangi
-                4 => 26000000, // Pandaan
-            ];
+        $batas_ketiga = [
+            1 => 40000000, // Probolinggo
+            2 => 26000000, // Jember
+            3 => 50000000, // Banyuwangi
+            4 => 26000000, // Pandaan
+        ];
 
-            $batas_keempat = [
-                1 => 45000000, // Probolinggo
-                2 => 30000000, // Jember
-                3 => 55000000, // Banyuwangi
-                4 => 30000000, // Pandaan
-            ];
+        $batas_keempat = [
+            1 => 45000000, // Probolinggo
+            2 => 30000000, // Jember
+            3 => 55000000, // Banyuwangi
+            4 => 30000000, // Pandaan
+        ];
 
-            $target_omset = [
-                1 => 50000000, // Probolinggo
-                2 => 35000000, // Jember
-                3 => 60000000, // Banyuwangi
-                4 => 35000000, // Pandaan
-            ];
+        $target_omset = [
+            1 => 50000000, // Probolinggo
+            2 => 35000000, // Jember
+            3 => 60000000, // Banyuwangi
+            4 => 35000000, // Pandaan
+        ];
 
-            //nilai dari db
+        //nilai dari db
 
-            $aktual_omset_unit = [
+        $aktual_omset_unit = [
 
-                1 => $this->db->table('detail_penjualan')
+            1 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
-                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
+                    ->where('MONTH(penjualan.tanggal)', date('m'))
+                    ->where('YEAR(penjualan.tanggal)', date('Y'))
                     ->where('penjualan.unit_idunit =', 1)
                     ->get()
                     ->getRow()
                     ->total ?? 0,
-                2 => $this->db->table('detail_penjualan')
+            2 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
-                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
+                    ->where('MONTH(penjualan.tanggal)', date('m'))
+                    ->where('YEAR(penjualan.tanggal)', date('Y'))
                     ->where('penjualan.unit_idunit =', 2)
                     ->get()
                     ->getRow()
                     ->total ?? 0,
-                3 => $this->db->table('detail_penjualan')
+            3 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
-                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
+                    ->where('MONTH(penjualan.tanggal)', date('m'))
+                    ->where('YEAR(penjualan.tanggal)', date('Y'))
                     ->where('penjualan.unit_idunit =', 3)
                     ->get()
                     ->getRow()
                     ->total ?? 0,  // Cabang 3
-                4 => $this->db->table('detail_penjualan')
+            4 => $this->db->table('detail_penjualan')
                     ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
                     ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-                    ->where('MONTH(penjualan.tanggal)', $seleksiBulanPadded)
-                    ->where('YEAR(penjualan.tanggal)', $seleksiTahun)
+                    ->where('MONTH(penjualan.tanggal)', date('m'))
+                    ->where('YEAR(penjualan.tanggal)', date('Y'))
                     ->where('penjualan.unit_idunit =', 4)
                     ->get()
                     ->getRow()
                     ->total ?? 0,
 
-            ];
-            $aktual_omset = $aktual_omset_unit[$unit] ?? 0;
+        ];
+        $aktual_omset = $aktual_omset_unit[$unit] ?? 0;
 
-            $aktual_customer = [];
-            foreach ([1, 2, 3, 4] as $idUnit) {
-                $countService = $this->db->table('service')
-                    ->select('COUNT(idservice) AS total')
-                    ->where('MONTH(tanggal_selesai)', $seleksiBulanPadded)
-                    ->where('YEAR(tanggal_selesai)', $seleksiTahun)
-                    ->where('unit_idunit', $idUnit)
-                    ->get()
-                    ->getRow()
-                    ->total ?? 0;
-
-                $countSales = $this->db->table('penjualan')
-                    ->select('COUNT(DISTINCT idpenjualan) AS total')
-                    ->where('MONTH(tanggal)', $seleksiBulanPadded)
-                    ->where('YEAR(tanggal)', $seleksiTahun)
-                    ->where('unit_idunit', $idUnit)
-                    ->like('kode_invoice', 'SLL', 'after')
-                    ->get()
-                    ->getRow()
-                    ->total ?? 0;
-
-                $aktual_customer[$idUnit] = $countService + $countSales;
-            }
-            $aktual_customer = $aktual_customer[$unit] ?? 0;
-
-            $aktual_tutup_kasir    = $this->db->table('tutup_kasir')
-                ->select('COUNT(status) AS total')
-                ->where('MONTH(tanggal)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal)', $seleksiTahun)
-                ->where('unit', $unit)
-                ->get()
-                ->getRow();
-            $total_tutup_kasir = $aktual_tutup_kasir->total ?? 0;
-
-            $aktual_opname         = $this->db->table('stok_opname_draft')
-                ->select('COUNT(DISTINCT DATE(tanggal)) AS total')
-                ->where('unit_idunit', $unit)
-                ->where('MONTH(tanggal)', $seleksiBulanPadded, false)
-                ->where('YEAR(tanggal)', $seleksiTahun, false)
+        $aktual_customer = [];
+        foreach ([1, 2, 3, 4] as $idUnit) {
+            $countService = $this->db->table('service')
+                ->select('COUNT(idservice) AS total')
+                ->where('MONTH(tanggal_selesai)', date('m'))
+                ->where('YEAR(tanggal_selesai)', date('Y'))
+                ->where('unit_idunit', $idUnit)
                 ->get()
                 ->getRow()
-                ->total;
+                ->total ?? 0;
 
-            $aktual_absen          = 90;
-
-            $aktual_divisi         = $this->db->table('penilaian')
-                ->select('Avg(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
+            $countSales = $this->db->table('penjualan')
+                ->select('COUNT(DISTINCT idpenjualan) AS total')
+                ->where('MONTH(tanggal)', date('m'))
+                ->where('YEAR(tanggal)', date('Y'))
+                ->where('unit_idunit', $idUnit)
+                ->like('kode_invoice', 'SLL', 'after')
                 ->get()
-                ->getRow();
-            $total_divisi = $aktual_divisi->total ?? 0;
+                ->getRow()
+                ->total ?? 0;
 
-            $ak_kebersihan         = $this->db->table('penilaian')
-                ->select('Avg(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('aspek =', 'kebersihan')
-                ->get()
-                ->getRow();
-            $ttl_kebersihan = $ak_kebersihan->total ?? 0;
+            $aktual_customer[$idUnit] = $countService + $countSales;
+        }
+        $aktual_customer = $aktual_customer[$unit] ?? 0;
 
-            $ak_seragam         = $this->db->table('penilaian')
-                ->select('Avg(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('aspek =', 'seragam')
-                ->get()
-                ->getRow();
-            $ttl_seragam = $ak_seragam->total ?? 0;
+        $aktual_tutup_kasir    = $this->db->table('tutup_kasir')
+                                    ->select('COUNT(status) AS total')
+                                    ->where('MONTH(tanggal)', date('m'))
+                                    ->where('YEAR(tanggal)', date('Y'))
+                                    ->where('unit', $unit)
+                                    ->get()
+                                    ->getRow();
+        $total_tutup_kasir = $aktual_tutup_kasir->total ?? 0;
 
-            $ak_kepatuhan          = $this->db->table('penilaian')
-                ->select('Avg(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('aspek =', 'kepatuhan sop')
-                ->get()
-                ->getRow();
-            $ttl_kepatuhan  = $ak_kepatuhan->total ?? 0;
         // Samakan dengan StokOpnameCalculator: yang dihitung hanya periode FINAL
         // yang seluruh barang berstoknya terisi. Versi lama menghitung DISTINCT
         // tanggal pada stok_opname_draft, jadi draft kosong pun ikut dihitung
@@ -850,591 +770,636 @@
                                     ->getRow()
                                     ->total;
 
-            $aktual_closing        = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'closing')
-                ->get()
-                ->getRow();
-            $total_closing = $aktual_closing->total ?? 0;
+        $aktual_absen          = 90;
 
-            $aktual_upselling      = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'upselling')
-                ->get()
-                ->getRow();
-            $total_upselling = $aktual_upselling->total ?? 0;
+        $aktual_divisi         = $this->db->table('penilaian')
+                                    ->select('Avg(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->get()
+                                    ->getRow();
+        $total_divisi = $aktual_divisi->total ?? 0;
 
-            $aktual_followup       = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'followup')
-                ->get()
-                ->getRow();
-            $total_followup = $aktual_followup->total ?? 0;
+        $ak_kebersihan         = $this->db->table('penilaian')
+                                    ->select('Avg(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('aspek =', 'kebersihan')
+                                    ->get()
+                                    ->getRow();
+        $ttl_kebersihan = $ak_kebersihan->total ?? 0;
 
-            $aktual_budgeting      = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'budgeting')
-                ->get()
-                ->getRow();
-            $total_budgeting = $aktual_budgeting->total ?? 0;
+        $ak_seragam         = $this->db->table('penilaian')
+                                    ->select('Avg(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('aspek =', 'seragam')
+                                    ->get()
+                                    ->getRow();
+        $ttl_seragam = $ak_seragam->total ?? 0;
 
-            $aktual_roas           = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'roas')
-                ->get()
-                ->getRow();
-            $total_roas = $aktual_roas->total ?? 0;
+        $ak_kepatuhan          = $this->db->table('penilaian')
+                                    ->select('Avg(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('aspek =', 'kepatuhan sop')
+                                    ->get()
+                                    ->getRow();
+        $ttl_kepatuhan  = $ak_kepatuhan ->total ?? 0;
+        
+        $aktual_closing        = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'closing')
+                                    ->get()
+                                    ->getRow();
+        $total_closing = $aktual_closing->total ?? 0;
 
-            $aktual_feed_pl        = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'feed pl')
-                ->get()
-                ->getRow();
-            $total_feed = $aktual_feed_pl->total ?? 0;
+        $aktual_upselling      = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'upselling')
+                                    ->get()
+                                    ->getRow();
+        $total_upselling = $aktual_upselling->total ?? 0;
 
-            $aktual_video          = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'video')
-                ->get()
-                ->getRow();
-            $total_video = $aktual_video->total ?? 0;
+        $aktual_followup       = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'followup')
+                                    ->get()
+                                    ->getRow();
+        $total_followup = $aktual_followup->total ?? 0;
+        
+        $aktual_budgeting      = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'budgeting')
+                                    ->get()
+                                    ->getRow();
+        $total_budgeting = $aktual_budgeting->total ?? 0;
 
-            $aktual_feed_mingguan  = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'feed mingguan')
-                ->get()
-                ->getRow();
-            $total_feed = $aktual_feed_mingguan->total ?? 0;
+        $aktual_roas           =$this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'roas')
+                                    ->get()
+                                    ->getRow();
+        $total_roas = $aktual_roas->total ?? 0;
 
-            $aktual_story          = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'story')
-                ->get()
-                ->getRow();
-            $total_story = $aktual_story->total ?? 0;
+        $aktual_feed_pl        = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'feed pl')
+                                    ->get()
+                                    ->getRow();
+        $total_feed = $aktual_feed_pl->total ?? 0;
 
-            $aktual_testimoni      = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'testimoni')
-                ->get()
-                ->getRow();
-            $total_testimoni = $aktual_testimoni->total ?? 0;
+        $aktual_video          = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'video')
+                                    ->get()
+                                    ->getRow();
+        $total_video = $aktual_video->total ?? 0;
 
-            $aktual_bug_minor      = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'bug minor')
-                ->get()
-                ->getRow();
-            $total_bug_minor = $aktual_bug_minor->total ?? 0;
+        $aktual_feed_mingguan  = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'feed mingguan')
+                                    ->get()
+                                    ->getRow();
+        $total_feed = $aktual_feed_mingguan->total ?? 0;
 
-            $aktual_bug_operasional = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'operasional')
-                ->get()
-                ->getRow();
-            $total_bug_operasional = $aktual_bug_operasional->total ?? 0;
+        $aktual_story          = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'story')
+                                    ->get()
+                                    ->getRow();
+        $total_story = $aktual_story->total ?? 0;
 
-            $aktual_ecommerce      = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'ecommerce')
-                ->get()
-                ->getRow();
-            $total_ecommerce = $aktual_ecommerce->total ?? 0;
+        $aktual_testimoni      = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'testimoni')
+                                    ->get()
+                                    ->getRow();
+        $total_testimoni = $aktual_testimoni->total ?? 0;
 
-            $aktual_fitur          = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'operasional')
-                ->get()
-                ->getRow();
-            $total_fitur = $aktual_fitur->total ?? 0;
+        $aktual_bug_minor      = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'bug minor')
+                                    ->get()
+                                    ->getRow();
+        $total_bug_minor = $aktual_bug_minor->total ?? 0;
 
-            // $aktual_kehadiran = 150;
-            $aktual_kehadiran = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'kehadiran')
-                ->get()
-                ->getRow();
+        $aktual_bug_operasional= $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'operasional')
+                                    ->get()
+                                    ->getRow();
+        $total_bug_operasional = $aktual_bug_operasional->total ?? 0;
 
-            $totalKehadiran = $aktual_kehadiran->total ?? 0;
+        $aktual_ecommerce      = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'ecommerce')
+                                    ->get()
+                                    ->getRow();
+        $total_ecommerce = $aktual_ecommerce->total ?? 0;
 
-            $aktual_kebersihan = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'kebersihan')
-                ->get()
-                ->getRow();
-            $totalKebersihan = $aktual_kebersihan->total ?? 0;
+        $aktual_fitur          = $this->db->table('penilaian')
+                                    ->select('SUM(skor) AS total')
+                                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                                    ->where('pegawai_idpegawai', $selected_karyawan)
+                                    ->where('aspek =', 'operasional')
+                                    ->get()
+                                    ->getRow();
+        $total_fitur = $aktual_fitur->total ?? 0;
 
-            $aktual_seragam = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'seragam')
-                ->get()
-                ->getRow();
+        // $aktual_kehadiran = 150;
+        $aktual_kehadiran = $this->db->table('penilaian')
+                    ->select('SUM(skor) AS total')
+                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('pegawai_idpegawai', $selected_karyawan)
+                    ->where('aspek =', 'kehadiran')
+                    ->get()
+                    ->getRow();
 
-            $totalSeragam = $aktual_seragam->total ?? 0;
+        $totalKehadiran = $aktual_kehadiran->total ?? 0;
 
-            $aktual_sop = $this->db->table('penilaian')
-                ->select('SUM(skor) AS total')
-                ->where('MONTH(tanggal_penilaian)', $seleksiBulanPadded)
-                ->where('YEAR(tanggal_penilaian)', $seleksiTahun)
-                ->where('pegawai_idpegawai', $selected_karyawan)
-                ->where('aspek =', 'kepatuhan sop')
-                ->get()
-                ->getRow();
-            $totalSop = $aktual_sop->total ?? 0;
+        $aktual_kebersihan = $this->db->table('penilaian')
+                    ->select('SUM(skor) AS total')
+                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('pegawai_idpegawai', $selected_karyawan)
+                    ->where('aspek =', 'kebersihan')
+                    ->get()
+                    ->getRow();
+        $totalKebersihan = $aktual_kebersihan->total ?? 0;
 
-            //persentas nilai
-            $batas1 = $batas_awal[$unit] ?? $batas_awal[1];
-            $batas2 = $batas_kedua[$unit] ?? $batas_kedua[1];
-            $batas3 = $batas_ketiga[$unit] ?? $batas_ketiga[1];
-            $batas4 = $batas_keempat[$unit] ?? $batas_keempat[1];
+        $aktual_seragam = $this->db->table('penilaian')
+                    ->select('SUM(skor) AS total')
+                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('pegawai_idpegawai', $selected_karyawan)
+                    ->where('aspek =', 'seragam')
+                    ->get()
+                    ->getRow();
 
-            $targetOmset = $target_omset[$unit] ?? $target_omset[1];
+        $totalSeragam = $aktual_seragam->total ?? 0;
 
-            $aktual_operasional = 0;
+        $aktual_sop = $this->db->table('penilaian')
+                    ->select('SUM(skor) AS total')
+                    ->where('MONTH(tanggal_penilaian)', date('m'))
+                    ->where('YEAR(tanggal_penilaian)', date('Y'))
+                    ->where('pegawai_idpegawai', $selected_karyawan)
+                    ->where('aspek =', 'kepatuhan sop')
+                    ->get()
+                    ->getRow();
+        $totalSop = $aktual_sop->total ?? 0;
 
-            $insentif = 0;
+        //persentas nilai
+        $batas1 = $batas_awal[$unit];
+        $batas2 = $batas_kedua[$unit];
+        $batas3 = $batas_ketiga[$unit];
+        $batas4 = $batas_keempat[$unit];
 
-            if ($jabatan == 41) {
-                if ($aktual_omset <= $batas1) {
-                    $nilai_omset = 0;
-                } elseif ($aktual_omset == $batas2) {
+        $targetOmset = $target_omset[$unit];
+
+        $aktual_operasional = 0;
+
+        $insentif = 0;
+
+        if ($jabatan == 41){
+            if ($aktual_omset <= $batas1) {
+                $nilai_omset = 0;
+
+            } elseif ($aktual_omset == $batas2) {
+                $nilai_omset = 33;
+
+            } elseif ($aktual_omset == $batas3 ) {
+                $nilai_omset = 66;
+
+            } elseif ($aktual_omset >= $batas4 && $aktual_omset < $targetOmset) {
+                $nilai_omset = 100;
+
+            } elseif ($aktual_omset >= $targetOmset) {
+                $nilai_omset = 100;
+                $insentif = (3 / 100) * $aktual_omset / 4;
+            } else{
+                $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
+            }
+        } elseif($jabatan == 40 ){
+
+            $cabang_aman = 0;
+
+            foreach ($aktual_omset_unit as $idUnit => $omset) {
+
+                $batasCabang = $batas_keempat[$idUnit];
+
+                if ($omset >= $batasCabang) {
+                    $cabang_aman++;
+                }
+
+                // insentif jika target cabang tercapai
+                if ($omset >= $target_omset[$idUnit]) {
+                    $insentif += (5 / 1000) * $omset;
+                }
+            }
+
+            switch ($cabang_aman) {
+                case 1:
                     $nilai_omset = 33;
-                } elseif ($aktual_omset == $batas3) {
+
+                    $aktual_operasional    = 33;
+
+                    break;
+
+                case 2:
                     $nilai_omset = 66;
-                } elseif ($aktual_omset >= $batas4 && $aktual_omset < $targetOmset) {
+
+                    $aktual_operasional    = 66;
+
+                    break;
+
+                case 3:
                     $nilai_omset = 100;
-                } elseif ($aktual_omset >= $targetOmset) {
-                    $nilai_omset = 100;
-                    $insentif = (3 / 100) * $aktual_omset / 4;
-                } else {
-                    $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
-                }
-            } elseif ($jabatan == 40) {
 
-                $cabang_aman = 0;
+                    $aktual_operasional    = 100;
 
-                foreach ($aktual_omset_unit as $idUnit => $omset) {
+                    break;
 
-                    $batasCabang = $batas_keempat[$idUnit];
-
-                    if ($omset >= $batasCabang) {
-                        $cabang_aman++;
-                    }
-
-                    // insentif jika target cabang tercapai
-                    if ($omset >= $target_omset[$idUnit]) {
-                        $insentif += (5 / 1000) * $omset;
-                    }
-                }
-
-                switch ($cabang_aman) {
-                    case 1:
-                        $nilai_omset = 33;
-
-                        $aktual_operasional    = 33;
-
-                        break;
-
-                    case 2:
-                        $nilai_omset = 66;
-
-                        $aktual_operasional    = 66;
-
-                        break;
-
-                    case 3:
-                        $nilai_omset = 100;
-
-                        $aktual_operasional    = 100;
-
-                        break;
-
-                    default:
-                        $nilai_omset = 0;
-
-                        $aktual_operasional    = 0;
-                        break;
-                }
-            } elseif ($jabatan == 43) {
-
-                $cabang_aman = 0;
-
-                foreach ($aktual_omset_unit as $idUnit => $omset) {
-
-                    $batasCabang = $batas_keempat[$idUnit];
-
-                    if ($omset >= $batasCabang) {
-                        $cabang_aman++;
-                    }
-
-                    // insentif jika target cabang tercapai
-                    if ($omset >= $target_omset[$idUnit]) {
-                        $insentif += (1 / 100) * $omset;
-                    }
-                }
-
-                switch ($cabang_aman) {
-                    case 1:
-                        $nilai_omset = 33;
-                        break;
-
-                    case 2:
-                        $nilai_omset = 66;
-                        break;
-
-                    case 3:
-                        $nilai_omset = 100;
-                        break;
-
-                    default:
-                        $nilai_omset = 0;
-                        break;
-                }
-            } else {
-
-                if ($aktual_omset < $batas2) {
+                default:
                     $nilai_omset = 0;
-                } elseif ($aktual_omset >= $batas2 && $aktual_omset < $batas3) {
+
+                    $aktual_operasional    = 0;
+                    break;
+            }
+        } elseif($jabatan == 43){
+
+            $cabang_aman = 0;
+
+            foreach ($aktual_omset_unit as $idUnit => $omset) {
+
+                $batasCabang = $batas_keempat[$idUnit];
+
+                if ($omset >= $batasCabang) {
+                    $cabang_aman++;
+                }
+
+                // insentif jika target cabang tercapai
+                if ($omset >= $target_omset[$idUnit]) {
+                    $insentif += (1 / 100) * $omset;
+                }
+            }
+
+            switch ($cabang_aman) {
+                case 1:
                     $nilai_omset = 33;
-                } elseif ($aktual_omset >= $batas3 && $aktual_omset < $batas4) {
+                    break;
+
+                case 2:
                     $nilai_omset = 66;
-                } elseif ($aktual_omset >= $batas4 && $aktual_omset < $targetOmset) {
+                    break;
+
+                case 3:
                     $nilai_omset = 100;
-                } elseif ($aktual_omset >= $targetOmset) {
-                    $nilai_omset = 100;
-                    $insentif = (3 / 100) * $aktual_omset / 4;
-                } else {
-                    $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
-                }
-            }
-
-            $nilai_customer = min(
-                ($aktual_customer / $target['customer']) * 100,
-                100
-            );
-
-            $nilai_closing = min(
-                ($total_closing / $target['closing']) * 100,
-                100
-            );
-
-            $nilai_upselling = min(
-                ($total_upselling / $target['upselling']) * 100,
-                100
-            );
-
-            $nilai_followup = min(
-                ($total_followup / $target['followup']) * 100,
-                100
-            );
-
-            $nilai_roas = $total_roas * 100;
-
-            $nilai_tutup_kasir  = $total_tutup_kasir / 30 * 20;
-            $nilai_opname       = $aktual_opname / 4 * 100;
-            $nilai_absen        = $aktual_absen;
-
-            $nilai_operasional  = $aktual_operasional;
-            $nilai_divisi       = $total_divisi * 20;
-
-            $rata_kebersihan    = $ttl_kebersihan * 20;
-            $rata_seragam    = $ttl_seragam * 20;
-            $rata_kepatuhan    = $ttl_kepatuhan * 20;
-
-            $nilai_budgeting    = $total_budgeting * 100;
-
-            $nilai_feed_pl      = $total_feed;
-            $nilai_video        = $total_video;
-            $nilai_feed_mingguan = $total_feed;
-            $nilai_story        = $total_story;
-            $nilai_testimoni    = $total_testimoni;
-
-            $nilai_bug_minor    = $total_bug_minor / 4 * 20;
-            $nilai_bug_operasional = $total_bug_operasional / 4 * 20;
-            $nilai_ecommerce    = $total_ecommerce / 4 * 20;
-            $nilai_fitur        = $total_fitur / 4 * 20;
-
-            $nilai_kehadiran = $totalKehadiran / 26 * 20;
-            $nilai_kebersihan = $totalKebersihan / 26 * 20;
-            $nilai_seragam = $totalSeragam / 26 * 20;
-            $nilai_sop = $totalSop / 26 * 20;
-
-            //gaji sesuai jabatan
-
-            $skor_total = 0;
-            $skor_total2 = 0;
-            $detail_kpi = [];
-            $detail_absen = [];
-
-            switch ($jabatan) {
-
-                // ADMIN
-                case 35:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset Toko', 'bobot' => 70, 'nilai' => $nilai_omset],
-                        ['nama' => 'Tutup Kasir', 'bobot' => 10, 'nilai' => $nilai_tutup_kasir],
-                        ['nama' => 'Stok Opname', 'bobot' => 10, 'nilai' => $nilai_opname],
-                        ['nama' => 'Absensi', 'bobot' => 10, 'nilai' => $nilai_absen],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
                     break;
 
-                // TEKNISI
-                case 36:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset Toko', 'bobot' => 70, 'nilai' => $nilai_omset],
-                        ['nama' => 'Omset Teknisi', 'bobot' => 15, 'nilai' => $nilai_omset],
-                        ['nama' => 'Customer Masuk', 'bobot' => 15, 'nilai' => $nilai_customer],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
-                    break;
-
-                // KEPALA TOKO
-                case 41:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset Toko', 'bobot' => 70, 'nilai' => $nilai_omset],
-                        ['nama' => 'Total Customer', 'bobot' => 10, 'nilai' => $nilai_customer],
-                        ['nama' => 'Tutup Kasir', 'bobot' => 10, 'nilai' => $nilai_tutup_kasir],
-                        ['nama' => 'Opname', 'bobot' => 10, 'nilai' => $nilai_opname],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
-                    break;
-
-                // SPV
-                case 40:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset Cabang', 'bobot' => 70, 'nilai' => $nilai_omset],
-                        ['nama' => 'Customer', 'bobot' => 10, 'nilai' => $nilai_customer],
-                        ['nama' => 'Operasional', 'bobot' => 10, 'nilai' => $nilai_operasional],
-                        ['nama' => 'Divisi', 'bobot' => 10, 'nilai' => $nilai_divisi],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $rata_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $rata_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $rata_kepatuhan],
-                    ];
-
-                    break;
-
-                // CUSTOMER SERVICE
-                case 42:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset', 'bobot' => 70, 'nilai' => $nilai_omset],
-                        ['nama' => 'Closing', 'bobot' => 10, 'nilai' => $nilai_closing],
-                        ['nama' => 'Upselling', 'bobot' => 10, 'nilai' => $nilai_upselling],
-                        ['nama' => 'Follow Up', 'bobot' => 10, 'nilai' => $nilai_followup],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
-                    break;
-
-                // PENGIKLAN
-                case 43:
-
-                    $detail_kpi = [
-                        ['nama' => 'Budgeting', 'bobot' => 15, 'nilai' => $nilai_budgeting],
-                        ['nama' => 'ROAS', 'bobot' => 15, 'nilai' => $nilai_roas],
-                        ['nama' => 'Omset', 'bobot' => 70, 'nilai' => $nilai_omset],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
-                    break;
-
-                // MULTIMEDIA
-                case 44:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset Cabang', 'bobot' => 30, 'nilai' => $nilai_omset],
-                        ['nama' => 'Feed PL', 'bobot' => 15, 'nilai' => $nilai_feed_pl],
-                        ['nama' => 'Video', 'bobot' => 20, 'nilai' => $nilai_video],
-                        ['nama' => 'Feed Mingguan', 'bobot' => 15, 'nilai' => $nilai_feed_mingguan],
-                        ['nama' => 'Story', 'bobot' => 10, 'nilai' => $nilai_story],
-                        ['nama' => 'Testimoni', 'bobot' => 10, 'nilai' => $nilai_testimoni],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
-                    break;
-
-                // IT
-                case 45:
-
-                    $detail_kpi = [
-                        ['nama' => 'Omset', 'bobot' => 30, 'nilai' => $nilai_omset],
-                        ['nama' => 'Bug Minor', 'bobot' => 10, 'nilai' => $nilai_bug_minor],
-                        ['nama' => 'Operasional', 'bobot' => 25, 'nilai' => $nilai_bug_operasional],
-                        ['nama' => 'Ecommerce', 'bobot' => 15, 'nilai' => $nilai_ecommerce],
-                        ['nama' => 'Fitur', 'bobot' => 20, 'nilai' => $nilai_fitur],
-                    ];
-
-                    $detail_absen = [
-                        ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
-                        ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
-                        ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
-                        ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
-                    ];
-
+                default:
+                    $nilai_omset = 0;
                     break;
             }
+        } else {
+            
+            if ($aktual_omset < $batas2) {
+                $nilai_omset = 0;
+                
+                
+            } elseif ($aktual_omset >= $batas2 && $aktual_omset < $batas3) {
+                $nilai_omset = 33;
 
-            //total nilai
+                
+            } elseif ($aktual_omset >= $batas3 && $aktual_omset < $batas4) {
+                $nilai_omset = 66;
 
-            foreach ($detail_kpi as $kpi) {
-                $skor_total += ($kpi['nilai'] * $kpi['bobot']) / 100;
+                
+
+            } elseif ($aktual_omset >= $batas4 && $aktual_omset < $targetOmset) {
+                $nilai_omset = 100;
+
+                
+
+            } elseif ($aktual_omset >= $targetOmset) {
+                $nilai_omset = 100;
+                $insentif = (3 / 100) * $aktual_omset / 4;                
+
+                
+            } else{
+                $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
+                
+                
             }
-
-            foreach ($detail_absen as $absen) {
-                $skor_total2 += ($absen['nilai'] * $absen['bobot']) / 100;
-            }
-
-            $tunjangan_absen = $skor_total2 / 100 * 250000;
-
-            if ($jabatan == 41) {
-                $tunjangan_kinerja = $skor_total / 100 * 850000;
-            } elseif ($jabatan == 40) {
-                $tunjangan_kinerja = $skor_total / 100 * 1250000;
-            } elseif ($jabatan == 43) {
-                $tunjangan_kinerja = $skor_total / 100 * 1000000;
-            } elseif ($jabatan == 35) {
-                if ($unit == 1) {
-                    $tunjangan_kinerja = $skor_total / 100 * 850000;
-                } else {
-                    $tunjangan_kinerja = $skor_total / 100 * 250000;
-                }
-            } else {
-                $tunjangan_kinerja = $skor_total / 100 * 250000;
-            }
-
-
-            $gaji_pokok = 1500000;
-
-            $gaji = $gaji_pokok + $tunjangan_kinerja + $tunjangan_absen + $akun->tunjangan_penempatan + $insentif;
-
-            $gaji = $gaji_pokok
-                + $tunjangan_kinerja
-                + $tunjangan_absen
-                + $akun->tunjangan_penempatan
-                + $insentif;
-
-            $totalGajiUnit += $gaji;
         }
 
+        $nilai_customer = min(
+            ($aktual_customer / $target['customer']) * 100,
+            100
+        );
+
+        $nilai_closing = min(
+            ($total_closing / $target['closing']) * 100,
+            100
+        );
+
+        $nilai_upselling = min(
+            ($total_upselling / $target['upselling']) * 100,
+            100
+        );
+
+        $nilai_followup = min(
+            ($total_followup / $target['followup']) * 100,
+            100
+        );
+
+        $nilai_roas = $total_roas * 100;
+
+        $nilai_tutup_kasir  = $total_tutup_kasir/30 * 20;
+        $nilai_opname       = $aktual_opname/4 * 100;
+        $nilai_absen        = $aktual_absen;
+    
+        $nilai_operasional  = $aktual_operasional;
+        $nilai_divisi       = $total_divisi *20;
+
+        $rata_kebersihan    = $ttl_kebersihan *20;
+        $rata_seragam    = $ttl_seragam *20;
+        $rata_kepatuhan    = $ttl_kepatuhan *20;
+
+        $nilai_budgeting    = $total_budgeting * 100;
+
+        $nilai_feed_pl      = $total_feed;
+        $nilai_video        = $total_video;
+        $nilai_feed_mingguan = $total_feed;
+        $nilai_story        = $total_story;
+        $nilai_testimoni    = $total_testimoni;
+
+        $nilai_bug_minor    = $total_bug_minor/4 * 20;
+        $nilai_bug_operasional = $total_bug_operasional/4 * 20;
+        $nilai_ecommerce    = $total_ecommerce/4 * 20;
+        $nilai_fitur        = $total_fitur/4 * 20;
+
+        $nilai_kehadiran = $totalKehadiran/26 * 20;
+        $nilai_kebersihan = $totalKebersihan/26 * 20;
+        $nilai_seragam = $totalSeragam/26 * 20;
+        $nilai_sop = $totalSop/26 * 20;
+
+        //gaji sesuai jabatan
+
+        $skor_total = 0;
+        $skor_total2 = 0;
+        $detail_kpi = [];
+        $detail_absen = [];
+
+        switch ($jabatan) {
+
+            // ADMIN
+            case 35:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset Toko', 'bobot' => 70, 'nilai' => $nilai_omset],
+                    ['nama' => 'Tutup Kasir', 'bobot' => 10, 'nilai' => $nilai_tutup_kasir],
+                    ['nama' => 'Stok Opname', 'bobot' => 10, 'nilai' => $nilai_opname],
+                    ['nama' => 'Absensi', 'bobot' => 10, 'nilai' => $nilai_absen],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+
+            // TEKNISI
+            case 36:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset Toko', 'bobot' => 70, 'nilai' => $nilai_omset],
+                    ['nama' => 'Omset Teknisi', 'bobot' => 15, 'nilai' => $nilai_omset],
+                    ['nama' => 'Customer Masuk', 'bobot' => 15, 'nilai' => $nilai_customer],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+
+            // KEPALA TOKO
+            case 41:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset Toko', 'bobot' => 70, 'nilai' => $nilai_omset],
+                    ['nama' => 'Total Customer', 'bobot' => 10, 'nilai' => $nilai_customer],
+                    ['nama' => 'Tutup Kasir', 'bobot' => 10, 'nilai' => $nilai_tutup_kasir],
+                    ['nama' => 'Opname', 'bobot' => 10, 'nilai' => $nilai_opname],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+
+            // SPV
+            case 40:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset Cabang', 'bobot' => 70, 'nilai' => $nilai_omset],
+                    ['nama' => 'Customer', 'bobot' => 10, 'nilai' => $nilai_customer],
+                    ['nama' => 'Operasional', 'bobot' => 10, 'nilai' => $nilai_operasional],
+                    ['nama' => 'Divisi', 'bobot' => 10, 'nilai' => $nilai_divisi],                    
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $rata_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $rata_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $rata_kepatuhan],
+                ];
+
+                break;
+
+            // CUSTOMER SERVICE
+            case 42:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset', 'bobot' => 70, 'nilai' => $nilai_omset],
+                    ['nama' => 'Closing', 'bobot' => 10, 'nilai' => $nilai_closing],
+                    ['nama' => 'Upselling', 'bobot' => 10, 'nilai' => $nilai_upselling],
+                    ['nama' => 'Follow Up', 'bobot' => 10, 'nilai' => $nilai_followup],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+
+            // PENGIKLAN
+            case 43:
+
+                $detail_kpi = [
+                    ['nama' => 'Budgeting', 'bobot' => 15, 'nilai' => $nilai_budgeting],
+                    ['nama' => 'ROAS', 'bobot' => 15, 'nilai' => $nilai_roas],
+                    ['nama' => 'Omset', 'bobot' => 70, 'nilai' => $nilai_omset],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+
+            // MULTIMEDIA
+            case 44:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset Cabang', 'bobot' => 30, 'nilai' => $nilai_omset],
+                    ['nama' => 'Feed PL', 'bobot' => 15, 'nilai' => $nilai_feed_pl],
+                    ['nama' => 'Video', 'bobot' => 20, 'nilai' => $nilai_video],
+                    ['nama' => 'Feed Mingguan', 'bobot' => 15, 'nilai' => $nilai_feed_mingguan],
+                    ['nama' => 'Story', 'bobot' => 10, 'nilai' => $nilai_story],
+                    ['nama' => 'Testimoni', 'bobot' => 10, 'nilai' => $nilai_testimoni],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+
+            // IT
+            case 45:
+
+                $detail_kpi = [
+                    ['nama' => 'Omset', 'bobot' => 30, 'nilai' => $nilai_omset],
+                    ['nama' => 'Bug Minor', 'bobot' => 10, 'nilai' => $nilai_bug_minor],
+                    ['nama' => 'Operasional', 'bobot' => 25, 'nilai' => $nilai_bug_operasional],
+                    ['nama' => 'Ecommerce', 'bobot' => 15, 'nilai' => $nilai_ecommerce],
+                    ['nama' => 'Fitur', 'bobot' => 20, 'nilai' => $nilai_fitur],
+                ];
+
+                $detail_absen = [
+                    ['nama' => 'Kehadiran', 'bobot' => 40, 'nilai' => $nilai_kehadiran],
+                    ['nama' => 'Kebersihan', 'bobot' => 20, 'nilai' => $nilai_kebersihan],
+                    ['nama' => 'Seragam', 'bobot' => 20, 'nilai' => $nilai_seragam],
+                    ['nama' => 'Kepatuhan SOP', 'bobot' => 20, 'nilai' => $nilai_sop],
+                ];
+
+                break;
+        }
+
+        //total nilai
+
+        foreach ($detail_kpi as $kpi) {
+            $skor_total += ($kpi['nilai'] * $kpi['bobot']) / 100;
+        }
+
+        foreach ($detail_absen as $absen) {
+            $skor_total2 += ($absen['nilai'] * $absen['bobot']) / 100;
+        }
+        
+        $tunjangan_absen = $skor_total2 /100 * 250000;
+        
+        if($jabatan == 41){                
+            $tunjangan_kinerja = $skor_total /100 * 850000;
+        } elseif($jabatan == 40){
+            $tunjangan_kinerja = $skor_total /100 * 1250000;
+        } elseif($jabatan == 43){
+            $tunjangan_kinerja = $skor_total /100 * 1000000;
+        } elseif($jabatan == 35){
+            if ($unit == 1) {
+                $tunjangan_kinerja = $skor_total /100 * 850000;
+            } else{
+                $tunjangan_kinerja = $skor_total /100 * 250000;
+            }
+        }else{
+            $tunjangan_kinerja = $skor_total /100 * 250000;
+        }
+        
+
+        $gaji_pokok= 1500000;
+
+        $gaji = $gaji_pokok + $tunjangan_kinerja + $tunjangan_absen + $akun->tunjangan_penempatan + $insentif;
+        
+            $gaji = $gaji_pokok
+                    + $tunjangan_kinerja
+                    + $tunjangan_absen
+                    + $akun->tunjangan_penempatan
+                    + $insentif;
+        
+            $totalGajiUnit += $gaji;
+        }
+        
         $pengeluaran = $this->db->table('kas_keluar')
             ->selectSum('kas_keluar.jumlah', 'total')
             ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori')
-            ->where('MONTH(kas_keluar.tanggal)', $seleksiBulanPadded)
-            ->where('YEAR(kas_keluar.tanggal)', $seleksiTahun)
+            ->where('MONTH(kas_keluar.tanggal)', date('m'))
+            ->where('YEAR(kas_keluar.tanggal)', date('Y'))
             ->where('kas_keluar.idunit', $unit)
-            ->whereIn('kas_keluar.kategori_idkategori', [1, 2, 3, 4, 5, 11, 18])
+            ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,11,18])
             ->get()
             ->getRow()
             ->total ?? 0;
-
-        $isBulanBerjalan = ($seleksiBulan == (int) date('n') && $seleksiTahun == (int) date('Y'));
-
-        $bulanSebelum = (int) date('n', mktime(0, 0, 0, $seleksiBulan - 1, 1, $seleksiTahun));
-        $tahunSebelum = (int) date('Y', mktime(0, 0, 0, $seleksiBulan - 1, 1, $seleksiTahun));
-        $bulanSesudah = (int) date('n', mktime(0, 0, 0, $seleksiBulan + 1, 1, $seleksiTahun));
-        $tahunSesudah = (int) date('Y', mktime(0, 0, 0, $seleksiBulan + 1, 1, $seleksiTahun));
-
-        $periodeLabel = date('F Y', mktime(0, 0, 0, $seleksiBulan, 1, $seleksiTahun));
-        $hariDalamBulan = (int) date('t', mktime(0, 0, 0, $seleksiBulan, 1, $seleksiTahun));
 
         return view('template', [
             'list_unit'      => $list_unit,
@@ -1442,92 +1407,112 @@
             'id_jabatan'     => $id_jabatan,
             'pengeluaran'     => $pengeluaran,
             'totalGajiUnit'  => $totalGajiUnit,
-
+            
             'omset_bulan'       => $omset_bulan,
-            'bulan'             => $seleksiBulan,
-            'tahun'             => $seleksiTahun,
-            'isBulanBerjalan'   => $isBulanBerjalan,
-            'bulanSebelum'      => $bulanSebelum,
-            'tahunSebelum'      => $tahunSebelum,
-            'bulanSesudah'      => $bulanSesudah,
-            'tahunSesudah'      => $tahunSesudah,
-            'hariDalamBulan'    => $hariDalamBulan,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }
-
+    
     public function tutup()
     {
         $unit = session()->get('ID_UNIT');
+        
+        $today = date('Y-m-d');
 
-        // ==============================================================
-        // SEMUA ANGKA UANG DIHITUNG ULANG DI SERVER.
-        // ==============================================================
-        //
-        // Hidden field `awal_cash`, `akhir_cash`, `akhir_transfer`,
-        // `pendapatan_*`, `pengeluaran_*` TIDAK LAGI dibaca sama sekali.
-        // Semuanya dulu dipakai utuh, padahal `akhir_cash` yang tersimpan
-        // adalah SALDO AWAL laci besok — jadi satu POST crafted cukup untuk
-        // menggeser saldo kas seluruh hari-hari berikutnya.
-        //
-        // Yang Trusted dari form sekarang hanya SATU: `cash_laci`, karena
-        // itu memang hasil hitung uang fisik oleh manusia. Validasi
-        // ketatnya ada di `TutupKasirClosing::validasiCashLaci()`.
-        //
-        // Ke mana pun angka disimpan, form dan server memakai
-        // `TutupKasirClosing::hitung()` yang sama, jadi yang tampil di layar
-        // pasti sama dengan yang masuk tabel.
-        //
-        // @see \App\Services\Finance\TutupKasirClosing
-        $hasil = (new TutupKasirClosing($this->db))->simpan(
-            (int) $unit,
-            date('Y-m-d'),
-            $this->request->getPost('cash_laci'),
-            (int) session()->get('ID_AKUN')
-        );
+        $besok = date('Y-m-d', strtotime('+1 day'));
 
-        if (! $hasil['ok']) {
-            return redirect()->to('/tutup_kasir')->with('gagal', $hasil['alasan']);
+        $akhir_cash = $this->request->getPost('akhir_cash');
+        $akhir_transfer = $this->request->getPost('akhir_transfer');
+
+        // default
+        $cash_laci = $akhir_cash;
+        $transfer_tambahan = 0;
+
+        // jika cash lebih dari 1 juta
+        if ($akhir_cash > 1000000) {
+            $cash_laci = 1000000;
+            $this->db->table('kas_masuk')->insert([
+
+                'tanggal'          => $besok,
+                'jumlah'           => $cash_laci,
+                'deskripsi'        => 'kas awal',
+                'idunit'             => $unit,
+                'created_on'       => date('Y-m-d H:i:s'),
+                'updated_on'       => date('Y-m-d H:i:s'),
+            ]);
+
+            $transfer_tambahan = $akhir_cash - 1000000;
+            $transfer_final= $akhir_transfer + $transfer_tambahan;
+        }else {
+            $this->db->table('kas_masuk')->insert([
+
+                'tanggal'          => $besok,
+                'jumlah'           => $cash_laci,
+                'deskripsi'        => 'kas awal',
+                'idunit'             => $unit,
+                'created_on'       => date('Y-m-d H:i:s'),
+                'updated_on'       => date('Y-m-d H:i:s'),
+            ]);
         }
 
-        // Sudah ada closing untuk (tanggal, unit) => TIDAK ada INSERT kedua.
-        // Dijawab sebagai hasil yang konsisten, bukan error server.
-        if ($hasil['kode'] === 'sudah_ada') {
-            return redirect()->to('/tutup_kasir')->with('gagal', $hasil['alasan']);
+        $this->db->table('tutup_kasir')->insert([
+
+            'tanggal'              => $today,
+
+            'awal_cash'            => $this->request->getPost('awal_cash'),
+            'awal_transfer'        => $this->request->getPost('awal_transfer'),
+
+            'akhir_cash'           => $this->request->getPost('akhir_cash'),
+            'akhir_transfer'       => $this->request->getPost('akhir_transfer'),
+
+            'pendapatan_cash'      => $this->request->getPost('pendapatan_cash'),
+            'pendapatan_transfer'  => $this->request->getPost('pendapatan_transfer'),
+
+            'pengeluaran_cash'     => $this->request->getPost('pengeluaran_cash'),
+            'pengeluaran_transfer' => $this->request->getPost('pengeluaran_transfer'),
+
+            'cash_laci'            => $this->request->getPost('cash_laci'),
+
+            'status'               => 'selesai',
+
+            'akun_ID_AKUN' => session('ID_AKUN'),
+            'unit'         => session('ID_UNIT'),
+
+            'created_at'           => date('Y-m-d H:i:s'),
+            'updated_at'           => date('Y-m-d H:i:s'),
+        ]);
+
+        if ($transfer_tambahan > 0) {
+            $this->db->table('kas_masuk')->insert([
+
+                'tanggal'          => $besok,
+                'jumlah'           => $transfer_final,
+                'deskripsi'        => 'kas awal',
+                'idbank'          => 1,
+                'idunit'             => $unit,
+                'created_on'       => date('Y-m-d H:i:s'),
+                'updated_on'       => date('Y-m-d H:i:s'),
+            ]);
+        } else {
+            $this->db->table('kas_masuk')->insert([
+
+                'tanggal'          => $besok,
+                'jumlah'           => $akhir_transfer,
+                'deskripsi'        => 'kas awal',
+                'idbank'          => 1,
+                'idunit'             => $unit,
+                'created_on'       => date('Y-m-d H:i:s'),
+                'updated_on'       => date('Y-m-d H:i:s'),
+            ]);
         }
 
-        $akhir = (int) ($hasil['closing']['akhir_cash'] ?? 0);
-        $laci  = (int) ($hasil['closing']['cash_laci'] ?? 0);
-        $beda  = $laci - $akhir;
-
-        $pesan = 'Tutup kasir berhasil. Saldo akhir laci sistem Rp '
-            . number_format($akhir, 0, ',', '.') . '.';
-
-        if ($beda !== 0) {
-            $pesan .= ' Uang di laci Rp ' . number_format($laci, 0, ',', '.')
-                . ', selisih ' . ($beda < 0 ? 'Kurang' : 'Lebih') . ' Rp '
-                . number_format(abs($beda), 0, ',', '.') . '.';
-        }
-
-        return redirect()->to('/tutup_kasir')->with('sukses', $pesan);
+        return redirect()->to('/tutup_kasir')
+            ->with('success', 'Tutup kasir berhasil');
     }
 
     public function cetak_tutup_kasir($id)
     {
         $unit = session()->get('ID_UNIT');
-
-        // Closing TIDAK ditemukan -> jangan render PDF berisi angka nol.
-        // Selain itu, `getById()` sudah memfilter `unit` jadi closing unit
-        // lain tidak bisa dicetak lewat tebakan id. Unit NULL (20 baris
-        // legacy) tidak bisa jatuh ke user mana pun karena `where('unit',
-        // null)` jadi `unit IS NULL` dan session selalu berisi unit nyata —
-        // tapi dicek eksplisit supaya penolakannya jelas.
-        $tutupKasir = $this->TutupKasir->getById($id, $unit);
-
-        if ($tutupKasir === null || $tutupKasir->unit === null) {
-            return redirect()->to('/tutup_kasir')
-                ->with('gagal', 'Data tutup kasir tidak ditemukan untuk unit Anda.');
-        }
 
         $today = date('Y-m-d');
 
@@ -1538,7 +1523,7 @@
             ->where('unit_idunit', $unit)
             ->get()
             ->getRow()->total ?? 0;
-
+        
         $qtyservice = $this->db->table('service')
             ->selectCount('bayar_tunai', 'total')
             ->where('DATE(tanggal_selesai)', $today)
@@ -1546,7 +1531,7 @@
             ->where('unit_idunit', $unit)
             ->get()
             ->getRow()->total ?? 0;
-
+        
         // PENGELUARAN Cash
         $opcash = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
@@ -1556,7 +1541,7 @@
             ->like('deskripsi', 'operasional', 'after')
             ->get()
             ->getRow()->total ?? 0;
-
+        
         $optf = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
             ->where('idunit', $unit)
@@ -1574,7 +1559,7 @@
             ->like('deskripsi', 'sparepart', 'after')
             ->get()
             ->getRow()->total ?? 0;
-
+        
         $pstf = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
             ->where('idunit', $unit)
@@ -1583,7 +1568,7 @@
             ->like('deskripsi', 'sparepart', 'after')
             ->get()
             ->getRow()->total ?? 0;
-
+        
         $hp_total = $this->db->table('detail_penjualan')
             ->selectSum('detail_penjualan.sub_total', 'total')
             ->join('barang', 'barang.idbarang = detail_penjualan.barang_idbarang', 'left')
@@ -1616,7 +1601,7 @@
             ->get()
             ->getRow()
             ->total ?? 0;
-
+            
         $acc_qty = $this->db->table('detail_penjualan')
             ->selectCount('detail_penjualan.sub_total', 'total')
             ->join('barang', 'barang.idbarang = detail_penjualan.barang_idbarang', 'left')
@@ -1627,6 +1612,8 @@
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        $tutupKasir = $this->TutupKasir->getById($id, $unit);
 
         $data = [
             'ps_tf' => $pstf,

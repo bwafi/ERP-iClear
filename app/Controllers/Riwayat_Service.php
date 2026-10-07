@@ -76,6 +76,8 @@ class Riwayat_Service extends BaseController
 
     public function index()
     {
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
 
         $data =  array(
 
@@ -84,6 +86,8 @@ class Riwayat_Service extends BaseController
             'service' => [],
             'unit' => $this->UnitModel->getUnit(),
             'is_admin' => session()->get('ID_JABATAN') == 1,
+            'is_ho' => $isHO,
+            'user_unit' => (int) session('ID_UNIT'),
             'body'  => 'riwayat/service'
         );
         return view('template', $data);
@@ -103,6 +107,12 @@ class Riwayat_Service extends BaseController
         $startDate = $request->getPost('startDate') ?? '';
         $endDate = $request->getPost('endDate') ?? '';
         $unitFilter = $request->getPost('unitFilter') ?? '';
+
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        if (!$isHO) {
+            $unitFilter = (int) session('ID_UNIT');
+        }
 
         $result = $this->ServiceModel->getRiwayatServiceServerSide(
             $start,
