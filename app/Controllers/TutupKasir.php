@@ -324,6 +324,9 @@ class TutupKasir extends BaseController
         } else {
             $pertumbuhan_omset = 0;
         }
+        $omset_bulan_lalu = $omset_bulan_sebelum;
+        $periodeLaluLabel = date('F Y', mktime(0, 0, 0, $bulanSebelum, 1, $tahunSebelum));
+        $selisih_omset = $omset_bulan - $omset_bulan_sebelum;
 
 
         // ==========================
@@ -528,6 +531,9 @@ class TutupKasir extends BaseController
             'bestsellerproduct' => $bestsellerproduct,
             'omset_bulan'       => $omset_bulan,
             'pertumbuhan_omset' => $pertumbuhan_omset,
+            'omset_bulan_lalu'  => $omset_bulan_lalu,
+            'periodeLaluLabel'  => $periodeLaluLabel,
+            'selisih_omset'     => $selisih_omset,
             'pelanggan_bulan'   => $pelanggan_bulan,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
@@ -657,6 +663,9 @@ class TutupKasir extends BaseController
         } else {
             $pertumbuhan_omset = 0;
         }
+        $omset_bulan_lalu = $omset_bulan_sebelum;
+        $periodeLaluLabel = date('F Y', mktime(0, 0, 0, $bulanSebelum, 1, $tahunSebelum));
+        $selisih_omset = $omset_bulan - $omset_bulan_sebelum;
 
 
         $totalGajiUnit = 0;
@@ -1517,6 +1526,9 @@ class TutupKasir extends BaseController
             'totalGajiUnit'  => $totalGajiUnit,
             'omset_bulan'       => $omset_bulan,
             'pertumbuhan_omset' => $pertumbuhan_omset,
+            'omset_bulan_lalu'  => $omset_bulan_lalu,
+            'periodeLaluLabel'  => $periodeLaluLabel,
+            'selisih_omset'     => $selisih_omset,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }
