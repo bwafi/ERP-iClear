@@ -308,6 +308,24 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
+        // HITUNG PERTUMBUHAN OMSET VS BULAN SEBELUMNYA
+        $omset_bulan_sebelum = $this->db->table('detail_penjualan')
+            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
+            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+            ->where('MONTH(penjualan.tanggal)', $bulanSebelum)
+            ->where('YEAR(penjualan.tanggal)', $tahunSebelum)
+            ->where('penjualan.unit_idunit', $unit)
+            ->get()
+            ->getRow()
+            ->total ?? 0;
+
+        if ($omset_bulan_sebelum > 0) {
+            $pertumbuhan_omset = (($omset_bulan - $omset_bulan_sebelum) / $omset_bulan_sebelum) * 100;
+        } else {
+            $pertumbuhan_omset = 0;
+        }
+
+
         // ==========================
         // TOTAL PELANGGAN
         // ==========================
@@ -509,6 +527,7 @@ class TutupKasir extends BaseController
             'bestseller'        => $bestseller,
             'bestsellerproduct' => $bestsellerproduct,
             'omset_bulan'       => $omset_bulan,
+            'pertumbuhan_omset' => $pertumbuhan_omset,
             'pelanggan_bulan'   => $pelanggan_bulan,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
@@ -621,6 +640,24 @@ class TutupKasir extends BaseController
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        // HITUNG PERTUMBUHAN OMSET VS BULAN SEBELUMNYA
+        $omset_bulan_sebelum = $this->db->table('detail_penjualan')
+            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
+            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+            ->where('MONTH(penjualan.tanggal)', $bulanSebelum)
+            ->where('YEAR(penjualan.tanggal)', $tahunSebelum)
+            ->where('penjualan.unit_idunit', $unit)
+            ->get()
+            ->getRow()
+            ->total ?? 0;
+
+        if ($omset_bulan_sebelum > 0) {
+            $pertumbuhan_omset = (($omset_bulan - $omset_bulan_sebelum) / $omset_bulan_sebelum) * 100;
+        } else {
+            $pertumbuhan_omset = 0;
+        }
+
 
         $totalGajiUnit = 0;
 
@@ -1479,6 +1516,7 @@ class TutupKasir extends BaseController
             'pengeluaran'     => $pengeluaran,
             'totalGajiUnit'  => $totalGajiUnit,
             'omset_bulan'       => $omset_bulan,
+            'pertumbuhan_omset' => $pertumbuhan_omset,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }
