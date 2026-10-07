@@ -275,14 +275,32 @@ class TutupKasir extends BaseController
             ->get()
             ->getResultArray();
 
+        // FILTER BULAN/TAHUN
+        $bulan = $this->request->getGet('bulan');
+        $tahun = $this->request->getGet('tahun');
+
+        if (!$bulan || !$tahun) {
+            $bulan = date('m');
+            $tahun = date('Y');
+        }
+
+        // Hitung bulan/tahun sebelumnya
+        $bulanSebelum = (int)$bulan - 1;
+        $tahunSebelum = (int)$tahun;
+        if ($bulanSebelum < 1) {
+            $bulanSebelum = 12;
+            $tahunSebelum = (int)$tahun - 1;
+        }
+
+
         // ==========================
         // TOTAL OMSET BULAN INI
         // ==========================
         $omset_bulan = $this->db->table('detail_penjualan')
             ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -293,8 +311,8 @@ class TutupKasir extends BaseController
         // ==========================
         $countService = $this->db->table('service')
             ->select('COUNT(idservice) AS total')
-            ->where('MONTH(tanggal_selesai)', date('m'))
-            ->where('YEAR(tanggal_selesai)', date('Y'))
+            ->where('MONTH(tanggal_selesai)', $bulan)
+            ->where('YEAR(tanggal_selesai)', $tahun)
             ->where('unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -326,8 +344,8 @@ class TutupKasir extends BaseController
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
             ->like('stok_barang.kode_barang', 'SPRT', 'after')
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->orderBy('stok_barang.total_penjualan', 'DESC')
             ->limit(1)
@@ -351,8 +369,8 @@ class TutupKasir extends BaseController
                 ) AS keyword_hp,
                 COUNT(*) AS total
             ")
-            ->where('MONTH(tanggal_selesai)', date('m'))
-            ->where('YEAR(tanggal_selesai)', date('Y'))
+            ->where('MONTH(tanggal_selesai)', $bulan)
+            ->where('YEAR(tanggal_selesai)', $tahun)
             ->where('unit_idunit', $unit)
             ->groupBy('keyword_hp')
             ->orderBy('total', 'DESC')
@@ -410,8 +428,8 @@ class TutupKasir extends BaseController
                 'barang',
                 'barang.idbarang = detail_penjualan.barang_idbarang'
             )
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->where('barang.idkategori =', 3)
             ->get()
@@ -428,8 +446,8 @@ class TutupKasir extends BaseController
                 'barang',
                 'barang.idbarang = detail_penjualan.barang_idbarang'
             )
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('barang.idkategori =', 3)
             ->get()
             ->getRow()
@@ -447,8 +465,8 @@ class TutupKasir extends BaseController
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->groupBy('DATE(penjualan.tanggal)')
             ->get()
@@ -477,6 +495,10 @@ class TutupKasir extends BaseController
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
+            'bulan'          => $bulan,
+            'tahun'          => $tahun,
+            'bulanSebelum'   => $bulanSebelum,
+            'tahunSebelum'   => $tahunSebelum,
             'hpp'           => $hpp,
             'hpp_global'    => $hpp_global,
             'listHari'          => $listHari,
@@ -544,14 +566,49 @@ class TutupKasir extends BaseController
             ->get()
             ->getResultArray();
 
+        // FILTER BULAN/TAHUN
+        $bulan = $this->request->getGet('bulan');
+        $tahun = $this->request->getGet('tahun');
+
+        if (!$bulan || !$tahun) {
+            $bulan = date('m');
+            $tahun = date('Y');
+        }
+
+        $bulanSebelum = (int)$bulan - 1;
+        $tahunSebelum = (int)$tahun;
+        if ($bulanSebelum < 1) {
+            $bulanSebelum = 12;
+            $tahunSebelum = (int)$tahun - 1;
+        }
+
+
+        // FILTER BULAN/TAHUN
+        $bulan = $this->request->getGet('bulan');
+        $tahun = $this->request->getGet('tahun');
+
+        if (!$bulan || !$tahun) {
+            $bulan = date('m');
+            $tahun = date('Y');
+        }
+
+        // Hitung bulan/tahun sebelumnya
+        $bulanSebelum = (int)$bulan - 1;
+        $tahunSebelum = (int)$tahun;
+        if ($bulanSebelum < 1) {
+            $bulanSebelum = 12;
+            $tahunSebelum = (int)$tahun - 1;
+        }
+
+
         // ==========================
         // TOTAL OMSET BULAN INI
         // ==========================
         $omset_bulan = $this->db->table('detail_penjualan')
             ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', date('m'))
-            ->where('YEAR(penjualan.tanggal)', date('Y'))
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -1405,9 +1462,12 @@ class TutupKasir extends BaseController
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
+            'bulan'          => $bulan,
+            'tahun'          => $tahun,
+            'bulanSebelum'   => $bulanSebelum,
+            'tahunSebelum'   => $tahunSebelum,
             'pengeluaran'     => $pengeluaran,
             'totalGajiUnit'  => $totalGajiUnit,
-            
             'omset_bulan'       => $omset_bulan,
             'body'              => 'dashboard/asset_berjalan'
         ]);
