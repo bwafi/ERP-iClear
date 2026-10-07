@@ -769,8 +769,9 @@ class Riwayat_Service extends BaseController
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
-            'unit' => $isHO ? $this->UnitModel->getUnit() : [],
+            'unit' => $this->UnitModel->getUnit(),
             'is_ho' => $isHO,
+            'user_unit' => (int) session('ID_UNIT'),
             'body'  => 'riwayat/proses_service'
         );
         return view('template', $data);
@@ -790,6 +791,12 @@ class Riwayat_Service extends BaseController
         $startDate = $request->getPost('startDate') ?? '';
         $endDate = $request->getPost('endDate') ?? '';
         $unitFilter = $request->getPost('unitFilter') ?? '';
+
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        if (!$isHO) {
+            $unitFilter = (int) session('ID_UNIT');
+        }
 
         $result = $this->ServiceModel->ProsesServiceAktifServerSide(
             $start,
