@@ -291,6 +291,8 @@ class TutupKasir extends BaseController
             $bulanSebelum = 12;
             $tahunSebelum = (int)$tahun - 1;
         }
+        $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
+        $isBulanBerjalan = ((int)$bulan == (int)date('m') && (int)$tahun == (int)date('Y'));
 
 
         // ==========================
@@ -497,6 +499,8 @@ class TutupKasir extends BaseController
             'id_jabatan'     => $id_jabatan,
             'bulan'          => $bulan,
             'tahun'          => $tahun,
+            'periodeLabel'   => $periodeLabel,
+            'isBulanBerjalan' => $isBulanBerjalan,
             'bulanSebelum'   => $bulanSebelum,
             'tahunSebelum'   => $tahunSebelum,
             'hpp'           => $hpp,
@@ -581,6 +585,8 @@ class TutupKasir extends BaseController
             $bulanSebelum = 12;
             $tahunSebelum = (int)$tahun - 1;
         }
+        $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
+        $isBulanBerjalan = ((int)$bulan == (int)date('m') && (int)$tahun == (int)date('Y'));
 
 
         // FILTER BULAN/TAHUN
@@ -599,6 +605,8 @@ class TutupKasir extends BaseController
             $bulanSebelum = 12;
             $tahunSebelum = (int)$tahun - 1;
         }
+        $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
+        $isBulanBerjalan = ((int)$bulan == (int)date('m') && (int)$tahun == (int)date('Y'));
 
 
         // ==========================
@@ -1464,6 +1472,8 @@ class TutupKasir extends BaseController
             'id_jabatan'     => $id_jabatan,
             'bulan'          => $bulan,
             'tahun'          => $tahun,
+            'periodeLabel'   => $periodeLabel,
+            'isBulanBerjalan' => $isBulanBerjalan,
             'bulanSebelum'   => $bulanSebelum,
             'tahunSebelum'   => $tahunSebelum,
             'pengeluaran'     => $pengeluaran,
