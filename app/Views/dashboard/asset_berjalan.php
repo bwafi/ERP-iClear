@@ -60,6 +60,8 @@ $bolehPilihUnit = in_array($id_jabatan, [1, 0, 34, 40]);
                 </div>
 
                 <?php if (!$isBulanBerjalan): ?>
+                    <?php $bulanSesudah = (int)date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
+                    <?php $tahunSesudah = (int)date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
                     <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSesudah . '&tahun=' . $tahunSesudah) ?>"
                         class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
                         <span class="fw-medium d-none d-md-inline"><?= $namaBulan[$bulanSesudah] . ' ' . $tahunSesudah ?></span>
