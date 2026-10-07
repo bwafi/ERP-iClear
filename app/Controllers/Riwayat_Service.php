@@ -77,7 +77,7 @@ class Riwayat_Service extends BaseController
     public function index()
     {
         $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42');
 
         $data =  array(
 
@@ -109,7 +109,7 @@ class Riwayat_Service extends BaseController
         $unitFilter = $request->getPost('unitFilter') ?? '';
 
         $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42');
         if (!$isHO) {
             $unitFilter = (int) session('ID_UNIT');
         }
