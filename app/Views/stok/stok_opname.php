@@ -240,6 +240,15 @@ $who      = static function ($id) use ($akunNama): string {
                                 <iconify-icon icon="solar:check-circle-bold" class="me-1"></iconify-icon>Finalisasi
                             </button>
                         <?php endif; ?>
+                        <form method="post" action="<?= base_url('stok_opname/batal') ?>" class="d-flex align-items-center" id="formBatal" style="display:inline">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="unit" value="<?= (int)$unit ?>">
+                            <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
+                            <button type="button" class="btn btn-outline-danger btn-batal ms-2" data-bs-toggle="modal" data-bs-target="#modalBatal">
+                                <iconify-icon icon="solar:trash-bin-2-bold" class="me-1"></iconify-icon>Batal Draft
+                            </button>
+                        </form>
+
                     <?php else : ?>
                         <?php if (!empty($canReopen)) : ?>
                             <form method="post" action="<?= base_url('stok_opname/reopen') ?>" class="d-flex flex-wrap gap-2 align-items-center"
@@ -1017,3 +1026,62 @@ $who      = static function ($id) use ($akunNama): string {
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalBatal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><iconify-icon icon="solar:danger-circle-bold" class="me-1"></iconify-icon>Konfirmasi Batal Draft</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <p>Yakin membatalkan draft stok opname untuk <strong><?= esc($namaUnit) ?></strong> tanggal <strong><?= esc($tanggal) ?></strong>?</p>
+                <p class="small text-muted mb-2">Draft yang dibatalkan <u>tidak</u> memengaruhi stok produk. Periode akan berstatus <strong>BATAL</strong>.</p>
+                <div class="mb-2">
+                    <label for="soAlasanBatal" class="form-label">Alasan pembatalan (opsional)</label>
+                    <input type="text" class="form-control" id="soAlasanBatal" maxlength="255" placeholder="Masukkan alasan pembatalan">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                <button type="button" class="btn btn-danger btn-confirm-batal">
+                    <iconify-icon icon="solar:trash-bin-2-bold" class="me-1"></iconify-icon>Ya, Batal Draft
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modalBtn = document.querySelector('#modalBatal .btn-confirm-batal');
+    var form = document.getElementById('formBatal');
+    if (modalBtn && form) {
+        modalBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var alasan = document.getElementById('soAlasanBatal');
+            if (alasan && alasan.value.trim() !== '') {
+                var inp = form.querySelector('input[name="alasan"]');
+                if (!inp) {
+                    inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = 'alasan';
+                    form.appendChild(inp);
+                }
+                inp.value = alasan.value.trim();
+            } else {
+                var existing = form.querySelector('input[name="alasan"]');
+                if (existing) {
+                    existing.remove();
+                }
+            }
+            form.submit();
+        });
+    }
+});
+</script>
+
+

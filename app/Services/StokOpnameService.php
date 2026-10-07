@@ -568,4 +568,55 @@ class StokOpnameService
             'created_at'     => date('Y-m-d H:i:s'),
         ]);
     }
+
+    /**
+     * Batal draft: ubah periode DRAFT menjadi BATAL.
+     * Tidak menghapus detail draft atau periode.
+     */
+    public function batalDraft(int $unit, string $tanggal, int $userId, ?string $alasan = null): array
+    {
+        $periode = $this->periode($unit, $tanggal);
+        if (!$periode) {
+            return ['success' => false, 'errors' => ['Periode stok opname tidak ditemukan.'], 'periode' => null];
+        }
+        if ($periode->status !== 'DRAFT') {
+            return ['success' => false, 'errors' => ['Hanya periode DRAFT yang dapat dibatalkan.'], 'periode' => $periode];
+        }
+
+        $alasan = $alasan !== null ? trim($alasan) : '';
+        if ($alasan === '') {
+            $alasan = 'Dibatalkan tanpa alasan';
+        }
+        $alasan = mb_substr($alasan, 0, 255);
+
+        $this->db->transBegin();
+
+        try {
+            $periodeId = (int)$periode->id;
+
+            $this->db->table('stok_opname_periode')
+                ->where('id', $periodeId)
+                ->update([
+                    'status'           => 'BATAL',
+                    'batal_by'         => $userId,
+                    'tanggal_batal'    => date('Y-m-d H:i:s'),
+                    'alasan_batal'     => $alasan,
+                    'updated_at'       => date('Y-m-d H:i:s'),
+                ]);
+
+            $this->audit($periodeId, $unit, $tanggal, 'batal_draft', $userId, ['status' => 'BATAL'], $alasan);
+
+            if ($this->db->transStatus() === false) {
+                $this->db->transRollback();
+                return ['success' => false, 'errors' => ['Gagal membatalkan draft stok opname.'], 'periode' => null];
+            }
+
+            $this->db->transCommit();
+            return ['success' => true, 'errors' => [], 'periode' => $this->model->find($periodeId)];
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['success' => false, 'errors' => ['Terjadi kesalahan: ' . $e->getMessage()], 'periode' => null];
+        }
+    }
+
 }

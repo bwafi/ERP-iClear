@@ -240,6 +240,7 @@ $routes->group('stok_opname', ['filter' => ['auth', 'csrf']], static function ($
     $routes->post('simpan', 'StokOpname::simpan');
     $routes->post('finalisasi', 'StokOpname::finalisasi');
     $routes->post('reopen', 'StokOpname::reopen');
+    $routes->post('batal', 'StokOpname::batal');
 });
 $routes->post('insert/stokopname', 'StokOpname::simpan', ['filter' => ['auth', 'csrf']]);
 $routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => ['auth', 'csrf']]);
@@ -423,11 +424,10 @@ $routes->group('kas_bank', ['filter' => 'auth'], function ($routes) {
     $routes->post('saldo-awal/save', 'KasBank::saveSaldoAwal', ['filter' => 'auth']);
     $routes->post('saldo-alokasi/save', 'KasBank::saveAlokasiSaldo', ['filter' => 'auth']);
 
-    // Opening KAS: baseline laci kas yang ditetapkan Finance, lalu dicocokkan
-    // dengan real cash hasil hitung laci saat Tutup Kasir. Berdiri sendiri dari
-    // statement bank: rekening KAS tidak punya statement.
+    // Opening KAS: baseline saldo riil laci kas yang ditetapkan Finance pada
+    // tanggal cut-off. Berdiri sendiri dari statement bank: rekening KAS tidak
+    // punya statement.
     $routes->post('opening-kas/save', 'KasBank::saveOpeningKas', ['filter' => 'auth']);
-    $routes->post('opening-kas/verifikasi', 'KasBank::verifikasiOpeningKas', ['filter' => 'auth']);
     $routes->get('transfer', 'KasBank::transfer');
     $routes->post('transfer/save', 'KasBank::saveTransfer', ['filter' => 'auth']);
     $routes->post('transfer/reversal/(:num)', 'KasBank::reversalTransfer/$1', ['filter' => 'auth']);

@@ -93,6 +93,8 @@ class StokOpname extends BaseController
             'canMutate'        => $canMutate,
             'canReopen'        => in_array($myJabatan, self::REOPEN_ROLES, true),
             'periode'          => $periode,
+            'namaUnit'         => ($this->UnitModel->where('idunit', $unit)->first()->NAMA_UNIT ?? '-'),
+            'namaUnit'         => ($this->UnitModel->where('idunit', $unit)->first()->NAMA_UNIT ?? '-'),
             'items'            => $this->svc->periodeItems($unit, $tanggal),
             'historis'         => $this->PeriodeModel->getByUnit($unit, 20),
             'draftTerbuka'     => $draftTerbuka,
@@ -416,4 +418,34 @@ class StokOpname extends BaseController
     {
         return \Config\Database::connect();
     }
+
+    /**
+     * Batal draft: ubah periode DRAFT menjadi BATAL.
+     */
+    public function batal()
+    {
+        if ($this->isViewOnly()) {
+            return redirect()->to(base_url('stok_opname'))
+                ->with('gagal', 'Mode lihat: role ini tidak dapat membatalkan stok opname.');
+        }
+
+        $unit = $this->mutationUnit();
+        if ($unit <= 0) {
+            return redirect()->to(base_url('stok_opname'))
+                ->with('gagal', 'Unit tidak valid. Pilih unit dari daftar.');
+        }
+
+        $tanggal = $this->resolveMutationDate($unit);
+        $url = base_url("stok_opname?unit={$unit}&tanggal={$tanggal}");
+
+        $alasan = (string) $this->request->getPost('alasan');
+
+        $r = $this->svc->batalDraft($unit, $tanggal, (int) session('ID_AKUN'), $alasan);
+        if ($r['success']) {
+            return redirect()->to($url)->with('sukses',
+                'Draft stok opname dibatalkan (BATAL).');
+        }
+        return redirect()->to($url)->with('gagal', implode(' ', $r['errors']));
+    }
+
 }
