@@ -1,478 +1,241 @@
-<!-- HEADER -->
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Kasir Bulanan</h4>
+<?= $this->include('jurnal/_tutup_kasir_theme') ?>
 
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none"
-                        href="<?= base_url('/') ?>">
-                        Dashboard
-                    </a>
-                </li>
+<?php
+$fmt = fn($v) => number_format((int)($v ?? 0), 0, ',', '.');
+$totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
+?>
 
-                <li class="breadcrumb-item active" aria-current="page">
-                    Kasir Bulanan
-                </li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<div class="tutup-kasir kb-page">
+    <header class="tk-header">
+        <div class="container-fluid py-3">
+            <nav aria-label="breadcrumb" class="d-flex align-items-center flex-wrap gap-3 mb-2">
+                <ol class="breadcrumb mb-0 me-auto">
+                    <li class="breadcrumb-item">
+                        <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">Rekap Kasir</li>
+                </ol>
+            </nav>
+        </div>
+    </header>
 
+    <main class="container-fluid py-4">
 
-<!-- CARD -->
-<div class="card w-100 position-relative overflow-hidden">
+        <section class="tk-section mb-4">
+            <header class="p-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <iconify-icon icon="solar:calendar-bold" width="22" class="text-primary"></iconify-icon>
+                    <h5 class="mb-0 fw-semibold">Rekap Harian Kasir</h5>
+                </div>
 
-    <!-- HEADER CARD -->
-    <div class="px-4 py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+                    <input type="date"
+                        name="tanggal"
+                        class="form-control form-control-sm"
+                        value="<?= $tanggal ?>"
+                        style="width: auto; border-radius: var(--tk-radius); font-variant-numeric: tabular-nums;">
 
-        <div>
-            <h5 class="mb-1 fw-semibold">
-                Laporan Hari : (<?= $tanggal; ?>)
-            </h5>
+                    <select name="unit"
+                        class="form-select form-select-sm"
+                        style="width: auto; border-radius: var(--tk-radius);">
+                        <?php foreach ($list_unit as $u): ?>
+                            <option value="<?= (int)$u['idunit'] ?>"
+                                <?= (string)($selected_unit ?? '') === (string)$u['idunit'] ? 'selected' : '' ?>>
+                                <?= $u['NAMA_UNIT'] ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <button type="submit"
+                        class="tk-btn tk-btn--primary"
+                        style="padding: 0.4rem 1rem; font-size: 0.875rem;">
+                        <iconify-icon icon="solar:calendar-search-bold" width="16"></iconify-icon>
+                        Filter
+                    </button>
+                </form>
+            </header>
 
             <?php if ($tutupkasir): ?>
-
-                <small class="text-muted">
-
-                    Status :
-                    <span class="badge bg-success">
-                        <?= $tutupkasir->status ?>
-                    </span>
-
-                    |
-
-                    Ditutup Oleh :
-                    <b><?= $tutupkasir->NAMA_AKUN ?? '-' ?></b>
-
-                </small>
-
+                <div class="p-3 border-bottom" style="background: var(--bs-secondary-bg, #f8f9fa);">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <div class="d-flex align-items-center gap-2">
+                            <span style="
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 0.375rem;
+                                padding: 0.25rem 0.75rem;
+                                border-radius: 2rem;
+                                font-size: 0.8125rem;
+                                font-weight: 600;
+                                background: var(--bs-success-bg-subtle, #dffff3);
+                                color: var(--bs-success, #198754);
+                            ">
+                                <iconify-icon icon="solar:check-circle-bold" width="14"></iconify-icon>
+                                Ditutup
+                            </span>
+                        </div>
+                        <div style="font-size: 0.875rem; color: var(--tk-muted);">
+                            <span style="font-variant-numeric: tabular-nums; font-weight: 600; color: var(--bs-body-color);"><?= date('d M Y', strtotime($tanggal)) ?></span>
+                            &middot; Oleh <strong><?= $tutupkasir->NAMA_AKUN ?? '-' ?></strong>
+                        </div>
+                    </div>
+                </div>
             <?php endif; ?>
-        </div>
+        </section>
 
-        <!-- FILTER -->
-        <form method="get" class="d-flex gap-2 flex-wrap">
+        <?php if (!$tutupkasir): ?>
 
-            <input type="date"
-                name="tanggal"
-                class="form-control"
-                value="<?= $tanggal ?>">
-
-            <select name="unit"
-                class="form-select">
-
-                <?php foreach ($list_unit as $u): ?>
-                    <option value="<?= (int)$u['idunit'] ?>"
-                        <?= (string)($selected_unit ?? '') === (string)$u['idunit'] ? 'selected' : '' ?>>
-                        <?= $u['NAMA_UNIT'] ?>
-                    </option>
-                <?php endforeach; ?>
-
-            </select>
-
-            <button type="submit"
-                class="btn btn-primary">
-
-                <iconify-icon icon="solar:calendar-search-bold">
-                </iconify-icon>
-
-                Filter
-
-            </button>
-
-        </form>
-
-    </div>
-
-
-    <?php if (!$tutupkasir): ?>
-
-        <div class="card-body">
-            <div class="alert alert-warning mb-0">
-                Data tutup kasir tanggal
-                <b><?= $tanggal ?></b>
-                tidak ditemukan.
+            <div class="tk-alert tk-alert--warning" role="alert">
+                <iconify-icon icon="solar:info-circle-bold" width="20"></iconify-icon>
+                <div>
+                    <div class="tk-alert__title">Data tidak ditemukan</div>
+                    <div class="tk-alert__desc">Tutup kasir untuk tanggal <strong><?= $tanggal ?></strong> belum tersedia.</div>
+                </div>
             </div>
-        </div>
 
-    <?php else: ?>
+        <?php else: ?>
 
-
-        <div class="card-body px-4 pt-4 pb-2">
-
-            <!-- HIDDEN -->
-            <input type="hidden" name="awal_cash"
-                value="<?= $kas_awalcash ?? 0 ?>">
-
-            <input type="hidden" name="awal_transfer"
-                value="<?= $kas_awaltf ?? 0 ?>">
-
-            <input type="hidden" name="akhir_cash"
-                value="<?= $kas_akhircash ?? 0 ?>">
-
-            <input type="hidden" name="akhir_transfer"
-                value="<?= $kas_akhirtf ?? 0 ?>">
-
-            <input type="hidden" name="pendapatan_cash"
-                value="<?= $cash ?? 0 ?>">
-
-            <input type="hidden" name="pendapatan_transfer"
-                value="<?= $transfer ?? 0 ?>">
-
-            <input type="hidden" name="pengeluaran_cash"
-                value="<?= $pengeluarancash ?? 0 ?>">
-
-            <input type="hidden" name="pengeluaran_transfer"
-                value="<?= $pengeluarantf ?? 0 ?>">
-
-
-            <!-- SALDO AWAL -->
-            <div class="row g-4">
-
-                <div class="col-md-6">
-                    <div class="alert alert-primary border-0">
-
-                        <h6 class="fw-semibold mb-1">
-                            Saldo Awal Cash
-                        </h6>
-
-                        <h4 class="mb-0 fw-bold">
-                            Rp <?= number_format($kas_awalcash ?? 0, 0, ',', '.') ?>
-                        </h4>
-
+            <section class="tk-hero mb-4">
+                <div class="tk-hero__balance tk-card">
+                    <div class="d-flex align-items-center mb-3">
+                        <iconify-icon icon="solar:wallet-bold" width="28" class="text-primary me-2"></iconify-icon>
+                        <h5 class="mb-0 fw-semibold">Saldo Awal</h5>
+                    </div>
+                    <div class="tk-balance__amount">
+                        Rp <?= $fmt(($kas_awalcash ?? 0) + ($kas_awaltf ?? 0)) ?>
+                    </div>
+                    <div class="tk-balance__breakdown">
+                        Kas <strong class="tk-tabular">Rp <?= $fmt($kas_awalcash) ?></strong>
+                        &middot;
+                        Transfer <strong class="tk-tabular">Rp <?= $fmt($kas_awaltf) ?></strong>
                     </div>
                 </div>
 
-                <div class="col-md-6">
-                    <div class="alert alert-primary border-0">
-
-                        <h6 class="fw-semibold mb-1">
-                            Saldo Awal Bank
-                        </h6>
-
-                        <h4 class="mb-0 fw-bold">
-                            Rp <?= number_format($kas_awaltf ?? 0, 0, ',', '.') ?>
-                        </h4>
-
+                <div class="tk-card" style="padding: 1.5rem;">
+                    <div class="d-flex align-items-center mb-3">
+                        <iconify-icon icon="solar:calculator-bold" width="28" class="text-success me-2"></iconify-icon>
+                        <h5 class="mb-0 fw-semibold">Saldo Akhir</h5>
+                    </div>
+                    <div class="tk-balance__amount" style="color: var(--tk-success);">
+                        Rp <?= $fmt(($kas_akhircash ?? 0) + ($kas_akhirtf ?? 0)) ?>
+                    </div>
+                    <div class="tk-balance__breakdown">
+                        Kas <strong class="tk-tabular">Rp <?= $fmt($kas_akhircash) ?></strong>
+                        &middot;
+                        Transfer <strong class="tk-tabular">Rp <?= $fmt($kas_akhirtf) ?></strong>
                     </div>
                 </div>
+            </section>
 
-            </div>
-
-
-            <!-- PENDAPATAN -->
-            <div class="row g-4">
-
-                <!-- CASH -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="card bg-warning-subtle border-0 shadow-none">
-
-                        <div class="card-body">
-
-                            <div class="d-flex justify-content-between align-items-center">
-
-                                <div>
-
-                                    <h6 class="mb-1">
-                                        Pendapatan Cash
-                                    </h6>
-
-                                    <h4 class="fw-bold mb-0">
-                                        Rp <?= number_format($cash ?? 0, 0, ',', '.') ?>
-                                    </h4>
-
-                                </div>
-
-                                <iconify-icon
-                                    icon="solar:money-bag-bold"
-                                    width="42"
-                                    class="text-warning">
-                                </iconify-icon>
-
+            <section class="tk-section mb-4">
+                <header class="p-3 border-bottom">
+                    <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
+                        <iconify-icon icon="solar:document-text-bold" width="22"></iconify-icon>
+                        Ringkasan Pendapatan & Pengeluaran
+                    </h5>
+                </header>
+                <div class="p-3">
+                    <div class="tk-summary">
+                        <article class="tk-summary__item tk-summary__item--income">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Pendapatan Cash</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:money-bag-bold" width="28"></iconify-icon></div>
                             </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($cash) ?></div>
+                        </article>
 
-                        </div>
-
-                    </div>
-                </div>
-
-
-                <!-- TRANSFER -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="card bg-success-subtle border-0 shadow-none">
-
-                        <div class="card-body">
-
-                            <div class="d-flex justify-content-between align-items-center">
-
-                                <div>
-
-                                    <h6 class="mb-1">
-                                        Pendapatan Transfer
-                                    </h6>
-
-                                    <h4 class="fw-bold mb-0">
-                                        Rp <?= number_format($transfer ?? 0, 0, ',', '.') ?>
-                                    </h4>
-
-                                </div>
-
-                                <iconify-icon
-                                    icon="solar:card-transfer-bold"
-                                    width="42"
-                                    class="text-success">
-                                </iconify-icon>
-
+                        <article class="tk-summary__item tk-summary__item--income">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Pendapatan Transfer</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
                             </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($transfer) ?></div>
+                        </article>
 
-                        </div>
-
-                    </div>
-                </div>
-
-
-                <!-- TOTAL -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="card bg-primary-subtle border-0 shadow-none">
-
-                        <div class="card-body">
-
-                            <div class="d-flex justify-content-between align-items-center">
-
-                                <div>
-
-                                    <h6 class="mb-1">
-                                        Total Pendapatan
-                                    </h6>
-
-                                    <h4 class="fw-bold mb-0">
-                                        Rp <?= number_format($total_pendapatan ?? 0, 0, ',', '.') ?>
-                                    </h4>
-
-                                </div>
-
-                                <iconify-icon
-                                    icon="solar:wallet-money-bold"
-                                    width="42"
-                                    class="text-primary">
-                                </iconify-icon>
-
+                        <article class="tk-summary__item tk-summary__item--income-total">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Total Pendapatan</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:wallet-money-bold" width="28"></iconify-icon></div>
                             </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($total_pendapatan) ?></div>
+                        </article>
 
-                        </div>
-
-                    </div>
-                </div>
-
-            </div>
-
-
-            <!-- PENGELUARAN -->
-            <div class="row g-4 mt-1">
-
-                <!-- CASH -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="card bg-danger-subtle border-0 shadow-none">
-
-                        <div class="card-body">
-
-                            <div class="d-flex justify-content-between align-items-center">
-
-                                <div>
-
-                                    <h6 class="mb-1">
-                                        Pengeluaran Cash
-                                    </h6>
-
-                                    <h4 class="fw-bold mb-0">
-                                        Rp <?= number_format($pengeluarancash ?? 0, 0, ',', '.') ?>
-                                    </h4>
-
-                                </div>
-
-                                <iconify-icon
-                                    icon="solar:bill-list-bold"
-                                    width="42"
-                                    class="text-danger">
-                                </iconify-icon>
-
+                        <article class="tk-summary__item tk-summary__item--expense">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Pengeluaran Cash</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:bill-list-bold" width="28"></iconify-icon></div>
                             </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($pengeluarancash) ?></div>
+                        </article>
 
-                        </div>
-
-                    </div>
-                </div>
-
-
-                <!-- TRANSFER -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="card bg-danger-subtle border-0 shadow-none">
-
-                        <div class="card-body">
-
-                            <div class="d-flex justify-content-between align-items-center">
-
-                                <div>
-
-                                    <h6 class="mb-1">
-                                        Pengeluaran Transfer
-                                    </h6>
-
-                                    <h4 class="fw-bold mb-0">
-                                        Rp <?= number_format($pengeluarantf ?? 0, 0, ',', '.') ?>
-                                    </h4>
-
-                                </div>
-
-                                <iconify-icon
-                                    icon="solar:bill-list-bold"
-                                    width="42"
-                                    class="text-danger">
-                                </iconify-icon>
-
+                        <article class="tk-summary__item tk-summary__item--expense">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Pengeluaran Transfer</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:bill-list-bold" width="28"></iconify-icon></div>
                             </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($pengeluarantf) ?></div>
+                        </article>
 
-                        </div>
-
-                    </div>
-                </div>
-
-
-                <!-- TOTAL -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="card bg-danger-subtle border-0 shadow-none">
-
-                        <div class="card-body">
-
-                            <div class="d-flex justify-content-between align-items-center">
-
-                                <div>
-
-                                    <h6 class="mb-1">
-                                        Total Pengeluaran
-                                    </h6>
-
-                                    <h4 class="fw-bold mb-0">
-                                        Rp <?= number_format(($pengeluarancash ?? 0) + ($pengeluarantf ?? 0), 0, ',', '.') ?>
-                                    </h4>
-
-                                </div>
-
-                                <iconify-icon
-                                    icon="solar:bill-list-bold"
-                                    width="42"
-                                    class="text-danger">
-                                </iconify-icon>
-
+                        <article class="tk-summary__item tk-summary__item--expense-total">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Total Pengeluaran</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:bill-list-bold" width="28"></iconify-icon></div>
                             </div>
-
-                        </div>
-
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($totalPengeluaran) ?></div>
+                        </article>
                     </div>
                 </div>
+            </section>
 
-            </div>
+            <?php
+            $selisih = ($tutupkasir->cash_laci ?? 0) - ($tutupkasir->akhir_cash ?? 0);
+            $selisihColor = $selisih == 0 ? 'var(--bs-info, #0dcaf0)' : ($selisih > 0 ? 'var(--tk-success)' : 'var(--tk-expense)');
+            $selisihBg = $selisih == 0 ? 'var(--bs-info-bg-subtle, #e1f5fa)' : ($selisih > 0 ? 'var(--bs-success-bg-subtle, #dffff3)' : 'var(--bs-danger-bg-subtle, #ffede9)');
+            $selisihIcon = $selisih == 0 ? 'solar:check-circle-bold' : ($selisih > 0 ? 'solar:arrow-up-bold' : 'solar:arrow-down-bold');
+            $selisihLabel = $selisih == 0 ? 'Cocok' : ($selisih > 0 ? 'Lebih' : 'Kurang');
+            ?>
 
-
-            <!-- SALDO AKHIR -->
-            <div class="row g-4 mt-1">
-
-                <div class="col-md-6">
-                    <div class="alert alert-success border-0">
-
-                        <h6 class="fw-semibold mb-1">
-                            Saldo Akhir Cash
-                        </h6>
-
-                        <h4 class="mb-0 fw-bold">
-                            Rp <?= number_format($kas_akhircash ?? 0, 0, ',', '.') ?>
-                        </h4>
-
+            <details class="tk-details tk-card mb-4">
+                <summary>
+                    <iconify-icon icon="solar:safe-2-bold" width="22"></iconify-icon>
+                    Rekonsiliasi Fisik
+                </summary>
+                <div class="tk-details__content">
+                    <div class="tk-details__row">
+                        <span class="tk-details__label">Saldo Akhir Kas (Sistem)</span>
+                        <span class="tk-details__value tk-tabular">Rp <?= $fmt($kas_akhircash) ?></span>
+                    </div>
+                    <div class="tk-details__row">
+                        <span class="tk-details__label">Uang Fisik di Laci</span>
+                        <span class="tk-details__value tk-tabular" style="color: var(--bs-warning, #f59e0b);">Rp <?= $fmt($tutupkasir->cash_laci ?? 0) ?></span>
+                    </div>
+                    <div class="tk-details__row" style="padding-top: 0.75rem; padding-bottom: 0.75rem;">
+                        <span class="tk-details__label"><strong>Selisih (Fisik - Sistem)</strong></span>
+                        <span class="tk-details__value tk-tabular d-flex align-items-center gap-2" style="color: <?= $selisihColor ?>;">
+                            <iconify-icon icon="<?= $selisihIcon ?>" width="16"></iconify-icon>
+                            <strong>Rp <?= $fmt($selisih) ?></strong>
+                            <span style="
+                                font-size: 0.75rem;
+                                font-weight: 600;
+                                padding: 0.125rem 0.5rem;
+                                border-radius: 2rem;
+                                background: <?= $selisihBg ?>;
+                            "><?= $selisihLabel ?></span>
+                        </span>
                     </div>
                 </div>
+            </details>
 
-                <div class="col-md-6">
-                    <div class="alert alert-success border-0">
+            <input type="hidden" name="awal_cash" value="<?= $kas_awalcash ?? 0 ?>">
+            <input type="hidden" name="awal_transfer" value="<?= $kas_awaltf ?? 0 ?>">
+            <input type="hidden" name="akhir_cash" value="<?= $kas_akhircash ?? 0 ?>">
+            <input type="hidden" name="akhir_transfer" value="<?= $kas_akhirtf ?? 0 ?>">
+            <input type="hidden" name="pendapatan_cash" value="<?= $cash ?? 0 ?>">
+            <input type="hidden" name="pendapatan_transfer" value="<?= $transfer ?? 0 ?>">
+            <input type="hidden" name="pengeluaran_cash" value="<?= $pengeluarancash ?? 0 ?>">
+            <input type="hidden" name="pengeluaran_transfer" value="<?= $pengeluarantf ?? 0 ?>">
 
-                        <h6 class="fw-semibold mb-1">
-                            Saldo Akhir Bank
-                        </h6>
+        <?php endif; ?>
 
-                        <h4 class="mb-0 fw-bold">
-                            Rp <?= number_format($kas_akhirtf ?? 0, 0, ',', '.') ?>
-                        </h4>
-
-                    </div>
-                </div>
-
-            </div>
-
-
-            <!-- LACI & SELISIH -->
-            <div class="row g-4">
-
-                <!-- SALDO LACI -->
-                <div class="col-md-6">
-                    <div class="alert alert-warning border-0">
-
-                        <h6 class="fw-semibold mb-1">
-                            Saldo Laci
-                        </h6>
-
-                        <h4 class="mb-0 fw-bold">
-                            Rp <?= number_format($tutupkasir->cash_laci ?? 0, 0, ',', '.') ?>
-                        </h4>
-
-                    </div>
-                </div>
-
-
-                <!-- SELISIH -->
-                <div class="col-md-6">
-
-                    <?php
-                    $selisih =
-                        ($tutupkasir->cash_laci ?? 0)
-                        - ($tutupkasir->akhir_cash ?? 0);
-                    ?>
-
-                    <div class="alert alert-info border-0">
-
-                        <h6 class="fw-semibold mb-1">
-                            Selisih
-                        </h6>
-
-                        <h4 class="mb-0 fw-bold">
-                            Rp <?= number_format($selisih, 0, ',', '.') ?>
-                        </h4>
-
-                    </div>
-                </div>
-
-            </div>
-
-
-            <!-- PRINT -->
-            <div class="text-end mt-4">
-
-                <!-- <a href="<?= base_url('/cetak-tutup-kasir/' . $tutupkasir->idtutupkasir) ?>"
-                    target="_blank"
-                    class="btn btn-primary px-4">
-
-                    <iconify-icon
-                        icon="solar:printer-bold"
-                        width="20">
-                    </iconify-icon>
-
-                    Print
-
-                </a> -->
-
-            </div>
-
-        </div>
-
-    <?php endif; ?>
-
+    </main>
 </div>
