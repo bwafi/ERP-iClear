@@ -19,131 +19,72 @@ class TutupKasir extends BaseController
     public function index()
     {
         $today = date('Y-m-d');
-        $besok = date('Y-m-d', strtotime('+1 day'));
 
         // ambil unit login
-        $unit = session()->get('ID_UNIT');
+        $unit = (int) session()->get('ID_UNIT');
 
-        // KAS AWAL CASH
-        $kasawalcash = $this->db->table('kas_masuk')
-            ->select('jumlah as total')
-            ->where('DATE(tanggal)', $today)
-            ->where('deskripsi', 'kas awal')
-            ->where('idbank', null)
-            ->where('idunit', $unit)
-            ->get()
-            ->getRow()->total ?? 0;
+        // ==============================================================
+        // SATU SUMBER ANGKA
+        // ==============================================================
+        //
+        // Seluruh angka halaman ini dihitung `TutupKasirClosing::hitung()` —
+        // service yang SAMA dengan yang dipanggil `simpan()` saat menyimpan.
+        // Jadi yang tampil di layar pasti sama dengan yang masuk ke
+        // `tutup_kasir`. Tidak ada lagi query perhitungan kedua di controller
+        // yang bisa menyimpang dari angka closing.
+        //
+        // `saldo_awal_kas` / `saldo_awal_tf` berasal dari
+        // `TutupKasirSaldoAwal` (carry-forward closing -> baseline ->
+        // alokasi rekening bersama -> belum ditetapkan).
+        //
+        // @see \App\Services\Finance\TutupKasirClosing::hitung()
+        // @see \App\Services\Finance\TutupKasirSaldoAwal
+        $h = (new \App\Services\Finance\TutupKasirClosing($this->db))
+            ->hitung($unit, $today);
 
-        // KAS AWAL TRANSFER
-        $kasawaltf = $this->db->table('kas_masuk')
-            ->select('jumlah as total')
-            ->where('DATE(tanggal)', $today)
-            ->where('deskripsi', 'kas awal')
-            ->where('idbank !=', null)
-            ->where('idunit', $unit)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        // PENJUALAN TRANSFER
-        $tfpenjualan = $this->db->table('penjualan')
-            ->selectSum('bayar_bank', 'total')
-            ->where('DATE(tanggal)', $today)
-            ->where('unit_idunit', $unit)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow()->total ?? 0;
-
-        // SERVICE TRANSFER
-        $tfservice = $this->db->table('service')
-            ->select('SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)) AS total')
-            ->where('DATE(tanggal_selesai)', $today)
-            ->where('status_service', 4)
-            ->where('unit_idunit', $unit)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        $transfer = $tfpenjualan + $tfservice;
-
-        // PENJUALAN CASH
-        $cashpenjualan = $this->db->table('penjualan')
-            ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal)', $today)
-            ->where('unit_idunit', $unit)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow()->total ?? 0;
-
-        // SERVICE CASH
-        $cashservice = $this->db->table('service')
-            ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal_selesai)', $today)
-            ->where('status_service', 4)
-            ->where('unit_idunit', $unit)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        $cash = $cashpenjualan + $cashservice;
-        $total = $transfer + $cash;
-
-        // PENGELUARAN CASH
-        $pengeluarancash = $this->db->table('kas_keluar')
-            ->selectSum('jumlah', 'total')
-            ->where('DATE(tanggal)', $today)
-            ->where('idbank', null)
-            ->where('idunit', $unit)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        // PENGELUARAN TF
-        $pengeluarantf = $this->db->table('kas_keluar')
-            ->selectSum('jumlah', 'total')
-            ->where('DATE(tanggal)', $today)
-            ->where('idbank !=', null)
-            ->where('idunit', $unit)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        // tutup kasir terakhir per unit
+        // tutup kasir terakhir per unit (dipakai tombol Print)
         $tutupkasir = $this->db->table('tutup_kasir')
             ->where('unit', $unit)
             ->orderBy('idtutupkasir', 'DESC')
             ->get()
             ->getRow();
 
-        // cek sudah tutup kasir hari ini atau belum per unit
-        $cek = $this->db->table('tutup_kasir')
+        // Closing hari ini sudah ada atau belum. Tidak dipakai untuk
+        // menghentikan render: view punya `$sudah_ditutup` + tombol disabled.
+        $sudahDitutup = $this->db->table('tutup_kasir')
             ->where('DATE(tanggal)', $today)
             ->where('unit', $unit)
-            ->countAllResults();
+            ->countAllResults() > 0;
 
-        if ($cek > 0) {
-            return view('template', [
-                'today'            => $today,
-                'besok'            => $besok,
-                'tutupkasir'       => $tutupkasir,
-                'kas_awaltf'       => $kasawaltf,
-                'kas_awalcash'     => $kasawalcash,
-                'total_pendapatan' => $total,
-                'transfer'         => $transfer,
-                'cash'             => $cash,
-                'pengeluarantf'    => $pengeluarantf,
-                'pengeluarancash'  => $pengeluarancash,
-                'error'            => 'Tutup kasir unit ini hari ini sudah dilakukan',
-                'body'             => 'jurnal/tutup_kasir'
-            ]);
-        }
+        return view('template', array_merge($h['angka'], [
+            'tanggal'             => $today,
+            'unit'                => $unit,
+            'tutupkasir'          => $tutupkasir,
+            'saldo_awal_kas'      => $h['saldo_awal_kas'],
+            'saldo_awal_tf'       => $h['saldo_awal_tf'],
+            'tutup_bisa_disimpan' => (bool) $h['siap'],
+            'tutup_alasan'        => (string) $h['alasan'],
+            'sudah_ditutup'       => $sudahDitutup,
+            'setor'               => (int) $h['setor'],
+            'tarik'               => (int) $h['tarik'],
+            'transfer_internal'   => $h['transfer_internal'],
+            'transfer_masuk'      => (int) $h['transfer_masuk'],
+            'transfer_keluar'     => (int) $h['transfer_keluar'],
+            'kas_masuk'           => (int) $h['kas_masuk'],
+            'kas_keluar'          => (int) $h['kas_keluar'],
 
-        return view('template', [
-            'tutupkasir'       => $tutupkasir,
-            'kas_awaltf'       => $kasawaltf,
-            'kas_awalcash'     => $kasawalcash,
-            'total_pendapatan' => $total,
-            'transfer'         => $transfer,
-            'cash'             => $cash,
-            'pengeluarantf'    => $pengeluarantf,
-            'pengeluarancash'  => $pengeluarancash,
-            'body'             => 'jurnal/tutup_kasir'
-        ]);
+            // Nama-nama yang dipakai view `jurnal/tutup_kasir` (berbeda dari
+            // nama kolom `tutup_kasir`). Nilainya tetap angka yang sama dari
+            // `hitung()`, hanya diganti nama supaya view tidak perlu diubah.
+            'cash'                => (int) $h['kas_masuk'],
+            'transfer'            => (int) $h['transfer_masuk'],
+            'pengeluarancash'     => (int) $h['kas_keluar'],
+            'pengeluarantf'       => (int) $h['transfer_keluar'],
+            'total_pendapatan'    => (int) $h['kas_masuk'] + (int) $h['transfer_masuk'],
+
+            'wibOffsetMenit'      => 420,
+            'body'                => 'jurnal/tutup_kasir',
+        ]));
     }
 
     public function kasirbulanan()
@@ -1548,99 +1489,50 @@ class TutupKasir extends BaseController
     
     public function tutup()
     {
-        $unit = session()->get('ID_UNIT');
-        
+        $unit  = (int) session()->get('ID_UNIT');
         $today = date('Y-m-d');
 
-        $besok = date('Y-m-d', strtotime('+1 day'));
+        // ==============================================================
+        // SERVER YANG MENGHITUNG, BUKAN FORM
+        // ==============================================================
+        //
+        // Tidak ada lagi `getPost('awal_cash')` / `getPost('akhir_cash')`.
+        // Satu-satunya angka dari request adalah `cash_laci` (hasil hitung
+        // uang fisik oleh kasir), dan itu pun divalidasi ketat oleh
+        // `TutupKasirClosing::simpan()`.
+        //
+        // `simpan()` juga yang menangani: kunci anti-duplikat (GET_LOCK),
+        // transaksi, hitung ulang seluruh angka dari DB, idempoten, dan
+        // penolakan kalau sumber saldo awal belum sah.
+        //
+        // Tidak ada lagi insert manual ke `tutup_kasir`, dan tidak ada lagi
+        // penulisan baris `kas_masuk` berdeskripsi 'kas awal' — saldo awal
+        // hari berikutnya sudah dibawa oleh carry-forward
+        // `tutup_kasir.akhir_cash`.
+        //
+        // @see \App\Services\Finance\TutupKasirClosing::simpan()
+        $hasil = (new \App\Services\Finance\TutupKasirClosing($this->db))
+            ->simpan(
+                $unit,
+                $today,
+                $this->request->getPost('cash_laci'),
+                (int) session('ID_AKUN')
+            );
 
-        $akhir_cash = $this->request->getPost('akhir_cash');
-        $akhir_transfer = $this->request->getPost('akhir_transfer');
-
-        // default
-        $cash_laci = $akhir_cash;
-        $transfer_tambahan = 0;
-
-        // jika cash lebih dari 1 juta
-        if ($akhir_cash > 1000000) {
-            $cash_laci = 1000000;
-            $this->db->table('kas_masuk')->insert([
-
-                'tanggal'          => $besok,
-                'jumlah'           => $cash_laci,
-                'deskripsi'        => 'kas awal',
-                'idunit'             => $unit,
-                'created_on'       => date('Y-m-d H:i:s'),
-                'updated_on'       => date('Y-m-d H:i:s'),
-            ]);
-
-            $transfer_tambahan = $akhir_cash - 1000000;
-            $transfer_final= $akhir_transfer + $transfer_tambahan;
-        }else {
-            $this->db->table('kas_masuk')->insert([
-
-                'tanggal'          => $besok,
-                'jumlah'           => $cash_laci,
-                'deskripsi'        => 'kas awal',
-                'idunit'             => $unit,
-                'created_on'       => date('Y-m-d H:i:s'),
-                'updated_on'       => date('Y-m-d H:i:s'),
-            ]);
+        if (! $hasil['ok']) {
+            return redirect()->to('/tutup_kasir')
+                ->with('gagal', (string) $hasil['alasan']);
         }
 
-        $this->db->table('tutup_kasir')->insert([
-
-            'tanggal'              => $today,
-
-            'awal_cash'            => $this->request->getPost('awal_cash'),
-            'awal_transfer'        => $this->request->getPost('awal_transfer'),
-
-            'akhir_cash'           => $this->request->getPost('akhir_cash'),
-            'akhir_transfer'       => $this->request->getPost('akhir_transfer'),
-
-            'pendapatan_cash'      => $this->request->getPost('pendapatan_cash'),
-            'pendapatan_transfer'  => $this->request->getPost('pendapatan_transfer'),
-
-            'pengeluaran_cash'     => $this->request->getPost('pengeluaran_cash'),
-            'pengeluaran_transfer' => $this->request->getPost('pengeluaran_transfer'),
-
-            'cash_laci'            => $this->request->getPost('cash_laci'),
-
-            'status'               => 'selesai',
-
-            'akun_ID_AKUN' => session('ID_AKUN'),
-            'unit'         => session('ID_UNIT'),
-
-            'created_at'           => date('Y-m-d H:i:s'),
-            'updated_at'           => date('Y-m-d H:i:s'),
-        ]);
-
-        if ($transfer_tambahan > 0) {
-            $this->db->table('kas_masuk')->insert([
-
-                'tanggal'          => $besok,
-                'jumlah'           => $transfer_final,
-                'deskripsi'        => 'kas awal',
-                'idbank'          => 1,
-                'idunit'             => $unit,
-                'created_on'       => date('Y-m-d H:i:s'),
-                'updated_on'       => date('Y-m-d H:i:s'),
-            ]);
-        } else {
-            $this->db->table('kas_masuk')->insert([
-
-                'tanggal'          => $besok,
-                'jumlah'           => $akhir_transfer,
-                'deskripsi'        => 'kas awal',
-                'idbank'          => 1,
-                'idunit'             => $unit,
-                'created_on'       => date('Y-m-d H:i:s'),
-                'updated_on'       => date('Y-m-d H:i:s'),
-            ]);
+        // Idempoten: posting ganda / tombol diklik dua kali. Closing hari ini
+        // sudah ada, jadi tidak disimpan lagi — tetap dianggap berhasil.
+        if ($hasil['kode'] === 'sudah_ada') {
+            return redirect()->to('/tutup_kasir')
+                ->with('sukses', (string) $hasil['alasan']);
         }
 
         return redirect()->to('/tutup_kasir')
-            ->with('success', 'Tutup kasir berhasil');
+            ->with('sukses', 'Tutup kasir berhasil');
     }
 
     public function cetak_tutup_kasir($id)

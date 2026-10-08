@@ -177,7 +177,7 @@ trait EntitlementFixture
     {
         $this->koneksi()->query(
             'INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, status, keterangan) VALUES ('
-            . $akunKasId . ', \'' . \App\Services\Finance\FinanceScopeService::cutoffDate() . '\', '
+            . $akunKasId . ', \'' . \App\Services\Finance\FinanceScopeService::kasBankCutoffDate() . '\', '
             . $saldo . ', \'VERIFIED\', \'saldo KAS test\')'
         );
     }
@@ -255,7 +255,7 @@ trait EntitlementFixture
      */
     public function seedStatementCanonical(string $status = 'VERIFIED'): void
     {
-        $tanggal = \App\Services\Finance\FinanceScopeService::cutoffDate();
+        $tanggal = \App\Services\Finance\FinanceScopeService::kasBankCutoffDate();
 
         foreach ([Fase1::AKUN_CV, Fase1::AKUN_ALFARIZKI, Fase1::AKUN_SABRINA] as $akun) {
             $this->koneksi()->query(

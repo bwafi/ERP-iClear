@@ -171,7 +171,7 @@ class KasBankSourceMovement
             return 0;
         }
 
-        $dari = $dari ?? FinanceScopeService::periodeMulaiDate();
+        $dari = $dari ?? FinanceScopeService::kasBankPeriodeMulaiDate();
         $tipe = strtoupper((string) $akun->tipe);
 
         // Batas atas yang lebih kecil dari batas bawah berarti tidak ada
@@ -523,7 +523,7 @@ class KasBankSourceMovement
      */
     public function transferMasukTakTeralokasi(string $dari): array
     {
-        $dari = $dari ?? FinanceScopeService::periodeMulaiDate();
+        $dari = $dari ?? FinanceScopeService::kasBankPeriodeMulaiDate();
         $out  = [];
 
         foreach ($this->db->table('unit')->select('idunit')->get()->getResultArray() as $u) {
@@ -599,7 +599,7 @@ class KasBankSourceMovement
             return $nol;
         }
 
-        $dari = $dari ?? FinanceScopeService::periodeMulaiDate();
+        $dari = $dari ?? FinanceScopeService::kasBankPeriodeMulaiDate();
 
         if ($sampai !== null && $sampai < $dari) {
             return $nol;

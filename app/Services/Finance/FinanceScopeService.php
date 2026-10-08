@@ -208,6 +208,53 @@ class FinanceScopeService
     }
 
     /**
+     * Cut-off KHUSUS modul Kas & Bank (YYYY-MM-DD).
+     *
+     * Dipakai jalur KasBank saja: opening KAS/bank, statement, guard Setor/Tarik,
+     * filter movement, dan UI input opening. Modul LAIN (TutupKasir, Hutang-
+     * Piutang, KPI) tetap memakai cutoffDate() — jangan menyatukan keduanya.
+     */
+    public static function kasBankCutoffDate(): string
+    {
+        return (string) (new Finance())->kasBankCutoffDate;
+    }
+
+    /**
+     * Batas bawah ledger KHUSUS Kas & Bank (YYYY-MM-DD) = kasBankCutoffDate + 1.
+     *
+     * Semua query movement/saldo Kas & Bank WAJIB memfilter
+     * `tanggal >= kasBankPeriodeMulaiDate()`. Memakai kasBankCutoffDate() di
+     * sana akan menghitung transaksi tanggal baseline sebagai mutasi baru.
+     */
+    public static function kasBankPeriodeMulaiDate(): string
+    {
+        return (string) (new Finance())->kasBankPeriodeMulaiDate;
+    }
+
+    /**
+     * Apakah tanggal transaksi termasuk LEGACY menurut periode Kas & Bank.
+     *
+     * Legacy = sebelum kasBankPeriodeMulaiDate(). Transaksi 1–7 Okt legacy
+     * ketika cut-off KasBank 7 Okt.
+     */
+    public static function isKasBankLegacyTransaction($tanggal): bool
+    {
+        $t = self::tanggalStr($tanggal);
+
+        return $t !== '' && $t < self::kasBankPeriodeMulaiDate();
+    }
+
+    /**
+     * Apakah tanggal transaksi termasuk AKTIF menurut periode Kas & Bank.
+     */
+    public static function isActiveKasBankTransaction($tanggal): bool
+    {
+        $t = self::tanggalStr($tanggal);
+
+        return $t !== '' && $t >= self::kasBankPeriodeMulaiDate();
+    }
+
+    /**
      * Normalisasi tanggal apapun (datetime/date/null) ke "YYYY-MM-DD".
      */
     public static function tanggalStr($tanggal): string

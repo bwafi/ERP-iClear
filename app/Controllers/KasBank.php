@@ -401,7 +401,7 @@ class KasBank extends BaseController
         // (marker KasBankSetorTarikService). Mirror legacy tidak punya marker
         // itu sehingga tidak masuk dan tidak dobel.
         // -----------------------------------------------------------------
-        $cutoff = FinanceScopeService::periodeMulaiDate();
+        $cutoff = FinanceScopeService::kasBankPeriodeMulaiDate();
         $dari   = $tanggalAwal !== '' ? max($tanggalAwal, $cutoff) : $cutoff;
         $sampai = $tanggalAkhir !== '' ? $tanggalAkhir : date('Y-m-d');
 
@@ -631,7 +631,7 @@ class KasBank extends BaseController
                     ? sprintf('sudah ada baris %s tapi BELUM VERIFIKASI', $b['tanggal_baseline'])
                     : sprintf(
                         'belum ada baris pada %s; angka yang terbaca sekarang berasal dari baris lama tanggal %s, bukan baseline',
-                        FinanceScopeService::cutoffDate(),
+                        FinanceScopeService::kasBankCutoffDate(),
                         $b['tertagih'] ?? '(tidak ada baris)'
                     );
 
@@ -651,7 +651,7 @@ class KasBank extends BaseController
                         '%s (#%d) — %s',
                         $b['nama_akun'],
                         $b['akun_id'],
-                        sprintf('belum ada opening KAS pada %s', FinanceScopeService::cutoffDate())
+                        sprintf('belum ada opening KAS pada %s', FinanceScopeService::kasBankCutoffDate())
                     );
 
                     continue;
@@ -665,20 +665,20 @@ class KasBank extends BaseController
             // melakukan hal yang memang tidak bisa dilakukan di form itu.
             $aksi = [];
             if ($adaBank) {
-                $aksi[] = 'Rekening bank: input SALDO RIIL akhir ' . FinanceScopeService::cutoffDate()
+                $aksi[] = 'Rekening bank: input SALDO RIIL akhir ' . FinanceScopeService::kasBankCutoffDate()
                     . ' di ' . base_url('kas_bank/akun') . ' (tab Saldo awal), lalu set status "Terverifikasi".'
-                    . ' Saldo riil itu sudah memabsorpsi transaksi 1–' . FinanceScopeService::cutoffDate()
+                    . ' Saldo riil itu sudah memabsorpsi transaksi 1–' . FinanceScopeService::kasBankCutoffDate()
                     . ', jadi jangan input hasil SUM transaksi legacy.';
             }
             if ($adaKasus) {
                 $aksi[] = 'Laci kas: tetapkan OPENING KAS (uang fisik laci) di ' . base_url('kas_bank/akun') . '#opening-kas'
-                    . ' untuk tanggal ' . FinanceScopeService::cutoffDate()
+                    . ' untuk tanggal ' . FinanceScopeService::kasBankCutoffDate()
                     . '. Laci kas tidak punya statement bank.';
             }
 
             $out[] = [
                 'level'  => 'warning',
-                'judul'  => count($baselineBelum) . ' rekening belum punya opening balance untuk ' . FinanceScopeService::cutoffDate(),
+                'judul'  => count($baselineBelum) . ' rekening belum punya opening balance untuk ' . FinanceScopeService::kasBankCutoffDate(),
                 'detail' => $detail,
                 'aksi'   => implode(' ', $aksi),
             ];
@@ -747,7 +747,7 @@ class KasBank extends BaseController
             'opening_kas'           => $openingKas,
             'opening_kas_by_akun'   => $openingKasById,
             'opening_kas_belum'    => $openingKasBelum,
-            'opening_kas_cutoff'    => FinanceScopeService::cutoffDate(),
+            'opening_kas_cutoff'    => FinanceScopeService::kasBankCutoffDate(),
             'bisa_input'            => $this->canInput(),
             'body'              => 'kas_bank/akun',
         ]);
@@ -917,16 +917,15 @@ class KasBank extends BaseController
 
         $cutoff = new \App\Services\Finance\KasBankCutoffService();
 
-        // Opening allocation hanya sah kalau ada statement yang sudah
-        // diverifikasi Finance. Tanpa cek ini pesan errornya jadi menyesatkan:
-        // "total alokasi melebihi statement" padahal statement-nya memang belum
-        // diisi (placeholder 0 dengan status BELUM_VERIFIKASI).
-        if (! $cutoff->statementVerified($akunId)) {
-            return $this->gagal(
-                'Statement rekening ini belum diverifikasi Finance, jadi alokasi belum bisa diisi. '
-                . 'Isi dan verifikasi statement ' . $cutoff->tanggalCutoff() . ' terlebih dahulu.'
-            );
-        }
+        // Verifikasi statement BUKAN syarat alokasi. Proses verifikasi berdiri
+        // sendiri dan hanya dipakai alur yang memang butuh angka terkonfirmasi
+        // (setor/tarik, transfer, bayar hutang/piutang).
+        //
+        // Satu-satunya batas alokasi ada DI DALAM transaksi: `cekOpeningAllocation()`
+        // membandingkan total alokasi dengan saldo statement cut-off — angka yang
+        // sudah Finance input lewat "Catat saldo awal" — bukan dengan status
+        // verifikasinya. Rekening yang belum diinput saldo awalnya tetap ditolak
+        // karena totalnya melebihi saldo statement 0, bukan karena belum diverifikasi.
 
         $data = [
             'akun_kas_bank_id' => $akunId,
@@ -1023,7 +1022,7 @@ class KasBank extends BaseController
         $akunId   = (int) $this->request->getPost('akun_kas_bank_id');
         $opening  = (int) preg_replace('/[^0-9]/', '', (string) $this->request->getPost('opening'));
         $keterangan = trim((string) $this->request->getPost('keterangan'));
-        $tanggal  = FinanceScopeService::cutoffDate();
+        $tanggal  = FinanceScopeService::kasBankCutoffDate();
 
         $svc = new \App\Services\Finance\KasOpeningService();
 
@@ -1088,19 +1087,13 @@ class KasBank extends BaseController
             );
         }
 
-        // Saldo 0 TIDAK otomatis berarti rekening kosong. Karena itu 0 hanya
-        // boleh disimpan kalau Finance justru menyatakan rekening itu nol
-        // (dengan status terverifikasi). Kolom `status` yang menjelaskan mana
-        // placeholder dan mana fakta.
+        // Verifikasi statement BUKAN syarat input saldo awal, termasuk untuk
+        // nilai 0. Kolom `status` tetap yang menjelaskan mana placeholder dan
+        // mana fakta — 0 yang belum diverifikasi disimpan apa adanya dan masih
+        // dilaporkan "BELUM VERIFIKASI" oleh diagnostik baseline. Menolak 0 di
+        // sini justru memaksa Finance menandai verifikasi hanya demi bisa
+        // menyimpan saldo, padahal verifikasi adalah proses terpisah.
         $verifikasi = (string) $this->request->getPost('status') === KasBankCutoffService::STATEMENT_SUDAH;
-
-        if ($saldo === 0 && ! $verifikasi) {
-            return $this->gagal(
-                'Saldo 0 hanya boleh disimpan sebagai hasil verifikasi Finance '
-                . '(pilih status "Terverifikasi"). Nilai 0 tanpa verifikasi akan '
-                . 'dianggap placeholder, bukan fakta.'
-            );
-        }
 
         $existing = $this->SaldoAwalModel->getByAkunTanggal($akunId, $tanggal);
         $data = [
@@ -1322,7 +1315,7 @@ class KasBank extends BaseController
         // dengan saveTransfer() di file ini. Catatan lengkap soal kenapa tidak
         // ada batas atas "tanggal <= hari ini" ada di saveTransfer().
         $tanggal = FinanceScopeService::tanggalStr($tanggal);
-        $mulai   = FinanceScopeService::periodeMulaiDate();
+        $mulai   = FinanceScopeService::kasBankPeriodeMulaiDate();
 
 
         if ($tanggal < $mulai) {
@@ -1972,9 +1965,9 @@ class KasBank extends BaseController
         // masuk boleh dicatat sebelum koran bank datang. Yang ditampilkan
         // hanya statusnya, supaya user tahu saldo rekening belum terverifikasi.
         $tanggal = (string) $input['tanggal'];
-        if ($tanggal !== '' && $tanggal < FinanceScopeService::periodeMulaiDate()) {
+        if ($tanggal !== '' && $tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
             $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
-                . FinanceScopeService::periodeMulaiDate() . ').';
+                . FinanceScopeService::kasBankPeriodeMulaiDate() . ').';
             $bisaSubmit = false;
         }
 
@@ -2089,9 +2082,9 @@ class KasBank extends BaseController
         }
 
         $tanggal = (string) $input['tanggal'];
-        if ($tanggal !== '' && $tanggal < FinanceScopeService::periodeMulaiDate()) {
+        if ($tanggal !== '' && $tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
             $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
-                . FinanceScopeService::periodeMulaiDate() . ').';
+                . FinanceScopeService::kasBankPeriodeMulaiDate() . ').';
             $bisaSubmit = false;
         }
 
@@ -2158,7 +2151,7 @@ class KasBank extends BaseController
             'ada'    => false,
             'saldo'  => null,
             'alasan' => 'Belum ada closing kas pada tanggal '
-                . FinanceScopeService::cutoffDate() . ' untuk unit ini.',
+                . FinanceScopeService::kasBankCutoffDate() . ' untuk unit ini.',
         ];
     }
 
@@ -2169,8 +2162,8 @@ class KasBank extends BaseController
      */
     private function infoCutoff(): array
     {
-        $cutoff     = FinanceScopeService::cutoffDate();
-        $mulai      = FinanceScopeService::periodeMulaiDate();
+        $cutoff     = FinanceScopeService::kasBankCutoffDate();
+        $mulai      = FinanceScopeService::kasBankPeriodeMulaiDate();
         $tanpaUnit  = KasBankCutoffService::unitTanpaClosingCutoff();
         $namaTanpa  = [];
 
@@ -2511,10 +2504,10 @@ class KasBank extends BaseController
         // (implementasi referensi Setor/Tarik) juga hanya menolak tanggal
         // sebelum periode mulai. Menambah batas atas di sini hanya di sini
         // akan membuat Pindah Saldo jadi satu-satunya mutasi yang terkunci,
-        // dan karena `periodeMulaiDate()` = cutoff + 1 hari, seluruh fitur
+        // dan karena `kasBankPeriodeMulaiDate()` = cutoff + 1 hari, seluruh fitur
         // mati selama periode baru belum dibuka.
         $tanggal = FinanceScopeService::tanggalStr($tanggal);
-        $mulai   = FinanceScopeService::periodeMulaiDate();
+        $mulai   = FinanceScopeService::kasBankPeriodeMulaiDate();
 
         if ($tanggal < $mulai) {
             return $this->gagal('Tanggal ' . $tanggal . ' berada sebelum periode operasional baru (' . $mulai . '). '

@@ -34,12 +34,12 @@ class SetorTarikStatementGuardTest extends CIUnitTestCase
 
     private function setor(int $unit, int $kas, int $bank, int $nominal, string $key): array
     {
-        return $this->service->setorTunai($unit, $kas, $bank, $nominal, '2026-10-03', $key);
+        return $this->service->setorTunai($unit, $kas, $bank, $nominal, \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate(), $key);
     }
 
     private function tarik(int $unit, int $kas, int $bank, int $nominal, string $key): array
     {
-        return $this->service->tarikTunai($unit, $kas, $bank, $nominal, '2026-10-03', $key);
+        return $this->service->tarikTunai($unit, $kas, $bank, $nominal, \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate(), $key);
     }
 
     private function jumlahTransaksi(): int
@@ -208,7 +208,7 @@ class SetorTarikStatementGuardTest extends CIUnitTestCase
 
         // KAS 6 milik Unit 2, jadi gate "rekening kas harus milik unit" LOLOS
         // dan guard yang diuji benar-benar yang menolak.
-        $hasil = $this->service->setorTunai(2, 6, Fase1::AKUN_CV, 100000, '2026-10-03', 'sc-2');
+        $hasil = $this->service->setorTunai(2, 6, Fase1::AKUN_CV, 100000, \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate(), 'sc-2');
 
         $this->assertFalse($hasil['ok'], 'Unit di luar jangkauan tidak boleh bisa diakses dari service');
         $this->assertStringContainsStringIgnoringCase('jangkauan', $hasil['alasan']);
@@ -221,7 +221,7 @@ class SetorTarikStatementGuardTest extends CIUnitTestCase
         $this->loginUnit(1, Fase1::ROLE_KASIR);
         $this->seedStatementCanonical('VERIFIED');
 
-        $hasil = $this->service->tarikTunai(2, 6, Fase1::AKUN_CV, 100000, '2026-10-03', 'sc-3');
+        $hasil = $this->service->tarikTunai(2, 6, Fase1::AKUN_CV, 100000, \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate(), 'sc-3');
 
         $this->assertFalse($hasil['ok'], 'Penarikan ke unit asing harus ditolak');
         $this->assertStringContainsStringIgnoringCase('jangkauan', $hasil['alasan']);
@@ -236,7 +236,7 @@ class SetorTarikStatementGuardTest extends CIUnitTestCase
         $this->seedStatementCanonical('VERIFIED');
         $this->seedSaldoKas(6);
 
-        $hasil = $this->service->setorTunai(2, 6, Fase1::AKUN_CV, 100000, '2026-10-03', 'sc-4');
+        $hasil = $this->service->setorTunai(2, 6, Fase1::AKUN_CV, 100000, \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate(), 'sc-4');
 
         $this->assertTrue($hasil['ok'], 'ROOT boleh lintas unit: ' . $hasil['alasan']);
         $this->assertSame(2, $this->jumlahTransaksi());

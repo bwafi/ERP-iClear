@@ -40,6 +40,20 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
     protected KasBankSetorTarikService $pindah;
     protected KasOpeningService $opening;
 
+    /**
+     * Tanggal relatif terhadap cut-off KasBank supaya test tidak basi saat
+     * config digeser:
+     *
+     *   $sebelum = hari sebelum cut-off (masih legacy)
+     *   $h0      = hari PERTAMA periode (kasBankPeriodeMulaiDate)
+     *   $h1      = hari kedua periode
+     *   $h2      = hari ketiga periode
+     */
+    private string $sebelum;
+    private string $h0;
+    private string $h1;
+    private string $h2;
+
     /** Rekening: 1 = Bank Bersama (shared), 2 = KAS Unit 1. */
     private const AKUN_KAS  = 2;
     private const AKUN_BANK = 1;
@@ -51,6 +65,11 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         parent::setUp();
 
         $this->db = Database::connect();
+
+        $this->sebelum = date('Y-m-d', strtotime(FinanceScopeService::kasBankCutoffDate() . ' -1 day'));
+        $this->h0      = FinanceScopeService::kasBankPeriodeMulaiDate();
+        $this->h1      = date('Y-m-d', strtotime($this->h0 . ' +1 day'));
+        $this->h2      = date('Y-m-d', strtotime($this->h0 . ' +2 day'));
 
         // Service dibuat sebelum seed() karena seed() memakai $this->opening.
         $this->cutoff  = new KasBankCutoffService();
@@ -154,16 +173,16 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
             (2, 1,    'KAS',  'Kas Probolinggo', NULL,       'aktif', 0, 0)");
 
         // Statement bank terverifikasi + entitlement, supaya Setor/Tarik lolos guard.
-        $cutoff = FinanceScopeService::cutoffDate();
+        $cutoff = FinanceScopeService::kasBankCutoffDate();
         $this->q("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
             (1, '{$cutoff}', 100000000, 'Koran cut-off', 'VERIFIED')");
         $this->q("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan, created_at) VALUES
             (1, 1, 60000000, 'Unit 1', '" . date('Y-m-d H:i:s') . "')");
 
-        // Opening KAS + Tutup Kasir di tanggal cut-off.
+        // Opening KAS baseline pada tanggal cut-off. Tutup Kasir dan
+        // verifikasi tidak dibutuhkan lagi: opening yang tersimpan langsung
+        // jadi baseline Setor/Penarikan.
         $this->opening->inputOpening(self::AKUN_KAS, self::OPENING, 'test-alur', 1);
-        $this->q("INSERT INTO db_tutup_kasir (unit, tanggal, akhir_cash) VALUES (1, '{$cutoff}', " . self::OPENING . ')');
-        $this->opening->verifikasi(self::AKUN_KAS, 1);
     }
 
     private function jual(string $invoice, string $tanggal, int $tunai, int $bank = 0): void
@@ -182,31 +201,53 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testTanggalCutoffMovementNol(): void
     {
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, FinanceScopeService::cutoffDate());
+        $cutoff = FinanceScopeService::kasBankCutoffDate();
+        $alur   = $this->cutoff->alurKasSampai(self::AKUN_KAS, $cutoff);
 
+        $this->assertSame(date('Y-m-d', strtotime($cutoff . ' +1 day')), $this->h0,
+            'Periode KasBank harus cut-off + 1 hari');
         $this->assertTrue($alur['opening_ada']);
         $this->assertSame(self::OPENING, $alur['opening']);
         $this->assertSame(0, $alur['movement'], 'Tidak ada movement yang boleh dihitung pada tanggal cut-off');
         $this->assertSame(self::OPENING, $alur['saldo_buku']);
-        $this->assertSame(0, $this->cutoff->netMovement(self::AKUN_KAS, null, FinanceScopeService::cutoffDate()));
+        $this->assertSame(0, $this->cutoff->netMovement(self::AKUN_KAS, null, $cutoff));
+    }
+
+    public function testTransaksiSampaiTanggalCutOffBukanMovement(): void
+    {
+        // ATURAN CUT-OFF: transaksi 1–7 Okt adalah LEGACY — sudah terserap di
+        // saldo riil yang diinput pada tanggal cut-off, jadi TIDAK boleh
+        // ikut dihitung sebagai movement periode baru, termasuk transaksi
+        // yang jatuh PERSIS pada tanggal cut-off.
+        $this->jual('INV-CUT', FinanceScopeService::kasBankCutoffDate(), 250000);
+        $this->jual('INV-H-1', $this->sebelum, 175000);
+
+        $this->assertSame(0, $this->cutoff->netMovement(self::AKUN_KAS),
+            'Transaksi <= tanggal cut-off tidak boleh masuk movement');
+        $this->assertSame(self::OPENING, $this->cutoff->saldoFisik(self::AKUN_KAS));
+
+        // Hari pertama periode barulah yang dihitung.
+        $this->jual('INV-H0', $this->h0, 90000);
+        $this->assertSame(90000, $this->cutoff->netMovement(self::AKUN_KAS));
+        $this->assertSame(self::OPENING + 90000, $this->cutoff->saldoFisik(self::AKUN_KAS));
     }
 
     public function testTanggalSebelumCutoffMovementNol(): void
     {
         // Tanggal di bawah batas bawah periode: harus 0, bukan negatif atau error.
-        $this->assertSame(0, $this->cutoff->netMovement(self::AKUN_KAS, null, '2026-09-30'));
+        $this->assertSame(0, $this->cutoff->netMovement(self::AKUN_KAS, null, $this->sebelum));
     }
 
     // =================================================================
     // 2 & 3. Batas atas
     // =================================================================
 
-    public function testEnamOktHanyaMovementEnamOkt(): void
+    public function testHariPertamaPeriodeHanyaMovementHariItu(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
-        $this->jual('INV-7', '2026-10-07', 100000);
+        $this->jual('INV-6', $this->h0, 300000);
+        $this->jual('INV-7', $this->h1, 100000);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(300000, $alur['cash_in']);
         $this->assertSame(0, $alur['cash_out']);
@@ -215,27 +256,27 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         $this->assertSame(self::OPENING + 300000, $alur['saldo_buku']);
     }
 
-    public function testTujuhOktMengakumulasiEnamDanTujuhOkt(): void
+    public function testHariKeduaPeriodeMengakumulasiHariPertamaDanKedua(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
-        $this->jual('INV-7', '2026-10-07', 100000);
+        $this->jual('INV-6', $this->h0, 300000);
+        $this->jual('INV-7', $this->h1, 100000);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-07');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h1);
 
-        $this->assertSame(400000, $alur['cash_in'], 'Cash In kumulatif 6 + 7 Okt');
+        $this->assertSame(400000, $alur['cash_in'], 'Cash In kumulatif hari pertama + kedua');
         $this->assertSame(400000, $alur['movement']);
         $this->assertSame(self::OPENING + 400000, $alur['saldo_buku']);
     }
 
-    public function testTransaksiDelapanOktTidakMemengaruhiTujuhOkt(): void
+    public function testTransaksiHariKetigaTidakMemengaruhiHariKedua(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
-        $this->jual('INV-7', '2026-10-07', 100000);
-        $sebelum = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-07');
+        $this->jual('INV-6', $this->h0, 300000);
+        $this->jual('INV-7', $this->h1, 100000);
+        $sebelum = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h1);
 
-        // Transaksi 8 Okt sengaja jauh lebih besar supaya kebocoran jelas.
-        $this->jual('INV-8', '2026-10-08', 700000);
-        $sesudah = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-07');
+        // Transaksi hari ketiga sengaja jauh lebih besar supaya kebocoran jelas.
+        $this->jual('INV-8', $this->h2, 700000);
+        $sesudah = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h1);
 
         $this->assertSame($sebelum['cash_in'], $sesudah['cash_in']);
         $this->assertSame($sebelum['movement'], $sesudah['movement']);
@@ -243,13 +284,13 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
         $this->assertSame(
             1100000,
-            $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-08')['cash_in'],
-            'Angka 8 Okt sendiri harus tetap benar'
+            $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h2)['cash_in'],
+            'Angka hari ketiga sendiri harus tetap benar'
         );
 
         // Guard lama: saldoFisik() yang meneruskan tanggal harus ikut
         // menghormati batas atas, bukan hanya opening.
-        $this->assertSame(self::OPENING + 400000, $this->cutoff->saldoFisik(self::AKUN_KAS, '2026-10-07'));
+        $this->assertSame(self::OPENING + 400000, $this->cutoff->saldoFisik(self::AKUN_KAS, $this->h1));
     }
 
     // =================================================================
@@ -258,11 +299,11 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testSetorMengurangiSaldoKas(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
-        $r = $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, '2026-10-06', 'k-setor');
+        $this->jual('INV-6', $this->h0, 300000);
+        $r = $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, $this->h0, 'k-setor');
         $this->assertSame('inserted', $r['status'], $r['alasan']);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(200000, $alur['transfer_keluar'], 'Setor dari KAS = KAS keluar');
         $this->assertSame(0, $alur['transfer_masuk']);
@@ -272,10 +313,10 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testTarikMenambahSaldoKas(): void
     {
-        $r = $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, '2026-10-06', 'k-tarik');
+        $r = $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, $this->h0, 'k-tarik');
         $this->assertSame('inserted', $r['status'], $r['alasan']);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(50000, $alur['transfer_masuk'], 'Tarik ke KAS = KAS masuk');
         $this->assertSame(0, $alur['transfer_keluar']);
@@ -285,18 +326,18 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testSetorDanTarikTerpisahPerTanggal(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
-        $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, '2026-10-07', 'k-setor-7');
-        $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, '2026-10-08', 'k-tarik-8');
+        $this->jual('INV-6', $this->h0, 300000);
+        $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, $this->h1, 'k-setor-7');
+        $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, $this->h2, 'k-tarik-8');
 
-        $enam  = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
-        $tujuh = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-07');
-        $delapan = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-08');
+        $enam  = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
+        $tujuh = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h1);
+        $delapan = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h2);
 
         $this->assertSame(0, $enam['transfer_keluar']);
         $this->assertSame(200000, $tujuh['transfer_keluar']);
         $this->assertSame(200000, $delapan['transfer_keluar']);
-        $this->assertSame(50000, $delapan['transfer_masuk'], 'Tarik 8 Okt = KAS masuk 50.000');
+        $this->assertSame(50000, $delapan['transfer_masuk'], 'Tarik hari ketiga = KAS masuk 50.000');
 
         $this->assertSame(300000, $enam['movement']);
         $this->assertSame(100000, $tujuh['movement'], '300.000 - 200.000 setor');
@@ -309,9 +350,9 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testOpeningTidakMasukMovement(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
+        $this->jual('INV-6', $this->h0, 300000);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         // Opening ada di tabel, tapi tidak muncul di satu pun komponen movement.
         $this->assertSame(1, (int) $this->db->table('opening_kas')->countAllResults());
@@ -339,15 +380,15 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         // Kas keluar tunai (idbank NULL) mengurangi laci; yang beridbank
         // adalah mutasi ke bank dan TIDAK boleh ikut mengurangi KAS.
         $this->db->table('kas_keluar')->insert([
-            'tanggal' => '2026-10-06 10:00:00', 'idunit' => self::UNIT,
+            'tanggal' => $this->h0 . ' 10:00:00', 'idunit' => self::UNIT,
             'idbank' => null, 'jumlah' => 50000, 'deskripsi' => 'test-alur',
         ]);
         $this->db->table('kas_keluar')->insert([
-            'tanggal' => '2026-10-06 11:00:00', 'idunit' => self::UNIT,
+            'tanggal' => $this->h0 . ' 11:00:00', 'idunit' => self::UNIT,
             'idbank' => '1', 'jumlah' => 90000, 'deskripsi' => 'test-alur',
         ]);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(50000, $alur['cash_out'], 'Hanya kas_keluar tunai yang mengurangi KAS');
         $this->assertSame(-50000, $alur['movement']);
@@ -359,16 +400,16 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         // Tutup Kasir.
         $this->db->table('service')->insert([
             'no_service' => 'S-1', 'unit_idunit' => self::UNIT,
-            'tanggal_selesai' => '2026-10-06 09:00:00', 'status_service' => 4,
+            'tanggal_selesai' => $this->h0 . ' 09:00:00', 'status_service' => 4,
             'harus_dibayar' => 400000, 'bayar_tunai' => 120000, 'keterangan' => 'test-alur',
         ]);
         $this->db->table('service')->insert([
             'no_service' => 'S-2', 'unit_idunit' => self::UNIT,
-            'tanggal_selesai' => '2026-10-06 10:00:00', 'status_service' => 2,
+            'tanggal_selesai' => $this->h0 . ' 10:00:00', 'status_service' => 2,
             'harus_dibayar' => 700000, 'bayar_tunai' => 300000, 'keterangan' => 'test-alur',
         ]);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(120000, $alur['cash_in'], 'Service status != 4 tidak boleh masuk Cash In');
     }
@@ -376,9 +417,9 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
     public function testInvoiceSvcTidakMasukCashIn(): void
     {
         // Penjualan berkode srv/after bukan penjualan biasa di Tutup Kasir.
-        $this->jual('srv-2026-10-06', '2026-10-06', 900000);
+        $this->jual('srv-' . $this->h0, $this->h0, 900000);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, '2026-10-06');
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(0, $alur['cash_in']);
     }
@@ -389,8 +430,8 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testTanpaBatasAtasTetapSampaiSekarang(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
-        $this->jual('INV-7', '2026-10-07', 100000);
+        $this->jual('INV-6', $this->h0, 300000);
+        $this->jual('INV-7', $this->h1, 100000);
 
         $this->assertSame(400000, $this->cutoff->netMovement(self::AKUN_KAS));
         $this->assertSame(self::OPENING + 400000, $this->cutoff->saldoFisik(self::AKUN_KAS));
@@ -398,12 +439,12 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testRincianMovementSamaDenganNetMovement(): void
     {
-        $this->jual('INV-6', '2026-10-06', 300000);
+        $this->jual('INV-6', $this->h0, 300000);
         $this->db->table('kas_keluar')->insert([
-            'tanggal' => '2026-10-07 10:00:00', 'idunit' => self::UNIT,
+            'tanggal' => $this->h1 . ' 10:00:00', 'idunit' => self::UNIT,
             'idbank' => null, 'jumlah' => 70000, 'deskripsi' => 'test-alur',
         ]);
-        $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 120000, '2026-10-07', 'k-setor-x');
+        $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 120000, $this->h1, 'k-setor-x');
 
         $mv = new KasBankSourceMovement();
 
@@ -413,8 +454,8 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
             'Rincian hanya memecah angka, bukan menghitung ulang'
         );
 
-        $rincian = $mv->rincianMovement(self::AKUN_KAS, null, null, '2026-10-06');
+        $rincian = $mv->rincianMovement(self::AKUN_KAS, null, null, $this->h0);
         $this->assertSame(300000, $rincian['cash_in']);
-        $this->assertSame(0, $rincian['transfer_keluar'], 'Setor 7 Okt belum masuk rentang sampai 6 Okt');
+        $this->assertSame(0, $rincian['transfer_keluar'], 'Setor hari kedua belum masuk rentang sampai hari pertama');
     }
 }

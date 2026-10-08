@@ -10,8 +10,11 @@ use App\Models\ModelAlokasiSaldoKasBank;
  *
  * MODEL
  * -----
- * Cut-off      : 2026-10-05 (tanggal SALDOKORAN yang disepakati)
- * Periode aktif: 2026-10-06 → sekarang
+ * Cut-off      : Finance::$kasBankCutoffDate (tanggal SALDOKORAN yang disepakati)
+ * Periode aktif: Finance::$kasBankPeriodeMulaiDate → sekarang
+ *
+ * Cut-off KasBank TERPISAH dari Finance::$cutoffDate. Yang terakhir global
+ * (TutupKasir, Hutang-Piutang, KPI) dan tidak boleh digeser bersama ini.
  *
  * KAS tidak punya bank statement — dan TIDAK BOLEH membuatnya. Baseline KAS
  * adalah SALDO RIIL laci yang diinput user pada tanggal cut-off (`opening_kas`).
@@ -26,23 +29,24 @@ use App\Models\ModelAlokasiSaldoKasBank;
  *
  * BANK memakai model berbeda:
  *
- *     saldo_fisik(akun)  = statement(akun, 5 Okt) + netMovement sejak 6 Okt
- *     posisiUnit(u)      = openingAllocation(u) + netMovement(u) sejak 6 Okt
+ *     saldo_fisik(akun)  = statement(akun, cut-off) + netMovement sejak periode
+ *     posisiUnit(u)      = openingAllocation(u) + netMovement(u) sejak periode
  *     LEGACY/UNASSIGNED  = statement(akun) - SUM(openingAllocation)
  *
  * KAS:
  *
- *     saldo_fisik(akun)  = opening_kas(akun, 5 Okt) + netMovement sejak 6 Okt
- *     posisiUnit(u)      = opening_kas(akun) + netMovement(u) sejak 6 Okt
+ *     saldo_fisik(akun)  = opening_kas(akun, cut-off) + netMovement sejak periode
+ *     posisiUnit(u)      = opening_kas(akun) + netMovement(u) sejak periode
  *
  * Opening KAS TIDAK PERNAH menjadi baris `transaksi_kas_bank` dan tidak pernah
  * ikut dijumlahkan sebagai movement — itu yang membuatnya dihitung tepat satu
  * kali.
  *
  * Opening balance yang diinput pada tanggal cut-off adalah SALDO RIIL akhir
- * hari itu, bukan SUM transaksi. Transaksi 1–5 Okt tidak diposting sebagai
- * transaksi Finance baru karena sudah terserap di saldo riil tersebut — itu
- * sebabnya batas bawah ledger (periodeMulaiDate) adalah 6 Okt, bukan 1 Okt.
+ * hari itu, bukan SUM transaksi. Transaksi sebelum periode (1–7 Okt ketika
+ * cut-off 7 Okt) tidak diposting sebagai transaksi Finance baru karena sudah
+ * terserap di saldo riil tersebut — itu sebabnya batas bawah ledger
+ * (kasBankPeriodeMulaiDate) selalu cut-off + 1 hari.
  *
 * Tiga hal yang TIDAK boleh dilanggar:
  *
@@ -111,16 +115,16 @@ class KasBankCutoffService
     // TANGGAL — semuanya delegate ke FinanceScopeService (sumber tunggal)
     // =====================================================================
 
-    /** Tanggal baseline statement: 2026-10-05. */
+    /** Tanggal baseline statement/opening (Finance::$kasBankCutoffDate). */
     public function tanggalCutoff(): string
     {
-        return FinanceScopeService::cutoffDate();
+        return FinanceScopeService::kasBankCutoffDate();
     }
 
-    /** Hari pertama periode ledger: 2026-10-06. */
+    /** Hari pertama periode ledger KasBank (Finance::$kasBankPeriodeMulaiDate). */
     public function tanggalMulaiPeriode(): string
     {
-        return FinanceScopeService::periodeMulaiDate();
+        return FinanceScopeService::kasBankPeriodeMulaiDate();
     }
 
     // =====================================================================
@@ -414,7 +418,7 @@ class KasBankCutoffService
      * $sampai hanya membatasi sisi ATAS rentang. Tanpa ini, jawaban untuk
      * tanggal 7 Okt ikut naik begitu ada transaksi 8 Okt.
      *
-     * Filter lower bound wajib periodeMulaiDate(), BUKAN cutoffDate():
+     * Filter lower bound wajib kasBankPeriodeMulaiDate(), BUKAN kasBankCutoffDate():
      * tanggal 30 Sep adalah tanggal statement, bukan mutasi.
      */
     public function netMovement(int $akunId, ?int $unitId = null, ?string $sampai = null): int
@@ -422,7 +426,7 @@ class KasBankCutoffService
         return $this->sourceMovement()->netMovement(
             $akunId,
             $unitId,
-            FinanceScopeService::periodeMulaiDate(),
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
             $sampai
         );
     }
@@ -463,7 +467,7 @@ class KasBankCutoffService
      * $tanggal dipakai untuk KEDUA suku: opening pada tanggal itu dan
      * movement HINGGA tanggal itu. Dulu $tanggal hanya masuk ke opening
      * sementara movement tetap dihitung tanpa batas atas, sehingga
-     * `saldoFisik($akun, '2026-10-07')` diam-diam mengembalikan saldo
+     * `saldoFisik($akun, '2026-11-02')` diam-diam mengembalikan saldo
      * 8 Okt dan seterusnya.
      */
     public function saldoFisik(int $akunId, ?string $tanggal = null): int
@@ -494,13 +498,13 @@ class KasBankCutoffService
         $rincian = $this->sourceMovement()->rincianMovement(
             $akunId,
             null,
-            FinanceScopeService::periodeMulaiDate(),
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
             $sampai
         );
 
         $movement   = (int) $rincian['net'];
         $openingRow = $this->tipeRekening($akunId) === TutupKasirSourceDefinition::TIPE_KAS
-            ? $this->openingSrc()->openingAt($akunId, FinanceScopeService::cutoffDate())
+            ? $this->openingSrc()->openingAt($akunId, FinanceScopeService::kasBankCutoffDate())
             : null;
 
         return [
@@ -897,7 +901,7 @@ class KasBankCutoffService
      */
     public static function querySaldoKasCutoff(?string $tanggalCutoff = null): array
     {
-        $cutoff = $tanggalCutoff ?? FinanceScopeService::cutoffDate();
+        $cutoff = $tanggalCutoff ?? FinanceScopeService::kasBankCutoffDate();
         $db     = db_connect();
 
         // Alias WAJIB. Tanpa alias, `tutup_kasir.unit` di query string tidak
@@ -937,7 +941,7 @@ class KasBankCutoffService
      */
     public static function unitTanpaClosingCutoff(?string $tanggalCutoff = null): array
     {
-        $cutoff = $tanggalCutoff ?? FinanceScopeService::cutoffDate();
+        $cutoff = $tanggalCutoff ?? FinanceScopeService::kasBankCutoffDate();
         $db     = db_connect();
 
         $ada = $db->table('tutup_kasir tk')

@@ -51,11 +51,11 @@ class ModelTransaksiKasBank extends Model
      *
      * Statement adalah BASELINE dari `saldo_awal_kas_bank`, bukan transaksi —
      * tidak ada baris ledger yang mewakili saldo cut-off. Batas bawah
-     * movement adalah FinanceScopeService::periodeMulaiDate() (2026-10-06),
-     * BUKAN cutoffDate() (2026-10-05): tanggal cut-off adalah tanggal
+     * movement adalah FinanceScopeService::kasBankPeriodeMulaiDate(),
+     * BUKAN kasBankCutoffDate(): tanggal cut-off adalah tanggal
      * statement, dan menghitungnya sebagai mutasi akan menjumlahkan saldo
-     * dua kali. Transaksi 1–5 Okt pun tidak ikut dihitung — saldonya sudah
-     * terserap di baseline.
+     * dua kali. Transaksi sebelum periode (1–7 Okt ketika cut-off 7 Okt) pun
+     * tidak ikut dihitung — saldonya sudah terserap di baseline.
      */
     public function getSaldoAkun(int $akunId): int
     {

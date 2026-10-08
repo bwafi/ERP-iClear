@@ -39,8 +39,8 @@ use Config\Database;
  *
  *  6. `tanggal` dan `unit` dari POST tidak boleh dipercaya.
  *
- *  7. Opening KAS hanya boleh dipakai kalau berstatus `TERVERIFIKASI`,
- *     dan tanggalnya strictly sebelum tanggal closing.
+ *  7. Opening KAS yang tersimpan (kolom status legacy diabaikan) langsung
+ *     jadi saldo awal; baseline tidak boleh bertanggal setelah closing.
  *
  *  8. Setor mengurangi laci, Tarik menambahnya, dan hanya untuk
  *     `jenis = TRANSFER_INTERNAL`.
@@ -57,7 +57,8 @@ use Config\Database;
  *    di browser; mengedit satu `<input>` cukup untuk salah closing.
  *  - Tidak ada proteksi duplicate: closing ganda untuk (tanggal, unit)
  *    membuat `saldoAwalKas()` membaca baris yang tidak dijamin.
- *  - Opening `BELUM_VERIFIKASI` dipakai sebagai saldo awal laci.
+ *  - Opening `BELUM_VERIFIKASI` TIDAK lagi menolak laci: konsep verifikasi
+ *    dihapus, baris opening yang ada langsung jadi saldo awal.
  *  - Laci > Rp1 juta dipotong ke 1 juta dan kelebihannya menaikkan saldo
  *    bank tanpa record Setor (data lama unit 2: closing 2.221.000 ->
  *    opening besok 1.000.000).
@@ -231,7 +232,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
             (4, 1,    'BANK', 'Bank Probolinggo','BNI-001', '1010102000', 'aktif', 0, 0),
             (5, 2,    'BANK', 'Bank Jember',     'BNI-001', '1010102000', 'aktif', 0, 0)");
 
-        $cutoff = FinanceScopeService::cutoffDate();
+        $cutoff = FinanceScopeService::kasBankCutoffDate();
 
         $this->q("INSERT INTO saldo_awal_kas_bank
                 (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
@@ -241,18 +242,18 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
             (1, 1, 100000000, 'unit 1', '" . date('Y-m-d H:i:s') . "'),
             (1, 2, 100000000, 'unit 2', '" . date('Y-m-d H:i:s') . "')");
 
-        // Opening KAS baseline, TERVERIFIKASI (satu-satunya status yang boleh
-        // jadi saldo awal Tutup Kasir). Dua unit supaya test idempotensi
-        // per-unit punya kondisi yang sama-sama sah.
+        // Opening KAS baseline, kolom status legacy diisi TERVERIFIKASI.
+        // Service TIDAK membedakan status lagi (konsep verifikasi dihapus);
+        // status tetap diisi supaya fixture meniru baris produksi apa adanya.
         $this->q("INSERT INTO opening_kas
                 (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih,
                  status, input_by, created_at, updated_at)
             VALUES
             (2, 1, '{$cutoff}', " . self::OPENING . ", " . self::OPENING . ", 0,
-                '" . KasOpeningService::STATUS_SUDAH . "', 1, '" . date('Y-m-d H:i:s') . "',
+                'TERVERIFIKASI', 1, '" . date('Y-m-d H:i:s') . "',
                 '" . date('Y-m-d H:i:s') . "'),
             (3, 2, '{$cutoff}', 900000, 900000, 0,
-                '" . KasOpeningService::STATUS_SUDAH . "', 1, '" . date('Y-m-d H:i:s') . "',
+                'TERVERIFIKASI', 1, '" . date('Y-m-d H:i:s') . "',
                 '" . date('Y-m-d H:i:s') . "')");
 
         // Baseline statement bank untuk rekening bank milik unit 1. Tanpa ini
@@ -269,12 +270,12 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
     // HELPER
     // =================================================================
 
-    /** Buka/tutup baris opening KAS dengan status tertentu. */
+    /** Buka/tutup baris opening KAS dengan status tertentu (kolom legacy). */
     private function setOpeningKas(string $status, ?string $tanggal = null, ?int $opening = null): void
     {
-        $tanggal = $tanggal ?? FinanceScopeService::cutoffDate();
+        $tanggal = $tanggal ?? FinanceScopeService::kasBankCutoffDate();
         $opening = $opening ?? self::OPENING;
-        $sudah   = $status === KasOpeningService::STATUS_SUDAH;
+        $sudah   = $status === 'TERVERIFIKASI';
 
         $this->q("UPDATE opening_kas SET
                 tanggal = '{$tanggal}', opening = {$opening}, status = '{$status}',
@@ -702,26 +703,31 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
     // 7. OPENING KAS
     // =================================================================
 
-    public function testOpeningBelumVerifikasiTidakDipakai(): void
+    public function testOpeningStatusLegacyApapunTetapDipakai(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_BELUM);
+        // Konsep verifikasi dihapus: opening yang TERSIMPAN (berstatus apa pun
+        // pada kolom legacy) langsung menjadi baseline saldo awal. Status lama
+        // BELUM_VERIFIKASI/TIDAK_COCOK tidak lagi menghalangi apa pun.
+        $this->setOpeningKas('BELUM_VERIFIKASI');
 
         $h = $this->closing->hitung(self::UNIT, date('Y-m-d'));
-        $this->assertFalse($h['siap'], 'Opening BELUM_VERIFIKASI tidak boleh jadi saldo awal');
-        $this->assertStringContainsString('belum', strtolower($h['alasan']));
+        $this->assertTrue($h['siap'], 'Opening yang tersimpan harus jadi saldo awal: ' . ($h['alasan'] ?? ''));
+        $this->assertTrue($h['saldo_awal_kas'] !== null);
 
         $hasil = $this->simpan(1700000);
-        $this->assertFalse($hasil['ok'], 'Simpan harus ditolak');
-        $this->assertSame(0, $this->jumlahClosing());
+        $this->assertTrue($hasil['ok'], 'Simpan harus diterima: ' . ($hasil['alasan'] ?? ''));
+        $this->assertSame(1, $this->jumlahClosing());
     }
 
-    public function testOpeningTidakCocokTidakDipakai(): void
+    public function testOpeningTidakCocokTetapDipakai(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_GAGAL);
+        // Status legacy TIDAK_COCOK juga tidak lagi menghalangi: baseline yang
+        // tersimpan langsung sah (tidak ada perbandingan dengan real cash).
+        $this->setOpeningKas('TIDAK_COCOK');
 
         $h = $this->closing->hitung(self::UNIT, date('Y-m-d'));
-        $this->assertFalse($h['siap'], 'Baseline yang sudah dinyatakan meleset tidak boleh dipakai');
-        $this->assertStringContainsString('tidak cok', strtolower($h['alasan']));
+        $this->assertTrue($h['siap'], 'Opening status TIDAK_COCOK harus tetap dipakai: ' . ($h['alasan'] ?? ''));
+        $this->assertTrue($h['saldo_awal_kas'] !== null);
     }
 
     public function testClosingBerikutnyaMeneruskanClosingSebelumnya(): void
@@ -744,7 +750,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
     {
         // Opening dipindah ke 2 Nov — itu MASA DEPAN untuk closing 8 Okt.
         $this->setOpeningKas(
-            KasOpeningService::STATUS_SUDAH,
+            'TERVERIFIKASI',
             '2026-11-02',
             self::OPENING
         );
@@ -762,8 +768,16 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
         // tanggal cut-off (HARI PERTAMA) WAJIB boleh memakai baseline yang
         // bertanggal cut-off juga. Dulu aturan ini strict `<` sehingga hari
         // pertama selalu ditolak.
-        $cutoff = FinanceScopeService::cutoffDate();
-        $this->assertSame($cutoff, date('Y-m-d'), 'Test ini mengasumsikan hari ini = tanggal cut-off');
+        $cutoff = FinanceScopeService::kasBankCutoffDate();
+
+        // Test dijalankan kapan pun, jadi "hari ini" tidak di-hardcode sama
+        // dengan cut-off. Yang WAJIB benar hanya baseline tidak boleh di
+        // masa depan relative ke hari penutupan.
+        $this->assertGreaterThanOrEqual(
+            $cutoff,
+            date('Y-m-d'),
+            'Baseline cut-off tidak boleh setelah hari ini'
+        );
 
         $h = $this->closing->hitung(self::UNIT, $cutoff);
 
@@ -1233,8 +1247,11 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testFormTidakMenampilkanAngkaSaldoPalsu(): void
     {
-        // Opening BELUM_VERIFIKASI -> saldo awal tidak boleh tampil sebagai 0.
-        $this->setOpeningKas(KasOpeningService::STATUS_BELUM);
+        // Tidak ada baris opening -> saldo awal tidak boleh tampil sebagai 0.
+        // Kolom status legacy tidak kita gulir di sini: tanpa baris baseline
+        // sama sekali, laci belum bisa ditetapkan.
+        $this->setOpeningKas('TERVERIFIKASI', FinanceScopeService::kasBankCutoffDate(), 0);
+        $this->q('DELETE FROM opening_kas WHERE akun_kas_bank_id = ' . self::AKUN_KAS);
 
         $h = $this->closing->hitung(self::UNIT, date('Y-m-d'));
         $r = service('renderer');
@@ -1337,7 +1354,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testControllerMengabaikanSeluruhHiddenFieldDariPost(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_SUDAH);
+        $this->setOpeningKas('TERVERIFIKASI');
 
         $benar = $this->closing->hitung(self::UNIT, $this->hariIni());
 
@@ -1370,7 +1387,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testControllerMengabaikanTanggalDanUnitDariPost(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_SUDAH);
+        $this->setOpeningKas('TERVERIFIKASI');
 
         $row = $this->panggilControllerTutup($this->payloadCrafted());
 
@@ -1399,7 +1416,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testControllerTetapMengambilCashLaciDariPost(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_SUDAH);
+        $this->setOpeningKas('TERVERIFIKASI');
 
         // Disengaja TIDAK sama dengan `akhir_cash` server: laci adalah angka
         // fisik hasil hitung manusia, dan selisihnya memang harus_allowed.
@@ -1425,7 +1442,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testControllerPostGandaTetapSatuBaris(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_SUDAH);
+        $this->setOpeningKas('TERVERIFIKASI');
 
         $pertama = $this->panggilControllerTutup($this->payloadCrafted('1.000.000'));
 
@@ -1457,7 +1474,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testControllerTidakSimpanKalauCashLaciTidakValid(): void
     {
-        $this->setOpeningKas(KasOpeningService::STATUS_SUDAH);
+        $this->setOpeningKas('TERVERIFIKASI');
 
         $row = $this->panggilControllerTutup($this->payloadCrafted('1.5'));
 

@@ -63,12 +63,18 @@ class SharedAccountSeparationTest extends CIUnitTestCase
     /** Opening laci terverifikasi di tanggal cut-off. */
     private function seedOpeningKas(int $akunKas, int $unit, int $nominal): void
     {
-        $cutoff = \App\Services\Finance\FinanceScopeService::cutoffDate();
+        $cutoff = \App\Services\Finance\FinanceScopeService::kasBankCutoffDate();
         $this->koneksi()->query(
             'INSERT INTO db_opening_kas (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan) VALUES ('
             . $akunKas . ', ' . $unit . ', \'' . $cutoff . '\', ' . $nominal . ', ' . $nominal . ', 0, '
             . '\'TERVERIFIKASI\', \'opening laci test\')'
         );
+    }
+
+    /** Hari pertama periode KasBank — tanggal semua mutasi di test ini. */
+    private static function tanggalPeriode(): string
+    {
+        return \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate();
     }
 
     private function laci(int $akunKas, int $unit, int $nominal = 10_000_000): void
@@ -81,17 +87,17 @@ class SharedAccountSeparationTest extends CIUnitTestCase
 
     private function setor(int $unit, int $kas, int $bank, int $nominal, string $key): array
     {
-        return $this->service->setorTunai($unit, $kas, $bank, $nominal, '2026-10-06', $key);
+        return $this->service->setorTunai($unit, $kas, $bank, $nominal, self::tanggalPeriode(), $key);
     }
 
     private function posisi(int $akun, int $unit): int
     {
-        return (new KasBankCutoffService())->posisiUnit($akun, $unit, '2026-10-06');
+        return (new KasBankCutoffService())->posisiUnit($akun, $unit, self::tanggalPeriode());
     }
 
     private function fisik(int $akun): int
     {
-        return (new KasBankCutoffService())->saldoFisik($akun, '2026-10-06');
+        return (new KasBankCutoffService())->saldoFisik($akun, self::tanggalPeriode());
     }
 
     /**
@@ -196,7 +202,7 @@ class SharedAccountSeparationTest extends CIUnitTestCase
         $this->laci(6, 2);
         $this->assertTrue($this->setor(1, Fase1::AKUN_KAS_1, Fase1::AKUN_CV, 4_000_000, 'shr-e1')['ok']);
 
-        $hasil = $this->service->tarikTunai(2, 6, Fase1::AKUN_CV, 1_000_000, '2026-10-06', 'shr-e2');
+        $hasil = $this->service->tarikTunai(2, 6, Fase1::AKUN_CV, 1_000_000, self::tanggalPeriode(), 'shr-e2');
 
         $this->assertFalse($hasil['ok'], 'Tarik melebihi posisi unit harus ditolak');
         $this->assertStringContainsStringIgnoringCase('posisi', $hasil['alasan']);

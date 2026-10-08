@@ -105,6 +105,36 @@ class Finance extends BaseConfig
     public string $periodeMulaiDate = '2026-10-06';
 
     /**
+     * Cut-off KHUSUS modul Kas & Bank (YYYY-MM-DD).
+     *
+     * TERPISAH dari $cutoffDate karena $cutoffDate itu GLOBAL: dipakai
+     * TutupKasir (baseline laci/statement), Hutang-Piutang, dan KPI Cash Flow.
+     * Menggeser $cutoffDate akan ikut menggeser modul-modul itu.
+     *
+     * Nilai ini HANYA dipakai oleh jalur KasBank: opening KAS/bank, statement,
+     * guard Setor/Tarik, filter movement, dan UI input opening.
+     *
+     * Cut-off KasBank 7 Okt → saldo riil per akhir 7 Okt. Transaksi 1–7 Okt
+     * adalah LEGACY (sudah terserap di saldo riil tersebut).
+     *
+     * Harus = $cutoffDate + 2 hari pada skenario uji ini; konsistensi dengan
+     * $kasBankPeriodeMulaiDate wajib dijaga (selalu + 1 hari).
+     */
+    public string $kasBankCutoffDate = '2026-10-07';
+
+    /**
+     * Hari pertama periode ledger KHUSUS Kas & Bank (YYYY-MM-DD).
+     *
+     * Batas bawah filter movement KasBank (`tanggal >= ...`). Transaksi sebelum
+     * tanggal ini — termasuk tanggal 1–7 Okt — TIDAK ikut menghitung saldo
+     * berjalan. Saldo berjalan = opening(7 Okt) + net movement sejak 8 Okt.
+     *
+     * Harus = $kasBankCutoffDate + 1 hari. TIDAK menggantikan $periodeMulaiDate:
+     * KPI/Hutang-Piutang tetap memakai $periodeMulaiDate.
+     */
+    public string $kasBankPeriodeMulaiDate = '2026-10-08';
+
+    /**
      * ID_JABATAN yang boleh mengisi (input) Dashboard Finance.
      */
     public array $financeInputRoles = [0, 1, 2, 34];

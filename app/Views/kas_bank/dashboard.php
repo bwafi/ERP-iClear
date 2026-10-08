@@ -298,7 +298,7 @@ $netFlow = (int) ($net_cash_flow ?? 0);
                 <iconify-icon icon="bi:info-circle-fill" class="text-info kb-ico"></iconify-icon>
                 <div>
                     <strong>Cut-Off Finance:</strong> Dihitung dari transaksi operasional sejak
-                    <strong><?= esc(\App\Services\Finance\FinanceScopeService::cutoffDate()) ?></strong>.
+                    <strong><?= esc(\App\Services\Finance\FinanceScopeService::kasBankCutoffDate()) ?></strong>.
                 </div>
             </div>
         </section>

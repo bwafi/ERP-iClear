@@ -10,7 +10,8 @@ use App\Models\ModelOpeningKas;
  *
  * MODEL (sama secara konsep dengan opening bank, tanpa bank statement)
  * --------------------------------------------------------------------
- *     saldo_buku_kas(akun) = opening_kas(akun, cutoff) + net movement sejak cutoff+1
+ *     saldo_buku_kas(akun) = opening_kas(akun, cutoff KasBank) + net movement
+ *                            sejak kasBankPeriodeMulaiDate (cutoff + 1 hari)
  *
  * Opening KAS adalah BASELINE REAL BARU: saldo fisik aktual laci pada akhir
  * tanggal cut-off yang diinput user. Kali ini TIDAK ada perbandingan dengan
@@ -59,7 +60,7 @@ class KasOpeningService
      */
     public function seluruhOpeningPerAkun(?string $tanggal = null): array
     {
-        $tanggal ??= FinanceScopeService::cutoffDate();
+        $tanggal ??= FinanceScopeService::kasBankCutoffDate();
 
         return db_connect()->table('opening_kas')
             ->where('tanggal', $tanggal)
@@ -77,7 +78,7 @@ class KasOpeningService
      */
     public function openingAt(int $akunId, ?string $tanggal = null)
     {
-        $tanggal ??= FinanceScopeService::cutoffDate();
+        $tanggal ??= FinanceScopeService::kasBankCutoffDate();
 
         return $this->openingModel->getByAkunTanggal($akunId, $tanggal);
     }
@@ -95,7 +96,7 @@ class KasOpeningService
      */
     public function openingBerlaku(int $akunId, ?string $tanggal = null)
     {
-        $tanggal ??= FinanceScopeService::cutoffDate();
+        $tanggal ??= FinanceScopeService::kasBankCutoffDate();
         $db        = db_connect();
 
         $tepat = $this->openingAt($akunId, $tanggal);
@@ -157,7 +158,7 @@ class KasOpeningService
         ?int $userId = null,
         ?string $tanggal = null
     ): array {
-        $tanggal ??= FinanceScopeService::cutoffDate();
+        $tanggal ??= FinanceScopeService::kasBankCutoffDate();
 
         $akun = $this->akunModel->find($akunId);
         if ($akun === null || (string) $akun->status !== 'aktif') {
@@ -179,11 +180,11 @@ class KasOpeningService
             );
         }
 
-        if ($tanggal !== FinanceScopeService::cutoffDate()) {
+        if ($tanggal !== FinanceScopeService::kasBankCutoffDate()) {
             return $this->gagal(sprintf(
                 'Tanggal opening KAS harus %s (tanggal cut-off), sama dengan opening bank. '
                 . 'Tanggal yang dipilih: %s.',
-                FinanceScopeService::cutoffDate(),
+                FinanceScopeService::kasBankCutoffDate(),
                 $tanggal
             ));
         }

@@ -17,7 +17,7 @@ $canInput = $bisa_pilih_unit ?? false;
 $openingKas    = $opening_kas ?? [];
 $openingKasById = $opening_kas_by_akun ?? [];
 $openingKasBelum = (int) ($opening_kas_belum ?? 0);
-$cutoffOpening = $opening_kas_cutoff ?? \App\Services\Finance\FinanceScopeService::cutoffDate();
+$cutoffOpening = $opening_kas_cutoff ?? \App\Services\Finance\FinanceScopeService::kasBankCutoffDate();
 $daftarKas     = array_values(array_filter(
     $akun_kas_bank ?? [],
     static fn($a) => (string) $a->tipe === 'KAS'
@@ -233,7 +233,7 @@ foreach ($daftarAkun as $a) {
                                     // Default TANGGAL CUT-OFF, bukan hari ini. saveSaldoAwal()
                                     // menolak tanggal selain cut-off, jadi default date('Y-m-d')
                                     // membuat operator gagal menyimpan dengan pesan yang membingungkan.
-                                    $tanggalCutoffForm = \App\Services\Finance\FinanceScopeService::cutoffDate();
+                                    $tanggalCutoffForm = \App\Services\Finance\FinanceScopeService::kasBankCutoffDate();
                                     ?>
                                     <input type="date" name="tanggal" class="form-control kb-input"
                                         value="<?= esc($tanggalCutoffForm) ?>"

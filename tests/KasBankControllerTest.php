@@ -6,6 +6,7 @@ use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelPembayaranHutangPiutang;
 use App\Models\ModelTransaksiKasBank;
+use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\HutangPiutangService;
 use App\Services\Finance\KasBankSetorTarikService;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -26,9 +27,16 @@ class KasBankControllerTest extends CIUnitTestCase
 
     protected $db;
 
+    private string $tglCutoff;
+    private string $tglMulai;
+    private string $tglBerikut;
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->tglCutoff  = FinanceScopeService::kasBankCutoffDate();
+        $this->tglMulai   = FinanceScopeService::kasBankPeriodeMulaiDate();
+        $this->tglBerikut = date('Y-m-d', strtotime($this->tglMulai . ' +1 day'));
         $this->db = \Config\Database::connect();
         $this->buatSkema();
         $this->sebarData();
@@ -340,7 +348,7 @@ class KasBankControllerTest extends CIUnitTestCase
             'akun_asal_id'   => '6',
             'akun_tujuan_id' => '5',
             'jumlah'         => '100000',
-            'tanggal'        => '2026-10-06',
+            'tanggal'        => $this->tglMulai,
             'keterangan'     => 'Transfer A->B',
             'submit_token'   => $tok,
         ];
@@ -361,7 +369,7 @@ class KasBankControllerTest extends CIUnitTestCase
         $m   = $this->model(ModelTransaksiKasBank::class);
         $ref = 'TRF-RVT';
         $m->insert([
-            'tanggal'          => '2026-10-06',
+            'tanggal'          => $this->tglMulai,
             'unit_id'          => 1,
             'akun_kas_bank_id' => 1,
             'jenis'            => ModeKasBank::JENIS_TRANSFER,
@@ -373,7 +381,7 @@ class KasBankControllerTest extends CIUnitTestCase
         ]);
         $idKeluar = (int) $m->insertID();
         $m->insert([
-            'tanggal'          => '2026-10-06',
+            'tanggal'          => $this->tglMulai,
             'unit_id'          => 2,
             'akun_kas_bank_id' => 3,
             'jenis'            => ModeKasBank::JENIS_TRANSFER,
@@ -408,14 +416,14 @@ class KasBankControllerTest extends CIUnitTestCase
         // statement bank) — persis aturan yang berlaku untuk Setor/Tarik.
         $this->db->query("INSERT INTO db_opening_kas
             (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan)
-            VALUES (1, 1, '2026-10-05', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
+            VALUES (1, 1, '$this->tglCutoff', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
 
         $payload = [
             'hutang_piutang_id' => '901',
             'akun_pengirim_id'  => '1',
             'akun_penerima_id'  => '3',
             'jumlah'            => '200000',
-            'tanggal'           => '2026-10-06',
+            'tanggal'           => $this->tglMulai,
             'keterangan'        => 'Bayar antar unit',
             'submit_token'      => $tok,
         ];
@@ -543,7 +551,7 @@ class KasBankControllerTest extends CIUnitTestCase
             'akun_asal_id'   => '6',
             'akun_tujuan_id' => '5',
             'jumlah'         => '250000',
-            'tanggal'        => '2026-10-06',
+            'tanggal'        => $this->tglMulai,
             'keterangan'     => 'Transfer fisik A->B',
             'submit_token'   => $tok,
         ];
@@ -770,7 +778,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'akun_pengirim_id'  => '5',
             'akun_penerima_id'  => '5',
             'jumlah'            => '200000',
-            'tanggal'           => '2026-10-06',
+            'tanggal'           => $this->tglMulai,
             'keterangan'        => 'Settlement antar unit BCA bersama',
             'submit_token'      => $tok,
         ];
@@ -925,7 +933,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     private function posisiUnit(int $akunId, int $unitId): int
     {
         $svc = new \App\Services\Finance\KasBankCutoffService();
-        return $svc->posisiUnit($akunId, $unitId, '2026-10-06');
+        return $svc->posisiUnit($akunId, $unitId, $this->tglMulai);
     }
 
     public function testPindahSaldoDitolakSaatPosisiUnitTidakCukup(): void
@@ -942,7 +950,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         // nol. Guard harus menolak.
         $this->assertSame(
             800000,
-            (new \App\Services\Finance\KasBankCutoffService())->saldoFisik(5, '2026-10-06'),
+            (new \App\Services\Finance\KasBankCutoffService())->saldoFisik(5, $this->tglMulai),
             'Saldo fisik shared harus ample supaya test benar-benar menguji posisi, bukan fisik'
         );
 
@@ -964,7 +972,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'akun_asal_id'   => '5',
             'akun_tujuan_id' => '4',
             'jumlah'         => '100000',
-            'tanggal'        => '2026-10-06',
+            'tanggal'        => $this->tglMulai,
             'keterangan'     => 'Pakai saldo unit lain',
             'submit_token'   => 'tok-shared-deny',
         ]);
@@ -990,7 +998,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'akun_asal_id'   => '5',
             'akun_tujuan_id' => '6',
             'jumlah'         => '100000',
-            'tanggal'        => '2026-10-06',
+            'tanggal'        => $this->tglMulai,
             'keterangan'     => 'Pakai saldo sendiri',
             'submit_token'   => $tok,
         ]);
@@ -1038,7 +1046,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'akun_pengirim_id'  => '5',
             'akun_penerima_id'  => '4',
             'jumlah'            => '200000',
-            'tanggal'           => '2026-10-06',
+            'tanggal'           => $this->tglMulai,
             'keterangan'        => 'Bayar ke Unit 2 via rekening bersama',
             'submit_token'      => $tok,
         ])->assertStatus(302);
@@ -1073,7 +1081,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             (5, 1, 500000, 'Hak pakai BCA Bersama')");
         $this->db->query("INSERT INTO db_opening_kas
             (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan)
-            VALUES (1, 1, '2026-10-05', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
+            VALUES (1, 1, '$this->tglCutoff', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
 
         // KAS <-> BANK bukan Pindah Saldo: itu Setor/Tarik dan wajib lewat
         // KasBankSetorTarikService (guard baseline + cek saldo ikut jalan).
@@ -1084,7 +1092,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'akun_asal_id'   => '5',
             'akun_tujuan_id' => '1',
             'jumlah'         => '100000',
-            'tanggal'        => '2026-10-06',
+            'tanggal'        => $this->tglMulai,
             'keterangan'     => 'Bank ke KAS',
             'submit_token'   => $tok,
         ])->assertStatus(302);
@@ -1114,9 +1122,9 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'INSERT INTO db_transaksi_kas_bank
                 (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, akun_tujuan_id,
                  transfer_ref, submission_key, sumber_tipe, keterangan, created_at)
-             VALUES (?, ?, 2, ?, ?, 100000, 6, ?, NULL, ?, ?, "2026-10-06 09:00:00")',
+             VALUES (?, ?, 2, ?, ?, 100000, 6, ?, NULL, ?, ?, "' . $this->tglMulai . ' 09:00:00")',
             [
-                '2026-10-06',
+                $this->tglMulai,
                 $unit,
                 ModeKasBank::JENIS_TRANSFER,
                 ModeKasBank::ARAH_KELUAR,
@@ -1252,7 +1260,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'INSERT INTO db_transaksi_kas_bank
                 (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, akun_tujuan_id,
                  transfer_ref, submission_key, sumber_tipe, keterangan, created_at)
-             VALUES ("2026-10-06", 1, 6, ?, ?, 250000, 9, "TRF-LBL", NULL, ?, "ke IRA", "2026-10-06 09:00:00")',
+             VALUES ("' . $this->tglMulai . '", 1, 6, ?, ?, 250000, 9, "TRF-LBL", NULL, ?, "ke IRA", "' . $this->tglMulai . ' 09:00:00")',
             [ModeKasBank::JENIS_TRANSFER, ModeKasBank::ARAH_KELUAR, KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO]
         );
 
@@ -1352,7 +1360,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
                 'INSERT INTO db_transaksi_kas_bank
                     (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, transfer_ref,
                      sumber_tipe, keterangan, created_at)
-                 VALUES ("2026-10-06", 1, 6, ?, ?, 100000, ?, ?, "kaki masuk", "2026-10-06 09:00:01")',
+                 VALUES ("' . $this->tglMulai . '", 1, 6, ?, ?, 100000, ?, ?, "kaki masuk", "' . $this->tglMulai . ' 09:00:01")',
                 [ModeKasBank::JENIS_TRANSFER, ModeKasBank::ARAH_MASUK, $ref . '-K', $subtype]
             );
         }
@@ -1394,7 +1402,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'INSERT INTO db_transaksi_kas_bank
                 (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, transfer_ref,
                  sumber_tipe, keterangan, created_at)
-             VALUES ("2026-10-06", 1, 6, ?, ?, 100000, ?, ?, "kaki masuk", "2026-10-06 09:00:01")',
+             VALUES ("' . $this->tglMulai . '", 1, 6, ?, ?, 100000, ?, ?, "kaki masuk", "' . $this->tglMulai . ' 09:00:01")',
             [
                 ModeKasBank::JENIS_TRANSFER,
                 ModeKasBank::ARAH_MASUK,
@@ -1449,7 +1457,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             (5, 2, 0,     'Hak pakai BCA Bersama')");
         $this->db->query("INSERT INTO db_saldo_awal_kas_bank
             (akun_kas_bank_id, tanggal, saldo, keterangan, status)
-            VALUES (7, '2026-10-05', 500000000, 'Saldo awal BCA Unit C', 'VERIFIED')");
+            VALUES (7, '$this->tglCutoff', 500000000, 'Saldo awal BCA Unit C', 'VERIFIED')");
         // Rekening non-shared: pembuka posisi unit = alokasi, bukan statement.
         $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank
             (akun_kas_bank_id, unit_id, nominal, keterangan)
@@ -1483,7 +1491,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'akun_pengirim_id'  => '7',
             'akun_penerima_id'  => '5',
             'jumlah'            => '70000000',
-            'tanggal'           => '2026-10-06',
+            'tanggal'           => $this->tglMulai,
             'keterangan'        => 'Bayar ke rekening bersama Unit 1',
             'submit_token'      => $tok,
         ])->assertStatus(302);
@@ -1572,7 +1580,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->seedNoAkun();
 
         $r = $this->post('insert_kas_keluar', [
-            'tanggal'         => '2026-10-05',
+            'tanggal'         => $this->tglMulai,
             'deskripsi'       => 'Beli ATK',
             'unit_idunit'     => '1',
             'akun'            => [[
@@ -1606,7 +1614,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         // Sumber valid + ledger lama (BNI-001 -> akun 2).
         $this->db->query("INSERT INTO db_kas_keluar (idkas_keluar, tanggal, deskripsi, jumlah, jenis, penerima, idbank, idunit)
-            VALUES (1, '2026-10-05', 'Belanja lama', 75000, 'debet', 'PT Contoh', 'BNI-001', 1)");
+            VALUES (1, '$this->tglMulai', 'Belanja lama', 75000, 'debet', 'PT Contoh', 'BNI-001', 1)");
         $this->model(\App\Libraries\ModeKasBank::class);
         $lib = new \App\Libraries\ModeKasBank();
         $lib->postingKasKeluar(1);
@@ -1616,7 +1624,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->seedBankTanpaAkun();
         $r = $this->post('update_kas_keluar', [
             'idkas_keluar'      => '1',
-            'tanggal'           => '2026-10-06',
+            'tanggal'           => $this->tglBerikut,
             'deskripsi'         => 'Belanja BARU',
             'kategori_idkategori' => '1',
             'jumlah'            => '99000',
@@ -1628,7 +1636,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         // Sumber harus BALIK ke nilai lama (update ikut rollback).
         $row = $this->db->query('SELECT * FROM db_kas_keluar WHERE idkas_keluar=1')->getRow();
         $this->assertSame('BNI-001', $row->idbank);
-        $this->assertSame('2026-10-05', $row->tanggal);
+        $this->assertSame($this->tglMulai, $row->tanggal);
         $this->assertSame('75000', (string) (int)$row->jumlah);
 
         // Posting lama harus DIPULIHKAN — inilah yang hilang sebelum A1.
@@ -1649,7 +1657,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->seedNoAkun();
 
         $r = $this->post('insert_kas_masuk', [
-            'tanggal'     => '2026-10-05',
+            'tanggal'     => $this->tglMulai,
             'deskripsi'   => 'Setoran tak terpetakan',
             'unit_idunit' => '1',
             'akun'        => [[
@@ -1676,7 +1684,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->seedNoAkun();
 
         $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, jenis, penerima, idbank, idunit)
-            VALUES (1, '2026-10-05', 'Setoran lama', 90000, 'debet', 'PT Contoh', 'BNI-001', 1)");
+            VALUES (1, '$this->tglMulai', 'Setoran lama', 90000, 'debet', 'PT Contoh', 'BNI-001', 1)");
         $lib = new \App\Libraries\ModeKasBank();
         $lib->postingKasMasuk(1);
         $this->assertSame(1, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_transaksi_kas_bank WHERE sumber_tipe='kas_masuk' AND sumber_id=1")->getRow()->c);
@@ -1684,7 +1692,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->seedBankTanpaAkun();
         $r = $this->post('update_kas_masuk', [
             'idkas_masuk'        => '1',
-            'tanggal'           => '2026-10-06',
+            'tanggal'           => $this->tglBerikut,
             'deskripsi'         => 'Setoran BARU',
             'kategori_idkategori' => '1',
             'jumlah'            => '120000',
@@ -1778,7 +1786,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->seedNoAkun();
 
         $r = $this->post('insert_kas_masuk', [
-            'tanggal'     => '2026-10-05',
+            'tanggal'     => $this->tglMulai,
             'deskripsi'   => 'Penjualan tunai',
             'unit_idunit' => '1',
             'akun'        => [[
@@ -1804,5 +1812,251 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame('skipped', $r2['status']);
         $this->assertSame('sudah terposting', $r2['reason']);
         $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
+    }
+
+    // =================================================================
+    // SALDO AWAL & ALOKASI REKENING SHARED TANPA VERIFIKASI STATEMENT
+    //
+    // Verifikasi statement adalah proses TERPISAH. Ia bukan prerequisite
+    // untuk input saldo awal, edit saldo awal, maupun input alokasi shared,
+    // dan tidak boleh dibuat otomatis hanya untuk meloloskan guard.
+    // Alur yang memang butuh angka terkonfirmasi (setor/tarik, transfer,
+    // bayar hutang/piutang) tetap memakai statementVerified().
+    // =================================================================
+
+    private function cutofff(): \App\Services\Finance\KasBankCutoffService
+    {
+        return new \App\Services\Finance\KasBankCutoffService();
+    }
+
+    private function statementRow(int $akunId): ?object
+    {
+        $db = \Config\Database::connect('tests', false);
+
+        return $db->table('saldo_awal_kas_bank')
+            ->where('akun_kas_bank_id', $akunId)
+            ->where('tanggal', $this->tglCutoff)
+            ->get()->getRow();
+    }
+
+    /** 1. Input saldo awal 7 Okt TANPA statement verified -> berhasil. */
+    public function testInputSaldoAwalTanpaVerifikasiStatementBerhasil(): void
+    {
+        $this->sesi();
+
+        $r = $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '5',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '10000000',
+            'keterangan'       => 'Saldo riil cut-off tanpa verifikasi',
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal());
+        $this->assertStringContainsString('berhasil', $this->flashSukses());
+
+        $row = $this->statementRow(5);
+        $this->assertNotNull($row, 'Baris saldo awal pada tanggal cut-off wajib tersimpan');
+        $this->assertSame(10000000, (int) $row->saldo);
+        $this->assertSame('BELUM_VERIFIKASI', (string) $row->status);
+        $this->assertFalse(
+            $this->cutofff()->statementVerified(5),
+            'Input saldo awal tidak boleh menyetel verifikasi secara otomatis'
+        );
+    }
+
+    /**
+     * Saldo 0 pada cut-off juga harus bisa dicatat tanpa verifikasi —
+     * tanpa ini Finance dipaksa menandai "Terverifikasi" hanya agar bisa
+     * menyimpan saldo nol.
+     */
+    public function testInputSaldoAwalNolTanpaVerifikasiDiterima(): void
+    {
+        $this->sesi();
+
+        $r = $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '6',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '0',
+            'keterangan'       => 'Rekening kosong pada cut-off',
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal());
+
+        $row = $this->statementRow(6);
+        $this->assertNotNull($row);
+        $this->assertSame(0, (int) $row->saldo);
+        $this->assertSame('BELUM_VERIFIKASI', (string) $row->status);
+    }
+
+    /** 2. Input alokasi shared TANPA statement verified -> berhasil. */
+    public function testInputAlokasiSharedTanpaVerifikasiStatementBerhasil(): void
+    {
+        $this->sesi();
+
+        // Saldo awal rekening shared diinput lebih dulu, tanpa verifikasi.
+        $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '5',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '20000000',
+        ]);
+        $this->assertSame('', $this->flashGagal());
+        $this->assertFalse($this->cutofff()->statementVerified(5));
+
+        $r = $this->post('kas_bank/saldo-alokasi/save', [
+            'akun_kas_bank_id' => '5',
+            'unit_id'          => '1',
+            'nominal'          => '500000',
+            'keterangan'       => 'Alokasi tanpa verifikasi statement',
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal());
+        $this->assertStringContainsString('berhasil', $this->flashSukses());
+
+        $db  = \Config\Database::connect('tests', false);
+        $sum = (int) $db->table('alokasi_saldo_kas_bank')->selectSum('nominal')
+            ->where('akun_kas_bank_id', 5)->where('unit_id', 1)
+            ->get()->getRow()->nominal;
+        $this->assertSame(500000, $sum);
+
+        $this->assertFalse(
+            $this->cutofff()->statementVerified(5),
+            'Alokasi tidak boleh memicu verifikasi statement secara otomatis'
+        );
+    }
+
+    /** 3. Input saldo awal DENGAN statement verified tetap berhasil. */
+    public function testInputSaldoAwalDenganStatementTerverifikasiTetapBerhasil(): void
+    {
+        $this->sesi();
+
+        $r = $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '5',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '15000000',
+            'status'           => \App\Services\Finance\KasBankCutoffService::STATEMENT_SUDAH,
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal());
+
+        $row = $this->statementRow(5);
+        $this->assertNotNull($row);
+        $this->assertSame('VERIFIED', (string) $row->status);
+        $this->assertTrue($this->cutofff()->statementVerified(5));
+    }
+
+    /** 4. Verifikasi statement tetap bisa dilakukan pada proses TERPISAH. */
+    public function testVerifikasiStatementMasihBisaDilakukanTerpisah(): void
+    {
+        $this->sesi();
+
+        $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '5',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '12000000',
+        ]);
+        $this->assertSame('', $this->flashGagal());
+        $this->assertFalse($this->cutofff()->statementVerified(5), 'Langkah 1: input, belum diverifikasi');
+
+        // Proses terpisah: POST kedua khusus menaikkan status.
+        $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '5',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '12000000',
+            'status'           => \App\Services\Finance\KasBankCutoffService::STATEMENT_SUDAH,
+        ]);
+        $this->assertSame('', $this->flashGagal());
+        $this->assertTrue($this->cutofff()->statementVerified(5), 'Langkah 2: verifikasi terpisah');
+
+        $row = $this->statementRow(5);
+        $this->assertSame('VERIFIED', (string) $row->status);
+    }
+
+    /** 5a. Permission existing tetap menutup input saldo awal & alokasi. */
+    public function testAlokasiDanSaldoAwalTetapDitolakUserTanpaPermission(): void
+    {
+        // Role 35 (Admin Cabang) bukan financeInputRoles -> canInput() false.
+        $this->sesiAdminCabang();
+
+        $r = $this->post('kas_bank/saldo-alokasi/save', [
+            'akun_kas_bank_id' => '5',
+            'unit_id'          => '1',
+            'nominal'          => '100000',
+        ]);
+        $r->assertStatus(302);
+        $this->assertStringContainsString(
+            'tidak berhak mengatur alokasi saldo',
+            $this->flashGagal()
+        );
+
+        $r2 = $this->post('kas_bank/saldo-awal/save', [
+            'akun_kas_bank_id' => '5',
+            'tanggal'          => $this->tglCutoff,
+            'saldo'            => '10000000',
+        ]);
+        $r2->assertStatus(302);
+        $this->assertStringContainsString(
+            'tidak berhak menyimpan saldo awal',
+            $this->flashGagal()
+        );
+
+        $db = \Config\Database::connect('tests', false);
+        $this->assertSame(
+            0,
+            (int) $db->table('alokasi_saldo_kas_bank')->countAllResults(),
+            'Permintaan yang ditolak tidak boleh menyimpan alokasi'
+        );
+        $this->assertNull($this->statementRow(5), 'Permintaan yang ditolak tidak boleh menulis saldo awal');
+    }
+
+    /** 5b. Aturan tipe & nominal alokasi tidak berubah. */
+    public function testAlokasiTetapDijagaAturanTipeDanNominal(): void
+    {
+        $this->sesi();
+
+        $r = $this->post('kas_bank/saldo-alokasi/save', [
+            'akun_kas_bank_id' => '1',
+            'unit_id'          => '1',
+            'nominal'          => '100000',
+        ]);
+        $r->assertStatus(302);
+        $this->assertStringContainsString(
+            'khusus untuk rekening BANK aktif',
+            $this->flashGagal()
+        );
+
+        $r2 = $this->post('kas_bank/saldo-alokasi/save', [
+            'akun_kas_bank_id' => '5',
+            'unit_id'          => '1',
+            'nominal'          => '0',
+        ]);
+        $r2->assertStatus(302);
+        $this->assertStringContainsString('lebih dari 0', $this->flashGagal());
+
+        $db = \Config\Database::connect('tests', false);
+        $this->assertSame(
+            0,
+            (int) $db->table('alokasi_saldo_kas_bank')->countAllResults(),
+            'Tidak ada alokasi yang tersimpan dari permintaan yang ditolak'
+        );
+    }
+
+    /** 7. Konfigurasi cutoff Finance global & Kas/Bank tidak berubah. */
+    public function testKonfigurasiCutoffTidakBerubah(): void
+    {
+        $cfg = new \Config\Finance();
+
+        $this->assertSame('2026-10-05', $cfg->cutoffDate, 'Cutoff Finance global');
+        $this->assertSame('2026-10-06', $cfg->periodeMulaiDate, 'Periode Finance global');
+        $this->assertSame('2026-10-07', $cfg->kasBankCutoffDate, 'Cutoff Kas/Bank');
+        $this->assertSame('2026-10-08', $cfg->kasBankPeriodeMulaiDate, 'Periode Kas/Bank');
+
+        $this->assertSame($cfg->cutoffDate, FinanceScopeService::cutoffDate());
+        $this->assertSame($cfg->periodeMulaiDate, FinanceScopeService::periodeMulaiDate());
+        $this->assertSame($cfg->kasBankCutoffDate, FinanceScopeService::kasBankCutoffDate());
+        $this->assertSame($cfg->kasBankPeriodeMulaiDate, FinanceScopeService::kasBankPeriodeMulaiDate());
     }
 }

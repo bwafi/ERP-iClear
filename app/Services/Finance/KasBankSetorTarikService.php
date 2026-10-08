@@ -44,8 +44,8 @@ use Config\Finance;
  * -----
  *  - Penarikan: posisi unit harus >= nominal (BUKAN saldo fisik rekening).
  *  - Setor    : saldo fisik KAS harus >= nominal.
- *  - Tanggal harus >= periodeMulaiDate(). Transaksi bertanggal sebelum
- *    cut-off tidak boleh masuk ledger periode baru.
+ *  - Tanggal harus >= kasBankPeriodeMulaiDate(). Transaksi bertanggal
+ *    sebelum cut-off KasBank tidak boleh masuk ledger periode baru.
  */
 class KasBankSetorTarikService
 {
@@ -223,12 +223,12 @@ class KasBankSetorTarikService
         if ($tanggal === '') {
             return $this->tolakDenganIdempotensi($key, 'Tanggal transaksi wajib diisi.');
         }
-        if ($tanggal < FinanceScopeService::periodeMulaiDate()) {
+        if ($tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
             return $this->tolakDenganIdempotensi($key, sprintf(
                 'Tanggal %s berada sebelum periode operasional baru (%s). Mutasi sebelum '
                 . 'cut-off tidak boleh masuk ledger periode baru.',
                 $tanggal,
-                FinanceScopeService::periodeMulaiDate()
+                FinanceScopeService::kasBankPeriodeMulaiDate()
             ));
         }
 
