@@ -5,15 +5,20 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * OPENING KAS — baseline yang ditetapkan Finance pada tanggal cut-off.
+ * OPENING KAS — baseline SALDO RIIL laci yang ditetapkan Finance pada cut-off.
  *
  * Bedanya dari ModelSaldoAwalKasBank (statement bank):
  *   - statement bank = angka KORAN bank, diverifikasi Finance.
- *   - opening KAS     = angka BASELINE yang Finance tetapkan sendiri, lalu
- *                      dicocokkan dengan hitungan fisik laci (tutup_kasir).
+ *   - opening KAS     = angka BASELINE (uang fisik laci) yang Finance input
+ *                      langsung pada tanggal cut-off. Tidak ada verifikasi
+ *                      dan tidak ada perbandingan dengan hitungan laci.
  *
  * Keduanya baseline, bukan transaksi. Tidak ada opening yang boleh muncul
  * sebagai movement di `transaksi_kas_bank`.
+ *
+ * Kolom legacy `real_cash`, `selisih`, `status`, `verifikasi_by`,
+ * `verifikasi_at` sengaja TIDAK di-drop dari database dan TIDAK dipakai lagi
+ * — hanya dibiarkan sebagai sisa versi lama.
  */
 class ModelOpeningKas extends Model
 {
@@ -26,13 +31,8 @@ class ModelOpeningKas extends Model
         'unit_id',
         'tanggal',
         'opening',
-        'real_cash',
-        'selisih',
-        'status',
         'keterangan',
         'input_by',
-        'verifikasi_by',
-        'verifikasi_at',
         'created_at',
         'updated_at',
     ];

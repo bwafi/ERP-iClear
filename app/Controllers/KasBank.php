@@ -614,8 +614,8 @@ class KasBank extends BaseController
         // Finance sebelum cut-off dipakai: saldo riil akhir tanggal cut-off
         // adalah opening balance, jadi tanpa baris statement di tanggal itu
         // tidak ada angka yang bisa dipakai. Level-nya 'warning' (bukan
-        // 'danger') karena guard statement di KasBankSetorTarikService sudah
-        // menolak Setor/Penarikan selama belum VERIFIED — jadi tidak ada
+        // 'danger') karena guard di KasBankSetorTarikService sudah menolak
+        // Setor/Penarikan selama baseline belum tersedia — jadi tidak ada
         // transaksi yang bisa salah memakai angka nol.
         $baseline = (new \App\Services\Finance\KasBankCutoffService())->diagnostikBaseline();
 
@@ -639,19 +639,19 @@ class KasBank extends BaseController
                 // jadi ikutannya juga harus beda. Kalau tidak, operator laci
                 // kas disuruh mengisi Statement — padahal statement hanya
                 // untuk rekening bank.
-if (($b['tipe'] ?? '') === 'KAS') {
+                if (($b['tipe'] ?? '') === 'KAS') {
                     $adaKasus = true;
 
+                    // Untuk KAS tidak ada jalur verifikasi: baris opening pada
+                    // tanggal cut-off sudah langsung menjadi baseline. Karena
+                    // `baseline_terverifikasi` TIDAK bisa beda dari
+                    // `baseline_ada`, satu-satunya kondisi yang mungkin sampai
+                    // ke sini adalah "belum ada opening".
                     $detail[] = sprintf(
-                        '%s (#%d) — %s; opening %s, real cash %s, selisih %s',
+                        '%s (#%d) — %s',
                         $b['nama_akun'],
                         $b['akun_id'],
-                        $kondisi,
-                        KasBankCutoffService::rupiah($b['opening'] ?? 0),
-                        ($b['real_cash_ada'] ?? false)
-                            ? KasBankCutoffService::rupiah($b['real_cash'] ?? 0)
-                            : 'belum ada Tutup Kasir',
-                        $b['selisih'] === null ? '-' : KasBankCutoffService::rupiah($b['selisih'] ?? 0)
+                        sprintf('belum ada opening KAS pada %s', FinanceScopeService::cutoffDate())
                     );
 
                     continue;
@@ -671,14 +671,14 @@ if (($b['tipe'] ?? '') === 'KAS') {
                     . ', jadi jangan input hasil SUM transaksi legacy.';
             }
             if ($adaKasus) {
-                $aksi[] = 'Laci kas: tetapkan OPENING KAS di ' . base_url('kas_bank/akun') . '#opening-kas'
-                    . ', lalu cocokkan dengan hasil hitung laci saat Tutup Kasir pada ' . FinanceScopeService::cutoffDate()
+                $aksi[] = 'Laci kas: tetapkan OPENING KAS (uang fisik laci) di ' . base_url('kas_bank/akun') . '#opening-kas'
+                    . ' untuk tanggal ' . FinanceScopeService::cutoffDate()
                     . '. Laci kas tidak punya statement bank.';
             }
 
             $out[] = [
                 'level'  => 'warning',
-                'judul'  => count($baselineBelum) . ' rekening belum punya opening balance terverifikasi untuk ' . FinanceScopeService::cutoffDate(),
+                'judul'  => count($baselineBelum) . ' rekening belum punya opening balance untuk ' . FinanceScopeService::cutoffDate(),
                 'detail' => $detail,
                 'aksi'   => implode(' ', $aksi),
             ];
@@ -714,24 +714,21 @@ if (($b['tipe'] ?? '') === 'KAS') {
         // service, dan angka yang dipakai cutoff service semuanya berasal dari
         // satu sumber yang sama.
         //
-        // `rekonsiliasiSemua()` dipakai, BUKAN `belumTerverifikasi()`: halaman
-        // ini harus menunjukkan laci mana yang sudah selesai juga. Kalau hanya
-        // yang belum, operator tidak pernah melihat "yang ini sudah cocok" dan
-        // tidak bisa memastikan laci yang sudah beres tidak ikut hilang dari
-        // daftar.
+        // Dibaca semua baris opening pada cut-off (bukan cuma yang belum):
+        // halaman harus menunjukkan laci mana yang sudah ada opening-nya dan
+        // mana yang belum, supaya operator tidak bertanya-tanya kenapa saldo
+        // laci tertentu tidak muncul.
         $openingKasSvc = new \App\Services\Finance\KasOpeningService();
-        $openingKas    = $openingKasSvc->rekonsiliasiSemua();
+        $openingKas    = $openingKasSvc->seluruhOpeningPerAkun();
         $openingKasById = [];
-        $openingKasBelum = 0;
-        $openingKasBergeser = [];
         foreach ($openingKas as $baris) {
-            $openingKasById[(int) $baris['akun_id']] = $baris;
-
-            if ($baris['terverifikasi'] !== true) {
+            $openingKasById[(int) $baris->akun_kas_bank_id] = $baris;
+        }
+        $openingKasBelum = 0;
+        foreach ($akun as $a) {
+            if ((string) $a->tipe === 'KAS'
+                && ! isset($openingKasById[(int) $a->idakun_kas_bank])) {
                 $openingKasBelum++;
-            }
-            if (($baris['selisih_bergeser'] ?? null) === true) {
-                $openingKasBergeser[] = (int) $baris['akun_id'];
             }
         }
 
@@ -750,7 +747,6 @@ if (($b['tipe'] ?? '') === 'KAS') {
             'opening_kas'           => $openingKas,
             'opening_kas_by_akun'   => $openingKasById,
             'opening_kas_belum'    => $openingKasBelum,
-            'opening_kas_bergeser'  => $openingKasBergeser,
             'opening_kas_cutoff'    => FinanceScopeService::cutoffDate(),
             'bisa_input'            => $this->canInput(),
             'body'              => 'kas_bank/akun',
@@ -1014,8 +1010,9 @@ if (($b['tipe'] ?? '') === 'KAS') {
      *
      * Satu rekening hanya boleh punya satu baris opening pada satu tanggal
      * (dijamin UNIQUE di database), jadi "simpan" di sini selalu berarti
-     * upsert. Mengubah angka opening mereset verifikasi: begitu baseline
-     * bergerak, cocokkan dengan real cash lama sudah tidak berlaku.
+     * upsert. Mengubah angka opening mengganti baseline periode ini; saldo
+     * setelah cut-off otomatis dihitung dari opening baru + seluruh mutasi.
+     * Tidak ada verifikasi.
      */
     public function saveOpeningKas()
     {
@@ -1047,46 +1044,8 @@ if (($b['tipe'] ?? '') === 'KAS') {
         session()->setFlashdata(
             'sukses',
             'Opening KAS ' . (string) ($akun->nama_akun ?? $akunId) . ' tanggal ' . $tanggal
-            . ' disimpan. Verifikasi ulang dengan hasil hitung laci saat Tutup Kasir sebelum dipakai jadi acuan.'
+            . ' disimpan. Saldo laci mulai 1 hari setelah cut-off memakai baseline ini.'
         );
-
-        return redirect()->to(base_url('kas_bank/akun') . '#opening-kas');
-    }
-
-    /**
-     * Cocokkan opening KAS dengan real cash hasil hitung laci.
-     *
-     * Service yang menentukan: dia membaca Tutup Kasir pada tanggal cut-off,
-     * menghitung selisih, dan hanya menandai TERVERIFIKASI kalau selisihnya
-     * nol. Controller tidak menghitung ulang apa pun supaya tidak ada dua
-     * tempat yang bisa beda jawaban.
-     */
-    public function verifikasiOpeningKas()
-    {
-        if (! $this->canInput()) {
-            return $this->gagal('Anda tidak berhak memverifikasi opening KAS.');
-        }
-
-        $akunId  = (int) $this->request->getPost('akun_kas_bank_id');
-        $tanggal = FinanceScopeService::cutoffDate();
-
-        $svc = new \App\Services\Finance\KasOpeningService();
-
-        $hasil = $svc->verifikasi($akunId, (int) (session()->get('ID_AKUN') ?? 0), $tanggal);
-
-        if (! $hasil['ok']) {
-            return $this->gagal($hasil['alasan']);
-        }
-
-        $akun  = $this->AkunModel->find($akunId);
-        $nama  = (string) ($akun->nama_akun ?? $akunId);
-        $cocok = ($hasil['data']['status'] ?? '') === \App\Services\Finance\KasOpeningService::STATUS_SUDAH;
-
-        $pesan = $cocok
-            ? 'Opening KAS ' . $nama . ' cocok dengan hasil hitung laci. Saldo laci siap jadi acuan.'
-            : 'Opening KAS ' . $nama . ' TIDAK cocok dengan hasil hitung laci. Opening masih dipakai sebagai pembanding, belum jadi acuan transaksi.';
-
-        session()->setFlashdata('sukses', $pesan);
 
         return redirect()->to(base_url('kas_bank/akun') . '#opening-kas');
     }
@@ -1951,14 +1910,15 @@ if (($b['tipe'] ?? '') === 'KAS') {
         // memang kosong.
         $kasCutoffAda = $this->kasCutoffUnit($unit);
 
-        // Baseline laci kas adalah OPENING KAS, bukan statement bank: opening yang
-        // ditetapkan Finance lalu dicocokkan dengan real cash Tutup Kasir pada
-        // cut-off yang sama. Laci kas tidak punya statement.
+        // Baseline laci kas adalah OPENING KAS, bukan statement bank: opening
+        // (uang fisik laci) yang Finance input pada tanggal cut-off langsung
+        // sah sebagai acuan. Laci kas tidak punya statement dan tidak ada
+        // verifikasi.
         //
         // Gate ini harus PERSIS sama dengan yang dipakai
         // KasBankSetorTarikService, kalau tidak request yang sama akan dapat
         // dua jawaban berbeda tergantung lewat mana dia datang.
-        $kasTerverifikasi = $kasDipakai !== null && $svc->openingTerverifikasi((int) $kasDipakai->idakun_kas_bank);
+        $kasOpeningAda = $kasDipakai !== null && $svc->openingTersedia((int) $kasDipakai->idakun_kas_bank);
         $kasSaldo      = ($kasDipakai !== null && $unit !== null) ? $svc->saldoFisik((int) $kasDipakai->idakun_kas_bank) : null;
         $bankTerverifikasi = $bankDipakai !== null && $svc->statementVerified((int) $bankDipakai->idakun_kas_bank);
         $bankSaldo     = $bankDipakai !== null ? $svc->saldoFisik((int) $bankDipakai->idakun_kas_bank) : null;
@@ -1990,17 +1950,17 @@ if (($b['tipe'] ?? '') === 'KAS') {
             $bisaSubmit = false;
         }
 
-        // Sumber angka saldo laci adalah OPENING KAS yang sudah dicocokkan dengan
-        // real cash, sama seperti yang dipakai service. Kalau opening-nya belum
-        // diverifikasi Finance, angkanya belum boleh jadi acuan setor -- dan
+        // Sumber angka saldo laci adalah OPENING KAS (baseline riil fisik laci
+        // yang Finance input), sama seperti yang dipakai service. Kalau baris
+        // opening-nya belum ada, angkanya belum boleh jadi acuan setor -- dan
         // tidak boleh ditampilkan sebagai 0.
         //
         // `tutup_kasir.akhir_cash` (kasCutoffUnit) hanya cross-check tingkat
         // unit, ditampilkan di banner, BUKAN syarat simpan. Kalau controller
         // memblokir berdasarkan itu sementara service mengizinkan, keduanya
         // akan berbeda jawaban untuk request yang sama.
-        if ($kasDipakai !== null && ! $kasTerverifikasi) {
-            $blokir[] = 'Opening KAS laci unit belum ditetapkan dan dicocokkan dengan hasil hitung laci saat Tutup Kasir, jadi saldo laci belum tersedia sebagai acuan setor.';
+        if ($kasDipakai !== null && ! $kasOpeningAda) {
+            $blokir[] = 'Laci kas unit ini belum punya opening KAS pada tanggal cut-off, jadi saldo laci belum tersedia sebagai acuan setor. Finance harus menetapkan opening (uang fisik laci) dulu.';
             $bisaSubmit = false;
         } elseif ($kasSaldo !== null && $kasSaldo < $nominal && $nominal > 0) {
             $blokir[] = 'Saldo kas unit tidak cukup untuk disetor (tersedia '
@@ -2028,8 +1988,8 @@ if (($b['tipe'] ?? '') === 'KAS') {
             'kas'                => [
                 'akun_id'      => $kasDipakai !== null ? (int) $kasDipakai->idakun_kas_bank : null,
                 'nama'         => $kasDipakai->nama_akun ?? null,
-                'terverifikasi' => $kasTerverifikasi,
-                'saldo'        => $kasTerverifikasi ? $kasSaldo : null,
+                'opening_ada'  => $kasOpeningAda,
+                'saldo'        => $kasOpeningAda ? $kasSaldo : null,
                 'cutoff_ada'   => $kasCutoffAda['ada'],
             ],
             'bank'               => [
@@ -2071,10 +2031,10 @@ if (($b['tipe'] ?? '') === 'KAS') {
             : null;
 
         $kasCutoffAda = $this->kasCutoffUnit($unit);
-        // Sama seperti setor: gate laci kas adalah opening KAS terverifikasi, bukan
-        // statement bank. Laci kas memang tidak punya statement.
-        $kasTerverifikasiPenarikan = $kasDipakai !== null
-            && $svc->openingTerverifikasi((int) $kasDipakai->idakun_kas_bank);
+        // Sama seperti setor: gate laci kas adalah opening KAS yang tersedia,
+        // bukan statement bank. Laci kas memang tidak punya statement.
+        $kasOpeningAdaPenarikan = $kasDipakai !== null
+            && $svc->openingTersedia((int) $kasDipakai->idakun_kas_bank);
 
         $blokir  = [];
         $bisaSubmit = true;
@@ -2120,12 +2080,11 @@ if (($b['tipe'] ?? '') === 'KAS') {
             $bisaSubmit = false;
         }
 
-        // Sama seperti setor: yang menentukan adalah opening KAS yang sudah
-        // dicocokkan dengan real cash. Laci tujuan jadi acuan penarikan, jadi
-        // baseline-nya harus sudah diverifikasi. `tutup_kasir` tetap hanya
-        // cross-check.
-        if ($kasDipakai !== null && ! $kasTerverifikasiPenarikan) {
-            $blokir[] = 'Opening KAS laci tujuan belum ditetapkan dan dicocokkan dengan hasil hitung laci saat Tutup Kasir, jadi saldo laci belum tersedia sebagai acuan.';
+        // Sama seperti setor: yang menentukan adalah keberadaan opening KAS pada
+        // tanggal cut-off. Laci tujuan jadi acuan penarikan, jadi baseline-nya
+        // harus sudah ada. `tutup_kasir` tetap hanya cross-check.
+        if ($kasDipakai !== null && ! $kasOpeningAdaPenarikan) {
+            $blokir[] = 'Laci kas tujuan belum punya opening KAS pada tanggal cut-off, jadi saldo laci belum tersedia sebagai acuan penarikan. Finance harus menetapkan opening dulu.';
             $bisaSubmit = false;
         }
 
@@ -2146,8 +2105,8 @@ if (($b['tipe'] ?? '') === 'KAS') {
             'kas'                => [
                 'akun_id'      => $kasDipakai !== null ? (int) $kasDipakai->idakun_kas_bank : null,
                 'nama'         => $kasDipakai->nama_akun ?? null,
-                'terverifikasi' => $kasTerverifikasiPenarikan,
-                'saldo'        => $kasTerverifikasiPenarikan
+                'opening_ada'  => $kasOpeningAdaPenarikan,
+                'saldo'        => $kasOpeningAdaPenarikan
                     ? (($kasDipakai !== null && $unit !== null) ? $svc->saldoFisik((int) $kasDipakai->idakun_kas_bank) : null)
                     : null,
                 'cutoff_ada'   => $kasCutoffAda['ada'],

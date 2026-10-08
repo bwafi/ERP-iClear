@@ -12,8 +12,9 @@
  *   1. "Shared account" ditulis terbuka. Rekening bersama tidak milik satu
  *      unit, jadi tidak boleh ditampilkan seolah-olah milik unit pemohon.
  *
- *   2. Saldo yang belum terverifikasi ditampilkan sebagai "belum tersedia",
- *      bukan Rp 0. Angka 0 yang belum diverifikasi artinya "belum tahu",
+ *   2. Saldo yang belum tersedia (laci kas tanpa opening, atau bank tanpa
+ *      statement terverifikasi) ditampilkan sebagai "belum tersedia",
+ *      bukan Rp 0. Angka 0 yang belum terbukti artinya "belum tahu",
  *      bukan "tidak ada uang". Menampilkan 0 membuat user salah mengambil
  *      keputusan.
  *
@@ -177,7 +178,13 @@ $blokir     = $preview['blokir'] ?? [];
                     <?= $isSetor ? '−' : '+' ?> <?= $rp($nominal) ?>
                 </div>
                 <div class="pv-sub">
-                    <?= ($kas['saldo'] ?? null) === null ? 'Belum dapat dihitung' : 'Saldo ' . $rp($kas['saldo']) ?>
+                    <?php if (($kas['saldo'] ?? null) !== null) : ?>
+                        Saldo <?= $rp($kas['saldo']) ?>
+                    <?php elseif (empty($kas['opening_ada'])) : ?>
+                        Belum ada opening KAS — saldo tidak ditampilkan sebagai 0
+                    <?php else : ?>
+                        Belum dapat dihitung
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

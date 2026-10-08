@@ -14,11 +14,9 @@ use App\Models\ModelAlokasiSaldoKasBank;
  * Periode aktif: 2026-10-06 → sekarang
  *
  * KAS tidak punya bank statement — dan TIDAK BOLEH membuatnya. Baseline KAS
- * punya bentuk sendiri: angka yang ditetapkan FINANCE pada tanggal cut-off
- * (`opening_kas`), lalu dicocokkan dengan hitungan fisik laci saat Tutup Kasir
- * pada tanggal yang sama (`tutup_kasir.akhir_cash`). Opening adalah keputusan
- * Finance; `akhir_cash` adalah real/actual. Keduanya dicatat terpisah dan
- * dibandingkan — lihat KasOpeningService.
+ * adalah SALDO RIIL laci yang diinput user pada tanggal cut-off (`opening_kas`).
+ * Tidak ada verifikasi dan tidak ada perbandingan dengan `tutup_kasir` — angka
+ * opening langsung jadi pembuka saldo buku.
  *
  * Snapshot `kas_masuk` ber-deskripsi 'kas awal' BENIGN DIBACA: TutupKasir
  * menulisnya tiap hari untuk hari berikutnya, jadi menjumlahkannya akan
@@ -272,43 +270,19 @@ class KasBankCutoffService
     /**
      * Baris diagnostics untuk rekening KAS.
      *
-     * Empat angka ditampilkan terpisah sesuai bentuk rekonsiliasi opening KAS:
-     * opening (baseline Finance), real_cash (hitung laci saat Tutup Kasir),
-     * selisih, dan status. Opening KAS yang sudah ada tapi belum diverifikasi
-     * tetap dilaporkan lengkap — lengkap dengan real cash-nya, supaya yang
-     * belum diverifikasi kelihatan dan bisa langsung ditindaklanjuti.
+     * Baseline KAS adalah opening yang sudah diinput Finance pada tanggal
+     * cut-off. Kalau barisnya ada, baseline tersedia dan saldo laci bisa
+     * dipakai; kalau belum, dilaporkan sebagai belum ada sehingga tidak ada
+     * saldo 0 senyap.
      *
      * @return array<string, mixed>
      */
     private function diagnostikBaselineKas(object $akun, string $tanggal): array
     {
         $akunId = (int) $akun->idakun_kas_bank;
-        $r      = $this->openingSrc()->rekonsiliasi($akunId, $tanggal);
+        $row    = $this->openingSrc()->openingAt($akunId, $tanggal);
 
-        $opening = (int) ($r['opening'] ?? 0);
-        $real    = (int) ($r['real_cash'] ?? 0);
-
-        if ($r['status'] === 'BELUM_ADA') {
-            $kondisi = sprintf('belum ada opening pada %s', $tanggal);
-        } elseif ($r['status'] === KasOpeningService::STATUS_BELUM) {
-            $kondisi = sprintf(
-                'opening %s sudah diinput tapi BELUM dicocokkan dengan real cash',
-                self::rupiah($opening)
-            );
-        } elseif ($r['status'] === KasOpeningService::STATUS_GAGAL) {
-            $kondisi = sprintf(
-                'opening %s vs real cash %s, selisih %s',
-                self::rupiah($opening),
-                self::rupiah($real),
-                self::rupiah((int) ($r['selisih'] ?? 0))
-            );
-        } else {
-            $kondisi = sprintf(
-                'opening %s terverifikasi, cocok dengan real cash %s',
-                self::rupiah($opening),
-                self::rupiah($real)
-            );
-        }
+        $opening = $row === null ? null : (int) $row->opening;
 
         return [
             'akun_id'                 => $akunId,
@@ -316,33 +290,13 @@ class KasBankCutoffService
             'nama_akun'               => (string) ($akun->nama_akun ?? ''),
             'unit_id'                 => $akun->unit_id === null ? null : (int) $akun->unit_id,
             'is_shared'               => false,
-            'baseline_ada'            => (bool) $r['opening_ada'],
-            'baseline_terverifikasi'  => (bool) $r['terverifikasi'],
-            'saldo'                   => (int) ($r['opening'] ?? 0),
-            'tanggal_baseline'        => $r['opening_ada'] ? $tanggal : null,
+            'baseline_ada'            => $row !== null,
+            'baseline_terverifikasi'  => $row !== null,
+            'saldo'                   => $opening ?? 0,
+            'tanggal_baseline'        => $row === null ? null : $tanggal,
             'tertagih'                => null,
-            'kondisi'                 => $kondisi,
-            'opening'                 => $r['opening'],
-            'real_cash'               => $r['real_cash'],
-            'real_cash_ada'           => $r['real_cash_ada'],
-            'real_cash_ambigu'        => $r['real_cash_ambigu'],
-            // Nama key disamakan dengan bentuk rekonsiliasi (bukan
-            // `selisih_rekonsiliasi`/`status_rekonsiliasi`) supaya satu
-            // pembaca bisa memakai `selisih` dan `status` untuk rekening KAS
-            // maupun lewat service Opening KAS langsung.
-            'selisih'                => $r['selisih'],
-            'status'                 => $r['status'],
-
-            // Snapshot hasil verifikasi, dibandingkan dengan angka live di
-            // atas. `selisih` dihitung ulang dari Tutup Kasir saat ini,
-            // sedangkan `status` dibaca dari baris yang tersimpan waktu
-            // verifikasi. Kalau laci ditutup ulang atau baris Tutup Kasir
-            // berubah setelah verifikasi, kedua angka itu AKAN berbeda --
-            // dan tanpa flag ini rekening tetap terlihat "TERVERIFIKASI"
-            // padahal real cashnya sudah bergeser.
-            'real_cash_verifikasi'   => $r['real_cash_verifikasi'] ?? null,
-            'selisih_verifikasi'     => $r['selisih_verifikasi'] ?? null,
-            'selisih_bergeser'       => $r['selisih_bergeser'] ?? null,
+            'opening'                 => $opening,
+            'keterangan'              => $row === null ? null : $row->keterangan,
         ];
     }
 
@@ -585,20 +539,21 @@ class KasBankCutoffService
     }
 
     /**
-     * Apakah BASELINE rekening ini sudah terverifikasi.
+     * Apakah BASELINE rekening ini tersedia untuk Setor/Penarikan.
      *
-     * Padanan tipe-aware dari statementVerified():
-     *   - KAS  -> opening sudah dicocokkan dengan real cash Tutup Kasir
-     *   - BANK -> statement sudah diverifikasi Finance
+     * Tipe-aware:
+     *   - KAS  -> baris opening pada tanggal cut-off ada (opening langsung
+     *             sah sebagai acuan; tidak ada verifikasi).
+     *   - BANK -> statement sudah diverifikasi Finance.
      *
      * Inilah syarat yang dipakai Setor/Tarik sebelum memakai saldo rekening
-     * sebagai acuan, jadi "baseline laci" dan "baseline koran" diperlakukan
-     * sama: keduanya wajib dibuktikan dulu.
+     * sebagai acuan, jadi "baseline laci" ditentukan oleh keberadaan opening,
+     * sedangkan "baseline koran" tetap wajib diverifikasi.
      */
-    public function openingTerverifikasi(int $akunId, ?string $tanggal = null): bool
+    public function openingTersedia(int $akunId, ?string $tanggal = null): bool
     {
         if ($this->tipeRekening($akunId) === TutupKasirSourceDefinition::TIPE_KAS) {
-            return $this->openingSrc()->terverifikasi($akunId, $tanggal);
+            return $this->openingSrc()->openingAda($akunId, $tanggal);
         }
 
         return $this->statementVerified($akunId, $tanggal);
@@ -737,7 +692,7 @@ class KasBankCutoffService
      *     saldo_fisik == LEGACY + SUM(posisi unit entitled)
      *
      * @return array{
-     *   akun_id:int, tipe:string, saldo_opening:int, opening_terverifikasi:bool,
+     *   akun_id:int, tipe:string, saldo_opening:int, opening_ada:bool,
      *   total_opening_allocation:int, legacy_unassigned:int, net_movement:int,
      *   saldo_fisik:int, total_posisi_unit:int, selisih:int,
      *   alokasi_melebihi_opening:bool, status:string, entitled:int[]
@@ -774,7 +729,7 @@ class KasBankCutoffService
             'akun_id'                    => $akunId,
             'tipe'                       => $this->tipeRekening($akunId),
             'saldo_opening'              => $opening,
-            'opening_terverifikasi'      => $this->openingTerverifikasi($akunId),
+            'opening_ada'                => $this->openingTersedia($akunId),
             'total_opening_allocation'   => $alokasi,
             'legacy_unassigned'          => $legacy,
             'net_movement'               => $net,
@@ -793,7 +748,7 @@ class KasBankCutoffService
      * Invariant KAS yang dijaga: opening laci harus utuh sebagai posisi unit
      * owning-nya. Kalau opening KAS tidak terbaca (mis. baris hilang), posisi
      * unit dan saldo fisik ikut hilang bersama dan invariant tetap SEIMBANG
-     * — itu sebabnya `opening_terverifikasi` ikut dilaporkan, supaya kondisi
+     * — itu sebabnya `opening_ada` ikut dilaporkan, supaya kondisi
      * "seimbang tapi baseline-nya tidak ada" tidak lolos tanpa suara.
      *
      * @return array<int, array<string, mixed>>

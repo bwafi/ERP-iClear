@@ -265,17 +265,18 @@ class KasBankSetorTarikService
         // ---- Guard baseline laci KAS ----
         //
         // Laci kas tidak punya statement bank; baseline-nya adalah opening
-        // yang ditetapkan Finance lalu dicocokkan dengan real cash Tutup
-        // Kasir pada cutoff yang sama (KasOpeningService).
+        // (uang fisik laci) yang Finance input pada tanggal cut-off
+        // (KasOpeningService). Opening yang sudah tersimpan langsung sah
+        // sebagai acuan — tidak ada verifikasi.
         //
         // Cek ini WAJIB ada di service, bukan hanya di form: kalau form
         // memblokir sementara service mengizinkan, request yang sama akan
         // dapat dua jawaban berbeda tergantung lewat mana dia datang.
-        if (! $this->cutoff->openingTerverifikasi($akunKasId)) {
+        if (! $this->cutoff->openingTersedia($akunKasId)) {
             return $this->tolakDenganIdempotensi($key, sprintf(
-                'Laci kas "%s" belum punya opening KAS terverifikasi pada %s. Saldo laci hanya '
-                . 'boleh dipakai sebagai acuan setelah Finance menetapkan opening pada tanggal '
-                . 'cut-off dan opening itu dicocokkan dengan hasil hitung laci saat Tutup Kasir.',
+                'Laci kas "%s" belum punya opening KAS pada %s. Saldo laci hanya '
+                . 'boleh dipakai sebagai acuan setelah Finance menetapkan opening '
+                . '(uang fisik laci) pada tanggal cut-off.',
                 (string) ($kas->nama_akun ?? $akunKasId),
                 $this->cutoff->tanggalCutoff()
             ));

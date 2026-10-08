@@ -3,7 +3,7 @@
  * Banner diagnosa konfigurasi akun kas/bank.
  *
  * Muncul hanya kalau ada konfigurasi rekening/akun yang belum lengkap
- * (pemilihan rekening, alokasi shared account, atau verifikasi baseline/opening)
+ * (pemilihan rekening, alokasi shared account, atau opening/baseline KAS)
  * sehingga beberapa transaksi tidak bisa dipromosikan ke ledger `transaksi_kas_bank`.
  * Banner ini bersifat konfiguratif, bukan berarti seluruh jurnal operasional
  * wajib masuk `transaksi_kas_bank`.
@@ -21,7 +21,7 @@ $diagnostik = $diagnostik_konfigurasi ?? [];
             <strong>Konfigurasi rekening kas/bank belum lengkap</strong>
             <div class="mt-1">
                 Ini berkaitan dengan <span class="fw-semibold">konfigurasi rekening, alokasi shared account,
-                atau verifikasi opening/baseline KAS</span>. Beberapa transaksi yang membutuhkan
+                atau opening/baseline KAS</span>. Beberapa transaksi yang membutuhkan
                 penentuan rekening fisik <span class="fw-semibold">tidak dapat diposting ke
                 <code>transaksi_kas_bank</code></span> hingga konfigurasi diperbaiki.
                 Transaksi jurnal aslinya tetap tersimpan sesuai sumbernya.

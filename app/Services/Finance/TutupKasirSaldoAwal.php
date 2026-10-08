@@ -19,25 +19,22 @@ use Config\Database;
  *                         awal hari N+1.
  *
  *   2. BASELINE PERIODE   `opening_kas.opening` pada rekening KAS unit tsb,
- *                         HANYA kalau baris itu berstatus `TERVERIFIKASI`.
- *                         Dipakai `KasOpeningService` supaya definisi
- *                         baseline TIDAK diduplikasi di sini.
+ *                         barisnya cukup ADA pada tanggal cut-off. Dipakai
+ *                         `KasOpeningService` supaya definisi baseline TIDAK
+ *                         diduplikasi di sini.
  *
  *   3. BELUM DITETAPKAN    Tidak ada fallback. Tidak ke Rp1.000.000, tidak ke
  *                         `kas_masuk`, tidak ke 0, tidak ke saldo lama.
  *                         Pemanggil wajib menampilkan kondisinya supaya
  *                         angka palsu tidak pernah dibaca sebagai saldo riil.
  *
- * Kenapa baseline WAJIB `TERVERIFIKASI`:
- *   `opening_kas.status` punya tiga nilai: `BELUM_VERIFIKASI`, `TERVERIFIKASI`,
- *   dan `TIDAK_COCOK`. Dua nilai terakhir yang pertama TIDAK boleh jadi saldo
- *   awal Tutup Kasir:
- *     - `BELUM_VERIFIKASI` = Finance belum mencocokkan baseline dengan real cash.
- *     - `TIDAK_COCOK`       = Finance SUDAH mencocokkan dan hasilnya MELESET.
- *                              Baseline yang sudah dinyatakan meleset jelas
- *                              tidak boleh jadi titik awal laci.
+ * Kenapa opening TIDAK lagi diverifikasi:
+ *   Opening KAS adalah saldo riil uang fisik laci yang Finance input pada
+ *   tanggal cut-off; begitu barisnya tersimpan, angka itu langsung dipakai
+ *   sebagai baseline. Tidak ada perbandingan dengan `tutup_kasir.akhir_cash`
+ *   dan tidak ada status `BELUM_VERIFIKASI / TERVERIFIKASI / TIDAK_COCOK`.
  *   Ini prinsip yang sama dengan guard Setor/Tarik
- *   (`KasBankCutoffService::openingTerverifikasi()`), jadi kedua sisi tidak
+ *   (`KasBankCutoffService::openingTersedia()`), jadi kedua sisi tidak
  *   memakai dua standar berbeda untuk masalah yang sama.
  *
  * Kenapa tanggal baseline harus BERLAKU pada tanggal closing:
@@ -76,12 +73,6 @@ class TutupKasirSaldoAwal
     public const SUMBER_CLOSING = 'closing_sebelumnya';
     public const SUMBER_OPENING = 'opening_kas';
     public const SUMBER_BELUM  = 'belum_ditetapkan';
-
-    /** Opening KAS dengan status ini TIDAK boleh jadi saldo awal. */
-    public const STATUS_BELUM_DIPERCAYA = [
-        KasOpeningService::STATUS_BELUM,
-        KasOpeningService::STATUS_GAGAL,
-    ];
 
     /** Nilai opening yang berarti "dipakai" oleh Tutup Kasir. */
     public const BELUM_ADA = null;
@@ -170,9 +161,9 @@ class TutupKasirSaldoAwal
     /**
      * Pesan "belum bisa jadi saldo awal".
      *
-     * Kalau baseline-nya ADA tapi ditolak (belum terverifikasi / TIDAK COK /
-     * bertanggal di masa depan), alasannya dihitung lebih dulu supaya
-     * kasir tahu apa yang harus diperbaiki — bukan hanya "belum ada".
+     * Kalau baseline-nya ADA tapi ditolak (bertanggal di masa depan), alasan
+     * dihitung lebih dulu supaya kasir tahu apa yang harus diperbaiki —
+     * bukan hanya "belum ada".
      */
     private function pesanBelumTersedia(?int $akunId, string $alasan): string
     {
@@ -370,12 +361,14 @@ class TutupKasirSaldoAwal
     /**
      * Baseline Opening KAS pada tanggal cut-off, lewat KasOpeningService.
      *
-     * Tiga syarat WAJIB, semua dicek di sini:
+     * Syarat WAJIB, yang tersisa hanya satu:
      *
      *   1. Baris ada di `Finance::cutoffDate()`.
-     *   2. Statusnya `TERVERIFIKASI`. `BELUM_VERIFIKASI` belum dicocokkan
-     *      dengan real cash; `TIDAK_COCOK` sudah dicocokkan dan meleset.
-     *   3. Tanggal baseline STRICTLY sebelum $tanggalClosing. Baseline 5 Okt
+     *
+     * Tidak ada lagi syarat status: opening KAS yang tersimpan langsung sah
+     * sebagai baseline (tidak ada verifikasi).
+     *
+     *   2. Tanggal baseline TIDAK setelah $tanggalClosing. Baseline 5 Okt
      *      tidak boleh jadi saldo awal closing 4 Okt.
      *
      * Sengaja TIDAK memakai `opening()`: method itu mengembalikan 0 kalau
@@ -401,25 +394,7 @@ class TutupKasirSaldoAwal
             return $kosong;
         }
 
-        // --- syarat 2: status harus TERVERIFIKASI ---
-        $status = (string) ($row->status ?? '');
-
-        if ($status !== KasOpeningService::STATUS_SUDAH) {
-            return [
-                'ada'     => false,
-                'nilai'   => 0,
-                'tanggal' => (string) $row->tanggal,
-                'alasan'  => $status === KasOpeningService::STATUS_GAGAL
-                    ? 'Baseline Opening KAS di ' . $cutoff . ' sudah diverifikasi sebagai TIDAK COK '
-                        . '(selisih terhadap real cash), jadi tidak boleh jadi saldo awal. '
-                        . 'Perbaiki baselinenya di menu Kas & Bank → Opening KAS.'
-                    : 'Baseline Opening KAS di ' . $cutoff . ' belum diverifikasi (status: '
-                        . ($status === '' ? '(kosong)' : $status) . '), jadi tidak boleh jadi '
-                        . 'saldo awal Tutup Kasir. Verifikasikan dulu di menu Kas & Bank → Opening KAS.',
-            ];
-        }
-
-        // --- syarat 3: baseline tidak boleh ber Tanggal di masa depan ---
+        // --- syarat 2: baseline tidak boleh bertanggal di masa depan ---
         //
         // Aturannya `tanggal_baseline <= tanggal_closing` — sama dengan
         // `KasOpeningService::openingBerlaku()` yang dipakai Finance untuk
