@@ -428,6 +428,10 @@ class StokOpname extends BaseController
             return redirect()->to(base_url('stok_opname'))
                 ->with('gagal', 'Mode lihat: role ini tidak dapat membatalkan stok opname.');
         }
+        if ((int) session('ID_JABATAN') !== 1) {
+            return redirect()->to(base_url('stok_opname'))
+                ->with('gagal', 'Hanya Admin Root yang dapat membatalkan draft stok opname.');
+        }
 
         $unit = $this->mutationUnit();
         if ($unit <= 0) {
