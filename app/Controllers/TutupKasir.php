@@ -94,6 +94,8 @@ class TutupKasir extends BaseController
 
         $unit = $this->request->getGet('unit');
 
+        $list_unit = $this->db->table('unit')->get()->getResultArray();
+
         $builder = $this->db->table('tutup_kasir tk')
 
             ->select('
@@ -125,6 +127,7 @@ class TutupKasir extends BaseController
 
                 'tutupkasir' => null,
                 'tanggal'    => $tanggal,
+                'list_unit'  => $list_unit,
                 'selected_unit' => $unit,
                 'body' => 'jurnal/kasir_bulanan'
 
@@ -136,6 +139,8 @@ class TutupKasir extends BaseController
             'tutupkasir' => $tutupkasir,
 
             'tanggal' => $tanggal,
+
+            'list_unit' => $list_unit,
 
             'selected_unit' => $unit,
 
