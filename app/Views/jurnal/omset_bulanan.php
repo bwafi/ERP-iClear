@@ -174,7 +174,7 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <span class="badge bg-primary-subtle text-primary mb-2 px-3 py-1 fw-semibold">Fast Moving Service</span>
-                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;"><?= esc($bestsellerproduct->tipe_hp_label ?? '-') ?></h5>
+                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;"><?= esc(ucwords($bestsellerproduct->keyword_hp ?? $bestsellerproduct->tipe_hp_label ?? '-')) ?></h5>
                         <span class="fs-2 text-muted">Selesai: <strong class="text-dark"><?= number_format($bestsellerproduct->total ?? 0, 0, ',', '.') ?></strong> service</span>
                     </div>
                     <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
@@ -279,9 +279,9 @@
     <div class="col-md-3">
         <div class="card border shadow-none h-100">
             <div class="card-body p-3">
-                <span class="text-muted fs-2 d-block mb-1">HPP Value</span>
-                <h5 class="fw-bold text-dark mb-0">Rp <?= number_format($hpp_global ?? 0, 0, ',', '.') ?></h5>
-                <small class="text-muted fs-2"><?= $isBulanBerjalan ? 'Bulan berjalan' : 'Periode lampau' ?></small>
+                <span class="text-muted fs-2 d-block mb-1">Value</span>
+                <h5 class="fw-bold text-dark mb-0">Rp <?= number_format($value ?? 0, 0, ',', '.') ?></h5>
+                <small class="text-muted fs-2">Uang masuk kotor (tanpa HPP)</small>
             </div>
         </div>
     </div>

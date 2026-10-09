@@ -182,14 +182,27 @@ class TutupKasir extends BaseController
             70 => [4],    // Guruh Dwi Prasetyo: Pandaan
         ];
 
-        // Ambil list unit
+        // Ambil list unit (kecualikan Head Office)
         if (in_array($id_jabatan, [1, 40])) {
-            $list_unit = $this->db->table('unit')->get()->getResultArray();
+            $list_unit = $this->db->table('unit')
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office')
+                ->get()
+                ->getResultArray();
         } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
             $allowed = $allowedUnitsByAkun[$id_akun];
-            $list_unit = $this->db->table('unit')->whereIn('idunit', $allowed)->get()->getResultArray();
+            $list_unit = $this->db->table('unit')
+                ->whereIn('idunit', $allowed)
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office')
+                ->get()
+                ->getResultArray();
         } else {
-            $list_unit = $this->db->table('unit')->get()->getResultArray();
+            $list_unit = $this->db->table('unit')
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office')
+                ->get()
+                ->getResultArray();
         }
 
         // Penentuan unit
@@ -207,19 +220,10 @@ class TutupKasir extends BaseController
             $unit = session()->get('ID_UNIT');
         }
 
-        // ==========================
-        // FILTER UNIT
-        // ==========================
-        $unit = $this->request->getGet('unit');
-
-        if (!$unit) {
-            $unit = session()->get('ID_UNIT');
+        $availableUnitIds = array_map(function($u) { return (int)$u['idunit']; }, $list_unit);
+        if (!in_array((int)$unit, $availableUnitIds, true) && !empty($availableUnitIds)) {
+            $unit = $availableUnitIds[0];
         }
-
-        // LIST UNIT
-        $list_unit = $this->db->table('unit')
-            ->get()
-            ->getResultArray();
 
         // FILTER BULAN/TAHUN
         $bulan = $this->request->getGet('bulan');
@@ -420,8 +424,8 @@ class TutupKasir extends BaseController
             ->selectCount('b.nama_barang', 'total')
             ->join('barang b', 'b.idbarang = dp.barang_idbarang')
             ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
-            ->where('MONTH(p.tanggal)', date('m'))
-            ->where('YEAR(p.tanggal)', date('Y'))
+            ->where('MONTH(p.tanggal)', $bulan)
+            ->where('YEAR(p.tanggal)', $tahun)
             ->where('p.unit_idunit', $unit)
             ->where('b.idkategori', 3)
             ->notLike('b.nama_barang', 'mesin')
@@ -456,31 +460,22 @@ class TutupKasir extends BaseController
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->join(
-                'barang',
-                'barang.idbarang = detail_penjualan.barang_idbarang'
-            )
             ->where('MONTH(penjualan.tanggal)', $bulan)
             ->where('YEAR(penjualan.tanggal)', $tahun)
             ->where('penjualan.unit_idunit', $unit)
-            ->where('barang.idkategori =', 3)
             ->get()
             ->getRow()
             ->total ?? 0;
 
-        $hpp_global = $this->db->table('detail_penjualan')
-            ->select('SUM(hpp_penjualan) AS total')
+        $value = $this->db->table('detail_penjualan')
+            ->select('SUM(detail_penjualan.sub_total) AS total')
             ->join(
                 'penjualan',
                 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
             )
-            ->join(
-                'barang',
-                'barang.idbarang = detail_penjualan.barang_idbarang'
-            )
             ->where('MONTH(penjualan.tanggal)', $bulan)
             ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('barang.idkategori =', 3)
+            ->where('penjualan.unit_idunit', $unit)
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -545,7 +540,7 @@ class TutupKasir extends BaseController
             'bulanSebelum'   => $bulanSebelum,
             'tahunSebelum'   => $tahunSebelum,
             'hpp'           => $hpp,
-            'hpp_global'    => $hpp_global,
+            'value'         => $value,
             'listHari'          => $listHari,
             'bestseller'        => $bestseller,
             'bestsellerproduct' => $bestsellerproduct,
@@ -582,14 +577,27 @@ class TutupKasir extends BaseController
             70 => [4],    // Guruh Dwi Prasetyo: Pandaan
         ];
 
-        // Ambil list unit
+        // Ambil list unit (kecualikan Head Office)
         if (in_array($id_jabatan, [1, 40])) {
-            $list_unit = $this->db->table('unit')->get()->getResultArray();
+            $list_unit = $this->db->table('unit')
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office')
+                ->get()
+                ->getResultArray();
         } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
             $allowed = $allowedUnitsByAkun[$id_akun];
-            $list_unit = $this->db->table('unit')->whereIn('idunit', $allowed)->get()->getResultArray();
+            $list_unit = $this->db->table('unit')
+                ->whereIn('idunit', $allowed)
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office')
+                ->get()
+                ->getResultArray();
         } else {
-            $list_unit = $this->db->table('unit')->get()->getResultArray();
+            $list_unit = $this->db->table('unit')
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office')
+                ->get()
+                ->getResultArray();
         }
 
         // Penentuan unit
@@ -607,19 +615,10 @@ class TutupKasir extends BaseController
             $unit = session()->get('ID_UNIT');
         }
 
-        // ==========================
-        // FILTER UNIT
-        // ==========================
-        $unit = $this->request->getGet('unit');
-
-        if (!$unit) {
-            $unit = session()->get('ID_UNIT');
+        $availableUnitIds = array_map(function($u) { return (int)$u['idunit']; }, $list_unit);
+        if (!in_array((int)$unit, $availableUnitIds, true) && !empty($availableUnitIds)) {
+            $unit = $availableUnitIds[0];
         }
-
-        // LIST UNIT
-        $list_unit = $this->db->table('unit')
-            ->get()
-            ->getResultArray();
 
         // FILTER BULAN/TAHUN
         $bulan = $this->request->getGet('bulan');
