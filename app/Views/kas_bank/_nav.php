@@ -7,9 +7,8 @@ $__uri = service('uri');
 $__seg2 = $__uri->getSegment(2) ?? '';
 $__active = $__seg2 === '' ? 'ringkasan'
     : ($__seg2 === 'akun' ? 'rekening'
-    : ($__seg2 === 'transfer' ? 'pindah'
-    : (in_array($__seg2, ['antar-unit', 'antar_unit'], true) ? 'antar'
-    : (in_array($__seg2, ['setor-tunai', 'penarikan-tunai'], true) ? 'tunai' : 'ringkasan'))));
+    : (in_array($__seg2, ['transfer', 'setor-tunai', 'penarikan-tunai'], true) ? 'mutasi'
+    : (in_array($__seg2, ['antar-unit', 'antar_unit'], true) ? 'antar' : 'ringkasan')));
 
 $__ctxBadges = [
     'ringkasan' => '',
@@ -47,17 +46,11 @@ $__tabs = [
         'label' => 'Rekening & Saldo Awal',
         'badge' => $__ctxBadges['rekening'],
     ],
-    'pindah' => [
+    'mutasi' => [
         'url'   => base_url('kas_bank/transfer'),
-        'icon'  => 'solar:transfer-horizontal-bold-duotone',
-        'label' => 'Pindah Saldo (Bank)',
+        'icon'  => 'solar:refresh-horizontal-bold-duotone',
+        'label' => 'Mutasi Dana (Internal)',
         'badge' => $__ctxBadges['pindah'],
-    ],
-    'tunai' => [
-        'url'   => base_url('kas_bank/setor-tunai'),
-        'icon'  => 'solar:hand-money-bold-duotone',
-        'label' => 'Setor & Tarik Tunai',
-        'badge' => $__ctxBadges['tunai'],
     ],
     'antar' => [
         'url'   => base_url('kas_bank/antar-unit'),
@@ -65,6 +58,13 @@ $__tabs = [
         'label' => 'Talangan & Antar Cabang',
         'badge' => $__ctxBadges['antar'],
     ],
+];
+
+$__titles = [
+    'ringkasan' => ['Ringkasan Kas & Bank', 'Pantau saldo fisik kas laci, buku rekening bank, dan jatah saldo operasional per cabang.'],
+    'rekening'  => ['Rekening & Saldo Awal', 'Kelola daftar rekening bank/kas, saldo awal fisik, dan pembagian jatah saldo per cabang.'],
+    'mutasi'    => ['Mutasi Dana', 'Pindahkan dana antar rekening bank atau setor/tarik tunai ke laci kas.'],
+    'antar'     => ['Talangan & Antar Cabang', 'Penyelesaian hutang piutang transfer fisik antar cabang atau talangan biaya bersama.'],
 ];
 
 $__titles = [
