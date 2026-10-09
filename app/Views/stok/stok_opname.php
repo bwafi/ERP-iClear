@@ -649,7 +649,10 @@ $who      = static function ($id) use ($akunNama): string {
     const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
 
     function bukaDetailSelisih(tanggal) {
-        var myModal = new bootstrap.Modal(document.getElementById('modalDetailSelisih'));
+        console.log('Membuka modal, Tanggal:', tanggal);
+        var modalEl = document.getElementById('modalDetailSelisih');
+        var myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        
         if ($('#selectTanggalSelisih').length) {
             $('#selectTanggalSelisih').val(tanggal).trigger('change');
             myModal.show();
@@ -657,38 +660,39 @@ $who      = static function ($id) use ($akunNama): string {
     }
 
     $('#selectTanggalSelisih').on('change', function() {
-            const tanggal = $(this).val();
-            const container = $('#containerDetailSelisih');
-            
-            if (!tanggal || !stokopname_grouped[tanggal]) {
-                container.html('<p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>');
-                return;
-            }
+        const tanggal = $(this).val();
+        const container = $('#containerDetailSelisih');
+        
+        if (!tanggal || !stokopname_grouped[tanggal]) {
+            container.html('<p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>');
+            return;
+        }
 
-            // Filter selisih != 0
-            const items = stokopname_grouped[tanggal].filter(item => parseFloat(item.jumlah_selisih) !== 0);
-            
-            if (items.length === 0) {
-                container.html('<div class="alert alert-success">Tidak ada selisih pada tanggal ini.</div>');
-                return;
-            }
+        // Filter selisih != 0
+        const items = stokopname_grouped[tanggal].filter(item => parseFloat(item.jumlah_selisih) !== 0);
+        
+        if (items.length === 0) {
+            container.html('<div class="alert alert-success">Tidak ada selisih pada tanggal ini.</div>');
+            return;
+        }
 
-            let html = '<table class="table table-sm table-striped">';
-            html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
-            html += '<tbody>';
-            items.forEach(item => {
-                const selisih = parseFloat(item.jumlah_selisih);
-                const classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
-                html += `<tr>
-                    <td>${item.nama_barang}</td>
-                    <td class="text-center">${item.jumlah_real}</td>
-                    <td class="text-center">${item.jumlah_komp}</td>
-                    <td class="text-center fw-bold ${classSelisih}">${item.jumlah_selisih}</td>
-                </tr>`;
-            });
-            html += '</tbody></table>';
-            container.html(html);
+        let html = '<table class="table table-sm table-striped">';
+        html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
+        html += '<tbody>';
+        items.forEach(item => {
+            const selisih = parseFloat(item.jumlah_selisih);
+            const classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
+            html += `<tr>
+                <td>${item.nama_barang}</td>
+                <td class="text-center">${item.jumlah_real}</td>
+                <td class="text-center">${item.jumlah_komp}</td>
+                <td class="text-center fw-bold ${classSelisih}">${item.jumlah_selisih}</td>
+            </tr>`;
         });
+        html += '</tbody></table>';
+        container.html(html);
+    });
+</script>
     });
 </script>
 
