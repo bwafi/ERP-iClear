@@ -539,12 +539,7 @@ $who      = static function ($id) use ($akunNama): string {
                 <div class="<?= $duoCol ?>">
                     <section class="card so-history h-100">
                         <div class="card-header">
-                            <div class="d-flex align-items-center justify-content-between">
                             <h6 class="mb-0"><i class="bi bi-calendar3"></i> Riwayat Periode Opname — <?= esc($namaUnit) ?></h6>
-                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalDetailSelisih">
-                                <iconify-icon icon="solar:magnifer-linear"></iconify-icon> Lihat Detail Selisih
-                            </button>
-                        </div>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -651,14 +646,13 @@ $who      = static function ($id) use ($akunNama): string {
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
-<script>
     const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
 
     function bukaDetailSelisih(tanggal) {
+        var myModal = new bootstrap.Modal(document.getElementById('modalDetailSelisih'));
         if ($('#selectTanggalSelisih').length) {
             $('#selectTanggalSelisih').val(tanggal).trigger('change');
-            $('#modalDetailSelisih').modal('show');
+            myModal.show();
         }
     }
 
