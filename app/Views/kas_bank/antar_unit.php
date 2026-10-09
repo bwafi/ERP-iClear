@@ -70,19 +70,20 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                     <input type="hidden" name="submit_token" value="<?= esc($submit_token ?? '') ?>">
 
                     <div class="mb-3">
-                        <label class="kb-label mb-1">Target Hutang Antar Unit</label>
+                        <label class="kb-label mb-1">Tagihan yang akan dibayar</label>
                         <select name="hutang_piutang_id" id="hp_hutang" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
-                            <option value="">Pilih Tagihan Hutang</option>
+                            <option value="">Pilih tagihan</option>
                             <?php foreach (($hp_hutang ?? []) as $h) : ?>
                                 <option value="<?= (int) $h->id ?>"
                                     data-unit="<?= (int) $h->unit_id ?>"
                                     data-lawan="<?= (int) $h->lawan_unit_id ?>"
                                     data-sisa="<?= (int) $h->sisa ?>"
                                     <?= (int) $h->sisa <= 0 ? 'disabled' : '' ?>>
-                                    [<?= esc($unitMap[(int) $h->unit_id] ?? 'U' . $h->unit_id) ?>] <?= esc($h->nama_pihak) ?> — sisa <?= $rp($h->sisa) ?>
+                                    <?= esc($h->kode) ?> — ke <?= esc($unitMap[(int) $h->lawan_unit_id] ?? 'U' . $h->lawan_unit_id) ?> — sisa <?= $rp($h->sisa) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <small class="text-muted">Daftar difilter otomatis sesuai cabang yang sedang difilter di atas.</small>
                     </div>
 
                     <div class="mb-3">
@@ -98,7 +99,19 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
                     </div>
 
                     <div class="mb-3">
-                        <label class="kb-label mb-1">Akun Penerima (Kas/Bank)</label>
+                        <label class="kb-label mb-1">Rekening Sumber Dana</label>
+                        <select name="akun_sumber_id" id="akun_sumber" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
+                            <option value="">Pilih rekening pengirim</option>
+                            <?php foreach (($akun_kas_bank ?? []) as $a) : ?>
+                                <option value="<?= (int) $a->idakun_kas_bank ?>">
+                                    <?= esc($kelAkun($a)) ?><?= (int) ($a->is_shared ?? 0) === 1 ? ' (Bersama)' : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="kb-label mb-1">Rekening Penerima</label>
                         <select name="akun_penerima_id" id="akun_penerima" class="form-select form-select-sm kb-select" required <?= $canTransaksi ? '' : 'disabled' ?>>
                             <option value="">Pilih Rekening Penerima</option>
                             <?php foreach (($akun_penerima ?? []) as $a) : ?>
