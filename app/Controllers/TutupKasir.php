@@ -1612,13 +1612,33 @@ class TutupKasir extends BaseController
         $tanggal = $this->request->getGet('tanggal');
 
         if (!$unit || !$tanggal) {
-            return $this->response->setStatusCode(400)->setJSON(['error' => 'Parameter tidak lengkap']);
+            return $this->response->setStatusCode(400)->setJSON([
+                'success' => false,
+                'message' => 'Parameter tidak lengkap',
+            ]);
         }
 
         $service = new \App\Services\Finance\DailyCashFlowService();
-        $data = $service->getForDate((int)$unit, $tanggal);
 
-        return $this->response->setJSON($data);
+        try {
+            $data = $service->getForDate((int)$unit, $tanggal);
+        } catch (\Throwable $e) {
+            log_message('error', 'DailyCashFlowService::getForDate gagal: ' . $e->getMessage());
+
+            return $this->response->setStatusCode(500)->setJSON([
+                'success' => false,
+                'message' => 'Gagal memuat data arus kas.',
+            ]);
+        }
+
+        // Kontrak front-end (/omset_bulanan): payload harus `success: true`
+        // dengan data di `payload.data`. Versi yang mengembalikan baris mentah
+        // tanpa wrapper membuat pitanya selalu jatuh ke "Gagal memuat data
+        // arus kas".
+        return $this->response->setJSON([
+            'success' => true,
+            'data'    => $data,
+        ]);
     }
 
     public function cetak_tutup_kasir($id)
