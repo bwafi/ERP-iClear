@@ -812,14 +812,21 @@ $who      = static function ($id) use ($akunNama): string {
             soRender();
         });
 
-        // Enter pada input Jumlah Real = pindah ke baris berikutnya (bukan submit),
-        // sehingga tidak memicu banyak validasi/peringatan.
+        // Navigasi keyboard pada input Jumlah Real
         $('#opnameTable').on('keydown', '.input-real', function(e) {
-            if (e.which === 13) {
+            // Cegah perilaku default panah (increment/decrement) agar navigasi konsisten
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
                 e.preventDefault();
+                
+                // Pastikan state terbaru tersimpan sebelum navigasi
+                $(this).trigger('input');
+
                 var $inputs = $('#opnameTable .input-real');
                 var idx = $inputs.index(this);
-                if (idx < $inputs.length - 1) {
+
+                if (e.key === 'ArrowUp' && idx > 0) {
+                    $inputs.eq(idx - 1).focus();
+                } else if ((e.key === 'ArrowDown' || e.key === 'Enter') && idx < $inputs.length - 1) {
                     $inputs.eq(idx + 1).focus();
                 }
             }
