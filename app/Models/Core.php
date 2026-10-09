@@ -137,11 +137,11 @@ class Core extends Model
         // $db      = \Config\Database::connect();
         $ID_AKUN = session()->get("ID_AKUN");
         if (!$ID_AKUN) {
-            return redirect()->to(base_url('Login'));
+            return redirect()->to(base_url('login'));
         }
         $data_user = db_connect()->table("akun")->where("ID_AKUN", "$ID_AKUN")->get()->getRow();
         if (!$data_user) {
-            return redirect()->to(base_url('Login'));
+            return redirect()->to(base_url('login'));
         }
         $data_jabatan = db_connect()->table("jabatan")->where("ID_JABATAN", $data_user->ID_JABATAN)->get()->getRow();
         $role = array("1");

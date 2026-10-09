@@ -20,7 +20,7 @@ class AuthFilter implements FilterInterface
         // cukup cek logged_in. Alur login "pilih gedung" (hanya menyimpan
         // ID_GEDUNG) tetap lolos karena tetap menyertakan logged_in.
         if (session()->get('logged_in') !== true) {
-            return redirect()->to(base_url('/Login'))->with('error', "Invalid Credential Login");
+            return redirect()->to(base_url('/login'))->with('error', "Invalid Credential Login");
         }
             // $ID_AKUN = session()->get("ID_AKUN");
             // $data_user = db_connect()->table("akun")->where("ID_AKUN", "$ID_AKUN")->get()->getRow();
