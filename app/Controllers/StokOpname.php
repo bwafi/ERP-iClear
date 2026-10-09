@@ -82,6 +82,15 @@ class StokOpname extends BaseController
         $periode = $this->svc->periode($unit, $tanggal);
         $audit   = $this->auditTrail($unit, $tanggal);
 
+        // Ambil data stokopname untuk modal filter selisih
+        $stokopname = (new \App\Models\ModelStokOpname())->getStokOpnameAll();
+        $stokopname_grouped = [];
+        foreach ($stokopname as $row) {
+            if((int)$row->unit_idunit === (int)$unit) {
+                $stokopname_grouped[$row->tanggal][] = $row;
+            }
+        }
+
         return view('template', [
             'akun'             => $this->AuthModel->getById(session('ID_AKUN')),
             'unitList'         => $this->UnitModel->getUnit(),
@@ -94,12 +103,12 @@ class StokOpname extends BaseController
             'canReopen'        => in_array($myJabatan, self::REOPEN_ROLES, true),
             'periode'          => $periode,
             'namaUnit'         => ($this->UnitModel->where('idunit', $unit)->first()->NAMA_UNIT ?? '-'),
-            'namaUnit'         => ($this->UnitModel->where('idunit', $unit)->first()->NAMA_UNIT ?? '-'),
             'items'            => $this->svc->periodeItems($unit, $tanggal),
             'historis'         => $this->PeriodeModel->getByUnit($unit, 20),
             'draftTerbuka'     => $draftTerbuka,
             'kpiBulanIni'      => $this->kpiBulan($unit),
             'auditTrail'       => $audit,
+            'stokopname_grouped' => $stokopname_grouped,
             'akunNama'         => $this->akunNamaMap(array_merge(
                 [(int) ($periode->mulai_by ?? 0), (int) ($periode->finalisasi_by ?? 0)],
                 array_column($audit, 'actor_id')

@@ -539,7 +539,12 @@ $who      = static function ($id) use ($akunNama): string {
                 <div class="<?= $duoCol ?>">
                     <section class="card so-history h-100">
                         <div class="card-header">
+                            <div class="d-flex align-items-center justify-content-between">
                             <h6 class="mb-0"><i class="bi bi-calendar3"></i> Riwayat Periode Opname — <?= esc($namaUnit) ?></h6>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalDetailSelisih">
+                                <iconify-icon icon="solar:magnifer-linear"></iconify-icon> Lihat Detail Selisih
+                            </button>
+                        </div>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -610,6 +615,71 @@ $who      = static function ($id) use ($akunNama): string {
         $opnameItemsJson = json_encode($payload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     }
 ?>
+
+<!-- Modal Detail Selisih -->
+<div class="modal fade" id="modalDetailSelisih" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detail Barang Selisih (Data Final)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <select id="selectTanggalSelisih" class="form-select mb-3">
+                    <option value="">-- Pilih Tanggal Opname --</option>
+                    <?php if (!empty($stokopname_grouped)): ?>
+                        <?php foreach (array_keys($stokopname_grouped) as $tanggal): ?>
+                            <option value="<?= esc($tanggal) ?>"><?= esc($tanggal) ?></option>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </select>
+                <div id="containerDetailSelisih">
+                    <p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
+
+        $('#selectTanggalSelisih').on('change', function() {
+            const tanggal = $(this).val();
+            const container = $('#containerDetailSelisih');
+            
+            if (!tanggal || !stokopname_grouped[tanggal]) {
+                container.html('<p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>');
+                return;
+            }
+
+            // Filter selisih != 0
+            const items = stokopname_grouped[tanggal].filter(item => parseFloat(item.jumlah_selisih) !== 0);
+            
+            if (items.length === 0) {
+                container.html('<div class="alert alert-success">Tidak ada selisih pada tanggal ini.</div>');
+                return;
+            }
+
+            let html = '<table class="table table-sm table-striped">';
+            html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
+            html += '<tbody>';
+            items.forEach(item => {
+                const selisih = parseFloat(item.jumlah_selisih);
+                const classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
+                html += `<tr>
+                    <td>${item.nama_barang}</td>
+                    <td class="text-center">${item.jumlah_real}</td>
+                    <td class="text-center">${item.jumlah_komp}</td>
+                    <td class="text-center fw-bold ${classSelisih}">${item.jumlah_selisih}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.html(html);
+        });
+    });
+</script>
 
 <script>
     $(function() {
@@ -740,7 +810,7 @@ $who      = static function ($id) use ($akunNama): string {
                     + ((it.jenis || it.warna) ? '<span class="so-sub">' + soEsc(it.jenis) + (it.warna ? ' · ' + soEsc(it.warna) : '') + '</span>' : '')
                     + '</td>'
                     + '<td class="so-num">' + soFmt(it.komp) + '</td>'
-                    + '<td class="text-center"><input type="number" step="1" min="0" class="form-control form-control-sm text-center input-real" name="items[' + it.id + '][jumlah_real]" value="' + soEsc(realVal) + '" placeholder="0" aria-label="Jumlah real ' + soEsc(it.kode) + '"' + (soReadonly ? ' readonly' : '') + '></td>'
+                    + '<td class="text-center"><input type="number" step="1" min="0" class="form-control form-control-sm text-center input-real" name="items[' + it.id + '][jumlah_real]" value="' + (realVal === null ? '' : realVal) + '" placeholder="" aria-label="Jumlah real ' + soEsc(it.kode) + '"' + (soReadonly ? ' readonly' : '') + '></td>'
                     + '<td class="text-center">' + soSelHtml(it) + '</td>'
                     + '<td class="text-center">' + soStatusHtml(it.terisi) + '</td>'
                     + '</tr>';
