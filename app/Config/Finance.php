@@ -120,7 +120,7 @@ class Finance extends BaseConfig
      * Harus = $cutoffDate + 2 hari pada skenario uji ini; konsistensi dengan
      * $kasBankPeriodeMulaiDate wajib dijaga (selalu + 1 hari).
      */
-    public string $kasBankCutoffDate = '2026-10-07';
+    public string $kasBankCutoffDate = '2026-10-09';
 
     /**
      * Hari pertama periode ledger KHUSUS Kas & Bank (YYYY-MM-DD).
