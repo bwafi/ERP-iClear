@@ -1526,7 +1526,7 @@ class KasBank extends BaseController
             'can_transaksi'   => true,
             'submit_token'    => $this->buatSubmitToken(),
             'operation_key'   => $operationKey,
-            'transaksi'       => $this->transaksiSetorTarik($unitTerpilih),
+            'transaksi'       => $this->transaksiSetorTarik($unitTerpilih, KasBankSetorTarikService::SUMBER_TIPE_SETOR),
             'cutoff_info'     => $this->infoCutoff(),
             'preview'         => null,
             'body'            => 'kas_bank/setor_tunai',
@@ -1614,7 +1614,7 @@ class KasBank extends BaseController
             'can_transaksi'  => true,
             'submit_token'   => $this->buatSubmitToken(),
             'operation_key'  => $operationKey,
-            'transaksi'      => $this->transaksiSetorTarik($unitTerpilih),
+            'transaksi'      => $this->transaksiSetorTarik($unitTerpilih, KasBankSetorTarikService::SUMBER_TIPE_TARIK),
             'cutoff_info'    => $this->infoCutoff(),
             'preview'        => null,
             'body'           => 'kas_bank/penarikan_tunai',
@@ -2204,7 +2204,7 @@ class KasBank extends BaseController
      *
      * @return array<int, array<string, mixed>>
      */
-    private function transaksiSetorTarik(?int $unitTerpilih): array
+    private function transaksiSetorTarik(?int $unitTerpilih, string $tipe): array
     {
         $akunIds = $this->AkunScope->akunIdsTerlihat(
             $this->unitIdsUser(),
@@ -2222,10 +2222,7 @@ class KasBank extends BaseController
             ->join('akun_kas_bank a', 'a.idakun_kas_bank = t.akun_kas_bank_id', 'left')
             ->join('unit u', 'u.idunit = t.unit_id', 'left')
             ->whereIn('t.akun_kas_bank_id', $akunIds)
-            ->whereIn('t.sumber_tipe', [
-                KasBankSetorTarikService::SUMBER_TIPE_SETOR,
-                KasBankSetorTarikService::SUMBER_TIPE_TARIK,
-            ])
+            ->where('t.sumber_tipe', $tipe)
             ->orderBy('t.tanggal', 'DESC')
             ->orderBy('t.idtransaksi', 'DESC')
             ->get()
