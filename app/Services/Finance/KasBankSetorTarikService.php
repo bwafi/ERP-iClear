@@ -645,20 +645,17 @@ class KasBankSetorTarikService
             );
         }
 
-        // ---- STATEMENT VERIFIED ----
+        // ---- STATEMENT VERIFIED (DILEPAS untuk Setor/Tarik) ----
         //
-        // Hanya berlaku untuk rekening yang WAJIB punya statement. Daftar ini
-        // datang dari config Finance, bukan dari tebakan sistem.
-        if ($this->policy->wajibStatementVerifikasi($akunBankId)) {
-            if (! $this->cutoff->statementVerified($akunBankId, $tanggal)) {
-                return sprintf(
-                    'Rekening "%s" belum punya statement yang diverifikasi Finance pada %s. '
-                    . 'Pengesahan saldo hanya bisa dilakukan setelah statement diinput dan diverifikasi.',
-                    (string) ($bank->nama_akun ?? $akunBankId),
-                    $this->cutoff->tanggalCutoff()
-                );
-            }
-        }
+        // Requirement 2026-10-08: Setor Tunai dan Tarik Tunai tidak boleh diblokir
+        // hanya karena statement cutoff belum verified. Baseline tetap boleh
+        // unverified, dan transaksi operasional harus tetap bisa berjalan.
+        //
+        // Guard ini tetap ada di flow Pindah Saldo (KasBank.php) dan Pembayaran
+        // Hutang/Piutang (KasBank.php) karena policy Finance mensyaratkan
+        // statement verified untuk rekening tertentu pada flow tersebut.
+        //
+        // Setor/Tarik: guard ini di-bypass. Validasi saldo/entitlement tetap berjalan.
 
         return null;
     }
