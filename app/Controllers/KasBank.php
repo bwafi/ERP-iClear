@@ -449,6 +449,13 @@ class KasBank extends BaseController
         $builder = db_connect()->table('transaksi_kas_bank')
             ->select("COALESCE(SUM(CASE WHEN transaksi_kas_bank.arah = 'MASUK' THEN transaksi_kas_bank.jumlah ELSE -transaksi_kas_bank.jumlah END), 0) AS total", false)
             ->where('transaksi_kas_bank.transfer_ref IS NOT NULL', null, false)
+            // Mutasi hak atribusi (rekening SAMA) bukan transfer fisik: pasangan
+            // KELUAR/MASUK-nya net-nol terhadap rekening, tapi per-unit bisa
+            // tampil sebagai "Transfer" palsu. Tolak dari ringkasan Transfer.
+            ->groupStart()
+                ->where('transaksi_kas_bank.sumber_tipe IS NULL', null, false)
+                ->orWhere('transaksi_kas_bank.sumber_tipe !=', 'antar_unit_atribusi')
+            ->groupEnd()
             ->where('transaksi_kas_bank.tanggal >=', $dari);
 
         if ($sampai !== '') {
@@ -1185,7 +1192,9 @@ class KasBank extends BaseController
      * memakai subtype yang salah.
      *
      * Null = jangan filter `sumber_tipe` (untuk jenis yang punya satu
-     * subtype saja, mis. `PEMBAYARAN_ANTAR_UNIT`).
+     * subtype saja, mis. `PEMBAYARAN_ANTAR_UNIT`) — TAPI pasangan leg mutasi
+     * hak `antar_unit_atribusi` selalu dikecualikan: ini atribusi rekening
+     * SAMA, bukan transfer fisik, jadi tidak boleh tampil sebagai transfer.
      */
     private function transaksiTerlihat(string $jenis, ?int $unitTerpilih, ?string $sumberTipe = null)
     {
@@ -1211,6 +1220,14 @@ class KasBank extends BaseController
 
         if ($sumberTipe !== null && $sumberTipe !== '') {
             $builder->where('sumber_tipe', $sumberTipe);
+        } else {
+            // Tanpa penyaring subtype, tolak leg mutasi hak (rekening sama).
+            // NULL bisa artinya leg fisik — jangan pakai `!=` mentah, karena
+            // itu akan menelan baris fisik yang sumber_tipe-nya NULL.
+            $builder->groupStart()
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
+            ->groupEnd();
         }
 
         return $builder
@@ -2343,6 +2360,30 @@ class KasBank extends BaseController
     }
 
     /**
+     * Kembali ke halaman antar unit MEMPERTAHANKAN konteks unit.
+     *
+     * Tanpa `?unit_id=`, pengguna lintas unit jatuh ke mode konsolidasi
+     * (unit = null) dan daftar rekening "Bayar DARI"/"Dibayar KE" kosong —
+     * `canUseAsSource()`/`canUseAsDestination()` menolak tanpa unit leg.
+     * Jadi setelah simpan/batal, user harus dibalikkan ke unit yang benar.
+     *
+     * @param int|null $unitId unit transaksi; null = ambil dari request,
+     *                         lalu dari record terkait
+     */
+    private function keAntarUnit(?int $unitId = null): \CodeIgniter\HTTP\RedirectResponse
+    {
+        $unitId ??= $this->unitTerpilih();
+        $url = base_url('kas_bank/antar_unit');
+
+        if ($unitId !== null && $unitId > 0
+            && in_array($unitId, $this->scopeService->allowedUnitIds(), true)) {
+            $url .= '?unit_id=' . $unitId;
+        }
+
+        return redirect()->to($url);
+    }
+
+    /**
      * Halaman pembayaran antar unit + daftar hutang/piutang antar unit.
      */
     public function antar_unit()
@@ -2391,6 +2432,7 @@ class KasBank extends BaseController
 
         $data = array_merge($this->pageData(), [
             'unit_terpilih'    => $unitTerpilih,
+            'unit_map'         => $this->UnitModel->orderBy('idunit', 'ASC')->findAll(),
             'akun_kas_bank'    => $this->akunAktifUntuk($unitTerpilih),
             'can_transaksi'    => $this->bisaTransaksi(),
             'akun_pengirim'    => $this->akunSumberUntuk($unitTerpilih),
@@ -2457,11 +2499,14 @@ class KasBank extends BaseController
      * Simpan pembayaran antar unit (satu DB transaction, atomic).
      *
      * Dua skenario rekening:
-     * a) Pengirim & penerima pakai rekening FISIK berbeda -> 2 leg kas/bank.
-     * b) Pengirim & penerima pakai rekening FISIK yang SAMA -> TIDAK membuat
-     *    gerakan kas/bank; hanya menyelesaikan H/P + catatan pembayaran
-     *    bertipe 'antar_unit_atribusi' (atribusi internal, ledger mencerminkan
-     *    kenyataan: uang tidak berpindah rekening).
+     * a) Pengirim & penerima pakai rekening FISIK berbeda -> 2 leg kas/bank
+     *    (KELUAR akun pengirim / MASUK akun penerima), saldo fisik bergeser.
+     * b) Pengirim & penerima pakai rekening FISIK yang SAMA -> saldo fisik
+     *    TETAP (no leg fisik). Hak saldo per unit dipindahkan lewat pasangan
+     *    leg internal bertanda `sumber_tipe='antar_unit_atribusi'`: KELUAR
+     *    unit pengirim / MASUK unit penerima pada rekening yang sama. Posisi
+     *    unit memakainya (movementHak); saldo fisik, Tutup Kasir, dan Cash
+     *    Flow menolaknya. Pembayaran tetap dicatat 'antar_unit_atribusi'.
      */
     public function saveAntarUnit()
     {
@@ -2554,31 +2599,43 @@ class KasBank extends BaseController
         // bukan bahwa saldonya cukup miliknya. Di rekening shared keduanya
         // berbeda, jadi tanpa cek ini unit bisa mengirim>dari posisi unitnya.
         //
-        // Catatan skenario: kalau rekening pengirim == rekening penerima, tidak
-        // ada gerakan kas/bank sama sekali (atribusi internal), jadi cek saldo
-        // per unit TIDAK relevan di sana dan hanya rekening pengirim yang dipakai.
-        $rekeningDipakai = $akunKirimId === $akunTerimaId
-            ? [$akunKirim]
-            : [$akunKirim, $akunTerima];
+        // Berlaku JUGA untuk rekening SAMA: pelunasan itu menggeser HAK unit
+        // pengirim (posisi unitnya berkurang), jadi haknya harus cukup. Sisi
+        // penerima tidak dicek — ia hanya bertambah.
+        $rekeningDipakai = [$akunKirim, $akunTerima];
 
         $cutoff = new KasBankCutoffService();
         $policy = new \App\Services\Finance\EntitlementPolicyService();
 
-        foreach ($rekeningDipakai as $akun) {
-            if ($policy->wajibStatementVerifikasi((int) $akun->idakun_kas_bank)
-                && ! $cutoff->statementVerified((int) $akun->idakun_kas_bank, $tanggal)
-            ) {
-                return $this->gagal('Rekening "' . $akun->nama_akun . '" belum punya statement yang '
-                    . 'diverifikasi Finance pada ' . $cutoff->tanggalCutoff() . '. '
-                    . 'Isi dan verifikasi statement di menu "Rekening & Saldo Awal" dulu.');
+        // Guard statement VERIFIED: saldo yang dipindah HARUS berbasis angka
+        // yang sudah disahkan Finance (daftar rekeningnya dari config.
+        // `rekeningWajibStatementByBank`, bukan tebakan).
+        //
+        // KETENTUAN rekening SAMA: mutasi hak antar unit TIDAK menggerakkan
+        // saldo fisik bank — pasangan leg atribusi (KELUAR/MASUK) net-nol
+        // terhadap fisik, yang berpindah hanya hak/alokasi per unit. Tidak ada
+        // baseline fisik baru yang perlu dibuktikan statement, jadi guard ini
+        // tidak berlaku di skenario itu. `cekTarikUnit()` di bawah tetap
+        // membatasi hak unit pengirim. Alur rekening BEDA, Setor/Tarik, dan
+        // Pindah Saldo tetap tunduk pada guard statement seperti semula.
+        if ($akunKirimId !== $akunTerimaId) {
+            foreach ($rekeningDipakai as $akun) {
+                if ($policy->wajibStatementVerifikasi((int) $akun->idakun_kas_bank)
+                    && ! $cutoff->statementVerified((int) $akun->idakun_kas_bank, $tanggal)
+                ) {
+                    return $this->gagal('Rekening "' . $akun->nama_akun . '" belum punya statement yang '
+                        . 'diverifikasi Finance pada ' . $cutoff->tanggalCutoff() . '. '
+                        . 'Isi dan verifikasi statement di menu "Rekening & Saldo Awal" dulu.');
+                }
             }
         }
 
-        if ($akunKirimId !== $akunTerimaId) {
-            $cek = $cutoff->cekTarikUnit($akunKirimId, (int) $hp->unit_id, $jumlah);
-            if (! $cek['ok']) {
-                return $this->gagal($cek['alasan']);
-            }
+        // Sumber selalu dicek: entah rekening berbeda (uang fisik keluar) atau
+        // rekening sama (hak unit pengirim berkurang), posisi hak unit
+        // pengirim harus cukup menutup jumlah yang dibayarkan.
+        $cek = $cutoff->cekTarikUnit($akunKirimId, (int) $hp->unit_id, $jumlah);
+        if (! $cek['ok']) {
+            return $this->gagal($cek['alasan']);
         }
 
         $bukti = $this->uploadBukti();
@@ -2592,10 +2649,22 @@ class KasBank extends BaseController
 
             if ($akunKirimId === $akunTerimaId) {
                 // ---------- SKENARIO (b): rekening fisik SAMA ----------
-                // Tidak ada gerakan kas/bank; cukup selesaikan H/P. Tandai
-                // pembayaran dengan referensi_tipe 'antar_unit_atribusi' dan
-                // referensi_id = id hutang, agar bisa di-reversal tanpa
-                // menyentuh saldo (yang memang tidak berubah).
+                // Tidak ada uang yang keluar/masuk rekening: saldo fisik tetap.
+                // Yang berpindah HANYA HAK saldo per unit — pengirim berkurang,
+                // penerima bertambah. Pasangan leg internal (KELUAR unit
+                // pengirim / MASUK unit penerima) ditulis bertanda
+                // `sumber_tipe='antar_unit_atribusi'`: dibaca oleh posisiUnit
+                // (movementHak), TIDAK oleh saldo fisik (movementInternalUnion)
+                // maupun Tutup Kasir / Cash Flow.
+                //
+                // Nilai fisiknya:
+                //   saldoFisik = statement + netMovement   (atribusi net-nol)
+                //   posisiUnit(u) = alokasi + netMovement + movementHak(u)
+                //
+                // Pembayaran dicatat dengan referensi_tipe 'antar_unit_atribusi'
+                // dan referensi_id = id hutang (sama dengan dulu), supaya
+                // reversal-atribusi menemukan catatannya. Leg ledger dilink
+                // balik via sumber_tipe + sumber_id = id hutang.
                 $bayarData = [
                     'tanggal_bayar'   => $tanggal,
                     'jumlah_bayar'    => $jumlah,
@@ -2605,11 +2674,50 @@ class KasBank extends BaseController
                     'sumber'          => 'antar_unit',
                     'referensi_tipe'  => 'antar_unit_atribusi',
                     'referensi_id'    => (int)$hp->id,
-                    'keterangan'      => 'Penyelesaian H/P antar unit (rekening fisik sama — tanpa gerakan kas) ' .
+                    'keterangan'      => 'Penyelesaian H/P antar unit (rekening fisik sama — mutasi hak tanpa gerakan kas) ' .
                         $transferRef . ($ket ? ' — ' . $ket : ''),
                     'input_by'        => (int)session()->get('ID_AKUN'),
                     'created_at'      => date('Y-m-d H:i:s'),
                 ];
+
+                // Leg 1: KELUAR hak unit PENGHUTANG (pengirim).
+                // submission_key = token form (UNIQUE) -> anti double-submit.
+                $this->TransaksiModel->insert([
+                    'tanggal'          => $tanggal,
+                    'unit_id'          => (int)$hp->unit_id,
+                    'akun_kas_bank_id' => $akunKirimId,
+                    'jenis'            => ModeKasBank::JENIS_ANTAR_UNIT,
+                    'arah'             => ModeKasBank::ARAH_KELUAR,
+                    'jumlah'           => $jumlah,
+                    'akun_tujuan_id'   => $akunTerimaId,
+                    'transfer_ref'     => $transferRef,
+                    'sumber_tipe'      => 'antar_unit_atribusi',
+                    'sumber_id'        => (int)$hp->id,
+                    'submission_key'   => $token,
+                    'keterangan'       => $ket,
+                    'bukti'            => $bukti,
+                    'input_by'         => (int)session()->get('ID_AKUN'),
+                    'created_at'       => date('Y-m-d H:i:s'),
+                ]);
+                $idKeluar = (int)$this->TransaksiModel->insertID();
+
+                // Leg 2: MASUK hak unit BERPIUTANG (penerima).
+                $this->TransaksiModel->insert([
+                    'tanggal'          => $tanggal,
+                    'unit_id'          => (int)$piutang->unit_id,
+                    'akun_kas_bank_id' => $akunTerimaId,
+                    'jenis'            => ModeKasBank::JENIS_ANTAR_UNIT,
+                    'arah'             => ModeKasBank::ARAH_MASUK,
+                    'jumlah'           => $jumlah,
+                    'akun_tujuan_id'   => $akunKirimId,
+                    'transfer_ref'     => $transferRef,
+                    'sumber_tipe'      => 'antar_unit_atribusi',
+                    'sumber_id'        => (int)$hp->id,
+                    'keterangan'       => $ket,
+                    'bukti'            => $bukti,
+                    'input_by'         => (int)session()->get('ID_AKUN'),
+                    'created_at'       => date('Y-m-d H:i:s'),
+                ]);
 
                 $bayarData['hutang_piutang_id'] = (int)$hp->id;
                 $this->PembayaranModel->insert($bayarData);
@@ -2703,15 +2811,23 @@ class KasBank extends BaseController
         session()->setFlashdata(
             'sukses',
             $akunKirimId === $akunTerimaId
-                ? 'Pembayaran antar unit berhasil disimpan (rekening fisik sama — H/P diselesaikan tanpa gerakan kas)'
+                ? 'Pembayaran antar unit berhasil disimpan (rekening fisik sama — hak saldo unit digeser tanpa gerakan kas)'
                 : 'Pembayaran antar unit berhasil disimpan'
         );
-        return redirect()->to(base_url('kas_bank/antar_unit'));
+        return $this->keAntarUnit((int) $hp->unit_id);
     }
 
     /**
-     * Reversal pembayaran antar unit ATRIBUSI (rekening fisik sama, tanpa
-     * gerakan kas/bank): kembalikan sisa H/P dan hapus catatan pembayaran.
+     * Reversal pembayaran antar unit ATRIBUSI (rekening fisik sama).
+     *
+     * Mengembalikan sisa H/P, menghapus catatan pembayaran, dan menghapus
+     * pasangan leg mutasi hak (`sumber_tipe = 'antar_unit_atribusi'` yang
+     * link ke hutang via `sumber_id`) sehingga posisi hak kedua unit kembali
+     * ke posisi sebelum mutasi. Saldo fisik tidak berubah di kedua arah.
+     *
+     * Backward compatible: catatan atribusi LEGACY (dulu tanpa leg ledger)
+     * tetap bisa di-reversal — query leg-nya kosong dan hanya H/P yang
+     * dikembalikan.
      */
     public function reversalAtribusi(int $idHp)
     {
@@ -2734,6 +2850,19 @@ class KasBank extends BaseController
             return $this->gagal('Hutang antar unit ini involve unit di luar cakupan Anda.');
         }
 
+        // Leg mutasi hak: kedua kaki (KELUAR unit pengirim / MASUK unit
+        // penerima) dihapus supaya hak kedua unit kembali, jadi SEMUA unit
+        // leg harus dalam cakupan user — persis seperti reversalAntarUnit().
+        $legHak = $this->TransaksiModel
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->where('sumber_id', $idHp)
+            ->findAll();
+        foreach ($legHak as $leg) {
+            if (! $this->AkunScope->userBolehUnit((int) $leg->unit_id)) {
+                return $this->gagal('Transaksi ini involve unit di luar cakupan Anda.');
+            }
+        }
+
         $db = \Config\Database::connect();
         $db->transStart();
 
@@ -2742,14 +2871,21 @@ class KasBank extends BaseController
             $this->PembayaranModel->delete($bayar->id);
         }
 
+        if (! empty($legHak)) {
+            $this->TransaksiModel
+                ->where('sumber_tipe', 'antar_unit_atribusi')
+                ->where('sumber_id', $idHp)
+                ->delete();
+        }
+
         $db->transComplete();
 
         if ($db->transStatus() === false) {
             return $this->gagal('Gagal reversal pembayaran antar unit atribusi');
         }
 
-        session()->setFlashdata('sukses', 'Pembayaran antar unit atribusi berhasil dibatalkan (sisa H/P dikembalikan)');
-        return redirect()->to(base_url('kas_bank/antar_unit'));
+        session()->setFlashdata('sukses', 'Pembayaran antar unit atribusi berhasil dibatalkan (sisa H/P & hak unit dikembalikan)');
+        return $this->keAntarUnit((int) $hp->unit_id);
     }
 
     /**
@@ -2794,7 +2930,7 @@ class KasBank extends BaseController
         }
 
         session()->setFlashdata('sukses', 'Pembayaran antar unit berhasil dibatalkan (kas/bank & sisa H/P dikembalikan)');
-        return redirect()->to(base_url('kas_bank/antar_unit'));
+        return $this->keAntarUnit((int) $row->unit_id);
     }
 
     /**

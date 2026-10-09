@@ -292,8 +292,10 @@ class DailyCashFlowService
      * Cakupannya: TRANSFER_INTERNAL (Setor/Tarik + Pindah Saldo) DAN
      * `PEMBAYARAN_ANTAR_UNIT`. Keduanya benar-benar memindahkan uang antar
      * rekening. Yang TIDAK ikut: baris mirror legacy `PEMASUKAN`/
-     * `PENGELUARAN` (tanpa `transfer_ref`) dan arus operasional, karena itu
-     * sudah dibaca dari tabel source di atas.
+     * `PENGELUARAN` (tanpa `transfer_ref`), arus operasional (sudah dibaca
+     * dari tabel source di atas), dan pasangan leg mutasi hak
+     * (`SUMBER_TIPE_ATRIBUSI`) — pelunasan H/P rekening SAMA yang net-nol
+     * terhadap fisik dan tidak boleh tampil sebagai perpindahan bank palsu.
      */
     protected function fetchLedger(int $unitId, string $tanggal): array
     {
@@ -304,6 +306,10 @@ class DailyCashFlowService
             ->where('transaksi_kas_bank.tanggal', $tanggal);
 
         return KasBankSourceMovement::scopeInternalUnion($builder)
+            ->groupStart()
+                ->where('transaksi_kas_bank.sumber_tipe IS NULL', null, false)
+                ->orWhere('transaksi_kas_bank.sumber_tipe !=', KasBankSourceMovement::SUMBER_TIPE_ATRIBUSI)
+            ->groupEnd()
             ->orderBy('transaksi_kas_bank.created_at', 'ASC')
             ->get()
             ->getResult();

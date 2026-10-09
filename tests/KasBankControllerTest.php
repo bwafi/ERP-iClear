@@ -431,6 +431,11 @@ class KasBankControllerTest extends CIUnitTestCase
         // Submit pertama: 2 ledger + 2 baris pembayaran + sisa H/P berkurang.
         $r1 = $this->post('kas_bank/antar-unit/save', $payload);
         $r1->assertStatus(302);
+        $this->assertStringContainsString(
+            'unit_id=1',
+            (string) $r1->getRedirectUrl(),
+            'Redirect harus mempertahankan konteks unit — tanpa itu user kembali dalam mode konsolidasi dan daftar rekening kosong lagi'
+        );
         $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)->countAllResults());
         $this->assertSame(2, $this->model(ModelPembayaranHutangPiutang::class)->countAllResults());
         $this->assertSame(300000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
@@ -760,19 +765,19 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
     public function testAntarUnitRekeningFisikSamaTanpaGerakanKas(): void
     {
-        $tok = 'tok-shared-but';
+        $tok = 'tok-shared-attr';
         $this->sesiDenganToken($tok);
 
         // Rekening SHARED (akun 5) tidak punya unit pemilik: hak aksesnya
-        // SEPENUHNYA dari tabel alokasi. Tanpa baris alokasi, save ditolak
-        // dengan "Akun pengirim ditolak" — jadi disetup di sini, mengikuti
-        // model produksi di mana Bank 1/2 dialokasikan ke unit rightful-nya.
+        // SEPENUHNYA dari tabel alokasi. Atribusi rekening sama menggeser HAK
+        // unit pengirim, jadi posisi unitnya harus cukup menutup jumlah yang
+        // dibayar. Alokasi 400000/400000 <= statement 800000.
         $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan, input_by) VALUES
-            (5, 1, 0, 'Alokasi unit 1', 43),
-            (5, 2, 0, 'Alokasi unit 2', 43)");
+            (5, 1, 400000, 'Alokasi unit 1', 43),
+            (5, 2, 400000, 'Alokasi unit 2', 43)");
 
         // BCA Bersama (akun 5) untuk pengirim & penerima: H/P antar unit
-        // diselesaikan TANPA gerakan kas (uang tidak berpindah rekening).
+        // diselesaikan lewat MUTASI HAK — uang TIDAK berpindah rekening.
         $payload = [
             'hutang_piutang_id' => '901',
             'akun_pengirim_id'  => '5',
@@ -786,9 +791,28 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $r = $this->post('kas_bank/antar-unit/save', $payload);
         $r->assertStatus(302);
 
-        // Tidak ada baris ledger antar-unit (0 gerakan kas).
+        // Posisi HAK: unit pengirim berkurang, penerima bertambah. Saldo
+        // FISIK rekening tidak berubah (leg atribusi net-nol terhadap fisik).
+        $this->assertSame(200000, $this->posisiUnit(5, 1), 'Hak Unit 1 turun 400000->200000');
+        $this->assertSame(600000, $this->posisiUnit(5, 2), 'Hak Unit 2 naik 400000->600000');
+        $this->assertSame(
+            800000,
+            (new \App\Services\Finance\KasBankCutoffService())->saldoFisik(5, $this->tglMulai),
+            'Saldo FISIK rekening shared tetap'
+        );
+
+        // Ledger: persis 2 baris leg atribusi (KELUAR unit 1 / MASUK unit 2),
+        // dan NOL baris gerakan fisik (sumber_tipe IS NULL).
+        $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults());
         $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
             ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->groupStart()
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
+            ->groupEnd()
             ->countAllResults());
 
         // Sisa H/P berkurang, pasangan piutang ikut berkurang.
@@ -803,16 +827,497 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             ->findAll();
         $this->assertCount(2, $pembayaran);
 
-        // Reversal atribusi mengembalikan sisa H/P, tanpa menyentuh kas.
+        // Reversal atribusi mengembalikan sisa H/P DAN menghapus kedua leg
+        // mutasi hak, tanpa menyentuh kas fisik.
         $this->sesi();
         $rev = $this->post('kas_bank/antar-unit/reversal-atribusi/901');
         $rev->assertStatus(302);
 
         $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
         $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
+        $this->assertSame(400000, $this->posisiUnit(5, 1), 'Hak Unit 1 kembali 400000');
+        $this->assertSame(400000, $this->posisiUnit(5, 2), 'Hak Unit 2 kembali 400000');
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults(), 'Leg atribusi dihapus reversal');
         $this->assertSame(0, $this->model(ModelPembayaranHutangPiutang::class)
             ->where('referensi_tipe', 'antar_unit_atribusi')
             ->countAllResults());
+    }
+
+    /**
+     * REGRESI guard statement untuk mutasi hak rekening SAMA.
+     *
+     * Produksi CV bersama Unit 1&2 memakai bank_idbank '2' — ada di config
+     * `rekeningWajibStatementByBank`, yang membuat `wajibStatementVerifikasi()`
+     * bernilai true. Sebelum perbaikan, guard statement di `saveAntarUnit()`
+     * menitikkan transaksi CV rekening SAMA yang statement-nya belum
+     * terverifikasi: "belum punya statement yang diverifikasi Finance …".
+     *
+     * Padahal mutasi hak rekening SAMA TIDAK menggerakkan saldo fisik bank
+     * (pasangan leg atribusi net-nol terhadap fisik) — jadi tidak ada baseline
+     * fisik baru yang perlu dibuktikan statement. Alur rekening BEDA tetap
+     * wajib statement (test terpisah di bawah).
+     */
+    public function testAntarUnitRekeningSamaCVTanpaStatementMenggeserHak(): void
+    {
+        // Akun CV bersama seperti produksi: bank_idbank '2' (wajib statement),
+        // shared untuk unit 1 & 2, TANPA baris statement sama sekali.
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared) VALUES
+            (55, NULL, 'BANK', 'CV Bersama Unit 1&2', '2', '1010202050', 'aktif', 1)");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (55, 1, 5000000, 'Alokasi Unit 1'),
+            (55, 2, 6000000, 'Alokasi Unit 2')");
+        $this->db->query("INSERT INTO db_hutang_piutang (id, kode, jenis, sumber_tipe, sumber_id, is_projection, pihak_tipe, pihak_id, lawan_unit_id, nama_pihak, tanggal, uraian, total, total_dibayar, sisa, status, unit_id, input_by, deleted) VALUES
+            (921, 'H-921', 'hutang', 'mutasi_unit', 998, 0, 'unit', 1, 2, 'Unit A', '2026-10-08', 'Mutasi barang', 1000000, 0, 1000000, 'belum_lunas', 1, 43, 0),
+            (922, 'P-922', 'piutang', 'mutasi_unit', 998, 0, 'unit', 2, 1, 'Unit B', '2026-10-08', 'Mutasi barang', 1000000, 0, 1000000, 'belum_lunas', 2, 43, 0)");
+
+        $policy = new \App\Services\Finance\EntitlementPolicyService();
+        $cutoff = new \App\Services\Finance\KasBankCutoffService();
+        $this->assertTrue($policy->wajibStatementVerifikasi(55), 'CV bank_idbank=2 wajib statement di alur lain');
+        $this->assertFalse($cutoff->statementVerified(55, $this->tglMulai), 'tanpa baris statement -> guard statement pasti menolak kalau diterapkan');
+
+        // PRE-CEK invariant sebelum transaksi, supaya posisi yang diassert
+        // sesudahnya mengukur pergeseran HAK, bukan baseline alokasi.
+        $this->assertSame(5000000, $this->posisiUnit(55, 1));
+        $this->assertSame(6000000, $this->posisiUnit(55, 2));
+
+        $tok = 'tok-cv-no-stmt';
+        $this->sesiDenganToken($tok);
+        $r = $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '921',
+            'akun_pengirim_id'  => '55',
+            'akun_penerima_id'  => '55',
+            'jumlah'            => '1000000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Mutasi hak CV tanpa statement',
+            'submit_token'      => $tok,
+        ]);
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal(), 'mutasi hak rekening SAMA tidak boleh ditolak guard statement');
+
+        // Hak unit berpindah sesuai nominal; saldo FISIK tidak bergerak.
+        $this->assertSame(4000000, $this->posisiUnit(55, 1), 'Hak Unit 1 5jt -> 4jt');
+        $this->assertSame(7000000, $this->posisiUnit(55, 2), 'Hak Unit 2 6jt -> 7jt');
+        $this->assertSame(0, $cutoff->saldoFisik(55, $this->tglMulai), 'Fisik tetap 0: tidak ada statement dan tidak ada leg fisik');
+
+        // Ledger: tepat 2 leg atribusi (KELUAR unit 1 / MASUK unit 2), nol leg fisik.
+        $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults());
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->groupStart()
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
+            ->groupEnd()
+            ->countAllResults());
+
+        // H/P terbayar penuh; catatan pembayaran sebagai atribusi.
+        $this->assertSame(0, (int) $this->model(ModelHutangPiutang::class)->find(921)->sisa);
+        $this->assertSame(0, (int) $this->model(ModelHutangPiutang::class)->find(922)->sisa);
+        $this->assertCount(2, $this->model(ModelPembayaranHutangPiutang::class)
+            ->where('sumber', 'antar_unit')
+            ->where('referensi_tipe', 'antar_unit_atribusi')
+            ->where('referensi_id', 921)
+            ->findAll());
+    }
+
+    /**
+     * Regresi arah berlawanan: rekening BEDA tetap WAJIB statement VERIFIED.
+     *
+     * CV (akun 55, bank_idbank '2', statement BELUM terverifikasi) dipakai
+     * sebagai PENGIRIM ke rekening fisik yang berbeda (akun 5). Pengiriman
+     * antar rekening yang berbeda menggerakkan saldo FISIK bank, jadi guard
+     * statement harus tetap menolak — inilah "tidak melonggarkan validasi".
+     */
+    public function testAntarUnitRekeningBedaTetapMenolakTanpaStatementTerverifikasi(): void
+    {
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared) VALUES
+            (55, NULL, 'BANK', 'CV Bersama Unit 1&2', '2', '1010202050', 'aktif', 1)");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (55, 1, 3000000, 'Alokasi Unit 1 CV'),
+            (5, 2, 400000, 'Alokasi Unit 2 BCA Bersama')");
+
+        $tok = 'tok-cv-beda';
+        $this->sesiDenganToken($tok);
+        $r = $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '55',
+            'akun_penerima_id'  => '5',
+            'jumlah'            => '100000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Antar unit rekening BEDA tanpa statement CV',
+            'submit_token'      => $tok,
+        ]);
+        $r->assertStatus(302);
+        $this->assertStringContainsString('belum punya statement', $this->flashGagal());
+
+        // Tidak ada apa pun yang ditulis: ledger, pembayaran, sisa, posisi.
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)->countAllResults());
+        $this->assertSame(0, $this->model(ModelPembayaranHutangPiutang::class)->countAllResults());
+        $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
+        $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
+        $this->assertSame(3000000, $this->posisiUnit(55, 1), 'posisi sumber tidak boleh bergeser saat ditolak');
+        $this->assertSame(400000, $this->posisiUnit(5, 2), 'posisi penerima tidak boleh bergeser saat ditolak');
+    }
+
+    /**
+     * Regresi sisi positif: rekening BEDA DENGAN statement VERIFIED tetap
+     * berhasil — bukti guard statement tidak dimatikan, hanya dikecualikan
+     * untuk mutasi hak rekening SAMA.
+     */
+    public function testAntarUnitRekeningBedaStatementTerverifikasiTetapBerhasil(): void
+    {
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared) VALUES
+            (55, NULL, 'BANK', 'CV Bersama Unit 1&2', '2', '1010202050', 'aktif', 1)");
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
+            (55, '{$this->tglCutoff}', 8000000, 'Koran CV 8jt', 'VERIFIED')");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (55, 1, 3000000, 'Alokasi Unit 1 CV'),
+            (5, 2, 400000, 'Alokasi Unit 2 BCA Bersama')");
+
+        $tok = 'tok-cv-beda-verified';
+        $this->sesiDenganToken($tok);
+        $r = $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '55',
+            'akun_penerima_id'  => '5',
+            'jumlah'            => '200000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Antar unit rekening BEDA statement CV verified',
+            'submit_token'      => $tok,
+        ]);
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal(), 'statement TERVERIFIKASI -> rekening BEDA tetap boleh');
+
+        $cutoff = new \App\Services\Finance\KasBankCutoffService();
+        $this->assertSame(7800000, $cutoff->saldoFisik(55, $this->tglMulai), 'fisik sumber 8jt - 200k');
+        $this->assertSame(1000000, $cutoff->saldoFisik(5, $this->tglMulai), 'fisik penerima 800k + 200k');
+        $this->assertSame(2800000, $this->posisiUnit(55, 1), 'posisi sumber 3jt - 200k');
+        $this->assertSame(600000, $this->posisiUnit(5, 2), 'posisi penerima 400k + 200k');
+
+        // Leg fisik antar rekening berbeda: KELUAR + MASUK = 2 baris (bukan atribusi).
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults());
+        $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->countAllResults());
+        $this->assertSame(300000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
+        $this->assertSame(300000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
+    }
+
+    /**
+     * ACCEPTANCE A — humpelan 2jt dengan rekening fisik SAMA:
+     * saldo fisik tetap 20jt, hak Unit 1 turun 10jt -> 8jt, hak Unit 2 naik
+     * 10jt -> 12jt, H/P lunas, dan TIDAK ada baris ledger "transfer fisik".
+     */
+    public function testAtribusiHakGesarFisikTetap(): void
+    {
+        // Baseline: statement 20jt di tanggal cut-off, alokasi 10jt/10jt.
+        $this->db->query("DELETE FROM db_saldo_awal_kas_bank WHERE akun_kas_bank_id = 5");
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
+            (5, '2026-10-09', 20000000, 'Koran 20jt', 'VERIFIED')");
+        $this->db->query("DELETE FROM db_alokasi_saldo_kas_bank");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (5, 1, 10000000, 'Alokasi Unit 1'),
+            (5, 2, 10000000, 'Alokasi Unit 2')");
+        $this->db->query("INSERT INTO db_hutang_piutang (id, kode, jenis, sumber_tipe, sumber_id, is_projection, pihak_tipe, pihak_id, lawan_unit_id, nama_pihak, tanggal, uraian, total, total_dibayar, sisa, status, unit_id, input_by, deleted) VALUES
+            (911, 'H-911', 'hutang', 'mutasi_unit', 998, 0, 'unit', 1, 2, 'Unit A', '2026-10-08', 'Mutasi barang', 3000000, 0, 3000000, 'belum_lunas', 1, 43, 0),
+            (912, 'P-912', 'piutang', 'mutasi_unit', 998, 0, 'unit', 2, 1, 'Unit B', '2026-10-08', 'Mutasi barang', 3000000, 0, 3000000, 'belum_lunas', 2, 43, 0)");
+
+        $svc = new \App\Services\Finance\KasBankCutoffService();
+        $this->assertSame(20000000, $svc->saldoFisik(5, $this->tglMulai), 'Fisik awal 20jt');
+        $this->assertSame(10000000, $this->posisiUnit(5, 1), 'Hak Unit 1 awal 10jt');
+        $this->assertSame(10000000, $this->posisiUnit(5, 2), 'Hak Unit 2 awal 10jt');
+
+        $tok = 'tok-acc-a';
+        $this->sesiDenganToken($tok);
+        $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '911',
+            'akun_pengirim_id'  => '5',
+            'akun_penerima_id'  => '5',
+            'jumlah'            => '2000000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Pelunasan antar unit 2jt dari rekening sama',
+            'submit_token'      => $tok,
+        ])->assertStatus(302);
+
+        $this->assertSame(20000000, $svc->saldoFisik(5, $this->tglMulai), 'Fisik TETAP 20jt — tidak ada uang pindah');
+        $this->assertSame(8000000, $this->posisiUnit(5, 1), 'Hak Unit 1 10jt -> 8jt');
+        $this->assertSame(12000000, $this->posisiUnit(5, 2), 'Hak Unit 2 10jt -> 12jt');
+
+        $this->assertSame(1000000, (int) $this->model(ModelHutangPiutang::class)->find(911)->sisa, 'Sisa hutang 3jt - 2jt');
+        $this->assertSame(1000000, (int) $this->model(ModelHutangPiutang::class)->find(912)->sisa, 'Pasangan piutang ikut berkurang');
+
+        // Ledger akun 5: PERSIS 2 leg atribusi, dan NOL leg fisik.
+        $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)
+            ->where('akun_kas_bank_id', 5)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults());
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('akun_kas_bank_id', 5)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->groupStart()
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
+            ->groupEnd()
+            ->countAllResults(), 'Tidak ada baris transfer fisik palsu');
+
+        // Invariant: fisik == legacy(0) + posisi unit (8jt + 12jt).
+        $this->assertSame(
+            \App\Services\Finance\KasBankCutoffService::INV_SEIMBANG,
+            $svc->cekInvariant(5)['status']
+        );
+
+        // Lanjut ke ACCEPTANCE B (reversal) di test berikut agar tidak mengulang setup.
+        $this->assertTrue(true);
+    }
+
+    /**
+     * ACCEPTANCE B — reversal atribusi mengembalikan hak kedua unit DAN
+     * sisa H/P, tanpa menyisakan leg leder (tidak ada yatim/duplikat).
+     */
+    public function testAtribusiReversalMengembalikanHakDanSisaTepat(): void
+    {
+        // Baseline sama persis dengan ACCEPTANCE A, lalu bayar 2jt.
+        $this->db->query("DELETE FROM db_saldo_awal_kas_bank WHERE akun_kas_bank_id = 5");
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
+            (5, '2026-10-09', 20000000, 'Koran 20jt', 'VERIFIED')");
+        $this->db->query("DELETE FROM db_alokasi_saldo_kas_bank");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (5, 1, 10000000, 'Alokasi Unit 1'),
+            (5, 2, 10000000, 'Alokasi Unit 2')");
+        $this->db->query("INSERT INTO db_hutang_piutang (id, kode, jenis, sumber_tipe, sumber_id, is_projection, pihak_tipe, pihak_id, lawan_unit_id, nama_pihak, tanggal, uraian, total, total_dibayar, sisa, status, unit_id, input_by, deleted) VALUES
+            (911, 'H-911', 'hutang', 'mutasi_unit', 998, 0, 'unit', 1, 2, 'Unit A', '2026-10-08', 'Mutasi barang', 3000000, 0, 3000000, 'belum_lunas', 1, 43, 0),
+            (912, 'P-912', 'piutang', 'mutasi_unit', 998, 0, 'unit', 2, 1, 'Unit B', '2026-10-08', 'Mutasi barang', 3000000, 0, 3000000, 'belum_lunas', 2, 43, 0)");
+
+        $tok = 'tok-acc-b';
+        $this->sesiDenganToken($tok);
+        $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '911',
+            'akun_pengirim_id'  => '5',
+            'akun_penerima_id'  => '5',
+            'jumlah'            => '2000000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Pelunasan 2jt atribusi',
+            'submit_token'      => $tok,
+        ])->assertStatus(302);
+
+        // Reversal.
+        $this->sesi();
+        $this->post('kas_bank/antar-unit/reversal-atribusi/911')->assertStatus(302);
+
+        $svc = new \App\Services\Finance\KasBankCutoffService();
+        $this->assertSame(20000000, $svc->saldoFisik(5, $this->tglMulai), 'Fisik tetap 20jt sepanjang siklus');
+        $this->assertSame(10000000, $this->posisiUnit(5, 1), 'Hak Unit 1 kembali 10jt');
+        $this->assertSame(10000000, $this->posisiUnit(5, 2), 'Hak Unit 2 kembali 10jt');
+        $this->assertSame(3000000, (int) $this->model(ModelHutangPiutang::class)->find(911)->sisa, 'Sisa hutang dipulihkan');
+        $this->assertSame(3000000, (int) $this->model(ModelHutangPiutang::class)->find(912)->sisa, 'Pasangan piutang dipulihkan');
+
+        // Tidak ada leg tersisa & tidak ada catatan pembayaran tersisa.
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults(), 'Tidak ada leg atribusi yatim');
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->countAllResults(), 'Tidak ada leg fisik apapun');
+        $this->assertSame(0, $this->model(ModelPembayaranHutangPiutang::class)
+            ->where('referensi_tipe', 'antar_unit_atribusi')
+            ->countAllResults(), 'Catatan pembayaran dihapus');
+        $this->assertSame(
+            \App\Services\Finance\KasBankCutoffService::INV_SEIMBANG,
+            $svc->cekInvariant(5)['status']
+        );
+    }
+
+    /**
+     * ACCEPTANCE C — regresi:
+     * 1. rekening BEDA tetap membuat 2 leg FISIK (perilaku lama utuh);
+     * 2. Finance/HO sebagai pengirim tetap ditolak untuk non-ROOT/Finance;
+     * 3. tanggal sebelum 10-10 (periode mulai) tetap ditolak;
+     * 4. baseline (alokasi + statement) tidak ikut berubah oleh mutasi harian.
+     */
+    public function testAtribusiTidakMengubahPerilakuRekeningBedaFinanceDanTanggal(): void
+    {
+        $svc = new \App\Services\Finance\KasBankCutoffService();
+
+        // (1) Rekening BEDA: BNI Unit A (akun 2) -> BNI Unit B (akun 4).
+        // Statement + alokasi supaya posisi unit pengirim cukup.
+        $this->db->query("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
+            (2, '2026-10-09', 500000, 'Koran BNI Unit A', 'VERIFIED')");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (2, 1, 500000, 'Alokasi BNI Unit A')");
+        $this->assertSame(500000, $this->posisiUnit(2, 1));
+
+        $tok = 'tok-acc-c-fisik';
+        $this->sesiDenganToken($tok);
+        $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '2',
+            'akun_penerima_id'  => '4',
+            'jumlah'            => '200000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Transfer fisik beda rekening',
+            'submit_token'      => $tok,
+        ])->assertStatus(302);
+
+        // Dua leg FISIK (sumber_tipe NULL / 'antar_unit') — bukan atribusi.
+        $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->groupStart()
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
+            ->groupEnd()
+            ->countAllResults(), 'Rekening beda tetap 2 leg fisik (KELUAR NULL, MASUK antar_unit)');
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('sumber_tipe', 'antar_unit_atribusi')
+            ->countAllResults(), 'Tidak ada leg atribusi pada rekening beda');
+        $this->assertSame(300000, $this->posisiUnit(2, 1), 'Posisi fisik Unit 1 turun 500000 -> 300000');
+
+        // (2) Finance/HO (is_finance_ho=1, bank '3') sebagai pengirim ditolak
+        // untuk Admin Cabang (role 35) — perilaku lama dipertahankan.
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared, is_finance_ho) VALUES
+            (9, NULL, 'BANK', 'IRA Finance', '3', '1010202090', 'aktif', 1, 1)");
+        $tok2 = 'tok-acc-c-ira';
+        $this->db->query("INSERT INTO db_akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN)
+            VALUES (44, 1, 35, 'Admin Cabang')");
+        $this->withSession([
+            'logged_in'        => true,
+            'ID_AKUN'          => 44,
+            'ID_UNIT'          => 1,
+            'ID_JABATAN'       => 35,
+            'kb_submit_' . $tok2 => time(),
+        ]);
+        $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '9',
+            'akun_penerima_id'  => '5',
+            'jumlah'            => '100000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Coba pakai IRA sebagai sumber',
+            'submit_token'      => $tok2,
+        ])->assertStatus(302);
+        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)
+            ->where('akun_kas_bank_id', 9)
+            ->countAllResults(), 'Finance/HO sebagai sumber ditolak (role 35)');
+
+        // (3) Tanggal sebelum 10-10 (tglMulai) ditolak, baseline tidak berubah.
+        $nAlokasiSebelum = (int) $this->db->table('db_alokasi_saldo_kas_bank')
+            ->where('akun_kas_bank_id', 5)
+            ->selectSum('nominal')->get()->getRow()->nominal ?? 0;
+        $nLedgerSebelum = $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->countAllResults();
+        $sisaHpSebelum = (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa;
+        $tok3 = 'tok-acc-c-tgl';
+        $this->sesiDenganToken($tok3);
+        $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '5',
+            'akun_penerima_id'  => '5',
+            'jumlah'            => '100000',
+            'tanggal'           => '2026-10-09',
+            'keterangan'        => 'Tanggal sebelum periode',
+            'submit_token'      => $tok3,
+        ])->assertStatus(302);
+        $this->assertSame($nLedgerSebelum, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->countAllResults(), 'Tanggal sebelum cut-off tidak menulis ledger');
+        $this->assertSame($sisaHpSebelum, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa, 'Sisa H/P tidak berubah');
+        $nAlokasiSesudah = (int) $this->db->table('db_alokasi_saldo_kas_bank')
+            ->where('akun_kas_bank_id', 5)
+            ->selectSum('nominal')->get()->getRow()->nominal ?? 0;
+        $this->assertSame($nAlokasiSebelum, $nAlokasiSesudah, 'Alokasi baseline tidak ikut berubah');
+        $this->assertSame(
+            \App\Services\Finance\KasBankCutoffService::INV_SEIMBANG,
+            $svc->cekInvariant(5)['status']
+        );
+    }
+
+    /**
+     * Form bayar antar unit punya dua dropdown rekening yang dihasilkan
+     * `canUseAsSource()` / `canUseAsDestination()`, keduanya MENOLAK
+     * `unitId = null`. Karena itu, untuk pengguna lintas unit yang belum
+     * memilih unit (konsolidasi), daftar rekening selalu kosong.
+     *
+     * Dulu halaman ini satu-satunya di modul Kas & Bank tanpa pemilih unit,
+     * sehingga user lintas unit tidak punya jalan keluar: "Bayar DARI" dan
+     * "Dibayar KE" hanya berisi placeholder dan pelunasan mustahil diisi.
+     */
+    public function testAntarUnitPunyaPemilihUnitSupayaRekeningTidakKosong(): void
+    {
+        $this->sesi(); // Root, lintas unit -> tanpa `unit_id` jadi konsolidasi.
+
+        $html = (string) $this->get('kas_bank/antar-unit')->getBody();
+
+        $this->assertSame(
+            1,
+            preg_match('/<select\b[^>]*\bname="unit_id"/i', $html),
+            'Halaman antar unit harus menyediakan pemilih unit'
+        );
+        $this->assertStringContainsString(
+            'Belum ada rekening yang bisa dipilih',
+            $html,
+            'State konsolidasi harus menjelaskan kenapa rekening kosong'
+        );
+        $this->assertSame(
+            [],
+            $this->opsiDropdown($html, 'akun_pengirim_id'),
+            'Tanpa unit leg tidak ada satu pun rekening sumber yang sah'
+        );
+
+        // Setelah unit dipilih: kedua dropdown terisi dan hanya memuat
+        // rekening unit itu (shared baru ikut bila ada baris alokasi).
+        $htmlUnit1 = (string) $this->get('kas_bank/antar-unit?unit_id=1')->getBody();
+
+        $this->assertMatchesRegularExpression(
+            '/<option value="1"[^>]*selected/i',
+            $htmlUnit1,
+            'Unit yang dipilih harus ter-selected di pemilih unit'
+        );
+
+        foreach (['akun_pengirim_id', 'akun_penerima_id'] as $select) {
+            $opsi = $this->opsiDropdown($htmlUnit1, $select);
+            $this->assertContains(1, $opsi, "KAS Unit A wajib ada di {$select}");
+            $this->assertContains(6, $opsi, "BANK Unit A wajib ada di {$select}");
+            $this->assertNotContains(3, $opsi, "Rekening Unit B tidak boleh ada di {$select}");
+        }
+    }
+
+    /**
+     * Tabel antar unit menampilkan nama unit LAWAN (cabang yang menerima /
+     * memberi barang) lewat peta unit LENGKAP dari controller, bukan fallback
+     * "U<id>". Admin cabang unit 1 hanya punya scope unit 1, sedangkan H/P
+     * barunya berlawan dengan Unit 4 yang ada di DB tapi di luar scope —
+     * kolom "Pemberi barang · berpiutang" harus menulis "Cabang Patrang".
+     */
+    public function testTabelAntarUnitMenampilkanNamaUnitLawanDiLuarScope(): void
+    {
+        $this->db->query("INSERT INTO db_unit (idunit, NAMA_UNIT) VALUES (4, 'Cabang Patrang')");
+        $this->db->query("INSERT INTO db_hutang_piutang (id, kode, jenis, sumber_tipe, sumber_id, is_projection,
+            pihak_tipe, pihak_id, lawan_unit_id, nama_pihak, tanggal, uraian, total, total_dibayar, sisa,
+            status, unit_id, input_by, deleted) VALUES
+            (931, 'H-931', 'hutang', 'mutasi_unit', 997, 0, 'unit', 1, 4, 'Patrang', '2026-10-08',
+             'Mutasi barang', 500000, 0, 500000, 'belum_lunas', 1, 43, 0)");
+
+        $this->sesiAdminCabang(); // scope hanya unit 1
+        $html = (string) $this->get('kas_bank/antar-unit?unit_id=1')->getBody();
+
+        $this->assertStringContainsString(
+            'Cabang Patrang',
+            $html,
+            'Nama unit lawan di luar scope user harus tampil, bukan "U4"'
+        );
+        $this->assertStringNotContainsString(
+            'U4',
+            $html,
+            'Fallback "U<id>" tidak boleh muncul selama unit lawan ada di DB'
+        );
     }
 
     public function testListPositionsDefaultMenghilangkanLegacy(): void
@@ -1165,7 +1670,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             $html,
             $m
         );
-        $this->assertSame(1, $ok, "Select {$name} tidak ditemukan di halaman Pindah Saldo");
+        $this->assertSame(1, $ok, "Select {$name} tidak ditemukan di halaman Kas & Bank");
 
         preg_match_all('/<option value="(\d+)"/i', $m[1], $vals);
 

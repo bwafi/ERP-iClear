@@ -132,6 +132,39 @@ class RenderProbeTest extends CIUnitTestCase
         $this->assertStringContainsString('value="9"', $terima, 'IRA BOLEH jadi pilihan penerima');
     }
 
+    public function testAntarUnitMenampilkanNamaUnitLawanDiLuarCakupan()
+    {
+        // Scope user hanya Unit 1 & 2 (dropdown), tapi H/P antar unit boleh
+        // punya lawan unit di luar cakupan (mis. Unit 4). Kolom "Pemberi
+        // barang · berpiutang" harus menampilkan NAMA unit, bukan "U4".
+        $html = $this->render('kas_bank/antar_unit', array_replace($this->dataDasar(), [
+            'akun_pengirim' => [$this->akun(1, 1, 'KAS', 'Kas Unit 1', 0)],
+            'akun_penerima' => [$this->akun(3, 2, 'KAS', 'Kas Unit 2', 0)],
+            'unit_map'      => [
+                (object) ['idunit' => 1, 'NAMA_UNIT' => 'Unit 1'],
+                (object) ['idunit' => 2, 'NAMA_UNIT' => 'Unit 2'],
+                (object) ['idunit' => 4, 'NAMA_UNIT' => 'Unit Empat'],
+            ],
+            'hp_hutang' => [
+                (object) [
+                    'id'            => 7,
+                    'kode'          => 'H-7',
+                    'sisa'          => 500000,
+                    'status'        => 'belum_lunas',
+                    'unit_id'       => 1,
+                    'lawan_unit_id' => 4,
+                    'nama_pihak'    => 'Pihak Test',
+                    'jatuh_tempo'   => null,
+                    'sumber_tipe'   => 'mutasi_unit',
+                    'sumber_id'     => 0,
+                ],
+            ],
+        ]), 'antar-unit');
+
+        $this->assertStringContainsString('Unit Empat', $html, 'lawan unit di luar cakupan harus tampil sebagai NAMA unit');
+        $this->assertStringNotContainsString('U4', $html, 'fallback "U<id>" tidak boleh muncul untuk lawan yang unitnya ada');
+    }
+
     public function testTidakAdaPhpErrorDiKeduaView()
     {
         foreach ([['transfer', ['akun_sumber' => [], 'akun_tujuan' => []]], ['antar_unit', ['akun_pengirim' => [], 'akun_penerima' => []]]] as [$view, $extra]) {

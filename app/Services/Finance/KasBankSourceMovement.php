@@ -39,6 +39,24 @@ use Config\Database;
  */
 class KasBankSourceMovement
 {
+    /**
+     * Subtype leg "mutasi hak" pelunasan H/P antar unit pada rekening fisik
+     * yang SAMA.
+     *
+     * Pasangan KELUAR (unit pengirim) / MASUK (unit penerima) pada rekening
+     * fisik yang sama TIDAK memindahkan uang: saldo fisik rekening tetap
+     * (net nol), yang bergeser hanya posisi hak antar unit. Karena itu kedua
+     * leg ini DIPISAHKAN dari gerakan fisik antar rekening:
+     * `movementInternalUnion()` (saldo fisik) menolaknya, sementara
+     * `movementHak()` (posisi unit) hanya membacanya.
+     */
+    public const SUMBER_TIPE_ATRIBUSI = 'antar_unit_atribusi';
+
+    /** Filter internalLedger(): HANYA leg atribusi (mutasi hak). */
+    private const ATRIBUSI_HANYA = 'hanya';
+    /** Filter internalLedger(): TOLAK leg atribusi (gerakan fisik). */
+    private const ATRIBUSI_KECUALI = 'kecuali';
+
     protected $db;
     protected ModelAkunKasBank $akunModel;
 
@@ -184,6 +202,10 @@ class KasBankSourceMovement
         // masih membaca transaksi_kas_bank, dan hanya untuk perpindahan uang
         // antar rekening fisik (Setor/Tarik, Pindah Saldo, dan pelunasan
         // H/P antar unit yang menyentuh rekening berbeda).
+        //
+        // CATATAN: netMovement() adalah GERAKAN FISIK — leg mutasi hak
+        // (SUMBER_TIPE_ATRIBUSI) TIDAK ikut di sini. Posisi hak per unit
+        // menambahkannya lewat movementHak() (lihat posisiUnit()).
         $internal = $this->movementInternalUnion($akunId, $unitId, $dari, $sampai);
 
         if ($tipe === TutupKasirSourceDefinition::TIPE_KAS) {
@@ -193,9 +215,9 @@ class KasBankSourceMovement
         return $this->movementBank($akun, $unitId, $dari, $sampai) + $internal;
     }
 
-    // =================================================================
-    // PERPINDAHAN UANG ANTAR REKENING — DUA MAKNA, DUA METHOD
-    // =================================================================
+    // ------------------------------------------------------------------
+    // Dua makna "leg internal" — ditambah satu untuk mutasi hak atribusi.
+    // ------------------------------------------------------------------
     //
     // Basis pemisahan: `transfer_ref IS NOT NULL` (semua perpindahan uang
     // antar rekening fisik yang kita catat sendiri) vs
@@ -206,8 +228,8 @@ class KasBankSourceMovement
     // parameter opsional:
     //
     //   - Finance menghitung POSISI REKENING secara utuh. Di sana arus
-    //     `PEMBAYARAN_ANTAR_UNIT` juga benar-benar memindahkan uang antar
-    //     rekening fisik, jadi HARUS ikut terhitung.
+    //     `PEMBAYARAN_ANTAR_UNIT` (rekening berbeda) juga benar-benar
+    //     memindahkan uang antar rekening fisik, jadi HARUS ikut terhitung.
     //   - Tutup Kasir & Rekon menghitung SALDO LACI. Pelunasan H/P antar unit
     //     yang menyentuh laci BUKAN Setor/Tarik laci, jadi TIDAK boleh ikut.
     //
@@ -217,6 +239,16 @@ class KasBankSourceMovement
     // menduplikasi literal-nya sendiri. Sekarang maknanya dipisah di method
     // terpisah; `internalLedger()` di bawah tetap query builder tunggal,
     // jadi definisi SQL hanya ada di satu tempat.
+    //
+    // MAKNA KETIGA — MUTASI HAK (`SUMBER_TIPE_ATRIBUSI`):
+    //   Pelunasan H/P antar unit yang memakai rekening fisik SAMA tidak
+    //   memindahkan uang. Sistem menulis pasangan leg (KELUAR unit pengirim /
+    //   MASUK unit penerima) pada rekening yang sama agar posisi hak per unit
+    //   bergeser, TANPA mengubah saldo fisik rekening. Karena itu:
+    //   - `movementInternalUnion()` (dipakai saldoFisik) menolak leg atribusi;
+    //   - `movementHak()` (dipakai posisiUnit) HANYA membaca leg atribusi.
+    //   Konsekuensinya pasangan leg atribusi net-nol terhadap saldo fisik dan
+    //   tidak pernah tampil sebagai perpindahan bank "palsu".
 
     /**
      * SEMUA perpindahan uang antar rekening fisik — basis `movementInternalUnion()`.
@@ -228,7 +260,9 @@ class KasBankSourceMovement
      * TIDAK termasuk: baris `sumber_tipe = kas_keluar / kas_masuk` yang ada
      * di ledger sebagai CERMINAN tabel source (sudah dihitung lewat
      * movementKas()/movementBank() — menghitung dua kali = double count),
-     * dan legacy dump tanpa `transfer_ref` (otomatis tertinggal).
+     * legacy dump tanpa `transfer_ref` (otomatis tertinggal), dan pasangan
+     * leg `SUMBER_TIPE_ATRIBUSI` (mutasi hak rekening sama — tidak
+     * memindahkan uang fisik).
      *
      * @return array{masuk:int, keluar:int}
      */
@@ -238,7 +272,7 @@ class KasBankSourceMovement
         string $dari,
         ?string $sampai = null
     ): array {
-        return $this->internalLedger($akunId, $unitId, $dari, $sampai, null);
+        return $this->internalLedger($akunId, $unitId, $dari, $sampai, null, self::ATRIBUSI_KECUALI);
     }
 
     /**
@@ -251,6 +285,39 @@ class KasBankSourceMovement
         ?string $sampai = null
     ): int {
         $t = $this->movementInternalUnionRincian($akunId, $unitId, $dari, $sampai);
+
+        return $t['masuk'] - $t['keluar'];
+    }
+
+    /**
+     * Mutasi HAK atribusi — HANYA pasangan leg rekening SAMA
+     * (`sumber_tipe = SUMBER_TIPE_ATRIBUSI`), dipecah per arah.
+     *
+     * Ini satu-satunya pembaca baris `transaksi_kas_bank` yang memasukkan
+     * leg atribusi. Tujuannya memindahkan posisi hak antar unit tanpa
+     * mengubah saldo fisik: `posisiUnit(u) = alokasi + netMovement + mutasiHak`.
+     *
+     * @return array{masuk:int, keluar:int}
+     */
+    public function movementHakRincian(
+        int $akunId,
+        ?int $unitId = null,
+        ?string $dari = null,
+        ?string $sampai = null
+    ): array {
+        return $this->internalLedger($akunId, $unitId, $dari ?? FinanceScopeService::kasBankPeriodeMulaiDate(), $sampai, null, self::ATRIBUSI_HANYA);
+    }
+
+    /**
+     * Net `movementHakRincian()` (MASUK - KELUAR).
+     */
+    public function movementHak(
+        int $akunId,
+        ?int $unitId = null,
+        ?string $dari = null,
+        ?string $sampai = null
+    ): int {
+        $t = $this->movementHakRincian($akunId, $unitId, $dari, $sampai);
 
         return $t['masuk'] - $t['keluar'];
     }
@@ -297,19 +364,26 @@ class KasBankSourceMovement
     /**
      * Query builder tunggal untuk seluruh pembacaan `transaksi_kas_bank`.
      *
-     * Pivate dengan sengaja: pemanggil TIDAK boleh memilih `$jenis` sendiri.
+     * Private dengan sengaja: pemanggil TIDAK boleh memilih `$jenis` sendiri.
      * Akses dibatasi ke dua makna yang sudah bernama di atas lewat
      * movementInternalUnionRincian() / movementSetorTarikRincian(), supaya
      * tidak ada caller yang bisa diam-diam memakai definisi ketiga.
      *
+     * `$atribusi` memisahkan gerakan FISIK (antar rekening) dari mutasi HAK
+     * (rekening sama): 'kecuali' = tolak leg atribusi (dipakai
+     * movementInternalUnionRincian()), 'hanya' = hanya leg atribusi (dipakai
+     * movementHakRincian()), null = keduanya.
+     *
      * @param string|null $jenis null = union (tanpa filter jenis)
+     * @param string|null $atribusi self::ATRIBUSI_HANYA | self::ATRIBUSI_KECUALI | null
      */
     private function internalLedger(
         int $akunId,
         ?int $unitId,
         string $dari,
         ?string $sampai = null,
-        ?string $jenis = null
+        ?string $jenis = null,
+        ?string $atribusi = null
     ): array {
         $db = $this->db;
         $b  = $db->table('transaksi_kas_bank')
@@ -322,6 +396,15 @@ class KasBankSourceMovement
 
         if ($jenis !== null && $jenis !== '') {
             $b->where('jenis', $jenis);
+        }
+
+        if ($atribusi === self::ATRIBUSI_HANYA) {
+            $b->where('sumber_tipe', self::SUMBER_TIPE_ATRIBUSI);
+        } elseif ($atribusi === self::ATRIBUSI_KECUALI) {
+            $b->groupStart()
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', self::SUMBER_TIPE_ATRIBUSI)
+            ->groupEnd();
         }
 
         // Kolom `tanggal` di ledger bertipe DATE, bukan DATETIME, jadi `<=`

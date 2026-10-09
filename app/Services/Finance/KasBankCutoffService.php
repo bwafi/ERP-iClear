@@ -30,8 +30,13 @@ use App\Models\ModelAlokasiSaldoKasBank;
  * BANK memakai model berbeda:
  *
  *     saldo_fisik(akun)  = statement(akun, cut-off) + netMovement sejak periode
- *     posisiUnit(u)      = openingAllocation(u) + netMovement(u) sejak periode
+ *     posisiUnit(u)      = openingAllocation(u) + netMovement(u) + mutasiHak(u)
  *     LEGACY/UNASSIGNED  = statement(akun) - SUM(openingAllocation)
+ *
+ * `mutasiHak(u)` = movementHak(): pasangan leg atribusi (rekening fisik SAMA)
+ * yang menggeser hak antar unit tanpa mengubah saldo fisik. Yang membedakan
+ * posisi unit dari saldo fisik: leg atribusi TIDAK ikut dihitung sebagai
+ * perpindahan fisik (lihat KasBankSourceMovement).
  *
  * KAS:
  *
@@ -609,7 +614,7 @@ class KasBankCutoffService
 
     /**
      * Posisi unit = opening allocation + net movement unit sejak cut-off.
- *
+     *
      * Unit yang TIDAK entitled mengembalikan 0 dan `entitled()`-nya false.
      * Nol itu bukan "saldo unit habis", tapi "unit ini memang tidak punya
      * hak atas rekening" — bedanya dipakai guard penarikan.
@@ -617,6 +622,12 @@ class KasBankCutoffService
      * Rekening KAS tidak punya alokasi: laci milik satu unit, jadi opening-nya
      * langsung jadi posisi unit itu. Tanpa cabang khusus, KAS akan selalu
      * terlihat nol padahal opening-nya ada.
+     *
+     * MUTASI HAK (atribusi rekening sama): selain net movement FISIK, posisi
+     * unit membaca `movementHak()` — pasangan leg KELUAR/MASUK pada rekening
+     * fisik yang SAMA yang hanya menggeser hak antar unit tanpa mengubah
+     * saldo fisik rekening. Tanpa suku ini, pelunasan H/P dari rekening
+     * bersama yang sama tidak akan pernah mengubah hak unit.
      */
     public function posisiUnit(int $akunId, int $unitId, ?string $tanggal = null): int
     {
@@ -638,8 +649,9 @@ class KasBankCutoffService
             : $alokasi;
 
         // Sama seperti saldoFisik(): $tanggal membatasi KEDUA suku, bukan
-        // hanya opening.
-        return $pembuka + $this->netMovement($akunId, $unitId, $tanggal);
+        // hanya opening. Suku mutasi hak mengikuti batas yang sama.
+        return $pembuka + $this->netMovement($akunId, $unitId, $tanggal)
+            + $this->sourceMovement()->movementHak($akunId, $unitId, $tanggal);
     }
 
     /**

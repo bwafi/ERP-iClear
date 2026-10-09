@@ -6,7 +6,10 @@ $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
 $canTransaksi = $can_transaksi ?? false;
 $canKelola = $bisa_pilih_unit ?? false;
 $unitMap = [];
-foreach (($unit ?? []) as $u) {
+// `unit_map` = SEMUA unit (untuk nama lawan yang bisa berada di luar scope
+// user); `unit` = unit dalam scope user (untuk dropdown pilih-unit). Kolom
+// lawan memakai nama unit asli, bukan fallback "U<id>".
+foreach ((($unit_map ?? []) ?: ($unit ?? [])) as $u) {
     $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
 }
 $akunMap = [];
@@ -295,8 +298,8 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                             <iconify-icon icon="solar:calculator-minimalistic-bold-duotone" width="20" height="20"></iconify-icon>
                         </div>
                         <div>
-                            <div class="fw-bold text-dark" style="font-size:.82rem">Atribusi — Tanpa Uang Pindah</div>
-                            <small class="text-muted" style="font-size:.74rem">Rekening <strong>sama</strong>. Hanya hutang/piutang yang berkurang. Saldo tetap.</small>
+                            <div class="fw-bold text-dark" style="font-size:.82rem">Atribusi — Hak Saldo Berpindah</div>
+                            <small class="text-muted" style="font-size:.74rem">Rekening <strong>sama</strong>. Uang fisik tidak berpindah, <strong>hak saldo unit</strong> geser; utang/piutang lunas.</small>
                         </div>
                     </div>
                 </div>
@@ -331,6 +334,31 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
             </div>
         </div>
     </div>
+
+    <?php /* ==================== UNIT CONTEXT (wajib utk daftar rekening) ==================== */ ?>
+    <?php if (count($unit ?? []) > 1) : ?>
+        <form method="get" action="<?= base_url('kas_bank/antar-unit') ?>" class="kb-clean-card mb-3">
+            <div class="card-body p-3 bg-white">
+                <div class="row g-3 align-items-end">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small fw-semibold text-dark mb-1" for="au-unit">Unit Transaksi</label>
+                        <select name="unit_id" id="au-unit" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">— Semua Cabang (konsolidasi) —</option>
+                            <?php foreach (($unit ?? []) as $u) : ?>
+                                <option value="<?= (int) $u->idunit ?>" <?= (int) ($unit_terpilih ?? 0) === (int) $u->idunit ? 'selected' : '' ?>>
+                                    <?= esc($u->NAMA_UNIT) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-8 text-muted d-flex align-items-start gap-2">
+                        <iconify-icon icon="bi:info-circle-fill" class="text-info flex-shrink-0 mt-1"></iconify-icon>
+                        <span style="font-size:.78rem">Pilih unit dulu — daftar rekening <strong>Bayar DARI</strong> &amp; <strong>Dibayar KE</strong> hanya muncul untuk unit yang dipilih. Mode <strong>Semua Cabang</strong> hanya menampilkan daftar hutang/piutang.</span>
+                    </div>
+                </div>
+            </div>
+        </form>
+    <?php endif; ?>
 
     <?php /* ==================== WORKSPACE (FORM + PREVIEW) ==================== */ ?>
     <div class="kb-workspace mb-4">
@@ -412,6 +440,12 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                 </select>
                             </div>
                         </div>
+                        <?php if (empty($akun_pengirim ?? []) && empty($akun_penerima ?? [])) : ?>
+                            <div class="kb-helper text-warning-emphasis">
+                                <iconify-icon icon="bi:exclamation-triangle-fill" class="fs-7"></iconify-icon>
+                                Belum ada rekening yang bisa dipilih<?= (count($unit ?? []) > 1 && !($unit_terpilih ?? 0)) ? ' — pilih <strong>Unit Transaksi</strong> di atas terlebih dahulu' : '' ?>.
+                            </div>
+                        <?php endif; ?>
                         <div id="rekHelper" class="kb-helper">Pilih dua rekening yang <strong>berbeda</strong> untuk pindah uang, atau <strong>sama</strong> untuk pelunasan tanpa pindah uang.</div>
                     </div>
 
@@ -773,7 +807,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
         <div id="rpane-atribusi" class="bg-white" style="display:none">
             <div class="p-2 px-3 bg-warning-subtle text-warning-emphasis border-bottom small d-flex gap-2 align-items-center" style="font-size:.72rem">
                 <iconify-icon icon="solar:calculator-minimalistic-bold-duotone" class="fs-6"></iconify-icon>
-                <span>Tanpa gerakan uang — hanya hutang/piutang yang dilunasi. Saldo kas/bank tidak berubah.</span>
+                <span>Uang fisik <strong>tidak</strong> pindah rekening — <strong>hak saldo unit</strong> yang bergeser (pengirim turun, penerima naik). Saldo kas/bank rekening tetap.</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" style="font-size:.82rem">
@@ -800,7 +834,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                 <td class="text-end kb-num fw-bold text-dark"><?= $rp($p->jumlah_bayar ?? 0) ?></td>
                                 <td class="text-end">
                                     <?php if ($canKelola): ?>
-                                        <form method="post" class="d-inline" action="<?= base_url('kas_bank/antar-unit/reversal-atribusi/' . (int)($p->referensi_id ?? 0)) ?>" onsubmit="return confirm('Batalkan atribusi ini? Sisa hutang/piutang akan dikembalikan. Saldo kas tidak berubah.')">
+                                        <form method="post" class="d-inline" action="<?= base_url('kas_bank/antar-unit/reversal-atribusi/' . (int)($p->referensi_id ?? 0)) ?>" onsubmit="return confirm('Batalkan atribusi ini? Sisa hutang/piutang dikembalikan dan hak saldo kedua unit kembali.')">
                                             <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" style="font-size:.72rem">Batalkan</button>
                                         </form>
                                     <?php endif; ?>
@@ -868,20 +902,20 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
             if (!f || !t) {
                 badge.textContent = 'Pilih rekening';
                 badge.className = 'kb-live-badge idle';
-                helper.innerHTML = 'Pilih dua rekening yang <strong>berbeda</strong> untuk pindah uang, atau <strong>sama</strong> untuk pelunasan tanpa pindah uang.';
+                helper.innerHTML = 'Pilih dua rekening yang <strong>berbeda</strong> untuk pindah uang, atau <strong>sama</strong> untuk menggeser hak saldo unit.';
                 modeExplain.style.display = 'none';
                 if (pvModeText) pvModeText.innerHTML = '<span class="text-muted">Pilih kedua rekening untuk melihat mode penyelesaian.</span>';
                 return;
             }
             const same = f === t;
             if (same) {
-                badge.textContent = 'Atribusi — tanpa pindah uang';
+                badge.textContent = 'Atribusi — hak saldo geser';
                 badge.className = 'kb-live-badge atribusi';
-                helper.innerHTML = '<span class="text-warning-emphasis fw-bold">Atribusi:</span> rekening sama — <strong>saldo kas/bank tidak bergerak</strong>, hanya hutang/piutang berkurang.';
+                helper.innerHTML = '<span class="text-warning-emphasis fw-bold">Atribusi:</span> rekening sama — <strong>uang tidak pindah</strong>, <strong>hak saldo unit</strong> pengirim berkurang &amp; penerima bertambah.';
                 modeExplain.style.display = 'block';
-                modeExplain.innerHTML = 'Rekening sama terdeteksi &rarr; pelunasan <strong>tanpa gerakan kas</strong>. Cocok untuk rekening Bersama.';
+                modeExplain.innerHTML = 'Rekening sama terdeteksi &rarr; <strong>mutasi hak</strong>, tanpa gerakan kas fisik. Cocok untuk rekening Bersama.';
                 modeExplain.className = 'kb-helper text-center mt-2 text-warning-emphasis';
-                if (pvModeText) pvModeText.innerHTML = '<span class="text-warning-emphasis">Rekening <strong>sama</strong> &rarr; <strong>Atribusi</strong>. Tidak ada uang yang pindah antar rekening. Sistem hanya mengurangi hutang/piutang.</span>';
+                if (pvModeText) pvModeText.innerHTML = '<span class="text-warning-emphasis">Rekening <strong>sama</strong> &rarr; <strong>Atribusi</strong>. Saldo fisik rekening tetap; posisi hak unit pengirim turun, penerima naik.</span>';
             } else {
                 badge.textContent = 'Transfer fisik — uang pindah';
                 badge.className = 'kb-live-badge transfer';
