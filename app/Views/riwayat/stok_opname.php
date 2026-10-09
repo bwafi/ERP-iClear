@@ -56,6 +56,14 @@
         </div>
     </form>
 
+    <div class="row mb-3">
+        <div class="col-12 text-end">
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalDetailSelisih">
+                <iconify-icon icon="solar:magnifer-linear"></iconify-icon> Lihat Detail Selisih per Tanggal
+            </button>
+        </div>
+    </div>
+
     <div class="table-responsive mb-4 px-4">
         <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
             <thead class="text-dark fs-4">
@@ -102,8 +110,65 @@
     </div>
 </div>
 
+<!-- Modal Detail Selisih -->
+<div class="modal fade" id="modalDetailSelisih" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detail Barang Selisih</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <select id="selectTanggalSelisih" class="form-select mb-3">
+                    <option value="">-- Pilih Tanggal Opname --</option>
+                    <?php if (!empty($stokopname_grouped)): ?>
+                        <?php foreach (array_keys($stokopname_grouped) as $tanggal): ?>
+                            <option value="<?= esc($tanggal) ?>"><?= esc($tanggal) ?></option>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </select>
+                <div id="containerDetailSelisih">
+                    <p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    $(document).ready(function() {
+    const stokopname_grouped = <?= json_encode($stokopname_grouped) ?>;
+
+    $('#selectTanggalSelisih').on('change', function() {
+        const tanggal = $(this).val();
+        const container = $('#containerDetailSelisih');
+        
+        if (!tanggal || !stokopname_grouped[tanggal]) {
+            container.html('<p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>');
+            return;
+        }
+
+        const items = stokopname_grouped[tanggal].filter(item => parseInt(item.jumlah_selisih) !== 0);
+        
+        if (items.length === 0) {
+            container.html('<div class="alert alert-success">Tidak ditemukan barang selisih pada tanggal ini.</div>');
+            return;
+        }
+
+        let html = '<table class="table table-sm">';
+        html += '<thead><tr><th>Barang</th><th>Real</th><th>Komp</th><th>Selisih</th></tr></thead>';
+        html += '<tbody>';
+        items.forEach(item => {
+            html += `<tr>
+                <td>${item.nama_barang}</td>
+                <td>${item.jumlah_real}</td>
+                <td>${item.jumlah_komp}</td>
+                <td class="text-danger fw-bold">${item.jumlah_selisih}</td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        container.html(html);
+    });
+</script>
         // ========== 1. CEK DAN INISIALISASI DATATABLE ==========
         var table;
 

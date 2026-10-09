@@ -33,10 +33,19 @@ class Riwayat_StokOpname extends BaseController
     public function index()
     {
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
+        $stokopname = $this->StokOpnameModel->getStokOpnameAll();
+        
+        // Grouping stok opname by date untuk kemudahan modal filter
+        $stokopname_grouped = [];
+        foreach ($stokopname as $row) {
+            $stokopname_grouped[$row->tanggal][] = $row;
+        }
+
         $data =  array(
             'akun' => $akun,
             'stok' => $this->KartuStokModel->getKartuStok(),
-            'stokopname' => $this->StokOpnameModel->getStokOpnameAll(),
+            'stokopname' => $stokopname,
+            'stokopname_grouped' => $stokopname_grouped,
             'stokopnamedraft' => $this->StokOpnameDraftModel->getStokOpname(),
             'body'  => 'riwayat/stok_opname'
         );
