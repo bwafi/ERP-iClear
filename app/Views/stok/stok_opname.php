@@ -554,8 +554,8 @@ $who      = static function ($id) use ($akunNama): string {
                                             <th>Tanggal</th>
                                             <th class="text-center">Status</th>
                                             <th class="text-center">Barang</th>
-                                            <th class="text-end">Stok Komputer</th>
-                                            <th class="text-end">Selisih</th>
+                                            <th class="text-end">Stok Komputer</th>                                            <th class="text-end">Selisih</th>
+                                            <th class="text-center">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -578,12 +578,15 @@ $who      = static function ($id) use ($akunNama): string {
                                                 <td class="text-center"><?= (int)$hp->total_barang ?> (<?= (int)$hp->terisi_barang ?> terisi)</td>
                                                 <td class="text-end"><?= number_format((float)$hp->jumlah_komp, 0, ',', '.') ?></td>
                                                 <td class="text-end <?= ($hpSelisih !== null && (float)$hpSelisih != 0) ? 'fw-bold' : 'text-muted' ?>">
+                                                    <?= $hpSelisih !== null ? number_format((float)$hpSelisih, 0, ',', '.') : '—' ?>
+                                                </td>
+                                                <td class="text-center">
                                                     <?php if ($hpSelisih !== null && (float)$hpSelisih != 0) : ?>
-                                                        <button type="button" class="btn btn-sm btn-link p-0 text-danger" onclick="bukaDetailSelisih('<?= esc($hp->tanggal) ?>')">
-                                                            <?= number_format((float)$hpSelisih, 0, ',', '.') ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-info" onclick="bukaDetailSelisih('<?= esc($hp->tanggal) ?>')">
+                                                            <iconify-icon icon="solar:magnifer-linear"></iconify-icon> Detail
                                                         </button>
                                                     <?php else : ?>
-                                                        <?= $hpSelisih !== null ? number_format((float)$hpSelisih, 0, ',', '.') : '—' ?>
+                                                        <span class="text-muted">—</span>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
