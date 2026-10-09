@@ -168,51 +168,77 @@
     </div>
 
     <!-- Row 2: Secondary Highlights -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-lg-3">
         <div class="card border shadow-none h-100">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <span class="badge bg-primary-subtle text-primary mb-2 px-3 py-1 fw-semibold">Fast Moving Service</span>
-                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 220px;"><?= esc($bestsellerproduct->tipe_hp_label ?? '-') ?></h5>
+                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;"><?= esc($bestsellerproduct->tipe_hp_label ?? '-') ?></h5>
                         <span class="fs-2 text-muted">Selesai: <strong class="text-dark"><?= number_format($bestsellerproduct->total ?? 0, 0, ',', '.') ?></strong> service</span>
                     </div>
                     <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:medal-ribbons-star-bold-duotone" width="32" height="32"></iconify-icon>
+                        <iconify-icon icon="solar:medal-ribbons-star-bold-duotone" width="30" height="30"></iconify-icon>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-lg-3">
         <div class="card border shadow-none h-100">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <span class="badge bg-info-subtle text-info mb-2 px-3 py-1 fw-semibold">Sparepart Best Seller</span>
-                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 220px;"><?= esc($bestseller->nama_barang ?? '-') ?></h5>
+                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;"><?= esc($bestseller->nama_barang ?? '-') ?></h5>
                         <span class="fs-2 text-muted">Total Terjual: <strong class="text-dark"><?= number_format($bestseller->total_penjualan ?? 0, 0, ',', '.') ?></strong></span>
                     </div>
                     <div class="p-3 bg-info-subtle rounded-3 text-info d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:box-minimalistic-bold-duotone" width="32" height="32"></iconify-icon>
+                        <iconify-icon icon="solar:box-minimalistic-bold-duotone" width="30" height="30"></iconify-icon>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-12 col-lg-4">
+    <div class="col-md-6 col-lg-3">
         <div class="card border shadow-none h-100">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase fs-2 text-muted fw-bold d-block mb-1">Hari Omset Tertinggi</span>
-                        <h5 class="fw-bold mb-1 text-dark"><?= $hariTerbaik ? date('d F Y', strtotime($hariTerbaik)) : '-' ?></h5>
+                        <span class="badge bg-danger-subtle text-danger mb-2 px-3 py-1 fw-semibold">Hari Omset Tertinggi</span>
+                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;"><?= $hariTerbaik ? date('d F Y', strtotime($hariTerbaik)) : '-' ?></h5>
                         <span class="fs-2 text-muted"><?= $hariTerbaik ? 'Rp ' . number_format($omsetTerbaik ?? 0, 0, ',', '.') : 'Belum ada data' ?></span>
                     </div>
                     <div class="p-3 bg-danger-subtle rounded-3 text-danger d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:medal-star-bold-duotone" width="32" height="32"></iconify-icon>
+                        <iconify-icon icon="solar:medal-star-bold-duotone" width="30" height="30"></iconify-icon>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+        <div class="card border shadow-none h-100">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="overflow-hidden">
+                        <span class="badge bg-warning-subtle text-warning-emphasis mb-2 px-3 py-1 fw-semibold">Domisili Terbanyak</span>
+                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;" title="<?= esc($top_kecamatan->nama_kecamatan ?? '-') ?>">
+                            <?= esc($top_kecamatan->nama_kecamatan ?? '-') ?>
+                        </h5>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="fs-2 text-muted">
+                                <strong class="text-dark"><?= number_format($top_kecamatan->total_pelanggan ?? 0, 0, ',', '.') ?></strong> pelanggan (<?= $top_kecamatan->persentase ?? 0 ?>%)
+                            </span>
+                        </div>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none d-inline-flex align-items-center gap-1 mt-1 text-primary fs-2 fw-medium" data-bs-toggle="modal" data-bs-target="#modalKecamatan">
+                            Lihat Sebaran (<?= count($list_kecamatan ?? []) ?>) <iconify-icon icon="solar:alt-arrow-right-line-duotone"></iconify-icon>
+                        </button>
+                    </div>
+                    <div class="p-3 bg-warning-subtle rounded-3 text-warning-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
+                        <iconify-icon icon="solar:map-point-wave-bold-duotone" width="30" height="30"></iconify-icon>
                     </div>
                 </div>
             </div>
@@ -365,6 +391,114 @@
         <div class="alert alert-light border mt-3 mb-0 d-flex align-items-center gap-2 py-2 px-3 text-muted fs-2">
             <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
             <span>Kolom <strong>Omset</strong> murni menghitung nilai penjualan/penyerahan barang/jasa. Tombol <strong>Arus Kas</strong> menampilkan mutasi fisik kas/bank masuk dan keluar pada tanggal tersebut.</span>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sebaran Domisili Kecamatan -->
+<div class="modal fade" id="modalKecamatan" tabindex="-1" aria-labelledby="modalKecamatanLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom bg-light">
+                <div>
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2" id="modalKecamatanLabel">
+                        <iconify-icon icon="solar:map-point-wave-bold-duotone" class="text-warning-emphasis fs-5"></iconify-icon>
+                        Sebaran Domisili Pelanggan (Kecamatan)
+                    </h5>
+                    <small class="text-muted fs-2">Periode <?= esc($periodeLabel) ?></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-4">
+                        <div class="p-3 bg-light rounded-3 border text-center">
+                            <span class="text-muted fs-2 d-block mb-1">Total Pelanggan</span>
+                            <h5 class="fw-bold text-dark mb-0"><?= number_format($total_kecamatan_pelanggan ?? 0, 0, ',', '.') ?></h5>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="p-3 bg-light rounded-3 border text-center">
+                            <span class="text-muted fs-2 d-block mb-1">Total Transaksi/Unit</span>
+                            <h5 class="fw-bold text-dark mb-0"><?= number_format($total_kecamatan_transaksi ?? 0, 0, ',', '.') ?></h5>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="p-3 bg-light rounded-3 border text-center">
+                            <span class="text-muted fs-2 d-block mb-1">Kecamatan Terdata</span>
+                            <h5 class="fw-bold text-primary mb-0"><?= count($list_kecamatan ?? []) ?></h5>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0">
+                            <iconify-icon icon="solar:magnifer-linear" class="text-muted"></iconify-icon>
+                        </span>
+                        <input type="text" id="searchKecamatan" class="form-control border-start-0" placeholder="Cari nama kecamatan..." onkeyup="filterKecamatanTable()">
+                    </div>
+                </div>
+
+                <div class="table-responsive border rounded-3">
+                    <table class="table align-middle table-hover mb-0" id="tableKecamatanList">
+                        <thead class="table-light text-dark fs-2">
+                            <tr>
+                                <th width="8%" class="text-center">#</th>
+                                <th width="35%">Kecamatan</th>
+                                <th width="20%" class="text-center">Pelanggan</th>
+                                <th width="17%" class="text-center">Transaksi</th>
+                                <th width="20%">Porsi (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="fs-2" id="tbodyKecamatan">
+                            <?php if (!empty($list_kecamatan)): ?>
+                                <?php foreach ($list_kecamatan as $idx => $kec): ?>
+                                    <tr>
+                                        <td class="text-center fw-bold text-muted">
+                                            <?php if ($idx === 0): ?>
+                                                <span class="badge bg-warning-subtle text-warning-emphasis rounded-circle p-1">🥇</span>
+                                            <?php elseif ($idx === 1): ?>
+                                                <span class="badge bg-secondary-subtle text-secondary rounded-circle p-1">🥈</span>
+                                            <?php elseif ($idx === 2): ?>
+                                                <span class="badge bg-light-subtle text-dark rounded-circle p-1">🥉</span>
+                                            <?php else: ?>
+                                                <?= $idx + 1 ?>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="fw-semibold text-dark nama-kecamatan-text"><?= esc($kec->nama_kecamatan) ?></span>
+                                            <?php if ($idx === 0): ?>
+                                                <span class="badge bg-warning-subtle text-warning-emphasis ms-1 fs-1">Terbanyak</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center fw-medium"><?= number_format($kec->total_pelanggan, 0, ',', '.') ?> orang</td>
+                                        <td class="text-center text-muted"><?= number_format($kec->total_transaksi, 0, ',', '.') ?> trx</td>
+                                        <td>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="progress flex-grow-1" style="height: 6px;">
+                                                    <div class="progress-bar <?= $idx === 0 ? 'bg-warning' : 'bg-primary' ?>" role="progressbar" style="width: <?= min(100, $kec->persentase) ?>%;" aria-valuenow="<?= $kec->persentase ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                                </div>
+                                                <span class="text-muted fs-1 fw-semibold" style="width: 40px; text-align: right;"><?= $kec->persentase ?>%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        <iconify-icon icon="solar:info-circle-linear" class="fs-4 d-block mb-1"></iconify-icon>
+                                        Belum ada data domisili kecamatan pelanggan untuk periode ini.
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer border-top bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
+            </div>
         </div>
     </div>
 </div>
@@ -735,5 +869,24 @@
         `;
 
         document.getElementById('arusKasBody').innerHTML = html;
+    }
+
+    function filterKecamatanTable() {
+        const input = document.getElementById('searchKecamatan');
+        const filter = (input ? input.value : '').toLowerCase().trim();
+        const tbody = document.getElementById('tbodyKecamatan');
+        if (!tbody) return;
+        const rows = tbody.getElementsByTagName('tr');
+        for (let i = 0; i < rows.length; i++) {
+            const nameEl = rows[i].querySelector('.nama-kecamatan-text');
+            if (nameEl) {
+                const text = nameEl.textContent || nameEl.innerText;
+                if (text.toLowerCase().indexOf(filter) > -1) {
+                    rows[i].style.display = '';
+                } else {
+                    rows[i].style.display = 'none';
+                }
+            }
+        }
     }
 </script>

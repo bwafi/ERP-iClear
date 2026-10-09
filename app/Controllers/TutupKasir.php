@@ -289,8 +289,8 @@ class TutupKasir extends BaseController
 
         $countSales = $this->db->table('penjualan')
             ->select('COUNT(DISTINCT idpenjualan) AS total')
-            ->where('MONTH(tanggal)', date('m'))
-            ->where('YEAR(tanggal)', date('Y'))
+            ->where('MONTH(tanggal)', $bulan)
+            ->where('YEAR(tanggal)', $tahun)
             ->where('unit_idunit', $unit)
             ->like('kode_invoice', 'SLL', 'after')
             ->get()
@@ -298,6 +298,69 @@ class TutupKasir extends BaseController
             ->total ?? 0;
 
         $pelanggan_bulan = $countService + $countSales;
+
+        // ==========================
+        // TOP KECAMATAN / DOMISILI PELANGGAN
+        // ==========================
+        $kecamatanQuery = $this->db->query("
+            SELECT 
+                UPPER(TRIM(p.kecamatan)) AS raw_kecamatan,
+                COUNT(DISTINCT sub.unik_id) AS total_transaksi,
+                COUNT(DISTINCT p.id_pelanggan) AS total_pelanggan
+            FROM (
+                SELECT s.pelanggan_id_pelanggan AS id_pelanggan, CONCAT('SVC-', s.idservice) AS unik_id
+                FROM service s
+                WHERE s.unit_idunit = ?
+                  AND MONTH(s.tanggal_selesai) = ?
+                  AND YEAR(s.tanggal_selesai) = ?
+                  AND s.pelanggan_id_pelanggan IS NOT NULL
+                  AND s.pelanggan_id_pelanggan != 0
+
+                UNION ALL
+
+                SELECT pj.id_pelanggan, CONCAT('SLS-', pj.idpenjualan) AS unik_id
+                FROM penjualan pj
+                WHERE pj.unit_idunit = ?
+                  AND MONTH(pj.tanggal) = ?
+                  AND YEAR(pj.tanggal) = ?
+                  AND pj.kode_invoice LIKE 'SLL%'
+                  AND pj.id_pelanggan IS NOT NULL
+                  AND pj.id_pelanggan > 0
+            ) AS sub
+            JOIN pelanggan p ON p.id_pelanggan = sub.id_pelanggan
+            WHERE p.deleted = '0'
+              AND p.kecamatan IS NOT NULL 
+              AND TRIM(p.kecamatan) != ''
+            GROUP BY UPPER(TRIM(p.kecamatan))
+            ORDER BY total_pelanggan DESC, total_transaksi DESC
+        ", [$unit, $bulan, $tahun, $unit, $bulan, $tahun]);
+
+        $listKecamatanRaw = $kecamatanQuery->getResultArray();
+
+        $totalKecamatanTransaksi = 0;
+        $totalKecamatanPelanggan = 0;
+        foreach ($listKecamatanRaw as $row) {
+            $totalKecamatanTransaksi += (int)$row['total_transaksi'];
+            $totalKecamatanPelanggan += (int)$row['total_pelanggan'];
+        }
+
+        $list_kecamatan = [];
+        foreach ($listKecamatanRaw as $row) {
+            $pct = $totalKecamatanPelanggan > 0 ? round(((int)$row['total_pelanggan'] / $totalKecamatanPelanggan) * 100, 1) : 0;
+            $list_kecamatan[] = (object)[
+                'nama_kecamatan'  => ucwords(strtolower($row['raw_kecamatan'])),
+                'total_transaksi' => (int)$row['total_transaksi'],
+                'total_pelanggan' => (int)$row['total_pelanggan'],
+                'persentase'      => $pct,
+            ];
+        }
+
+        $top_kecamatan = !empty($list_kecamatan) ? $list_kecamatan[0] : (object)[
+            'nama_kecamatan'  => 'Belum ada data',
+            'total_transaksi' => 0,
+            'total_pelanggan' => 0,
+            'persentase'      => 0,
+        ];
 
         // ==========================
         // SPAREPART BEST SELLER
@@ -496,6 +559,10 @@ class TutupKasir extends BaseController
             'omset_hari_ini'    => $omset_hari_ini,
             'hariTerbaik'       => $hariTerbaik,
             'omsetTerbaik'      => $omsetTerbaik,
+            'top_kecamatan'     => $top_kecamatan,
+            'list_kecamatan'    => $list_kecamatan,
+            'total_kecamatan_pelanggan' => $totalKecamatanPelanggan,
+            'total_kecamatan_transaksi' => $totalKecamatanTransaksi,
             'body'              => 'jurnal/omset_bulanan'
         ]);
     }
