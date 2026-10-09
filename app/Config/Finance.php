@@ -132,7 +132,7 @@ class Finance extends BaseConfig
      * Harus = $kasBankCutoffDate + 1 hari. TIDAK menggantikan $periodeMulaiDate:
      * KPI/Hutang-Piutang tetap memakai $periodeMulaiDate.
      */
-    public string $kasBankPeriodeMulaiDate = '2026-10-08';
+    public string $kasBankPeriodeMulaiDate = '2026-10-10';
 
     /**
      * ID_JABATAN yang boleh mengisi (input) Dashboard Finance.
