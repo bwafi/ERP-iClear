@@ -578,7 +578,13 @@ $who      = static function ($id) use ($akunNama): string {
                                                 <td class="text-center"><?= (int)$hp->total_barang ?> (<?= (int)$hp->terisi_barang ?> terisi)</td>
                                                 <td class="text-end"><?= number_format((float)$hp->jumlah_komp, 0, ',', '.') ?></td>
                                                 <td class="text-end <?= ($hpSelisih !== null && (float)$hpSelisih != 0) ? 'fw-bold' : 'text-muted' ?>">
-                                                    <?= $hpSelisih !== null ? number_format((float)$hpSelisih, 0, ',', '.') : '—' ?>
+                                                    <?php if ($hpSelisih !== null && (float)$hpSelisih != 0) : ?>
+                                                        <button type="button" class="btn btn-sm btn-link p-0 text-danger" onclick="bukaDetailSelisih('<?= esc($hp->tanggal) ?>')">
+                                                            <?= number_format((float)$hpSelisih, 0, ',', '.') ?>
+                                                        </button>
+                                                    <?php else : ?>
+                                                        <?= $hpSelisih !== null ? number_format((float)$hpSelisih, 0, ',', '.') : '—' ?>
+                                                    <?php endif; ?>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -643,9 +649,17 @@ $who      = static function ($id) use ($akunNama): string {
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
+<script>
+    const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
 
-        $('#selectTanggalSelisih').on('change', function() {
+    function bukaDetailSelisih(tanggal) {
+        if ($('#selectTanggalSelisih').length) {
+            $('#selectTanggalSelisih').val(tanggal).trigger('change');
+            $('#modalDetailSelisih').modal('show');
+        }
+    }
+
+    $('#selectTanggalSelisih').on('change', function() {
             const tanggal = $(this).val();
             const container = $('#containerDetailSelisih');
             
