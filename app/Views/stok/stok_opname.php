@@ -626,20 +626,9 @@ $who      = static function ($id) use ($akunNama): string {
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Detail Barang Selisih (Data Final)</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <select id="selectTanggalSelisih" class="form-select mb-3">
-                    <option value="">-- Pilih Tanggal Opname --</option>
-                    <?php if (!empty($stokopname_grouped)): ?>
-                        <?php foreach (array_keys($stokopname_grouped) as $tanggal): ?>
-                            <option value="<?= esc($tanggal) ?>"><?= esc($tanggal) ?></option>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </select>
-                <div id="containerDetailSelisih">
-                    <p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>
-                </div>
+            <div class="modal-body" id="containerDetailSelisih">
             </div>
         </div>
     </div>
@@ -649,14 +638,29 @@ $who      = static function ($id) use ($akunNama): string {
     const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
 
     function bukaDetailSelisih(tanggal) {
-        console.log('Membuka modal, Tanggal:', tanggal);
         var modalEl = document.getElementById('modalDetailSelisih');
         var myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
         
-        if ($('#selectTanggalSelisih').length) {
-            $('#selectTanggalSelisih').val(tanggal).trigger('change');
-            myModal.show();
+        var items = stokopname_grouped[tanggal] ? stokopname_grouped[tanggal].filter(item => parseFloat(item.jumlah_selisih) !== 0) : [];
+        var container = document.getElementById('containerDetailSelisih');
+        
+        if (!tanggal || items.length === 0) {
+            container.innerHTML = '<div class="alert alert-success">Tidak ada selisih pada tanggal ' + (tanggal || '') + '.</div>';
+        } else {
+            var html = '<h6 class="mb-3 text-muted">Tanggal: ' + tanggal + '</h6>';
+            html += '<table class="table table-sm table-striped">';
+            html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
+            html += '<tbody>';
+            items.forEach(function(item) {
+                var selisih = parseFloat(item.jumlah_selisih);
+                var classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
+                html += '<tr><td>' + item.nama_barang + '</td><td class="text-center">' + parseInt(item.jumlah_real) + '</td><td class="text-center">' + parseInt(item.jumlah_komp) + '</td><td class="text-center fw-bold ' + classSelisih + '">' + parseInt(item.jumlah_selisih) + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
         }
+
+        myModal.show();
     }
 
     $('#selectTanggalSelisih').on('change', function() {
@@ -676,18 +680,14 @@ $who      = static function ($id) use ($akunNama): string {
             return;
         }
 
-        let html = '<table class="table table-sm table-striped">';
+        let html = '<p class="text-muted small mb-3">Menampilkan selisih pada tanggal: <strong>' + tanggal + '</strong></p>';
+        html += '<table class="table table-sm table-striped">';
         html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
         html += '<tbody>';
-        items.forEach(item => {
-            const selisih = parseFloat(item.jumlah_selisih);
-            const classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
-            html += `<tr>
-                <td>${item.nama_barang}</td>
-                <td class="text-center">${item.jumlah_real}</td>
-                <td class="text-center">${item.jumlah_komp}</td>
-                <td class="text-center fw-bold ${classSelisih}">${item.jumlah_selisih}</td>
-            </tr>`;
+        items.forEach(function(item) {
+            var selisih = parseFloat(item.jumlah_selisih);
+            var classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
+            html += '<tr><td>' + item.nama_barang + '</td><td class="text-center">' + parseInt(item.jumlah_real) + '</td><td class="text-center">' + parseInt(item.jumlah_komp) + '</td><td class="text-center fw-bold ' + classSelisih + '">' + parseInt(item.jumlah_selisih) + '</td></tr>';
         });
         html += '</tbody></table>';
         container.html(html);
