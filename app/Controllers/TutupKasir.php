@@ -1606,6 +1606,21 @@ class TutupKasir extends BaseController
             ->with('sukses', 'Tutup kasir berhasil');
     }
 
+    public function arusKasHarian()
+    {
+        $unit = $this->request->getGet('unit');
+        $tanggal = $this->request->getGet('tanggal');
+
+        if (!$unit || !$tanggal) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Parameter tidak lengkap']);
+        }
+
+        $service = new \App\Services\Finance\DailyCashFlowService();
+        $data = $service->getForDate((int)$unit, $tanggal);
+
+        return $this->response->setJSON($data);
+    }
+
     public function cetak_tutup_kasir($id)
     {
         $unit = session()->get('ID_UNIT');
