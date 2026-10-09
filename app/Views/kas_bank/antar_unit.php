@@ -22,16 +22,22 @@ $hpOpen = array_filter($hp_hutang ?? [], static fn($h) => (int) $h->sisa > 0 && 
 ?>
 
 <!-- Context Banner -->
-<div class="kb-banner mb-4">
-    <div class="kb-banner-icon text-warning">
-        <iconify-icon icon="bi:building-check"></iconify-icon>
-    </div>
-    <div class="kb-banner-content">
-        <strong class="text-emphasis">Aturan Penyelesaian Hutang/Piutang Antar Cabang:</strong>
-        <div class="text-secondary mt-1">
-            Hutang terbentuk otomatis dari mutasi stok barang antar unit.
-            Jika <strong class="text-body">Rekening Pengirim &amp; Penerima Beda</strong>, transaksi mencatat pergerakan kas/bank nyata.
-            Jika <strong class="text-body">Rekening Fisik Sama</strong> (rekening bersama), sistem mencatat <strong class="text-primary">Atribusi</strong> (penyelesaian H/P tanpa gerakan kas).
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4 bg-primary-subtle text-primary-emphasis rounded-3">
+        <h5 class="fw-bold mb-2">Pilih Metode Penyelesaian:</h5>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="p-3 bg-white rounded-3 shadow-sm border">
+                    <strong class="d-block text-dark mb-1"><iconify-icon icon="solar:transfer-horizontal-bold-duotone" class="text-primary fs-5"></iconify-icon> Transfer Fisik</strong>
+                    <small class="text-muted">Pilih rekening pengirim & penerima yang <strong>berbeda</strong>. Uang tunai benar-benar berpindah antar rekening.</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-3 bg-white rounded-3 shadow-sm border">
+                    <strong class="d-block text-dark mb-1"><iconify-icon icon="solar:calculator-minimalistic-bold-duotone" class="text-warning fs-5"></iconify-icon> Atribusi (Talangan)</strong>
+                    <small class="text-muted">Pilih rekening pengirim & penerima yang <strong>sama</strong>. Hanya pindah beban/hutang, tidak ada uang tunai yang bergerak.</small>
+                </div>
+            </div>
         </div>
     </div>
 </div>

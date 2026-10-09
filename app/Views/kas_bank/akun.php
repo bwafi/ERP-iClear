@@ -112,17 +112,17 @@ foreach ($daftarAkun as $a) {
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="kb-tab" id="step2-tab" data-bs-toggle="tab" data-bs-target="#step2-pane" type="button" role="tab">
-                            <span class="kb-step">2</span>Saldo awal
+                            <span class="kb-step">2</span>Saldo Awal Bank
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="kb-tab" id="step3-tab" data-bs-toggle="tab" data-bs-target="#step3-pane" type="button" role="tab">
-                            <span class="kb-step">3</span>Hak unit
+                            <span class="kb-step">3</span>Jatah Cabang
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="kb-tab" id="step4-tab" data-bs-toggle="tab" data-bs-target="#step4-pane" type="button" role="tab">
-                            <span class="kb-step">4</span>Opening KAS
+                            <span class="kb-step">4</span>Kas Laci (Opening)
                         </button>
                     </li>
                 </ul>
@@ -263,9 +263,8 @@ foreach ($daftarAkun as $a) {
                     <div class="tab-pane fade" id="step3-pane" role="tabpanel">
                             <div class="kb-pane-head">
                                 <div>
-                                    <div class="kb-pane-title">Bagi hak per unit</div>
-                                    <div class="kb-hint">Tentukan porsi saldo bank bersama untuk tiap cabang.
-                                        Rekening Finance/HO tidak termasuk karena tidak memakai alokasi.</div>
+                                    <div class="kb-pane-title">Bagi Jatah Saldo per Cabang (Alokasi)</div>
+                                    <div class="kb-hint">Tentukan jatah saldo bank operasional untuk masing-masing cabang. Total jatah seluruh cabang idealnya sama dengan saldo fisik bank.</div>
                                 </div>
                             </div>
                             <form method="post" action="<?= base_url('kas_bank/saldo-alokasi/save') ?>">
@@ -316,11 +315,9 @@ foreach ($daftarAkun as $a) {
                     <div class="tab-pane fade" id="step4-pane" role="tabpanel">
                         <div class="kb-pane-head">
                             <div>
-                                <div class="kb-pane-title">Baseline laci kas</div>
+                                <div class="kb-pane-title">Saldo Awal Kas Laci (Opening KAS)</div>
                                 <div class="kb-hint">
-                                    Opening = uang fisik yang ada di laci pada akhir
-                                    <?= esc($cutoffOpening) ?>, diinput oleh Finance. Tanggalnya
-                                    dikunci karena harus sama dengan opening bank.
+                                    Tetapkan saldo fisik awal uang tunai yang ada di laci kasir cabang pada tanggal cut-off (<?= esc($cutoffOpening) ?>).
                                 </div>
                             </div>
                         </div>
@@ -577,7 +574,7 @@ foreach ($daftarAkun as $a) {
                                             <?php endif; ?>
                                         </td>
                                     </tr>
-                                    <?php if (!empty($alokasiAkun)) : ?>
+                                    <?php if ($isShared && !empty($alokasiAkun)) : ?>
                                         <tr class="kb-row-alloc">
                                             <td colspan="7" class="ps-3 pe-3">
                                                 <div class="kb-alloc">

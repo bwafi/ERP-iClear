@@ -62,16 +62,16 @@ $netFlow = (int) ($net_cash_flow ?? 0);
     <!-- Panduan pembacaan saldo -->
     <div class="kb-banner">
         <div class="kb-banner-icon text-primary">
-            <iconify-icon icon="bi:info-circle-fill"></iconify-icon>
+            <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-4"></iconify-icon>
         </div>
         <div class="kb-banner-content">
             <strong class="text-emphasis">Panduan Pembacaan Saldo:</strong>
             <div class="text-secondary mt-1">
-                <strong>Saldo Nyata</strong> adalah nominal fisik di rekening/laci.
+                • <strong>Saldo Fisik Buku Rekening</strong> adalah jumlah uang nyata yang ada di rekening bank atau kas laci.<br>
                 <?php if ($unitDipilih) : ?>
-                    Cabang aktif: <strong class="text-primary">Hak Unit Ini</strong> mencerminkan porsi kepemilikan unit dari total fisik.
+                    • Cabang terpilih: <strong class="text-primary">Jatah Saldo Cabang Ini</strong> mencerminkan porsi saldo hak milik operasional cabang ini dari total fisik.
                 <?php else : ?>
-                    Pilih cabang tertentu pada filter untuk meninjau <strong class="text-primary">Hak Pakai per Unit</strong>.
+                    • Pilih cabang tertentu pada filter di atas untuk melihat <strong class="text-primary">Jatah Saldo per Cabang</strong>.
                 <?php endif; ?>
             </div>
         </div>
@@ -175,9 +175,9 @@ $netFlow = (int) ($net_cash_flow ?? 0);
                             <th style="min-width: 160px;">Nama Rekening</th>
                             <th>Tipe</th>
                             <th>Status</th>
-                            <th class="text-end" style="min-width: 120px;">Saldo Nyata</th>
+                            <th class="text-end" style="min-width: 130px;">Saldo Fisik Rekening</th>
                             <?php if ($unitDipilih) : ?>
-                                <th class="text-end" style="min-width: 120px;">Hak Unit Ini</th>
+                                <th class="text-end" style="min-width: 130px;">Jatah Cabang Ini</th>
                             <?php endif; ?>
                         </tr>
                     </thead>

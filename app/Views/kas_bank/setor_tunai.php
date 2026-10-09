@@ -26,6 +26,26 @@ $inputBankId   = (int) ($input['akun_bank_id'] ?? 0);
 $simpanNonaktif = ($preview !== null && ! $preview['bisa_submit']);
 ?>
 
+<!-- Mode Switcher Perpindahan Uang -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-2 bg-light rounded-3">
+        <div class="nav nav-pills nav-fill gap-2">
+            <a href="<?= base_url('kas_bank/transfer') ?>" class="nav-link bg-white text-dark border fw-semibold py-2 d-flex align-items-center justify-content-center gap-2">
+                <iconify-icon icon="solar:transfer-horizontal-bold-duotone" class="fs-5"></iconify-icon>
+                <span>Pindah Saldo (Bank &rarr; Bank)</span>
+            </a>
+            <a href="<?= base_url('kas_bank/setor-tunai') ?>" class="nav-link active bg-success text-white fw-semibold py-2 d-flex align-items-center justify-content-center gap-2">
+                <iconify-icon icon="solar:cash-out-bold-duotone" class="fs-5"></iconify-icon>
+                <span>Setor Tunai (Laci &rarr; Bank)</span>
+            </a>
+            <a href="<?= base_url('kas_bank/penarikan-tunai') ?>" class="nav-link bg-white text-dark border fw-semibold py-2 d-flex align-items-center justify-content-center gap-2">
+                <iconify-icon icon="solar:hand-money-bold-duotone" class="fs-5 text-warning-emphasis"></iconify-icon>
+                <span>Tarik Tunai (Bank &rarr; Laci)</span>
+            </a>
+        </div>
+    </div>
+</div>
+
 <style>
     /* Semua gaya halaman ini diawali "stn-" supaya tidak bentrok dengan _theme. */
     .stn-wrap {

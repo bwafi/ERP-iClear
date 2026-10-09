@@ -37,42 +37,42 @@ if (isset($hp_hutang) && is_array($hp_hutang)) {
 $__tabs = [
     'ringkasan' => [
         'url'   => base_url('kas_bank'),
-        'icon'  => 'bi:speedometer2',
-        'label' => 'Ringkasan',
+        'icon'  => 'solar:chart-square-bold-duotone',
+        'label' => 'Ringkasan & Saldo',
         'badge' => $__ctxBadges['ringkasan'],
     ],
     'rekening' => [
         'url'   => base_url('kas_bank/akun'),
-        'icon'  => 'bi:bank2',
-        'label' => 'Rekening & Saldo',
+        'icon'  => 'solar:card-2-bold-duotone',
+        'label' => 'Rekening & Saldo Awal',
         'badge' => $__ctxBadges['rekening'],
     ],
     'pindah' => [
         'url'   => base_url('kas_bank/transfer'),
-        'icon'  => 'bi:arrow-left-right',
-        'label' => 'Pindah Saldo',
+        'icon'  => 'solar:transfer-horizontal-bold-duotone',
+        'label' => 'Pindah Saldo (Bank)',
         'badge' => $__ctxBadges['pindah'],
-    ],
-    'antar' => [
-        'url'   => base_url('kas_bank/antar-unit'),
-        'icon'  => 'bi:building-check',
-        'label' => 'Bayar Antar Unit',
-        'badge' => $__ctxBadges['antar'],
     ],
     'tunai' => [
         'url'   => base_url('kas_bank/setor-tunai'),
-        'icon'  => 'bi:cash-stack',
-        'label' => 'Setor / Tarik Tunai',
+        'icon'  => 'solar:hand-money-bold-duotone',
+        'label' => 'Setor & Tarik Tunai',
         'badge' => $__ctxBadges['tunai'],
+    ],
+    'antar' => [
+        'url'   => base_url('kas_bank/antar-unit'),
+        'icon'  => 'solar:buildings-bold-duotone',
+        'label' => 'Talangan & Antar Cabang',
+        'badge' => $__ctxBadges['antar'],
     ],
 ];
 
 $__titles = [
-    'ringkasan' => ['Ringkasan Kas & Bank', 'Oversight posisi uang tunai, saldo rekening bank, dan arus kas bersih operasional.'],
-    'rekening'  => ['Rekening & Saldo Awal', 'Kelola master rekening fisik, saldo awal, dan pembagian hak alokasi per cabang.'],
-    'pindah'    => ['Pindah Saldo (Transfer Internal)', 'Transfer antar rekening milik sendiri tanpa memengaruhi laporan laba rugi.'],
-    'antar'     => ['Pembayaran Antar Unit (H/P)', 'Penyelesaian hutang/piutang mutasi stok antar cabang (real transfer vs atribusi).'],
-    'tunai'     => ['Setor & Penarikan Tunai', 'Pindahkan uang antara laci kas unit dan rekening bank, dengan batas entitlement per unit.'],
+    'ringkasan' => ['Ringkasan Kas & Bank', 'Pantau saldo fisik kas laci, buku rekening bank, dan jatah saldo operasional per cabang.'],
+    'rekening'  => ['Rekening & Saldo Awal', 'Kelola daftar rekening bank/kas, saldo awal fisik, dan pembagian jatah saldo per cabang.'],
+    'pindah'    => ['Pindah Saldo (Bank ke Bank)', 'Pindahkan uang antar rekening bank milik sendiri tanpa mengubah laporan laba rugi.'],
+    'tunai'     => ['Setor & Tarik Tunai', 'Pindahkan uang fisik antara laci kas cabang dan rekening bank operasional.'],
+    'antar'     => ['Talangan & Antar Cabang', 'Penyelesaian hutang piutang transfer fisik antar cabang atau talangan biaya bersama.'],
 ];
 $__t = $__titles[$__active] ?? $__titles['ringkasan'];
 ?>
