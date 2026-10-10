@@ -1,4 +1,33 @@
 <!-- HEADER SECTION -->
+<style>
+    /* Samakan tampilan Select2 (Pilih Karyawan) dengan form-select bulan/tahun */
+    #f_karyawan + .select2-container {
+        width: 100% !important;
+    }
+    #f_karyawan + .select2-container .select2-selection--single {
+        background-color: #f8f9fa;
+        border: 0;
+        border-radius: var(--bs-border-radius);
+        color: var(--bs-body-color);
+        min-height: 2.5rem;
+        display: flex;
+        align-items: center;
+        padding-inline: 1rem;
+    }
+    #f_karyawan + .select2-container .select2-selection--single .select2-selection__rendered {
+        line-height: 1.2;
+        padding-left: 0;
+        color: var(--bs-body-color);
+    }
+    #f_karyawan + .select2-container .select2-selection--single .select2-selection__arrow {
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    #f_karyawan + .select2-container .select2-selection--single .select2-selection__clear {
+        position: relative;
+        top: 0;
+    }
+</style>
 <div class="card border-0 bg-white shadow-sm mb-4 rounded-4">
     <div class="card-body d-flex align-items-center p-4">
         <div class="d-flex align-items-center gap-3">
@@ -51,7 +80,7 @@
                 </div>
                 <div class="col-md-6">
                     <label class="form-label text-muted small fw-medium">Pilih Karyawan</label>
-                    <select name="karyawan" class="form-select bg-light border-0 py-2" onchange="this.form.submit()">
+                    <select name="karyawan" id="f_karyawan" class="form-select bg-light border-0 py-2 select2" onchange="this.form.submit()">
                         <?php foreach ($list_karyawan as $karyawan): ?>
                             <option value="<?= $karyawan['ID_AKUN'] ?>" <?= $selected_karyawan == $karyawan['ID_AKUN'] ? 'selected' : '' ?>>
                                 <?= $karyawan['NAMA_AKUN'] ?>
