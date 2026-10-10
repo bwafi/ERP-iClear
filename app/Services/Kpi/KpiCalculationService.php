@@ -646,19 +646,19 @@ class KpiCalculationService
     protected function queryAkun(int $employeeId)
     {
         $db = \Config\Database::connect();
-        $query = $db->query("
-            SELECT
-                NAMA_AKUN, ALAMAT, ID_UNIT,
-                CASE
-                    WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 1 THEN 1
-                    WHEN ALAMAT = 'Jember'       AND ID_UNIT = 2 THEN 1
-                    WHEN ALAMAT = 'Banyuwangi'   AND ID_UNIT = 3 THEN 1
-                    WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 50 THEN 1
-                    ELSE 0
-                END AS penempatan
-            FROM akun WHERE ID_AKUN = ?
-        ", [$employeeId]);
-        return $query->getRow();
+        $akun = $db->table('akun')
+            ->select('NAMA_AKUN, ALAMAT, ID_UNIT')
+            ->where('ID_AKUN', $employeeId)
+            ->get()
+            ->getRow();
+
+        if (!$akun) {
+            return null;
+        }
+
+        $akun->penempatan = \App\Services\Payroll\PenempatanService::penempatan($akun->ALAMAT, $akun->ID_UNIT);
+
+        return $akun;
     }
 
     /**

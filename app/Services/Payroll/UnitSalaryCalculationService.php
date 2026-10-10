@@ -84,22 +84,13 @@ class UnitSalaryCalculationService
             $jabatan = (int) $karyawanArr['ID_JABATAN'];
 
             // ── QUERY PENEMPATAN ────────────────────────────────────
-            $akun = $this->db->query("
-                SELECT
-                    NAMA_AKUN,
-                    ALAMAT,
-                    ID_UNIT,
-                    CASE
-                        WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 1 THEN 1
-                        WHEN ALAMAT = 'Jember' AND ID_UNIT = 2 THEN 1
-                        WHEN ALAMAT = 'Banyuwangi' AND ID_UNIT = 3 THEN 1
-                        WHEN ALAMAT = 'Probolinggo' AND ID_UNIT = 50 THEN 1
-                        ELSE 0
-                    END AS penempatan
-                FROM akun
-                WHERE ID_AKUN = ?
-            ", [$selected_karyawan])->getRow();
+            $akun = $this->db->table('akun')
+                ->select('NAMA_AKUN, ALAMAT, ID_UNIT')
+                ->where('ID_AKUN', $selected_karyawan)
+                ->get()
+                ->getRow();
 
+            $akun->penempatan = \App\Services\Payroll\PenempatanService::penempatan($akun->ALAMAT, $akun->ID_UNIT);
             $akun->tunjangan_penempatan = ($akun->penempatan == 0) ? 350000 : 0;
 
             // ── TARGET & THRESHOLD (context gaji) ───────────────────
