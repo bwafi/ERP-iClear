@@ -67,6 +67,11 @@ class StokOpname extends BaseController
             $unit = ! empty($unitList) ? (int) ($unitList[0]->idunit ?? 1) : 1;
         }
 
+        // Barang jasa (nama berawalan PUP/JASA/MESIN) bukan produk sehingga
+        // tidak diopname. Kalau draft lama masih memuatnya, buang di sini agar
+        // daftar & progres yang tampil akurat. Idempoten.
+        $this->svc->buangBukanProdukDariDraft($unit);
+
         // Untuk operator: buka DRAFT yang masih menggantung, bukan selalu hari ini.
         // Inilah yang membuat DRAFT bisa dilanjutkan ke hari berikutnya.
         $draftTerbuka = $canMutate ? $this->svc->draftTerbuka($unit) : null;
