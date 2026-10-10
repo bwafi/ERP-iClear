@@ -350,4 +350,70 @@ class RenderProbeTest extends CIUnitTestCase
         $this->assertStringContainsString('1 rekening bank belum punya akun fisik', $bermasalah);
         $this->assertStringContainsString('idbank 7', $bermasalah);
     }
+
+    // =====================================================================
+    // Stok Opname: filter "Selisih" tersedia di tabel draft (tanpa gerbang
+    // role) supaya admin bisa menelusuri ulang baris draft yang berselisih.
+    // =====================================================================
+
+    private function dataOpname(string $status): array
+    {
+        return [
+            'periode' => (object) [
+                'status'         => $status,
+                'total_barang'   => 1,
+                'terisi_barang'  => 1,
+                'jumlah_komp'    => 10,
+                'jumlah_selisih' => -2,
+                'created_at'     => '2026-10-09 08:00:00',
+                'mulai_by'       => 43,
+                'finalisasi_by'  => $status === 'FINAL' ? 43 : null,
+                'tanggal_finalisasi' => $status === 'FINAL' ? '2026-10-09 17:00:00' : null,
+            ],
+            'items' => [[
+                'barang_id'       => 11,
+                'kode_barang'     => 'BRG-11',
+                'nama_barang'     => 'Barang Contoh',
+                'jenis_hp'        => '',
+                'warna'           => '',
+                'jumlah_komp'     => 10,
+                'jumlah_real'     => 8,
+                'jumlah_selisih'  => -2,
+                'selisih_negatif' => true,
+                'selisih_positif' => false,
+                'terisi'          => true,
+            ]],
+            'unitList'           => [(object) ['idunit' => 1, 'NAMA_UNIT' => 'Unit 1']],
+            'unit'               => 1,
+            'myUnit'             => 1,
+            'tanggal'            => '2026-10-09',
+            'canPickUnit'        => false,
+            'canMutate'          => true,
+            'canReopen'          => false,
+            'draftTerbuka'       => null,
+            'kpiBulanIni'        => [],
+            'auditTrail'         => [],
+            'historis'           => [],
+            'stokopname_grouped' => [],
+            'akunNama'           => [43 => 'Admin Unit 1'],
+        ];
+    }
+
+    public function testStokOpnameDraftPunyaFilterSelisih(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpname('DRAFT'), 'stok_opname');
+
+        $this->assertStringContainsString('id="soSelisih"', $html, 'Filter selisih harus ada di tabel draft');
+        $this->assertStringContainsString('Ada Selisih', $html);
+        // Filter selisih dipakai sebagai filter utama: saat aktif, filter status
+        // (Belum/Sudah Terisi) diabaikan.
+        $this->assertStringContainsString("if (soState.selisih !== 'all') {", $html);
+    }
+
+    public function testStokOpnameFinalTidakMenampilkanFilterSelisih(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpname('FINAL'), 'stok_opname');
+
+        $this->assertStringNotContainsString('id="soSelisih"', $html, 'Tabel FINAL tidak perlu filter selisih');
+    }
 }

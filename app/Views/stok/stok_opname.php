@@ -368,20 +368,18 @@ $who      = static function ($id) use ($akunNama): string {
 
                             <div class="so-spacer"></div>
 
-                            <?php if (!empty($canFilterSelisih)) : ?>
-                                <div class="so-field">
-                                    <label for="soSelisih">Selisih</label>
-                                    <select id="soSelisih" class="form-select form-select-sm w-auto">
-                                        <option value="all">Semua</option>
-                                        <option value="nz">Ada Selisih (≠ 0)</option>
-                                        <option value="plus">Lebih (+)</option>
-                                        <option value="minus">Kurang (−)</option>
-                                        <option value="zero">Presisi (= 0)</option>
-                                        <option value="stok0">Stok 0 (tidak wajib)</option>
-                                        <option value="stokplus">Stok &gt; 0 (wajib)</option>
-                                    </select>
-                                </div>
-                            <?php endif; ?>
+                            <div class="so-field">
+                                <label for="soSelisih">Selisih</label>
+                                <select id="soSelisih" class="form-select form-select-sm w-auto">
+                                    <option value="all">Semua</option>
+                                    <option value="nz">Ada Selisih (≠ 0)</option>
+                                    <option value="plus">Lebih (+)</option>
+                                    <option value="minus">Kurang (−)</option>
+                                    <option value="zero">Presisi (= 0)</option>
+                                    <option value="stok0">Stok 0 (tidak wajib)</option>
+                                    <option value="stokplus">Stok &gt; 0 (wajib)</option>
+                                </select>
+                            </div>
 
                             <div class="so-field">
                                 <label for="soSort">Urut</label>
@@ -752,10 +750,9 @@ $who      = static function ($id) use ($akunNama): string {
             if (q) {
                 return (it.kode.toLowerCase().indexOf(q) !== -1) || (it.nama.toLowerCase().indexOf(q) !== -1);
             }
-            if (soState.filter === 'belum' && it.terisi) return false;
-            if (soState.filter === 'sudah' && !it.terisi) return false;
-            if (soState.filter === 'unsaved' && !it.dirty) return false;
-            // Filter selisih (hanya untuk role pengawas yang punya akses).
+            // Filter selisih adalah filter UTAMA: saat dipakai, filter status
+            // (Belum/Sudah Terisi) diabaikan supaya admin bisa langsung melihat
+            // semua baris draft yang selisih tanpa harus ganti tab dulu.
             if (soState.selisih !== 'all') {
                 var sl = soSelisih(it);
                 if (soState.selisih === 'stok0') {
@@ -769,7 +766,11 @@ $who      = static function ($id) use ($akunNama): string {
                     if (soState.selisih === 'minus' && !(sl < 0)) return false;
                     if (soState.selisih === 'zero' && sl !== 0) return false;
                 }
+                return true;
             }
+            if (soState.filter === 'belum' && it.terisi) return false;
+            if (soState.filter === 'sudah' && !it.terisi) return false;
+            if (soState.filter === 'unsaved' && !it.dirty) return false;
             return true;
         }
 
@@ -864,6 +865,10 @@ $who      = static function ($id) use ($akunNama): string {
             var f = $(this).attr('data-filter');
             $(this).removeClass('btn-outline-secondary').addClass((f === 'unsaved' ? 'btn-danger' : 'btn-warning') + ' fw-semibold');
             soState.filter = f;
+            // Pilih status = keluar dari mode filter selisih agar tidak bingung
+            // kenapa daftar tetap terfilter.
+            soState.selisih = 'all';
+            $('#soSelisih').val('all');
             soState.page = 1;
             soRender();
         });

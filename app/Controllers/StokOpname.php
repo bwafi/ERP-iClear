@@ -35,9 +35,6 @@ class StokOpname extends BaseController
     /** Role yang boleh memilih unit di layar (termasuk Admin Root). */
     private const CROSS_UNIT_ROLES = [0, 1, 2, 34];
 
-    /** Role yang boleh memakai fitur pemantauan, mis. filter selisih. */
-    private const MONITOR_ROLES = [0, 1, 2, 34, 40];
-
     /** Role yang boleh melakukan reopen stok opname (koreksi hasil final). */
     private const REOPEN_ROLES = [1];
 
@@ -98,7 +95,6 @@ class StokOpname extends BaseController
             'myUnit'           => $myUnit,
             'tanggal'          => $tanggal,
             'canPickUnit'      => $isCrossUnit,
-            'canFilterSelisih' => in_array($myJabatan, self::MONITOR_ROLES, true),
             'canMutate'        => $canMutate,
             'canReopen'        => in_array($myJabatan, self::REOPEN_ROLES, true),
             'periode'          => $periode,
