@@ -205,8 +205,14 @@ class TutupKasir extends BaseController
                 ->getResultArray();
         }
 
-        // Penentuan unit
-        if (in_array($id_jabatan, [1, 40])) {
+        // Penentuan unit.
+        // Role Finance (0) dan Manager (34) ikut cabang ini: berhak memilih unit
+        // lewat ?unit= — selaras dengan daftar role yang menampilkan filter unit
+        // di view halaman ini ([1, 0, 34, 40]). Sebelumnya keduanya jatuh ke
+        // else (terkunci unit sesi); karena ID_UNIT Finance = 50 (Head Office)
+        // tidak ada di list_unit, hasilnya selalu fallback ke unit pertama
+        // (Probolinggo) berapa pun unit yang dipilih di filter.
+        if (in_array($id_jabatan, [0, 1, 34, 40])) {
             $unit = $this->request->getGet('unit');
             if (!$unit) {
                 $unit = session()->get('ID_UNIT');
@@ -600,8 +606,14 @@ class TutupKasir extends BaseController
                 ->getResultArray();
         }
 
-        // Penentuan unit
-        if (in_array($id_jabatan, [1, 40])) {
+        // Penentuan unit.
+        // Role Finance (0) dan Manager (34) ikut cabang ini: berhak memilih unit
+        // lewat ?unit= — selaras dengan daftar role yang menampilkan filter unit
+        // di view halaman ini ([1, 0, 34, 40]). Sebelumnya keduanya jatuh ke
+        // else (terkunci unit sesi); karena ID_UNIT Finance = 50 (Head Office)
+        // tidak ada di list_unit, hasilnya selalu fallback ke unit pertama
+        // (Probolinggo) berapa pun unit yang dipilih di filter.
+        if (in_array($id_jabatan, [0, 1, 34, 40])) {
             $unit = $this->request->getGet('unit');
             if (!$unit) {
                 $unit = session()->get('ID_UNIT');
