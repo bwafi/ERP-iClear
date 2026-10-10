@@ -3,7 +3,7 @@
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <div class="text-white">
             <h4 class="fw-semibold mb-1 text-white">Target KPI</h4>
-            <small class="text-white-50">Edit target omset / target KPI (tabel kpi_targets). Khusus Admin Root.</small>
+            <small class="text-white-50">Edit target omset / target KPI (tabel kpi_targets). Khusus Admin Root & Manager.</small>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
@@ -34,7 +34,7 @@
                     <option value="0">Semua</option>
                     <?php foreach ($components as $c) : ?>
                         <option value="<?= (int)$c->id ?>" <?= (int)$c->id == ($filter['kpi_component_id'] ?? 0) ? 'selected' : '' ?>>
-                            <?= esc($c->code) ?> - <?= esc($c->name) ?>
+<?= esc($c->name) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -94,8 +94,7 @@
                 <?php foreach ($targets as $t) : ?>
                     <tr>
                         <td>
-                            <div class="fw-semibold"><?= esc($t->code) ?></div>
-                            <small class="text-muted"><?= esc($t->name) ?></small>
+                            <div class="fw-semibold"><?= esc($t->name) ?></div>
                         </td>
                         <td><?= $t->unit_id === null ? '<span class="badge bg-secondary">Global</span>' : esc($unitMap[(int)$t->unit_id] ?? (string)$t->unit_id) ?></td>
                         <td><?= $t->position_id ? esc($positionMap[(int)$t->position_id] ?? (string)$t->position_id) : '<span class="text-muted">-</span>' ?></td>
@@ -149,7 +148,7 @@
                             <select name="kpi_component_id" id="f_component" class="form-select" required>
                                 <option value="">-- Pilih --</option>
                                 <?php foreach ($components as $c) : ?>
-                                    <option value="<?= (int)$c->id ?>"><?= esc($c->code) ?> - <?= esc($c->name) ?></option>
+                                    <option value="<?= (int)$c->id ?>"><?= esc($c->name) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
