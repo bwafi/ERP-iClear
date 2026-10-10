@@ -29,6 +29,11 @@
     <div class="card-body d-flex flex-wrap gap-2 align-items-end justify-content-between">
         <form method="get" class="row g-2 align-items-end">
             <div class="col-auto">
+                <label class="form-label mb-1 small text-muted">Cari</label>
+                <input type="text" name="q" class="form-control form-control-sm" style="min-width:200px" placeholder="Nama komponen / unit / jabatan"
+                    value="<?= esc($filter['q'] ?? '', 'attr') ?>">
+            </div>
+            <div class="col-auto">
                 <label class="form-label mb-1 small text-muted">Komponen KPI</label>
                 <select name="kpi_component_id" class="form-select form-select-sm">
                     <option value="0">Semua</option>

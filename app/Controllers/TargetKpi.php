@@ -56,6 +56,7 @@ class TargetKpi extends BaseController
             'kpi_component_id' => (int)($this->request->getGet('kpi_component_id') ?? 0),
             'unit_id'          => (int)($this->request->getGet('unit_id') ?? 0),
             'position_id'      => (int)($this->request->getGet('position_id') ?? 0),
+            'q'                => trim((string)$this->request->getGet('q')),
         ];
 
         $targets = $this->TargetModel->getEditorTargets($filter);

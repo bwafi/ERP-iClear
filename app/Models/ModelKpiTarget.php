@@ -98,6 +98,15 @@ class ModelKpiTarget extends Model
         if (!empty($filters['position_id'])) {
             $builder->where('kpi_targets.position_id', (int)$filters['position_id']);
         }
+        if (!empty($filters['q'])) {
+            $q = (string)$filters['q'];
+            $builder->groupStart()
+                ->like('kpi_components.code', $q)
+                ->orLike('kpi_components.name', $q)
+                ->orLike('unit.NAMA_UNIT', $q)
+                ->orLike('jabatan.NAMA_JABATAN', $q)
+            ->groupEnd();
+        }
 
         return $builder->orderBy('kpi_components.code', 'ASC')
                     ->orderBy('kpi_targets.unit_id', 'ASC')
