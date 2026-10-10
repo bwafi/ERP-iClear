@@ -280,26 +280,3 @@ form 212 / 0. Di render 27 hari: 332 id dengan 331 unik (duplikat tunggal
 `sidebarnav` milik dua sidebar template), 81 input, 27 tombol, 27 prefix
 unik, tanpa page error. Ketik `1.234.567` pada hari dengan ERP `800.000`
 memunculkan `Rp 434.567` di panel itu saja; panel lain tidak bergerak.
-
----
-
-## /penilaian_kinerja — Report card → payslip
-
-Status: shipped 2026-10-10 · brief + direction contract: `.impeccable/surfaces/app-views-penilaian-penilaian-kinerja-php.md`, seed `614d898d`. Operate mode (supervisor/HR/finance reading one employee's month). Scope: `app/Views/penilaian/penilaian_kinerja.php` + new scoped `app/Views/penilaian/_penilaian_kinerja_theme.php` — no controller, service, route, field, role, or calculation change.
-
-### Composition
-- Page header → filter (bulan · tahun · karyawan via Select2, GET auto-submit) → **report-card hero** (`.pk-report`, a 50/50 grid at ≥992px: left Skor Kinerja + quality band + weighted-contribution meter, right Take Home Pay + Cetak Slip Gaji) → Omset cabang strip → KPI ledger → attendance ledger → income composition resolving to Take Home Pay.
-- Mobile (<992px) stacks the hero halves; the omset grid steps 4 → 2 → 1 columns; both ledgers scroll inside a capped `.pk-scroll` with a sticky `thead`.
-
-### Decisions worth keeping
-- **The template's `--bs-*-text-emphasis` tokens are unusable in light mode — they ship raw Sass (`shade-color(#fb977d, 60%)`).** `var(--bs-danger-text-emphasis, <fallback>)` then invalidates at computed-value time and *inherits* the ink colour, so every status word rendered grey in light theme (dark resolves real hex, which is why it looked fine there). The surface defines resolved status tints itself (`--pk-ok #146c43`, `--pk-warn #7a5c04`, `--pk-bad #b02a37`), mirroring the precedent recorded for `/finance/rekonsiliasi` above. Light warning needed `#7a5c04` (5.84:1 on the tint); `#997404` is only 4.04:1.
-- **`--pk-ink` is set darker than `--pk-muted`** (#55606d vs #5b6672) so the hierarchy reads correctly and the filter selects clear AA — `--bs-body-color` (#707a82) is 4.42:1 on the filter ground `#e7ecf0`. Filter controls take `--pk-ink-strong` (#4d5866 light / `#cfd8e3` dark) for the same reason.
-- **Bands and badges keep the template's semantic `--bs-success/-warning/-danger` fills untouched** (badge fills pass at 8.15 / 8.37 / 6.9:1) so the status vocabulary does not drift.
-- **No eyebrow.** A "Periode & Karyawan" kicker over the filter was deleted to the craft floor's ban; the three field labels carry the card.
-- **Omset rows are separated with `nth-child`, not a border on the first cell** — `:first-child` left a stray hairline on the second row's first column, and the header already draws the top rule, so the grid adds no `border-top` (it was doubling the header hairline).
-
-### Preserved exactly
-All data and logic: bulan/tahun/karyawan GET + Select2, `detail_kpi` (weight, target → realisasi, HO/non-HO, per-cabang sub-ledger with reached/shortfall, score badge), `detail_absen`, omset per cabang + global, salary composition (Gaji Pokok, Tunj. Kinerja, Tunj. Absen, Penempatan, Insentif) → Take Home Pay, the "not including commission/incentive" note, the official slip link, and both empty states. Server-side scores untouched; the attendance figure is display-only weighted.
-
-### Verification
-Detector `[]` (clean). Programmatic render audit at 1440 / 1280 / 768 / 390 light + 1440 dark: `documentElement.scrollWidth == innerWidth` everywhere, no element-level overflow, hero halves side-by-side ≥992px and stacked below, meter `scaleX = skor/100`, 92/92 icons resolved, `tabular-nums` on figures, and every sampled contrast probe ≥4.5:1 (filter selects 6.08 light / 9.91 dark after the fix; status text 5.74–8.57). Print target `/penilaian/slip_gaji/49?bulan=10&tahun=2026` → HTTP 200. Pre-existing, not repaired: the template's offline JS throws `Element not found` ×4 (apexcharts, reproduced identically on untouched `/stok_opname`); the surface brief carries a duplicated YAML frontmatter block. Rasters: `.impeccable/review/desktop.png`, `mobile.png`, `desktop-dark.png` — geometry and colour verified programmatically; **eyeball sign-off still pending a vision-capable reviewer**.
