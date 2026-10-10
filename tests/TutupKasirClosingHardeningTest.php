@@ -732,11 +732,13 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
 
     public function testClosingBerikutnyaMeneruskanClosingSebelumnya(): void
     {
-        // Closing di 8 Okt dibuat lebih dulu; opening cut-off TIDAK lagi dipakai
-        // sebagai sumber karena closing sebelumnya menang.
+        // Closing di 8 Okt dibuat lebih dulu; di ledger yang sama (9 Okt masih
+        // sebelum reset KasBank) opening cut-off TIDAK dipakai karena closing
+        // sebelumnya menang. Perilaku setelah reset KasBank (target >= 10 Okt)
+        // diuji oleh TutupKasirSaldoAwalTest::testClosingSebelumCutoff*.
         $this->tutupBaris('2026-10-08', self::UNIT, self::OPENING, 1700000);
 
-        $h = $this->closing->hitung(self::UNIT, '2026-10-20');
+        $h = $this->closing->hitung(self::UNIT, '2026-10-09');
 
         $this->assertTrue($h['siap'], (string) $h['alasan']);
         $this->assertSame(

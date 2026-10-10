@@ -346,7 +346,11 @@ class TutupKasirSaldoAwalTest extends CIUnitTestCase
 
     public function testHariPertamaSaldoAwalDariOpeningKas(): void
     {
-        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-08');
+        // Hari pertama PERIODE BARU = periode mulai KasBank. Baseline cut-off
+        // (Opening KAS tanggal cut-off) bertanggal <= hari ini, jadi sah
+        // dipakai. Menutup kasir pada tanggal sebelum cut-off justru dilarang
+        // memakai baseline yang masih di masa depan relatif ke closing tsb.
+        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, $this->hariIni);
 
         $this->assertTrue($hasil['ada']);
         $this->assertSame(self::OPENING, $hasil['nilai']);
@@ -368,11 +372,14 @@ class TutupKasirSaldoAwalTest extends CIUnitTestCase
 
     public function testOpeningKasTidakDipakaiLagiSetelahAdaClosing(): void
     {
-        $this->tutup('2026-10-08', self::UNIT, self::OPENING, 999999);
+        // Closing hari pertama periode baru (10 Okt). 11 Okt harus memakai
+        // closing itu, bukan Opening KAS lagi.
+        $this->tutup('2026-10-10', self::UNIT, self::OPENING, 999999);
 
         $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-11');
 
         $this->assertSame(999999, $hasil['nilai']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_CLOSING, $hasil['sumber']);
         $this->assertNotSame(
             self::OPENING,
             $hasil['nilai'],
@@ -382,18 +389,20 @@ class TutupKasirSaldoAwalTest extends CIUnitTestCase
 
     public function testRantaiCarryForwardBeberapaHari(): void
     {
-        $this->tutup('2026-10-08', self::UNIT, self::OPENING, 1600000);
-        $this->tutup('2026-10-09', self::UNIT, 1600000, 1750000);
+        // Carry-forward antar-hari DI DALAM periode baru (>= periode mulai).
+        $this->tutup('2026-10-10', self::UNIT, self::OPENING, 1600000);
+        $this->tutup('2026-10-11', self::UNIT, 1600000, 1750000);
 
-        $tanggal10 = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-10');
-        $tanggal11 = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-11');
+        $tanggal12 = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-12');
+        $tanggal13 = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-13');
 
-        // Untuk 10 Okt, closing terakhir sebelumnya adalah 9 Okt (1.750.000).
-        // Untuk 11 Okt juga 9 Okt, karena 10 Okt belum ditutup.
-        $this->assertSame(1750000, $tanggal10['nilai']);
-        $this->assertSame('2026-10-09', $tanggal10['tanggal']);
-        $this->assertSame(1750000, $tanggal11['nilai']);
-        $this->assertSame('2026-10-09', $tanggal11['tanggal']);
+        // Untuk 12 Okt, closing terakhir sebelumnya adalah 11 Okt (1.750.000).
+        // Untuk 13 Okt juga 11 Okt, karena 12 Okt belum ditutup.
+        $this->assertSame(1750000, $tanggal12['nilai']);
+        $this->assertSame('2026-10-11', $tanggal12['tanggal']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_CLOSING, $tanggal12['sumber']);
+        $this->assertSame(1750000, $tanggal13['nilai']);
+        $this->assertSame('2026-10-11', $tanggal13['tanggal']);
     }
 
     public function testClosingHariIniTidakDipakai(): void
@@ -434,27 +443,28 @@ class TutupKasirSaldoAwalTest extends CIUnitTestCase
 
     public function testClosingDipilihBerdasarkanTanggalTerakhir(): void
     {
-        $this->tutup('2026-10-07', self::UNIT, 0, 100);
-        $this->tutup('2026-10-08', self::UNIT, 0, 200);
-        $this->tutup('2026-10-09', self::UNIT, 0, 300);
+        $this->tutup('2026-10-10', self::UNIT, 0, 100);
+        $this->tutup('2026-10-11', self::UNIT, 0, 200);
+        $this->tutup('2026-10-12', self::UNIT, 0, 300);
 
-        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-10');
+        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-13');
 
         $this->assertSame(300, $hasil['nilai'], 'Tanggal terbaru yang menang, bukan id terbesar');
     }
 
     public function testClosingDenganAkhirCashNullDiabaikan(): void
     {
-        $this->tutup('2026-10-08', self::UNIT, 0, 500000);
+        $this->tutup('2026-10-10', self::UNIT, 0, 500000);
         // Closing tanpa saldo bukan posisi kas yang bisa diteruskan.
         $this->db->table('tutup_kasir')->insert([
-            'tanggal' => '2026-10-09', 'unit' => self::UNIT, 'status' => 'selesai',
+            'tanggal' => '2026-10-11', 'unit' => self::UNIT, 'status' => 'selesai',
         ]);
 
-        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-10');
+        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-12');
 
         $this->assertSame(500000, $hasil['nilai']);
         $this->assertSame(TutupKasirSaldoAwal::SUMBER_CLOSING, $hasil['sumber']);
+        $this->assertSame('2026-10-10', $hasil['tanggal']);
     }
 
     // =================================================================
@@ -521,13 +531,100 @@ class TutupKasirSaldoAwalTest extends CIUnitTestCase
 
     public function testKasAwalLegacyTidakMenggangguClosingYangAda(): void
     {
-        $this->kasAwalLegacy('2026-10-10', self::UNIT, 1000000);
-        $this->tutup('2026-10-09', self::UNIT, 0, 2340000);
+        $this->kasAwalLegacy('2026-10-11', self::UNIT, 1000000);
+        $this->tutup('2026-10-10', self::UNIT, 0, 2340000);
 
-        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-10');
+        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-11');
 
         $this->assertSame(2340000, $hasil['nilai']);
         $this->assertSame(TutupKasirSaldoAwal::SUMBER_CLOSING, $hasil['sumber']);
+    }
+
+    // =================================================================
+    // 2b. RESET KASBANK: closing ledger lama tidak menimpa baseline cutoff
+    // =================================================================
+
+    public function testClosingSebelumCutoffTidakJadiSumberKasPeriodeBaru(): void
+    {
+        // Kasus produksi: closing 8 Okt (Rp33.389.372) dipakai sebagai sumber
+        // saldo awal 10 Okt walau cut-off KasBank sudah 9 Okt. Closing lama itu
+        // harus gugur dan baseline cut-off (Opening KAS) yang dipakai.
+        $this->tutup('2026-10-08', self::UNIT, self::OPENING, 3623500);
+
+        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-10');
+
+        $this->assertTrue($hasil['ada'], $hasil['pesan']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_OPENING, $hasil['sumber']);
+        $this->assertSame(self::OPENING, $hasil['nilai'], 'Baseline Opening KAS cut-off yang dipakai, bukan closing 8 Okt');
+        $this->assertSame(FinanceScopeService::kasBankCutoffDate(), $hasil['tanggal']);
+    }
+
+    public function testClosingPadaTanggalCutoffTidakJadiSumberPeriodeBaru(): void
+    {
+        // Closing tepat di tanggal cut-off pun dihitung dengan ledger lama,
+        // jadi tetap tidak sah untuk periode baru.
+        $this->tutup(FinanceScopeService::kasBankCutoffDate(), self::UNIT, 0, 444000);
+
+        $hasil = $this->saldoAwal->saldoAwalKas(
+            self::UNIT,
+            FinanceScopeService::kasBankPeriodeMulaiDate()
+        );
+
+        $this->assertTrue($hasil['ada'], $hasil['pesan']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_OPENING, $hasil['sumber']);
+        $this->assertSame(self::OPENING, $hasil['nilai']);
+    }
+
+    public function testClosingSebelumCutoffTidakJadiSumberTransferPeriodeBaru(): void
+    {
+        // Kasus produksi: closing 8 Okt mencatat akhir_transfer Rp29.765.872.
+        // Untuk periode baru, baseline statement cut-off (alokasi unit)
+        // yang harus menang, bukan angka transfer legacy itu.
+        $this->db->table('tutup_kasir')->insert([
+            'tanggal' => '2026-10-08', 'unit' => self::UNIT, 'status' => 'selesai',
+            'awal_cash' => 0, 'akhir_cash' => 0,
+            'akhir_transfer' => 29765872,
+            'akun_ID_AKUN' => 43,
+            'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        $hasil = $this->saldoAwal->saldoAwalTransfer(self::UNIT, '2026-10-10');
+
+        $this->assertTrue($hasil['ada'], $hasil['pesan']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_ALOKASI, $hasil['sumber']);
+        $this->assertSame(60000000, (int) $hasil['nilai'], 'Baseline statement cut-off (alokasi unit) yang dipakai');
+    }
+
+    public function testClosingHariPertamaPeriodeJadiSumberHariBerikutnya(): void
+    {
+        // Begitu ada closing DI DALAM periode baru, carry-forward normal jalan
+        // lagi: closing 10 Okt menjadi sumber saldo awal 11 Okt.
+        $this->tutup('2026-10-10', self::UNIT, self::OPENING, 1900000);
+
+        $hasil = $this->saldoAwal->saldoAwalKas(self::UNIT, '2026-10-11');
+
+        $this->assertTrue($hasil['ada'], $hasil['pesan']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_CLOSING, $hasil['sumber']);
+        $this->assertSame('2026-10-10', $hasil['tanggal']);
+        $this->assertSame(1900000, $hasil['nilai']);
+    }
+
+    public function testClosingHariPertamaPeriodeJadiSumberTransferHariBerikutnya(): void
+    {
+        $this->db->table('tutup_kasir')->insert([
+            'tanggal' => '2026-10-10', 'unit' => self::UNIT, 'status' => 'selesai',
+            'awal_cash' => 0, 'akhir_cash' => 0,
+            'akhir_transfer' => 12345678,
+            'akun_ID_AKUN' => 43,
+            'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        $hasil = $this->saldoAwal->saldoAwalTransfer(self::UNIT, '2026-10-11');
+
+        $this->assertTrue($hasil['ada'], $hasil['pesan']);
+        $this->assertSame(TutupKasirSaldoAwal::SUMBER_CLOSING, $hasil['sumber']);
+        $this->assertSame('2026-10-10', $hasil['tanggal']);
+        $this->assertSame(12345678, (int) $hasil['nilai']);
     }
 
     public function testSaldoNolSahTidakDikiraBelumDitetapkan(): void

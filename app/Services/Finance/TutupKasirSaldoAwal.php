@@ -61,27 +61,27 @@ use Config\Database;
  *   opening lagi — kalau tidak, setiap hari akan memakai baseline periode
  *   sehingga saldo melenceng dari saldo bendahara.
  *
- * Kenapa closing pada jendela reset KasBank DITOLAK:
+ * Kenapa closing dari LEDGER LAMA TIDAK BOLEH menimpa baseline periode baru:
  *   Cut-off KasBank (`Finance::kasBankCutoffDate`) adalah hari terakhir
  *   ledger LAMA; hari berikutnya (`Finance::kasBankPeriodeMulaiDate`) adalah
  *   hari pertama ledger BARU, yang posisinya berasal dari baseline cut-off
  *   (Opening KAS / statement bank), bukan dari penjumlahan closing lama.
  *
- *   Closing yang jatuh di jendela `[cut-off, periodeMulai)` — sekarang tepat
- *   satu hari, yaitu tanggal cut-off sendiri — mencatat `akhir_*` dengan
- *   ledger lama, jadi angkanya tidak sebanding dengan baseline baru. Kalau
- *   dipakai, seluruh periode baru dibuka dengan angka pra-reset (pada data
- *   produksi: Rp121.817.231 alih-alih alokasi Rp10.000.000).
+ *   Closing yang bertanggal <= cut-off mencatat `akhir_*` dengan ledger lama,
+ *   jadi angkanya tidak sebanding dengan baseline baru. Untuk closing target
+ *   di periode baru (>= periodeMulai), closing dari ledger lama — termasuk
+ *   yang jauh sebelum cut-off — DITOLAK. Kalau tidak, seluruh periode baru
+ *   dibuka dengan angka pra-reset (pada data produksi: closing 8 Okt
+ *   Rp33.389.372 alih-alih baseline cut-off).
  *
- *   Closing SEBELUM cut-off tetap sah (itu posisi ledger lama yang memang
- *   belum tersentuh reset), dan closing pada/pedah periode mulai tetap sah —
- *   carry-forward hari ke-N+1 di dalam periode baru berjalan normal.
+ *   Setelah ada closing pertama DI DALAM periode baru, carry-forward antar-hari
+ *   periode baru berjalan normal (sumber dan target sama-sama >= periodeMulai).
  *
  *   Penolakan dilakukan sebagai PASCA-FILTER atas baris terakhir, bukan
- *   sebagai `WHERE` di query. Bedanya menentukan hasil: data produksi punya
- *   closing 6 Okt DAN 7 Okt. Kalau baris 7 Okt dibuang lewat WHERE, query
- *   jatuh balik ke 6 Okt dan angka legacy tetap bocor; dengan pasca-filter,
- *   baris terakhir gugur dan sumber jatuh ke baseline cut-off.
+ *   sebagai `WHERE` di query. Bedanya menentukan hasil: kalau baris terakhir
+ *   dibuang lewat WHERE, query jatuh balik ke closing yang lebih lama dan
+ *   angka legacy tetap bocor; dengan pasca-filter, baris terakhir gugur dan
+ *   sumber jatuh ke baseline cut-off.
  *
  * Kenapa TIDAK `getRow()` tanpa ordering:
  *   Ada closing ganda di data lama (unit 3 tgl 2 Okt, unit 5 tgl 1 Okt).
@@ -352,7 +352,8 @@ class TutupKasirSaldoAwal
      * ambil satu. `akhir_cash` NULL TIDAK dipakai — closing yang belum punya
      * saldo bukan posisi kas yang bisa diteruskan.
      *
-     * Ditolak juga kalau tanggalnya berada di jendela reset KasBank — lihat
+     * Ditolak juga kalau tanggalnya berasal dari ledger lama (<= cut-off)
+     * sementara $tanggal berada di periode KasBank baru — lihat
      * `carryForwardSah()`. Penolakan itu membuat method ini mengembalikan
      * null, sehingga pemanggil jatuh ke baseline cut-off.
      *
@@ -390,11 +391,13 @@ class TutupKasirSaldoAwal
             return null;
         }
 
-        // Jendela reset KasBank: closing tanggal cut-off dihitung dengan
-        // ledger LAMA sehingga tidak sebanding dengan baseline periode baru.
-        // Post-filter atas baris INI saja (bukan WHERE) supaya tidak jatuh
-        // balik ke closing yang lebih lama dan juga berasal dari ledger lama.
-        if (! $this->carryForwardSah((string) $row['tanggal'])) {
+        // Jendela reset KasBank: closing yang dihitung dengan ledger LAMA
+        // (tanggal <= cut-off) tidak sebanding dengan baseline periode baru,
+        // jadi tidak boleh menimpa baseline saat closing target berada di
+        // periode baru. Post-filter atas baris INI saja (bukan WHERE) supaya
+        // tidak jatuh balik ke closing yang lebih lama dan juga berasal dari
+        // ledger lama.
+        if (! $this->carryForwardSah((string) $row['tanggal'], $tanggal)) {
             return null;
         }
 
@@ -407,31 +410,44 @@ class TutupKasirSaldoAwal
     }
 
     /**
-     * Apakah closing bertanggal $tanggalClosing sah jadi sumber carry-forward.
+     * Apakah closing bertanggal $tanggalSource sah jadi sumber carry-forward
+     * untuk closing target $tanggalTarget.
      *
-     * Jendela `[kasBankCutoffDate, kasBankPeriodeMulaiDate)` — hari reset
-     * KasBank, sekarang tepat satu hari yaitu tanggal cut-off sendiri —
-     * DITOLAK: `akhir_*` tanggal itu memakai ledger lama, jadi bukan posisi
-     * yang bisa diteruskan ke periode baru. Sumber yang sah di situ adalah
-     * baseline cut-off (`openingKas()` / `baselineBank()`).
+     * Aturan inti periode baru:
+     *   Closing dari LEDGER LAMA (`< kasBankPeriodeMulaiDate`, yaitu tanggal
+     *   cut-off dan sebelumnya) TIDAK BOLEH menjadi sumber bagi closing di
+     *   PERIODE BARU (`>= kasBankPeriodeMulaiDate`). Posisi closing lama
+     *   dihitung dengan ledger pra-reset, sehingga tidak sebanding dengan
+     *   baseline cut-off. Sumber yang sah untuk hari-hari periode baru adalah
+     *   baseline cut-off (`openingKas()` / `baselineBank()`), sampai ada
+     *   closing pertama DI DALAM periode baru; setelah itu carry-forward
+     *   antar-hari periode baru berjalan normal.
      *
-     * Closing sebelum cut-off tetap sah, dan closing pada/pedah periode mulai
-     * tetap sah supaya carry-forward normal di dalam periode baru tidak ikut
-     * mati.
+     * Di dalam SATU ledger (target dan sumber sama-sama pra- atau sama-sama
+     * pasca-reset), carry-forward biasa tetap berlaku. Khusus sumber tepat di
+     * jendela `[cut-off, periodeMulai)` tetap ditolak secara defensif (dulu:
+     * satu-satunya jendela yang ditolak) supaya jendela reset kosong pun tidak
+     * pernah dipakai.
      *
      * Hanya memakai accessor KasBank — `Finance::$cutoffDate` milik modul lain
      * sengaja tidak disentuh.
      */
-    private function carryForwardSah(string $tanggalClosing): bool
+    private function carryForwardSah(string $tanggalSource, string $tanggalTarget): bool
     {
-        if ($tanggalClosing === '') {
+        if ($tanggalSource === '' || $tanggalTarget === '') {
             return false;
         }
 
         $cutoff = FinanceScopeService::kasBankCutoffDate();
         $mulai  = FinanceScopeService::kasBankPeriodeMulaiDate();
 
-        return $tanggalClosing < $cutoff || $tanggalClosing >= $mulai;
+        // Sumber dari ledger lama tidak boleh bocor ke periode baru.
+        if ($tanggalTarget >= $mulai && $tanggalSource < $mulai) {
+            return false;
+        }
+
+        // Jendela reset [cut-off, periodeMulai) selalu ditolak (defensif).
+        return $tanggalSource < $cutoff || $tanggalSource >= $mulai;
     }
 
     // =================================================================
