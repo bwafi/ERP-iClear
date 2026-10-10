@@ -104,13 +104,11 @@ class KpiScoreService
     }
 
     /**
-     * [EXISTING] tiered omset score — replikasi LITERAL switch-case
-     * hitungKPIGaji() untuk jabatan 41 (kepala_toko) dan default.
+     * [EXISTING] tiered omset score — TIDAK dipakai oleh engine.
      *
-     * DISCREPANCY NOTE: kondisi exact-match `== batas2` / `== batas3`
-     * dipertahankan VERBATIM dari existing (termasuk perilaku boundary-nya),
-     * supaya OLD == NEW. Perbaikan boundary perlu keputusan business rule
-     * terpisah dan TIDAK dilakukan di sini.
+     * Seluruh skoring OMSET memakai target_value saja (threshold tanpa tier),
+     * dan kolom batas_* sudah dihapus. Metode sengaja tidak dihapus agar
+     * referensi lama (regression baseline) tetap bisa dibaca. JANGAN dipakai.
      */
     public function tieredOmsetScore(
         float $aktualOmset,

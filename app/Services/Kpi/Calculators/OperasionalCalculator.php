@@ -7,9 +7,9 @@ use App\Services\Kpi\OmsetTokoCalculator;
 /**
  * OPERASIONAL Calculator for SPV (position_id = 40)
  * 
- * Business Rule:
- * - Count units (cabang) that meet batas_keempat threshold
- * - Map count to score: 1→25, 2→50, 3→75, 4→100, 0→0
+ * Business Rule (konteks tunggal):
+ * - Count units (cabang) that reach their OMSET target (target_value)
+ * - Map count to score: 1→25, 2→50, 3→75, 4→100, 0→0 (4-tier penilaian_kinerja)
  * - Only applies to SPV position
  * 
  * Source: LegacyKpiCalculationService.php:340-366
@@ -33,7 +33,6 @@ class OperasionalCalculator
      * @param int $unitId
      * @param string $month
      * @param string $year
-     * @param string $context
      * @param string $date
      * @return float Normalized score (0-100)
      */
@@ -43,7 +42,6 @@ class OperasionalCalculator
         int $unitId,
         string $month,
         string $year,
-        string $context = 'gaji',
         ?string $date = null
     ): float {
         // OPERASIONAL cabang-aman logic only applies to SPV (position_id = 40)
@@ -60,18 +58,18 @@ class OperasionalCalculator
             return 0.0;
         }
 
-        // Count cabang_aman (units meeting batas_keempat threshold)
+        // Count cabang_aman (units reaching OMSET target_value)
         $cabangAman = 0;
         
         for ($unit = 1; $unit <= 4; $unit++) {
             // Get actual omzet for this unit
             $actualOmzet = $this->omsetCalc->calculate(0, $unit, $month, $year);
             
-            // Get batas_keempat threshold for this unit
+            // Get OMSET target (target_value) for this unit
             $target = $this->targetModel
                 ->where('kpi_component_id', $component->id)
                 ->where('unit_id', $unit)
-                ->where('context', $context)
+                ->where('context', 'default')
                 ->where('effective_from <=', $date)
                 ->groupStart()
                     ->where('effective_to >=', $date)
@@ -79,46 +77,31 @@ class OperasionalCalculator
                 ->groupEnd()
                 ->first();
             
-            if (!$target || !$target->batas_keempat) {
+            if (!$target || $target->target_value === null) {
                 continue;
             }
             
-            // Check if unit meets threshold
-            if ($actualOmzet >= (float)$target->batas_keempat) {
+            // Check if unit meets target
+            if ($actualOmzet >= (float)$target->target_value) {
                 $cabangAman++;
             }
         }
 
         // Map cabang_aman count to score (legacy business rule)
-        $score = $this->mapCabangAmanToScore($cabangAman, $context);
+        $score = $this->mapCabangAmanToScore($cabangAman);
         
         return (float)$score;
     }
 
     /**
-     * Map cabang_aman count to OPERASIONAL score
+     * Map cabang_aman count to OPERASIONAL score (4-tier penilaian_kinerja)
      * 
      * @param int $cabangAman
-     * @param string $context
      * @return int
      */
-    protected function mapCabangAmanToScore(int $cabangAman, string $context): int
+    protected function mapCabangAmanToScore(int $cabangAman): int
     {
-        // For gaji context (3-tier mapping)
-        if ($context === 'gaji') {
-            switch ($cabangAman) {
-                case 1:
-                    return 33;
-                case 2:
-                    return 66;
-                case 3:
-                    return 100;
-                default:
-                    return 0;
-            }
-        }
-        
-        // For penilaian_kinerja and slip_gaji contexts (4-tier mapping)
+        // Konteks tunggal: mapping 4-tier (1→25, 2→50, 3→75, 4→100, 0→0).
         switch ($cabangAman) {
             case 1:
                 return 25;
@@ -142,7 +125,6 @@ class OperasionalCalculator
         int $unitId,
         string $month,
         string $year,
-        string $context = 'gaji',
         ?string $date = null
     ): array {
         if ($positionId !== 40) {
@@ -163,7 +145,7 @@ class OperasionalCalculator
             $target = $this->targetModel
                 ->where('kpi_component_id', $component->id)
                 ->where('unit_id', $unit)
-                ->where('context', $context)
+                ->where('context', 'default')
                 ->where('effective_from <=', $date)
                 ->groupStart()
                     ->where('effective_to >=', $date)
@@ -171,7 +153,7 @@ class OperasionalCalculator
                 ->groupEnd()
                 ->first();
             
-            $threshold = $target ? (float)$target->batas_keempat : 0;
+            $threshold = ($target && $target->target_value !== null) ? (float)$target->target_value : 0;
             $meets = ($actualOmzet >= $threshold);
             
             if ($meets) {
@@ -186,7 +168,7 @@ class OperasionalCalculator
         }
         
         $breakdown['cabang_aman'] = $cabangAman;
-        $breakdown['final_score'] = $this->mapCabangAmanToScore($cabangAman, $context);
+        $breakdown['final_score'] = $this->mapCabangAmanToScore($cabangAman);
         
         return $breakdown;
     }

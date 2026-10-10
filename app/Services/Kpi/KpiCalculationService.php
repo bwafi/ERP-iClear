@@ -86,9 +86,8 @@ class KpiCalculationService
     {
         $date = $date ?? sprintf('%04d-%02d-15', (int)$year, (int)$month);
 
-        // Target lookup context: slip_gaji uses penilaian_kinerja targets
-        // (identical business rule in legacy: non-'gaji' context share targets).
-        $targetContext = ($context === 'slip_gaji') ? 'penilaian_kinerja' : $context;
+        // Target lookup: konteks sudah tunggal ('default') — konteks pemanggil
+        // tidak lagi menentukan baris target (semua baris sama).
 
         $positionId = $this->getPositionOfEmployee($employeeId);
 
@@ -112,7 +111,7 @@ class KpiCalculationService
                     (int)$month,
                     (int)$year,
                     $context,
-                    $targetContext,
+                    $context,
                     $date
                 );
             // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): 7 KPI Digital Marketing
@@ -124,7 +123,7 @@ class KpiCalculationService
                     (int)$unitId,
                     (int)$month,
                     (int)$year,
-                    $targetContext,
+                    $context,
                     $date
                 );
                 $achievement = $digitalData['achievement'];
@@ -149,7 +148,7 @@ class KpiCalculationService
                 // Unit sumber omset: default unit penempatan, kecuali CS (unit 1).
                 $omsetUnitId = $this->resolveOmsetUnitId($positionId, $component->code, (int)$unitId);
                 $actualValue = $calculator->calculate($employeeId, $omsetUnitId, $month, $year);
-                $target = $this->targetModel->getTargetByKpiAndUnit($component->id, $omsetUnitId, $targetContext, $date);
+                $target = $this->targetModel->getTargetByKpiAndUnit($component->id, $omsetUnitId, $context, $date);
                 if (!$target) {
                     continue; // belum ada target utk KPI ini
                 }
@@ -227,7 +226,6 @@ class KpiCalculationService
                         $unitId,
                         $month,
                         $year,
-                        $targetContext,
                         $date
                     );
                 } elseif ($component->code === 'KONTROL_ASET') {
@@ -257,7 +255,7 @@ class KpiCalculationService
             if ($positionId === 40 && in_array($component->code, ['OMZET_WILAYAH', 'TARGET_CABANG'], true)) {
                 if ($omzetInfo === null) {
                     $omzetInfo = $this->supervisorService()->omzetDetail(
-                        $employeeId, $unitId, (int)$month, (int)$year, $targetContext, $date
+                        $employeeId, $unitId, (int)$month, (int)$year, $context, $date
                     );
                 }
                 if ($omzetInfo) {
@@ -732,7 +730,7 @@ class KpiCalculationService
 
             foreach ($units as $uId) {
                 $actualOmset = $omsetCalc->calculate(0, $uId, $month, $year);
-                $target = $this->targetModel->getTargetByKpiAndUnit($rule->kpi_component_id, $uId, 'gaji', $date);
+                $target = $this->targetModel->getTargetByKpiAndUnit($rule->kpi_component_id, $uId, 'default', $date);
                 
                 if ($target && $actualOmset >= (float)$target->target_value) {
                     $totalIncentive += $actualOmset * ((float)$rule->base_value / 100.0);
@@ -749,7 +747,7 @@ class KpiCalculationService
         $minAch      = (float)($rule->minimum_achievement ?? 0);
 
         if ($minAch > 0) {
-            $target = $this->targetModel->getTargetByKpiAndUnit((int)$rule->kpi_component_id, $unit, 'gaji', $date);
+            $target = $this->targetModel->getTargetByKpiAndUnit((int)$rule->kpi_component_id, $unit, 'default', $date);
             if (!$target || (float)$target->target_value <= 0) {
                 return 0.0;
             }

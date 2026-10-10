@@ -57,17 +57,17 @@ class SalaryCalculationService
 
         // Resolve: untuk tiap component code+type pilih row paling spesifik
         // urutan prioritas:
-        //  1. unit match + context match
-        //  2. unit match + context default
-        //  3. unit NULL + context match
-        //  4. unit NULL + context default
+        //  1. unit match
+        //  2. unit NULL (global)
+        // Konteks sudah dikonsolidasi jadi SATU ('default') — tidak lagi
+        // mempengaruhi pemilihan baris.
         $resolved = [];
         foreach ($rows as $row) {
             $key = $row->code;
             if (isset($resolved[$key])) {
                 $cur = $resolved[$key];
-                $newScore = $this->specificityScore($row, $unitId, $context);
-                $curScore = $this->specificityScore($cur, $unitId, $context);
+                $newScore = $this->specificityScore($row, $unitId);
+                $curScore = $this->specificityScore($cur, $unitId);
                 if ($newScore > $curScore) {
                     $resolved[$key] = $row;
                 }
@@ -78,17 +78,14 @@ class SalaryCalculationService
         return array_values($resolved);
     }
 
-    private function specificityScore($row, ?int $unitId, string $context): int
+    private function specificityScore($row, ?int $unitId): int
     {
         $score = 0;
         $unitMatch = $unitId !== null && $row->unit_id !== null && (int)$row->unit_id === $unitId;
-        $contextMatch = $context !== 'default' && $row->context === $context;
         $unitAny = $row->unit_id === null;
-        $contextAny = $row->context === 'default';
 
-        if ($unitMatch) $score += 4;
-        elseif ($unitAny) $score += 2;
-        if ($contextMatch) $score += 1;
+        if ($unitMatch) $score += 2;
+        elseif ($unitAny) $score += 1;
         return $score;
     }
 

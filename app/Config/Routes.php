@@ -515,6 +515,12 @@ $routes->post('penilaian/kpi/save_customer_satisfaction', 'PenilaianKPI::save_cu
 
 // Asset Master (Finance/Root/Direktur/Manager: 0,1,2,34)
 $routes->get('penilaian/kpi/aset_master', 'PenilaianKPI::aset_master_index', ['filter' => 'auth']);
+// Editor Target KPI (khusus Admin Root — guard di Controller TargetKpi)
+$routes->group('penilaian/kpi/target', ['filter' => 'auth'], function ($routes) {
+    $routes->get('/', 'TargetKpi::index');
+    $routes->post('simpan', 'TargetKpi::simpan');
+    $routes->post('hapus', 'TargetKpi::hapus');
+});
 $routes->post('penilaian/kpi/aset_master/insert', 'PenilaianKPI::aset_master_insert', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/aset_master/update', 'PenilaianKPI::aset_master_update', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/aset_master/toggle', 'PenilaianKPI::aset_master_toggle', ['filter' => 'auth']);

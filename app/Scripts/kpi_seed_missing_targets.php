@@ -25,7 +25,7 @@ $dotenv->load();
 $db = \Config\Database::connect();
 
 // 1. slip_gaji omset targets (mirror penilaian_kinerja)
-$rows = $db->table('kpi_targets')->where('kpi_component_id', 1)->where('context', 'penilaian_kinerja')->get()->getResult();
+$rows = $db->table('kpi_targets')->where('kpi_component_id', 1)->where('context', 'default')->get()->getResult();
 foreach ($rows as $src) {
     $exists = $db->table('kpi_targets')
         ->where('kpi_component_id', 1)
@@ -51,7 +51,7 @@ foreach ($rows as $src) {
 // 2. CUSTOMER_COUNT threshold rows (atas_customer) — non-gaji context only.
 //    Context 'gaji' memakai target_value default row (130/118/210/118).
 $thresholds = [
-    'penilaian_kinerja' => [1 => 220, 2 => 180, 3 => 350, 4 => 250],
+    'default' => [1 => 220, 2 => 180, 3 => 350, 4 => 250],
     'slip_gaji'         => [1 => 220, 2 => 180, 3 => 350, 4 => 250],
 ];
 foreach ($thresholds as $ctx => $perUnit) {

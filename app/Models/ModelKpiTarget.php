@@ -15,10 +15,6 @@ class ModelKpiTarget extends Model
         'position_id',
         'context',
         'target_value',
-        'batas_awal',
-        'batas_kedua',
-        'batas_ketiga',
-        'batas_keempat',
         'period_type',
         'period_month',
         'effective_from',
@@ -31,38 +27,24 @@ class ModelKpiTarget extends Model
     protected $updatedField = 'updated_at';
 
     /**
-     * Ambil target aktif untuk KPI + unit + context + periode.
+     * Ambil target aktif untuk KPI + unit + periode.
+     *
+     * Konteks sudah dikonsolidasi jadi SATU ('default'), sehingga parameter
+     * $context dipertahankan hanya untuk kompatibilitas pemanggil dan diabaikan.
      */
     public function getTargetByKpiAndUnit($kpi_component_id, $unit_id, $context = 'default', $date = null)
     {
         $date = $date ?? date('Y-m-d');
 
-        $target = $this->where('kpi_component_id', $kpi_component_id)
+        return $this->where('kpi_component_id', $kpi_component_id)
                     ->where('unit_id', $unit_id)
-                    ->where('context', $context)
+                    ->where('context', 'default')
                     ->where('effective_from <=', $date)
                     ->groupStart()
                         ->where('effective_to >=', $date)
                         ->orWhere('effective_to IS NULL')
                     ->groupEnd()
                     ->first();
-
-        // Fallback ke context 'default' bila target utk context spesifik
-        // (mis. 'gaji'/'penilaian_kinerja') tidak ditemukan.
-        // Menjaga komponen yg targetnya hanya disimpan dgn context 'default'.
-        if (!$target && $context !== 'default') {
-            $target = $this->where('kpi_component_id', $kpi_component_id)
-                        ->where('unit_id', $unit_id)
-                        ->where('context', 'default')
-                        ->where('effective_from <=', $date)
-                        ->groupStart()
-                            ->where('effective_to >=', $date)
-                            ->orWhere('effective_to IS NULL')
-                        ->groupEnd()
-                        ->first();
-        }
-
-        return $target;
     }
 
     public function getTargetsByUnit($unit_id, $date = null)
@@ -92,6 +74,34 @@ class ModelKpiTarget extends Model
                         ->where('kpi_targets.effective_to >=', $date)
                         ->orWhere('kpi_targets.effective_to IS NULL')
                     ->groupEnd()
+                    ->findAll();
+    }
+
+    /**
+     * Daftar target untuk editor admin (join komponen, unit, jabatan).
+     * Filter bersifat opsional; unit_id 0 berarti "global" (unit_id NULL).
+     */
+    public function getEditorTargets(array $filters = []): array
+    {
+        $builder = $this->select('kpi_targets.*, kpi_components.code, kpi_components.name,
+                                  unit.NAMA_UNIT, jabatan.NAMA_JABATAN')
+                    ->join('kpi_components', 'kpi_components.id = kpi_targets.kpi_component_id')
+                    ->join('unit', 'unit.idunit = kpi_targets.unit_id', 'left')
+                    ->join('jabatan', 'jabatan.ID_JABATAN = kpi_targets.position_id', 'left');
+
+        if (!empty($filters['kpi_component_id'])) {
+            $builder->where('kpi_targets.kpi_component_id', (int)$filters['kpi_component_id']);
+        }
+        if (!empty($filters['unit_id'])) {
+            $builder->where('kpi_targets.unit_id', (int)$filters['unit_id']);
+        }
+        if (!empty($filters['position_id'])) {
+            $builder->where('kpi_targets.position_id', (int)$filters['position_id']);
+        }
+
+        return $builder->orderBy('kpi_components.code', 'ASC')
+                    ->orderBy('kpi_targets.unit_id', 'ASC')
+                    ->orderBy('kpi_targets.effective_from', 'DESC')
                     ->findAll();
     }
 

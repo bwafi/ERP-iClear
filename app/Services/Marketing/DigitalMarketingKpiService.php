@@ -17,7 +17,7 @@ use App\Services\Konten\MultimediaKpiService;
  *
  * Komponen (total bobot 100):
  *   OMZET_GLOBAL         50  Global omzet perusahaan
- *                             Target Toko (floor) = SUM(batas_awal OMSET_TOKO)
+ *                             Target Toko (floor) = SUM(target_value * 0.7)
  *                             Target HO (100%)    = SUM(target_value OMSET_TOKO)
  *                             actual <= Toko → 0; >= HO → 100; else linear.
  *   LEADS_QUALITY        15  Leads (sum Hasil Performa Ads) + Kualitas
@@ -271,11 +271,11 @@ class DigitalMarketingKpiService
             $target = $this->db->query(
                 "SELECT target_value FROM kpi_targets
                  WHERE kpi_component_id = ? AND unit_id IS NULL
-                   AND context IN (?, 'default')
+                   AND context = 'default'
                    AND effective_from <= ?
                    AND (effective_to IS NULL OR effective_to >= ?)
-                 ORDER BY (context = ?) DESC, effective_from DESC LIMIT 1",
-                [(int)$comp->id, $context, $date ?? date('Y-m-d'), $date ?? date('Y-m-d'), $context]
+                 ORDER BY effective_from DESC LIMIT 1",
+                [(int)$comp->id, $date ?? date('Y-m-d'), $date ?? date('Y-m-d')]
             )->getRow();
         }
         if (!$target) {
@@ -286,8 +286,8 @@ class DigitalMarketingKpiService
     }
 
     /**
-     * Target omzet global: Target Toko = SUM(batas_awal), Target HO = SUM(target_value)
-     * dari kpi_targets OMSET_TOKO per cabang (sumber mekanisme target existing).
+     * Target omzet global: Target Toko = Target HO = SUM(target_value)
+     * dari kpi_targets OMSET_TOKO per cabang (satu konteks, tanpa batas).
      *
      * @return array{toko:float, ho:float}
      */
@@ -303,7 +303,7 @@ class DigitalMarketingKpiService
             if (!$target) {
                 continue;
             }
-            $toko += (float)($target->batas_awal ?? 0);
+            $toko += (float)$target->target_value;
             $ho   += (float)$target->target_value;
         }
 

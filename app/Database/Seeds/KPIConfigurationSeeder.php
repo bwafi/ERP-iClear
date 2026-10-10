@@ -482,25 +482,13 @@ class KPIConfigurationSeeder extends Seeder
         $componentMap = array_column($components, 'id', 'code');
         $units = $this->db->table('unit')->select('idunit')->get()->getResultArray();
 
-        // Threshold OMSET_TOKO per unit + context.
-        // Context 'gaji' vs 'penilaian_kinerja'/'slip_gaji' punya nilai berbeda — dipertahankan.
+        // Threshold OMSET (konteks tunggal — nilai 'penilaian_kinerja' yang menang).
+        // Seluruh skoring memakai target_value saja (tanpa batas/tier).
         $omsetThreshold = [
-            1 => [ // Unit 1
-                'gaji'       => ['batas_awal' => 30000000, 'batas_kedua' => 35000000, 'batas_ketiga' => 40000000, 'batas_keempat' => 45000000, 'target' => 50000000],
-                'penilaian'  => ['batas_awal' => 35000000, 'batas_kedua' => 40000000, 'batas_ketiga' => 45000000, 'batas_keempat' => 50000000, 'target' => 50000000],
-            ],
-            2 => [ // Unit 2
-                'gaji'       => ['batas_awal' => 18000000, 'batas_kedua' => 22000000, 'batas_ketiga' => 26000000, 'batas_keempat' => 30000000, 'target' => 35000000],
-                'penilaian'  => ['batas_awal' => 18000000, 'batas_kedua' => 22000000, 'batas_ketiga' => 26000000, 'batas_keempat' => 30000000, 'target' => 35000000],
-            ],
-            3 => [ // Unit 3
-                'gaji'       => ['batas_awal' => 40000000, 'batas_kedua' => 45000000, 'batas_ketiga' => 50000000, 'batas_keempat' => 55000000, 'target' => 60000000],
-                'penilaian'  => ['batas_awal' => 40000000, 'batas_kedua' => 45000000, 'batas_ketiga' => 50000000, 'batas_keempat' => 55000000, 'target' => 60000000],
-            ],
-            4 => [ // Unit 4
-                'gaji'       => ['batas_awal' => 18000000, 'batas_kedua' => 22000000, 'batas_ketiga' => 26000000, 'batas_keempat' => 30000000, 'target' => 35000000],
-                'penilaian'  => ['batas_awal' => 35000000, 'batas_kedua' => 40000000, 'batas_ketiga' => 45000000, 'batas_keempat' => 50000000, 'target' => 55000000],
-            ],
+            1 => ['target' => 50000000], // Unit 1
+            2 => ['target' => 35000000], // Unit 2
+            3 => ['target' => 60000000], // Unit 3
+            4 => ['target' => 55000000], // Unit 4
         ];
 
         // Target per KPI per unit (customer/closing/upselling/followup/roas/tutup_kasir/stok_opname)
@@ -520,17 +508,13 @@ class KPIConfigurationSeeder extends Seeder
             $uid = $unit['idunit'];
             $t = $omsetThreshold[$uid] ?? $omsetThreshold[1];
 
-            // OMSET_TOKO context gaji
+            // OMSET_TOKO
             $data[] = [
                 'kpi_component_id' => $componentMap['OMSET_TOKO'],
                 'unit_id' => $uid,
                 'position_id' => NULL,
-                'context' => 'gaji',
-                'target_value' => $t['gaji']['target'],
-                'batas_awal' => $t['gaji']['batas_awal'],
-                'batas_kedua' => $t['gaji']['batas_kedua'],
-                'batas_ketiga' => $t['gaji']['batas_ketiga'],
-                'batas_keempat' => $t['gaji']['batas_keempat'],
+                'context' => 'default',
+                'target_value' => $t['target'],
                 'period_type' => 'monthly',
                 'period_month' => NULL,
                 'effective_from' => '2024-01-01',
@@ -538,51 +522,13 @@ class KPIConfigurationSeeder extends Seeder
                 'created_by' => NULL,
             ];
 
-            // OMSET_TOKO context penilaian_kinerja/slip_gaji
-            $data[] = [
-                'kpi_component_id' => $componentMap['OMSET_TOKO'],
-                'unit_id' => $uid,
-                'position_id' => NULL,
-                'context' => 'penilaian_kinerja',
-                'target_value' => $t['penilaian']['target'],
-                'batas_awal' => $t['penilaian']['batas_awal'],
-                'batas_kedua' => $t['penilaian']['batas_kedua'],
-                'batas_ketiga' => $t['penilaian']['batas_ketiga'],
-                'batas_keempat' => $t['penilaian']['batas_keempat'],
-                'period_type' => 'monthly',
-                'period_month' => NULL,
-                'effective_from' => '2024-01-01',
-                'effective_to' => NULL,
-                'created_by' => NULL,
-            ];
-
-            // OMSET_CABANG: sama dgn OMSET_TOKO (omzet cabang/toko sendiri)
+            // OMSET_CABANG
             $data[] = [
                 'kpi_component_id' => $componentMap['OMSET_CABANG'],
                 'unit_id' => $uid,
                 'position_id' => NULL,
-                'context' => 'gaji',
-                'target_value' => $t['gaji']['target'],
-                'batas_awal' => $t['gaji']['batas_awal'],
-                'batas_kedua' => $t['gaji']['batas_kedua'],
-                'batas_ketiga' => $t['gaji']['batas_ketiga'],
-                'batas_keempat' => $t['gaji']['batas_keempat'],
-                'period_type' => 'monthly',
-                'period_month' => NULL,
-                'effective_from' => '2024-01-01',
-                'effective_to' => NULL,
-                'created_by' => NULL,
-            ];
-            $data[] = [
-                'kpi_component_id' => $componentMap['OMSET_CABANG'],
-                'unit_id' => $uid,
-                'position_id' => NULL,
-                'context' => 'penilaian_kinerja',
-                'target_value' => $t['penilaian']['target'],
-                'batas_awal' => $t['penilaian']['batas_awal'],
-                'batas_kedua' => $t['penilaian']['batas_kedua'],
-                'batas_ketiga' => $t['penilaian']['batas_ketiga'],
-                'batas_keempat' => $t['penilaian']['batas_keempat'],
+                'context' => 'default',
+                'target_value' => $t['target'],
                 'period_type' => 'monthly',
                 'period_month' => NULL,
                 'effective_from' => '2024-01-01',
@@ -597,28 +543,8 @@ class KPIConfigurationSeeder extends Seeder
                     'kpi_component_id' => $componentMap['OMSET_TEKNISI'],
                     'unit_id' => $uid,
                     'position_id' => NULL,
-                    'context' => 'gaji',
-                    'target_value' => $t['gaji']['target'] / 2,
-                    'batas_awal' => NULL,
-                    'batas_kedua' => NULL,
-                    'batas_ketiga' => NULL,
-                    'batas_keempat' => NULL,
-                    'period_type' => 'monthly',
-                    'period_month' => NULL,
-                    'effective_from' => '2024-01-01',
-                    'effective_to' => NULL,
-                    'created_by' => NULL,
-                ];
-                $data[] = [
-                    'kpi_component_id' => $componentMap['OMSET_TEKNISI'],
-                    'unit_id' => $uid,
-                    'position_id' => NULL,
-                    'context' => 'penilaian_kinerja',
-                    'target_value' => $t['penilaian']['target'] / 2,
-                    'batas_awal' => NULL,
-                    'batas_kedua' => NULL,
-                    'batas_ketiga' => NULL,
-                    'batas_keempat' => NULL,
+                    'context' => 'default',
+                    'target_value' => $t['target'] / 2,
                     'period_type' => 'monthly',
                     'period_month' => NULL,
                     'effective_from' => '2024-01-01',
@@ -627,7 +553,7 @@ class KPIConfigurationSeeder extends Seeder
                 ];
             }
 
-            // Target KPI lain
+            // Target KPI lain (konteks tunggal)
             foreach ($kpiTarget as $code => $perUnit) {
                 if (!isset($componentMap[$code])) {
                     continue;
@@ -638,10 +564,6 @@ class KPIConfigurationSeeder extends Seeder
                     'position_id' => NULL,
                     'context' => 'default',
                     'target_value' => $perUnit[$uid] ?? $perUnit[1],
-                    'batas_awal' => NULL,
-                    'batas_kedua' => NULL,
-                    'batas_ketiga' => NULL,
-                    'batas_keempat' => NULL,
                     'period_type' => 'monthly',
                     'period_month' => NULL,
                     'effective_from' => '2024-01-01',
@@ -724,10 +646,8 @@ class KPIConfigurationSeeder extends Seeder
         $data[] = $mk(44, 'TUNJANGAN_KINERJA', 750000, 'percent_of_kpi');
         // IT & System (45): 750k
         $data[] = $mk(45, 'TUNJANGAN_KINERJA', 750000, 'percent_of_kpi');
-        // PIC (46): 850k di context non-gaji (penilaian_kinerja/slip_gaji), 250k di gaji
-        $data[] = $mk(46, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi', null, 'penilaian_kinerja');
-        $data[] = $mk(46, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi', null, 'slip_gaji');
-        $data[] = $mk(46, 'TUNJANGAN_KINERJA', 250000, 'percent_of_kpi', null, 'gaji');
+        // PIC (46): jabatan sudah tidak aktif — strukur memakai konteks tunggal 'default'.
+        $data[] = $mk(46, 'TUNJANGAN_KINERJA', 850000, 'percent_of_kpi');
 
         // ── Tunjangan absen (250k, pakai score absen) ───────────────
         // Old logic: tunjangan_absen = (skor_total2/100) * 250000 untuk SEMUA jabatan

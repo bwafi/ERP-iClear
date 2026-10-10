@@ -42,7 +42,6 @@ class ManualKpiScorer
         $year   = (int)$ctx['year'];
         $emp    = (int)$ctx['employee_id'];
         $unit   = (int)$ctx['unit'];
-        $context = $ctx['context'];
         $date   = $ctx['date'];
 
         switch ($code) {
@@ -57,17 +56,14 @@ class ManualKpiScorer
             case 'FOLLOWUP':
                 return $this->manualEvaluationScore($emp, $ctx, $code);
             case 'ROAS':
-                // legacy: gaji = SUM*100, non-gaji = SUM*20 (uncapped)
+                // Konteks tunggal: SKOR = SUM aspek roas × 20 (rumus penilaian_kinerja).
                 $sum = $this->metrics->sumAspekScore($emp, 'roas', $month, $year);
-                return $sum * ($context === 'gaji' ? 100 : 20);
+                return $sum * 20;
             case 'BUDGETING':
                 $sum = $this->metrics->sumAspekScore($emp, 'budgeting', $month, $year);
-                return $sum * ($context === 'gaji' ? 100 : 20);
+                return $sum * 20;
             case 'TUTUP_KASIR':
                 $cnt = $this->metrics->countTutupKasir($unit, $month, $year);
-                if ($context === 'gaji') {
-                    return $cnt / 30 * 20;
-                }
                 return min($cnt / 30 * 100, 100);
             case 'STOK_OPNAME':
                 return $this->metrics->countStokOpname($unit, $month, $year) / 4 * 100;
@@ -158,10 +154,9 @@ class ManualKpiScorer
 
     protected function targetValue(int $componentId, int $unit, string $context, string $date): float
     {
-        $target = $this->targetModel->getTargetByKpiAndUnit($componentId, $unit, $context, $date);
-        if (!$target) {
-            $target = $this->targetModel->getTargetByKpiAndUnit($componentId, $unit, 'default', $date);
-        }
+        // Konteks tunggal ('default') — parameter $context dipertahankan utk
+        // kompatibilitas pemanggil namun tidak lagi menentukan baris target.
+        $target = $this->targetModel->getTargetByKpiAndUnit($componentId, $unit, 'default', $date);
         return $target ? (float)$target->target_value : 0.0;
     }
 
