@@ -1,33 +1,62 @@
 <!-- HEADER SECTION -->
 <style>
-    /* Samakan tampilan Select2 (Pilih Karyawan) dengan form-select bulan/tahun */
-    #f_karyawan + .select2-container {
+    /* Samakan & Presisikan Select2 dengan Form Select Bootstrap 5 */
+    #f_karyawan+.select2-container {
         width: 100% !important;
     }
-    #f_karyawan + .select2-container .select2-selection--single {
-        background-color: #f8f9fa;
-        border: 0;
-        border-radius: var(--bs-border-radius);
-        color: var(--bs-body-color);
-        min-height: 2.5rem;
-        display: flex;
-        align-items: center;
-        padding-inline: 1rem;
+
+    /* Container Utama Select2 */
+    #f_karyawan+.select2-container .select2-selection--single {
+        background-color: var(--bs-light, #f8f9fa) !important;
+        border: 0 !important;
+        border-radius: var(--bs-border-radius, 0.375rem) !important;
+        height: 38px !important;
+        /* Sama persis dengan py-2 / form-select bawaan */
+        display: flex !important;
+        align-items: center !important;
+        padding-left: 0.75rem !important;
+        padding-right: 2.25rem !important;
+        position: relative !important;
     }
-    #f_karyawan + .select2-container .select2-selection--single .select2-selection__rendered {
-        line-height: 1.2;
-        padding-left: 0;
-        color: var(--bs-body-color);
+
+    /* Teks Hasil Pilihan (Select2 Rendered) */
+    #f_karyawan+.select2-container .select2-selection--single .select2-selection__rendered {
+        display: flex !important;
+        align-items: center !important;
+        /* Kunci vertikal center untuk teks */
+        height: 100% !important;
+        line-height: normal !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        color: var(--bs-body-color) !important;
+        font-size: 0.875rem !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
     }
-    #f_karyawan + .select2-container .select2-selection--single .select2-selection__arrow {
-        top: 50%;
-        transform: translateY(-50%);
+
+    /* Container Panah Dropdown */
+    #f_karyawan+.select2-container .select2-selection--single .select2-selection__arrow {
+        height: 100% !important;
+        top: 0 !important;
+        right: 0.75rem !important;
+        transform: none !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
-    #f_karyawan + .select2-container .select2-selection--single .select2-selection__clear {
-        position: relative;
-        top: 0;
+
+    /* Bentuk Panah (Triangle) */
+    #f_karyawan+.select2-container .select2-selection--single .select2-selection__arrow b {
+        position: static !important;
+        margin: 0 !important;
+        border-color: #6c757d transparent transparent transparent !important;
+    }
+
+    #f_karyawan+.select2-container--open .select2-selection--single .select2-selection__arrow b {
+        border-color: transparent transparent #6c757d transparent !important;
     }
 </style>
+
 <div class="card border-0 bg-white shadow-sm mb-4 rounded-4">
     <div class="card-body d-flex align-items-center p-4">
         <div class="d-flex align-items-center gap-3">
@@ -59,7 +88,7 @@
         <form method="get">
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
-                    <label class="form-label text-muted small fw-medium">Bulan</label>
+                    <label class="form-label text-muted small fw-medium mb-1">Bulan</label>
                     <select name="bulan" class="form-select bg-light border-0 py-2" onchange="this.form.submit()">
                         <?php for ($i = 1; $i <= 12; $i++): ?>
                             <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>>
@@ -69,7 +98,7 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label text-muted small fw-medium">Tahun</label>
+                    <label class="form-label text-muted small fw-medium mb-1">Tahun</label>
                     <select name="tahun" class="form-select bg-light border-0 py-2" onchange="this.form.submit()">
                         <?php for ($i = date('Y'); $i >= 2023; $i--): ?>
                             <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>>
@@ -78,13 +107,13 @@
                         <?php endfor; ?>
                     </select>
                 </div>
+                <!-- FILTER SECTION -->
                 <div class="col-md-6">
-                    <label class="form-label text-muted small fw-medium">Pilih Karyawan</label>
+                    <label class="form-label text-muted small fw-medium mb-1">Pilih Karyawan</label>
                     <select name="karyawan" id="f_karyawan" class="form-select bg-light border-0 py-2 select2" onchange="this.form.submit()">
                         <?php foreach ($list_karyawan as $karyawan): ?>
-                            <option value="<?= $karyawan['ID_AKUN'] ?>" <?= $selected_karyawan == $karyawan['ID_AKUN'] ? 'selected' : '' ?>>
-                                <?= $karyawan['NAMA_AKUN'] ?>
-                            </option>
+                            <!-- Tulis tag option dan variabelnya rapat dalam 1 baris tanpa enter/spasi tambahan -->
+                            <option value="<?= $karyawan['ID_AKUN'] ?>" <?= $selected_karyawan == $karyawan['ID_AKUN'] ? 'selected' : '' ?>><?= trim($karyawan['NAMA_AKUN']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -200,7 +229,7 @@
     </div>
 </div>
 
-<!-- TOTAL & ACTIONS HERO CARD (Satu-satunya tombol cetak slip gaji yang strategis) -->
+<!-- TOTAL & ACTIONS HERO CARD -->
 <div class="card border-0 shadow-sm rounded-4 text-white mb-4" style="background: linear-gradient(135deg, #198754 100%, #157347 0%);">
     <div class="card-body p-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
         <div>
