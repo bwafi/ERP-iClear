@@ -575,24 +575,12 @@ class KpiCalculationService
             ];
         }
 
-        // Build detail_absen for views: array of ['nama','bobot','nilai']
-        $absenWeights = $this->weightModel->getByPosition($positionId, $date, 'absen');
-        $detailAbsen  = [];
-        foreach ($absenWeights as $w) {
-            $component = $this->componentModel->where('id', $w->kpi_component_id)->first();
-            if (!$component) {
-                continue;
-            }
-            $normalized = 0.0;
-            if (isset($kpiResult['attendance']['components'][$component->code])) {
-                $normalized = (float) $kpiResult['attendance']['components'][$component->code]['normalized'];
-            }
-            $detailAbsen[] = [
-                'nama'  => $component->name,
-                'bobot' => (float)$w->weight,
-                'nilai' => round($normalized, 2),
-            ];
-        }
+        // Build detail_absen for views: list of ['nama','bobot','nilai'].
+        // Sumber tunggal: komponen absen yang SUDAH dihitung
+        // AttendanceAggregationService (bobot 40/20/20/20) — TIDAK lagi
+        // membaca kpi_weights, supaya pegawai tanpa mapping bobot absen
+        // (mis. jabatan Finance/0) tetap menampilkan rincian.
+        $detailAbsen = AttendanceAggregationService::detailRows($kpiResult['attendance'] ?? []);
 
         // ── Omset per unit (for views) ────────────────────────
         // Daftar cabang diambil dari master `unit` (kecuali Head Office),

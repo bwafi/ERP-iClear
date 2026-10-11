@@ -237,6 +237,36 @@ class AttendanceAggregationService
     }
 
     /**
+     * Ubah hasil calculateMonthlyAttendance() menjadi baris siap tampil
+     * "Detail Penilaian Absen": list of ['nama','bobot','nilai'].
+     *
+     * Bobot & nama bersumber dari SATU tempat (ATTENDANCE_COMPONENTS) yang
+     * juga dipakai menghitung skor absen — BUKAN dari kpi_weights. Dengan
+     * begitu pegawai yang tidak punya mapping bobot absen (mis. jabatan
+     * Finance/0) tetap menampilkan rincian komponen, sementara pegawai yang
+     * sudah punya mapping (35–45) tidak berubah karena bobotnya memang
+     * 40/20/20/20 dan urutannya sama.
+     *
+     * @param array $attendance hasil calculateMonthlyAttendance()
+     * @return list<array{nama:string,bobot:float,nilai:float}>
+     */
+    public static function detailRows(array $attendance): array
+    {
+        $components = $attendance['components'] ?? [];
+
+        $rows = [];
+        foreach (self::ATTENDANCE_COMPONENTS as $code => $meta) {
+            $rows[] = [
+                'nama'  => $meta['name'],
+                'bobot' => (float) $meta['weight'],
+                'nilai' => round((float) ($components[$code]['normalized'] ?? 0.0), 2),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Rata-rata skor absen per komponen utk MANAGER.
      *
      * Skor non-kehadiran Manager TIDAK diinput manual — dihitung sebagai
