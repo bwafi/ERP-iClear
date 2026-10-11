@@ -1540,6 +1540,9 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
+        // Jumlah hari pada bulan terpilih, dipakai view untuk "Total Tanggungan Asset".
+        $hariDalamBulan = (int) date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
+
         return view('template', [
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
@@ -1548,6 +1551,7 @@ class TutupKasir extends BaseController
             'tahun'          => $tahun,
             'periodeLabel'   => $periodeLabel,
             'isBulanBerjalan' => $isBulanBerjalan,
+            'hariDalamBulan' => $hariDalamBulan,
             'bulanSebelum'   => $bulanSebelum,
             'tahunSebelum'   => $tahunSebelum,
             'pengeluaran'     => $pengeluaran,
