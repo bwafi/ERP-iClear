@@ -615,18 +615,39 @@ class KasBank extends BaseController
             ];
         }
 
-        // 5. Baseline statement pada tanggal CUT-OFF belum diinput.
+        // 5. Baseline (statement bank / opening KAS) pada tanggal CUT-OFF
+        //    benar-benar belum tersedia.
         //
-        // Ini bukan error konfigurasi, tapi kondisi yang WAJIB diselesaikan
-        // Finance sebelum cut-off dipakai: saldo riil akhir tanggal cut-off
-        // adalah opening balance, jadi tanpa baris statement di tanggal itu
-        // tidak ada angka yang bisa dipakai. Level-nya 'warning' (bukan
-        // 'danger') karena guard di KasBankSetorTarikService sudah menolak
-        // Setor/Penarikan selama baseline belum tersedia — jadi tidak ada
-        // transaksi yang bisa salah memakai angka nol.
+        // - Penanda unit OPERASIONAL (unit.is_operational = 1) menentukan
+        //   kewajiban opening KAS. Head Office (unit non-operasional) tidak
+        //   diwajibkan punya opening KAS, begitu juga rekening Finance/HO
+        //   (is_finance_ho = 1). Penanda ini TIDAK membebaskan rekening bank:
+        //   bank tetap diperiksa sesuai aturan rekeningnya.
+        // - Status BELUM VERIFIKASI TIDAK dianggap belum lengkap: modul KasBank
+        //   memakai baseline + alokasi saldo tanpa workflow verifikasi. Yang
+        //   penting baseline ADA pada tanggal cut-off, bukan status barisnya.
+        // - Baseline riil = baris PERSIS pada tanggal cut-off, bukan baris
+        //   fallback lama. Jadi rekening yang statement-nya terakhir diupdate di
+        //   tanggal sebelum cut-off masih dilaporkan, dan operator tidak boleh
+        //   memakai angka dari tanggal lama (tertagih) sebagai pengganti.
         $baseline = (new \App\Services\Finance\KasBankCutoffService())->diagnostikBaseline();
 
-        $baselineBelum = array_values(array_filter($baseline, static fn ($b) => ! $b['baseline_terverifikasi']));
+        $baselineBelum = array_values(array_filter($baseline, static function ($b) {
+            // Rekening Finance/HO (is_finance_ho = 1) bukan unit operasional:
+            // tidak wajib punya statement cut-off (bank holding).
+            if (! empty($b['is_finance_ho'])) {
+                return false;
+            }
+            // Kewajiban "punya opening KAS" hanya untuk laci unit OPERASIONAL.
+            // Dibatasi ke tipe KAS supaya penanda operasional tidak diam-diam
+            // membebaskan rekening bank.
+            if (($b['tipe'] ?? '') === 'KAS' && ! $b['unit_is_operational']) {
+                return false;
+            }
+            // Hanya baseline yang benar-benar belum tersedia pada tanggal
+            // cut-off. BELUM_VERIFIKASI sudah punya baseline → tidak dilaporkan.
+            return ! $b['baseline_ada'];
+        }));
 
         if ($baselineBelum !== []) {
             $detail     = [];
@@ -634,38 +655,31 @@ class KasBank extends BaseController
             $adaBank    = false;
 
             foreach ($baselineBelum as $b) {
-                $kondisi = $b['baseline_ada']
-                    ? sprintf('sudah ada baris %s tapi BELUM VERIFIKASI', $b['tanggal_baseline'])
-                    : sprintf(
-                        'belum ada baris pada %s; angka yang terbaca sekarang berasal dari baris lama tanggal %s, bukan baseline',
-                        FinanceScopeService::kasBankCutoffDate(),
-                        $b['tertagih'] ?? '(tidak ada baris)'
-                    );
-
-                // Rekening KAS dan BANK punya jalur baseline yang BERBEDA,
-                // jadi ikutannya juga harus beda. Kalau tidak, operator laci
-                // kas disuruh mengisi Statement — padahal statement hanya
-                // untuk rekening bank.
+                // Filter di atas sudah memastikan baseline_ada == false, jadi
+                // kondisi yang tersisa hanya "belum ada baris".
                 if (($b['tipe'] ?? '') === 'KAS') {
                     $adaKasus = true;
-
-                    // Untuk KAS tidak ada jalur verifikasi: baris opening pada
-                    // tanggal cut-off sudah langsung menjadi baseline. Karena
-                    // `baseline_terverifikasi` TIDAK bisa beda dari
-                    // `baseline_ada`, satu-satunya kondisi yang mungkin sampai
-                    // ke sini adalah "belum ada opening".
                     $detail[] = sprintf(
-                        '%s (#%d) — %s',
+                        '%s (#%d) — belum ada opening KAS pada %s',
                         $b['nama_akun'],
                         $b['akun_id'],
-                        sprintf('belum ada opening KAS pada %s', FinanceScopeService::kasBankCutoffDate())
+                        FinanceScopeService::kasBankCutoffDate()
                     );
 
                     continue;
                 }
 
                 $adaBank = true;
-                $detail[] = sprintf('%s (#%d) — %s', $b['nama_akun'], $b['akun_id'], $kondisi);
+                $context = $b['tertagih'] !== null
+                    ? sprintf('; saldo statement terakhir tersedia dari %s, bukan dari tanggal cut-off', $b['tertagih'])
+                    : '';
+                $detail[] = sprintf(
+                    '%s (#%d) — belum ada baris statement pada %s%s',
+                    $b['nama_akun'],
+                    $b['akun_id'],
+                    FinanceScopeService::kasBankCutoffDate(),
+                    $context
+                );
             }
 
             // Aksi dipisah per jenis baseline supaya tidak menyuruh operator
@@ -673,8 +687,8 @@ class KasBank extends BaseController
             $aksi = [];
             if ($adaBank) {
                 $aksi[] = 'Rekening bank: input SALDO RIIL akhir ' . FinanceScopeService::kasBankCutoffDate()
-                    . ' di ' . base_url('kas_bank/akun') . ' (tab Saldo awal), lalu set status "Terverifikasi".'
-                    . ' Saldo riil itu sudah memabsorpsi transaksi 1–' . FinanceScopeService::kasBankCutoffDate()
+                    . ' di ' . base_url('kas_bank/akun') . ' (tab Saldo awal). Saldo riil itu sudah memabsorpsi transaksi 1-'
+                    . FinanceScopeService::kasBankCutoffDate()
                     . ', jadi jangan input hasil SUM transaksi legacy.';
             }
             if ($adaKasus) {
@@ -685,7 +699,7 @@ class KasBank extends BaseController
 
             $out[] = [
                 'level'  => 'warning',
-                'judul'  => count($baselineBelum) . ' rekening belum punya opening balance untuk ' . FinanceScopeService::kasBankCutoffDate(),
+                'judul'  => count($baselineBelum) . ' rekening belum punya baseline untuk ' . FinanceScopeService::kasBankCutoffDate(),
                 'detail' => $detail,
                 'aksi'   => implode(' ', $aksi),
             ];

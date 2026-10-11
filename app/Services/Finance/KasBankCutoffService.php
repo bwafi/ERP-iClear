@@ -241,15 +241,16 @@ class KasBankCutoffService
      */
     public function diagnostikBaseline(?string $tanggal = null): array
     {
-        $tanggal ??= $this->tanggalCutoff();
-        $out      = [];
+        $tanggal     ??= $this->tanggalCutoff();
+        $out         = [];
+        $unitOperasi = $this->mapUnitOperasional();
 
         foreach ($this->akunModel->whereIn('tipe', ['BANK', 'KAS'])->where('status', 'aktif')->findAll() as $akun) {
             $akunId = (int) $akun->idakun_kas_bank;
             $tipe   = strtoupper((string) $akun->tipe);
 
             if ($tipe === TutupKasirSourceDefinition::TIPE_KAS) {
-                $out[] = $this->diagnostikBaselineKas($akun, $tanggal);
+                $out[] = $this->diagnostikBaselineKas($akun, $tanggal, $unitOperasi);
 
                 continue;
             }
@@ -263,6 +264,11 @@ class KasBankCutoffService
                 'nama_akun'               => (string) ($akun->nama_akun ?? ''),
                 'unit_id'                 => $akun->unit_id === null ? null : (int) $akun->unit_id,
                 'is_shared'               => (int) ($akun->is_shared ?? 0) === 1,
+                'is_finance_ho'           => (int) ($akun->is_finance_ho ?? 0) === 1,
+                'unit_is_operational'     => $this->unitOperasional(
+                    $akun->unit_id === null ? null : (int) $akun->unit_id,
+                    $unitOperasi
+                ),
                 'baseline_ada'            => $row !== null,
                 'baseline_terverifikasi'  => $status !== null && (string) $status === self::STATEMENT_SUDAH,
                 'saldo'                   => (int) ($row->saldo ?? 0),
@@ -284,9 +290,11 @@ class KasBankCutoffService
      * dipakai; kalau belum, dilaporkan sebagai belum ada sehingga tidak ada
      * saldo 0 senyap.
      *
+     * @param array<int, bool> $unitOperasi peta idunit => is_operational
+     *
      * @return array<string, mixed>
      */
-    private function diagnostikBaselineKas(object $akun, string $tanggal): array
+    private function diagnostikBaselineKas(object $akun, string $tanggal, array $unitOperasi): array
     {
         $akunId = (int) $akun->idakun_kas_bank;
         $row    = $this->openingSrc()->openingAt($akunId, $tanggal);
@@ -299,6 +307,11 @@ class KasBankCutoffService
             'nama_akun'               => (string) ($akun->nama_akun ?? ''),
             'unit_id'                 => $akun->unit_id === null ? null : (int) $akun->unit_id,
             'is_shared'               => false,
+            'is_finance_ho'           => (int) ($akun->is_finance_ho ?? 0) === 1,
+            'unit_is_operational'     => $this->unitOperasional(
+                $akun->unit_id === null ? null : (int) $akun->unit_id,
+                $unitOperasi
+            ),
             'baseline_ada'            => $row !== null,
             'baseline_terverifikasi'  => $row !== null,
             'saldo'                   => $opening ?? 0,
@@ -307,6 +320,41 @@ class KasBankCutoffService
             'opening'                 => $opening,
             'keterangan'              => $row === null ? null : $row->keterangan,
         ];
+    }
+
+    /**
+     * Peta idunit => bool operasional dari master unit.
+     *
+     * Unit yang tidak ditemukan TIDAK boleh diam-diam dibebaskan dari
+     * kewajiban opening KAS, jadi hanya baris yang jelas is_operational = 0
+     * (Head Office) yang dianggap non-operasional.
+     *
+     * @return array<int, bool>
+     */
+    private function mapUnitOperasional(): array
+    {
+        $peta = [];
+
+        foreach (db_connect()->table('unit')->select('idunit, is_operational')->get()->getResult() as $u) {
+            $peta[(int) $u->idunit] = (int) ($u->is_operational ?? 1) === 1;
+        }
+
+        return $peta;
+    }
+
+    /**
+     * Apakah unit pemilik rekening termasuk unit operasional.
+     *
+     * Rekening tanpa unit (null, mis. rekening shared) dianggap operasional:
+     * penanda unit hanya bicara soal laci kas unit, bukan soal rekening bank.
+     */
+    private function unitOperasional(?int $unitId, array $peta): bool
+    {
+        if ($unitId === null) {
+            return true;
+        }
+
+        return $peta[$unitId] ?? true;
     }
 
     /**
