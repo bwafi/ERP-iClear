@@ -299,12 +299,15 @@ class TutupKasir extends BaseController
 
 
         // ==========================
-        // TOTAL PELANGGAN
+        // TOTAL PELANGGAN MASUK
         // ==========================
+        // Disamakan dengan KPI CustomerCalculator: pelanggan "masuk" dihitung
+        // saat service DIBUAT (created_at, semua status — bukan tunggu selesai)
+        // + semua penjualan yang punya id_pelanggan (bukan hanya invoice SLL).
         $countService = $this->db->table('service')
             ->select('COUNT(idservice) AS total')
-            ->where('MONTH(tanggal_selesai)', $bulan)
-            ->where('YEAR(tanggal_selesai)', $tahun)
+            ->where('MONTH(created_at)', $bulan)
+            ->where('YEAR(created_at)', $tahun)
             ->where('unit_idunit', $unit)
             ->get()
             ->getRow()
@@ -315,7 +318,7 @@ class TutupKasir extends BaseController
             ->where('MONTH(tanggal)', $bulan)
             ->where('YEAR(tanggal)', $tahun)
             ->where('unit_idunit', $unit)
-            ->like('kode_invoice', 'SLL', 'after')
+            ->where('id_pelanggan IS NOT NULL AND id_pelanggan <> 0', null, false)
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -325,6 +328,8 @@ class TutupKasir extends BaseController
         // ==========================
         // TOP KECAMATAN / DOMISILI PELANGGAN
         // ==========================
+        // Basis sama dengan KPI CustomerCalculator: service dihitung saat
+        // DIBUAT (created_at, semua status) + semua penjualan ber-id_pelanggan.
         $kecamatanQuery = $this->db->query("
             SELECT 
                 UPPER(TRIM(p.kecamatan)) AS raw_kecamatan,
@@ -334,8 +339,8 @@ class TutupKasir extends BaseController
                 SELECT s.pelanggan_id_pelanggan AS id_pelanggan, CONCAT('SVC-', s.idservice) AS unik_id
                 FROM service s
                 WHERE s.unit_idunit = ?
-                  AND MONTH(s.tanggal_selesai) = ?
-                  AND YEAR(s.tanggal_selesai) = ?
+                  AND MONTH(s.created_at) = ?
+                  AND YEAR(s.created_at) = ?
                   AND s.pelanggan_id_pelanggan IS NOT NULL
                   AND s.pelanggan_id_pelanggan != 0
 
@@ -346,7 +351,6 @@ class TutupKasir extends BaseController
                 WHERE pj.unit_idunit = ?
                   AND MONTH(pj.tanggal) = ?
                   AND YEAR(pj.tanggal) = ?
-                  AND pj.kode_invoice LIKE 'SLL%'
                   AND pj.id_pelanggan IS NOT NULL
                   AND pj.id_pelanggan > 0
             ) AS sub
