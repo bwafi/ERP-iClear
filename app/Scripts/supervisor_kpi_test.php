@@ -597,18 +597,18 @@ foreach ($kpiSvc->calculateForEmployee(68, 2, '04', (string)$YEAR, 'default', sp
 ok('OMSET_TOKO bulan 4: actual 0 < target 35jt → 0 (tanpa tier minimum)', $o4 && near($o4['achievement'] ?? null, 0.0), json_encode($o4));
 $k58_5 = null;
 foreach ($kpiSvc->calculateForEmployee(58, 3, (string)$MONTH, (string)$YEAR, 'default', $dateAnchor)['items'] as $it) {
-    if (($it['code'] ?? '') === 'OMSET_CABANG') {
+    if (($it['code'] ?? '') === 'OMSET_TOKO') {
         $k58_5 = $it;
     }
 }
-ok('OMSET_CABANG (KT unit3) bulan 5: actual 60jt < target 80jt → 0 (threshold)', $k58_5 && near($k58_5['achievement'] ?? null, 0.0), json_encode($k58_5));
+ok('OMSET_TOKO (KT unit3) bulan 5: actual 60jt ≥ target 60jt → 100', $k58_5 && near($k58_5['achievement'] ?? null, 100.0), json_encode($k58_5));
 $k58_4 = null;
 foreach ($kpiSvc->calculateForEmployee(58, 3, '04', (string)$YEAR, 'default', sprintf('%04d-04-15', $YEAR))['items'] as $it) {
-    if (($it['code'] ?? '') === 'OMSET_CABANG') {
+    if (($it['code'] ?? '') === 'OMSET_TOKO') {
         $k58_4 = $it;
     }
 }
-ok('OMSET_CABANG bulan 4: actual 0 < target → 0', $k58_4 && near($k58_4['achievement'] ?? null, 0.0), json_encode($k58_4));
+ok('OMSET_TOKO (KT unit3) bulan 4: actual 0 < target 60jt → 0', $k58_4 && near($k58_4['achievement'] ?? null, 0.0), json_encode($k58_4));
 
 // ── 9. Rollback (tidak mencemari DB) ─────────────────────────────
 $db->transRollback();
