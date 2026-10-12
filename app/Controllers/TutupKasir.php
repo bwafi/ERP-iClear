@@ -136,7 +136,7 @@ class TutupKasir extends BaseController
 
         // Setor/Tarik (transaksi bank: KAS <-> BANK, mis. "TUKAR CASH") TIDAK
         // disimpan di kolom `tutup_kasir` — dihitung ulang dari
-        // `transaksi_kas_bank`, sama persis seperti gitaran harian. Tanpa ini,
+        // `transaksi_kas_bank`, sama persis seperti halaman harian. Tanpa ini,
         // rekap bulanan tidak menampilkan perpindahan kas ke bank, padahal
         // `akhir_cash` sudah ikut berkurang karenanya.
         $transferKas = (new \App\Services\Finance\TutupKasirTransferInternal($this->db))
@@ -167,6 +167,7 @@ class TutupKasir extends BaseController
             // transaksi bank (setor / tarik KAS <-> BANK)
             'setor' => (int) ($transferKas['setor'] ?? 0),
             'tarik' => (int) ($transferKas['tarik'] ?? 0),
+            'transfer_internal' => $transferKas,
 
             // saldo akhir
             'kas_akhircash' => $tutupkasir->akhir_cash ?? 0,

@@ -66,10 +66,15 @@ class TutupKasirTransferInternal
     /**
      * Setor & Tarik KAS laci unit pada satu tanggal.
      *
-     * @return array{ada:bool, setor:int, tarik:int, akun_kas_bank_id:int|null, pesan:string}
+     * @return array{ada:bool, setor:int, tarik:int, akun_kas_bank_id:int|null, pesan:string, rincian:array}
      *   `ada` = true hanya kalau ada transfer internal nyata pada tanggal itu.
      *   Nilai 0 yang sah (tidak ada setor/tarik) tetap `ada` = false supaya
      *   view tidak menampilkan baris kosong yang tidak perlu.
+     *
+     *   `rincian` = daftar per transaksi: arah ('setor'/'tarik'), jumlah,
+     *   nama rekening bank lawan (dari leg transfer_ref yang sama),
+     *   `transfer_ref`, dan `keterangan`. Dipakai view untuk menyebutkan
+     *   "setor/tarik ke BANK MANA" — bukan hanya jumlah agregat.
      */
     public function hariIni(int $unitId, string $tanggal, ?int $akunKasId = null): array
     {
@@ -79,6 +84,7 @@ class TutupKasirTransferInternal
             'tarik'            => 0,
             'akun_kas_bank_id' => $akunKasId,
             'pesan'            => 'Belum ada Setor/Tarik pada tanggal ini.',
+            'rincian'          => [],
         ];
 
         if ($unitId <= 0) {
@@ -119,6 +125,64 @@ class TutupKasirTransferInternal
             'pesan'            => $ada
                 ? sprintf('Setor Rp %s, Tarik Rp %s.', number_format($setor, 0, ',', '.'), number_format($tarik, 0, ',', '.'))
                 : 'Belum ada Setor/Tarik pada tanggal ini.',
+            'rincian'          => $ada ? $this->rincian($unitId, $tanggal, (int) $akunKasId) : [],
         ];
+    }
+
+    /**
+     * Rincian per transaksi Setor/Tarik KAS laci pada satu tanggal.
+     *
+     * Untuk tiap leg KAS (transaksi_kas_bank berjenis TRANSFER_INTERNAL pada
+     * rekening KAS unit), pasangan leg dengan `transfer_ref` yang sama dibaca
+     * supaya nama rekening BANK tujuan/asal bisa ditampilkan ("setor ke bank
+     * mana?"). Definisi "transfer internal" tetap sama dengan Finance:
+     * `transfer_ref IS NOT NULL` + `jenis = TRANSFER_INTERNAL`.
+     *
+     * @return array<int, array{arah:string, jumlah:int, nama_bank:?string, transfer_ref:?string, keterangan:string}>
+     */
+    private function rincian(int $unitId, string $tanggal, int $akunKasId): array
+    {
+        $kasLegs = $this->db->table('transaksi_kas_bank')
+            ->where('unit_id', $unitId)
+            ->where('akun_kas_bank_id', $akunKasId)
+            ->where('tanggal', $tanggal)
+            ->where('jenis', ModeKasBank::JENIS_TRANSFER)
+            ->where('transfer_ref IS NOT NULL', null, false)
+            ->get()
+            ->getResultArray();
+
+        if (empty($kasLegs)) {
+            return [];
+        }
+
+        $refs   = array_values(array_unique(array_column($kasLegs, 'transfer_ref')));
+        $peers  = $this->db->table('transaksi_kas_bank')
+            ->select('transaksi_kas_bank.transfer_ref, akun.nama_akun')
+            ->join('akun_kas_bank akun', 'akun.idakun_kas_bank = transaksi_kas_bank.akun_kas_bank_id', 'left')
+            ->where('transaksi_kas_bank.akun_kas_bank_id !=', $akunKasId)
+            ->whereIn('transaksi_kas_bank.transfer_ref', $refs)
+            ->get()
+            ->getResultArray();
+
+        $namaByRef = [];
+        foreach ($peers as $p) {
+            if (($p['nama_akun'] ?? '') !== '') {
+                $namaByRef[$p['transfer_ref']] = $p['nama_akun'];
+            }
+        }
+
+        $rincian = [];
+        foreach ($kasLegs as $leg) {
+            $setor = (strtoupper((string) $leg['arah']) === ModeKasBank::ARAH_KELUAR);
+            $rincian[] = [
+                'arah'         => $setor ? 'setor' : 'tarik',
+                'jumlah'       => (int) $leg['jumlah'],
+                'nama_bank'    => $namaByRef[$leg['transfer_ref']] ?? null,
+                'transfer_ref' => $leg['transfer_ref'] ?? null,
+                'keterangan'   => (string) ($leg['keterangan'] ?? ''),
+            ];
+        }
+
+        return $rincian;
     }
 }

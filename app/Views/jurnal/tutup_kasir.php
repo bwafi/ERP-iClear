@@ -238,7 +238,7 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
                 </div>
             </section>
 
-            <!-- ===== COLLAPSIBLE: SALDO SEHARUSNYA ===== -->
+            <!-- ===== COLLAPSIBLE: SALDO SEHARUSNYA (rincian alur, TANPA angka akhir) ===== -->
             <details class="tk-details tk-card tk-details mb-4">
                 <summary>
                     <iconify-icon icon="solar:calculator-bold" width="22"></iconify-icon>
@@ -275,36 +275,60 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
                             <span class="tk-details__label">Tarik (Bank &rarr; Kas)</span>
                             <span class="tk-details__value tk-tabular text-info">+ Rp <?= number_format((int)($tarik ?? 0), 0, ',', '.') ?></span>
                         </div>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label"><strong>Saldo Seharusnya</strong></span>
-                            <span class="tk-details__value tk-tabular"><strong>Rp <?= number_format($akhirCashSistem, 0, ',', '.') ?></strong></span>
-                        </div>
                     <?php endif; ?>
                 </div>
             </details>
 
-            <!-- ===== COLLAPSIBLE: PERPINDAHAN KAS <-> BANK ===== -->
+            <!-- ===== PERPINDAHAN KAS <-> BANK (setor/tarik per bank) ===== -->
             <?php if (($transfer_internal['ada'] ?? false)) : ?>
-            <details class="tk-details tk-card tk-details mb-4">
-                <summary>
-                    <iconify-icon icon="solar:swap-horizontal-bold" width="22"></iconify-icon>
-                    Perpindahan Kas &harr; Bank Hari Ini
-                </summary>
-                <div class="tk-details__content">
-                    <div class="tk-details__row">
-                        <span class="tk-details__label">Setor (Kas &rarr; Bank)</span>
-                        <span class="tk-details__value tk-tabular text-info">Rp <?= number_format((int)($setor ?? 0), 0, ',', '.') ?></span>
-                    </div>
-                    <div class="tk-details__row">
-                        <span class="tk-details__label">Tarik (Bank &rarr; Kas)</span>
-                        <span class="tk-details__value tk-tabular text-info">Rp <?= number_format((int)($tarik ?? 0), 0, ',', '.') ?></span>
-                    </div>
-                    <div class="tk-details__row">
-                        <span class="tk-details__label"><strong>Net Perpindahan</strong></span>
-                        <span class="tk-details__value tk-tabular"><strong><?= (int)($tarik ?? 0) - (int)($setor ?? 0) >= 0 ? '+' : '' ?><?= number_format((int)($tarik ?? 0) - (int)($setor ?? 0), 0, ',', '.') ?></strong></span>
+            <?php
+                $rincian   = $transfer_internal['rincian'] ?? [];
+                $floatList = static function (string $arah) use ($rincian) {
+                    $baris = array_values(array_filter($rincian, fn($t) => ($t['arah'] ?? '') === $arah));
+                    if (empty($baris)) {
+                        return '';
+                    }
+                    $html = '<ul style="list-style:none;padding:0;margin:0.75rem 0 0;border-top:1px dashed var(--bs-border-color, #dee2e6);">';
+                    foreach ($baris as $b) {
+                        $nama = $b['nama_bank'] ?: 'Bank';
+                        $ket  = ($b['keterangan'] ?? '') !== '' ? '<span style="color:var(--tk-muted);font-size:0.75rem;">' . esc($b['keterangan']) . '</span>' : '';
+                        $html .= '<li style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.375rem 0;font-size:0.8125rem;">'
+                            . '<span>' . esc($nama) . ' ' . $ket . '</span>'
+                            . '<strong style="font-variant-numeric:tabular-nums;white-space:nowrap;">Rp ' . number_format((int) $b['jumlah'], 0, ',', '.') . '</strong>'
+                            . '</li>';
+                    }
+                    return $html . '</ul>';
+                };
+            ?>
+            <section class="tk-section mb-4">
+                <header class="p-3 border-bottom">
+                    <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
+                        <iconify-icon icon="solar:swap-horizontal-bold" width="22"></iconify-icon>
+                        Perpindahan Kas &harr; Bank Hari Ini
+                    </h5>
+                </header>
+                <div class="p-3">
+                    <div class="tk-summary">
+                        <article class="tk-summary__item tk-summary__item--expense">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Setor ke Bank (Kas &rarr; Bank)</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
+                            </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= number_format((int)($setor ?? 0), 0, ',', '.') ?></div>
+                            <?= $floatList('setor') ?>
+                        </article>
+
+                        <article class="tk-summary__item tk-summary__item--income">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Tarik dari Bank (Bank &rarr; Kas)</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
+                            </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= number_format((int)($tarik ?? 0), 0, ',', '.') ?></div>
+                            <?= $floatList('tarik') ?>
+                        </article>
                     </div>
                 </div>
-            </details>
+            </section>
             <?php endif; ?>
 
             <!-- ===== PERINGATAN TERLAMBAT (JS shows/hides) ===== -->

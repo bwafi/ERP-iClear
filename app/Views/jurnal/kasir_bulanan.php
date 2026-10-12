@@ -3,6 +3,21 @@
 <?php
 $fmt = fn($v) => number_format((int)($v ?? 0), 0, ',', '.');
 $totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
+$tfRincian = $transfer_internal['rincian'] ?? [];
+$tfList = static function (string $arah) use ($tfRincian) {
+    $baris = array_values(array_filter($tfRincian, fn($t) => ($t['arah'] ?? '') === $arah));
+    if (empty($baris)) {
+        return '';
+    }
+    $html = '<ul style="list-style:none;padding:0;margin:0.75rem 0 0;border-top:1px dashed var(--bs-border-color, #dee2e6);">';
+    foreach ($baris as $b) {
+        $html .= '<li style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.375rem 0;font-size:0.8125rem;">'
+            . '<span>' . esc($b['nama_bank'] ?: 'Bank') . '</span>'
+            . '<strong style="font-variant-numeric:tabular-nums;white-space:nowrap;">Rp ' . number_format((int) $b['jumlah'], 0, ',', '.') . '</strong>'
+            . '</li>';
+    }
+    return $html . '</ul>';
+};
 ?>
 
 <div class="tutup-kasir kb-page">
@@ -190,6 +205,7 @@ $totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
                                 <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
                             </div>
                             <div class="tk-summary__value tk-tabular">Rp <?= $fmt($setor) ?></div>
+                            <?= $tfList('setor') ?>
                         </article>
 
                         <article class="tk-summary__item tk-summary__item--income">
@@ -198,6 +214,7 @@ $totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
                                 <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
                             </div>
                             <div class="tk-summary__value tk-tabular">Rp <?= $fmt($tarik) ?></div>
+                            <?= $tfList('tarik') ?>
                         </article>
                     </div>
                 </div>
