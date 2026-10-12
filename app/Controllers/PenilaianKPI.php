@@ -1497,6 +1497,10 @@ class PenilaianKPI extends BaseController
         $kpiService = new \App\Services\Kpi\KpiCalculationService();
         $kpi = $kpiService->calculateForSalary((int) $selected_karyawan, (string) $bulan, (string) $tahun, 'penilaian_kinerja');
 
+        // Urutkan detail KPI dari bobot terbesar ke terkecil.
+        $detailKpiSorted = $kpi['detail_kpi'] ?? [];
+        usort($detailKpiSorted, static fn ($a, $b) => (float)($b['bobot'] ?? 0) <=> (float)($a['bobot'] ?? 0));
+
         // =========================================================
         // SALARY COMPOSITION — SalaryCalculationService (context penilaian_kinerja)
         // =========================================================
@@ -1531,7 +1535,7 @@ class PenilaianKPI extends BaseController
             'list_karyawan'        => $list_karyawan,
             'selected_karyawan'    => $selected_karyawan,
             'karyawan'             => $kpi['karyawan'],
-            'detail_kpi'           => $kpi['detail_kpi'],
+            'detail_kpi'           => $detailKpiSorted,
             'detail_absen'         => $kpi['detail_absen'],
             'aktual_omset_unit'    => $kpi['aktual_omset_unit'],
             'omset_cabang'         => $omsetCabang,
