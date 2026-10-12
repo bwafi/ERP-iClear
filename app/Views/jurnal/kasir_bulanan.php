@@ -183,6 +183,22 @@ $totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
                             </div>
                             <div class="tk-summary__value tk-tabular">Rp <?= $fmt($totalPengeluaran) ?></div>
                         </article>
+
+                        <article class="tk-summary__item tk-summary__item--expense">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Setor ke Bank (Kas &rarr; Bank)</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
+                            </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($setor) ?></div>
+                        </article>
+
+                        <article class="tk-summary__item tk-summary__item--income">
+                            <div class="tk-summary__header">
+                                <span class="tk-summary__title">Tarik dari Bank (Bank &rarr; Kas)</span>
+                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
+                            </div>
+                            <div class="tk-summary__value tk-tabular">Rp <?= $fmt($tarik) ?></div>
+                        </article>
                     </div>
                 </div>
             </section>
@@ -204,6 +220,14 @@ $totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
                     <div class="tk-details__row">
                         <span class="tk-details__label">Saldo Akhir Kas (Sistem)</span>
                         <span class="tk-details__value tk-tabular">Rp <?= $fmt($kas_akhircash) ?></span>
+                    </div>
+                    <div class="tk-details__row">
+                        <span class="tk-details__label">Setor (Kas &rarr; Bank)</span>
+                        <span class="tk-details__value tk-tabular text-info">- Rp <?= $fmt($setor) ?></span>
+                    </div>
+                    <div class="tk-details__row">
+                        <span class="tk-details__label">Tarik (Bank &rarr; Kas)</span>
+                        <span class="tk-details__value tk-tabular text-info">+ Rp <?= $fmt($tarik) ?></span>
                     </div>
                     <div class="tk-details__row">
                         <span class="tk-details__label">Uang Fisik di Laci</span>
@@ -234,6 +258,8 @@ $totalPengeluaran = ($pengeluarancash ?? 0) + ($pengeluarantf ?? 0);
             <input type="hidden" name="pendapatan_transfer" value="<?= $transfer ?? 0 ?>">
             <input type="hidden" name="pengeluaran_cash" value="<?= $pengeluarancash ?? 0 ?>">
             <input type="hidden" name="pengeluaran_transfer" value="<?= $pengeluarantf ?? 0 ?>">
+            <input type="hidden" name="setor" value="<?= (int)($setor ?? 0) ?>">
+            <input type="hidden" name="tarik" value="<?= (int)($tarik ?? 0) ?>">
 
         <?php endif; ?>
 
