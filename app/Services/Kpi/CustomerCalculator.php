@@ -9,8 +9,8 @@ namespace App\Services\Kpi;
  * berdasarkan DATE(created_at)) + penjualan yang ber-id pelanggan
  * (id_pelanggan, berdasarkan DATE(tanggal)).
  *
- * Untuk TEKNISI (jabatan 36), achievement memakai:
- *   - aktual = jumlah service yang teknisi tsb tangani (service_by, semua
+ * Untuk TEKNISI (36) & KEPALA TOKO (41), achievement memakai:
+ *   - aktual = jumlah service yang pegawai tsb tangani (service_by, semua
  *     status, DATE(created_at)) pada unit & bulan tsb.
  *   - target = kpi_targets.target_value (target pelanggan UNIT: BWI 220 /
  *     JBR 180 / BWI 350 / Pandaan 250) ÷ 2 — dibagi di kode, bukan di DB.

@@ -174,16 +174,17 @@ class KpiCalculationService
                     // Nilai KPI 0 jika aktual < target; jika tercapai → min(ratio, 100).
                     $targetHalf = (float) $target->target_value / 2.0;
 
-                    if ($positionId === 36) {
-                        // TEKNISI: aktual = jumlah service yg teknisi tsb tangani pd bulan
-                        // tsb (service_by, semua status, unit tsb).
+                    if (in_array($positionId, [36, 41], true)) {
+                        // TEKNISI & KEPALA TOKO: aktual = jumlah service yg pegawai
+                        // tsb tangani pd bulan tsb (service_by, semua status, unit tsb)
+                        // — TIDAK menghitung seluruh pelanggan unit.
                         $customerCalc = $this->calculators['customer_count'];
                         $handled     = (float) $customerCalc->handledByTeknisi($employeeId, $unitId, (int)$month, (int)$year);
                         $achievement = ($targetHalf > 0 && $handled >= $targetHalf)
                             ? min(($handled / $targetHalf) * 100.0, 100.0)
                             : 0.0;
                     } else {
-                        // Kepala Toko & lainnya: capped ratio terhadap target_value÷2,
+                        // Lainnya: capped ratio terhadap target_value÷2,
                         // tanpa threshold. 0 jika belum mencapai target.
                         $achievement = ($targetHalf > 0 && $actualValue >= $targetHalf)
                             ? $this->scoreService()->achievementScore($actualValue, $targetHalf)
@@ -295,10 +296,10 @@ class KpiCalculationService
                 }
             } elseif ($component->code === 'CUSTOMER_COUNT' && isset($actualValue) && isset($target)) {
                 // CUSTOMER_COUNT: target per pegawai = target_value(unit, full) ÷ 2.
-                // Aktual teknisi = service yg ditangani; aktual lainnya = TotalCustomer
-                // (service + penjualan ber-id pelanggan).
+                // Aktual teknisi & kepala toko = service yg ditangani (service_by);
+                // aktual lainnya = TotalCustomer (service + penjualan ber-id pelanggan).
                 $targetHalf = (float) $target->target_value / 2.0;
-                if ($positionId === 36) {
+                if (in_array($positionId, [36, 41], true)) {
                     $handled = (float) $this->calculators['customer_count']
                         ->handledByTeknisi($employeeId, $unitId, (int)$month, (int)$year);
                     $targetInfo = [
