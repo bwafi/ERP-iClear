@@ -1522,6 +1522,96 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     }
 
     /**
+     * REGRESI bug produksi: Pindah Saldo ditolak padahal kas tidak keluar
+     * sistem, hanya karena statement rekening sumber belum diverifikasi
+     * Finance ("Rekening asal … belum punya statement yang diverifikasi
+     * Finance pada 2026-10-09.").
+     *
+     * Pindah Saldo adalah perpindahan BANK -> BANK internal. Sisi sumber
+     * dijamin cekTarikUnit() (posisi hak unit), bukan status statement, jadi
+     * kewajiban statement VERIFIED dihapus untuk alur ini. Rekening CV
+     * (akun 55, bank_idbank '2', masuk config `rekeningWajibStatementByBank`)
+     * sengaja dibuat TANPA baris statement: terbukti guard lama akan menolak
+     * (`wajibStatementVerifikasi()=true`, `statementVerified()=false`) tapi
+     * Pindah Saldo tetap harus berhasil. Alur Setor/Tarik dan pembayaran
+     * antar unit rekening BEDA tidak terpengaruh (tes terpisah).
+     */
+    public function testPindahSaldoBerhasilTanpaStatementTerverifikasi(): void
+    {
+        // Akun CV seperti produksi (bank '2' = wajib statement, shared) tanpa
+        // baris statement sama sekali; alokasi Unit 1 cukup untuk nominal.
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared) VALUES
+            (55, NULL, 'BANK', 'CV Bersama Unit 1&2', '2', '1010202050', 'aktif', 1)");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (55, 1, 5000000, 'Alokasi Unit 1 CV')");
+
+        $policy = new \App\Services\Finance\EntitlementPolicyService();
+        $cutoff = new \App\Services\Finance\KasBankCutoffService();
+        $this->assertTrue($policy->wajibStatementVerifikasi(55), 'CV bank_idbank=2 wajib statement di alur lain');
+        $this->assertFalse($cutoff->statementVerified(55, $this->tglMulai), 'tanpa baris statement -> guard lama pasti menolak');
+
+        $tok = 'tok-pindah-cv-no-stmt';
+        $this->sesiDenganToken($tok);
+        $r = $this->post('kas_bank/transfer/save', [
+            'akun_asal_id'   => '55',
+            'akun_tujuan_id' => '6',
+            'jumlah'         => '100000',
+            'tanggal'        => $this->tglMulai,
+            'keterangan'     => 'Pindah saldo CV tanpa statement terverifikasi',
+            'submit_token'   => $tok,
+        ]);
+        $r->assertStatus(302);
+        $this->assertSame('', $this->flashGagal(), 'Pindah Saldo tidak boleh ditolak guard statement');
+
+        $m = $this->model(ModelTransaksiKasBank::class);
+        $this->assertSame(2, $m->where('jenis', ModeKasBank::JENIS_TRANSFER)->countAllResults());
+        $this->assertSame(
+            [KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO],
+            array_values(array_unique(array_column($m->select('sumber_tipe')->findAll(), 'sumber_tipe'))),
+            'Kedua kaki tetap PINDAH_SALDO'
+        );
+        $this->assertSame(4900000, $this->posisiUnit(55, 1), 'Posisi Unit 1 berkurang sesuai nominal');
+    }
+
+    /**
+     * Regresi arah berlawanan: tanpa statement sekalipun, Pindah Saldo tetap
+     * DITOLAK kalau posisi hak unit tidak mencukupi (nominal > alokasi). Ini
+     * bukti penghapusan guard statement tidak melonggarkan validasi saldo.
+     */
+    public function testPindahSaldoTetapMenolakSaatPosisiUnitKurangTanpaStatement(): void
+    {
+        $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared) VALUES
+            (55, NULL, 'BANK', 'CV Bersama Unit 1&2', '2', '1010202050', 'aktif', 1)");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (55, 1, 50000, 'Alokasi Unit 1 CV kecil')");
+
+        $this->assertFalse(
+            (new \App\Services\Finance\KasBankCutoffService())->statementVerified(55, $this->tglMulai),
+            'sumber sengaja tanpa statement terverifikasi'
+        );
+
+        $tok = 'tok-pindah-cv-kurang';
+        $this->sesiDenganToken($tok);
+        $r = $this->post('kas_bank/transfer/save', [
+            'akun_asal_id'   => '55',
+            'akun_tujuan_id' => '6',
+            'jumlah'         => '100000',
+            'tanggal'        => $this->tglMulai,
+            'keterangan'     => 'Pindah saldo melebihi posisi unit CV',
+            'submit_token'   => $tok,
+        ]);
+        $r->assertStatus(302);
+        $this->assertStringContainsString('tidak cukup untuk menarik', $this->flashGagal());
+
+        $this->assertSame(
+            0,
+            $this->model(ModelTransaksiKasBank::class)->where('jenis', ModeKasBank::JENIS_TRANSFER)->countAllResults(),
+            'Pindah saldo yang melebihi posisi unit harus ditolak walau guard statement sudah dihapus'
+        );
+        $this->assertSame(50000, $this->posisiUnit(55, 1), 'posisi sumber tidak boleh bergeser saat ditolak');
+    }
+
+    /**
      * (C) Transfer antar unit ke rekening bersama hanya menaikkan posisi unit
      * PENERIMA, bukan posisi unit pengirim.
      *

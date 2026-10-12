@@ -1376,26 +1376,17 @@ class KasBank extends BaseController
                 . $this->alasanRekeningDitolak($tujuan, $unitMasuk, 'destination', $role));
         }
 
-        // ---- GUARD SALDO & BASELINE (yang sebelumnya tidak ada) ----
+        // ---- GUARD SALDO & HAK UNIT ----
         //
-        // Tanpa dua blok ini, method ini bisa jadi jalur bypass Setor/Tarik:
-        // pada rekening shared, `canUseAsSource()` hanya membuktikan unit
-        // punya AKSES, bukan bahwa saldonya cukup miliknya.
+        // Pindah Saldo TIDAK lagi menuntut statement Finance sudah VERIFIED.
+        // Ini perpindahan internal antar rekening bank milik sendiri (BANK ->
+        // BANK): dana tidak keluar sistem, dan sisi sumber tetap dijamin oleh
+        // cekTarikUnit() di bawah (posisi hak unit >= nominal), bukan oleh
+        // status statement. Kewajiban statement VERIFIED masih berlaku untuk
+        // alur lain yang menggerakkan saldo fisik / baseline — Setor/Tarik
+        // (KasBankSetorTarikService) dan pembayaran antar unit rekening beda
+        // (saveAntarUnit()) — jadi guard itu tidak dihapus di sini.
         $cutoff = new \App\Services\Finance\KasBankCutoffService();
-        $policy = new \App\Services\Finance\EntitlementPolicyService();
-
-        // Rekening yang memang wajib punya statement: saldo yang dipindah
-        // harus berdasar angka yang sudah diverifikasi Finance, bukan
-        // placeholder 0. Daftar rekeningnya datang dari config, bukan tebakan.
-        foreach ([[$asal, 'asal'], [$tujuan, 'tujuan']] as [$akun, $namaKaki]) {
-            if ($policy->wajibStatementVerifikasi((int) $akun->idakun_kas_bank)
-                && ! $cutoff->statementVerified((int) $akun->idakun_kas_bank, $tanggal)
-            ) {
-                return $this->gagal('Rekening ' . $namaKaki . ' "' . $akun->nama_akun . '" belum punya '
-                    . 'statement yang diverifikasi Finance pada ' . $cutoff->tanggalCutoff() . '. '
-                    . 'Isi dan verifikasi statement di menu "Rekening & Saldo Awal" dulu.');
-            }
-        }
 
         // Cek POSISI UNIT, bukan saldo fisik rekening. Di rekening shared,
         // saldo fisik bisa cukup sementara posisi unit ini nol — dan itu
