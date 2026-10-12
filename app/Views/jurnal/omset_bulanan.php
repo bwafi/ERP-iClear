@@ -225,9 +225,15 @@
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="overflow-hidden">
                         <span class="badge bg-warning-subtle text-warning-emphasis mb-2 px-3 py-1 fw-semibold">Domisili Terbanyak</span>
-                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;" title="<?= esc($top_kecamatan->nama_kecamatan ?? '-') ?>">
+                        <h5 class="fw-bold mb-1 text-dark text-truncate" style="max-width: 180px;" title="<?= esc(($top_kecamatan->nama_kecamatan ?? '-') . (isset($top_kecamatan->nama_kabupaten) && $top_kecamatan->nama_kabupaten !== '-' ? ', ' . $top_kecamatan->nama_kabupaten : '')) ?>">
                             <?= esc($top_kecamatan->nama_kecamatan ?? '-') ?>
                         </h5>
+                        <?php if (isset($top_kecamatan->nama_kabupaten) && $top_kecamatan->nama_kabupaten !== '-'): ?>
+                            <div class="fs-2 text-muted text-truncate" style="max-width: 180px;">
+                                <iconify-icon icon="solar:city-linear" class="align-middle"></iconify-icon>
+                                <?= esc($top_kecamatan->nama_kabupaten) ?>
+                            </div>
+                        <?php endif; ?>
                         <div class="d-flex align-items-center gap-1">
                             <span class="fs-2 text-muted">
                                 <strong class="text-dark"><?= number_format($top_kecamatan->total_pelanggan ?? 0, 0, ',', '.') ?></strong> pelanggan (<?= $top_kecamatan->persentase ?? 0 ?>%)
@@ -403,7 +409,7 @@
                 <div>
                     <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2" id="modalKecamatanLabel">
                         <iconify-icon icon="solar:map-point-wave-bold-duotone" class="text-warning-emphasis fs-5"></iconify-icon>
-                        Sebaran Domisili Pelanggan (Kecamatan)
+                        Sebaran Domisili Pelanggan (Kabupaten/Kota &amp; Kecamatan)
                     </h5>
                     <small class="text-muted fs-2">Periode <?= esc($periodeLabel) ?></small>
                 </div>
@@ -411,19 +417,25 @@
             </div>
             <div class="modal-body p-4">
                 <div class="row g-3 mb-4">
-                    <div class="col-sm-4">
+                    <div class="col-sm-3">
                         <div class="p-3 bg-light rounded-3 border text-center">
                             <span class="text-muted fs-2 d-block mb-1">Total Pelanggan</span>
                             <h5 class="fw-bold text-dark mb-0"><?= number_format($total_kecamatan_pelanggan ?? 0, 0, ',', '.') ?></h5>
                         </div>
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-3">
                         <div class="p-3 bg-light rounded-3 border text-center">
                             <span class="text-muted fs-2 d-block mb-1">Total Transaksi/Unit</span>
                             <h5 class="fw-bold text-dark mb-0"><?= number_format($total_kecamatan_transaksi ?? 0, 0, ',', '.') ?></h5>
                         </div>
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-3">
+                        <div class="p-3 bg-light rounded-3 border text-center">
+                            <span class="text-muted fs-2 d-block mb-1">Kabupaten/Kota Terdata</span>
+                            <h5 class="fw-bold text-primary mb-0"><?= number_format($total_kabupaten ?? 0, 0, ',', '.') ?></h5>
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
                         <div class="p-3 bg-light rounded-3 border text-center">
                             <span class="text-muted fs-2 d-block mb-1">Kecamatan Terdata</span>
                             <h5 class="fw-bold text-primary mb-0"><?= count($list_kecamatan ?? []) ?></h5>
@@ -436,7 +448,7 @@
                         <span class="input-group-text bg-light border-end-0">
                             <iconify-icon icon="solar:magnifer-linear" class="text-muted"></iconify-icon>
                         </span>
-                        <input type="text" id="searchKecamatan" class="form-control border-start-0" placeholder="Cari nama kecamatan..." onkeyup="filterKecamatanTable()">
+                        <input type="text" id="searchKecamatan" class="form-control border-start-0" placeholder="Cari kecamatan atau kabupaten/kota..." onkeyup="filterKecamatanTable()">
                     </div>
                 </div>
 
@@ -444,11 +456,12 @@
                     <table class="table align-middle table-hover mb-0" id="tableKecamatanList">
                         <thead class="table-light text-dark fs-2">
                             <tr>
-                                <th width="8%" class="text-center">#</th>
-                                <th width="35%">Kecamatan</th>
-                                <th width="20%" class="text-center">Pelanggan</th>
-                                <th width="17%" class="text-center">Transaksi</th>
-                                <th width="20%">Porsi (%)</th>
+                                <th width="6%" class="text-center">#</th>
+                                <th width="25%">Kabupaten/Kota</th>
+                                <th width="22%">Kecamatan</th>
+                                <th width="15%" class="text-center">Pelanggan</th>
+                                <th width="13%" class="text-center">Transaksi</th>
+                                <th width="19%">Porsi (%)</th>
                             </tr>
                         </thead>
                         <tbody class="fs-2" id="tbodyKecamatan">
@@ -465,6 +478,15 @@
                                             <?php else: ?>
                                                 <?= $idx + 1 ?>
                                             <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="fw-medium text-secondary nama-kabupaten-text">
+                                                <?php if (!empty($kec->nama_kabupaten) && $kec->nama_kabupaten !== '-'): ?>
+                                                    <iconify-icon icon="solar:city-linear" class="align-middle me-1 text-muted"></iconify-icon><?= esc($kec->nama_kabupaten) ?>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </span>
                                         </td>
                                         <td>
                                             <span class="fw-semibold text-dark nama-kecamatan-text"><?= esc($kec->nama_kecamatan) ?></span>
@@ -486,9 +508,9 @@
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="5" class="text-center py-4 text-muted">
+                                    <td colspan="6" class="text-center py-4 text-muted">
                                         <iconify-icon icon="solar:info-circle-linear" class="fs-4 d-block mb-1"></iconify-icon>
-                                        Belum ada data domisili kecamatan pelanggan untuk periode ini.
+                                        Belum ada data domisili kabupaten/kota &amp; kecamatan pelanggan untuk periode ini.
                                     </td>
                                 </tr>
                             <?php endif; ?>
@@ -882,15 +904,8 @@
         if (!tbody) return;
         const rows = tbody.getElementsByTagName('tr');
         for (let i = 0; i < rows.length; i++) {
-            const nameEl = rows[i].querySelector('.nama-kecamatan-text');
-            if (nameEl) {
-                const text = nameEl.textContent || nameEl.innerText;
-                if (text.toLowerCase().indexOf(filter) > -1) {
-                    rows[i].style.display = '';
-                } else {
-                    rows[i].style.display = 'none';
-                }
-            }
+            const text = (rows[i].textContent || rows[i].innerText || '').toLowerCase();
+            rows[i].style.display = (text.indexOf(filter) > -1 || filter === '') ? '' : 'none';
         }
     }
 </script>

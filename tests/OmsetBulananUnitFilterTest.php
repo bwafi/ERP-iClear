@@ -80,7 +80,7 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
                 pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL,
                 tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
                 tipe_hp TEXT NULL, created_at TEXT NULL)');
-        $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL, kecamatan TEXT NULL, deleted TEXT NULL)');
+        $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL, kabupaten TEXT NULL, kecamatan TEXT NULL, deleted TEXT NULL)');
 
         // Tabel laporan omset.
         $q('CREATE TABLE penjualan (

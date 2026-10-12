@@ -332,6 +332,7 @@ class TutupKasir extends BaseController
         // DIBUAT (created_at, semua status) + semua penjualan ber-id_pelanggan.
         $kecamatanQuery = $this->db->query("
             SELECT 
+                UPPER(TRIM(p.kabupaten)) AS raw_kabupaten,
                 UPPER(TRIM(p.kecamatan)) AS raw_kecamatan,
                 COUNT(DISTINCT sub.unik_id) AS total_transaksi,
                 COUNT(DISTINCT p.id_pelanggan) AS total_pelanggan
@@ -358,7 +359,7 @@ class TutupKasir extends BaseController
             WHERE p.deleted = '0'
               AND p.kecamatan IS NOT NULL 
               AND TRIM(p.kecamatan) != ''
-            GROUP BY UPPER(TRIM(p.kecamatan))
+            GROUP BY UPPER(TRIM(p.kabupaten)), UPPER(TRIM(p.kecamatan))
             ORDER BY total_pelanggan DESC, total_transaksi DESC
         ", [$unit, $bulan, $tahun, $unit, $bulan, $tahun]);
 
@@ -372,9 +373,15 @@ class TutupKasir extends BaseController
         }
 
         $list_kecamatan = [];
+        $kabupatenTerdata = [];
         foreach ($listKecamatanRaw as $row) {
             $pct = $totalKecamatanPelanggan > 0 ? round(((int)$row['total_pelanggan'] / $totalKecamatanPelanggan) * 100, 1) : 0;
+            $kabupaten = trim((string)($row['raw_kabupaten'] ?? ''));
+            if ($kabupaten !== '') {
+                $kabupatenTerdata[$kabupaten] = true;
+            }
             $list_kecamatan[] = (object)[
+                'nama_kabupaten'  => $kabupaten !== '' ? ucwords(strtolower($kabupaten)) : '-',
                 'nama_kecamatan'  => ucwords(strtolower($row['raw_kecamatan'])),
                 'total_transaksi' => (int)$row['total_transaksi'],
                 'total_pelanggan' => (int)$row['total_pelanggan'],
@@ -382,7 +389,10 @@ class TutupKasir extends BaseController
             ];
         }
 
+        $total_kabupaten = count($kabupatenTerdata);
+
         $top_kecamatan = !empty($list_kecamatan) ? $list_kecamatan[0] : (object)[
+            'nama_kabupaten'  => '-',
             'nama_kecamatan'  => 'Belum ada data',
             'total_transaksi' => 0,
             'total_pelanggan' => 0,
@@ -581,6 +591,7 @@ class TutupKasir extends BaseController
             'list_kecamatan'    => $list_kecamatan,
             'total_kecamatan_pelanggan' => $totalKecamatanPelanggan,
             'total_kecamatan_transaksi' => $totalKecamatanTransaksi,
+            'total_kabupaten'   => $total_kabupaten,
             'body'              => 'jurnal/omset_bulanan'
         ]);
     }
