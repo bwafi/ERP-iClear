@@ -52,7 +52,7 @@
 </div>
 
 <!-- Filter Toolbar (For Authorized Roles) -->
-<?php if (in_array($id_jabatan, [1, 0, 34, 40])): ?>
+<?php if (in_array($id_jabatan, [1, 0, 34, 40, 55])): ?>
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-4">
             <form method="GET" class="row align-items-end g-3">
@@ -712,8 +712,12 @@
     }
 
     const escHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    } [c]));
 
     function barisArusKas(rows, warnaNominal) {
         if (!rows || !rows.length) {
