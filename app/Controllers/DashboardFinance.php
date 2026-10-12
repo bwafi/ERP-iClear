@@ -76,6 +76,7 @@ class DashboardFinance extends BaseController
                 'counted' => 0,
                 'weights' => $this->config->kpiWeights,
                 'labels' => $this->config->kpiLabels,
+                'manual_options' => $this->config->manualKpiCodes,
             ]);
         }
 

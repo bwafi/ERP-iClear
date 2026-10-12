@@ -1,6 +1,25 @@
-Omset Bulanan Unit Filter (Tests\OmsetBulananUnitFilter)
- [x] Finance bisa memfilter unit pandaan
- [x] Finance tanpa filter jatuh ke unit pertama
- [x] Finance unit tidak valid jatuh ke unit pertama
- [x] Role tak berwenang tidak bisa ganti unit via query
+Digital Marketing Kpi
+ [x] Omzet global below toko target is zero
+ [x] Omzet global at or above target ho is hundred
+ [x] Omzet global linear between toko and target ho
+ [x] Omzet global invalid target returns null
+ [x] Leads absent is zero not hundred
+ [x] Leads full target with all qualified is hundred
+ [x] Leads unmet target yet full quality
+ [x] Leads quality zero when no leads qualified
+ [x] Leads over target and quality capped at hundred
+ [x] Conversion no lead is null
+ [x] Conversion formula
+ [x] Cpl no budget or divisions is null
+ [x] Cpl fixture
+ [x] Cpl lower is better
+ [x] Cpl averages datang and closing achievements
+ [x] Campaign performance no ads is null
+ [x] Campaign performance ratio capped
+ [x] Reporting no campaign is null
+ [x] Reporting done vs total campaign
+ [x] Weights sum exactly hundred
+ [x] Omzet global weight is half
+ [x] Improvement reuses multimedia mechanism
+ [x] Requirement fixture leads target three thousand and cpl two hundred fifty thousand
 

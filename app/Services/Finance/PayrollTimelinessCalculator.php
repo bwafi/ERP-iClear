@@ -74,6 +74,7 @@ class PayrollTimelinessCalculator implements FinanceCalculatorInterface
 
             $items[] = [
                 'id' => (int) $row->id,
+                'period' => date('Y-m', strtotime((string) $row->due_date)),
                 'due_date' => $row->due_date,
                 'paid_date' => $paid,
                 'total' => (float) ($row->total ?? 0),
