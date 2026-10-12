@@ -4,6 +4,7 @@ namespace App\Services\Kpi;
 use App\Models\ModelKpiComponent;
 use App\Models\ModelKpiTarget;
 use App\Models\ModelKpiWeight;
+use App\Services\Finance\FinanceKpiService;
 use App\Services\Konten\ContentKpiService;
 use App\Services\Konten\MultimediaKpiService;
 use App\Services\Kpi\AttendanceAggregationService;
@@ -51,6 +52,7 @@ class KpiCalculationService
     protected $attendanceAggregationService;
     protected $marketingService;
     protected $digitalMarketingService;
+    protected $financeKpiService;
 
     public function __construct()
     {
@@ -96,6 +98,7 @@ class KpiCalculationService
         $items = [];
         $omzetInfo = null; // cache ringkasan omzet SPV (target/actual per cabang) utk display
         $digitalData = null; // cache data target/actual KPI Digital Marketing (jabatan 43)
+        $financeData = null; // cache data target/actual KPI Finance (jabatan 0)
         foreach ($weights as $w) {
             $component = $this->componentModel->where('id', $w->kpi_component_id)->first();
             if (!$component || !(int)$component->is_active) {
@@ -136,6 +139,16 @@ class KpiCalculationService
                     (int)$month,
                     (int)$year
                 );
+            // ==== FINANCE (jabatan 0): 8 KPI Finance (rata-rata antar-cabang) ====
+            // Nilai tiap KPI = rata-rata skor cabang dari scorecard Dashboard
+            // Finance. Bobot mengikuti kpi_weights posisi 0 (Config\Finance).
+            } elseif ($positionId === 0 && in_array($component->code, FinanceKpiService::CODES, true)) {
+                $financeData = $this->financeKpiService()->componentData(
+                    $component->code,
+                    (int)$month,
+                    (int)$year
+                );
+                $achievement = $financeData['achievement'];
             // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
             } elseif ($component->code === 'CLOSING_RATE') {
                 $achievement = (new \App\Services\Kpi\Calculators\ClosingRateCalculator())
@@ -337,6 +350,16 @@ class KpiCalculationService
                     'ho'        => true,
                     'cabang'    => null,
                 ];
+            } elseif ($financeData !== null) {
+                // KPI Finance (jabatan 0): target = skor 100, realisasi =
+                // rata-rata skor antar-cabang (FinanceKpiService::componentData).
+                $targetInfo = [
+                    'target'    => $financeData['target'],
+                    'actual'    => $financeData['actual'],
+                    'shortfall' => $financeData['shortfall'],
+                    'ho'        => true,
+                    'cabang'    => null,
+                ];
             }
 
             $items[] = [
@@ -425,6 +448,14 @@ class KpiCalculationService
             $this->digitalMarketingService = new DigitalMarketingKpiService();
         }
         return $this->digitalMarketingService;
+    }
+
+    public function financeKpiService(): FinanceKpiService
+    {
+        if ($this->financeKpiService === null) {
+            $this->financeKpiService = new FinanceKpiService();
+        }
+        return $this->financeKpiService;
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int

@@ -10,9 +10,10 @@ use CodeIgniter\Test\CIUnitTestCase;
  *
  * Bug sebelum perbaikan: KpiCalculationService::calculateForSalary() menyusun
  * detail_absen dari tabel kpi_weights (weight_group='absen'). Pegawai dengan
- * ID_JABATAN = 0 (Finance — Ira Kurniawati) tidak punya baris kpi_weights sama
- * sekali, sehingga rincian absen kosong walau skor absen (skor_total2) tetap
- * terhitung dari kpi_evaluations.
+ * ID_JABATAN = 0 (Finance — Ira Kurniawati) tidak punya baris kpi_weights
+ * absen (hanya bobot kinerja, weight_group='kpi' — lihat migration
+ * AddFinanceKpiJabatan0), sehingga rincian absen kosong walau skor absen
+ * (skor_total2) tetap terhitung dari kpi_evaluations.
  *
  * Perbaikan: detail_absen dibangun dari komponen yang SUDAH dihitung
  * AttendanceAggregationService (bobot tunggal 40/20/20/20) via
@@ -188,9 +189,12 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
 
     public function testFinanceTidakPunyaMappingBobotAbsen(): void
     {
-        $jumlah = $this->db->table('kpi_weights')->where('position_id', 0)->countAllResults();
+        $jumlah = $this->db->table('kpi_weights')
+            ->where('position_id', 0)
+            ->where('weight_group', 'absen')
+            ->countAllResults();
 
-        $this->assertSame(0, $jumlah, 'Prasyarat bug: jabatan Finance (0) memang tidak punya kpi_weights.');
+        $this->assertSame(0, $jumlah, 'Prasyarat bug: jabatan Finance (0) memang tidak punya kpi_weights absen.');
     }
 
     public function testDetailAbsenIraTerisiWalauTanpaBobot(): void
