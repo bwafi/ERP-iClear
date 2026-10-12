@@ -305,19 +305,19 @@ $compIdOmset = (int)$db->query("SELECT id FROM kpi_components WHERE code = 'OMSE
 ok('Scope SPV 49 = [2,3,5]', $svc->scopeUnits($SPV49, 50) === [2, 3, 5], json_encode($svc->scopeUnits($SPV49, 50)));
 ok('Scope SPV 56 = [1,4]', $svc->scopeUnits($SPV56, 50) === [1, 4], json_encode($svc->scopeUnits($SPV56, 50)));
 
-// Adjust per cabang: 2 cabang dalam scope = +Rp14.000.000 total.
-$t2 = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 2 AND context = 'default' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
-$t3 = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 3 AND context = 'default' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
-$adj = \App\Services\Kpi\SupervisorKpiService::HO_TARGET_ADJUSTMENT;
-ok('Adjustment HO per cabang = Rp7.000.000', near($adj, 7000000), "adj={$adj}");
+// Adjust per cabang: tidak ada adjustment lagi (target di DB sudah HO target).
+$t2 = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 2 AND position_id IS NULL AND context = 'default' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
+$t3 = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 3 AND position_id IS NULL AND context = 'default' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
+$adj = 0.0; // HO_TARGET_ADJUSTMENT dihapus, target HO disimpan di kpi_targets (position_id=40)
+ok('Adjustment HO per cabang = Rp0 (disimpan di DB)', near($adj, 0), "adj={$adj}");
 $adjTotal = (($t2 + $adj) + ($t3 + $adj)) - ($t2 + $t3);
-ok('2 cabang dalam scope → total adjustment = +Rp14.000.000', near($adjTotal, 14000000), "adjTotal={$adjTotal}");
+ok('2 cabang dalam scope → total adjustment = +Rp0 (target HO dari DB)', near($adjTotal, 0), "adjTotal={$adjTotal}");
 ok('OMZET threshold: actual (100jt) < target stlh adjustment HO (109jt) → 0', near($ow, 0.0), "ow={$ow}");
 
-// Target dasar cabang TIDAK berubah (tidak ditulis kembali ke kpi_targets).
-ok('Target dasar cabang 2 tetap 35jt (tidak diubah)', near($t2, 35000000), "t2={$t2}");
-$t4Out = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 4 AND context = 'default' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
-ok('Cabang luar scope (unit 4) tetap 55jt (dasar, tanpa adjustment utk SPV49)', near($t4Out, 55000000), "t4={$t4Out}");
+// Target HO sudah di DB (position_id=40), target dasar (position_id=NULL) beda.
+ok('Target dasar cabang 2 = 50jt (position_id NULL)', near($t2, 50000000), "t2={$t2}");
+$t4Out = (float)$db->query("SELECT target_value FROM kpi_targets WHERE kpi_component_id = ? AND unit_id = 4 AND position_id IS NULL AND context = 'default' AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1", [$compIdOmset, $dateAnchor])->getRow()->target_value;
+ok('Cabang luar scope (unit 4) target dasar = 75jt (position_id NULL)', near($t4Out, 75000000), "t4={$t4Out}");
 
 // Actual omzet TIDAK di-adjust +7jt.
 $omsetCalc = new \App\Services\Kpi\OmsetCabangCalculator();
@@ -439,27 +439,27 @@ $addSales = function (int $mf, array $perUnit) use ($salesTable, $detTable, $db,
     }
 };
 
-// Bulan 6: unit2 & unit3 GROSS 100jt masing-masing → total 200jt > 109jt.
-$addSales(6, [2 => 100000000, 3 => 100000000]);
+// Bulan 6: unit2, unit3, unit5 GROSS melampaui target -> total 250jt > 151jt.
+$addSales(6, [2 => 100000000, 3 => 100000000, 5 => 50000000]);
 $owCap = $svc->achievement('OMZET_WILAYAH', $SPV49, 1, 6, $YEAR, 'default', 'default', $dateAnchor);
-ok('OMZET_WILAYAH = 100 saat actual (200jt) > target HO (109jt) [cap]', near($owCap, 100.0), var_export($owCap, true));
+ok('OMZET_WILAYAH = 100 saat actual (250jt) > target HO (151jt) [cap]', near($owCap, 100.0), var_export($owCap, true));
 $tcCap = $svc->achievement('TARGET_CABANG', $SPV49, 1, 6, $YEAR, 'default', 'default', $dateAnchor);
-ok('TARGET_CABANG = 100 (2/2 cabang tercapai)', near($tcCap, 100.0), var_export($tcCap, true));
+ok('TARGET_CABANG = 100 (3/3 cabang tercapai)', near($tcCap, 100.0), var_export($tcCap, true));
 ok('Actual omzet bulan 6 tetap 100jt/cabang (tanpa +7jt)', near($omsetCalc->calculate(0, 2, 6, $YEAR), 100000000), var_export($omsetCalc->calculate(0, 2, 6, $YEAR), true));
 
-// Bulan 7: actual PERSIS sama target HO (u2=42jt, u3=67jt → 109 = 109).
-$addSales(7, [2 => 42000000, 3 => 67000000]);
+// Bulan 7: actual PERSIS sama target HO (u2=42jt, u3=67jt, u5=42jt → 151 = 151).
+$addSales(7, [2 => 42000000, 3 => 67000000, 5 => 42000000]);
 $owEq = $svc->achievement('OMZET_WILAYAH', $SPV49, 1, 7, $YEAR, 'default', 'default', $dateAnchor);
-ok('OMZET_WILAYAH = 100 saat actual == target (109 = 109)', near($owEq, 100.0), var_export($owEq, true));
+ok('OMZET_WILAYAH = 100 saat actual == target (151 = 151)', near($owEq, 100.0), var_export($owEq, true));
 $tcEq = $svc->achievement('TARGET_CABANG', $SPV49, 1, 7, $YEAR, 'default', 'default', $dateAnchor);
-ok('TARGET_CABANG = 100 saat actual == target (2/2)', near($tcEq, 100.0), var_export($tcEq, true));
+ok('TARGET_CABANG = 100 saat actual == target (3/3)', near($tcEq, 100.0), var_export($tcEq, true));
 
-// Bulan 8: hanya 1 cabang tercapai (u2=42jt tercapai, u3=66jt tidak).
-$addSales(8, [2 => 42000000, 3 => 66000000]);
+// Bulan 8: u2 & u3 tercapai, u5 tidak (total 108jt < 151jt).
+$addSales(8, [2 => 42000000, 3 => 67000000, 5 => 0]);
 $tcHalf = $svc->achievement('TARGET_CABANG', $SPV49, 1, 8, $YEAR, 'default', 'default', $dateAnchor);
-ok('TARGET_CABANG = 50 (1/2 cabang tercapai)', near($tcHalf, 50.0), var_export($tcHalf, true));
+ok('TARGET_CABANG = 66.67 (2/3 cabang tercapai)', near($tcHalf, 66.6667), var_export($tcHalf, true));
 $owHalf = $svc->achievement('OMZET_WILAYAH', $SPV49, 1, 8, $YEAR, 'default', 'default', $dateAnchor);
-ok('OMZET tetap 0 walau 1 cabang tercapai (108jt < 109jt)', near($owHalf, 0.0), var_export($owHalf, true));
+ok('OMZET tetap 0 walau 2 cabang tercapai (109jt < 151jt)', near($owHalf, 0.0), var_export($owHalf, true));
 
 // Bulan 9: actual jauh di bawah target (2jt total).
 $addSales(9, [2 => 1000000, 3 => 1000000]);
@@ -503,23 +503,25 @@ ok('OMZET_WILAYAH = 100 saat actual == target (228 = 228, 4 cabang)', near($ow44
 // ── 6c. Info target/realisasi utk tampilan (omzetDetail, read-only) ──
 $od = $svc->omzetDetail($SPV49, 1, $MONTH, $YEAR, 'default', $dateAnchor);
 ok('omzetDetail SPV49 bulan 5 ada', is_array($od), json_encode($od));
-ok('omzetDetail target_ho_total = 109jt', near($od['target_ho_total'] ?? null, 109000000), json_encode($od['target_ho_total'] ?? null));
-ok('omzetDetail target_non_ho_total = 95jt', near($od['target_non_ho_total'] ?? null, 95000000), json_encode($od['target_non_ho_total'] ?? null));
+// SPV 49 membawahi [2 Jember, 3 Banyuwangi, 5 Genteng].
+// Target HO: Jbr=42jt, Bwi=67jt, Genteng=42jt -> total = 151jt.
+ok('omzetDetail target_ho_total = 151jt (42+67+42)', near($od['target_ho_total'] ?? null, 151000000), json_encode($od['target_ho_total'] ?? null));
+ok('omzetDetail target_non_ho_total = 130jt (50+80+0)', near($od['target_non_ho_total'] ?? null, 130000000), json_encode($od['target_non_ho_total'] ?? null));
 ok('omzetDetail actual_total = 100jt', near($od['actual_total'] ?? null, 100000000), json_encode($od['actual_total'] ?? null));
-ok('omzetDetail shortfall_ho = 9jt', near($od['shortfall_ho'] ?? null, 9000000), json_encode($od['shortfall_ho'] ?? null));
+ok('omzetDetail shortfall_ho = 51jt (151 - 100)', near($od['shortfall_ho'] ?? null, 51000000), json_encode($od['shortfall_ho'] ?? null));
 $cb2 = $od['cabang'][0] ?? null;
 ok('omzetDetail cabang unit2 target_ho 42jt actual 40jt belum tercapai', $cb2 && $cb2['unit'] === 2 && near($cb2['target_ho'], 42000000) && near($cb2['actual'], 40000000) && $cb2['reached'] === false, json_encode($cb2));
 
 $kpiInfo = $kpiSvc->calculateForSalary($SPV49, (string)$MONTH, (string)$YEAR, 'default')['detail_kpi'];
 $rowByName = array_column($kpiInfo, null, 'nama');
 $owRow = $rowByName['Omzet Wilayah'] ?? [];
-ok('Detail "Omzet Wilayah" membawa target HO 109jt', near($owRow['target'] ?? null, 109000000), json_encode($owRow));
-ok('Detail "Omzet Wilayah" shortfall 9jt', near($owRow['shortfall'] ?? null, 9000000), json_encode($owRow));
+ok('Detail "Omzet Wilayah" membawa target HO 151jt', near($owRow['target'] ?? null, 151000000), json_encode($owRow));
+ok('Detail "Omzet Wilayah" shortfall 51jt', near($owRow['shortfall'] ?? null, 51000000), json_encode($owRow));
 $tcRow = $rowByName['Target Cabang'] ?? [];
-ok('Detail "Target Cabang" unit_count 2, reached 0, shortfall 2', ($tcRow['unit_count'] ?? null) === 2 && ($tcRow['reached'] ?? null) === 0 && ($tcRow['shortfall'] ?? null) === 2, json_encode($tcRow));
+ok('Detail "Target Cabang" unit_count 3, reached 0, shortfall 3', ($tcRow['unit_count'] ?? null) === 3 && ($tcRow['reached'] ?? null) === 0 && ($tcRow['shortfall'] ?? null) === 3, json_encode($tcRow));
 
 $od6 = $svc->omzetDetail($SPV49, 1, 6, $YEAR, 'default', $dateAnchor);
-ok('omzetDetail bulan 6: 200jt realisasi, semua cabang tercapai', near($od6['actual_total'] ?? null, 200000000) && !empty($od6['cabang']) && $od6['cabang'][0]['reached'] && $od6['cabang'][1]['reached'], json_encode($od6));
+ok('omzetDetail bulan 6: 250jt realisasi, semua cabang tercapai', near($od6['actual_total'] ?? null, 250000000) && !empty($od6['cabang']) && $od6['cabang'][0]['reached'] && $od6['cabang'][1]['reached'] && $od6['cabang'][2]['reached'], json_encode($od6));
 
 // ── 7. Edge & fallback ───────────────────────────────────────────
 ok('scopeUnits fallback ke unit sendiri', $svc->scopeUnits(999999, 7) === [7], json_encode($svc->scopeUnits(999999, 7)));
@@ -599,7 +601,7 @@ foreach ($kpiSvc->calculateForEmployee(58, 3, (string)$MONTH, (string)$YEAR, 'de
         $k58_5 = $it;
     }
 }
-ok('OMSET_CABANG (KT unit3) bulan 5: actual 60jt = target 60jt → 100', $k58_5 && near($k58_5['achievement'] ?? null, 100.0), json_encode($k58_5));
+ok('OMSET_CABANG (KT unit3) bulan 5: actual 60jt < target 80jt → 0 (threshold)', $k58_5 && near($k58_5['achievement'] ?? null, 0.0), json_encode($k58_5));
 $k58_4 = null;
 foreach ($kpiSvc->calculateForEmployee(58, 3, '04', (string)$YEAR, 'default', sprintf('%04d-04-15', $YEAR))['items'] as $it) {
     if (($it['code'] ?? '') === 'OMSET_CABANG') {

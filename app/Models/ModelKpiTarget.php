@@ -32,19 +32,30 @@ class ModelKpiTarget extends Model
      * Konteks sudah dikonsolidasi jadi SATU ('default'), sehingga parameter
      * $context dipertahankan hanya untuk kompatibilitas pemanggil dan diabaikan.
      */
-    public function getTargetByKpiAndUnit($kpi_component_id, $unit_id, $context = 'default', $date = null)
+    public function getTargetByKpiAndUnit($kpi_component_id, $unit_id, $context = 'default', $date = null, $position_id = null)
     {
         $date = $date ?? date('Y-m-d');
 
-        return $this->where('kpi_component_id', $kpi_component_id)
-                    ->where('unit_id', $unit_id)
-                    ->where('context', 'default')
-                    ->where('effective_from <=', $date)
-                    ->groupStart()
-                        ->where('effective_to >=', $date)
-                        ->orWhere('effective_to IS NULL')
-                    ->groupEnd()
-                    ->first();
+        $builder = $this->where('kpi_component_id', $kpi_component_id)
+                         ->where('unit_id', $unit_id)
+                         ->where('context', 'default')
+                         ->where('effective_from <=', $date)
+                         ->groupStart()
+                             ->where('effective_to >=', $date)
+                             ->orWhere('effective_to IS NULL')
+                         ->groupEnd();
+
+        if ($position_id !== null) {
+            $builder->groupStart()
+                     ->where('position_id', $position_id)
+                     ->orWhere('position_id IS NULL')
+                     ->groupEnd()
+                     ->orderBy('position_id', 'DESC');
+        } else {
+            $builder->where('position_id IS NULL');
+        }
+
+        return $builder->first();
     }
 
     public function getTargetsByUnit($unit_id, $date = null)

@@ -19,14 +19,14 @@ use App\Models\ModelKpiEvaluation;
  *   - Periode (bulan/tahun) selalu DITERUSKAN oleh caller — tidak memakai
  *     date() sebagai periode KPI.
  *
- * Komponen & Sumber data:
- *   OMZET_WILAYAH           sum(actual omzet cabang) / sum(target omzet cabang, +adjustment HO)
- *   TARGET_CABANG           avg(actual/target tiap cabang, target +adjustment HO)
- *   PRODUKTIVITAS_CABANG    unique customer bulan berjalan / bulan sebelumnya × 100
- *   SOP                     avg(KPI Kepatuhan SOP Kepala Toko) — nilai existing
- *   KINERJA_KEPALA_TOKO     avg(total KPI Kepala Toko, tanpa absensi)
- *   KEDISIPLINAN_TEAM       avg(nilai kedisiplinan seluruh team cabang)
- *   CUSTOMER_SATISFACTION   SUM(review)/SUM(total customer) harian per unit area
+    * Komponen & Sumber data:
+     *   OMZET_WILAYAH           sum(actual omzet cabang) / sum(target omzet cabang, HO di DB)
+     *   TARGET_CABANG           avg(actual/target tiap cabang, target HO di DB)
+     *   PRODUKTIVITAS_CABANG    unique customer bulan berjalan / bulan sebelumnya × 100
+     *   SOP                     avg(KPI Kepatuhan SOP Kepala Toko) — nilai existing
+     *   KINERJA_KEPALA_TOKO     avg(total KPI Kepala Toko, tanpa absensi)
+     *   KEDISIPLINAN_TEAM       avg(nilai kedisiplinan seluruh team cabang)
+     *   CUSTOMER_SATISFACTION   SUM(review)/SUM(total customer) harian per unit area
  */
 class SupervisorKpiService
 {
@@ -41,18 +41,9 @@ class SupervisorKpiService
         'CUSTOMER_SATISFACTION',
     ];
 
-    /**
-     * Adjustment target HO utk SPV.
-     *
-     * SPV termasuk HO → target omzet SPV = Σ(target dasar cabang + Rp7.000.000)
-     * BERLAKU PER CABANG dalam scope SPV.
-     *
-     * - Hanya cabang dalam scope yang mendapat adjustment.
-     * - Adjustment HANYA pada TARGET — actual omzet TIDAK di-adjust.
-     * - Target dasar cabang di tabel master TIDAK diubah (adjustment dihitung
-     *   pada layer kalkulasi SPV, bukan ditulis-balik ke kpi_targets).
+/*
+     * Adjustment target HO utk SPV dihapus. Target HO disimpan di kpi_targets (position_id=40).
      */
-    public const HO_TARGET_ADJUSTMENT = 7000000.0;
 
     /** Jabatan "team cabang" di bawah Supervisor (termasuk Kepala Toko). */
     public const TEAM_JABATANS = [35, 36, 41, 42, 43, 44, 45];
@@ -138,8 +129,8 @@ class SupervisorKpiService
     /**
      * Achievement omzet agregat SPV (seluruh cabang dalam scope).
      *
-     * Target per cabang = target dasar + adjustment HO (Rp7.000.000 per cabang
-     * dalam scope). Aturan FINAL:
+     * Target per cabang = target HO dari kpi_targets (position_id=40).
+     * Aturan FINAL:
      *   - actual_total < target_total  → 0 (threshold; belum tercapai tidak dihitung)
      *   - actual_total >= target_total → (actual_total ÷ target_total) × 100
      * Achievement di-cap maksimal 100 (pedoman §VII).
@@ -166,8 +157,7 @@ class SupervisorKpiService
 
             $target = $this->cabangTarget((int)$comp->id, (int)$unit, $targetContext, $date);
             if ($target !== null) {
-                // SPV termasuk HO: +Rp7.000.000 per cabang (hanya target).
-                $targetSum += ($target + self::HO_TARGET_ADJUSTMENT);
+                $targetSum += $target;
                 $hasTarget = true;
             }
         }
@@ -190,7 +180,7 @@ class SupervisorKpiService
      * TARGET_CABANG = cabang tercapai ÷ total cabang dalam scope × 100.
      *
      * Berbeda dengan OMZET_WILAYAH: menilai TERCAPAI/TIDAK per cabang.
-     * Cabang TERCAPAI jika actual omzet >= (target dasar + Rp7.000.000 HO).
+     * Cabang TERCAPAI jika actual omzet >= target HO (dari kpi_targets position_id=40).
      * Bukan rata-rata persentase achievement cabang.
      */
     public function targetCabang(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
@@ -214,7 +204,6 @@ class SupervisorKpiService
             if ($target === null || $target <= 0) {
                 continue; // cabang tanpa target tidak ikut hitungan.
             }
-            $target += self::HO_TARGET_ADJUSTMENT;
             $actual = $omset->calculate(0, (int)$unit, $month, $year);
             if ($actual >= $target) {
                 $reached++;
@@ -229,9 +218,8 @@ class SupervisorKpiService
      * Info omzet SPV utk tampilan informatif (penilaian_kinerja) — read-only.
      *
      * Ringkasan target & realisasi per cabang dalam scope:
-     *   target_non_ho_total (target dasar), target_ho_total (dasar + 7jt HO),
-     *   actual_total, shortfall_ho (Rp kurang utk capai target HO), dan
-     *   per-cabang: target_dasar, target_ho, actual, reached, shortfall_ho.
+     *   target_ho_total (dari kpi_targets position_id=40), actual_total, shortfall_ho,
+     *   per-cabang: target_ho, actual, reached, shortfall_ho.
      * Tidak mempengaruhi achievement — hanya data display.
      */
     public function omzetDetail(int $supervisorId, int $fallbackUnit, int $month, int $year, string $targetContext, ?string $date = null): ?array
@@ -254,20 +242,24 @@ class SupervisorKpiService
         $hasTarget        = false;
 
         foreach ($units as $unit) {
-            $target   = $this->cabangTarget((int)$comp->id, (int)$unit, $targetContext, $date);
-            $actual   = $omset->calculate(0, (int)$unit, $month, $year);
-            $targetHo = ($target !== null) ? ($target + self::HO_TARGET_ADJUSTMENT) : null;
+            $targetDasar = $this->targetModel->getTargetByKpiAndUnit((int)$comp->id, (int)$unit, $targetContext, $date, null);
+            $targetDasarVal = ($targetDasar && $targetDasar->target_value !== null) ? (float)$targetDasar->target_value : null;
 
-            if ($target !== null) {
-                $targetDasarTotal += $target;
-                $targetHoTotal   += $targetHo;
-                $hasTarget        = true;
+            $targetHo = $this->cabangTarget((int)$comp->id, (int)$unit, $targetContext, $date);
+            $actual   = $omset->calculate(0, (int)$unit, $month, $year);
+
+            if ($targetHo !== null) {
+                $targetHoTotal += $targetHo;
+                $hasTarget      = true;
+            }
+            if ($targetDasarVal !== null) {
+                $targetDasarTotal += $targetDasarVal;
             }
             $actualTotal += $actual;
 
             $detail[] = [
                 'unit'         => (int)$unit,
-                'target_dasar' => ($target === null) ? null : round($target),
+                'target_dasar' => ($targetDasarVal === null) ? null : round($targetDasarVal),
                 'target_ho'    => ($targetHo === null) ? null : round($targetHo),
                 'actual'       => round($actual),
                 'reached'      => ($targetHo !== null && $actual >= $targetHo),
@@ -515,7 +507,7 @@ class SupervisorKpiService
 
     protected function cabangTarget(int $compId, int $unit, string $targetContext, ?string $date): ?float
     {
-        $target = $this->targetModel->getTargetByKpiAndUnit($compId, $unit, $targetContext, $date);
+        $target = $this->targetModel->getTargetByKpiAndUnit($compId, $unit, $targetContext, $date, 40);
         return $target && $target->target_value !== null ? (float)$target->target_value : null;
     }
 
