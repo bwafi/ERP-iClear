@@ -54,8 +54,8 @@ class DigitalMarketingKpiService
         'IMPROVEMENT'          => 5,
     ];
 
-    /** Cabang dengan data omzet ERP (penjualan). */
-    public const SALES_UNITS = [1, 2, 3, 4];
+    /** Cabang dengan data omzet ERP (penjualan) — semua cabang operasional, kecuali HO. */
+    public const SALES_UNITS = [1, 2, 3, 4, 5];
 
     private $db;
     private $targetModel;
@@ -286,25 +286,40 @@ class DigitalMarketingKpiService
     }
 
     /**
-     * Target omzet global: Target Toko = Target HO = SUM(target_value)
-     * dari kpi_targets OMSET_TOKO per cabang (satu konteks, tanpa batas).
+     * Target omzet global Kepala Divisi (jabatan di HO):
+     *   - Target Toko (batas bawah) = SUM(target_value) OMSET_TOKO per cabang.
+     *   - Target HO   (batas atas)  = SUM(target_value) target HO cabang
+     *                                 = OMSET_CABANG position_id=40 per cabang.
+     *
+     * Karena Kepala Divisi berada di HO, standar penilaian memakai target HO
+     * (bukan hanya target toko). Skor 0 di bawah Target Toko, 100 di atas Target HO.
      *
      * @return array{toko:float, ho:float}
      */
     public function omzetTargets(string $context, ?string $date): array
     {
-        $comp = $this->db->table('kpi_components')->where('code', 'OMSET_TOKO')->get()->getRow();
+        $tokoComp   = $this->db->table('kpi_components')->where('code', 'OMSET_TOKO')->get()->getRow();
+        $cabangComp = $this->db->table('kpi_components')->where('code', 'OMSET_CABANG')->get()->getRow();
+
         $toko = 0.0;
         $ho   = 0.0;
+
         foreach (self::SALES_UNITS as $unit) {
-            $target = $comp
-                ? $this->targetModel->getTargetByKpiAndUnit((int)$comp->id, $unit, $context, $date)
-                : null;
-            if (!$target) {
-                continue;
+            // Batas bawah: target toko (OMSET_TOKO) per cabang.
+            if ($tokoComp) {
+                $tokoTarget = $this->targetModel->getTargetByKpiAndUnit((int)$tokoComp->id, $unit, $context, $date);
+                if ($tokoTarget) {
+                    $toko += (float)$tokoTarget->target_value;
+                }
             }
-            $toko += (float)$target->target_value;
-            $ho   += (float)$target->target_value;
+
+            // Batas atas: target HO (OMSET_CABANG position_id=40) per cabang.
+            if ($cabangComp) {
+                $hoTarget = $this->targetModel->getTargetByKpiAndUnit((int)$cabangComp->id, $unit, $context, $date, 40);
+                if ($hoTarget) {
+                    $ho += (float)$hoTarget->target_value;
+                }
+            }
         }
 
         return ['toko' => round($toko, 2), 'ho' => round($ho, 2)];
