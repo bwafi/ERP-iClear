@@ -26,6 +26,7 @@ use App\Models\ModelDetailPenjualan;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
+use App\Services\Service\ServiceDpService;
 
 class Riwayat_Service extends BaseController
 
@@ -49,6 +50,7 @@ class Riwayat_Service extends BaseController
     protected $PenjualanModel;
     protected $DetailPenjualanModel;
     protected $RegionModel;
+    protected $DpService;
 
 
 
@@ -72,6 +74,7 @@ class Riwayat_Service extends BaseController
         $this->PenjualanModel = new ModelPenjualan();
         $this->RegionModel = new ModelRegion();
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
+        $this->DpService = new ServiceDpService();
     }
 
     public function index()
@@ -963,41 +966,121 @@ class Riwayat_Service extends BaseController
 
     public function update_sudah_diambil()
     {
-        $idservice = $this->request->getPost('idservice');
+        $idservice = (int) $this->request->getPost('idservice');
         $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
 
         $dataservice = $this->ServiceModel->getServiceById($idservice);
+        if (empty($dataservice)) {
+            session()->setFlashdata('gagal', 'Data service tidak ditemukan.');
+            return redirect()->to(base_url('bisa_diambil'));
+        }
+
+        // Idempotensi: service yang sudah berstatus 4 (diambil) tidak dijurnal ulang.
+        if ((int) $dataservice->status_service === 4) {
+            session()->setFlashdata('gagal', 'Service ini sudah berstatus diambil.');
+            return redirect()->to(base_url('bisa_diambil'));
+        }
+
+        $db = Database::connect();
+
+        $total_service = (int) $dataservice->total_service;
+        $bayar_tunai   = (int) $dataservice->bayar_tunai;
+
+        // Pembayaran via bank pada saat pengambilan (referensi 'service_baru').
+        $bayar_bank = 0;
         $bankData = $this->PembayaranBankModel->getByServiceBaru($idservice);
-        $harus_dibayar = $dataservice->harus_dibayar;
-        $dp_bayar = $dataservice->dp_bayar;
-        $created_at = $dataservice->created_at;
-        $tanggal_saja = date('Y-m-d', strtotime($created_at));
-        $total_service = $dataservice->total_service;
-        $tanggal = date('Y-m-d', strtotime($created_at));
-        $data = [
-            'status_service' => 4,
-            'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
-        ];
-
-         $this->ServiceModel->updateService($idservice, $data);
-
         if (!empty($bankData) && is_array($bankData)) {
             foreach ($bankData as $b) {
-                    $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service_' . $b->bank_idbank, [$b->jumlah], "Pembayaran Uang Lunas Jasa Service", $idservice, 'service');
+                $bayar_bank += (int) $b->jumlah;
             }
         }
-        if ($dataservice->bayar_tunai > 0) {
-            $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service_tunai', [$dataservice->bayar_tunai], "Pembayaran Uang Tunai Jasa Service", $idservice, 'service');
-        }
-        if ($dataservice->dp_bayar > 0) {
-            $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service_penguranganDP', [$dataservice->dp_bayar], "Pembayaran Jasa Service", $idservice, 'service');
-        }
-        $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service', [$dataservice->total_service], "Pembayaran Jasa Service", $idservice, 'service');
 
-         $datapbgaransi = array(
-             'tabel_referensi' => 'service_garansi_0'
-         );
-         $this->PembayaranBankModel->updateByReferensi($idservice, $datapbgaransi);
+        // Sumber saldo DP: ledger baru (`service_dp`) atau historis (`service.dp_bayar`).
+        $sumberDp    = $this->DpService->statusSumberDp($idservice);
+        $sisaTagihan = max($total_service - $bayar_tunai - $bayar_bank, 0);
+        $dpTerpakai  = min((int) $sumberDp['saldo'], $sisaTagihan);
+        $pendapatan  = $bayar_tunai + $bayar_bank + $dpTerpakai;
+
+        // Tanggal pengakuan: tanggal pengambilan (WIB), bukan tanggal intake.
+        $tanggal = $wibTime->format('Y-m-d');
+
+        $db->transBegin();
+
+        try {
+            $this->ServiceModel->updateService($idservice, [
+                'status_service'  => 4,
+                'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
+            ]);
+
+            // Idempotensi berbasis jurnal: bila jurnal pengambilan (tabel_referensi
+            // 'service') untuk service ini sudah pernah tertulis, JANGAN posting
+            // ulang. Guard status (=4) saja tidak cukup: jalur "Dibatalkan (90) ->
+            // Aktifkan kembali (2)" membuat service kembali berstatus != 4 tanpa
+            // membalik jurnal, sehingga pengambilan ulang akan menggandakan
+            // pendapatan dan pelepasan PDM. Status akhir tetap dipastikan 4.
+            $sudahDijurnal = $this->JurnalModel->ringkasByReferensi('service', $idservice)['jumlah'] > 0;
+
+            if (! $sudahDijurnal) {
+                // Batas id jurnal sebelum insert, untuk memverifikasi baris baru saja.
+                $maks = $db->table('jurnal')->selectMax('idjurnal', 'maks')->get()->getRow();
+                $maxIdjurnal = (int) ($maks->maks ?? 0);
+
+                // Seluruh pelepasan PDM ditaruh di SATU template: akun PDM sama pada
+                // kedua template, sehingga pendapatan dan PDM tidak mungkin dobel.
+                $templateDp = $bayar_tunai > 0
+                    ? 'pembayaran_service_tunai'
+                    : ($bayar_bank > 0 ? 'pembayaran_service_bank' : 'pembayaran_service_tunai');
+
+                $kaki = [
+                    'pembayaran_service_tunai' => ['kas' => $bayar_tunai, 'dp' => 0],
+                    'pembayaran_service_bank'  => ['kas' => $bayar_bank,  'dp' => 0],
+                ];
+                $kaki[$templateDp]['dp'] = $dpTerpakai;
+
+                foreach ($kaki as $kodeTemplate => $nilai) {
+                    $kas = (int) $nilai['kas'];
+                    $dp  = (int) $nilai['dp'];
+                    if ($kas === 0 && $dp === 0) {
+                        continue;
+                    }
+                    $keterangan = $kodeTemplate === 'pembayaran_service_bank'
+                        ? 'Pembayaran Uang Lunas Jasa Service'
+                        : 'Pembayaran Uang Tunai Jasa Service';
+                    $this->JurnalModel->insertJurnal(
+                        $tanggal,
+                        $kodeTemplate,
+                        [$kas, $dp, $kas + $dp],
+                        $keterangan,
+                        $idservice,
+                        'service'
+                    );
+                }
+
+                // Verifikasi eksplisit: insertJurnal() tidak memberi sinyal kegagalan.
+                $ringkas = $this->JurnalModel->ringkasByReferensi('service', $idservice, $maxIdjurnal);
+                if ($pendapatan > 0 && $ringkas['jumlah'] === 0) {
+                    throw new \RuntimeException('Jurnal pengambilan service tidak terbentuk (template jurnal tidak lengkap).');
+                }
+                if (! $ringkas['seimbang']) {
+                    throw new \RuntimeException('Jurnal pengambilan service tidak seimbang.');
+                }
+                if ($ringkas['debet'] !== $pendapatan) {
+                    throw new \RuntimeException('Nominal jurnal pengambilan service tidak sesuai (' . $ringkas['debet'] . ' != ' . $pendapatan . ').');
+                }
+            }
+
+            // Penanda bank: perilaku lama dipertahankan (garansi_1 -> garansi_0).
+            $this->PembayaranBankModel->updateByReferensi($idservice, [
+                'tabel_referensi' => 'service_garansi_0',
+            ]);
+
+            $db->transCommit();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'update_sudah_diambil gagal service ' . $idservice . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menyelesaikan service: ' . $e->getMessage());
+            return redirect()->to(base_url('bisa_diambil'));
+        }
 
         session()->setFlashdata('sukses', 'Berhasil Memperbarui Status');
         return redirect()->to(base_url('bisa_diambil'));
@@ -1067,12 +1150,11 @@ class Riwayat_Service extends BaseController
             return redirect()->to(base_url('riwayat_service'));
         }
 
-        if ($this->ServiceModel->hasDpLedger($idservice)) {
-            session()->setFlashdata('gagal', 'Service ini memiliki DP yang tercatat pada ledger. Hard delete ditolak agar ledger dan jurnal DP tidak menjadi yatim. Pembatalan DP belum tersedia pada tahap ini.');
-            return redirect()->to(base_url('riwayat_service'));
-        }
-
         try {
+            // Service ber-DP kini boleh dihapus permanen: hardDeleteService()
+            // menghapus service bersama seluruh baris `service_dp` dan jurnal
+            // DP-nya dalam satu transaksi (tidak meninggalkan ledger/jurnal
+            // yatim).
             $result = $this->ServiceModel->hardDeleteService($idservice);
 
             if ($result) {

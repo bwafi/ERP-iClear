@@ -32,6 +32,12 @@ use Config\Database;
  *      - `TutupKasirTransferInternal`   -> setor / tarik
  *    Tidak ada formula sumber kedua yang ditulis di file ini.
  *
+ *    Komponen DP (uang muka) service juga diambil dari
+ *    `TutupKasirSourceDefinition` (`dpMasukTunai` / `dpMasukTransfer` /
+ *    `dpServiceSelesai`), bukan dihitung ulang di sini. DP masuk di TANGGAL
+ *    PENERIMAAN sesuai metode; `dpServiceSelesai` mengeluarkan DP dari
+ *    residual service di tanggal pengambilan agar tidak dobel.
+ *
  * 2. FORMULA (tidak boleh diubah tanpa audit):
  *
  *      akhir_cash     = awal_cash + kas_masuk - kas_keluar - setor + tarik
@@ -142,10 +148,18 @@ class TutupKasirClosing
         $awalCashNum = $awalKas['ada'] ? (int) $awalKas['nilai'] : 0;
         $awalTfNum   = $awalTf['ada'] ? (int) $awalTf['nilai'] : 0;
 
-        $kasMasuk        = $srcDef->cashMasuk($unitId, $tanggal);
-        $transferMasuk   = $srcDef->transferMasuk($unitId, $tanggal);
+        // DP (uang muka) service diakui pada TANGGAL PENERIMAAN sesuai metode,
+        // bukan pada tanggal service selesai. Uangnya sudah masuk laci/rekening
+        // di tanggal itu. Karena residual service (`harus_dibayar - bayar_tunai`)
+        // pada model canonical sudah memasukkan DP, DP service yang SELESAI pada
+        // tanggal ini dikeluarkan lagi agar tidak terhitung dua kali. Komposisi
+        // canonical-nya ada di `TutupKasirSourceDefinition::kasMasukDp()` /
+        // `transferMasukDp()` (satu sumber angka tetap dipertahankan).
+        $kasMasuk        = $srcDef->kasMasukDp($unitId, $tanggal);
+        $transferMasuk   = $srcDef->transferMasukDp($unitId, $tanggal);
         $kasKeluar       = $srcDef->kasKeluarCash($unitId, $tanggal);
         $transferKeluar  = $srcDef->kasKeluarTransfer($unitId, $tanggal);
+
         $setor           = (int) $transfer['setor'];
         $tarik           = (int) $transfer['tarik'];
 

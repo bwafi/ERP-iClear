@@ -648,19 +648,63 @@ class Service extends BaseController
             return redirect()->to(base_url('service'));
         }
 
-        if ($this->ServiceModel->hasDpLedger($idservice)) {
-            session()->setFlashdata('gagal', 'Service ini memiliki DP yang tercatat pada ledger. Pembatalan service ber-DP ditolak agar ledger dan jurnal DP tidak menjadi yatim. Pembatalan/refund DP belum tersedia pada tahap ini.');
+        $idservice = (int) $idservice;
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            // Catat keberhasilan langkah lewat return value query, bukan lewat
+            // `transStatus()`: flag itu ter-set false saat ada query gagal dan
+            // tidak di-reset lagi (transStrict default true) sehingga pada
+            // koneksi yang dipakai ulang bisa membuat transaksi berikutnya salah
+            // rollback.
+            $ok = true;
+
+            // Service ber-DP kini boleh dibatalkan permanen. Ledger `service_dp`
+            // dan jurnal DP-nya dihapus dalam transaksi yang sama dengan service
+            // supaya tidak ada ledger/jurnal yatim. Hanya jurnal DP milik service
+            // ini yang dihapus (WHERE id_referensi IN ...).
+            if ($db->tableExists($db->getPrefix() . 'service_dp', false)) {
+                $dpIds = [];
+                foreach ($db->table('service_dp')
+                    ->select('id')
+                    ->where('service_idservice', $idservice)
+                    ->get()->getResult() as $dp) {
+                    $dpIds[] = (string) $dp->id;
+                }
+
+                if ($dpIds !== []) {
+                    $ok = $db->table('jurnal')
+                        ->where('tabel_referensi', 'service_dp')
+                        ->whereIn('id_referensi', $dpIds)
+                        ->delete() && $ok;
+                }
+
+                $ok = $db->table('service_dp')->where('service_idservice', $idservice)->delete() && $ok;
+            }
+
+            $ok = $this->ServiceModel->delete($idservice) && $ok;
+
+            $ok = $this->ServiceKerusakanModel->where('service_idservice', $idservice)->delete() && $ok;
+            $ok = $this->ServiceSparepartModel->where('service_idservice', $idservice)->delete() && $ok;
+
+            if (! $ok) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Gagal membatalkan transaksi service.');
+                return redirect()->to(base_url('service'));
+            }
+
+            $db->transCommit();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'cancel_service gagal service ' . $idservice . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal membatalkan transaksi: ' . $e->getMessage());
             return redirect()->to(base_url('service'));
         }
 
-        $this->ServiceModel->delete($idservice);
-        
-        $this->ServiceKerusakanModel->where('service_idservice', $idservice)->delete();
-        $this->ServiceSparepartModel->where('service_idservice', $idservice)->delete();
-        
         session()->remove('idservice');
         session()->setFlashdata('sukses', 'Transaksi berhasil dibatalkan');
-        
+
         return redirect()->to(base_url('service'));
     }
 

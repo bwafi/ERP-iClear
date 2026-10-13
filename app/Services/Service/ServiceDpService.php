@@ -212,6 +212,92 @@ class ServiceDpService
     }
 
     /**
+     * Apakah tabel ledger `service_dp` sudah ada?
+     *
+     * Dicek langsung (non-cache) dengan prefix diterapkan, mengikuti pola
+     * `ModelService::hasDpLedger()` — daftar tabel CI4 di-cache per koneksi
+     * sehingga hasil bisa basi setelah DDL.
+     */
+    public function punyaTabelLedger(): bool
+    {
+        return $this->db->tableExists($this->db->getPrefix() . 'service_dp', false);
+    }
+
+    /**
+     * Sumber saldo DP efektif sebuah service untuk pengambilan (settlement).
+     *
+     * Kompatibilitas baru vs historis:
+     *  - `ledger`   : ada tabel `service_dp` DAN minimal satu baris ledger untuk
+     *                 service ini -> saldo = total DP aktif (per metode).
+     *  - `historis` : tidak ada baris ledger (service dibuat sebelum ledger ada)
+     *                 -> saldo = kolom `service.dp_bayar` (nilai lama).
+     *  - `none`     : tidak ada DP sama sekali.
+     *
+     * Bila tabel ledger ada tetapi baris untuk service ini nol (mis. DP sudah
+     * dibatalkan), sumbernya `historis` bila kolom `dp_bayar` > 0; JANGAN
+     * diam-diam memakai ledger kosong lalu menimpa kolom historis.
+     *
+     * @return array{sumber:string,punya_ledger:bool,saldo:int,tunai:int,transfer:int}
+     */
+    public function statusSumberDp(int $idservice): array
+    {
+        $hasil = [
+            'sumber'       => 'none',
+            'punya_ledger' => false,
+            'saldo'        => 0,
+            'tunai'        => 0,
+            'transfer'     => 0,
+        ];
+
+        if ($idservice <= 0) {
+            return $hasil;
+        }
+
+        $adaLedger = $this->punyaTabelLedger() && $this->DpModel->jumlahBaris($idservice) > 0;
+
+        if ($adaLedger) {
+            $hasil['sumber']       = 'ledger';
+            $hasil['punya_ledger'] = true;
+
+            foreach ($this->DpModel->getAktifByService($idservice) as $row) {
+                $jumlah = (int) ($row->jumlah ?? 0);
+                $metode = strtolower(trim((string) ($row->metode ?? '')));
+                if ($metode === 'transfer') {
+                    $hasil['transfer'] += $jumlah;
+                } else {
+                    $hasil['tunai'] += $jumlah;
+                }
+            }
+
+            $hasil['saldo'] = $hasil['tunai'] + $hasil['transfer'];
+
+            return $hasil;
+        }
+
+        $row = $this->db->table('service')
+            ->select('dp_bayar')
+            ->where('idservice', $idservice)
+            ->get()
+            ->getRow();
+        $dpBayar = (int) ($row->dp_bayar ?? 0);
+
+        if ($dpBayar > 0) {
+            $hasil['sumber'] = 'historis';
+            $hasil['saldo']  = $dpBayar;
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Apakah service memakai ledger DP baru (`service_dp`) sebagai sumber saldo.
+     */
+    public function isLedgerBased(int $idservice): bool
+    {
+        return $this->statusSumberDp($idservice)['sumber'] === 'ledger';
+    }
+
+    /**
      * Hitung ulang total DP aktif lalu tulis sebagai proyeksi `service.dp_bayar`.
      *
      * @return int total DP aktif (nilai yang diproyeksikan)

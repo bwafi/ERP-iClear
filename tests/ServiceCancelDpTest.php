@@ -5,8 +5,9 @@
  *
  * - Service TANPA baris `service_dp` -> cancel_service tetap berjalan seperti
  *   biasa (semua baris dibatalkan dihapus).
- * - Service BER-DP -> cancel_service ditolak dan TIDAK menghapus apa pun agar
- *   ledger `service_dp` dan jurnal DP tidak menjadi yatim.
+ * - Service BER-DP -> cancel_service berjalan dan menghapus service + baris
+ *   `service_dp` + jurnal DP terkait dalam satu transaksi, tanpa menghapus
+ *   jurnal DP milik service lain.
  *
  * Mengikuti pola KasBankControllerTest: tabel dibuat dengan prefix `db_`
  * (group 'tests'), dan verifikasi dilakukan lewat koneksi fresh agar tidak
@@ -25,6 +26,7 @@ final class ServiceCancelDpTest extends CIUnitTestCase
     private const TABEL = [
         'db_service',
         'db_service_dp',
+        'db_jurnal',
         'db_service_kerusakan',
         'db_service_sparepart',
         'db_pelanggan',
@@ -84,12 +86,19 @@ final class ServiceCancelDpTest extends CIUnitTestCase
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_service_dp (
-            idservice_dp INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             service_idservice INT UNSIGNED NOT NULL,
             kode_dp VARCHAR(64) NULL,
             jumlah DOUBLE NOT NULL DEFAULT 0,
             status VARCHAR(20) NOT NULL DEFAULT "aktif",
-            PRIMARY KEY (idservice_dp)
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB');
+
+        $q('CREATE TABLE db_jurnal (
+            idjurnal INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            id_referensi VARCHAR(255) NULL,
+            tabel_referensi VARCHAR(255) NULL,
+            PRIMARY KEY (idjurnal)
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_service_kerusakan (
@@ -182,11 +191,10 @@ final class ServiceCancelDpTest extends CIUnitTestCase
         $this->assertSame(0, (int) $db->table('service_dp')->countAllResults(), 'Tidak ada sisa ledger DP.');
     }
 
-    public function testCancelServiceBerDpDitolakDanTidakMenghapus(): void
+    public function testCancelServiceBerDpMenghapusServiceDanLedgerDp(): void
     {
         $this->sesi();
 
-        $id = (int) $this->db->insertID();
         $this->db->table('service')->insert([
             'no_service'    => 'SRV-BER-DP',
             'status_service' => 1,
@@ -202,18 +210,35 @@ final class ServiceCancelDpTest extends CIUnitTestCase
             'jumlah'            => 100000,
             'status'            => 'aktif',
         ]);
+        $dpId = (int) $this->db->insertID();
+        $this->db->table('jurnal')->insert([
+            'id_referensi'    => (string) $dpId,
+            'tabel_referensi' => 'service_dp',
+        ]);
+        // Jurnal DP milik service lain — TIDAK boleh ikut terhapus.
+        $this->db->table('jurnal')->insert([
+            'id_referensi'    => '999',
+            'tabel_referensi' => 'service_dp',
+        ]);
 
         $r = $this->get('service/cancel/' . $id);
 
         $r->assertStatus(302);
 
         $db = $this->koneksiFresh();
-        $this->assertSame(1, (int) $db->table('service')->countAllResults(), 'Service ber-DP tidak boleh terhapus.');
-        $this->assertSame(1, (int) $db->table('service_kerusakan')->countAllResults(), 'Kerusakan tidak boleh terhapus.');
-        $this->assertSame(1, (int) $db->table('service_sparepart')->countAllResults(), 'Sparepart tidak boleh terhapus.');
-        $this->assertSame(1, (int) $db->table('service_dp')->countAllResults(), 'Ledger DP tidak boleh terhapus.');
-
-        $sisa = $db->table('service_dp')->where('service_idservice', $id)->countAllResults();
-        $this->assertSame(1, (int) $sisa, 'Ledger DP service yang bersangkutan tetap utuh.');
+        $this->assertSame(0, (int) $db->table('service')->countAllResults(), 'Service ber-DP harus terhapus.');
+        $this->assertSame(0, (int) $db->table('service_kerusakan')->countAllResults(), 'Kerusakan harus terhapus.');
+        $this->assertSame(0, (int) $db->table('service_sparepart')->countAllResults(), 'Sparepart harus terhapus.');
+        $this->assertSame(0, (int) $db->table('service_dp')->countAllResults(), 'Ledger DP harus terhapus (tidak yatim).');
+        $this->assertSame(
+            0,
+            (int) $db->table('jurnal')->where('tabel_referensi', 'service_dp')->where('id_referensi', (string) $dpId)->countAllResults(),
+            'Jurnal DP milik service ini harus terhapus.'
+        );
+        $this->assertSame(
+            1,
+            (int) $db->table('jurnal')->where('tabel_referensi', 'service_dp')->where('id_referensi', '999')->countAllResults(),
+            'Jurnal DP service lain tidak boleh ikut terhapus.'
+        );
     }
 }

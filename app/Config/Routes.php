@@ -180,7 +180,14 @@ $routes->post('insert/service/savePembayaran', 'Service::insert_pembayaran', ['f
 $routes->post('update/pelanggan_service', 'Riwayat_Service::update_service_pelanggan', ['filter' => 'auth']);
 $routes->post('update_service/saveKerusakan', 'Riwayat_Service::insert_kerusakan', ['filter' => 'auth']);
 $routes->post('update_service/saveSparepart', 'Riwayat_Service::insert_sparepart', ['filter' => 'auth']);
-$routes->post('update_insert/service/savePembayaran', 'Riwayat_Service::insert_pembayaran', ['filter' => 'auth']);
+// DINONAKTIFKAN: `Riwayat_Service::insert_pembayaran` menulis `harus_dibayar`
+// NET (`total - dp_bayar`), sementara alur UI yang aktif memakai handler GROSS
+// (`Service::insert_pembayaran`, route `insert/service/savePembayaran`).
+// View pemicu jalur ini (`riwayat/table/pembayaran.php`) sudah yatim di
+// repository, jadi endpoint ini hanya bisa dipanggil lewat POST manual. Jika
+// tetap aktif, `harus_dibayar` NET membuat integrasi DP di TutupKasir
+// (`dpServiceSelesai()`) menghitung DP dua kali (undercount sebesar DP).
+// $routes->post('update_insert/service/savePembayaran', 'Riwayat_Service::insert_pembayaran', ['filter' => 'auth']);
 
 $routes->get('sparepart_keluar', 'Riwayat_Service::sparepart', ['filter' => 'auth']);
 $routes->post('sparepart_keluar/ajax', 'Riwayat_Service::sparepart_keluar_ajax', ['filter' => 'auth']);

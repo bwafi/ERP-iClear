@@ -24,8 +24,7 @@ class ModelJurnal extends Model
             ->delete();
     }
 
-    public function insertJurnal($tanggal, $kode_template, $ar_value, $keterangan, $id_referensi, $tabel_referensi, $id_unit = null)
-    {
+    public function insertJurnal($tanggal, $kode_template, $ar_value, $keterangan, $id_referensi, $tabel_referensi, $id_unit = null)    {
         $id_akun = session('ID_AKUN');
         if ($id_unit == null) {
             $id_unit = session('ID_UNIT');
@@ -55,6 +54,46 @@ class ModelJurnal extends Model
             $this->insert($data);
         }
         return true;
+    }
+
+    /**
+     * Ringkasan jurnal untuk (tabel_referensi, id_referensi) tertentu.
+     *
+     * `insertJurnal()` tidak memberi sinyal kegagalan (template hilang -> loop
+     * kosong -> return true). Pemanggil yang butuh jaminan jurnal benar-benar
+     * terbentuk dan seimbang memakai method ini.
+     *
+     * @param int|null $idjurnalDiAtas Bila diisi, hanya baris dengan
+     *                                 idjurnal > nilai ini yang dihitung
+     *                                 (untuk memverifikasi baris baru saja).
+     *
+     * @return array{jumlah:int,debet:int,kredit:int,seimbang:bool}
+     */
+    public function ringkasByReferensi(string $tabelReferensi, $idReferensi, ?int $idjurnalDiAtas = null): array
+    {
+        $builder = $this->db->table($this->table)
+            ->where('tabel_referensi', $tabelReferensi)
+            ->where('id_referensi', (string) $idReferensi);
+
+        if ($idjurnalDiAtas !== null) {
+            $builder->where('idjurnal >', $idjurnalDiAtas);
+        }
+
+        $rows = $builder->get()->getResult();
+
+        $debet  = 0;
+        $kredit = 0;
+        foreach ($rows as $row) {
+            $debet  += (int) ($row->debet ?? 0);
+            $kredit += (int) ($row->kredit ?? 0);
+        }
+
+        return [
+            'jumlah'    => count($rows),
+            'debet'     => $debet,
+            'kredit'    => $kredit,
+            'seimbang'  => $debet === $kredit,
+        ];
     }
 
 

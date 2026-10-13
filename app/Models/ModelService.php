@@ -62,9 +62,9 @@ class ModelService extends Model
     /**
      * Apakah service memiliki baris ledger DP (`service_dp`)?
      *
-     * Dipakai sebagai guard hard delete: service ber-DP tidak boleh dihapus
-     * fisik karena akan meninggalkan baris ledger dan jurnal DP (tabel_referensi
-     * 'service_dp') yang yatim — reversal DP belum tersedia pada tahap ini.
+     * Predikat saja (mis. untuk UI/informasi). BUKAN lagi guard hard delete:
+     * `hardDeleteService()` kini menghapus service bersama seluruh baris
+     * `service_dp` dan jurnal DP-nya dalam satu transaksi.
      */
     public function hasDpLedger($idservice): bool
     {
@@ -86,21 +86,49 @@ class ModelService extends Model
     public function hardDeleteService($idservice)
     {
         $db = \Config\Database::connect();
+        $idservice = (int) $idservice;
 
         try {
             log_message('info', 'Starting delete service ID: ' . $idservice);
 
-            if ($this->hasDpLedger($idservice)) {
-                log_message('error', 'hardDeleteService ditolak: service ' . $idservice . ' memiliki ledger DP (service_dp).');
-                return false;
+            // Semua penghapusan dibungkus satu transaksi: service, data
+            // terkait, dan ledger DP + jurnal DP harus hilang bersama-sama.
+            // Kalau ada satu langkah gagal, tidak boleh ada sisa setengah
+            // terhapus (service hilang tapi ledger DP/jurnal masih ada, atau
+            // sebaliknya).
+            $db->transBegin();
+
+            // Catat keberhasilan tiap langkah lewat return value query, BUKAN
+            // lewat `transStatus()`. Di CI4, `transStatus` ter-set `false` saat
+            // ada query gagal di dalam transaksi dan (karena `transStrict`
+            // default true) tidak pernah di-reset lagi; pada koneksi yang
+            // dipakai ulang (mis. beberapa hard delete dalam satu request) flag
+            // itu akan membuat transaksi berikutnya salah rollback.
+            $ok = true;
+
+            // Ledger DP (`service_dp`) + jurnal DP terkait. Hanya jurnal milik
+            // id DP service INI yang dihapus (WHERE id_referensi IN ...), bukan
+            // seluruh jurnal `tabel_referensi='service_dp'`, supaya jurnal DP
+            // service lain tidak ikut terhapus.
+            if ($db->tableExists($db->getPrefix() . 'service_dp', false)) {
+                $dpIds = [];
+                foreach ($db->table('service_dp')
+                    ->select('id')
+                    ->where('service_idservice', $idservice)
+                    ->get()->getResult() as $dp) {
+                    $dpIds[] = (string) $dp->id;
+                }
+
+                if ($dpIds !== []) {
+                    $ok = $db->table('jurnal')
+                        ->where('tabel_referensi', 'service_dp')
+                        ->whereIn('id_referensi', $dpIds)
+                        ->delete() && $ok;
+                }
+
+                $ok = $db->table('service_dp')->where('service_idservice', $idservice)->delete() && $ok;
+                log_message('info', 'Deleted ' . count($dpIds) . ' ledger DP terkait service');
             }
-
-            $spareparts = $db->table('service_sparepart')
-                ->where('service_idservice', $idservice)
-                ->get()->getResult();
-            log_message('info', 'Found ' . count($spareparts) . ' spareparts');
-
-            // Hapus data terkait (tidak pakai transaction karena stok_barang adalah VIEW)
 
             // Hapus detail_penjualan & penjualan yang terkait service
             $penjualans = $db->table('penjualan')
@@ -108,34 +136,43 @@ class ModelService extends Model
                 ->get()->getResult();
 
             foreach ($penjualans as $p) {
-                $db->table('detail_penjualan')->where('penjualan_idpenjualan', $p->idpenjualan)->delete();
+                $ok = $db->table('detail_penjualan')->where('penjualan_idpenjualan', $p->idpenjualan)->delete() && $ok;
             }
 
-            $db->table('penjualan')->where('service_idservice', $idservice)->delete();
+            $ok = $db->table('penjualan')->where('service_idservice', $idservice)->delete() && $ok;
             log_message('info', 'Deleted ' . count($penjualans) . ' penjualan terkait service');
 
-            $db->table('service_sparepart')->where('service_idservice', $idservice)->delete();
+            $ok = $db->table('service_sparepart')->where('service_idservice', $idservice)->delete() && $ok;
 
-            $db->table('service_kerusakan')->where('service_idservice', $idservice)->delete();
+            $ok = $db->table('service_kerusakan')->where('service_idservice', $idservice)->delete() && $ok;
 
-            $db->table('pembayaran_bank')
+            $ok = $db->table('pembayaran_bank')
                 ->where('id_referensi', $idservice)
                 ->whereIn('tabel_referensi', ['service_baru', 'service_garansi_0', 'service_garansi_1'])
-                ->delete();
+                ->delete() && $ok;
 
-            $db->table('jurnal')
+            $ok = $db->table('jurnal')
                 ->where('id_referensi', $idservice)
                 ->where('tabel_referensi', 'service')
-                ->delete();
+                ->delete() && $ok;
 
-            $db->table('proses_service')->where('service_idservice', $idservice)->delete();
-            
-            $db->table('service')->where('idservice', $idservice)->delete();
+            $ok = $db->table('proses_service')->where('service_idservice', $idservice)->delete() && $ok;
+
+            $ok = $db->table('service')->where('idservice', $idservice)->delete() && $ok;
+
+            if (! $ok) {
+                $db->transRollback();
+                log_message('error', 'hardDeleteService rollback: ada langkah hapus yang gagal untuk service ' . $idservice);
+                return false;
+            }
+
+            $db->transCommit();
 
             log_message('info', 'Successfully deleted service ID: ' . $idservice);
             return true;
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            $db->transRollback();
             log_message('error', 'Exception in hardDeleteService: ' . $e->getMessage());
             log_message('error', 'Service ID: ' . $idservice);
             return false;

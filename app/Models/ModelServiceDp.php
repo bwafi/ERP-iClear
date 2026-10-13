@@ -67,6 +67,19 @@ class ModelServiceDp extends Model
         return (int) ($row->jumlah ?? 0);
     }
 
+    /**
+     * Jumlah baris ledger DP untuk sebuah service (semua status).
+     *
+     * Dipakai untuk membedakan service yang memang memakai ledger DP baru
+     * dari service historis yang hanya punya kolom `service.dp_bayar`.
+     */
+    public function jumlahBaris($idservice): int
+    {
+        return $this->db->table($this->table)
+            ->where('service_idservice', (int) $idservice)
+            ->countAllResults();
+    }
+
     public function kodeDpSudahAda(string $kodeDp): bool
     {
         return $this->db->table($this->table)

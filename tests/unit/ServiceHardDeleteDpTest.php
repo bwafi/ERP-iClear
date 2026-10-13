@@ -8,10 +8,12 @@ use CodeIgniter\Test\CIUnitTestCase;
 /**
  * Kebijakan hard delete service terkait ledger DP (`service_dp`).
  *
+ * - Service DENGAN baris ledger DP: hard delete BOLEH, dan harus menghapus
+ *   service + `service_dp` + jurnal DP terkait dalam SATU transaksi sehingga
+ *   tidak meninggalkan baris yatim.
+ * - Jurnal DP milik service LAIN tidak boleh ikut terhapus.
+ * - Kegagalan di tengah proses harus rollback (tidak boleh setengah terhapus).
  * - Service TANPA baris ledger DP: hard delete tetap berfungsi seperti semula.
- * - Service DENGAN baris ledger DP: hard delete DITOLAK agar baris ledger dan
- *   jurnal DP (tabel_referensi='service_dp') tidak menjadi yatim. Reversal DP
- *   belum tersedia pada tahap ini.
  *
  * DDL/DML nyata di group `tests` (MySQL `erp_test`, prefix dikosongkan).
  *
@@ -105,7 +107,7 @@ final class ServiceHardDeleteDpTest extends CIUnitTestCase
         ]);
     }
 
-    public function testHardDeleteDitolakBilaServicePunyaLedgerDp(): void
+    public function testHardDeleteMenghapusServiceDanLedgerDpBesertaJurnalTerkait(): void
     {
         $this->seedService(10);
         $this->db->table('service_dp')->insert([
@@ -114,17 +116,73 @@ final class ServiceHardDeleteDpTest extends CIUnitTestCase
             'jumlah'            => 50000,
             'status'            => 'aktif',
         ]);
+        $dpId = (int) $this->db->insertID();
+
         $this->db->table('jurnal')->insert([
-            'id_referensi'    => '1',
+            'id_referensi'    => (string) $dpId,
             'tabel_referensi' => 'service_dp',
+        ]);
+        // Jurnal DP milik service lain (id DP 999) — TIDAK boleh ikut terhapus.
+        $this->db->table('jurnal')->insert([
+            'id_referensi'    => '999',
+            'tabel_referensi' => 'service_dp',
+        ]);
+        // Jurnal pengambilan lama (tabel_referensi='service') — tetap dibersihkan.
+        $this->db->table('jurnal')->insert([
+            'id_referensi'    => '10',
+            'tabel_referensi' => 'service',
         ]);
 
         $this->assertTrue($this->model()->hasDpLedger(10), 'Service seharusnya terdeteksi punya ledger DP.');
-        $this->assertFalse($this->model()->hardDeleteService(10), 'Hard delete service ber-DP harus ditolak.');
+        $this->assertTrue($this->model()->hardDeleteService(10), 'Hard delete service ber-DP harus berhasil.');
 
-        $this->assertSame(1, (int) $this->db->table('service')->where('idservice', 10)->countAllResults(), 'Service tidak boleh terhapus.');
-        $this->assertSame(1, (int) $this->db->table('service_dp')->where('service_idservice', 10)->countAllResults(), 'Ledger DP tidak boleh hilang/yatim.');
-        $this->assertSame(1, (int) $this->db->table('jurnal')->where('tabel_referensi', 'service_dp')->countAllResults(), 'Jurnal DP tidak boleh yatim.');
+        $this->assertSame(0, (int) $this->db->table('service')->where('idservice', 10)->countAllResults(), 'Service harus terhapus.');
+        $this->assertSame(0, (int) $this->db->table('service_dp')->where('service_idservice', 10)->countAllResults(), 'Ledger DP harus terhapus.');
+        $this->assertSame(
+            0,
+            (int) $this->db->table('jurnal')->where('tabel_referensi', 'service_dp')->where('id_referensi', (string) $dpId)->countAllResults(),
+            'Jurnal DP milik service ini harus terhapus.'
+        );
+        $this->assertSame(
+            1,
+            (int) $this->db->table('jurnal')->where('tabel_referensi', 'service_dp')->where('id_referensi', '999')->countAllResults(),
+            'Jurnal DP service lain tidak boleh ikut terhapus.'
+        );
+        $this->assertSame(
+            0,
+            (int) $this->db->table('jurnal')->where('tabel_referensi', 'service')->where('id_referensi', '10')->countAllResults(),
+            'Jurnal pengambilan lama tetap dibersihkan.'
+        );
+    }
+
+    public function testHardDeleteGagalRollbackTidakMeninggalkanLedgerYatim(): void
+    {
+        $this->seedService(10);
+        $this->db->table('service_dp')->insert([
+            'service_idservice' => 10,
+            'kode_dp'           => 'DP-SRV10',
+            'jumlah'            => 50000,
+            'status'            => 'aktif',
+        ]);
+        $dpId = (int) $this->db->insertID();
+        $this->db->table('jurnal')->insert([
+            'id_referensi'    => (string) $dpId,
+            'tabel_referensi' => 'service_dp',
+        ]);
+
+        // Paksa kegagalan SETELAH penghapusan service_dp: tabel ini dihapus
+        // lebih dulu sehingga DELETE padanya error dan transaksi harus rollback.
+        $this->db->query('DROP TABLE service_sparepart');
+
+        $this->assertFalse($this->model()->hardDeleteService(10), 'Hard delete harus gagal karena error di tengah transaksi.');
+
+        $this->assertSame(1, (int) $this->db->table('service')->where('idservice', 10)->countAllResults(), 'Service harus utuh setelah rollback.');
+        $this->assertSame(1, (int) $this->db->table('service_dp')->where('service_idservice', 10)->countAllResults(), 'Ledger DP harus utuh setelah rollback.');
+        $this->assertSame(
+            1,
+            (int) $this->db->table('jurnal')->where('tabel_referensi', 'service_dp')->where('id_referensi', (string) $dpId)->countAllResults(),
+            'Jurnal DP harus utuh setelah rollback.'
+        );
     }
 
     public function testHardDeleteTetapBerfungsiTanpaLedgerDp(): void
