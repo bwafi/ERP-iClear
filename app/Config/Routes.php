@@ -717,6 +717,7 @@ $routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
 $routes->get('api/crm/lead-list', 'CrmLeadBridge::leadList');
 $routes->get('api/crm/price-catalog', 'CrmLeadBridge::priceCatalog');
 $routes->get('api/crm/service-summary', 'CrmLeadBridge::serviceSummary');
+$routes->get('api/customer-chat/invoice-progress', 'CustomerChatInvoiceBridge::progress');
 
 //Barang Rusak1
 $routes->get('barang_rusak', 'BarangRusak::index', ['filter' => 'auth']);
