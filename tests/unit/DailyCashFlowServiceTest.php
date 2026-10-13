@@ -53,6 +53,52 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
         $this->assertSame('13:40', $result['masuk']['transfer'][0]['waktu']);
     }
 
+    public function testDpMasukDikelompokkanMenurutMetodeDanTidakDihitungUlangSaatServiceSelesai(): void
+    {
+        $result = $this->service()->assemble([
+            'service' => [
+                (object) [
+                    'idservice' => 11,
+                    'no_service' => 'SRV-11',
+                    'tanggal_selesai' => '2026-10-02 13:40:00',
+                    'harus_dibayar' => 800000,
+                    'bayar_tunai' => 300000,
+                ],
+            ],
+            'dp_service_selesai' => [
+                (object) ['service_idservice' => 11, 'jumlah' => 100000],
+            ],
+            'dp_masuk' => [
+                (object) [
+                    'no_service' => 'SRV-22',
+                    'kode_dp' => 'DP-22-A',
+                    'metode' => 'tunai',
+                    'jumlah' => 40000,
+                    'created_at' => '2026-10-02 10:15:00',
+                    'refund_idkas_keluar' => 9001,
+                ],
+                (object) [
+                    'no_service' => 'SRV-22',
+                    'kode_dp' => 'DP-22-B',
+                    'metode' => 'transfer',
+                    'jumlah' => 20000,
+                    'created_at' => '2026-10-02 10:20:00',
+                ],
+            ],
+        ]);
+
+        // Service selesai: Rp300.000 cash + (Rp800.000 - Rp300.000 - Rp100.000 DP)
+        // transfer. Penerimaan DP hari ini ditambahkan sekali per metodenya.
+        $this->assertSame(340000, $result['subtotal']['masuk_tunai']);
+        $this->assertSame(420000, $result['subtotal']['masuk_transfer']);
+        $this->assertSame(760000, $result['total_masuk']);
+        $this->assertSame(760000, $result['net']);
+        $this->assertCount(2, $result['masuk']['tunai']);
+        $this->assertCount(2, $result['masuk']['transfer']);
+        $this->assertSame('DP Service SRV-22 · DP-22-A', $result['masuk']['tunai'][0]['keterangan']);
+        $this->assertSame('10:15', $result['masuk']['tunai'][0]['waktu']);
+    }
+
     public function testKasMasukDanKasKeluarDibedakanIdbank(): void
     {
         $result = $this->service()->assemble([

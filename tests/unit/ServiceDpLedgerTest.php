@@ -268,6 +268,21 @@ final class ServiceDpLedgerTest extends CIUnitTestCase
         $this->assertSame(0, $this->dpBayarService(1));
     }
 
+    public function testNominalNolTidakMembacaTabelLedger(): void
+    {
+        $this->db->query('DROP TABLE service_dp');
+
+        $hasil = $this->service()->catatDp([
+            'service_idservice' => 1,
+            'jumlah' => 0,
+            'metode' => 'tunai',
+            'unit_id' => 1,
+        ]);
+
+        $this->assertSame('skip', $hasil['status']);
+        $this->assertSame(0, $hasil['total']);
+    }
+
     public function testNominalNegatifDitolak(): void
     {
         $this->expectException(\RuntimeException::class);

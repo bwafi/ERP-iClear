@@ -292,7 +292,62 @@ class TutupKasirSourceDefinition
     }
 
     /**
-     * Total DP aktif (semua metode) dari service yang SELESAI pada tanggal
+     * Rincian DP service aktif yang diterima pada tanggal tertentu.
+     *
+     * Nilai `total_tunai` dan `total_transfer` adalah rincian dari penerimaan
+     * yang sama dengan `dpMasukTunai()` / `dpMasukTransfer()`. Data ini untuk
+     * transparansi di layar Tutup Kasir; bukan pendapatan tambahan.
+     *
+     * @return array{
+     *   ledger_ada:bool,total_tunai:int,total_transfer:int,total:int,
+     *   jumlah:int,rincian:array<int,array<string,mixed>>
+     * }
+     */
+    public function dpMasukRincian(int $unitId, string $tanggal): array
+    {
+        $hasil = [
+            'ledger_ada'     => $this->punyaLedgerDp(),
+            'total_tunai'    => 0,
+            'total_transfer' => 0,
+            'total'          => 0,
+            'jumlah'         => 0,
+            'rincian'        => [],
+        ];
+
+        if (! $hasil['ledger_ada']) {
+            return $hasil;
+        }
+
+        $rows = $this->db->table('service_dp sd')
+            ->select('sd.id, sd.kode_dp, sd.tanggal, sd.created_at, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.keterangan, s.idservice, s.no_service')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('DATE(sd.tanggal)', $tanggal)
+            ->where('s.unit_idunit', $unitId)
+            ->orderBy('sd.id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            $metode = strtolower(trim((string) ($row['metode'] ?? '')));
+            $jumlah = (int) ($row['jumlah'] ?? 0);
+
+            if ($metode === 'transfer') {
+                $hasil['total_transfer'] += $jumlah;
+            } else {
+                $hasil['total_tunai'] += $jumlah;
+            }
+        }
+
+        $hasil['rincian'] = $rows;
+        $hasil['jumlah']  = count($rows);
+        $hasil['total']   = $hasil['total_tunai'] + $hasil['total_transfer'];
+
+        return $hasil;
+    }
+
+    /**
+     * Total DP aktif yang belum direfund dari service yang SELESAI pada tanggal
      * tertentu.
      *
      * Dipakai untuk mengeluarkan DP dari residual service (`harus_dibayar -
@@ -302,21 +357,40 @@ class TutupKasirSourceDefinition
      */
     public function dpServiceSelesai(int $unitId, string $tanggal): int
     {
-        if (! $this->punyaLedgerDp()) {
-            return 0;
+        $total = 0;
+        foreach ($this->dpServiceSelesaiRincian($unitId, $tanggal) as $row) {
+            $total += (int) ($row['jumlah'] ?? 0);
         }
 
-        $row = $this->db->table('service_dp sd')
-            ->selectSum('sd.jumlah', 'total')
+        return $total;
+    }
+
+    /**
+     * Rincian DP aktif per service yang selesai pada tanggal tertentu.
+     * Dipakai arus kas untuk mengeluarkan DP dari sisa pembayaran service.
+     *
+     * @return array<int,array{service_idservice:int,jumlah:int}>
+     */
+    public function dpServiceSelesaiRincian(int $unitId, string $tanggal): array
+    {
+        if (! $this->punyaLedgerDp()) {
+            return [];
+        }
+
+        $builder = $this->db->table('service_dp sd')
+            ->select('sd.service_idservice, SUM(sd.jumlah) AS jumlah')
             ->join('service s', 's.idservice = sd.service_idservice')
             ->where('sd.status', 'aktif')
             ->where('DATE(s.tanggal_selesai)', $tanggal)
             ->where('s.status_service', 4)
             ->where('s.unit_idunit', $unitId)
-            ->get()
-            ->getRow();
+            ->groupBy('sd.service_idservice');
 
-        return (int) ($row->total ?? 0);
+        if ($this->db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            $builder->where('sd.refund_idkas_keluar', null);
+        }
+
+        return $builder->get()->getResultArray();
     }
 
     /**

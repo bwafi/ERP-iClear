@@ -25,10 +25,37 @@
                 class="form-control form-control-lg" value="Rp 0">
         </div>
 
-        <div class="mb-3">
-            <label class="form-label fw-semibold">DP</label>
-            <input type="text" name="dp_bayar" id="dp_bayar" readonly
-                class="form-control form-control-lg" value="<?php echo @$old_service_pelanggan->dp_bayar ?>">
+        <div class="row g-3 mb-2">
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Uang Muka (DP)</label>
+                <input type="text" name="dp_bayar_pembayaran" id="dp_bayar_pembayaran"
+                    class="form-control form-control-lg" value="Rp 0" placeholder="Rp 0">
+            </div>
+            <div class="col-md-4 d-none" id="dp-metode-pembayaran-col">
+                <label class="form-label fw-semibold">Metode DP</label>
+                <select id="dp_metode_bayar" name="dp_metode_bayar" class="form-control">
+                    <option value="">-- Pilih Metode --</option>
+                    <option value="tunai">Tunai</option>
+                    <option value="transfer">Transfer</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-none" id="dp-bank-pembayaran-col">
+                <label class="form-label fw-semibold">Rekening Tujuan (DP)</label>
+                <select id="dp_bank_idbank" name="dp_bank_idbank" class="form-control">
+                    <option value="">-- Pilih Rekening --</option>
+                    <?php if (!empty($bank)): ?>
+                        <?php foreach ($bank as $p): ?>
+                            <option value="<?= htmlspecialchars($p->idbank) ?>">
+                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama ?? '')?> : <?= htmlspecialchars($p->norek ?? '') ?>
+                            </option>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </select>
+            </div>
+            <div class="col-md-4 d-none" id="dp-referensi-pembayaran-col">
+                <label class="form-label fw-semibold">No. Referensi Transfer (DP)</label>
+                <input type="text" name="dp_referensi" id="dp_referensi" class="form-control">
+            </div>
         </div>
 
 
@@ -108,6 +135,26 @@
                 // Atau bisa pakai SweetAlert jika kamu pakai
                 return false;
             }
+
+            // Validasi DP (di tab Pembayaran)
+            const dpInput = document.getElementById('dp_bayar_pembayaran');
+            const dpMetode = document.getElementById('dp_metode_bayar');
+            const dpBank = document.getElementById('dp_bank_idbank');
+            const dpVal = parseRupiahToNumber(dpInput ? dpInput.value : '0');
+
+            if (dpVal > 0) {
+                const metode = dpMetode ? dpMetode.value : '';
+                if (!metode) {
+                    e.preventDefault();
+                    alert('DP diisi. Silakan pilih Metode DP (Tunai / Transfer).');
+                    return false;
+                }
+                if (metode === 'transfer' && (!dpBank || !dpBank.value)) {
+                    e.preventDefault();
+                    alert('Metode Transfer (DP) wajib memilih Rekening Tujuan.');
+                    return false;
+                }
+            }
         });
     });
 </script>
@@ -158,6 +205,35 @@
 
 <script>
     $(document).ready(function() {
+        // DP toggle (tampilkan metode & rekening bila DP > 0; rekening/refs bila metode transfer)
+        function toggleDpPembayaran() {
+            const dp = parseRupiahToNumber($('#dp_bayar_pembayaran').val());
+            const showMetode = dp > 0;
+            $('#dp-metode-pembayaran-col').toggleClass('d-none', !showMetode);
+
+            const metode = $('#dp_metode_bayar').val();
+            const showBank = showMetode && metode === 'transfer';
+            $('#dp-bank-pembayaran-col').toggleClass('d-none', !showBank);
+            $('#dp-referensi-pembayaran-col').toggleClass('d-none', !showBank);
+
+            if (!showMetode) {
+                $('#dp_metode_bayar').val('');
+            }
+            if (!showBank) {
+                $('#dp_bank_idbank').val('');
+                $('#dp_referensi').val('');
+            }
+        }
+
+        $('#dp_bayar_pembayaran').on('input', function() {
+            const v = parseRupiahToNumber($(this).val());
+            $(this).val(formatRupiah(v));
+            toggleDpPembayaran();
+        });
+        $('#dp_metode_bayar').on('change', toggleDpPembayaran);
+
+        // init once
+        toggleDpPembayaran();
         $('.tunai-section, .transfer-section').hide();
 
         $('#metode_bayar').on('change', function() {

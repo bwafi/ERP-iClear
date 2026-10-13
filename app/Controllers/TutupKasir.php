@@ -491,6 +491,11 @@ class TutupKasir extends BaseController
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        // DP tetap terpisah dari omset penjualan, tetapi ditampilkan sebagai
+        // informasi tambahan di kartu Omset Hari Ini untuk unit yang dipilih.
+        $dpHariIni = (new \App\Services\Finance\TutupKasirSourceDefinition($this->db))
+            ->dpMasukRincian((int) $unit, date('Y-m-d'));
             
         $hpp = $this->db->table('detail_penjualan')
             ->select('SUM(hpp_penjualan) AS total')
@@ -590,6 +595,8 @@ class TutupKasir extends BaseController
             'pelanggan_bulan'   => $pelanggan_bulan,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
+            'dp_hari_ini'       => (int) ($dpHariIni['total'] ?? 0),
+            'dp_jumlah_hari_ini' => (int) ($dpHariIni['jumlah'] ?? 0),
             'hariTerbaik'       => $hariTerbaik,
             'omsetTerbaik'      => $omsetTerbaik,
             'top_kecamatan'     => $top_kecamatan,

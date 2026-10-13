@@ -69,6 +69,7 @@ final class TutupKasirDpTest extends CIUnitTestCase
     {
         $this->db->query('CREATE TABLE service (
             idservice INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            no_service VARCHAR(40) NULL,
             unit_idunit INT NULL,
             status_service INT DEFAULT 1,
             bayar_tunai BIGINT DEFAULT 0,
@@ -78,6 +79,12 @@ final class TutupKasirDpTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE service_dp (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             service_idservice INT NOT NULL,
+            kode_dp VARCHAR(40) NULL,
+            bank_idbank VARCHAR(20) NULL,
+            referensi VARCHAR(100) NULL,
+            keterangan TEXT NULL,
+            created_at DATETIME NULL,
+            refund_idkas_keluar INT NULL,
             jumlah BIGINT DEFAULT 0,
             status VARCHAR(15) NOT NULL DEFAULT \'aktif\',
             metode VARCHAR(15) NULL,
@@ -99,6 +106,7 @@ final class TutupKasirDpTest extends CIUnitTestCase
         // -> sisa transfer di D2 = 60.000 (termasuk DP), transfer riil = 30.000.
         $this->db->table('service')->insert([
             'idservice'       => 1,
+            'no_service'      => 'SRV-001',
             'unit_idunit'     => self::UNIT,
             'status_service'  => 4,
             'bayar_tunai'     => 40000,
@@ -116,6 +124,7 @@ final class TutupKasirDpTest extends CIUnitTestCase
         // Service B: belum selesai, DP transfer 20.000 diterima D3.
         $this->db->table('service')->insert([
             'idservice'      => 2,
+            'no_service'     => 'SRV-002',
             'unit_idunit'    => self::UNIT,
             'status_service' => 1,
         ]);
@@ -130,6 +139,7 @@ final class TutupKasirDpTest extends CIUnitTestCase
         // Service C: DP BERSTATUS BATAL -> tidak boleh dihitung.
         $this->db->table('service')->insert([
             'idservice'      => 3,
+            'no_service'     => 'SRV-003',
             'unit_idunit'    => self::UNIT,
             'status_service' => 1,
         ]);
@@ -144,6 +154,7 @@ final class TutupKasirDpTest extends CIUnitTestCase
         // Service D: unit LAIN -> tidak boleh dihitung oleh unit 1.
         $this->db->table('service')->insert([
             'idservice'      => 4,
+            'no_service'     => 'SRV-004',
             'unit_idunit'    => 2,
             'status_service' => 1,
         ]);
@@ -175,10 +186,43 @@ final class TutupKasirDpTest extends CIUnitTestCase
         $this->assertSame(9999, $this->src->dpMasukTunai(2, self::D1), 'DP unit lain tidak bocor ke unit 1, tapi tetap ada di unitnya.');
     }
 
+    public function testRincianDpMasukHanyaMenampilkanPenerimaanAktifHariIniDanUnitIni(): void
+    {
+        $rincian = $this->src->dpMasukRincian(self::UNIT, self::D1);
+
+        $this->assertTrue($rincian['ledger_ada']);
+        $this->assertSame(30000, $rincian['total_tunai']);
+        $this->assertSame(0, $rincian['total_transfer']);
+        $this->assertSame(30000, $rincian['total']);
+        $this->assertSame(1, $rincian['jumlah']);
+        $this->assertSame('SRV-001', $rincian['rincian'][0]['no_service']);
+        $this->assertSame('tunai', $rincian['rincian'][0]['metode']);
+
+        $transfer = $this->src->dpMasukRincian(self::UNIT, self::D3);
+        $this->assertSame(0, $transfer['total_tunai']);
+        $this->assertSame(20000, $transfer['total_transfer']);
+        $this->assertSame(1, $transfer['jumlah']);
+
+        $kosong = $this->src->dpMasukRincian(self::UNIT, self::D2);
+        $this->assertSame(0, $kosong['total']);
+        $this->assertSame([], $kosong['rincian']);
+    }
+
     public function testDpServiceSelesaiMenjumlahDpServiceYangDiambil(): void
     {
         $this->assertSame(30000, $this->src->dpServiceSelesai(self::UNIT, self::D2), 'DP service A (selesai D2).');
         $this->assertSame(0, $this->src->dpServiceSelesai(self::UNIT, self::D1), 'Tidak ada service selesai di D1.');
+
+        $this->db->table('service_dp')->where('service_idservice', 1)->update(['refund_idkas_keluar' => 901]);
+        $this->assertSame(0, $this->src->dpServiceSelesai(self::UNIT, self::D2), 'DP yang direfund tidak mengurangi pelunasan service.');
+    }
+
+    public function testDpDirefundTetapMasukPadaTanggalPenerimaanAslinya(): void
+    {
+        $this->db->table('service_dp')->where('service_idservice', 1)->update(['refund_idkas_keluar' => 901]);
+
+        $this->assertSame(30000, $this->src->dpMasukTunai(self::UNIT, self::D1));
+        $this->assertSame(35000, $this->src->kasMasukDp(self::UNIT, self::D1));
     }
 
     public function testKasMasukDpMenambahDpTunaiDiTanggalPenerimaan(): void

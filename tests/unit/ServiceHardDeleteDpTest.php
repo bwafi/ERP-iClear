@@ -79,6 +79,7 @@ final class ServiceHardDeleteDpTest extends CIUnitTestCase
             kode_dp VARCHAR(40) NOT NULL,
             jumlah BIGINT DEFAULT 0,
             status VARCHAR(15) NOT NULL DEFAULT \'aktif\',
+            refund_idkas_keluar INT NULL,
             UNIQUE KEY uniq_sdp_kode (kode_dp))');
 
         $this->db->query('CREATE TABLE jurnal (

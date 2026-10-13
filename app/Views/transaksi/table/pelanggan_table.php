@@ -147,20 +147,6 @@ $formAction = empty($idservice)
         <input hidden type="text" id="created_at" value="<?php echo @$old_service_pelanggan->created_at ?>">
         <input type="hidden" name="selectedidpelanggan" id="idpela" value="<?php echo @$old_service_pelanggan->id_pelanggan ?>">
 
-        <!-- Perangkat -->
-        <div class="col-md-4">
-            <label class="form-label fw-semibold">Tipe HP</label>
-            <input type="text" value="<?php echo @$old_service_pelanggan->tipe_hp ?>" placeholder="" class="form-control" name="tipe_hp">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label fw-semibold">IMEI</label>
-            <input type="text" value="<?php echo @$old_service_pelanggan->imei ?>" class="form-control" name="imei">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label fw-semibold">DP</label>
-            <input type="text" value="<?php echo @$old_service_pelanggan->dp_bayar ?>" class="form-control" name="dp_bayar">
-        </div>
-
         <!-- Pelanggan (otomatis dari pelanggan terpilih) -->
         <div class="col-md-4">
             <label class="form-label fw-semibold d-inline-flex align-items-center gap-1">Nama Pelanggan <i class="bi bi-magic fs-3 text-success" title="Terisi otomatis dari pelanggan terpilih"></i></label>
@@ -198,6 +184,16 @@ $formAction = empty($idservice)
                     <option value="<?= esc($old_service_pelanggan->kecamatan) ?>" selected><?= esc($old_service_pelanggan->kecamatan) ?></option>
                 <?php endif ?>
             </select>
+        </div>
+
+        <!-- Perangkat -->
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Tipe HP</label>
+            <input type="text" value="<?php echo @$old_service_pelanggan->tipe_hp ?>" placeholder="" class="form-control" name="tipe_hp">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">IMEI</label>
+            <input type="text" value="<?php echo @$old_service_pelanggan->imei ?>" class="form-control" name="imei">
         </div>
 
         <!-- Akses perangkat -->
@@ -706,6 +702,8 @@ $formAction = empty($idservice)
                 alert('Silakan pilih pelanggan terlebih dahulu melalui tombol "Pilih Pelanggan"!');
                 return false;
             }
+
+            // DP dipindah ke tab Pembayaran. Tidak ada validasi DP di tahap ini.
         });
 
         // Domisili di form utama bersifat read-only (auto dari pelanggan),
@@ -715,6 +713,8 @@ $formAction = empty($idservice)
         });
     });
 </script>
+
+
 
 
 <script>

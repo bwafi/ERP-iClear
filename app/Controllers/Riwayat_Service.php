@@ -27,6 +27,7 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
+use App\Models\ModelServiceDp;
 
 class Riwayat_Service extends BaseController
 
@@ -51,6 +52,7 @@ class Riwayat_Service extends BaseController
     protected $DetailPenjualanModel;
     protected $RegionModel;
     protected $DpService;
+    protected $DpLedgerModel;
 
 
 
@@ -75,6 +77,7 @@ class Riwayat_Service extends BaseController
         $this->RegionModel = new ModelRegion();
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
         $this->DpService = new ServiceDpService();
+        $this->DpLedgerModel = new ModelServiceDp();
     }
 
     public function index()
@@ -830,6 +833,127 @@ class Riwayat_Service extends BaseController
             'recordsFiltered' => $result['recordsFiltered'],
             'data' => $result['data']
         ]);
+    }
+
+    /** Halaman daftar penerimaan DP service — akses dan cakupan unit mengikuti Proses Service. */
+    public function dp_service()
+    {
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+
+        return view('template', [
+            'unit'           => $this->UnitModel->getUnit(),
+            'is_ho'          => $isHO,
+            'user_unit'      => (int) session('ID_UNIT'),
+            'dp_ledger_ada'  => $this->DpService->punyaTabelLedger(),
+            'dp_refund_siap' => $this->DpService->refundSiap(),
+            'body'           => 'riwayat/dp_service',
+        ]);
+    }
+
+    /** DataTables DP service — pengguna non-HO selalu dibatasi ke unit sesi. */
+    public function dp_service_ajax()
+    {
+        $request = \Config\Services::request();
+        $draw = (int) ($request->getPost('draw') ?? 0);
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $userUnit = (int) session('ID_UNIT');
+
+        if (! $this->DpService->punyaTabelLedger()) {
+            return $this->response->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+            ]);
+        }
+
+        if ($isHO) {
+            $unitRaw = $request->getPost('unitFilter');
+            $unitFilter = is_numeric($unitRaw) && (int) $unitRaw > 0
+                ? (int) $unitRaw
+                : null;
+        } else {
+            $unitFilter = $userUnit > 0 ? $userUnit : -1;
+        }
+
+        $dateFilter = static function ($value): string {
+            if (! is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+                return '';
+            }
+
+            $date = \DateTime::createFromFormat('!Y-m-d', $value);
+
+            return $date && $date->format('Y-m-d') === $value ? $value : '';
+        };
+
+        $search = $request->getPost('search');
+        $searchValue = is_array($search) ? trim((string) ($search['value'] ?? '')) : '';
+        $order = $request->getPost('order');
+        $orderRow = is_array($order) ? ($order[0] ?? []) : [];
+        $start = max(0, (int) ($request->getPost('start') ?? 0));
+        $length = min(100, max(1, (int) ($request->getPost('length') ?? 10)));
+
+        $result = $unitFilter === -1
+            ? ['recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]
+            : $this->DpLedgerModel->datatable(
+                $start,
+                $length,
+                $searchValue,
+                $dateFilter($request->getPost('startDate')),
+                $dateFilter($request->getPost('endDate')),
+                $unitFilter,
+                (int) ($orderRow['column'] ?? 0),
+                (string) ($orderRow['dir'] ?? 'desc')
+            );
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $result['recordsTotal'],
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data'            => $result['data'],
+        ]);
+    }
+
+    /** Refund penuh DP untuk service yang sudah dibatalkan. */
+    public function refund_dp_service()
+    {
+        $rawId = $this->request->getPost('dp_id');
+        $idDp = is_scalar($rawId) ? (int) $rawId : 0;
+        $alasan = $this->request->getPost('refund_alasan');
+        $referensi = $this->request->getPost('refund_referensi');
+        $alasan = is_string($alasan) ? $alasan : '';
+        $referensi = is_string($referensi) ? $referensi : null;
+
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $unitDiizinkan = $isHO ? null : (int) session('ID_UNIT');
+        if (! $isHO && $unitDiizinkan <= 0) {
+            session()->setFlashdata('gagal', 'Unit akun tidak valid; refund DP tidak dapat diproses.');
+
+            return redirect()->to(base_url('dp_service'));
+        }
+
+        try {
+            $hasil = $this->DpService->refund(
+                $idDp,
+                $alasan,
+                $referensi,
+                (int) session('ID_AKUN'),
+                $unitDiizinkan
+            );
+
+            session()->setFlashdata(
+                'sukses',
+                'Refund DP berhasil dicatat sebesar Rp ' . number_format($hasil['jumlah'], 0, ',', '.') . '; service ditandai dibatalkan.'
+            );
+        } catch (\Throwable $e) {
+            log_message('error', 'Refund DP service #' . $idDp . ' gagal: ' . $e->getMessage());
+            session()->setFlashdata('gagal', $e->getMessage());
+        }
+
+        return redirect()->to(base_url('dp_service'));
     }
 
     public function togglePrioritas()

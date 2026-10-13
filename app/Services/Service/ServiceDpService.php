@@ -6,6 +6,7 @@ use App\Models\ModelBank;
 use App\Models\ModelJurnal;
 use App\Models\ModelService;
 use App\Models\ModelServiceDp;
+use App\Services\Finance\BankRekeningValidator;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
 
@@ -15,11 +16,13 @@ use Config\Database;
  * Ruang lingkup (tahap fondasi):
  *  - catatDp(): validasi + INSERT baris ledger + jurnal DP + proyeksi
  *    `service.dp_bayar`.
+ *  - refund(): refund penuh untuk service yang batal sebelum dikerjakan,
+ *    dicatat ke kas keluar dan jurnal pembalik tanpa menghapus penerimaan asal.
  *  - totalDpAktif(): jumlah DP berstatus aktif per service.
  *  - proyeksiDpBayar(): tulis ulang `service.dp_bayar` dari total DP aktif.
  *
- * BUKAN ledger pelunasan. Pelunasan, pembatalan/reversal, invoice, dan UI
- * belum menjadi bagian dari service ini.
+ * BUKAN ledger pelunasan. Pelunasan dan invoice tetap memakai alur service
+ * yang sudah ada.
  *
  * TRANSAKSI
  * ---------
@@ -50,6 +53,14 @@ class ServiceDpService
         'tunai'    => 'dp_service_tunai',
         'transfer' => 'dp_service_bank',
     ];
+
+    /** Template pembalik kewajiban DP saat dana dikembalikan penuh. */
+    public const TEMPLATE_REFUND = [
+        'tunai'    => 'refund_dp_service_tunai',
+        'transfer' => 'refund_dp_service_bank',
+    ];
+
+    private const COA_PENDAPATAN_DITERIMA_DI_MUKA = '2010302000';
 
     public const STATUS_OK = 'ok';
     public const STATUS_SKIP = 'skip';
@@ -142,7 +153,7 @@ class ServiceDpService
             return [
                 'status'  => self::STATUS_SKIP,
                 'id'      => null,
-                'total'   => $this->totalDpAktif($idservice),
+                'total'   => 0,
                 'kode_dp' => null,
             ];
         }
@@ -165,24 +176,37 @@ class ServiceDpService
         $kodeDp = $kodeDiminta ?? $this->generateKodeDp($idservice);
         $now    = date('Y-m-d H:i:s');
 
-        $id = $this->DpModel->insert([
-            'service_idservice' => $idservice,
-            'kode_dp'           => $kodeDp,
-            'tanggal'           => date('Y-m-d', strtotime($tanggal)),
-            'jumlah'            => $jumlah,
-            'metode'            => $metode,
-            // Bank & referensi hanya relevan untuk transfer.
-            'bank_idbank'       => $metode === 'transfer' ? $bankIdbank : null,
-            'referensi'         => $metode === 'transfer' ? $referensi : null,
-            'status'            => 'aktif',
-            'keterangan'        => $keterangan,
-            'unit_id'           => $unitId,
-            'input_by'          => $inputBy > 0 ? $inputBy : null,
-            'created_at'        => $now,
-            'updated_at'        => $now,
-        ], true);
+        $template = self::TEMPLATE[$metode];
+        $this->pastikanTemplateAda($template);
+
+        $kodeDp = $kodeDiminta ?? $this->generateKodeDp($idservice);
+        $now    = date('Y-m-d H:i:s');
+
+        try {
+            $id = $this->DpModel->insert([
+                'service_idservice' => $idservice,
+                'kode_dp'           => $kodeDp,
+                'tanggal'           => date('Y-m-d', strtotime($tanggal)),
+                'jumlah'            => $jumlah,
+                'metode'            => $metode,
+                // Bank & referensi hanya relevan untuk transfer.
+                'bank_idbank'       => $metode === 'transfer' ? $bankIdbank : null,
+                'referensi'         => $metode === 'transfer' ? $referensi : null,
+                'status'            => 'aktif',
+                'keterangan'        => $keterangan,
+                'unit_id'           => $unitId,
+                'input_by'          => $inputBy > 0 ? $inputBy : null,
+                'created_at'        => $now,
+                'updated_at'        => $now,
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'ServiceDpService::catatDp gagal insert: ' . $e->getMessage());
+            throw new \RuntimeException('DP service: gagal menyimpan baris ledger DP.');
+        }
 
         if (! $id) {
+            $error = $this->db->error();
+            log_message('error', 'ServiceDpService::catatDp gagal insert ke service_dp: ' . json_encode($error));
             throw new \RuntimeException('DP service: gagal menyimpan baris ledger DP.');
         }
 
@@ -197,6 +221,267 @@ class ServiceDpService
             'total'   => $total,
             'kode_dp' => $kodeDp,
         ];
+    }
+
+    /**
+     * Refund penuh DP sekaligus membatalkan service yang belum dikerjakan.
+     *
+     * Satu transaksi atomik membuat sumber kas keluar, jurnal pembalik DP,
+     * metadata audit, dan proyeksi `service.dp_bayar`. Dana dikembalikan melalui
+     * metode/rekening asal; syarat status aktif + conditional update mencegah
+     * refund ganda saat request bersamaan.
+     *
+     * @return array{status:string,idkas_keluar:int,jumlah:int,metode:string}
+     */
+    public function refund(
+        int $idDp,
+        string $alasan,
+        ?string $referensi,
+        int $inputBy,
+        ?int $unitDiizinkan = null
+    ): array {
+        $alasan = trim($alasan);
+        $referensi = $referensi === null ? null : trim($referensi);
+
+        if ($idDp <= 0) {
+            throw new \RuntimeException('DP tidak valid.');
+        }
+        if ($alasan === '' || mb_strlen($alasan) > 120) {
+            throw new \RuntimeException('Alasan refund wajib diisi (maksimal 120 karakter).');
+        }
+        if ($referensi !== null && mb_strlen($referensi) > 100) {
+            throw new \RuntimeException('Referensi refund maksimal 100 karakter.');
+        }
+
+        if (! $this->refundSiap()) {
+            throw new \RuntimeException('Skema atau jurnal refund DP belum siap. Jalankan migrasi refund DP atau hubungi admin.');
+        }
+
+        $this->db->transBegin();
+
+        try {
+            $dp = $this->db->table('service_dp sd')
+                ->select('sd.*, s.no_service, s.unit_idunit, s.status_service, s.bayar_tunai, p.nama AS nama_pelanggan')
+                ->join('service s', 's.idservice = sd.service_idservice')
+                ->join('pelanggan p', 'p.id_pelanggan = s.pelanggan_id_pelanggan', 'left')
+                ->where('sd.id', $idDp)
+                ->get()
+                ->getRow();
+
+            if (! $dp) {
+                throw new \RuntimeException('DP tidak ditemukan.');
+            }
+
+            $unitId = (int) ($dp->unit_idunit ?? 0);
+            if ($unitId <= 0 || ($unitDiizinkan !== null && $unitId !== $unitDiizinkan)) {
+                throw new \RuntimeException('Anda tidak memiliki akses ke unit service ini.');
+            }
+            $statusService = (int) ($dp->status_service ?? 0);
+            if (! in_array($statusService, [1, 2, 90], true)) {
+                throw new \RuntimeException('Refund DP hanya tersedia selama service belum masuk tahap siap diambil atau selesai.');
+            }
+            if ((string) $dp->status !== 'aktif' || ! empty($dp->refund_idkas_keluar) || ! empty($dp->refund_at)) {
+                throw new \RuntimeException('DP ini sudah dibatalkan atau direfund.');
+            }
+
+            $bayarTunaiSelainDp = (int) ($dp->bayar_tunai ?? 0);
+            $bankRow = $this->db->table('pembayaran_bank')
+                ->selectSum('jumlah', 'total')
+                ->where('tabel_referensi', 'service_baru')
+                ->where('id_referensi', (int) $dp->service_idservice)
+                ->get()
+                ->getRow();
+            $bayarBankSelainDp = (int) ($bankRow->total ?? 0);
+            if ($bayarTunaiSelainDp > 0 || $bayarBankSelainDp > 0) {
+                throw new \RuntimeException(
+                    'Service ini juga memiliki pembayaran selain DP (tunai Rp '
+                    . number_format($bayarTunaiSelainDp, 0, ',', '.')
+                    . ', transfer Rp ' . number_format($bayarBankSelainDp, 0, ',', '.')
+                    . '). Selesaikan refund pembayaran tersebut sebelum membatalkan service.'
+                );
+            }
+
+            if ($this->db->table('service_sparepart')
+                ->where('service_idservice', (int) $dp->service_idservice)
+                ->countAllResults() > 0) {
+                throw new \RuntimeException('Service ini sudah memakai sparepart. Selesaikan retur sparepart sebelum refund DP.');
+            }
+
+            $jumlah = (int) ($dp->jumlah ?? 0);
+            $metode = strtolower(trim((string) ($dp->metode ?? '')));
+            if ($jumlah <= 0 || ! isset(self::TEMPLATE_REFUND[$metode])) {
+                throw new \RuntimeException('Nominal atau metode DP tidak valid untuk refund.');
+            }
+            if ($metode === 'transfer' && ($referensi === null || $referensi === '')) {
+                throw new \RuntimeException('Referensi transfer refund wajib diisi.');
+            }
+
+            $bankId = null;
+            if ($metode === 'transfer') {
+                $bankId = trim((string) ($dp->bank_idbank ?? ''));
+                if ($bankId === '') {
+                    throw new \RuntimeException('Rekening asal DP transfer tidak tersedia. Refund dibatalkan.');
+                }
+
+                $validasiBank = (new BankRekeningValidator())->validateUntukUnit(
+                    $bankId,
+                    $unitId,
+                    session('ID_JABATAN') === null || session('ID_JABATAN') === ''
+                        ? null
+                        : (int) session('ID_JABATAN'),
+                    false
+                );
+                if (! $validasiBank['ok']) {
+                    throw new \RuntimeException('Rekening asal DP tidak dapat digunakan untuk refund: ' . $validasiBank['alasan']);
+                }
+            }
+
+            $kategoriRefund = $this->db->table('kategori_kas')
+                ->where('kategori', 'REFUND')
+                ->where('jenis_kas', 'kas_keluar')
+                ->get()
+                ->getRow();
+            if (! $kategoriRefund) {
+                throw new \RuntimeException('Kategori kas keluar REFUND belum tersedia.');
+            }
+            if (! $this->db->table('no_akun')
+                ->where('no_akun', self::COA_PENDAPATAN_DITERIMA_DI_MUKA)
+                ->countAllResults()) {
+                throw new \RuntimeException('Akun Pendapatan Diterima di Muka belum tersedia di daftar COA.');
+            }
+
+            $template = self::TEMPLATE_REFUND[$metode];
+            $jumlahTemplate = $this->db->table('template_jurnal')
+                ->where('kode_template', $template)
+                ->countAllResults();
+            if ($jumlahTemplate < 2) {
+                throw new \RuntimeException('Template jurnal refund DP belum lengkap. Jalankan migrasi refund DP.');
+            }
+
+            $wib = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
+            $tanggal = $wib->format('Y-m-d');
+            $waktu = $wib->format('Y-m-d H:i:s');
+
+            // Batalkan ticket dalam transaksi refund yang sama. Conditional
+            // update menolak refund jika ticket selesai bersamaan di request lain.
+            if ($statusService !== 90) {
+                $this->db->table('service')
+                    ->where('idservice', (int) $dp->service_idservice)
+                    ->whereIn('status_service', [1, 2, 3])
+                    ->update([
+                        'status_service' => 90,
+                        'tanggal_bisa_diambil' => $waktu,
+                        'updated_at' => $waktu,
+                    ]);
+
+                if ($this->db->affectedRows() !== 1) {
+                    throw new \RuntimeException('Status service berubah. Muat ulang halaman sebelum refund.');
+                }
+            }
+
+            $kodeDp = trim((string) ($dp->kode_dp ?? ('DP-' . $idDp)));
+            $deskripsi = 'Refund DP ' . $kodeDp . ' - ' . $alasan;
+            $namaPenerima = trim((string) ($dp->nama_pelanggan ?? ''));
+
+            // Kunci refund di transaksi tanpa mengubah status penerimaan DP.
+            // Status tetap aktif agar kas masuk pada tanggal DP diterima tidak
+            // hilang dari histori; refund_idkas_keluar menjadi jejak refund dan
+            // penanda bahwa saldo DP ini tidak bisa dipakai untuk settlement.
+            $this->db->table('service_dp')
+                ->where('id', $idDp)
+                ->where('status', 'aktif')
+                ->where('refund_idkas_keluar', null)
+                ->where('refund_at', null)
+                ->update([
+                    'refund_at'  => $waktu,
+                    'refund_by'  => $inputBy > 0 ? $inputBy : null,
+                    'updated_at' => $waktu,
+                ]);
+
+            if ($this->db->affectedRows() !== 1) {
+                throw new \RuntimeException('DP ini sudah diproses refund oleh pengguna lain. Muat ulang daftar DP.');
+            }
+
+            $tersimpan = $this->db->table('kas_keluar')->insert([
+                'tanggal'             => $tanggal,
+                'no_akun'             => self::COA_PENDAPATAN_DITERIMA_DI_MUKA,
+                'kategori_idkategori' => (int) $kategoriRefund->idkategori_kas,
+                'deskripsi'           => $deskripsi,
+                'jumlah'              => $jumlah,
+                'jenis'               => 'debet',
+                'penerima'            => $namaPenerima,
+                'idbank'              => $bankId,
+                'idunit'              => $unitId,
+                'created_on'          => $waktu,
+            ]);
+
+            if (! $tersimpan) {
+                throw new \RuntimeException('Gagal mencatat kas keluar refund DP.');
+            }
+
+            $idKasKeluar = (int) $this->db->insertID();
+            if ($idKasKeluar <= 0) {
+                throw new \RuntimeException('Nomor transaksi kas keluar refund tidak terbentuk.');
+            }
+
+            $maks = $this->db->table('jurnal')->selectMax('idjurnal', 'maks')->get()->getRow();
+            $jurnalSebelum = (int) ($maks->maks ?? 0);
+            $this->JurnalModel->insertJurnal(
+                $tanggal,
+                $template,
+                [$jumlah],
+                $deskripsi,
+                $idKasKeluar,
+                'kas_keluar',
+                $unitId
+            );
+
+            $ringkas = $this->JurnalModel->ringkasByReferensi('kas_keluar', $idKasKeluar, $jurnalSebelum);
+            if ($ringkas['jumlah'] !== 2 || ! $ringkas['seimbang']
+                || $ringkas['debet'] !== $jumlah || $ringkas['kredit'] !== $jumlah) {
+                throw new \RuntimeException('Jurnal refund DP gagal terbentuk seimbang. Refund dibatalkan.');
+            }
+
+            $this->db->table('service_dp')
+                ->where('id', $idDp)
+                ->update([
+                    'refund_idkas_keluar' => $idKasKeluar,
+                    'refund_tanggal'      => $tanggal,
+                    'refund_metode'       => $metode,
+                    'refund_bank_idbank'  => $bankId,
+                    'refund_referensi'    => $metode === 'transfer' ? $referensi : null,
+                    'refund_alasan'       => $alasan,
+                    'refund_by'           => $inputBy > 0 ? $inputBy : null,
+                    'refund_at'           => $waktu,
+                    'updated_at'          => $waktu,
+                ]);
+
+            $saldoDpAktif = $this->proyeksiDpBayar((int) $dp->service_idservice);
+            $service = $this->db->table('service')
+                ->select('dp_bayar')
+                ->where('idservice', (int) $dp->service_idservice)
+                ->get()
+                ->getRow();
+            if (! $service || (int) $service->dp_bayar !== $saldoDpAktif) {
+                throw new \RuntimeException('Gagal memperbarui saldo DP service setelah refund.');
+            }
+
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException('Refund DP gagal disimpan.');
+            }
+
+            $this->db->transCommit();
+
+            return [
+                'status'       => 'ok',
+                'idkas_keluar' => $idKasKeluar,
+                'jumlah'       => $jumlah,
+                'metode'       => $metode,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            throw $e;
+        }
     }
 
     /**
@@ -221,6 +506,40 @@ class ServiceDpService
     public function punyaTabelLedger(): bool
     {
         return $this->db->tableExists($this->db->getPrefix() . 'service_dp', false);
+    }
+
+    /** Apakah skema dan template jurnal untuk refund penuh sudah tersedia? */
+    public function refundSiap(): bool
+    {
+        if (! $this->punyaTabelLedger() || ! $this->db->tableExists('template_jurnal')) {
+            return false;
+        }
+
+        foreach ([
+            'refund_idkas_keluar', 'refund_tanggal', 'refund_metode',
+            'refund_bank_idbank', 'refund_referensi', 'refund_alasan',
+            'refund_by', 'refund_at',
+        ] as $field) {
+            if (! $this->db->fieldExists($field, 'service_dp')) {
+                return false;
+            }
+        }
+
+        foreach (self::TEMPLATE_REFUND as $template) {
+            if ($this->db->table('template_jurnal')->where('kode_template', $template)->countAllResults() < 2) {
+                return false;
+            }
+        }
+
+        if (! $this->db->tableExists('kategori_kas') || ! $this->db->tableExists('no_akun')) {
+            return false;
+        }
+        if ($this->db->table('kategori_kas')->where('kategori', 'REFUND')->where('jenis_kas', 'kas_keluar')->countAllResults() === 0
+            || $this->db->table('no_akun')->where('no_akun', self::COA_PENDAPATAN_DITERIMA_DI_MUKA)->countAllResults() === 0) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -274,11 +593,18 @@ class ServiceDpService
             return $hasil;
         }
 
-        $row = $this->db->table('service')
+        $query = $this->db->table('service')
             ->select('dp_bayar')
             ->where('idservice', $idservice)
-            ->get()
-            ->getRow();
+            ->get();
+
+        if ($query === false) {
+            $error = $this->db->error();
+            log_message('error', 'Gagal query statusSumberDp: ' . json_encode($error));
+            throw new \RuntimeException('Gagal membaca service pada statusSumberDp.');
+        }
+
+        $row = $query->getRow();
         $dpBayar = (int) ($row->dp_bayar ?? 0);
 
         if ($dpBayar > 0) {
@@ -406,11 +732,18 @@ class ServiceDpService
 
     private function generateKodeDp(int $idservice): string
     {
-        $service = $this->db->table('service')
+        $query = $this->db->table('service')
             ->select('no_service')
             ->where('idservice', $idservice)
-            ->get()
-            ->getRow();
+            ->get();
+
+        if ($query === false) {
+            $error = $this->db->error();
+            log_message('error', 'Gagal query generateKodeDp: ' . json_encode($error));
+            throw new \RuntimeException('Gagal membaca service pada generateKodeDp.');
+        }
+
+        $service = $query->getRow();
 
         $dasar = 'DP' . ($service->no_service ?? $idservice);
 

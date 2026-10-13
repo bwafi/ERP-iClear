@@ -83,10 +83,34 @@ class ModelService extends Model
             ->countAllResults() > 0;
     }
 
+    /**
+     * Refund adalah arus kas nyata; service terkait tidak boleh dihapus
+     * permanen setelahnya karena itu menghilangkan hubungan audit dan tanggal
+     * penerimaan DP dari laporan historis.
+     */
+    public function hasRefundedDp($idservice): bool
+    {
+        $db = \Config\Database::connect();
+        if (! $db->tableExists($db->getPrefix() . 'service_dp', false)
+            || ! $db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            return false;
+        }
+
+        return $db->table('service_dp')
+            ->where('service_idservice', (int) $idservice)
+            ->where('refund_idkas_keluar IS NOT NULL', null, false)
+            ->countAllResults() > 0;
+    }
+
     public function hardDeleteService($idservice)
     {
         $db = \Config\Database::connect();
         $idservice = (int) $idservice;
+
+        if ($this->hasRefundedDp($idservice)) {
+            log_message('warning', 'hardDeleteService ditolak: service ' . $idservice . ' memiliki refund DP tercatat');
+            return false;
+        }
 
         try {
             log_message('info', 'Starting delete service ID: ' . $idservice);

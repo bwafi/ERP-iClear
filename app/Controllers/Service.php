@@ -508,11 +508,50 @@ class Service extends BaseController
         $service_by_pembayaran = $this->request->getPost('service_by_pembayaran');
         $bayar_pembayaran = $this->rupiahToInt($this->request->getPost('bayar_pembayaran')); // ini tunai
         $idservice = $this->request->getPost('idservice_p');
+        $no_service = (string) ($this->request->getPost('no_service_pembayaran') ?? '');
+
+        // DP (dipindah dari tahap pelanggan ke tahap pembayaran)
+        $dp_bayar = $this->rupiahToInt((string) ($this->request->getPost('dp_bayar_pembayaran') ?? '0'));
+        $metode_dp = strtolower(trim((string) ($this->request->getPost('dp_metode_bayar') ?? '')));
+        $metode_dp = $metode_dp === '' ? 'tunai' : $metode_dp;
+        $bank_dp = $this->request->getPost('dp_bank_idbank');
+        if (is_array($bank_dp)) { $bank_dp = null; }
+        $referensi_dp = $this->request->getPost('dp_referensi');
+        if (is_array($referensi_dp)) { $referensi_dp = null; }
 
         $kodePembayaran =  'ksr' . date('Ymd') . session('ID_UNIT') . rand(1000, 9999);
         $bankData = $this->request->getPost('bank');
         $bankPembayaran = [];
         $totalBayarBank = 0;
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        // Catat DP (ledger + jurnal) bila diisi di tahap pembayaran
+        if ($dp_bayar > 0) {
+            try {
+                $hasilDp = $this->ServiceDpService->catatDp([
+                    'service_idservice' => (int) $idservice,
+                    'jumlah'            => (int) $dp_bayar,
+                    'metode'            => $metode_dp,
+                    'bank_idbank'       => $bank_dp,
+                    'referensi'         => $referensi_dp,
+                    'kode_dp'           => $no_service !== '' ? ('DP' . $no_service) : null,
+                    'tanggal'           => date('Y-m-d'),
+                    'keterangan'        => 'Pembayaran Uang Muka Jasa Service',
+                    'unit_id'           => (int) session('ID_UNIT'),
+                    'input_by'          => (int) session('ID_AKUN'),
+                ]);
+                if (($hasilDp['status'] ?? null) !== \App\Services\Service\ServiceDpService::STATUS_OK) {
+                    throw new \RuntimeException('Pencatatan DP gagal (status: ' . ($hasilDp['status'] ?? 'none') . ').');
+                }
+            } catch (\Throwable $e) {
+                $db->transRollback();
+                log_message('error', 'insert_pembayaran: gagal catat DP: ' . $e->getMessage());
+                session()->setFlashdata('gagal', 'Gagal menyimpan DP: ' . $e->getMessage());
+                return redirect()->back();
+            }
+        }
 
         if (!empty($bankData) && is_array($bankData)) {
             foreach ($bankData as $b) {
@@ -552,6 +591,11 @@ class Service extends BaseController
         );
         $this->ServiceModel->updateService($idservice, $datap);
 
+        if (! $db->transComplete()) {
+            $db->transRollback();
+            session()->setFlashdata('gagal', 'Transaksi pembayaran gagal diselesaikan.');
+            return redirect()->back();
+        }
         session()->remove('idservice');
         session()->setFlashdata('sukses', 'Berhasil Menambahkan Data Service');
         return redirect()->to(base_url('/proses_service'));
@@ -646,6 +690,11 @@ class Service extends BaseController
         if ($service->status_service >= 4) {
             session()->setFlashdata('gagal', 'Service sudah selesai, tidak dapat dibatalkan');
             return redirect()->to(base_url('service'));
+        }
+
+        if ($this->ServiceModel->hasRefundedDp($idservice)) {
+            session()->setFlashdata('gagal', 'Service dengan refund DP tidak dapat dihapus permanen karena transaksi refund harus tetap tercatat.');
+            return redirect()->to(base_url('proses_service'));
         }
 
         $idservice = (int) $idservice;
