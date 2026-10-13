@@ -42,6 +42,11 @@ class TutupKasir extends BaseController
         $h = (new \App\Services\Finance\TutupKasirClosing($this->db))
             ->hitung($unit, $today);
 
+        // Rincian DP yang diterima hari ini. Nilainya sudah termasuk di
+        // pendapatan cash/transfer; bagian ini hanya menampilkan rinciannya.
+        $dpService = (new \App\Services\Finance\TutupKasirSourceDefinition($this->db))
+            ->dpMasukRincian($unit, $today);
+
         // tutup kasir terakhir per unit (dipakai tombol Print)
         $tutupkasir = $this->db->table('tutup_kasir')
             ->where('unit', $unit)
@@ -81,7 +86,7 @@ class TutupKasir extends BaseController
             'pengeluarancash'     => (int) $h['kas_keluar'],
             'pengeluarantf'       => (int) $h['transfer_keluar'],
             'total_pendapatan'    => (int) $h['kas_masuk'] + (int) $h['transfer_masuk'],
-
+            'dp_service'          => $dpService,
             'wibOffsetMenit'      => 420,
             'body'                => 'jurnal/tutup_kasir',
         ]));

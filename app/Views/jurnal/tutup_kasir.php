@@ -23,6 +23,7 @@ $wibOffsetMenit    = (int)($wibOffsetMenit ?? 420);
 $tanggalHariIni    = (string)($tanggal ?? date('Y-m-d'));
 $unitId            = isset($unit) ? (int)$unit : 0;
 $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember' : ($unit === 3 ? 'Banyuwangi' : 'Pandaan'))) : '—';
+$dpService = $dp_service ?? ['ledger_ada' => false, 'total_tunai' => 0, 'total_transfer' => 0, 'total' => 0, 'jumlah' => 0, 'rincian' => []];
 ?>
 
 <div class="tutup-kasir tk-page">
@@ -237,6 +238,63 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
                     </div>
                 </div>
             </section>
+
+            <!-- ===== DP SERVICE DITERIMA HARI INI ===== -->
+            <?php if (!empty($dpService['ledger_ada'])) : ?>
+                <section class="tk-section mb-4">
+                    <header class="p-3 border-bottom">
+                        <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
+                            <iconify-icon icon="solar:hand-money-bold" width="22"></iconify-icon>
+                            DP Service Diterima Hari Ini
+                        </h5>
+                    </header>
+                    <div class="p-3">
+                        <div class="tk-summary mb-3">
+                            <article class="tk-summary__item tk-summary__item--income">
+                                <div class="tk-summary__header">
+                                    <span class="tk-summary__title">DP Tunai</span>
+                                    <div class="tk-summary__icon"><iconify-icon icon="solar:wallet-bold" width="28"></iconify-icon></div>
+                                </div>
+                                <div class="tk-summary__value tk-tabular">Rp <?= number_format((int)($dpService['total_tunai'] ?? 0), 0, ',', '.') ?></div>
+                            </article>
+                            <article class="tk-summary__item tk-summary__item--income">
+                                <div class="tk-summary__header">
+                                    <span class="tk-summary__title">DP Transfer</span>
+                                    <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
+                                </div>
+                                <div class="tk-summary__value tk-tabular">Rp <?= number_format((int)($dpService['total_transfer'] ?? 0), 0, ',', '.') ?></div>
+                            </article>
+                        </div>
+                        <p class="small text-muted mb-3">Rincian ini sudah termasuk dalam pendapatan cash/transfer di atas, bukan tambahan pendapatan.</p>
+                        <?php if (!empty($dpService['rincian'])) : ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Kode DP</th>
+                                            <th>No. Service</th>
+                                            <th>Metode</th>
+                                            <th class="text-end">Jumlah</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($dpService['rincian'] as $dp) : ?>
+                                            <tr>
+                                                <td><?= esc($dp['kode_dp'] ?? '-') ?></td>
+                                                <td><?= esc($dp['no_service'] ?? '-') ?></td>
+                                                <td><?= esc(ucfirst((string)($dp['metode'] ?? 'tunai'))) ?></td>
+                                                <td class="text-end tk-tabular">Rp <?= number_format((int)($dp['jumlah'] ?? 0), 0, ',', '.') ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php else : ?>
+                            <p class="text-muted small mb-0">Belum ada DP service diterima hari ini.</p>
+                        <?php endif; ?>
+                    </div>
+                </section>
+            <?php endif; ?>
 
             <!-- ===== COLLAPSIBLE: SALDO SEHARUSNYA (rincian alur, TANPA angka akhir) ===== -->
             <details class="tk-details tk-card tk-details mb-4">
