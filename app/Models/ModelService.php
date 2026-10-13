@@ -59,12 +59,41 @@ class ModelService extends Model
         return $this->findAll();
     }
 
+    /**
+     * Apakah service memiliki baris ledger DP (`service_dp`)?
+     *
+     * Dipakai sebagai guard hard delete: service ber-DP tidak boleh dihapus
+     * fisik karena akan meninggalkan baris ledger dan jurnal DP (tabel_referensi
+     * 'service_dp') yang yatim — reversal DP belum tersedia pada tahap ini.
+     */
+    public function hasDpLedger($idservice): bool
+    {
+        $db = \Config\Database::connect();
+
+        // Cek langsung (non-cache): daftar tabel CI4 di-cache per koneksi,
+        // sehingga hasil bisa basi setelah DDL. Panggil dengan nama lengkap
+        // termuat prefix, karena jalur non-cache `tableExists()` TIDAK
+        // mengaplikasikan DBPrefix (berbeda dengan jalur cache).
+        if (! $db->tableExists($db->getPrefix() . 'service_dp', false)) {
+            return false;
+        }
+
+        return $db->table('service_dp')
+            ->where('service_idservice', (int) $idservice)
+            ->countAllResults() > 0;
+    }
+
     public function hardDeleteService($idservice)
     {
         $db = \Config\Database::connect();
 
         try {
             log_message('info', 'Starting delete service ID: ' . $idservice);
+
+            if ($this->hasDpLedger($idservice)) {
+                log_message('error', 'hardDeleteService ditolak: service ' . $idservice . ' memiliki ledger DP (service_dp).');
+                return false;
+            }
 
             $spareparts = $db->table('service_sparepart')
                 ->where('service_idservice', $idservice)

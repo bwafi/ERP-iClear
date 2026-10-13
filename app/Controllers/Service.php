@@ -21,6 +21,7 @@ use App\Models\ModelPenjualan;
 use App\Models\ModelUnit;
 use App\Models\ModelKartuStok;
 use App\Models\ModelRegion;
+use App\Services\Service\ServiceDpService;
 
 class Service extends BaseController
 
@@ -43,6 +44,7 @@ class Service extends BaseController
     protected $UnitModel;
     protected $KartuStokModel;
     protected $RegionModel;
+    protected $ServiceDpService;
 
 
 
@@ -65,6 +67,7 @@ class Service extends BaseController
         $this->UnitModel = new ModelUnit();
         $this->KartuStokModel = new ModelKartuStok();
         $this->RegionModel = new ModelRegion();
+        $this->ServiceDpService = new ServiceDpService();
     }
 
     public function index()
@@ -144,7 +147,16 @@ class Service extends BaseController
         $idpelanggan  = $this->request->getPost('selectedidpelanggan');
         $no_hp = $this->request->getPost('no_hp');
         $imei = $this->request->getPost('imei');
-        $dp_bayar = $this->rupiahToInt($this->request->getPost('dp_bayar'));
+        $dp_raw = $this->request->getPost('dp_bayar');
+        if (is_array($dp_raw)) {
+            $dp_raw = null;
+        }
+        $dp_raw = (string) $dp_raw;
+        if (strpos($dp_raw, '-') !== false) {
+            session()->setFlashdata('gagal', 'Nominal DP tidak boleh negatif.');
+            return redirect()->back();
+        }
+        $dp_bayar = $this->rupiahToInt($dp_raw);
         $tipe_hp = $this->request->getPost('tipe_hp');
         $passcode = $this->request->getPost('passcode');
         $email_icloud = $this->request->getPost('email_icloud');
@@ -161,8 +173,13 @@ class Service extends BaseController
             return redirect()->back();
         }
 
-        $idunit = session('ID_UNIT');
-        $idakun = session('ID_AKUN');
+        $idunit = (int) session('ID_UNIT');
+        $idakun = (int) session('ID_AKUN');
+
+        if ($dp_bayar > 0 && $idunit <= 0) {
+            session()->setFlashdata('gagal', 'Unit transaksi tidak valid untuk pencatatan DP.');
+            return redirect()->back();
+        }
 
         date_default_timezone_set('Asia/Jakarta');
         $tanggal = date('Ymd');
@@ -192,7 +209,7 @@ class Service extends BaseController
             'no_service' => $no_service,
             'no_hp' => $no_hp,
             'imei' => $imei,
-            'dp_bayar' => $dp_bayar,
+            'dp_bayar' => 0,
             'keluhan' => $keluhan,
             'keterangan' => $keterangan,
             'tipe_hp' => $tipe_hp,
@@ -206,12 +223,29 @@ class Service extends BaseController
             'created_at' => $created_at,
         );
 
-        $result = $this->ServiceModel->insertService($data);
+        $metode_dp = strtolower(trim((string) ($this->request->getPost('metode_bayar') ?? 'tunai')));
+        $metode_dp = $metode_dp === '' ? 'tunai' : $metode_dp;
+        $bank_dp = $this->request->getPost('bank_idbank');
+        if (is_array($bank_dp)) {
+            $bank_dp = null;
+        }
+        $referensi_dp = $this->request->getPost('referensi_dp');
+        if (is_array($referensi_dp)) {
+            $referensi_dp = null;
+        }
 
+        $db = Database::connect();
+        $db->transStart();
 
-        if ($result) {
-            $idservice = $this->ServiceModel->insertID();
-            session()->set('idservice', $idservice);
+        try {
+            if (! $this->ServiceModel->insertService($data)) {
+                throw new \RuntimeException('Gagal menyimpan data service.');
+            }
+
+            $idservice = (int) $this->ServiceModel->insertID();
+            if ($idservice <= 0) {
+                throw new \RuntimeException('ID service tidak valid setelah penyimpanan.');
+            }
 
             if (!empty($idpelanggan)) {
                 $this->PelangganModel->update($idpelanggan, [
@@ -221,14 +255,45 @@ class Service extends BaseController
                 ]);
             }
 
-            $ar_nilai[] = $dp_bayar;
-            $ar_nilai[] = 0;
-            $this->JurnalModel->insertJurnal($tanggal_cek, 'dp_service_tunai', $ar_nilai, "Pembayaran Uang Muka Jasa Service", $idservice, 'service');
+            // DP > 0 dicatat ke ledger `service_dp` + jurnal DP. DP 0 dilewati
+            // (tidak ada baris ledger maupun jurnal). `kode_dp` dibuat stabil
+            // dari no_service sehingga ulangan request (no_service sama karena
+            // counter belum naik) memicu unique constraint / status duplikat
+            // dan dibatalkan seluruhnya oleh pemeriksaan di bawah.
+            $hasilDp = $this->ServiceDpService->catatDp([
+                'service_idservice' => $idservice,
+                'jumlah'            => $dp_bayar,
+                'metode'            => $metode_dp,
+                'bank_idbank'       => $bank_dp,
+                'referensi'         => $referensi_dp,
+                'kode_dp'           => 'DP' . $no_service,
+                'tanggal'           => $tanggal_cek,
+                'keterangan'        => 'Pembayaran Uang Muka Jasa Service',
+                'unit_id'           => $idunit,
+                'input_by'          => $idakun,
+            ]);
 
+            if ($dp_bayar > 0 && ($hasilDp['status'] ?? null) !== ServiceDpService::STATUS_OK) {
+                throw new \RuntimeException('Pencatatan DP tidak menghasilkan ledger (status: ' . ($hasilDp['status'] ?? 'none') . '). Pengiriman duplikat dibatalkan seluruhnya.');
+            }
 
-            session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
-            return redirect()->to('/service?tab=kerusakan')->with('sukses', 'Data kerusakan berhasil diperbarui.');
+            if ($db->transStatus() === false) {
+                throw new \RuntimeException('Terjadi kegagalan saat menyimpan transaksi.');
+            }
+
+            if (! $db->transComplete()) {
+                throw new \RuntimeException('Transaksi service gagal diselesaikan.');
+            }
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'Service::insert_service gagal: ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menambahkan data service: ' . $e->getMessage());
+            return redirect()->back();
         }
+
+        session()->set('idservice', $idservice);
+        session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
+        return redirect()->to('/service?tab=kerusakan')->with('sukses', 'Data kerusakan berhasil diperbarui.');
     }
 
 
@@ -580,6 +645,11 @@ class Service extends BaseController
 
         if ($service->status_service >= 4) {
             session()->setFlashdata('gagal', 'Service sudah selesai, tidak dapat dibatalkan');
+            return redirect()->to(base_url('service'));
+        }
+
+        if ($this->ServiceModel->hasDpLedger($idservice)) {
+            session()->setFlashdata('gagal', 'Service ini memiliki DP yang tercatat pada ledger. Pembatalan service ber-DP ditolak agar ledger dan jurnal DP tidak menjadi yatim. Pembatalan/refund DP belum tersedia pada tahap ini.');
             return redirect()->to(base_url('service'));
         }
 

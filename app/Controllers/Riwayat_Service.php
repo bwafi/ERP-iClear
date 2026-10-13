@@ -1067,6 +1067,11 @@ class Riwayat_Service extends BaseController
             return redirect()->to(base_url('riwayat_service'));
         }
 
+        if ($this->ServiceModel->hasDpLedger($idservice)) {
+            session()->setFlashdata('gagal', 'Service ini memiliki DP yang tercatat pada ledger. Hard delete ditolak agar ledger dan jurnal DP tidak menjadi yatim. Pembatalan DP belum tersedia pada tahap ini.');
+            return redirect()->to(base_url('riwayat_service'));
+        }
+
         try {
             $result = $this->ServiceModel->hardDeleteService($idservice);
 
