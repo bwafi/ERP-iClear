@@ -1,3 +1,226 @@
+<style>
+    /* Pemilih sparepart — daftar pilih, bukan tabel padat */
+    .service-sp-search {
+        position: relative;
+    }
+
+    .service-sp-search-icon {
+        position: absolute;
+        top: 50%;
+        left: 14px;
+        transform: translateY(-50%);
+        color: var(--bs-secondary-color);
+        pointer-events: none;
+    }
+
+    .service-sp-search .form-control {
+        height: 44px;
+        padding-left: 42px;
+    }
+
+    .service-sp-unit {
+        flex-shrink: 0;
+        font-size: .75rem;
+        font-weight: 600;
+        color: var(--bs-secondary-color);
+    }
+
+    .service-sp-list {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+        min-height: 220px;
+        max-height: min(58vh, 460px);
+        overflow-y: auto;
+        padding: 4px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--bs-border-color) transparent;
+    }
+
+    .service-sp-item {
+        position: relative;
+        margin: 0;
+        cursor: pointer;
+    }
+
+    .service-sp-item__input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .service-sp-item__box {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .7rem .875rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 12px;
+        background: var(--bs-body-bg);
+        transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+    }
+
+    .service-sp-item:hover .service-sp-item__box {
+        border-color: var(--bs-primary-border-subtle);
+        background: var(--bs-primary-bg-subtle);
+    }
+
+    .service-sp-item__input:focus-visible+.service-sp-item__box {
+        outline: 2px solid var(--bs-primary);
+        outline-offset: 2px;
+    }
+
+    .service-sp-item__input:checked+.service-sp-item__box {
+        border-color: var(--bs-primary);
+        background: var(--bs-primary-bg-subtle);
+    }
+
+    .service-sp-tick {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border: 1.5px solid var(--bs-border-color);
+        border-radius: 50%;
+        color: transparent;
+        transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+    }
+
+    .service-sp-item__input:checked+.service-sp-item__box .service-sp-tick {
+        border-color: var(--bs-primary);
+        background: var(--bs-primary);
+        color: #fff;
+    }
+
+    .service-sp-item__main {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .2rem;
+    }
+
+    .service-sp-name {
+        font-weight: 600;
+        color: var(--bs-heading-color);
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+    }
+
+    .service-sp-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .1rem .6rem;
+        font-size: .78rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .service-sp-meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        min-width: 0;
+    }
+
+    .service-sp-meta-item i {
+        font-size: .85rem;
+        flex: 0 0 auto;
+    }
+
+    .service-sp-code {
+        font-weight: 600;
+        color: var(--bs-body-color);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .service-sp-side {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: .3rem;
+        text-align: right;
+    }
+
+    .service-sp-price {
+        font-weight: 700;
+        color: var(--bs-heading-color);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .service-sp-stock {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        padding: .1rem .5rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 999px;
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-secondary-color);
+        font-size: .72rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .service-sp-stock.is-low {
+        border-color: var(--bs-warning-border-subtle);
+        background: var(--bs-warning-bg-subtle);
+        color: var(--bs-warning-text-emphasis);
+    }
+
+    .service-sp-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        min-height: 220px;
+        padding: 2rem 1rem;
+        text-align: center;
+    }
+
+    .service-sp-state i {
+        font-size: 1.4rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .service-sp-state p {
+        margin: 0;
+        font-size: .82rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .service-sp-state.is-error i {
+        color: var(--bs-danger);
+    }
+
+    .service-sp-count {
+        font-size: .82rem;
+        color: var(--bs-secondary-color);
+        font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 575.98px) {
+        .service-sp-item__box {
+            flex-wrap: wrap;
+        }
+
+        .service-sp-side {
+            flex-basis: 100%;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            padding-left: calc(22px + .75rem);
+        }
+    }
+</style>
+
 <form id="service-sparepart-form" action="<?php echo base_url('update_service/saveSparepart') ?>" enctype="multipart/form-data" method="post">
     <div class="mt-3">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal">
@@ -7,49 +230,45 @@
     <br>
 
     <div class="modal fade" id="sparepartModal" tabindex="-1" aria-labelledby="sparepartModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Pilih Sparepart</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="bg-primary-subtle text-primary rounded-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                            <i class="bi bi-box-seam fs-5"></i>
+                        </span>
+                        <div>
+                            <h5 class="modal-title" id="sparepartModalLabel">Pilih Sparepart</h5>
+                            <p class="text-muted fs-3 mb-0">Cari nama atau kode, lalu centang yang dipakai.</p>
+                        </div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Nama Unit:</label>
-                            <input type="text" class="form-control" id="unit" value="<?= session('NAMA_UNIT') ?>" readonly>
+                <div class="modal-body pt-3">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <div class="service-sp-search flex-grow-1">
+                            <i class="bi bi-search service-sp-search-icon"></i>
+                            <input type="text" class="form-control" id="searchSparepartInput" placeholder="Cari nama, kode, atau warna sparepart..." autocomplete="off">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Cari Sparepart:</label>
-                            <input type="text" class="form-control" id="searchSparepartInput" placeholder="Ketik nama, kode, atau warna...">
-                        </div>
+                        <span class="service-sp-unit badge text-bg-light border d-none d-sm-inline-flex">
+                            <i class="bi bi-shop me-1"></i><?= session('NAMA_UNIT') ?>
+                        </span>
                     </div>
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="table table-bordered table-hover" id="sparepartDataTable">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th width="40"></th>
-                                    <th>Kode Sparepart</th>
-                                    <th>Nama Sparepart</th>
-                                    <th>Warna</th>
-                                    <th>Nama Unit</th>
-                                    <th>Suplier</th>
-                                    <th>HPP</th>
-                                    <th>Stok Akhir</th>
-                                    <th>Harga</th>
-                                </tr>
-                            </thead>
-                            <tbody id="sparepart-modal-body">
-                                <tr>
-                                    <td colspan="9" class="text-center py-3">Ketik untuk mencari sparepart...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="service-sp-list" id="sparepart-modal-body" aria-live="polite">
+                        <div class="service-sp-state">
+                            <i class="bi bi-search"></i>
+                            <p>Ketik minimal 2 karakter untuk mencari sparepart.</p>
+                        </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" id="add-selected-sparepart" class="btn btn-success"
-                        data-bs-dismiss="modal">Tambahkan</button>
+                <div class="modal-footer justify-content-between">
+                    <span class="service-sp-count" id="sparepart-selected-count" aria-live="polite">Belum ada yang dipilih</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" id="add-selected-sparepart" class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-dismiss="modal">
+                            <i class="bi bi-plus-lg"></i> Tambahkan
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -128,6 +347,91 @@
 <script>
     let searchTimeout;
     const oldSpareparts = <?= json_encode($oldsparepart) ?>;
+    const sparepartFormatter = new Intl.NumberFormat('id-ID');
+
+    function escapeSparepart(value) {
+        return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function(ch) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            } [ch];
+        });
+    }
+
+    function sparepartState(icon, message, isError) {
+        return '<div class="service-sp-state' + (isError ? ' is-error' : '') + '">' +
+            '<i class="' + icon + '" aria-hidden="true"></i>' +
+            '<p>' + escapeSparepart(message) + '</p>' +
+            '</div>';
+    }
+
+    function sparepartOption(item) {
+        const id = item.idbarang;
+        const kode = item.kode_barang || '';
+        const nama = item.nama_barang || 'Tanpa nama';
+        const warna = item.warna || '';
+        const unit = item.NAMA_UNIT || item.nama_unit || '';
+        const suplier = item.nama_suplier || '';
+        const harga = Number(item.harga) || 0;
+        const hpp = Number(item.harga_beli) || 0;
+        const stok = Number(item.stok_akhir) || 0;
+        const isChecked = document.getElementById('row-' + id) ? ' checked' : '';
+
+        let meta = '<span class="service-sp-code">' + escapeSparepart(kode || '-') + '</span>';
+        if (warna) {
+            meta += '<span class="service-sp-meta-item"><i class="bi bi-droplet-half"></i>' + escapeSparepart(warna) + '</span>';
+        }
+        if (unit) {
+            meta += '<span class="service-sp-meta-item"><i class="bi bi-phone"></i>' + escapeSparepart(unit) + '</span>';
+        }
+        if (suplier) {
+            meta += '<span class="service-sp-meta-item"><i class="bi bi-truck"></i>' + escapeSparepart(suplier) + '</span>';
+        }
+        if (hpp > 0) {
+            meta += '<span class="service-sp-meta-item"><i class="bi bi-tag"></i>HPP Rp ' + sparepartFormatter.format(hpp) + '</span>';
+        }
+
+        return '<label class="service-sp-item">' +
+            '<input type="checkbox" class="service-sp-item__input sparepart-check"' +
+            ' data-id="' + escapeSparepart(id) + '"' +
+            ' data-kode="' + escapeSparepart(kode) + '"' +
+            ' data-nama="' + escapeSparepart(nama) + '"' +
+            ' data-harga="' + harga + '"' +
+            ' data-stok="' + stok + '"' + isChecked + '>' +
+            '<span class="service-sp-item__box">' +
+            '<span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>' +
+            '<span class="service-sp-item__main">' +
+            '<span class="service-sp-name">' + escapeSparepart(nama) + '</span>' +
+            '<span class="service-sp-meta">' + meta + '</span>' +
+            '</span>' +
+            '<span class="service-sp-side">' +
+            '<span class="service-sp-price">Rp ' + sparepartFormatter.format(harga) + '</span>' +
+            '<span class="service-sp-stock' + (stok <= 2 ? ' is-low' : '') + '">Stok ' + sparepartFormatter.format(stok) + '</span>' +
+            '</span>' +
+            '</span>' +
+            '</label>';
+    }
+
+    function updateSparepartSelection() {
+        const count = document.querySelectorAll('#sparepart-modal-body .sparepart-check:checked').length;
+        const label = document.getElementById('sparepart-selected-count');
+        const button = document.getElementById('add-selected-sparepart');
+        if (label) {
+            label.textContent = count > 0 ? count + ' sparepart dipilih' : 'Belum ada yang dipilih';
+        }
+        if (button) {
+            button.disabled = count === 0;
+        }
+    }
+
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.classList && event.target.classList.contains('sparepart-check')) {
+            updateSparepartSelection();
+        }
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
         const sparepartForm = document.getElementById('service-sparepart-form');
@@ -169,11 +473,11 @@
             const query = this.value.trim();
 
             if (query.length < 2) {
-                modalBody.innerHTML = '<tr><td colspan="9" class="text-center py-3">Ketik minimal 2 karakter untuk mencari...</td></tr>';
+                modalBody.innerHTML = sparepartState('bi-search', 'Ketik minimal 2 karakter untuk mencari sparepart.');
                 return;
             }
 
-            modalBody.innerHTML = '<tr><td colspan="9" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Mencari...</td></tr>';
+            modalBody.innerHTML = sparepartState('spinner-border spinner-border-sm text-primary', 'Mencari sparepart...');
 
             searchTimeout = setTimeout(function() {
                 fetch('<?= base_url('service/search_sparepart') ?>', {
@@ -186,39 +490,17 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.length === 0) {
-                        modalBody.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-muted">Tidak ada sparepart ditemukan</td></tr>';
+                    if (!Array.isArray(data) || data.length === 0) {
+                        modalBody.innerHTML = sparepartState('bi-inbox', 'Tidak ada sparepart yang cocok dengan "' + query + '".');
                         return;
                     }
 
-                    let html = '';
-                    data.forEach(item => {
-                        const isChecked = document.getElementById(`row-${item.idbarang}`) ? 'checked' : '';
-                        html += `
-                            <tr>
-                                <td>
-                                    <input type="checkbox" class="sparepart-check" 
-                                        data-id="${item.idbarang}" 
-                                        data-nama="${item.nama_barang}" 
-                                        data-harga="${item.harga}" data-stok="${item.stok_akhir ?? 0}"
-                                        ${isChecked}>
-                                </td>
-                                <td>${item.kode_barang || '-'}</td>
-                                <td>${item.nama_barang}</td>
-                                <td>${item.warna || '-'}</td>
-                                <td>${item.nama_unit || '-'}</td>
-                                <td>${item.nama_suplier || '-'}</td>
-                                <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_beli)}</td>
-                                <td>${item.stok_akhir ?? 0}</td>
-                                <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}</td>
-                            </tr>
-                        `;
-                    });
-                    modalBody.innerHTML = html;
+                    modalBody.innerHTML = data.map(sparepartOption).join('');
+                    updateSparepartSelection();
                 })
                 .catch(err => {
                     console.error(err);
-                    modalBody.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-danger">Gagal memuat data</td></tr>';
+                    modalBody.innerHTML = sparepartState('bi-exclamation-triangle', 'Gagal memuat data sparepart. Coba lagi.', true);
                 });
             }, 300);
         });
@@ -230,6 +512,8 @@
                 searchInput.dispatchEvent(new Event('input'));
             }
         });
+
+        updateSparepartSelection();
     });
 
     // Tambah sparepart dari modal
