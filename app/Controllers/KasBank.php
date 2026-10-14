@@ -85,6 +85,19 @@ class KasBank extends BaseController
     }
 
     /**
+     * Siapa yang boleh MEMBATALKAN Pindah Saldo di `/kas_bank/transfer`.
+     *
+     * SENGAJA lebih sempit dari bisaTransaksi() (yang mencakup Direktur,
+     * Manager, admin cabang): reversal menggeser saldo fisik dua rekening
+     * sekaligus, jadi hanya Finance (0) dan Admin root (1). Role lain tidak
+     * melihat kolom "Aksi", dan guard server tetap menolak POST yang diforged.
+     */
+    private function bisaReversalTransfer(): bool
+    {
+        return KasBankScopeService::roleBolehTransferReversal((int) session('ID_JABATAN'));
+    }
+
+    /**
      * Unit hasil pilihan user, dibatasi USER SCOPE.
      *
      * null = KONSOLIDASI (user punya akses >1 unit dan tidak memilih). null
@@ -1156,14 +1169,15 @@ class KasBank extends BaseController
         $akunSumberPindah = $this->akunSumberPindahSaldo($unitTerpilih);
         $akunTujuanPindah = $this->akunTujuanPindahSaldo($unitTerpilih);
 
-        // Lookup label di tabel riwayat memakai GABUNGAN kedua daftar, bukan
-        // salah satunya. Kalau hanya `akun_sumber`, rekening yang hanya sah
-        // sebagai tujuan (mis. IRA untuk ROOT) tidak punya nama di tabel dan
-        // kolomnya render "-". Union ini tetap BANK-only, tidak memasukkan KAS.
-        $akunLabelPindah = $akunSumberPindah;
-        foreach ($akunTujuanPindah as $a) {
-            $akunLabelPindah[(int) $a->idakun_kas_bank] = $a;
-        }
+        // Lookup label riwayat tidak boleh bergantung pada dropdown source / destination:
+        // policy dropdown berarah dan perlu unit terpilih, sedangkan ROOT saat
+        // mode konsolidasi tetap perlu melihat nama rekening Finance/HO pada
+        // transaksi lama. Ambil akun BANK yang terlihat dalam account scope;
+        // daftar ini hanya untuk label, bukan untuk memberi izin bertransaksi.
+        $akunLabelPindah = array_values(array_filter(
+            $this->akunAktifUntuk($unitTerpilih),
+            static fn ($a) => (string) ($a->tipe ?? '') === 'BANK'
+        ));
 
         $data = array_merge($this->pageData(), [
             'unit_terpilih' => $unitTerpilih,
@@ -1176,15 +1190,22 @@ class KasBank extends BaseController
             // KHUSUS label tabel riwayat. Jangan dipakai untuk dropdown, dan
             // jangan diisi KAS hanya demi kelengkapan label: baris KAS tidak
             // pernah ada di tab ini karena Pindah Saldo wajib BANK -> BANK.
-            'akun_kas_bank' => array_values($akunLabelPindah),
+            'akun_kas_bank' => $akunLabelPindah,
             'can_transaksi' => $this->bisaTransaksi(),
+            // Aksi "Batalkan" (reversal) hanya Finance / Admin root. View
+            // memakai flag ini untuk menyembunyikan seluruh kolom "Aksi".
+            'can_reversal'  => $this->bisaReversalTransfer(),
             'transaksi'     => $this->transaksiTerlihat(
                 ModeKasBank::JENIS_TRANSFER,
                 $unitTerpilih,
                 // Hanya Pindah Saldo. Setor/Tarik punya sumber_tipe sendiri
                 // (SETOR_TUNAI / PENARIKAN_TUNAI) dan tampil di tab "Setor /
                 // Tarik Tunai" — bukan di sini.
-                KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO
+                KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO,
+                // Satu transfer punya dua kaki ledger. Kaki KELUAR membawa
+                // akun tujuan dan mewakili satu transaksi untuk riwayat; kaki
+                // MASUK hanya mirror saldo sehingga tidak boleh dirender lagi.
+                ModeKasBank::ARAH_KELUAR
             ),
             'submit_token'  => $this->buatSubmitToken(),
             'body'          => 'kas_bank/transfer',
@@ -1210,7 +1231,12 @@ class KasBank extends BaseController
      * hak `antar_unit_atribusi` selalu dikecualikan: ini atribusi rekening
      * SAMA, bukan transfer fisik, jadi tidak boleh tampil sebagai transfer.
      */
-    private function transaksiTerlihat(string $jenis, ?int $unitTerpilih, ?string $sumberTipe = null)
+    private function transaksiTerlihat(
+        string $jenis,
+        ?int $unitTerpilih,
+        ?string $sumberTipe = null,
+        ?string $arah = null
+    )
     {
         $akunIds = $this->AkunScope->akunIdsTerlihat(
             $this->unitIdsUser(),
@@ -1242,6 +1268,10 @@ class KasBank extends BaseController
                 ->where('sumber_tipe IS NULL', null, false)
                 ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
             ->groupEnd();
+        }
+
+        if ($arah !== null && $arah !== '') {
+            $builder->where('arah', $arah);
         }
 
         return $builder
@@ -1471,8 +1501,10 @@ class KasBank extends BaseController
 
     public function reversalTransfer(int $id)
     {
-        if (!$this->canInput()) {
-            return $this->gagal('Anda tidak berhak membatalkan transfer.');
+        // Hanya Finance / Admin root. Direktur, Manager, dan admin cabang
+        // boleh MENGISI transfer, tetapi tidak boleh membatalkannya.
+        if (!$this->bisaReversalTransfer()) {
+            return $this->gagal('Hanya Finance dan Admin root yang berhak membatalkan transfer.');
         }
         $row = $this->TransaksiModel->find($id);
         if (!$row || $row->jenis !== ModeKasBank::JENIS_TRANSFER) {

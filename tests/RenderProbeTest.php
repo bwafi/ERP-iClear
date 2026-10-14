@@ -74,6 +74,7 @@ class RenderProbeTest extends CIUnitTestCase
             'can_transaksi'     => true,
             'canInput'          => true,
             'canKelola'         => true,
+            'can_reversal'      => true,
             'bisa_pilih_unit'   => true,
             'submit_token'      => 'tok',
             'submit_topik'      => [],

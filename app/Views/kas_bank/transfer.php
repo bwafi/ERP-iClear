@@ -4,7 +4,9 @@
 <?php
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
 $canInput = $can_transaksi ?? ($bisa_pilih_unit ?? false);
-$canKelola = $bisa_pilih_unit ?? false;
+// Pembatalan transfer hanya untuk Finance / Admin root. Kalau bukan, kolom
+// "Aksi" TIDAK dirender sama sekali (bukan hanya tombolnya yang disembunyikan).
+$canReversal = $can_reversal ?? false;
 $unitMap = [];
 foreach (($unit ?? []) as $u) {
     $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
@@ -165,13 +167,15 @@ $labelAkun = static function ($a) use ($unitMap) {
                             <th>Penerima</th>
                             <th class="text-end">Jumlah Nominal</th>
                             <th class="text-center">Bukti</th>
-                            <th class="text-end">Aksi</th>
+                            <?php if ($canReversal) : ?>
+                                <th class="text-end">Aksi</th>
+                            <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($transaksi)) : ?>
                             <tr>
-                                <td colspan="7" class="text-center py-4 text-muted">
+                                <td colspan="<?= $canReversal ? 7 : 6 ?>" class="text-center py-4 text-muted">
                                     <iconify-icon icon="bi:inbox" class="kb-ico-lg d-block mx-auto mb-2"></iconify-icon>
                                     Belum ada data riwayat transfer internal.
                                 </td>
@@ -202,17 +206,19 @@ $labelAkun = static function ($a) use ($unitMap) {
                                         <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="text-end">
-                                    <?php if ($t->arah === 'KELUAR' && $canKelola) : ?>
-                                        <form method="post" class="d-inline" action="<?= base_url('kas_bank/transfer/reversal/' . (int) $t->idtransaksi) ?>"
-                                            onsubmit="return confirm('Batalkan transfer <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>?')">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 d-inline-flex align-items-center gap-1">
-                                                <iconify-icon icon="bi:x-circle-fill"></iconify-icon>
-                                                Batalkan
-                                            </button>
-                                        </form>
-                                    <?php endif; ?>
-                                </td>
+                                <?php if ($canReversal) : ?>
+                                    <td class="text-end">
+                                        <?php if ($t->arah === 'KELUAR') : ?>
+                                            <form method="post" class="d-inline" action="<?= base_url('kas_bank/transfer/reversal/' . (int) $t->idtransaksi) ?>"
+                                                onsubmit="return confirm('Batalkan transfer <?= esc($t->transfer_ref) ?> sebesar <?= $rp($t->jumlah) ?>?')">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 d-inline-flex align-items-center gap-1">
+                                                    <iconify-icon icon="bi:x-circle-fill"></iconify-icon>
+                                                    Batalkan
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

@@ -119,6 +119,26 @@ class KasBankScopeService
         return in_array($role, self::financeHoSourceRoles(), true);
     }
 
+    /**
+     * Role yang boleh MEMBATALKAN Pindah Saldo di `/kas_bank/transfer`.
+     *
+     * @return int[]
+     */
+    public static function transferReversalRoles(): array
+    {
+        return (new \Config\Finance())->kasBankTransferReversalRoles;
+    }
+
+    /**
+     * Apakah role tertentu boleh membatalkan Pindah Saldo. Dipakai untuk
+     * menyembunyikan kolom "Aksi" sekaligus sebagai guard server — POST yang
+     * diforged tetap ditolak.
+     */
+    public static function roleBolehTransferReversal(int $role): bool
+    {
+        return in_array($role, self::transferReversalRoles(), true);
+    }
+
     // =====================================================================
     // LAPIS 2 — ACCOUNT SCOPE (milik kelas ini)
     // =====================================================================

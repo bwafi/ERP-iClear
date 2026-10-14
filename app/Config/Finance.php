@@ -179,6 +179,20 @@ class Finance extends BaseConfig
      */
     public array $financeHoSourceRoles = [0, 1];
 
+    /**
+     * ID_JABATAN yang boleh MEMBATALKAN (reversal) Pindah Saldo di
+     * `/kas_bank/transfer`.
+     *
+     * 0 = Finance, 1 = Admin root.
+     *
+     * SENGAJA lebih sempit daripada $financeInputRoles. Direktur (2) dan
+     * Manager (34) boleh MENGISI transfer (lihat KasBank::bisaTransaksi()),
+     * tetapi membatalkan transfer menyentuh saldo fisik dua rekening sekaligus
+     * — itu kewenangan Finance/Admin root saja. Role lain tidak melihat kolom
+     * "Aksi" sama sekali, dan guard server menolaknya walau POST diforged.
+     */
+    public array $kasBankTransferReversalRoles = [0, 1];
+
     // =====================================================================
     // PETA REKENING RESMI (ground truth bisnis, sudah dikonfirmasi Finance)
     // =====================================================================

@@ -1844,40 +1844,60 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
      * rekening ini benar-benar hanya ada di `akun_tujuan`, tidak mungkin
      * ikut terbawa daftar source.
      */
-    public function testRiwayatPindahSaldoMenampilkanLabelRekeningTujuanExclusive(): void
+    public function testRiwayatPindahSaldoRootKonsolidasiMenampilkanSatuBarisDenganLabelLengkap(): void
     {
         $this->db->query("INSERT INTO db_akun_kas_bank
             (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared, is_finance_ho)
             VALUES (9, NULL, 'BANK', 'Kas Direksi', 'BNI-001', '1010202099', 'aktif', 0, 1)");
 
-        // Leg sah: rekening 6 (unit 1) -> rekening 9 (Finance/HO).
+        // Leg sah: rekening 9 (Finance/HO) -> rekening 6 (unit 1). Satu
+        // transfer disimpan sebagai dua kaki; kaki MASUK tidak punya
+        // akun_tujuan_id dan tidak boleh muncul sebagai transaksi kedua.
         $this->db->query(
             'INSERT INTO db_transaksi_kas_bank
                 (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, akun_tujuan_id,
                  transfer_ref, submission_key, sumber_tipe, keterangan, created_at)
-             VALUES ("' . $this->tglMulai . '", 1, 6, ?, ?, 250000, 9, "TRF-LBL", NULL, ?, "ke IRA", "' . $this->tglMulai . ' 09:00:00")',
+             VALUES ("' . $this->tglMulai . '", 1, 9, ?, ?, 250000, 6, "TRF-LBL", NULL, ?, "dari IRA", "' . $this->tglMulai . ' 09:00:00")',
             [ModeKasBank::JENIS_TRANSFER, ModeKasBank::ARAH_KELUAR, KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO]
         );
+        $this->db->query(
+            'INSERT INTO db_transaksi_kas_bank
+                (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah,
+                 transfer_ref, submission_key, sumber_tipe, keterangan, created_at)
+             VALUES ("' . $this->tglMulai . '", 1, 6, ?, ?, 250000, "TRF-LBL", NULL, ?, "kaki masuk", "' . $this->tglMulai . ' 09:00:01")',
+            [ModeKasBank::JENIS_TRANSFER, ModeKasBank::ARAH_MASUK, KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO]
+        );
 
-        // Admin cabang (unit 1, non-lintas) supaya unit terpilih = 1. Pada
-        // ROOT tanpa `unit_id`, unit_terpilih null dan IRA memang tidak sah
-        // jadi tujuan — `canUseAsDestination()` menolak tanpa unit.
-        $this->sesiAdminCabang();
+        // ROOT membuka mode konsolidasi tanpa unit_id. IRA tetap harus diberi
+        // label di riwayat walau dropdown berarah tidak memasukkannya tanpa
+        // unit terpilih.
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 0,
+        ]);
 
         $result = $this->get('kas_bank/transfer');
         $result->assertStatus(200);
         $body = (string) $result->getBody();
 
         $baris = $this->barisRiwayatPindahSaldo($body, 'TRF-LBL');
+        preg_match_all('/<tr\b[^>]*>(.*?)<\/tr>/si', $body, $trs, PREG_SET_ORDER);
+        $jumlahBarisTransfer = count(array_filter(
+            $trs,
+            static fn ($tr) => str_contains($tr[1], 'TRF-LBL')
+        ));
+        $this->assertSame(1, $jumlahBarisTransfer, 'Pasangan kaki ledger harus tampil sebagai satu transfer');
         $this->assertStringContainsString(
             'Kas Direksi',
             $baris,
-            'Kolom tujuan harus menampilkan nama rekening IRA, bukan "-"'
+            'Kolom pengirim harus menampilkan nama rekening IRA, bukan "-"'
         );
         $this->assertStringContainsString(
             'BCA Unit A',
             $baris,
-            'Kolom asal harus menampilkan nama rekening pengirim'
+            'Kolom penerima harus menampilkan nama rekening tujuan'
         );
     }
 
@@ -2019,6 +2039,65 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             0,
             (int) $m->where('transfer_ref', 'TRF-OK-K')->countAllResults(),
             'Reversal Pindah Saldo harus menghapus seluruh pasangan'
+        );
+    }
+
+    /**
+     * Aksi "Batalkan" (reversal) Pindah Saldo hanya Finance (0) / Admin root (1).
+     *
+     * Direktur (2) boleh MENGISI transfer, tetapi tidak boleh membatalkannya:
+     * kolom "Aksi" harus hilang dari tabel, dan POST yang diforged tetap ditolak
+     * tanpa merusak kedua kaki ledger.
+     */
+    public function testAksiBatalkanTransferHanyaFinanceDanAdminRoot(): void
+    {
+        $this->insertSubtypeRow('TRF-ROLE', KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO);
+
+        // Direktur (role 2): lintas unit, boleh input, TIDAK boleh reversal.
+        // Sidebar butuh baris jabatan-nya (Core::get_role) karena halaman ini
+        // me-render template penuh.
+        $this->db->query("INSERT INTO db_jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN)
+            VALUES (2, 'Direktur', '[1]')");
+        $this->db->query("INSERT INTO db_akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN)
+            VALUES (45, 1, 2, 'Direktur')");
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 45,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 2,
+        ]);
+
+        $body = (string) $this->get('kas_bank/transfer')->getBody();
+        $this->assertStringNotContainsString('Batalkan', $body, 'Direktur tidak boleh melihat aksi Batalkan');
+        $this->assertStringNotContainsString('>Aksi<', $body, 'Kolom Aksi tidak boleh dirender untuk Direktur');
+
+        $m = $this->model(ModelTransaksiKasBank::class);
+        $idKelu = (int) $m->where('transfer_ref', 'TRF-ROLE')->where('arah', ModeKasBank::ARAH_KELUAR)->first()->idtransaksi;
+
+        $this->post('kas_bank/transfer/reversal/' . $idKelu)->assertStatus(302);
+        $this->assertSame(
+            1,
+            (int) $m->where('transfer_ref', 'TRF-ROLE')->countAllResults(),
+            'Reversal oleh Direktur harus ditolak, leg tetap utuh'
+        );
+
+        // Admin root (role 1): kolom Aksi tampil, reversal diproses.
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 1,
+        ]);
+
+        $bodyRoot = (string) $this->get('kas_bank/transfer')->getBody();
+        $this->assertStringContainsString('Batalkan', $bodyRoot, 'Admin root harus melihat aksi Batalkan');
+        $this->assertStringContainsString('>Aksi<', $bodyRoot, 'Kolom Aksi harus tampil untuk Admin root');
+
+        $this->post('kas_bank/transfer/reversal/' . $idKelu)->assertStatus(302);
+        $this->assertSame(
+            0,
+            (int) $m->where('transfer_ref', 'TRF-ROLE')->countAllResults(),
+            'Admin root harus bisa membatalkan transfer'
         );
     }
 
