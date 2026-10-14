@@ -29,16 +29,18 @@
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th width="40"></th>
+                                    <th>Kode Sparepart</th>
                                     <th>Nama Sparepart</th>
                                     <th>Warna</th>
                                     <th>Nama Unit</th>
                                     <th>HPP</th>
+                                    <th>Stok Akhir</th>
                                     <th>Harga</th>
                                 </tr>
                             </thead>
                             <tbody id="sparepart-modal-body">
                                 <tr>
-                                    <td colspan="6" class="text-center py-3">Ketik untuk mencari sparepart...</td>
+                                    <td colspan="8" class="text-center py-3">Ketik untuk mencari sparepart...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -57,6 +59,7 @@
             <tr>
                 <th>Nama Sparepart</th>
                 <th>Harga</th>
+                <th>Stok Akhir</th>
                 <th>Qty</th>
                 <th>Diskon</th>
                 <th>Total</th>
@@ -151,8 +154,8 @@
         // Load old spareparts if any
         if (oldSpareparts && oldSpareparts.length > 0) {
             oldSpareparts.forEach((sp) => {
-                addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
-                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan));
+                addSparepartRow(sp.barang_idbarang, sp.kode_barang, sp.nama_barang, parseFloat(sp.harga_penjualan),
+                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.stok_akhir) || 0);
             });
             updateTotals();
         }
@@ -163,11 +166,11 @@
             const query = this.value.trim();
 
             if (query.length < 2) {
-                modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3">Ketik minimal 2 karakter untuk mencari...</td></tr>';
+                modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3">Ketik minimal 2 karakter untuk mencari...</td></tr>';
                 return;
             }
 
-            modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Mencari...</td></tr>';
+            modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Mencari...</td></tr>';
 
             searchTimeout = setTimeout(function() {
                 fetch('<?= base_url('service/search_sparepart') ?>', {
@@ -181,7 +184,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.length === 0) {
-                        modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Tidak ada sparepart ditemukan</td></tr>';
+                        modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-muted">Tidak ada sparepart ditemukan</td></tr>';
                         return;
                     }
 
@@ -193,14 +196,17 @@
                                 <td>
                                     <input type="checkbox" class="sparepart-check" 
                                         data-id="${item.idbarang}" 
+                                        data-kode="${item.kode_barang || ''}"
                                         data-nama="${item.nama_barang}" 
-                                        data-harga="${item.harga}"
+                                        data-harga="${item.harga}" data-stok="${item.stok_akhir ?? 0}"
                                         ${isChecked}>
                                 </td>
+                                <td>${item.kode_barang || '-'}</td>
                                 <td>${item.nama_barang}</td>
                                 <td>${item.warna || '-'}</td>
                                 <td>${item.nama_unit || '-'}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_beli)}</td>
+                                <td>${item.stok_akhir ?? 0}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}</td>
                             </tr>
                         `;
@@ -209,7 +215,7 @@
                 })
                 .catch(err => {
                     console.error(err);
-                    modalBody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Gagal memuat data</td></tr>';
+                    modalBody.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-danger">Gagal memuat data</td></tr>';
                 });
             }, 300);
         });
@@ -227,12 +233,14 @@
     document.getElementById('add-selected-sparepart').addEventListener('click', () => {
         document.querySelectorAll('.sparepart-check:checked').forEach((checkbox) => {
             const id = checkbox.getAttribute('data-id');
+            const kode = checkbox.getAttribute('data-kode');
             const nama = checkbox.getAttribute('data-nama');
             const harga = parseFloat(checkbox.getAttribute('data-harga'));
+            const stokAkhir = parseFloat(checkbox.getAttribute('data-stok')) || 0;
 
             // Cek apakah sparepart sudah ada di tabel
             if (!document.getElementById(`row-${id}`)) {
-                addSparepartRow(id, nama, harga, 1, 0);
+                addSparepartRow(id, kode, nama, harga, 1, 0, stokAkhir);
             }
         });
 
@@ -240,7 +248,7 @@
     });
 
     // Tambahkan baris sparepart
-    function addSparepartRow(id, nama, harga, jumlah = 1, diskon = 0) {
+    function addSparepartRow(id, kode, nama, harga, jumlah = 1, diskon = 0, stokAkhir = 0) {
         const tbody = document.getElementById('sparepart-table-body');
 
         // Tentukan index terakhir yang belum terpakai
@@ -252,9 +260,11 @@
         row.innerHTML = `
             <td>
                 ${nama}
+                ${kode ? `<div class="text-muted small">${kode}</div>` : ''}
                 <input type="hidden" name="produk[${nextIndex}][id]" value="${id}">
             </td>
             <td><input type="text" class="form-control harga" name="produk[${nextIndex}][harga]" value="Rp ${formatNumber(harga)}"></td>
+            <td><input type="text" class="form-control" value="${formatNumber(stokAkhir)}" readonly></td>
             <td><input type="number" class="form-control qty" name="produk[${nextIndex}][jumlah]" value="${jumlah}" min="1"></td>
             <td><input type="text" class="form-control diskon-item" name="produk[${nextIndex}][diskon]" value="Rp ${formatNumber(diskon)}" min="0"></td>
             <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>

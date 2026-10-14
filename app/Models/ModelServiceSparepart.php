@@ -35,7 +35,7 @@ class ModelServiceSparepart extends Model
     public function getSerModelServiceSparepartByServiceId($idservice)
     {
         return $this->db->table('service_sparepart')
-            ->select('service_sparepart.*, barang.nama_barang, service.garansi_hari, stok_barang.stok_akhir')
+            ->select('service_sparepart.*, barang.kode_barang, barang.nama_barang, service.garansi_hari, stok_barang.stok_akhir')
             ->join('barang', 'barang.idbarang = service_sparepart.barang_idbarang')
             ->join('service', 'service.idservice = service_sparepart.service_idservice')
             ->join('stok_barang', 'stok_barang.idbarang = service_sparepart.barang_idbarang AND stok_barang.id_unit = service_sparepart.unit_idunit', 'left')
