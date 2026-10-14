@@ -262,6 +262,273 @@ class TutupKasirSourceDefinition
     }
 
     // =================================================================
+    // DP (uang muka) SERVICE — diakui di TANGGAL PENERIMAAN, bukan selesai
+    // =================================================================
+    //
+    // DP dicatat di ledger `service_dp` saat diterima (lihat ServiceDpService).
+    // Uangnya sudah masuk laci/rekening di tanggal itu, jadi Tutup Kasir harus
+    // mengakuinya di `service_dp.tanggal` dan memisahkannya menurut `metode`.
+    //
+    // KONSEKUENSI: `transferService()` memakai `harus_dibayar - bayar_tunai`,
+    // yang (pada model canonical) SUDAH memasukkan DP. Karena DP kini dihitung
+    // sendiri di tanggal penerimaan, DP untuk service yang SELESAI pada tanggal
+    // itu harus dikeluarkan lagi (`dpServiceSelesai()`) supaya tidak terhitung
+    // dua kali.
+    //
+    // `cashMasuk()` / `transferMasuk()` tetap menyediakan komponen transaksi
+    // service dan penjualan saja. DP ditambahkan secara eksplisit oleh
+    // `kasMasukDp()`, ringkasan rentang Kas & Bank, dan pergerakan rekening.
+
+    /** DP tunai yang diterima pada tanggal tertentu (`service_dp.tanggal`). */
+    public function dpMasukTunai(int $unitId, string $tanggal): int
+    {
+        return $this->dpMasuk($unitId, $tanggal, 'tunai');
+    }
+
+    /** DP transfer yang diterima pada tanggal tertentu (`service_dp.tanggal`). */
+    public function dpMasukTransfer(int $unitId, string $tanggal): int
+    {
+        return $this->dpMasuk($unitId, $tanggal, 'transfer');
+    }
+
+    /** DP tunai aktif yang diterima pada rentang tanggal untuk saldo Kas & Bank. */
+    public function dpMasukTunaiRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        return $this->dpMasukRentang($unitId, $dari, $sampai, 'tunai');
+    }
+
+    /** DP transfer aktif yang diterima unit pada rentang tanggal. */
+    public function dpMasukTransferRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        return $this->dpMasukRentang($unitId, $dari, $sampai, 'transfer');
+    }
+
+    /** DP transfer yang diterima untuk rekening bank dan unit pada rentang tanggal. */
+    public function dpMasukTransferBankRange(
+        string $bankIdbank,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): int {
+        $bankIdbank = trim($bankIdbank);
+        if ($bankIdbank === '') {
+            return 0;
+        }
+
+        return $this->dpMasukRentang($unitId, $dari, $sampai, 'transfer', $bankIdbank);
+    }
+
+    /** DP aktif dari service yang selesai dalam rentang tanggal. */
+    public function dpServiceSelesaiRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        if (! $this->punyaLedgerDp()) {
+            return 0;
+        }
+
+        $builder = $this->db->table('service_dp sd')
+            ->selectSum('sd.jumlah', 'total')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('s.status_service', 4)
+            ->where('s.unit_idunit', $unitId)
+            ->where('DATE(s.tanggal_selesai) >=', $dari);
+
+        if ($sampai !== null) {
+            $builder->where('DATE(s.tanggal_selesai) <=', $sampai);
+        }
+
+        if ($this->db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            $builder->where('sd.refund_idkas_keluar', null);
+        }
+
+        $row = $builder->get()->getRow();
+
+        return (int) ($row->total ?? 0);
+    }
+
+    /**
+     * Rincian DP service aktif yang diterima pada tanggal tertentu.
+     *
+     * Nilai `total_tunai` dan `total_transfer` adalah rincian dari penerimaan
+     * yang sama dengan `dpMasukTunai()` / `dpMasukTransfer()`. Data ini untuk
+     * transparansi di layar Tutup Kasir; bukan pendapatan tambahan.
+     *
+     * @return array{
+     *   ledger_ada:bool,total_tunai:int,total_transfer:int,total:int,
+     *   jumlah:int,rincian:array<int,array<string,mixed>>
+     * }
+     */
+    public function dpMasukRincian(int $unitId, string $tanggal): array
+    {
+        $hasil = [
+            'ledger_ada'     => $this->punyaLedgerDp(),
+            'total_tunai'    => 0,
+            'total_transfer' => 0,
+            'total'          => 0,
+            'jumlah'         => 0,
+            'rincian'        => [],
+        ];
+
+        if (! $hasil['ledger_ada']) {
+            return $hasil;
+        }
+
+        $rows = $this->db->table('service_dp sd')
+            ->select('sd.id, sd.kode_dp, sd.tanggal, sd.created_at, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.keterangan, s.idservice, s.no_service')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('DATE(sd.tanggal)', $tanggal)
+            ->where('s.unit_idunit', $unitId)
+            ->orderBy('sd.id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            $metode = strtolower(trim((string) ($row['metode'] ?? '')));
+            $jumlah = (int) ($row['jumlah'] ?? 0);
+
+            if ($metode === 'transfer') {
+                $hasil['total_transfer'] += $jumlah;
+            } else {
+                $hasil['total_tunai'] += $jumlah;
+            }
+        }
+
+        $hasil['rincian'] = $rows;
+        $hasil['jumlah']  = count($rows);
+        $hasil['total']   = $hasil['total_tunai'] + $hasil['total_transfer'];
+
+        return $hasil;
+    }
+
+    /**
+     * Total DP aktif yang belum direfund dari service yang SELESAI pada tanggal
+     * tertentu.
+     *
+     * Dipakai untuk mengeluarkan DP dari residual service (`harus_dibayar -
+     * bayar_tunai`) di tanggal pengambilan, karena DP sudah diakui di tanggal
+     * penerimaannya. Filter unit mengikuti `service.unit_idunit`, sama seperti
+     * definisi service lain di kelas ini.
+     */
+    public function dpServiceSelesai(int $unitId, string $tanggal): int
+    {
+        $total = 0;
+        foreach ($this->dpServiceSelesaiRincian($unitId, $tanggal) as $row) {
+            $total += (int) ($row['jumlah'] ?? 0);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Rincian DP aktif per service yang selesai pada tanggal tertentu.
+     * Dipakai arus kas untuk mengeluarkan DP dari sisa pembayaran service.
+     *
+     * @return array<int,array{service_idservice:int,jumlah:int}>
+     */
+    public function dpServiceSelesaiRincian(int $unitId, string $tanggal): array
+    {
+        if (! $this->punyaLedgerDp()) {
+            return [];
+        }
+
+        $builder = $this->db->table('service_dp sd')
+            ->select('sd.service_idservice, SUM(sd.jumlah) AS jumlah')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('DATE(s.tanggal_selesai)', $tanggal)
+            ->where('s.status_service', 4)
+            ->where('s.unit_idunit', $unitId)
+            ->groupBy('sd.service_idservice');
+
+        if ($this->db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            $builder->where('sd.refund_idkas_keluar', null);
+        }
+
+        return $builder->get()->getResultArray();
+    }
+
+    /**
+     * Kas masuk versi Tutup Kasir: kas tunai penjualan + service + DP tunai
+     * yang diterima pada tanggal ini.
+     */
+    public function kasMasukDp(int $unitId, string $tanggal): int
+    {
+        return $this->cashMasuk($unitId, $tanggal)
+            + $this->dpMasukTunai($unitId, $tanggal);
+    }
+
+    /**
+     * Transfer masuk versi Tutup Kasir: transfer penjualan + service + DP
+     * transfer yang diterima pada tanggal ini, dikurangi DP dari service yang
+     * SELESAI pada tanggal ini (DP itu sudah dihitung di tanggal penerimaan).
+     *
+     * Pengurangan ini yang mencegah DP terhitung dua kali. `transferService()`
+     * memakai `harus_dibayar - bayar_tunai` yang (di model canonical) sudah
+     * memasukkan DP.
+     */
+    public function transferMasukDp(int $unitId, string $tanggal): int
+    {
+        return $this->transferMasuk($unitId, $tanggal)
+            + $this->dpMasukTransfer($unitId, $tanggal)
+            - $this->dpServiceSelesai($unitId, $tanggal);
+    }
+
+    /**
+     * Apakah tabel ledger DP (`service_dp`) sudah ada?
+     *
+     * Kalau belum (database pra-migrasi atau skema test yang tidak membuatnya),
+     * komponen DP dianggap 0 supaya `hitung()` tidak error — perilakunya sama
+     * seperti sebelum integrasi DP.
+     */
+    private function punyaLedgerDp(): bool
+    {
+        return $this->db->tableExists($this->db->getPrefix() . 'service_dp', false);
+    }
+
+    /** @param string $metode 'tunai' | 'transfer' */
+    private function dpMasuk(int $unitId, string $tanggal, string $metode): int
+    {
+        return $this->dpMasukRentang($unitId, $tanggal, $tanggal, $metode);
+    }
+
+    private function dpMasukRentang(
+        ?int $unitId,
+        string $dari,
+        ?string $sampai,
+        string $metode,
+        ?string $bankIdbank = null
+    ): int
+    {
+        if (! $this->punyaLedgerDp()) {
+            return 0;
+        }
+
+        $builder = $this->db->table('service_dp sd')
+            ->selectSum('sd.jumlah', 'total')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('sd.metode', $metode)
+            ->where('DATE(sd.tanggal) >=', $dari);
+
+        if ($unitId !== null) {
+            $builder->where('s.unit_idunit', $unitId);
+        }
+
+        if ($bankIdbank !== null) {
+            $builder->where('sd.bank_idbank', $bankIdbank);
+        }
+
+        if ($sampai !== null) {
+            $builder->where('DATE(sd.tanggal) <=', $sampai);
+        }
+
+        $row = $builder->get()->getRow();
+
+        return (int) ($row->total ?? 0);
+    }
+
+    // =================================================================
     // KAS KELUAR — dipisah cash (idbank NULL) vs transfer (idbank NOT NULL)
     // =================================================================
 
@@ -500,8 +767,11 @@ class TutupKasirSourceDefinition
         $tfPenjualan   = $sum($p('tanggal')->selectSum('bayar_bank', 't'));
         $tfService     = $sum($s()->select('SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)) AS t'));
 
-        $cash     = $cashPenjualan + $cashService;
-        $transfer = $tfPenjualan + $tfService;
+        $dpTunai         = $this->dpMasukTunaiRange($unitId, $dari, $sampai);
+        $dpTransfer      = $this->dpMasukTransferRange($unitId, $dari, $sampai);
+        $dpServiceSelesai = $this->dpServiceSelesaiRange($unitId, $dari, $sampai);
+        $cash            = $cashPenjualan + $cashService + $dpTunai;
+        $transfer        = $tfPenjualan + $tfService + $dpTransfer - $dpServiceSelesai;
 
         $kk = function (string $bank) use ($unitId, $dari, $sampai) {
             $b = $this->db->table('kas_keluar')
@@ -520,8 +790,11 @@ class TutupKasirSourceDefinition
         return [
             'cashpenjualan'    => $cashPenjualan,
             'cashservice'      => $cashService,
+            'dp_tunai'         => $dpTunai,
             'tfpenjualan'      => $tfPenjualan,
             'tfservice'        => $tfService,
+            'dp_transfer'      => $dpTransfer,
+            'dp_service_selesai' => $dpServiceSelesai,
             'cash'             => $cash,
             'transfer'         => $transfer,
             'total_pendapatan' => $transfer + $cash,

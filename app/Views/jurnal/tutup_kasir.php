@@ -12,53 +12,93 @@ $tfBelumAda = !$awalTf['ada'];
 $awalCashNum = $belumAda ? 0 : (int)$awalKas['nilai'];
 $awalTfNum   = $tfBelumAda ? 0 : (int)$awalTf['nilai'];
 
-// Saldo seharusnya (sistem) — dihitung ulang server, di sini hanya untuk tampilan
-$akhirCashSistem = $belumAda ? null : ($awalCashNum + ($kas_masuk ?? 0) - ($kas_keluar ?? 0) - ($setor ?? 0) + ($tarik ?? 0));
-$akhirTfSistem   = $tfBelumAda ? null : ($awalTfNum + ($transfer_masuk ?? 0) - ($transfer_keluar ?? 0));
-
 $tutupBisaDisimpan = (bool)($tutup_bisa_disimpan ?? false);
 $sudahDitutup      = (bool)($sudah_ditutup ?? false);
 $tutupAlasan       = (string)($tutup_alasan ?? '');
 $wibOffsetMenit    = (int)($wibOffsetMenit ?? 420);
 $tanggalHariIni    = (string)($tanggal ?? date('Y-m-d'));
+$hariIni           = (string)($hari_ini ?? date('Y-m-d'));
+$isTanggalHariIni  = $tanggalHariIni === $hariIni;
+$isAdminRoot       = (bool)($is_admin_root ?? false);
 $unitId            = isset($unit) ? (int)$unit : 0;
-$namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember' : ($unit === 3 ? 'Banyuwangi' : 'Pandaan'))) : '—';
+$namaUnit = (string)($nama_unit ?? (isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember' : ($unit === 3 ? 'Banyuwangi' : 'Pandaan'))) : '—'));
+$tanggalPrint = !empty($tutupkasir->tanggal) ? date('Y-m-d', strtotime((string)$tutupkasir->tanggal)) : null;
+$printSesuaiPilihan = $tanggalPrint !== null && $tanggalPrint === $tanggalHariIni;
+$dpService = $dp_service ?? ['ledger_ada' => false, 'total_tunai' => 0, 'total_transfer' => 0, 'total' => 0, 'jumlah' => 0, 'rincian' => []];
+$netKasBank = (int)($tarik ?? 0) - (int)($setor ?? 0);
 ?>
 
 <div class="tutup-kasir tk-page">
-    <!-- ===== HEADER FLAT ===== -->
     <header class="tk-header">
         <div class="container-fluid py-3">
-            <nav aria-label="breadcrumb" class="d-flex align-items-center flex-wrap gap-3 mb-2">
-                <ol class="breadcrumb mb-0 me-auto">
+            <nav aria-label="breadcrumb" class="d-flex align-items-center flex-wrap gap-3">
+                <ol class="breadcrumb mb-0 flex-grow-1">
                     <li class="breadcrumb-item">
                         <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a>
                     </li>
                     <li class="breadcrumb-item active" aria-current="page">Tutup Kasir</li>
                 </ol>
-                <div class="text-end text-nowrap">
-                    <div class="small text-muted">Unit: <span class="fw-medium"><?= esc($namaUnit) ?> (#<?= $unitId ?>)</span></div>
-                    <div class="small text-muted">Tanggal: <span class="fw-medium" style="font-variant-numeric: tabular-nums;"><?= date('d M Y', strtotime($tanggalHariIni)) ?></span></div>
+                <div class="tk-context">
+                    <span><span class="text-muted">Unit</span> <strong><?= esc($namaUnit) ?> (#<?= $unitId ?>)</strong></span>
+                    <span><span class="text-muted">Tanggal</span> <strong class="tk-tabular"><?= date('d M Y', strtotime($tanggalHariIni)) ?></strong></span>
                 </div>
             </nav>
+            <div class="tk-title-row">
+                <div>
+                    <h1 class="tk-page-title">Tutup Kasir</h1>
+                    <p class="tk-page-subtitle mb-0">Hitung dan masukkan total uang fisik di laci.</p>
+                </div>
+                <?php if ($sudahDitutup) : ?>
+                    <span class="tk-state tk-state--success"><iconify-icon icon="solar:check-circle-bold" width="17"></iconify-icon> Closing tersimpan</span>
+                <?php elseif ($tutupBisaDisimpan) : ?>
+                    <span class="tk-state tk-state--info"><span class="tk-state__dot"></span> Siap ditutup</span>
+                <?php endif; ?>
+            </div>
         </div>
     </header>
 
     <main class="container-fluid py-4">
+        <?php if ($isAdminRoot) : ?>
+            <form action="<?= base_url('tutup_kasir') ?>" method="get" class="tk-admin-filter" aria-label="Pilih tanggal dan unit tutup kasir">
+                <div class="tk-admin-filter__intro">
+                    <strong>Filter Admin Root</strong>
+                    <span>Pilih tanggal dan unit. Closing yang sudah tercatat tidak dapat dibuat ulang.</span>
+                </div>
+                <div>
+                    <label for="filter_tanggal" class="form-label">Tanggal</label>
+                    <input
+                        type="date"
+                        name="tanggal"
+                        id="filter_tanggal"
+                        class="form-control"
+                        value="<?= esc($tanggalHariIni) ?>"
+                        max="<?= esc($hariIni) ?>"
+                        required
+                    >
+                </div>
+                <div>
+                    <label for="filter_unit" class="form-label">Unit</label>
+                    <select name="unit" id="filter_unit" class="form-select" required>
+                        <?php foreach (($unit_list ?? []) as $unitOption) : ?>
+                            <option value="<?= (int)($unitOption['idunit'] ?? 0) ?>" <?= (int)($unitOption['idunit'] ?? 0) === $unitId ? 'selected' : '' ?>>
+                                <?= esc($unitOption['NAMA_UNIT'] ?? ('Unit ' . (int)($unitOption['idunit'] ?? 0))) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <button type="submit" class="tk-btn tk-btn--primary">
+                    <iconify-icon icon="solar:filter-bold" width="18"></iconify-icon>
+                    Tampilkan
+                </button>
+            </form>
+        <?php endif; ?>
+
         <form action="<?= base_url('tutupkasir/tutup') ?>" method="post" id="formTutupKasir">
             <?= csrf_field() ?>
-
-            <!-- Hidden fields hanya untuk tampilan/audit — server menghitung ulang -->
-            <input type="hidden" name="awal_cash"        value="<?= $belumAda ? '' : $awalCashNum ?>">
-            <input type="hidden" name="awal_transfer"    value="<?= $tfBelumAda ? '' : $awalTfNum ?>">
-            <input type="hidden" name="akhir_cash"       value="<?= $akhirCashSistem === null ? '' : (int)$akhirCashSistem ?>">
-            <input type="hidden" name="akhir_transfer"   value="<?= $akhirTfSistem === null ? '' : (int)$akhirTfSistem ?>">
-            <input type="hidden" name="pendapatan_cash"  value="<?= (int)($kas_masuk ?? 0) ?>">
-            <input type="hidden" name="pendapatan_transfer" value="<?= (int)($transfer_masuk ?? 0) ?>">
-            <input type="hidden" name="pengeluaran_cash" value="<?= (int)($kas_keluar ?? 0) ?>">
-            <input type="hidden" name="pengeluaran_transfer" value="<?= (int)($transfer_keluar ?? 0) ?>">
-            <input type="hidden" name="setor"            value="<?= (int)($setor ?? 0) ?>">
-            <input type="hidden" name="tarik"            value="<?= (int)($tarik ?? 0) ?>">
+            <?php if ($isAdminRoot) : ?>
+                <input type="hidden" name="tanggal" value="<?= esc($tanggalHariIni) ?>">
+                <input type="hidden" name="unit" value="<?= $unitId ?>">
+            <?php endif; ?>
 
             <!-- ===== ALERT ZONE ===== -->
             <?php if ($belumAda || $tfBelumAda) : ?>
@@ -84,8 +124,8 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
                 <div class="tk-alert tk-alert--danger mb-3" role="alert">
                     <iconify-icon icon="solar:check-circle-bold" width="20"></iconify-icon>
                     <div>
-                        <div class="tk-alert__title">Sudah tutup kasir hari ini</div>
-                        <div class="tk-alert__desc">Unit ini sudah punya closing untuk tanggal hari ini.</div>
+                        <div class="tk-alert__title">Closing sudah tercatat</div>
+                    <div class="tk-alert__desc">Unit ini sudah punya closing pada <?= esc(date('d M Y', strtotime($tanggalHariIni))) ?>.</div>
                     </div>
                 </div>
             <?php endif; ?>
@@ -100,236 +140,131 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
                 </div>
             <?php endif; ?>
 
-            <!-- ===== HERO SECTION ===== -->
-            <section class="tk-hero mb-4">
-                <!-- Kiri: Saldo Awal -->
-                <div class="tk-hero__balance tk-card">
-                    <div class="d-flex align-items-center mb-3">
-                        <iconify-icon icon="solar:wallet-bold" width="28" class="text-primary me-2"></iconify-icon>
-                        <h5 class="mb-0 fw-semibold">Saldo Awal</h5>
+            <!-- Ringkasan saldo pembuka dan arus kas; saldo akhir sistem tidak ditampilkan saat closing. -->
+            <section class="tk-section tk-flow-section mb-4" aria-labelledby="arusKasTitle">
+                <header class="tk-section-header">
+                    <div>
+                        <h2 id="arusKasTitle" class="mb-1">Arus Kas <?= $isTanggalHariIni ? 'Hari Ini' : esc(date('d M Y', strtotime($tanggalHariIni))) ?></h2>
+                        <p class="mb-0">Arus KAS dan transfer pada tanggal pilihan; setor/tarik memengaruhi KAS.</p>
                     </div>
-                    <?php if ($belumAda && $tfBelumAda) : ?>
-                        <div class="tk-balance__amount text-warning">Belum ditetapkan</div>
-                        <div class="tk-balance__breakdown">Tetapkan saldo awal untuk melanjutkan</div>
-                    <?php else : ?>
-                        <div class="tk-balance__amount">
-                            Rp <?= number_format($awalCashNum + $awalTfNum, 0, ',', '.') ?>
-                        </div>
-                        <div class="tk-balance__breakdown">
-                            <?php if (!$belumAda) : ?>
-                                Kas <strong class="tk-tabular">Rp <?= number_format($awalCashNum, 0, ',', '.') ?></strong>
-                            <?php endif; ?>
-                            <?php if (!$tfBelumAda && !$belumAda) : ?>
-                                &middot;
-                            <?php endif; ?>
-                            <?php if (!$tfBelumAda) : ?>
-                                Transfer <strong class="tk-tabular">Rp <?= number_format($awalTfNum, 0, ',', '.') ?></strong>
-                            <?php endif; ?>
-                        </div>
-                        <?php if (!$belumAda && !empty($awalKas['pesan'])) : ?>
-                            <div class="tk-balance__note"><?= esc($awalKas['pesan']) ?></div>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                </div>
-
-                <!-- Kanan: Input Uang Laci -->
-                <div class="tk-hero__input">
-                    <label for="uang_laci" class="tk-input__label">
-                        <iconify-icon icon="solar:hand-money-bold" width="24"></iconify-icon>
-                        Total Uang di Laci
-                    </label>
-                    <div class="tk-input-group mb-2">
-                        <span class="input-group-text fw-semibold">Rp</span>
-                        <input
-                            type="text"
-                            name="cash_laci"
-                            id="uang_laci"
-                            class="form-control"
-                            placeholder="0"
-                            inputmode="numeric"
-                            required
-                            autocomplete="off"
-                            <?= $belumAda ? 'disabled' : '' ?>
-                        >
-                    </div>
-                    <small class="tk-input__hint d-block mb-3">
-                        Isi sesuai uang fisik yang ada di kas/laci. Isi <strong>0</strong> kalau laci memang kosong.
-                        Pemisah ribuan otomatis memakai titik, jadi <strong>1.500.000</strong> berarti 1.500.000.
-                    </small>
-                </div>
-            </section>
-
-            <!-- ===== RINGKASAN PENDAPATAN & PENGELUARAN (BOARD) ===== -->
-            <section class="tk-section mb-4">
-                <header class="p-3 border-bottom">
-                    <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
-                        <iconify-icon icon="solar:document-text-bold" width="22"></iconify-icon>
-                        Ringkasan Pendapatan & Pengeluaran
-                    </h5>
                 </header>
-                <div class="p-3">
-                    <div class="tk-summary">
-                        <!-- Pendapatan Cash -->
-                        <article class="tk-summary__item tk-summary__item--income">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Pendapatan Cash</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:money-bag-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">
-                                Rp <?= number_format((int)($kas_masuk ?? 0), 0, ',', '.') ?>
-                            </div>
-                        </article>
+                <div class="tk-ledger-wrap">
+                    <table class="tk-ledger">
+                        <thead>
+                            <tr>
+                                <th scope="col">Ringkasan</th>
+                                <th scope="col" class="text-end"><span class="tk-method"><span class="tk-method__dot tk-method__dot--cash"></span>KAS</span></th>
+                                <th scope="col" class="text-end"><span class="tk-method"><span class="tk-method__dot tk-method__dot--transfer"></span>Transfer</span></th>
+                                <th scope="col" class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="tk-ledger__opening">
+                                <th scope="row">
+                                    <span>Saldo awal</span>
+                                    <small class="tk-ledger__description">Saldo pembuka tanggal pilihan</small>
+                                    <small class="tk-ledger__mobile-total"><?= ($belumAda || $tfBelumAda) ? 'Belum lengkap' : 'Total · Rp ' . number_format($awalCashNum + $awalTfNum, 0, ',', '.') ?></small>
+                                </th>
+                                <td data-label="KAS" class="text-end tk-tabular"><?= $belumAda ? '<span class="tk-ledger__missing">Belum ditetapkan</span>' : 'Rp ' . number_format($awalCashNum, 0, ',', '.') ?></td>
+                                <td data-label="Transfer" class="text-end tk-tabular"><?= $tfBelumAda ? '<span class="tk-ledger__missing">Belum ditetapkan</span>' : 'Rp ' . number_format($awalTfNum, 0, ',', '.') ?></td>
+                                <td data-label="Total" class="text-end tk-tabular"><?= ($belumAda || $tfBelumAda) ? '<span class="tk-ledger__missing">Belum lengkap</span>' : 'Rp ' . number_format($awalCashNum + $awalTfNum, 0, ',', '.') ?></td>
+                            </tr>
+                            <tr class="tk-ledger__income">
+                                <th scope="row">
+                                    <span>Pendapatan <em>+</em></span>
+                                    <small class="tk-ledger__description">Penerimaan tunai dan transfer</small>
+                                    <small class="tk-ledger__mobile-total">Total · Rp <?= number_format((int)($total_pendapatan ?? 0), 0, ',', '.') ?></small>
+                                </th>
+                                <td data-label="KAS" class="text-end tk-tabular">
+                                    <strong>Rp <?= number_format((int)($kas_masuk ?? 0), 0, ',', '.') ?></strong>
+                                    <?php if ((int)($dpService['total_tunai'] ?? 0) > 0) : ?>
+                                        <small class="tk-ledger__note">Termasuk DP tunai Rp <?= number_format((int)$dpService['total_tunai'], 0, ',', '.') ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td data-label="Transfer" class="text-end tk-tabular">
+                                    <strong>Rp <?= number_format((int)($transfer_masuk ?? 0), 0, ',', '.') ?></strong>
+                                    <?php if ((int)($dpService['total_transfer'] ?? 0) > 0) : ?>
+                                        <small class="tk-ledger__note">Termasuk DP transfer Rp <?= number_format((int)$dpService['total_transfer'], 0, ',', '.') ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td data-label="Total" class="text-end tk-tabular"><strong>Rp <?= number_format((int)($total_pendapatan ?? 0), 0, ',', '.') ?></strong></td>
+                            </tr>
+                            <tr class="tk-ledger__expense">
+                                <th scope="row">
+                                    <span>Pengeluaran <em>−</em></span>
+                                    <small class="tk-ledger__description">Kas keluar tanggal pilihan</small>
+                                    <small class="tk-ledger__mobile-total">Total · Rp <?= number_format((int)($total_pengeluaran ?? ((int)($kas_keluar ?? 0) + (int)($transfer_keluar ?? 0))), 0, ',', '.') ?></small>
+                                </th>
+                                <td data-label="KAS" class="text-end tk-tabular">− Rp <?= number_format((int)($kas_keluar ?? 0), 0, ',', '.') ?></td>
+                                <td data-label="Transfer" class="text-end tk-tabular">− Rp <?= number_format((int)($transfer_keluar ?? 0), 0, ',', '.') ?></td>
+                                <td data-label="Total" class="text-end tk-tabular">− Rp <?= number_format((int)($total_pengeluaran ?? ((int)($kas_keluar ?? 0) + (int)($transfer_keluar ?? 0))), 0, ',', '.') ?></td>
+                            </tr>
+                            <?php if (($transfer_internal['ada'] ?? false)) : ?>
+                                <tr class="tk-ledger__internal">
+                                    <th scope="row">
+                                        <span>Perpindahan kas-bank</span>
+                                        <small>Setor mengurangi KAS; tarik menambah KAS</small>
+                                    </th>
+                                    <td data-label="KAS" class="text-end tk-tabular">
+                                        <?= $netKasBank > 0 ? '+' : ($netKasBank < 0 ? '−' : '') ?> Rp <?= number_format(abs($netKasBank), 0, ',', '.') ?>
+                                        <?php if ((int)($setor ?? 0) > 0 || (int)($tarik ?? 0) > 0) : ?>
+                                            <small class="tk-ledger__note">
+                                                <?php if ((int)($setor ?? 0) > 0) : ?>Setor Rp <?= number_format((int)($setor ?? 0), 0, ',', '.') ?><?php endif; ?>
+                                                <?php if ((int)($setor ?? 0) > 0 && (int)($tarik ?? 0) > 0) : ?> &middot; <?php endif; ?>
+                                                <?php if ((int)($tarik ?? 0) > 0) : ?>Tarik Rp <?= number_format((int)($tarik ?? 0), 0, ',', '.') ?><?php endif; ?>
+                                            </small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td data-label="Transfer" class="text-end tk-ledger__muted">Tidak mengubah saldo bank</td>
+                                    <td data-label="Total" class="text-end tk-ledger__muted" aria-label="Mutasi internal, tidak dijumlahkan">—</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
-                        <!-- Pendapatan Transfer -->
-                        <article class="tk-summary__item tk-summary__item--income">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Pendapatan Transfer</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">
-                                Rp <?= number_format((int)($transfer_masuk ?? 0), 0, ',', '.') ?>
-                            </div>
-                        </article>
-
-                        <!-- Total Pendapatan -->
-                        <article class="tk-summary__item tk-summary__item--income-total">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Total Pendapatan</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:wallet-money-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">
-                                Rp <?= number_format((int)($total_pendapatan ?? 0), 0, ',', '.') ?>
-                            </div>
-                        </article>
-
-                        <!-- Pengeluaran Cash -->
-                        <article class="tk-summary__item tk-summary__item--expense">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Pengeluaran Cash</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:bill-list-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">
-                                Rp <?= number_format((int)($kas_keluar ?? 0), 0, ',', '.') ?>
-                            </div>
-                        </article>
-
-                        <!-- Pengeluaran Transfer -->
-                        <article class="tk-summary__item tk-summary__item--expense">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Pengeluaran Transfer</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:bill-list-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">
-                                Rp <?= number_format((int)($transfer_keluar ?? 0), 0, ',', '.') ?>
-                            </div>
-                        </article>
-
-                        <!-- Total Pengeluaran -->
-                        <article class="tk-summary__item tk-summary__item--expense-total">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Total Pengeluaran</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:bill-list-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">
-                                Rp <?= number_format((int)(($kas_keluar ?? 0) + ($transfer_keluar ?? 0)), 0, ',', '.') ?>
-                            </div>
-                        </article>
+            <section class="tk-reconcile mb-4" aria-labelledby="uangLaciTitle">
+                <div class="tk-reconcile__intro">
+                    <span class="tk-reconcile__icon"><iconify-icon icon="solar:hand-money-bold" width="23"></iconify-icon></span>
+                    <div>
+                        <h2 id="uangLaciTitle">Hitung uang fisik di laci</h2>
+                        <p class="mb-0">Hitung seluruh uang tunai di laci, lalu masukkan totalnya. Isi 0 jika laci memang kosong.</p>
+                    </div>
+                </div>
+                <div class="tk-reconcile__body">
+                    <div class="tk-reconcile__input">
+                        <label for="uang_laci" class="tk-input__label">Total hasil hitung uang di laci</label>
+                        <div class="tk-input-group">
+                            <span class="input-group-text">Rp</span>
+                            <input
+                                type="text"
+                                name="cash_laci"
+                                id="uang_laci"
+                                class="form-control"
+                                placeholder="Masukkan jumlah"
+                                inputmode="numeric"
+                                required
+                                autocomplete="off"
+                                aria-describedby="uangLaciHint"
+                                <?= $belumAda ? 'disabled' : '' ?>
+                            >
+                        </div>
+                        <small id="uangLaciHint" class="tk-input__hint">Masukkan hasil hitung fisik, bukan angka dari ringkasan. Pemisah ribuan otomatis.</small>
                     </div>
                 </div>
             </section>
 
-            <!-- ===== COLLAPSIBLE: SALDO SEHARUSNYA (rincian alur, TANPA angka akhir) ===== -->
-            <details class="tk-details tk-card tk-details mb-4">
-                <summary>
-                    <iconify-icon icon="solar:calculator-bold" width="22"></iconify-icon>
-                    Saldo Seharusnya (Sistem)
-                </summary>
+            <details class="tk-details mb-4">
+                <summary><iconify-icon icon="solar:calculator-bold" width="19"></iconify-icon> Cara data kas diproses</summary>
                 <div class="tk-details__content">
-                    <?php if ($akhirCashSistem === null) : ?>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Status</span>
-                            <span class="tk-details__value text-warning">Belum tersedia</span>
-                        </div>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Alasan</span>
-                            <span class="tk-details__value">Saldo awal belum ditetapkan, jadi sistem tidak menghitung angka apa pun.</span>
-                        </div>
+                    <?php if ($belumAda) : ?>
+                        <p class="mb-0">Belum tersedia karena saldo awal KAS belum ditetapkan.</p>
                     <?php else : ?>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Saldo Awal</span>
-                            <span class="tk-details__value tk-tabular">Rp <?= number_format($awalCashNum, 0, ',', '.') ?></span>
-                        </div>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Kas Masuk (Pendapatan)</span>
-                            <span class="tk-details__value tk-tabular text-success">+ Rp <?= number_format((int)($kas_masuk ?? 0), 0, ',', '.') ?></span>
-                        </div>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Kas Keluar (Pengeluaran)</span>
-                            <span class="tk-details__value tk-tabular text-danger">- Rp <?= number_format((int)($kas_keluar ?? 0), 0, ',', '.') ?></span>
-                        </div>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Setor (Kas &rarr; Bank)</span>
-                            <span class="tk-details__value tk-tabular text-info">- Rp <?= number_format((int)($setor ?? 0), 0, ',', '.') ?></span>
-                        </div>
-                        <div class="tk-details__row">
-                            <span class="tk-details__label">Tarik (Bank &rarr; Kas)</span>
-                            <span class="tk-details__value tk-tabular text-info">+ Rp <?= number_format((int)($tarik ?? 0), 0, ',', '.') ?></span>
-                        </div>
+                        <p class="mb-0">Data transaksi dan mutasi diproses otomatis oleh sistem. Masukkan hanya jumlah uang fisik yang sudah dihitung langsung dari laci.</p>
                     <?php endif; ?>
                 </div>
             </details>
-
-            <!-- ===== PERPINDAHAN KAS <-> BANK (setor/tarik per bank) ===== -->
-            <?php if (($transfer_internal['ada'] ?? false)) : ?>
-            <?php
-                $rincian   = $transfer_internal['rincian'] ?? [];
-                $floatList = static function (string $arah) use ($rincian) {
-                    $baris = array_values(array_filter($rincian, fn($t) => ($t['arah'] ?? '') === $arah));
-                    if (empty($baris)) {
-                        return '';
-                    }
-                    $html = '<ul style="list-style:none;padding:0;margin:0.75rem 0 0;border-top:1px dashed var(--bs-border-color, #dee2e6);">';
-                    foreach ($baris as $b) {
-                        $nama = $b['nama_bank'] ?: 'Bank';
-                        $ket  = ($b['keterangan'] ?? '') !== '' ? '<span style="color:var(--tk-muted);font-size:0.75rem;">' . esc($b['keterangan']) . '</span>' : '';
-                        $html .= '<li style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.375rem 0;font-size:0.8125rem;">'
-                            . '<span>' . esc($nama) . ' ' . $ket . '</span>'
-                            . '<strong style="font-variant-numeric:tabular-nums;white-space:nowrap;">Rp ' . number_format((int) $b['jumlah'], 0, ',', '.') . '</strong>'
-                            . '</li>';
-                    }
-                    return $html . '</ul>';
-                };
-            ?>
-            <section class="tk-section mb-4">
-                <header class="p-3 border-bottom">
-                    <h5 class="mb-0 fw-semibold d-flex align-items-center gap-2">
-                        <iconify-icon icon="solar:swap-horizontal-bold" width="22"></iconify-icon>
-                        Perpindahan Kas &harr; Bank Hari Ini
-                    </h5>
-                </header>
-                <div class="p-3">
-                    <div class="tk-summary">
-                        <article class="tk-summary__item tk-summary__item--expense">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Setor ke Bank (Kas &rarr; Bank)</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">Rp <?= number_format((int)($setor ?? 0), 0, ',', '.') ?></div>
-                            <?= $floatList('setor') ?>
-                        </article>
-
-                        <article class="tk-summary__item tk-summary__item--income">
-                            <div class="tk-summary__header">
-                                <span class="tk-summary__title">Tarik dari Bank (Bank &rarr; Kas)</span>
-                                <div class="tk-summary__icon"><iconify-icon icon="solar:card-transfer-bold" width="28"></iconify-icon></div>
-                            </div>
-                            <div class="tk-summary__value tk-tabular">Rp <?= number_format((int)($tarik ?? 0), 0, ',', '.') ?></div>
-                            <?= $floatList('tarik') ?>
-                        </article>
-                    </div>
-                </div>
-            </section>
-            <?php endif; ?>
 
             <!-- ===== PERINGATAN TERLAMBAT (JS shows/hides) ===== -->
             <div class="tk-late d-none" id="peringatanTerlambat" role="alert">
@@ -345,8 +280,9 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
             </div>
 
             <!-- ===== STICKY FOOTER ===== -->
-            <footer class="tk-footer">
-                <button
+        <footer class="tk-footer">
+            <span class="tk-footer__meta">Pastikan seluruh uang fisik di laci sudah dihitung.</span>
+            <button
                     type="submit"
                     id="btnTutupKasir"
                     class="tk-btn tk-btn--danger"
@@ -361,7 +297,12 @@ $namaUnit = isset($unit) ? ($unit === 1 ? 'Probolinggo' : ($unit === 2 ? 'Jember
                        target="_blank"
                        class="tk-btn tk-btn--primary">
                         <iconify-icon icon="solar:printer-bold"></iconify-icon>
-                        Print
+                        <span class="tk-print-label">
+                            Print
+                            <?php if (!$printSesuaiPilihan) : ?>
+                                <small>Closing terakhir · <?= esc(date('d M Y', strtotime((string)$tutupkasir->tanggal))) ?></small>
+                            <?php endif; ?>
+                        </span>
                     </a>
                 <?php endif; ?>
             </footer>
@@ -380,6 +321,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tutupBisaDisimpan = <?= $tutupBisaDisimpan ? 'true' : 'false' ?>;
     const sudahDitutup      = <?= $sudahDitutup ? 'true' : 'false' ?>;
     const OFFSET_WIB_MENIT = <?= $wibOffsetMenit ?? 420 ?>;
+    const isTanggalHariIni = <?= $isTanggalHariIni ? 'true' : 'false' ?>;
 
     // Waktu dinding WIB (Asia/Jakarta)
     function waktuWib() {
@@ -402,6 +344,16 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.disabled = true;
             btn.innerHTML = `<iconify-icon icon="solar:lock-keyhole-bold" width="20"></iconify-icon> Saldo Awal Belum Ditetapkan`;
             btn.classList.add('tk-btn--disabled');
+            if (peringatan) peringatan.classList.add('d-none');
+            return;
+        }
+
+        // Admin Root dapat menutup tanggal lampau yang belum memiliki closing;
+        // batas jam harian hanya berlaku pada closing tanggal hari ini.
+        if (!isTanggalHariIni) {
+            btn.disabled = false;
+            btn.innerHTML = `<iconify-icon icon="solar:lock-keyhole-bold" width="20"></iconify-icon> Tutup Kasir`;
+            btn.classList.remove('tk-btn--disabled');
             if (peringatan) peringatan.classList.add('d-none');
             return;
         }
@@ -439,6 +391,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Format Rupiah di input uang laci (pemisah ribuan titik)
     const uangLaci = document.getElementById('uang_laci');
+
     if (uangLaci) {
         uangLaci.addEventListener('input', function (e) {
             let v = e.target.value.replace(/[^0-9]/g, '');

@@ -7,6 +7,7 @@ use App\Services\Finance\KasBankCutoffService;
 use App\Services\Finance\KasBankSetorTarikService;
 use App\Services\Finance\KasBankSourceMovement;
 use App\Services\Finance\KasOpeningService;
+use App\Services\Finance\TutupKasirSourceDefinition;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
 
@@ -94,7 +95,7 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         foreach ([
             'db_transaksi_kas_bank', 'db_alokasi_saldo_kas_bank', 'db_saldo_awal_kas_bank',
             'db_akun_kas_bank', 'db_tutup_kasir', 'db_unit', 'db_bank', 'db_akun',
-            'db_opening_kas', 'db_penjualan', 'db_kas_keluar', 'db_service',
+            'db_opening_kas', 'db_penjualan', 'db_kas_keluar', 'db_service_dp', 'db_service',
         ] as $t) {
             $this->q('DROP TABLE IF EXISTS ' . $t);
         }
@@ -150,10 +151,15 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
                 harus_dibayar REAL NULL, bayar_tunai REAL NULL, bayar_bank REAL NULL,
                 keterangan TEXT NULL)');
         $this->q('CREATE TABLE db_service (
-                id_service INTEGER PRIMARY KEY AUTO_INCREMENT,
+                idservice INTEGER PRIMARY KEY AUTO_INCREMENT,
                 no_service TEXT NULL, unit_idunit INT NULL, tanggal_selesai TEXT NULL,
                 status_service INT NULL, harus_dibayar REAL NULL, bayar_tunai REAL NULL,
                 keterangan TEXT NULL)');
+        $this->q('CREATE TABLE db_service_dp (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                service_idservice INT NULL, tanggal TEXT NULL, jumlah REAL NULL,
+                bank_idbank TEXT NULL,
+                metode TEXT NULL, status TEXT NULL, unit_id INT NULL)');
         $this->q('CREATE TABLE db_kas_keluar (
                 idkas_keluar INTEGER PRIMARY KEY AUTO_INCREMENT,
                 tanggal TEXT NULL, idunit INT NULL, idbank TEXT NULL,
@@ -412,6 +418,99 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
 
         $this->assertSame(120000, $alur['cash_in'], 'Service status != 4 tidak boleh masuk Cash In');
+    }
+
+    public function testDpTunaiMasukKeSaldoKasTunaiUnitPadaTanggalPenerimaan(): void
+    {
+        $this->db->table('service')->insert([
+            'no_service' => 'S-DP-UNIT-1', 'unit_idunit' => self::UNIT,
+            'status_service' => 1, 'bayar_tunai' => 0,
+        ]);
+        $serviceId = (int) $this->db->insertID();
+
+        $this->db->table('service_dp')->insert([
+            'service_idservice' => $serviceId,
+            'tanggal'            => $this->h0,
+            'jumlah'             => 85000,
+            'metode'             => 'tunai',
+            'status'             => 'aktif',
+            'unit_id'            => self::UNIT,
+        ]);
+
+        $srcDef = new TutupKasirSourceDefinition($this->db);
+        $this->assertSame(85000, $srcDef->dpMasukTunaiRange(self::UNIT, $this->h0, $this->h0));
+        $ringkasan = $srcDef->ringkasanRange(self::UNIT, $this->h0, $this->h0);
+        $this->assertSame(85000, $ringkasan['dp_tunai']);
+        $this->assertSame(85000, $ringkasan['cash']);
+
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
+
+        $this->assertSame(85000, $alur['cash_in'], 'DP tunai harus masuk Cash In saat diterima, walau service belum selesai.');
+        $this->assertSame(85000, $alur['movement']);
+        $this->assertSame(self::OPENING + 85000, $alur['saldo_buku'], 'Saldo Kas Tunai Unit harus bertambah sebesar DP.');
+    }
+
+    public function testDpTransferMasukKeSaldoBankUnitPadaRekeningYangDipilih(): void
+    {
+        $this->db->table('service')->insert([
+            'no_service' => 'S-DP-BANK-1', 'unit_idunit' => self::UNIT,
+            'status_service' => 1, 'bayar_tunai' => 0,
+        ]);
+        $serviceId = (int) $this->db->insertID();
+
+        $this->db->table('service_dp')->insert([
+            'service_idservice' => $serviceId,
+            'tanggal'            => $this->h0,
+            'jumlah'             => 95000,
+            'metode'             => 'transfer',
+            'bank_idbank'        => 'BNI-001',
+            'status'             => 'aktif',
+            'unit_id'            => self::UNIT,
+        ]);
+
+        $srcDef = new TutupKasirSourceDefinition($this->db);
+        $this->assertSame(
+            95000,
+            $srcDef->dpMasukTransferBankRange('BNI-001', self::UNIT, $this->h0, $this->h0)
+        );
+        $ringkasan = $srcDef->ringkasanRange(self::UNIT, $this->h0, $this->h0);
+        $this->assertSame(95000, $ringkasan['dp_transfer']);
+        $this->assertSame(95000, $ringkasan['transfer']);
+
+        $this->assertSame(95000, $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->h0));
+        $this->assertSame(95000, $this->cutoff->netMovement(self::AKUN_BANK, null, $this->h0));
+    }
+
+    public function testDpTransferTidakDihitungUlangSaatServiceSelesai(): void
+    {
+        $this->db->table('service')->insert([
+            'no_service' => 'S-DP-SELESAI-1', 'unit_idunit' => self::UNIT,
+            'tanggal_selesai' => $this->h1 . ' 09:00:00', 'status_service' => 4,
+            'harus_dibayar' => 100000, 'bayar_tunai' => 40000,
+        ]);
+        $serviceId = (int) $this->db->insertID();
+
+        $this->db->table('service_dp')->insert([
+            'service_idservice' => $serviceId,
+            'tanggal'            => $this->h0,
+            'jumlah'             => 30000,
+            'metode'             => 'transfer',
+            'bank_idbank'        => 'BNI-001',
+            'status'             => 'aktif',
+            'unit_id'            => self::UNIT,
+        ]);
+
+        $this->assertSame(30000, $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->h0));
+        $ringkasan = (new TutupKasirSourceDefinition($this->db))
+            ->ringkasanRange(self::UNIT, $this->h0, $this->h1);
+        $this->assertSame(30000, $ringkasan['dp_transfer']);
+        $this->assertSame(30000, $ringkasan['dp_service_selesai']);
+        $this->assertSame(60000, $ringkasan['transfer']);
+        $this->assertSame(
+            60000,
+            $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->h1),
+            'DP 30.000 saat diterima + transfer riil 30.000 saat service selesai'
+        );
     }
 
     public function testInvoiceSvcTidakMasukCashIn(): void

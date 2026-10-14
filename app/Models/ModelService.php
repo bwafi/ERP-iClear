@@ -59,19 +59,100 @@ class ModelService extends Model
         return $this->findAll();
     }
 
+    /**
+     * Apakah service memiliki baris ledger DP (`service_dp`)?
+     *
+     * Predikat saja (mis. untuk UI/informasi). BUKAN lagi guard hard delete:
+     * `hardDeleteService()` kini menghapus service bersama seluruh baris
+     * `service_dp` dan jurnal DP-nya dalam satu transaksi.
+     */
+    public function hasDpLedger($idservice): bool
+    {
+        $db = \Config\Database::connect();
+
+        // Cek langsung (non-cache): daftar tabel CI4 di-cache per koneksi,
+        // sehingga hasil bisa basi setelah DDL. Panggil dengan nama lengkap
+        // termuat prefix, karena jalur non-cache `tableExists()` TIDAK
+        // mengaplikasikan DBPrefix (berbeda dengan jalur cache).
+        if (! $db->tableExists($db->getPrefix() . 'service_dp', false)) {
+            return false;
+        }
+
+        return $db->table('service_dp')
+            ->where('service_idservice', (int) $idservice)
+            ->countAllResults() > 0;
+    }
+
+    /**
+     * Refund adalah arus kas nyata; service terkait tidak boleh dihapus
+     * permanen setelahnya karena itu menghilangkan hubungan audit dan tanggal
+     * penerimaan DP dari laporan historis.
+     */
+    public function hasRefundedDp($idservice): bool
+    {
+        $db = \Config\Database::connect();
+        if (! $db->tableExists($db->getPrefix() . 'service_dp', false)
+            || ! $db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            return false;
+        }
+
+        return $db->table('service_dp')
+            ->where('service_idservice', (int) $idservice)
+            ->where('refund_idkas_keluar IS NOT NULL', null, false)
+            ->countAllResults() > 0;
+    }
+
     public function hardDeleteService($idservice)
     {
         $db = \Config\Database::connect();
+        $idservice = (int) $idservice;
+
+        if ($this->hasRefundedDp($idservice)) {
+            log_message('warning', 'hardDeleteService ditolak: service ' . $idservice . ' memiliki refund DP tercatat');
+            return false;
+        }
 
         try {
             log_message('info', 'Starting delete service ID: ' . $idservice);
 
-            $spareparts = $db->table('service_sparepart')
-                ->where('service_idservice', $idservice)
-                ->get()->getResult();
-            log_message('info', 'Found ' . count($spareparts) . ' spareparts');
+            // Semua penghapusan dibungkus satu transaksi: service, data
+            // terkait, dan ledger DP + jurnal DP harus hilang bersama-sama.
+            // Kalau ada satu langkah gagal, tidak boleh ada sisa setengah
+            // terhapus (service hilang tapi ledger DP/jurnal masih ada, atau
+            // sebaliknya).
+            $db->transBegin();
 
-            // Hapus data terkait (tidak pakai transaction karena stok_barang adalah VIEW)
+            // Catat keberhasilan tiap langkah lewat return value query, BUKAN
+            // lewat `transStatus()`. Di CI4, `transStatus` ter-set `false` saat
+            // ada query gagal di dalam transaksi dan (karena `transStrict`
+            // default true) tidak pernah di-reset lagi; pada koneksi yang
+            // dipakai ulang (mis. beberapa hard delete dalam satu request) flag
+            // itu akan membuat transaksi berikutnya salah rollback.
+            $ok = true;
+
+            // Ledger DP (`service_dp`) + jurnal DP terkait. Hanya jurnal milik
+            // id DP service INI yang dihapus (WHERE id_referensi IN ...), bukan
+            // seluruh jurnal `tabel_referensi='service_dp'`, supaya jurnal DP
+            // service lain tidak ikut terhapus.
+            if ($db->tableExists($db->getPrefix() . 'service_dp', false)) {
+                $dpIds = [];
+                foreach ($db->table('service_dp')
+                    ->select('id')
+                    ->where('service_idservice', $idservice)
+                    ->get()->getResult() as $dp) {
+                    $dpIds[] = (string) $dp->id;
+                }
+
+                if ($dpIds !== []) {
+                    $ok = $db->table('jurnal')
+                        ->where('tabel_referensi', 'service_dp')
+                        ->whereIn('id_referensi', $dpIds)
+                        ->delete() && $ok;
+                }
+
+                $ok = $db->table('service_dp')->where('service_idservice', $idservice)->delete() && $ok;
+                log_message('info', 'Deleted ' . count($dpIds) . ' ledger DP terkait service');
+            }
 
             // Hapus detail_penjualan & penjualan yang terkait service
             $penjualans = $db->table('penjualan')
@@ -79,34 +160,43 @@ class ModelService extends Model
                 ->get()->getResult();
 
             foreach ($penjualans as $p) {
-                $db->table('detail_penjualan')->where('penjualan_idpenjualan', $p->idpenjualan)->delete();
+                $ok = $db->table('detail_penjualan')->where('penjualan_idpenjualan', $p->idpenjualan)->delete() && $ok;
             }
 
-            $db->table('penjualan')->where('service_idservice', $idservice)->delete();
+            $ok = $db->table('penjualan')->where('service_idservice', $idservice)->delete() && $ok;
             log_message('info', 'Deleted ' . count($penjualans) . ' penjualan terkait service');
 
-            $db->table('service_sparepart')->where('service_idservice', $idservice)->delete();
+            $ok = $db->table('service_sparepart')->where('service_idservice', $idservice)->delete() && $ok;
 
-            $db->table('service_kerusakan')->where('service_idservice', $idservice)->delete();
+            $ok = $db->table('service_kerusakan')->where('service_idservice', $idservice)->delete() && $ok;
 
-            $db->table('pembayaran_bank')
+            $ok = $db->table('pembayaran_bank')
                 ->where('id_referensi', $idservice)
                 ->whereIn('tabel_referensi', ['service_baru', 'service_garansi_0', 'service_garansi_1'])
-                ->delete();
+                ->delete() && $ok;
 
-            $db->table('jurnal')
+            $ok = $db->table('jurnal')
                 ->where('id_referensi', $idservice)
                 ->where('tabel_referensi', 'service')
-                ->delete();
+                ->delete() && $ok;
 
-            $db->table('proses_service')->where('service_idservice', $idservice)->delete();
-            
-            $db->table('service')->where('idservice', $idservice)->delete();
+            $ok = $db->table('proses_service')->where('service_idservice', $idservice)->delete() && $ok;
+
+            $ok = $db->table('service')->where('idservice', $idservice)->delete() && $ok;
+
+            if (! $ok) {
+                $db->transRollback();
+                log_message('error', 'hardDeleteService rollback: ada langkah hapus yang gagal untuk service ' . $idservice);
+                return false;
+            }
+
+            $db->transCommit();
 
             log_message('info', 'Successfully deleted service ID: ' . $idservice);
             return true;
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            $db->transRollback();
             log_message('error', 'Exception in hardDeleteService: ' . $e->getMessage());
             log_message('error', 'Service ID: ' . $idservice);
             return false;

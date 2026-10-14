@@ -26,6 +26,10 @@ use App\Models\ModelDetailPenjualan;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
+use App\Services\Service\ServiceDpService;
+use App\Services\Service\SparepartKeluarHardDeleteService;
+use App\Services\Service\ServiceSparepartPenjualanSyncService;
+use App\Models\ModelServiceDp;
 
 class Riwayat_Service extends BaseController
 
@@ -49,6 +53,8 @@ class Riwayat_Service extends BaseController
     protected $PenjualanModel;
     protected $DetailPenjualanModel;
     protected $RegionModel;
+    protected $DpService;
+    protected $DpLedgerModel;
 
 
 
@@ -72,6 +78,8 @@ class Riwayat_Service extends BaseController
         $this->PenjualanModel = new ModelPenjualan();
         $this->RegionModel = new ModelRegion();
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
+        $this->DpService = new ServiceDpService();
+        $this->DpLedgerModel = new ModelServiceDp();
     }
 
     public function index()
@@ -290,91 +298,115 @@ class Riwayat_Service extends BaseController
 
     public function insert_sparepart()
     {
+        $idservice = (int) $this->request->getPost('idservice_s');
         $produkData = $this->request->getPost('produk');
-        $idservice = $this->request->getPost('idservice_s');
-
+        $produkData = is_array($produkData) ? $produkData : [];
         $garansi = $this->request->getPost('garansi');
-
         if ($garansi === 'manual') {
-
             $garansi = $this->request->getPost('garansi_manual');
         }
 
-
-        $garansi = (int) $garansi;
-        $garansiupdate = array(
-            'garansi_hari' => $garansi
-        );
-        $this->ServiceModel->updateService($idservice, $garansiupdate);
-
-
-        $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
-        $existingMap = [];
-
-        foreach ($existingItems as $item) {
-            $existingMap[$item->barang_idbarang] = $item;
+        $urlKembali = base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart');
+        if ($idservice <= 0) {
+            return redirect()->to($urlKembali)->with('gagal', 'ID service tidak valid. Sparepart tidak disimpan.');
         }
 
-        $submittedIds = [];
+        $db = Database::connect();
+        $db->transBegin();
 
-        if (!empty($produkData)) {
+        try {
+            $service = $db->table('service')->where('idservice', $idservice)->get()->getRow();
+            if (! $service) {
+                throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+
+            // Ambil snapshot lama sebelum mengubah service_sparepart. Invoice
+            // lama dibersihkan/dicocokkan dalam transaksi yang sama, lalu satu
+            // invoice baru dibuat dari pilihan sparepart terbaru.
+            $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
+            (new ServiceSparepartPenjualanSyncService($db))->hapusTransaksiLama(
+                $idservice,
+                $existingItems,
+                (int) ($service->unit_idunit ?? session('ID_UNIT'))
+            );
+
+            if (! $this->ServiceModel->updateService($idservice, [
+                'garansi_hari' => (int) $garansi,
+            ])) {
+                throw new \RuntimeException('Gagal memperbarui garansi service.');
+            }
+
+            $existingMap = [];
+            foreach ($existingItems as $item) {
+                $existingMap[$item->barang_idbarang] = $item;
+            }
+
+            $submittedIds = [];
             foreach ($produkData as $produk) {
-                $id     = $produk['id'];
-                $jumlah = (int) $produk['jumlah'];
-                $harga  = $this->rupiahToInt($produk['harga']);
-                $diskon_item = $this->rupiahToInt($produk['diskon']);
-                $total  = $this->rupiahToInt($produk['total']);
+                $id = (int) ($produk['id'] ?? 0);
+                if ($id <= 0) {
+                    throw new \RuntimeException('Data sparepart tidak valid.');
+                }
+                $jumlah = (int) ($produk['jumlah'] ?? 0);
+                $harga = $this->rupiahToInt($produk['harga'] ?? '0');
+                $diskonItem = $this->rupiahToInt($produk['diskon'] ?? '0');
+                $total = $this->rupiahToInt($produk['total'] ?? '0');
                 $submittedIds[] = $id;
 
-                $datahppbarang = $this->HppBarangModel->getById($id);
-                $hpp = $datahppbarang->hpp ?? 0;
-
-                $datastokawal = $this->StokAwalModel->getById($id);
-                $satuan_terkecil = $datastokawal->satuan_terkecil ?? 'pcs';
-
-                $datas = [
+                $dataHppBarang = $this->HppBarangModel->getById($id);
+                $stokAwal = $this->StokAwalModel->getById($id);
+                $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,
                     'sub_total' => $total,
-                    'hpp_penjualan' => $hpp,
-                    'satuan_jual' => $satuan_terkecil,
-                    'diskon_penjualan' => $diskon_item,
+                    'hpp_penjualan' => $dataHppBarang->hpp ?? 0,
+                    'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
+                    'diskon_penjualan' => $diskonItem,
                     'service_idservice' => $idservice,
                     'barang_idbarang' => $id,
-                    'unit_idunit' => session('ID_UNIT')
+                    'unit_idunit' => (int) ($service->unit_idunit ?? session('ID_UNIT')),
                 ];
 
-                if (array_key_exists($id, $existingMap)) {
-                    // ID sudah ada → Update
-                    $this->ServiceSparepartModel
-                        ->updateByServiceAndBarang($idservice, $id, $datas);
-                } else {
-                    // ID belum ada → Insert
-                    $this->ServiceSparepartModel
-                        ->insert_SerModelServiceSparepart($datas);
+                $saved = array_key_exists($id, $existingMap)
+                    ? $this->ServiceSparepartModel->updateByServiceAndBarang($idservice, $id, $data)
+                    : $this->ServiceSparepartModel->insert_SerModelServiceSparepart($data);
+                if (! $saved) {
+                    throw new \RuntimeException('Gagal menyimpan detail sparepart service.');
                 }
             }
-        }
 
-        $this->buatPenjualanDariService($idservice, $produkData);
-
-        // Hapus data sparepart yang tidak lagi ada di form
-        foreach ($existingMap as $barangId => $item) {
-            if (!in_array($barangId, $submittedIds)) {
-                $this->ServiceSparepartModel
-                    ->deleteByServiceAndBarang($idservice, $barangId);
+            foreach ($existingMap as $barangId => $item) {
+                if (! in_array((int) $barangId, $submittedIds, true)
+                    && ! $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId)) {
+                    throw new \RuntimeException('Gagal menghapus sparepart yang dilepas dari service.');
+                }
             }
+
+            $this->buatPenjualanDariService($idservice, $produkData);
+
+            if ($db->transStatus() === false || ! $db->transCommit()) {
+                throw new \RuntimeException('Sinkronisasi sparepart keluar gagal disimpan.');
+            }
+
+            return redirect()->to($urlKembali)->with('sukses', 'Sparepart service dan sparepart keluar berhasil disinkronkan.');
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'Riwayat_Service::insert_sparepart gagal untuk service ' . $idservice . ': ' . $e->getMessage());
+            return redirect()->to($urlKembali)->with('gagal', 'Sparepart tidak tersimpan: ' . $e->getMessage());
         }
-        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('sukses', 'Data sparepart berhasil diperbarui.');
     }
 
     private function buatPenjualanDariService($idservice, $produkData)
     {
-        $db = \Config\Database::connect();
-        $db->transStart();
+        if (empty($produkData)) {
+            return;
+        }
 
         // ambil data service
         $service = $this->ServiceModel->find($idservice);
+        if (! $service) {
+            throw new \RuntimeException('Data service tidak ditemukan saat membuat invoice sparepart.');
+        }
 
         // generate invoice (copy dari insert_penjualan, tapi sederhana)
         $no_invoice = 'SRV' . date('YmdHis');
@@ -397,11 +429,17 @@ class Riwayat_Service extends BaseController
             'bayar' => 0,
             'keterangan' => 'Belum Lunas',
             'unit_idunit' => session('ID_UNIT'),
-            'id_pelanggan' => $service->id_pelanggan ?? null,
+            'id_pelanggan' => $service->pelanggan_id_pelanggan ?? null,
+            'service_idservice' => (int) $idservice,
         ];
 
-        $this->PenjualanModel->insert_Penjualan($dataPenjualan);
+        if (! $this->PenjualanModel->insert_Penjualan($dataPenjualan)) {
+            throw new \RuntimeException('Gagal membuat invoice sparepart service.');
+        }
         $idPenjualan = $this->PenjualanModel->insertID();
+        if ((int) $idPenjualan <= 0) {
+            throw new \RuntimeException('ID invoice sparepart service tidak valid.');
+        }
 
         // insert detail + potong stok
         foreach ($produkData as $p) {
@@ -414,7 +452,7 @@ class Riwayat_Service extends BaseController
 
             $hpp = $this->HppBarangModel->getById($produkid);
 
-            $this->DetailPenjualanModel->insert_detail([
+            if (! $this->DetailPenjualanModel->insert_detail([
                 'barang_idbarang' => $produkid,
                 'jumlah' => $qty,
                 'harga_penjualan' => $harga,
@@ -422,10 +460,10 @@ class Riwayat_Service extends BaseController
                 'penjualan_idpenjualan' => $idPenjualan,
                 'hpp_penjualan' => $hpp->hpp ?? 0,
                 'unit_idunit' => session('ID_UNIT'),
-            ]);
+            ])) {
+                throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
+            }
         }
-
-        $db->transComplete();
     }
 
     public function insert_pembayaran()
@@ -829,6 +867,127 @@ class Riwayat_Service extends BaseController
         ]);
     }
 
+    /** Halaman daftar penerimaan DP service — akses dan cakupan unit mengikuti Proses Service. */
+    public function dp_service()
+    {
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+
+        return view('template', [
+            'unit'           => $this->UnitModel->getUnit(),
+            'is_ho'          => $isHO,
+            'user_unit'      => (int) session('ID_UNIT'),
+            'dp_ledger_ada'  => $this->DpService->punyaTabelLedger(),
+            'dp_refund_siap' => $this->DpService->refundSiap(),
+            'body'           => 'riwayat/dp_service',
+        ]);
+    }
+
+    /** DataTables DP service — pengguna non-HO selalu dibatasi ke unit sesi. */
+    public function dp_service_ajax()
+    {
+        $request = \Config\Services::request();
+        $draw = (int) ($request->getPost('draw') ?? 0);
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $userUnit = (int) session('ID_UNIT');
+
+        if (! $this->DpService->punyaTabelLedger()) {
+            return $this->response->setJSON([
+                'draw' => $draw,
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+            ]);
+        }
+
+        if ($isHO) {
+            $unitRaw = $request->getPost('unitFilter');
+            $unitFilter = is_numeric($unitRaw) && (int) $unitRaw > 0
+                ? (int) $unitRaw
+                : null;
+        } else {
+            $unitFilter = $userUnit > 0 ? $userUnit : -1;
+        }
+
+        $dateFilter = static function ($value): string {
+            if (! is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+                return '';
+            }
+
+            $date = \DateTime::createFromFormat('!Y-m-d', $value);
+
+            return $date && $date->format('Y-m-d') === $value ? $value : '';
+        };
+
+        $search = $request->getPost('search');
+        $searchValue = is_array($search) ? trim((string) ($search['value'] ?? '')) : '';
+        $order = $request->getPost('order');
+        $orderRow = is_array($order) ? ($order[0] ?? []) : [];
+        $start = max(0, (int) ($request->getPost('start') ?? 0));
+        $length = min(100, max(1, (int) ($request->getPost('length') ?? 10)));
+
+        $result = $unitFilter === -1
+            ? ['recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]
+            : $this->DpLedgerModel->datatable(
+                $start,
+                $length,
+                $searchValue,
+                $dateFilter($request->getPost('startDate')),
+                $dateFilter($request->getPost('endDate')),
+                $unitFilter,
+                (int) ($orderRow['column'] ?? 0),
+                (string) ($orderRow['dir'] ?? 'desc')
+            );
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $result['recordsTotal'],
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data'            => $result['data'],
+        ]);
+    }
+
+    /** Refund penuh DP untuk service yang sudah dibatalkan. */
+    public function refund_dp_service()
+    {
+        $rawId = $this->request->getPost('dp_id');
+        $idDp = is_scalar($rawId) ? (int) $rawId : 0;
+        $alasan = $this->request->getPost('refund_alasan');
+        $referensi = $this->request->getPost('refund_referensi');
+        $alasan = is_string($alasan) ? $alasan : '';
+        $referensi = is_string($referensi) ? $referensi : null;
+
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $unitDiizinkan = $isHO ? null : (int) session('ID_UNIT');
+        if (! $isHO && $unitDiizinkan <= 0) {
+            session()->setFlashdata('gagal', 'Unit akun tidak valid; refund DP tidak dapat diproses.');
+
+            return redirect()->to(base_url('dp_service'));
+        }
+
+        try {
+            $hasil = $this->DpService->refund(
+                $idDp,
+                $alasan,
+                $referensi,
+                (int) session('ID_AKUN'),
+                $unitDiizinkan
+            );
+
+            session()->setFlashdata(
+                'sukses',
+                'Refund DP berhasil dicatat sebesar Rp ' . number_format($hasil['jumlah'], 0, ',', '.') . '; service ditandai dibatalkan.'
+            );
+        } catch (\Throwable $e) {
+            log_message('error', 'Refund DP service #' . $idDp . ' gagal: ' . $e->getMessage());
+            session()->setFlashdata('gagal', $e->getMessage());
+        }
+
+        return redirect()->to(base_url('dp_service'));
+    }
+
     public function togglePrioritas()
     {
         if ($this->request->isAJAX()) {
@@ -963,41 +1122,121 @@ class Riwayat_Service extends BaseController
 
     public function update_sudah_diambil()
     {
-        $idservice = $this->request->getPost('idservice');
+        $idservice = (int) $this->request->getPost('idservice');
         $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
 
         $dataservice = $this->ServiceModel->getServiceById($idservice);
+        if (empty($dataservice)) {
+            session()->setFlashdata('gagal', 'Data service tidak ditemukan.');
+            return redirect()->to(base_url('bisa_diambil'));
+        }
+
+        // Idempotensi: service yang sudah berstatus 4 (diambil) tidak dijurnal ulang.
+        if ((int) $dataservice->status_service === 4) {
+            session()->setFlashdata('gagal', 'Service ini sudah berstatus diambil.');
+            return redirect()->to(base_url('bisa_diambil'));
+        }
+
+        $db = Database::connect();
+
+        $total_service = (int) $dataservice->total_service;
+        $bayar_tunai   = (int) $dataservice->bayar_tunai;
+
+        // Pembayaran via bank pada saat pengambilan (referensi 'service_baru').
+        $bayar_bank = 0;
         $bankData = $this->PembayaranBankModel->getByServiceBaru($idservice);
-        $harus_dibayar = $dataservice->harus_dibayar;
-        $dp_bayar = $dataservice->dp_bayar;
-        $created_at = $dataservice->created_at;
-        $tanggal_saja = date('Y-m-d', strtotime($created_at));
-        $total_service = $dataservice->total_service;
-        $tanggal = date('Y-m-d', strtotime($created_at));
-        $data = [
-            'status_service' => 4,
-            'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
-        ];
-
-         $this->ServiceModel->updateService($idservice, $data);
-
         if (!empty($bankData) && is_array($bankData)) {
             foreach ($bankData as $b) {
-                    $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service_' . $b->bank_idbank, [$b->jumlah], "Pembayaran Uang Lunas Jasa Service", $idservice, 'service');
+                $bayar_bank += (int) $b->jumlah;
             }
         }
-        if ($dataservice->bayar_tunai > 0) {
-            $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service_tunai', [$dataservice->bayar_tunai], "Pembayaran Uang Tunai Jasa Service", $idservice, 'service');
-        }
-        if ($dataservice->dp_bayar > 0) {
-            $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service_penguranganDP', [$dataservice->dp_bayar], "Pembayaran Jasa Service", $idservice, 'service');
-        }
-        $this->JurnalModel->insertJurnal($tanggal, 'pembayaran_service', [$dataservice->total_service], "Pembayaran Jasa Service", $idservice, 'service');
 
-         $datapbgaransi = array(
-             'tabel_referensi' => 'service_garansi_0'
-         );
-         $this->PembayaranBankModel->updateByReferensi($idservice, $datapbgaransi);
+        // Sumber saldo DP: ledger baru (`service_dp`) atau historis (`service.dp_bayar`).
+        $sumberDp    = $this->DpService->statusSumberDp($idservice);
+        $sisaTagihan = max($total_service - $bayar_tunai - $bayar_bank, 0);
+        $dpTerpakai  = min((int) $sumberDp['saldo'], $sisaTagihan);
+        $pendapatan  = $bayar_tunai + $bayar_bank + $dpTerpakai;
+
+        // Tanggal pengakuan: tanggal pengambilan (WIB), bukan tanggal intake.
+        $tanggal = $wibTime->format('Y-m-d');
+
+        $db->transBegin();
+
+        try {
+            $this->ServiceModel->updateService($idservice, [
+                'status_service'  => 4,
+                'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
+            ]);
+
+            // Idempotensi berbasis jurnal: bila jurnal pengambilan (tabel_referensi
+            // 'service') untuk service ini sudah pernah tertulis, JANGAN posting
+            // ulang. Guard status (=4) saja tidak cukup: jalur "Dibatalkan (90) ->
+            // Aktifkan kembali (2)" membuat service kembali berstatus != 4 tanpa
+            // membalik jurnal, sehingga pengambilan ulang akan menggandakan
+            // pendapatan dan pelepasan PDM. Status akhir tetap dipastikan 4.
+            $sudahDijurnal = $this->JurnalModel->ringkasByReferensi('service', $idservice)['jumlah'] > 0;
+
+            if (! $sudahDijurnal) {
+                // Batas id jurnal sebelum insert, untuk memverifikasi baris baru saja.
+                $maks = $db->table('jurnal')->selectMax('idjurnal', 'maks')->get()->getRow();
+                $maxIdjurnal = (int) ($maks->maks ?? 0);
+
+                // Seluruh pelepasan PDM ditaruh di SATU template: akun PDM sama pada
+                // kedua template, sehingga pendapatan dan PDM tidak mungkin dobel.
+                $templateDp = $bayar_tunai > 0
+                    ? 'pembayaran_service_tunai'
+                    : ($bayar_bank > 0 ? 'pembayaran_service_bank' : 'pembayaran_service_tunai');
+
+                $kaki = [
+                    'pembayaran_service_tunai' => ['kas' => $bayar_tunai, 'dp' => 0],
+                    'pembayaran_service_bank'  => ['kas' => $bayar_bank,  'dp' => 0],
+                ];
+                $kaki[$templateDp]['dp'] = $dpTerpakai;
+
+                foreach ($kaki as $kodeTemplate => $nilai) {
+                    $kas = (int) $nilai['kas'];
+                    $dp  = (int) $nilai['dp'];
+                    if ($kas === 0 && $dp === 0) {
+                        continue;
+                    }
+                    $keterangan = $kodeTemplate === 'pembayaran_service_bank'
+                        ? 'Pembayaran Uang Lunas Jasa Service'
+                        : 'Pembayaran Uang Tunai Jasa Service';
+                    $this->JurnalModel->insertJurnal(
+                        $tanggal,
+                        $kodeTemplate,
+                        [$kas, $dp, $kas + $dp],
+                        $keterangan,
+                        $idservice,
+                        'service'
+                    );
+                }
+
+                // Verifikasi eksplisit: insertJurnal() tidak memberi sinyal kegagalan.
+                $ringkas = $this->JurnalModel->ringkasByReferensi('service', $idservice, $maxIdjurnal);
+                if ($pendapatan > 0 && $ringkas['jumlah'] === 0) {
+                    throw new \RuntimeException('Jurnal pengambilan service tidak terbentuk (template jurnal tidak lengkap).');
+                }
+                if (! $ringkas['seimbang']) {
+                    throw new \RuntimeException('Jurnal pengambilan service tidak seimbang.');
+                }
+                if ($ringkas['debet'] !== $pendapatan) {
+                    throw new \RuntimeException('Nominal jurnal pengambilan service tidak sesuai (' . $ringkas['debet'] . ' != ' . $pendapatan . ').');
+                }
+            }
+
+            // Penanda bank: perilaku lama dipertahankan (garansi_1 -> garansi_0).
+            $this->PembayaranBankModel->updateByReferensi($idservice, [
+                'tabel_referensi' => 'service_garansi_0',
+            ]);
+
+            $db->transCommit();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'update_sudah_diambil gagal service ' . $idservice . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menyelesaikan service: ' . $e->getMessage());
+            return redirect()->to(base_url('bisa_diambil'));
+        }
 
         session()->setFlashdata('sukses', 'Berhasil Memperbarui Status');
         return redirect()->to(base_url('bisa_diambil'));
@@ -1068,6 +1307,10 @@ class Riwayat_Service extends BaseController
         }
 
         try {
+            // Service ber-DP kini boleh dihapus permanen: hardDeleteService()
+            // menghapus service bersama seluruh baris `service_dp` dan jurnal
+            // DP-nya dalam satu transaksi (tidak meninggalkan ledger/jurnal
+            // yatim).
             $result = $this->ServiceModel->hardDeleteService($idservice);
 
             if ($result) {
@@ -1282,62 +1525,38 @@ class Riwayat_Service extends BaseController
             session()->setFlashdata('gagal', 'Tidak punya hak akses');
             return redirect()->to(base_url('sparepart_keluar'));
         }
-        $idDetail = $this->request->getPost('iddetail_penjualan');
-        $detail = $this->DetailPenjualanModel->getById($idDetail);
-        if (!$detail) {
-            session()->setFlashdata('gagal', 'Data tidak ditemukan');
-            return redirect()->to(base_url('sparepart_keluar'));
-        }
-
-        $idPenjualan = $detail->penjualan_idpenjualan;
-
+        $idDetail = (int) $this->request->getPost('iddetail_penjualan');
         $db = \Config\Database::connect();
-        $db->transStart();
+        $db->transBegin();
 
-        // hapus detail penjualan (stok VIEW otomatis menyesuaikan)
-        $this->DetailPenjualanModel->deleteDetail($idDetail);
+        try {
+            $hasil = (new SparepartKeluarHardDeleteService($db))->hapusDetail($idDetail);
+            if (! $hasil['ok']) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Data tidak ditemukan');
 
-        $remaining = $db->table('detail_penjualan')
-            ->where('penjualan_idpenjualan', $idPenjualan)
-            ->countAllResults();
+                return redirect()->to(base_url('sparepart_keluar'));
+            }
 
-        if ($remaining === 0) {
-            // Detail terakhir → invoice penjualan jadi kosong, hapus header-nya
-            // beserta jurnal yang mereferensikannya agar tidak ada sisa di laporan.
-            $db->table('jurnal')
-                ->where('tabel_referensi', 'penjualan')
-                ->where('id_referensi', $idPenjualan)
-                ->delete();
+            if ($db->transStatus() === false) {
+                throw new \RuntimeException('Hard delete sparepart gagal.');
+            }
 
-            $db->table('penjualan')
-                ->where('idpenjualan', $idPenjualan)
-                ->delete();
-
-            $db->transComplete();
-
-            session()->setFlashdata('sukses', 'Data sparepart & invoice penjualan berhasil dihapus. Stok otomatis disesuaikan.');
-            return redirect()->to(base_url('sparepart_keluar'));
+            if (! $db->transCommit()) {
+                throw new \RuntimeException('Commit hard delete sparepart gagal.');
+            }
+            session()->setFlashdata(
+                'sukses',
+                $hasil['invoice_deleted']
+                    ? 'Data sparepart & invoice penjualan berhasil dihapus. Stok otomatis disesuaikan.'
+                    : 'Data sparepart berhasil dihapus. Stok & total penjualan otomatis disesuaikan.'
+            );
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'delete_sparepart_keluar gagal: ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menghapus sparepart: ' . $e->getMessage());
         }
 
-        //Masih ada detail lain → update total pada tabel penjualan (induk)
-        $recalc = $db->table('detail_penjualan')
-            ->selectSum('sub_total', 'total_sub')
-            ->where('penjualan_idpenjualan', $idPenjualan)
-            ->get()
-            ->getRow();
-
-        $newTotal = (int) ($recalc->total_sub ?? 0);
-
-        $db->table('penjualan')
-            ->where('idpenjualan', $idPenjualan)
-            ->update([
-                'total_penjualan' => $newTotal,
-                'harus_dibayar'   => $newTotal,
-            ]);
-
-        $db->transComplete();
-
-        session()->setFlashdata('sukses', 'Data sparepart berhasil dihapus. Stok & total penjualan otomatis disesuaikan.');
         return redirect()->to(base_url('sparepart_keluar'));
     }
 }

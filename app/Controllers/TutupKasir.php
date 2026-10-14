@@ -19,9 +19,33 @@ class TutupKasir extends BaseController
     public function index()
     {
         $today = date('Y-m-d');
+        $isAdminRoot = $this->isAdminRoot();
+        $unitList = [];
 
-        // ambil unit login
-        $unit = (int) session()->get('ID_UNIT');
+        if ($isAdminRoot) {
+            $unitList = $this->db->table('unit')
+                ->select('idunit, NAMA_UNIT')
+                ->orderBy('NAMA_UNIT', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            $unitFallback = (int) session('ID_UNIT');
+            if (! $this->isKnownClosingUnit($unitFallback)) {
+                $unitFallback = (int) ($unitList[0]['idunit'] ?? 0);
+            }
+
+            $requestedUnit = $this->cleanClosingUnit($this->request->getGet('unit'));
+            $unit = $this->isKnownClosingUnit($requestedUnit) ? $requestedUnit : $unitFallback;
+
+            $requestedDate = $this->cleanClosingDate($this->request->getGet('tanggal'));
+            $tanggal = $requestedDate !== null && $requestedDate <= $today
+                ? $requestedDate
+                : $today;
+        } else {
+            // Pilihan query string sengaja diabaikan untuk seluruh role lain.
+            $unit = (int) session()->get('ID_UNIT');
+            $tanggal = $today;
+        }
 
         // ==============================================================
         // SATU SUMBER ANGKA
@@ -40,25 +64,51 @@ class TutupKasir extends BaseController
         // @see \App\Services\Finance\TutupKasirClosing::hitung()
         // @see \App\Services\Finance\TutupKasirSaldoAwal
         $h = (new \App\Services\Finance\TutupKasirClosing($this->db))
-            ->hitung($unit, $today);
+            ->hitung($unit, $tanggal);
 
-        // tutup kasir terakhir per unit (dipakai tombol Print)
+        // Rincian DP yang diterima pada tanggal pilihan. Nilainya sudah termasuk di
+        // pendapatan cash/transfer; bagian ini hanya menampilkan rinciannya.
+        $dpService = (new \App\Services\Finance\TutupKasirSourceDefinition($this->db))
+            ->dpMasukRincian($unit, $tanggal);
+
+        // Utamakan closing tanggal+unit pilihan. Jika belum ada, tetap sediakan
+        // akses ke struk closing terakhir unit ini seperti perilaku sebelumnya.
         $tutupkasir = $this->db->table('tutup_kasir')
             ->where('unit', $unit)
+            ->where('DATE(tanggal)', $tanggal)
             ->orderBy('idtutupkasir', 'DESC')
             ->get()
             ->getRow();
 
-        // Closing hari ini sudah ada atau belum. Tidak dipakai untuk
+        if ($tutupkasir === null) {
+            $tutupkasir = $this->db->table('tutup_kasir')
+                ->where('unit', $unit)
+                ->orderBy('tanggal', 'DESC')
+                ->orderBy('idtutupkasir', 'DESC')
+                ->get()
+                ->getRow();
+        }
+
+        // Closing untuk pasangan tanggal+unit pilihan sudah ada atau belum. Tidak dipakai untuk
         // menghentikan render: view punya `$sudah_ditutup` + tombol disabled.
         $sudahDitutup = $this->db->table('tutup_kasir')
-            ->where('DATE(tanggal)', $today)
+            ->where('DATE(tanggal)', $tanggal)
             ->where('unit', $unit)
             ->countAllResults() > 0;
 
+        $unitRow = $this->db->table('unit')
+            ->select('NAMA_UNIT')
+            ->where('idunit', $unit)
+            ->get()
+            ->getRowArray();
+
         return view('template', array_merge($h['angka'], [
-            'tanggal'             => $today,
+            'tanggal'             => $tanggal,
+            'hari_ini'            => $today,
             'unit'                => $unit,
+            'nama_unit'           => (string) ($unitRow['NAMA_UNIT'] ?? ('Unit ' . $unit)),
+            'unit_list'           => $unitList,
+            'is_admin_root'       => $isAdminRoot,
             'tutupkasir'          => $tutupkasir,
             'saldo_awal_kas'      => $h['saldo_awal_kas'],
             'saldo_awal_tf'       => $h['saldo_awal_tf'],
@@ -81,7 +131,7 @@ class TutupKasir extends BaseController
             'pengeluarancash'     => (int) $h['kas_keluar'],
             'pengeluarantf'       => (int) $h['transfer_keluar'],
             'total_pendapatan'    => (int) $h['kas_masuk'] + (int) $h['transfer_masuk'],
-
+            'dp_service'          => $dpService,
             'wibOffsetMenit'      => 420,
             'body'                => 'jurnal/tutup_kasir',
         ]));
@@ -486,6 +536,11 @@ class TutupKasir extends BaseController
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        // DP tetap terpisah dari omset penjualan, tetapi ditampilkan sebagai
+        // informasi tambahan di kartu Omset Hari Ini untuk unit yang dipilih.
+        $dpHariIni = (new \App\Services\Finance\TutupKasirSourceDefinition($this->db))
+            ->dpMasukRincian((int) $unit, date('Y-m-d'));
             
         $hpp = $this->db->table('detail_penjualan')
             ->select('SUM(hpp_penjualan) AS total')
@@ -585,6 +640,8 @@ class TutupKasir extends BaseController
             'pelanggan_bulan'   => $pelanggan_bulan,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
+            'dp_hari_ini'       => (int) ($dpHariIni['total'] ?? 0),
+            'dp_jumlah_hari_ini' => (int) ($dpHariIni['jumlah'] ?? 0),
             'hariTerbaik'       => $hariTerbaik,
             'omsetTerbaik'      => $omsetTerbaik,
             'top_kecamatan'     => $top_kecamatan,
@@ -1595,8 +1652,40 @@ class TutupKasir extends BaseController
     
     public function tutup()
     {
-        $unit  = (int) session()->get('ID_UNIT');
         $today = date('Y-m-d');
+        $isAdminRoot = $this->isAdminRoot();
+
+        if ($isAdminRoot) {
+            $tanggal = $this->cleanClosingDate($this->request->getPost('tanggal'));
+            $postedUnit = $this->cleanClosingUnit($this->request->getPost('unit'));
+            $fallbackUnit = (int) session('ID_UNIT');
+            if (! $this->isKnownClosingUnit($fallbackUnit)) {
+                $fallbackUnit = $this->isKnownClosingUnit($postedUnit) ? $postedUnit : 0;
+            }
+            $fallbackDate = $tanggal !== null && $tanggal <= $today ? $tanggal : $today;
+
+            if ($tanggal === null || $tanggal > $today) {
+                return redirect()->to($this->closingPageUrl($fallbackUnit, $fallbackDate, true))
+                    ->with('gagal', 'Tanggal closing tidak valid. Pilih tanggal hari ini atau sebelumnya.');
+            }
+
+            if (! $this->isKnownClosingUnit($postedUnit)) {
+                return redirect()->to($this->closingPageUrl($fallbackUnit, $tanggal, true))
+                    ->with('gagal', 'Unit tidak valid. Silakan pilih unit dari daftar.');
+            }
+
+            $unit = $postedUnit;
+        } else {
+            // Unit dan tanggal dari POST tidak pernah dipercaya untuk role lain.
+            $unit = (int) session()->get('ID_UNIT');
+            $tanggal = $today;
+        }
+
+        $redirectUrl = $this->closingPageUrl($unit, $tanggal, $isAdminRoot);
+        if ($unit <= 0) {
+            return redirect()->to($redirectUrl)
+                ->with('gagal', 'Unit tidak valid. Silakan pilih unit yang tersedia.');
+        }
 
         // ==============================================================
         // SERVER YANG MENGHITUNG, BUKAN FORM
@@ -1620,25 +1709,71 @@ class TutupKasir extends BaseController
         $hasil = (new \App\Services\Finance\TutupKasirClosing($this->db))
             ->simpan(
                 $unit,
-                $today,
+                $tanggal,
                 $this->request->getPost('cash_laci'),
-                (int) session('ID_AKUN')
+                (int) session('ID_AKUN'),
+                $isAdminRoot
             );
 
         if (! $hasil['ok']) {
-            return redirect()->to('/tutup_kasir')
+            return redirect()->to($redirectUrl)
                 ->with('gagal', (string) $hasil['alasan']);
         }
 
         // Idempoten: posting ganda / tombol diklik dua kali. Closing hari ini
         // sudah ada, jadi tidak disimpan lagi — tetap dianggap berhasil.
         if ($hasil['kode'] === 'sudah_ada') {
-            return redirect()->to('/tutup_kasir')
+            return redirect()->to($redirectUrl)
                 ->with('sukses', (string) $hasil['alasan']);
         }
 
-        return redirect()->to('/tutup_kasir')
+        return redirect()->to($redirectUrl)
             ->with('sukses', 'Tutup kasir berhasil');
+    }
+
+    private function isAdminRoot(): bool
+    {
+        return (int) session('ID_JABATAN') === 1;
+    }
+
+    private function cleanClosingDate($value): ?string
+    {
+        if (! is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+            return null;
+        }
+
+        [$year, $month, $day] = array_map('intval', explode('-', $value));
+        return checkdate($month, $day, $year) ? $value : null;
+    }
+
+    private function cleanClosingUnit($value): int
+    {
+        if (is_int($value)) {
+            return $value > 0 ? $value : 0;
+        }
+
+        if (! is_string($value) || preg_match('/^[1-9]\d*$/', $value) !== 1) {
+            return 0;
+        }
+
+        return (int) $value;
+    }
+
+    private function isKnownClosingUnit(int $unit): bool
+    {
+        return $unit > 0 && $this->db->table('unit')
+            ->where('idunit', $unit)
+            ->countAllResults() > 0;
+    }
+
+    private function closingPageUrl(int $unit, string $tanggal, bool $isAdminRoot): string
+    {
+        $url = base_url('tutup_kasir');
+        if (! $isAdminRoot) {
+            return $url;
+        }
+
+        return $url . '?' . http_build_query(['unit' => $unit, 'tanggal' => $tanggal]);
     }
 
     public function arusKasHarian()
@@ -1678,13 +1813,23 @@ class TutupKasir extends BaseController
 
     public function cetak_tutup_kasir($id)
     {
-        $unit = session()->get('ID_UNIT');
+        $isAdminRoot = $this->isAdminRoot();
+        $id = (int) $id;
+        $tutupKasir = $isAdminRoot
+            ? $this->db->table('tutup_kasir')->where('idtutupkasir', $id)->get()->getRow()
+            : $this->TutupKasir->getById($id, (int) session('ID_UNIT'));
 
-        $today = date('Y-m-d');
+        if ($tutupKasir === null) {
+            return redirect()->to(base_url('tutup_kasir'))
+                ->with('gagal', 'Data tutup kasir tidak ditemukan atau Anda tidak memiliki akses.');
+        }
+
+        $unit = (int) $tutupKasir->unit;
+        $tanggal = date('Y-m-d', strtotime((string) $tutupKasir->tanggal));
 
         $totalservice = $this->db->table('service')
             ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal_selesai)', $today)
+            ->where('DATE(tanggal_selesai)', $tanggal)
             ->where('status_service', 4)
             ->where('unit_idunit', $unit)
             ->get()
@@ -1692,7 +1837,7 @@ class TutupKasir extends BaseController
         
         $qtyservice = $this->db->table('service')
             ->selectCount('bayar_tunai', 'total')
-            ->where('DATE(tanggal_selesai)', $today)
+            ->where('DATE(tanggal_selesai)', $tanggal)
             ->where('status_service', 4)
             ->where('unit_idunit', $unit)
             ->get()
@@ -1702,7 +1847,7 @@ class TutupKasir extends BaseController
         $opcash = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
             ->where('idunit', $unit)
-            ->where('DATE(tanggal)', $today)
+            ->where('DATE(tanggal)', $tanggal)
             ->where('idbank IS NULL', null, false)
             ->like('deskripsi', 'operasional', 'after')
             ->get()
@@ -1711,7 +1856,7 @@ class TutupKasir extends BaseController
         $optf = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
             ->where('idunit', $unit)
-            ->where('DATE(tanggal)', $today)
+            ->where('DATE(tanggal)', $tanggal)
             ->where('idbank IS NOT NULL', null, false)
             ->like('deskripsi', 'operasional', 'after')
             ->get()
@@ -1720,7 +1865,7 @@ class TutupKasir extends BaseController
         $pscash = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
             ->where('idunit', $unit)
-            ->where('DATE(tanggal)', $today)
+            ->where('DATE(tanggal)', $tanggal)
             ->where('idbank IS NULL', null, false)
             ->like('deskripsi', 'sparepart', 'after')
             ->get()
@@ -1729,7 +1874,7 @@ class TutupKasir extends BaseController
         $pstf = $this->db->table('kas_keluar')
             ->selectSum('jumlah', 'total')
             ->where('idunit', $unit)
-            ->where('DATE(tanggal)', $today)
+            ->where('DATE(tanggal)', $tanggal)
             ->where('idbank IS NOT NULL', null, false)
             ->like('deskripsi', 'sparepart', 'after')
             ->get()
@@ -1741,7 +1886,7 @@ class TutupKasir extends BaseController
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan', 'left')
             ->where('barang.idkategori', 1)
             ->where('penjualan.unit_idunit', $unit)
-            ->like('penjualan.tanggal', $today, 'after')
+            ->like('penjualan.tanggal', $tanggal, 'after')
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -1752,7 +1897,7 @@ class TutupKasir extends BaseController
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan', 'left')
             ->where('barang.idkategori', 1)
             ->where('penjualan.unit_idunit', $unit)
-            ->like('penjualan.tanggal', $today, 'after')
+            ->like('penjualan.tanggal', $tanggal, 'after')
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -1763,7 +1908,7 @@ class TutupKasir extends BaseController
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan', 'left')
             ->where('barang.idkategori', 2)
             ->where('penjualan.unit_idunit', $unit)
-            ->like('penjualan.tanggal', $today, 'after')
+            ->like('penjualan.tanggal', $tanggal, 'after')
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -1774,12 +1919,10 @@ class TutupKasir extends BaseController
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan', 'left')
             ->where('barang.idkategori', 2)
             ->where('penjualan.unit_idunit', $unit)
-            ->like('penjualan.tanggal', $today, 'after')
+            ->like('penjualan.tanggal', $tanggal, 'after')
             ->get()
             ->getRow()
             ->total ?? 0;
-
-        $tutupKasir = $this->TutupKasir->getById($id, $unit);
 
         $data = [
             'ps_tf' => $pstf,
@@ -1821,7 +1964,7 @@ class TutupKasir extends BaseController
 
         $mpdf->WriteHTML($html);
 
-        $filename = 'laporan-tutup-kasir-' . date('Y-m-d') . '.pdf';
+        $filename = 'laporan-tutup-kasir-' . $tanggal . '-unit-' . $unit . '.pdf';
 
         $mpdf->Output($filename, 'I');
         exit;

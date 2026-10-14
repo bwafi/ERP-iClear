@@ -16,7 +16,8 @@ use Config\Database;
  *  - Sumber arus operasional (MASUK & KELUAR):
  *      MASUK  : penjualan non-"srv" (bayar_tunai / bayar_bank),
  *               service status 4 per tanggal_selesai
- *               (bayar_tunai / harus_dibayar - bayar_tunai).
+ *               (bayar_tunai / harus_dibayar - bayar_tunai), serta DP
+ *               service pada tanggal penerimaan sesuai metode.
  *      KELUAR : seluruh kas_keluar.
  *  - `transaksi_kas_bank` HANYA dibaca untuk perpindahan uang antar rekening
  *    fisik (`transfer_ref IS NOT NULL`) — Setor/Tarik, Pindah Saldo, dan
@@ -60,12 +61,17 @@ class DailyCashFlowService
     public function getForDate(int $unitId, string $tanggal): array
     {
         $tanggal = date('Y-m-d', strtotime($tanggal));
+        $sourceDefinition = new TutupKasirSourceDefinition($this->db);
+        $dpMasuk = $sourceDefinition->dpMasukRincian($unitId, $tanggal);
+        $dpServiceSelesai = $sourceDefinition->dpServiceSelesaiRincian($unitId, $tanggal);
 
         return $this->assemble([
             'tanggal'    => $tanggal,
             'unit_id'    => $unitId,
             'penjualan' => $this->fetchPenjualan($unitId, $tanggal),
             'service'   => $this->fetchService($unitId, $tanggal),
+            'dp_masuk'  => array_map(static fn (array $row) => (object) $row, $dpMasuk['rincian']),
+            'dp_service_selesai' => array_map(static fn (array $row) => (object) $row, $dpServiceSelesai),
             'kas_keluar' => $this->fetchKasKeluar($unitId, $tanggal),
             'ledger'    => $this->fetchLedger($unitId, $tanggal),
         ]);
@@ -83,6 +89,15 @@ class DailyCashFlowService
         $masuk = ['tunai' => [], 'transfer' => []];
         $keluar = ['tunai' => [], 'transfer' => []];
         $internal = [];
+        $dpServiceSelesai = [];
+
+        foreach ($sources['dp_service_selesai'] ?? [] as $row) {
+            $serviceId = (int) ($row->service_idservice ?? 0);
+            if ($serviceId > 0) {
+                $dpServiceSelesai[$serviceId] = ($dpServiceSelesai[$serviceId] ?? 0)
+                    + (int) ($row->jumlah ?? 0);
+            }
+        }
 
         foreach ($sources['penjualan'] ?? [] as $row) {
             $referensi = trim((string)($row->kode_invoice ?? ''));
@@ -118,12 +133,17 @@ class DailyCashFlowService
                 : 'Service';
 
             $waktu = $this->waktu($row->tanggal_selesai ?? null);
+            $serviceId = (int) ($row->idservice ?? 0);
+            $dpSelesai = $serviceId > 0
+                ? (int) ($dpServiceSelesai[$serviceId] ?? 0)
+                : 0;
 
             // Residual transfer MENGIKUTI TutupKasir apa adanya: tidak di
             // max(0, ...). Overpay (residual negatif) harus mengurangi
-            // subtotal transfer supaya totals sama dengan tutup kasir.
+            // subtotal transfer supaya totals sama dengan tutup kasir. DP
+            // yang sudah diakui saat diterima dikeluarkan dari residual ini.
             $tunai = (int)($row->bayar_tunai ?? 0);
-            $transfer = (int)($row->harus_dibayar ?? 0) - $tunai;
+            $transfer = (int)($row->harus_dibayar ?? 0) - $tunai - $dpSelesai;
 
             if ($tunai !== 0) {
                 $masuk['tunai'][] = $this->row($waktu, 'Service', $keterangan, $tunai);
@@ -131,6 +151,30 @@ class DailyCashFlowService
             if ($transfer !== 0) {
                 $masuk['transfer'][] = $this->row($waktu, 'Service', $keterangan, $transfer);
             }
+        }
+
+        // DP masuk pada tanggal penerimaan. Sumber rinciannya memiliki filter
+        // aktif/unit/tanggal yang sama dengan perhitungan Tutup Kasir.
+        foreach ($sources['dp_masuk'] ?? [] as $row) {
+            $jumlah = (int) ($row->jumlah ?? 0);
+            $metode = strtolower(trim((string) ($row->metode ?? '')));
+            if ($jumlah === 0 || ! in_array($metode, ['tunai', 'transfer'], true)) {
+                continue;
+            }
+
+            $nomorService = trim((string) ($row->no_service ?? ''));
+            $kodeDp = trim((string) ($row->kode_dp ?? ''));
+            $keterangan = 'DP Service' . ($nomorService !== '' ? ' ' . $nomorService : '');
+            if ($kodeDp !== '') {
+                $keterangan .= ' · ' . $kodeDp;
+            }
+
+            $masuk[$metode][] = $this->row(
+                $this->waktu($row->created_at ?? null),
+                'DP Service',
+                $keterangan,
+                $jumlah
+            );
         }
 
         foreach ($sources['kas_keluar'] ?? [] as $row) {
@@ -249,7 +293,7 @@ class DailyCashFlowService
     protected function fetchService(int $unitId, string $tanggal): array
     {
         return $this->db->table('service')
-            ->select('no_service, tanggal_selesai, harus_dibayar, bayar_tunai')
+            ->select('idservice, no_service, tanggal_selesai, harus_dibayar, bayar_tunai')
             ->where('unit_idunit', $unitId)
             ->where('DATE(tanggal_selesai)', $tanggal)
             ->where('status_service', 4)
@@ -333,7 +377,7 @@ class DailyCashFlowService
     {
         return [
             'waktu' => $waktu,
-            'jenis' => $sumber === 'Penjualan' || $sumber === 'Service' ? 'Kas Masuk' : $sumber,
+            'jenis' => in_array($sumber, ['Penjualan', 'Service', 'DP Service'], true) ? 'Kas Masuk' : $sumber,
             'sumber' => $sumber,
             'keterangan' => $keterangan,
             'nominal' => $jumlah,

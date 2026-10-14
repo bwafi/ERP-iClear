@@ -26,13 +26,14 @@ use Config\Database;
  *   service.bayar_bank     -> berisi KODE PEMBAYARAN ("ksr2026092446872"),
  *                             bukan idbank. Verified terhadap data.
  *
- * Yang MEMILIKI idbank asli: `kas_keluar.idbank` dan `kas_masuk.idbank`.
+ * Yang MEMILIKI idbank asli: `kas_keluar.idbank`, `kas_masuk.idbank`, dan
+ * DP transfer pada `service_dp.bank_idbank`.
  *
- * Keputusan: transfer masuk (penjualan.bayar_bank + residual service)
- * dialokasikan ke REKENING DEFAULT UNIT — rekening bank aktif milik unit
- * itu. Lihat rekeningDefaultUnit(). Angka ini adalah ASUMSI yang disepakati,
- * bukan fakta sumber, dan sengaja dikembalikan terpisah lewat
- * movementTeralokasi() supaya bisa diaudit.
+ * Keputusan: transfer masuk penjualan + residual service dialokasikan ke
+ * REKENING DEFAULT UNIT — rekening bank aktif milik unit itu. Lihat
+ * rekeningDefaultUnit(). Angka ini adalah ASUMSI yang disepakati, bukan fakta
+ * sumber. DP transfer berbeda: rekening aslinya dipakai langsung dari
+ * `service_dp.bank_idbank`.
  *
  * Yang TIDAK diasumsikan: transfer KELUAR selalu bisa dipertahankan karena
  * `kas_keluar.idbank` memang idbank asli.
@@ -446,9 +447,9 @@ class KasBankSourceMovement
     }
 
     /**
-     * KAS: cash masuk dari penjualan + service (filter TutupKasir), cash
-     * keluar dari kas_keluar idbank IS NULL. Tidak ada asumsi apa pun —
-     * `idbank IS NULL` persis sama dengan definisi TutupKasir.
+     * KAS: cash masuk dari penjualan, service selesai, dan DP tunai saat
+     * diterima; cash keluar dari kas_keluar idbank IS NULL. Tidak ada asumsi
+     * apa pun — `idbank IS NULL` persis sama dengan definisi TutupKasir.
      */
     private function movementKas(object $akun, ?int $unitId, string $dari, ?string $sampai = null): int
     {
@@ -481,8 +482,8 @@ class KasBankSourceMovement
     }
 
     /**
-     * BANK: transfer keluar dari kas_keluar.idbank (idbank asli, jadi pasti),
-     * transfer masuk dari penjualan + service yang DEFAULT-nya rekening ini.
+     * BANK: transfer keluar dari kas_keluar.idbank. Penjualan + service
+     * memakai rekening default unit; DP transfer memakai bank_idbank aslinya.
      */
     private function movementBank(object $akun, ?int $unitId, string $dari, ?string $sampai = null): int
     {
@@ -525,6 +526,16 @@ class KasBankSourceMovement
             $masuk += $this->transferMasuk($u, $dari, $sampai);
         }
 
+        // DP transfer punya dimensi rekening yang nyata (service_dp.bank_idbank),
+        // jadi masuk ke rekening yang dipilih, bukan diasumsikan ke default unit.
+        if (
+            (int) ($akun->is_finance_ho ?? 0) !== 1
+            && ($unitId === null || $this->unitBerhakAtasRekening($akun, $unitId))
+        ) {
+            $masuk += (new TutupKasirSourceDefinition($this->db))
+                ->dpMasukTransferBankRange((string) $bankId, $unitId, $dari, $sampai);
+        }
+
         return $masuk - $keluar;
     }
 
@@ -533,7 +544,7 @@ class KasBankSourceMovement
     // =================================================================
 
     /**
-     * SUM(bayar_tunai) penjualan + service, filter Tutup Kasir, rentang
+     * Cash In penjualan + service selesai + DP tunai, filter Tutup Kasir, rentang
      * [$dari, $sampai].
      *
      * Kolom tanggal dan filter status PERSIS sama dengan
@@ -563,10 +574,15 @@ class KasBankSourceMovement
             $s->where('DATE(tanggal_selesai) <=', $sampai);
         }
 
-        return (int) ($p->get()->getRow()->s ?? 0) + (int) ($s->get()->getRow()->s ?? 0);
+        return (int) ($p->get()->getRow()->s ?? 0)
+            + (int) ($s->get()->getRow()->s ?? 0)
+            + (new TutupKasirSourceDefinition($this->db))->dpMasukTunaiRange($unitId, $dari, $sampai);
     }
 
-    /** SUM(bayar_bank) penjualan + residual service, rentang [$dari, $sampai]. */
+    /**
+     * Transfer penjualan + residual service dikurangi DP yang sudah diakui
+     * saat penerimaan, agar DP tidak dihitung lagi saat service selesai.
+     */
     private function transferMasuk(int $unitId, string $dari, ?string $sampai = null): int
     {
         $p = $this->db->table('penjualan')
@@ -589,7 +605,25 @@ class KasBankSourceMovement
             $s->where('DATE(tanggal_selesai) <=', $sampai);
         }
 
-        return (int) ($p->get()->getRow()->s ?? 0) + (int) ($s->get()->getRow()->s ?? 0);
+        return (int) ($p->get()->getRow()->s ?? 0)
+            + (int) ($s->get()->getRow()->s ?? 0)
+            - (new TutupKasirSourceDefinition($this->db))->dpServiceSelesaiRange($unitId, $dari, $sampai);
+    }
+
+    private function unitBerhakAtasRekening(object $akun, int $unitId): bool
+    {
+        if ($unitId <= 0 || (int) ($akun->is_finance_ho ?? 0) === 1) {
+            return false;
+        }
+
+        if ((int) ($akun->is_shared ?? 0) !== 1) {
+            return (int) ($akun->unit_id ?? 0) === $unitId;
+        }
+
+        return $this->db->table('alokasi_saldo_kas_bank')
+            ->where('akun_kas_bank_id', (int) ($akun->idakun_kas_bank ?? 0))
+            ->where('unit_id', $unitId)
+            ->countAllResults() > 0;
     }
 
     // =================================================================

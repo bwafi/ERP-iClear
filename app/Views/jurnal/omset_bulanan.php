@@ -103,6 +103,15 @@
                     </div>
                 </div>
                 <small class="text-muted">Akumulasi pendapatan hari ini</small>
+                <?php if ((int)($dp_hari_ini ?? 0) > 0): ?>
+                    <small class="text-success fw-semibold d-block mt-2">
+                        <iconify-icon icon="solar:hand-money-bold-duotone" aria-hidden="true"></iconify-icon>
+                        DP service hari ini: Rp <?= number_format((int)$dp_hari_ini, 0, ',', '.') ?>
+                        <?php if ((int)($dp_jumlah_hari_ini ?? 0) > 0): ?>
+                            <span class="text-muted fw-normal">· <?= number_format((int)$dp_jumlah_hari_ini, 0, ',', '.') ?> transaksi</span>
+                        <?php endif; ?>
+                    </small>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -811,7 +820,7 @@
             <div class="alert alert-info border-0 shadow-sm d-flex gap-2 align-items-start mb-3 p-3">
                 <iconify-icon icon="solar:info-circle-bold-duotone" width="20" height="20" class="flex-shrink-0 mt-1"></iconify-icon>
                 <div class="fs-2">
-                    Angka di bawah adalah <strong>mutasi fisikal kas/bank</strong> (bukan omset). Kas awal Tutup Kasir tidak dihitung penerimaan baru.
+                    Angka di bawah adalah <strong>mutasi fisik kas/bank</strong> (bukan omset). DP service masuk pada tanggal diterima dan dikeluarkan dari sisa tagihan saat service selesai agar tidak terhitung dua kali.
                 </div>
             </div>
         `;

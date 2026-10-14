@@ -187,6 +187,13 @@
         startDateInput.value = toDateInputValue(thirtyDaysAgo);
         endDateInput.value = toDateInputValue(today);
 
+        const initialSearch = new URLSearchParams(window.location.search).get('search') || '';
+        if (initialSearch) {
+            startDateInput.value = '';
+            endDateInput.value = '';
+            searchBox.value = initialSearch;
+        }
+
         if ($.fn.DataTable.isDataTable('#zero_config')) {
             $('#zero_config').DataTable().destroy();
         }

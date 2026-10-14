@@ -32,6 +32,12 @@ use Config\Database;
  *      - `TutupKasirTransferInternal`   -> setor / tarik
  *    Tidak ada formula sumber kedua yang ditulis di file ini.
  *
+ *    Komponen DP (uang muka) service juga diambil dari
+ *    `TutupKasirSourceDefinition` (`dpMasukTunai` / `dpMasukTransfer` /
+ *    `dpServiceSelesai`), bukan dihitung ulang di sini. DP masuk di TANGGAL
+ *    PENERIMAAN sesuai metode; `dpServiceSelesai` mengeluarkan DP dari
+ *    residual service di tanggal pengambilan agar tidak dobel.
+ *
  * 2. FORMULA (tidak boleh diubah tanpa audit):
  *
  *      akhir_cash     = awal_cash + kas_masuk - kas_keluar - setor + tarik
@@ -142,10 +148,18 @@ class TutupKasirClosing
         $awalCashNum = $awalKas['ada'] ? (int) $awalKas['nilai'] : 0;
         $awalTfNum   = $awalTf['ada'] ? (int) $awalTf['nilai'] : 0;
 
-        $kasMasuk        = $srcDef->cashMasuk($unitId, $tanggal);
-        $transferMasuk   = $srcDef->transferMasuk($unitId, $tanggal);
+        // DP (uang muka) service diakui pada TANGGAL PENERIMAAN sesuai metode,
+        // bukan pada tanggal service selesai. Uangnya sudah masuk laci/rekening
+        // di tanggal itu. Karena residual service (`harus_dibayar - bayar_tunai`)
+        // pada model canonical sudah memasukkan DP, DP service yang SELESAI pada
+        // tanggal ini dikeluarkan lagi agar tidak terhitung dua kali. Komposisi
+        // canonical-nya ada di `TutupKasirSourceDefinition::kasMasukDp()` /
+        // `transferMasukDp()` (satu sumber angka tetap dipertahankan).
+        $kasMasuk        = $srcDef->kasMasukDp($unitId, $tanggal);
+        $transferMasuk   = $srcDef->transferMasukDp($unitId, $tanggal);
         $kasKeluar       = $srcDef->kasKeluarCash($unitId, $tanggal);
         $transferKeluar  = $srcDef->kasKeluarTransfer($unitId, $tanggal);
+
         $setor           = (int) $transfer['setor'];
         $tarik           = (int) $transfer['tarik'];
 
@@ -378,11 +392,12 @@ class TutupKasirClosing
      * @param string $tanggal  YYYY-MM-DD
      * @param mixed  $cashLaci hasil POST apa adanya, divalidasi di sini
      * @param int    $userId
+     * @param bool   $bolehTanggalHistoris Hanya controller Admin Root yang mengizinkan ini.
      *
      * @return array{ok:bool, alasan:string, kode:string, id:int|null, closing:array|null, hitung:array}
      *   `kode`: 'tersimpan' | 'sudah_ada' | 'ditolak'
      */
-    public function simpan(int $unitId, string $tanggal, $cashLaci, $userId): array
+    public function simpan(int $unitId, string $tanggal, $cashLaci, $userId, bool $bolehTanggalHistoris = false): array
     {
         // `ok` HARUS false di sini. Kalau penolakan dilaporkan `ok = true`,
         // pemanggil melihat success, masuk ke cabang "berhasil menyimpan",
@@ -394,11 +409,19 @@ class TutupKasirClosing
         ];
 
         $hariIni = date('Y-m-d');
+        $tanggalObj = \DateTimeImmutable::createFromFormat('!Y-m-d', $tanggal);
 
-        // Closing hanya boleh untuk HARI INI. Ini mencegah form lama (atau
-        // request crafted) menulis closing bertanggal lampau dan menggeser
-        // retroaktif seluruhOpening harian berikutnya.
-        if ($tanggal !== $hariIni) {
+        if (
+            $tanggalObj === false
+            || $tanggalObj->format('Y-m-d') !== $tanggal
+            || $tanggal > $hariIni
+        ) {
+            return $gagal('ditolak', 'Tanggal closing tidak valid. Pilih tanggal hari ini atau sebelumnya.');
+        }
+
+        // Closing lampau hanya dibuka untuk Admin Root yang sudah diotorisasi
+        // controller. Tanggal mendatang tetap ditolak untuk semua role.
+        if (! $bolehTanggalHistoris && $tanggal !== $hariIni) {
             return $gagal('ditolak', 'Tanggal tutup kasir harus hari ini (' . $hariIni . ').');
         }
 
