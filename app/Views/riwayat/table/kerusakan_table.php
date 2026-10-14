@@ -1,4 +1,4 @@
-<form action="<?php echo base_url('update_service/saveKerusakan') ?>" enctype="multipart/form-data" method="post">
+<form id="service-kerusakan-form" action="<?php echo base_url('update_service/saveKerusakan') ?>" enctype="multipart/form-data" method="post">
     <?php
     $kerusakan_terpilih = [];
     foreach ($oldkerusakan as $item) {
@@ -51,7 +51,9 @@
         <div>
             <input hidden type="text" name="idservice_k" value="<?php echo @$idservice ?>">
             <button type="button" class="btn btn-light" id="btn-previous-to-pelanggan">Sebelumnya</button>
-            <button type="submit" class="btn btn-success">Selanjutnya</button>
+            <button type="submit" class="btn btn-success" id="btn-next-to-sparepart" aria-live="polite">
+                Selanjutnya <i class="bi bi-arrow-right ms-1"></i>
+            </button>
         </div>
 
     </div>
@@ -62,6 +64,24 @@
 <script>
     // Saat dokumen siap
     document.addEventListener("DOMContentLoaded", function() {
+        const kerusakanForm = document.getElementById('service-kerusakan-form');
+        const nextButton = document.getElementById('btn-next-to-sparepart');
+        let isSubmitting = false;
+
+        if (kerusakanForm && nextButton) {
+            kerusakanForm.addEventListener('submit', function(event) {
+                if (isSubmitting) {
+                    event.preventDefault();
+                    return;
+                }
+
+                isSubmitting = true;
+                nextButton.disabled = true;
+                nextButton.setAttribute('aria-busy', 'true');
+                nextButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Menyimpan kerusakan...';
+            });
+        }
+
         const checkboxes = document.querySelectorAll('.checkbox-fungsi');
 
         checkboxes.forEach(function(checkbox) {

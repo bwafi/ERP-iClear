@@ -3,7 +3,7 @@
     Centang bagian yang rusak, lalu tulis keterangan singkat (opsional).
 </div>
 
-<form action="<?php echo base_url('service/saveKerusakan') ?>" enctype="multipart/form-data" method="post">
+<form id="service-kerusakan-form" action="<?php echo base_url('service/saveKerusakan') ?>" enctype="multipart/form-data" method="post" target="_blank">
     <?php
     $kerusakan_terpilih = [];
     foreach ($oldkerusakan as $item) {
@@ -61,10 +61,10 @@
             </button>
         </div>
         <div class="d-flex align-items-center gap-3">
-            <span class="text-muted fs-3 d-none d-sm-inline">Disimpan lalu lanjut ke cetak invoice.</span>
+            <span class="text-muted fs-3 d-none d-sm-inline">Data disimpan, lalu invoice service dibuka.</span>
             <input hidden type="text" name="idservice_k" value="<?php echo @$idservice ?>">
-            <button type="submit" id="btnnextnya" class="btn btn-primary">
-                Simpan <i class="bi bi-check2 ms-1"></i>
+            <button type="submit" id="btnnextnya" class="btn btn-primary" aria-live="polite">
+                Simpan &amp; Cetak Invoice <i class="bi bi-printer ms-1"></i>
             </button>
         </div>
     </div>
@@ -75,15 +75,30 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('btnnextnya').addEventListener('click', function(e) {
-            const idPela = document.getElementById('idpelakan').value;
+        const form = document.getElementById('service-kerusakan-form');
+        const nextButton = document.getElementById('btnnextnya');
+        let isSubmitting = false;
 
-            if (!idPela || idPela.trim() === '') {
-                e.preventDefault(); // cegah form submit
-                alert('Silakan pilih pelanggan terlebih dahulu melalui tombol input data pelanggan pada tab pelanggan kemudian tekan tombol simpan!');
-                return false;
-            }
-        });
+        if (form && nextButton) {
+            form.addEventListener('submit', function(event) {
+                const idPelanggan = document.getElementById('idpelakan')?.value || '';
+                if (!idPelanggan.trim()) {
+                    event.preventDefault();
+                    alert('Silakan pilih pelanggan terlebih dahulu melalui tab Pelanggan.');
+                    return;
+                }
+
+                if (isSubmitting) {
+                    event.preventDefault();
+                    return;
+                }
+
+                isSubmitting = true;
+                nextButton.disabled = true;
+                nextButton.setAttribute('aria-busy', 'true');
+                nextButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Menyimpan &amp; membuka invoice...';
+            });
+        }
     });
 </script>
 

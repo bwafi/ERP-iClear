@@ -305,7 +305,7 @@ class Service extends BaseController
         $idservice = $this->request->getPost('idservice_k');
 
         if (empty($fungsiTerpilih)) {
-            return redirect()->to('/service?tab=kerusakan')->with('gagal', 'Tidak ada kerusakan yang dipilih.');
+            return redirect()->to('/service?tab=kerusakan')->with('gagal', 'Pilih minimal satu jenis kerusakan sebelum melanjutkan.');
         }
 
         date_default_timezone_set('Asia/Jakarta');
@@ -346,7 +346,8 @@ class Service extends BaseController
             $this->ServiceKerusakanModel->deleteByServiceAndFungsi($idservice, $idfungsi);
         }
 
-        return redirect()->to('cetak/invoice_service/' . $idservice)->with('sukses', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to(base_url('cetak/invoice_service/' . $idservice))
+            ->with('sukses', 'Data kerusakan berhasil disimpan.');
     }
 
 

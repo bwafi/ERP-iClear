@@ -1,4 +1,4 @@
-<form action="<?php echo base_url('service/saveSparepart') ?>" enctype="multipart/form-data" method="post">
+<form id="service-sparepart-form" action="<?php echo base_url('service/saveSparepart') ?>" enctype="multipart/form-data" method="post">
     <div class="mt-3">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal">
             Tambah Sparepart
@@ -113,7 +113,7 @@
         </div>
         <div class="d-flex align-items-center gap-3">
             <span class="text-muted fs-3 d-none d-sm-inline">Total dihitung otomatis ke tahap Pembayaran.</span>
-            <button type="submit" id="selanjutnyabtnnya" class="btn btn-primary">
+            <button type="submit" id="selanjutnyabtnnya" class="btn btn-primary" aria-live="polite">
                 Selanjutnya <i class="bi bi-arrow-right ms-1"></i>
             </button>
         </div>
@@ -126,6 +126,24 @@
     const oldSpareparts = <?= json_encode($oldsparepart) ?>;
 
     document.addEventListener('DOMContentLoaded', () => {
+        const sparepartForm = document.getElementById('service-sparepart-form');
+        const nextButton = document.getElementById('selanjutnyabtnnya');
+        let isSubmitting = false;
+
+        if (sparepartForm && nextButton) {
+            sparepartForm.addEventListener('submit', (event) => {
+                if (isSubmitting) {
+                    event.preventDefault();
+                    return;
+                }
+
+                isSubmitting = true;
+                nextButton.disabled = true;
+                nextButton.setAttribute('aria-busy', 'true');
+                nextButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Menyimpan sparepart...';
+            });
+        }
+
         const tbody = document.getElementById('sparepart-table-body');
         const searchInput = document.getElementById('searchSparepartInput');
         const modalBody = document.getElementById('sparepart-modal-body');
