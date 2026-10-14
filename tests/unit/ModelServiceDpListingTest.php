@@ -21,7 +21,7 @@ final class ModelServiceDpListingTest extends CIUnitTestCase
         $this->prefixAsli = (string) $this->db->DBPrefix;
         $this->db->setPrefix('');
 
-        foreach (['service_dp', 'service', 'pelanggan', 'unit', 'bank'] as $table) {
+        foreach (['service_dp', 'service', 'pelanggan', 'unit', 'bank', 'penjualan', 'detail_penjualan', 'service_sparepart'] as $table) {
             $this->db->query("DROP TABLE IF EXISTS {$table}");
         }
 
@@ -41,6 +41,17 @@ final class ModelServiceDpListingTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE bank (
             idbank VARCHAR(20) PRIMARY KEY,
             nama_bank VARCHAR(100) NULL)');
+        $this->db->query('CREATE TABLE penjualan (
+            idpenjualan INT PRIMARY KEY,
+            service_idservice INT NULL)');
+        $this->db->query('CREATE TABLE detail_penjualan (
+            iddetail_penjualan INT AUTO_INCREMENT PRIMARY KEY,
+            penjualan_idpenjualan INT NULL,
+            barang_idbarang INT NULL,
+            jumlah INT NULL)');
+        $this->db->query('CREATE TABLE service_sparepart (
+            idservice_sparepart INT AUTO_INCREMENT PRIMARY KEY,
+            service_idservice INT NULL)');
         $this->db->query('CREATE TABLE service_dp (
             id BIGINT PRIMARY KEY,
             service_idservice INT NOT NULL,
@@ -77,7 +88,7 @@ final class ModelServiceDpListingTest extends CIUnitTestCase
 
     protected function tearDown(): void
     {
-        foreach (['service_dp', 'service', 'pelanggan', 'unit', 'bank'] as $table) {
+        foreach (['service_dp', 'service', 'pelanggan', 'unit', 'bank', 'penjualan', 'detail_penjualan', 'service_sparepart'] as $table) {
             $this->db->query("DROP TABLE IF EXISTS {$table}");
         }
         $this->db->setPrefix($this->prefixAsli);
@@ -114,5 +125,40 @@ final class ModelServiceDpListingTest extends CIUnitTestCase
         $this->assertSame(3, $result['recordsFiltered']);
         $this->assertCount(3, $result['data']);
         $this->assertContains('dibatalkan', array_column($result['data'], 'status'));
+    }
+
+    public function testDaftarDpMenampilkanJumlahSparepartYangBelumDiretur(): void
+    {
+        $this->db->table('penjualan')->insert([
+            'idpenjualan' => 901,
+            'service_idservice' => 1,
+        ]);
+        $this->db->table('detail_penjualan')->insert([
+            'penjualan_idpenjualan' => 901,
+            'barang_idbarang' => 77,
+            'jumlah' => 1,
+        ]);
+
+        $result = (new ModelServiceDp())->datatable(0, 10, 'DP-001', '', '', 1, 0, 'desc');
+        $this->assertSame(1, (int) $result['data'][0]['sparepart_belum_diretur']);
+
+        // Setelah detail stok diretur, histori service_sparepart boleh tetap ada
+        // tetapi DP sudah layak direfund.
+        $this->db->table('detail_penjualan')->where('penjualan_idpenjualan', 901)->delete();
+        $result = (new ModelServiceDp())->datatable(0, 10, 'DP-001', '', '', 1, 0, 'desc');
+        $this->assertSame(0, (int) $result['data'][0]['sparepart_belum_diretur']);
+    }
+
+    public function testDaftarDpTetapBerfungsiSebelumMigrasiRelasiInvoiceService(): void
+    {
+        $this->db->query('ALTER TABLE penjualan DROP COLUMN service_idservice');
+        $this->db->resetDataCache();
+        $this->db->table('service_sparepart')->insert(['service_idservice' => 1]);
+
+        $result = (new ModelServiceDp())->datatable(0, 10, 'DP-001', '', '', 1, 0, 'desc');
+
+        $this->assertCount(1, $result['data']);
+        $this->assertSame(1, (int) $result['data'][0]['sparepart_belum_diretur']);
+        $this->assertSame(0, (int) $result['data'][0]['sparepart_retur_siap']);
     }
 }

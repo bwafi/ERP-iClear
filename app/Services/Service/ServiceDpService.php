@@ -301,10 +301,30 @@ class ServiceDpService
                 );
             }
 
-            if ($this->db->table('service_sparepart')
-                ->where('service_idservice', (int) $dp->service_idservice)
-                ->countAllResults() > 0) {
-                throw new \RuntimeException('Service ini sudah memakai sparepart. Selesaikan retur sparepart sebelum refund DP.');
+            // Stok yang masih keluar ditunjukkan oleh detail_penjualan milik
+            // invoice service. Seperti hard delete di menu Sparepart Keluar,
+            // proses refund mengembalikan semua detail itu dan membersihkan
+            // invoice/jurnal terkait dalam transaksi yang sama.
+            if (! $this->db->fieldExists('service_idservice', 'penjualan')) {
+                $adaSparepartHistoris = $this->db->tableExists(
+                    $this->db->getPrefix() . 'service_sparepart',
+                    false
+                ) && $this->db->table('service_sparepart')
+                    ->where('service_idservice', (int) $dp->service_idservice)
+                    ->countAllResults() > 0;
+
+                if ($adaSparepartHistoris) {
+                    throw new \RuntimeException(
+                        'Skema database belum menautkan invoice sparepart ke service. Jalankan migrasi terbaru sebelum refund DP.'
+                    );
+                }
+
+                $sparepartBelumDiretur = 0;
+            } else {
+                $sparepartBelumDiretur = $this->db->table('detail_penjualan dp')
+                    ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
+                    ->where('p.service_idservice', (int) $dp->service_idservice)
+                    ->countAllResults();
             }
 
             $jumlah = (int) ($dp->jumlah ?? 0);
@@ -356,6 +376,10 @@ class ServiceDpService
                 ->countAllResults();
             if ($jumlahTemplate < 2) {
                 throw new \RuntimeException('Template jurnal refund DP belum lengkap. Jalankan migrasi refund DP.');
+            }
+
+            if ($sparepartBelumDiretur > 0) {
+                $this->returSparepartService((int) $dp->service_idservice);
             }
 
             $wib = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
@@ -470,7 +494,9 @@ class ServiceDpService
                 throw new \RuntimeException('Refund DP gagal disimpan.');
             }
 
-            $this->db->transCommit();
+            if (! $this->db->transCommit()) {
+                throw new \RuntimeException('Refund DP gagal di-commit.');
+            }
 
             return [
                 'status'       => 'ok',
@@ -481,6 +507,26 @@ class ServiceDpService
         } catch (\Throwable $e) {
             $this->db->transRollback();
             throw $e;
+        }
+    }
+
+    /** Return seluruh detail Sparepart Keluar milik service via mekanisme bersama. */
+    private function returSparepartService(int $serviceId): void
+    {
+        $details = $this->db->table('detail_penjualan dp')
+            ->select('dp.iddetail_penjualan')
+            ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
+            ->where('p.service_idservice', $serviceId)
+            ->orderBy('dp.iddetail_penjualan', 'ASC')
+            ->get()
+            ->getResultArray();
+        $hardDelete = new SparepartKeluarHardDeleteService($this->db);
+
+        foreach ($details as $detail) {
+            $hasil = $hardDelete->hapusDetail((int) ($detail['iddetail_penjualan'] ?? 0), $serviceId);
+            if (! $hasil['ok']) {
+                throw new \RuntimeException('Sparepart service berubah saat refund. Muat ulang lalu coba lagi.');
+            }
         }
     }
 

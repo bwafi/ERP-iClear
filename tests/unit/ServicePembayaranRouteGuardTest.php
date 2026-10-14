@@ -42,7 +42,7 @@ final class ServicePembayaranRouteGuardTest extends CIUnitTestCase
     {
         $db = \Config\Database::connect('tests', false);
 
-        foreach (['db_service', 'db_pembayaran_bank', 'db_pelanggan', 'db_unit', 'db_stok_barang', 'db_akun', 'db_jabatan'] as $tabel) {
+        foreach (['db_service', 'db_service_sparepart', 'db_pembayaran_bank', 'db_pelanggan', 'db_unit', 'db_stok_barang', 'db_akun', 'db_jabatan'] as $tabel) {
             $db->query("DROP TABLE IF EXISTS {$tabel}");
         }
 
@@ -90,6 +90,7 @@ final class ServicePembayaranRouteGuardTest extends CIUnitTestCase
             biaya_tambahan_garansi BIGINT NULL,
             harga_penjualan_garansi BIGINT NULL,
             harus_dibayar BIGINT NULL,
+            dp_bayar BIGINT NULL,
             bayar BIGINT NULL,
             bayar_tunai BIGINT NULL,
             bayar_bank VARCHAR(64) NULL,
@@ -104,6 +105,13 @@ final class ServicePembayaranRouteGuardTest extends CIUnitTestCase
             tabel_referensi VARCHAR(64) NULL,
             id_referensi INT NULL,
             PRIMARY KEY (idpembayaran_bank)
+        ) ENGINE=InnoDB');
+
+        $q('CREATE TABLE db_service_sparepart (
+            idservice_sparepart INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            service_idservice INT NOT NULL,
+            sub_total BIGINT NULL,
+            PRIMARY KEY (idservice_sparepart)
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_pelanggan (
@@ -202,6 +210,247 @@ final class ServicePembayaranRouteGuardTest extends CIUnitTestCase
                 ->where('id_referensi', 1)
                 ->countAllResults(),
             'Baris pembayaran bank tersimpan.'
+        );
+    }
+
+    public function testServiceYangSudahLunasMenolakPembayaranUlang(): void
+    {
+        $this->sesi();
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-LUNAS',
+            'total_service' => 350000,
+            'harus_dibayar' => 350000,
+            'dp_bayar'      => 100000,
+            'bayar_tunai'   => 250000,
+            'bayar'         => 250000,
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '350000',
+            'bayar_pembayaran'       => '250000',
+            'dp_bayar_pembayaran'    => '100000',
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(350000, (int) $row->total_service);
+        $this->assertSame(100000, (int) $row->dp_bayar);
+        $this->assertSame(250000, (int) $row->bayar_tunai);
+        $this->assertSame(250000, (int) $row->bayar);
+        $this->assertSame(0, (int) $db->table('pembayaran_bank')->countAllResults());
+    }
+
+    public function testPembayaranBerikutnyaMenambahkanCicilanTersimpan(): void
+    {
+        $this->sesi();
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-CICILAN',
+            'total_service' => 1000000,
+            'harus_dibayar' => 1000000,
+            'dp_bayar'      => 100000,
+            'bayar_tunai'   => 400000,
+            'bayar'         => 400000,
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '1000000',
+            'bayar_pembayaran'       => '500000',
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(900000, (int) $row->bayar, 'Pembayaran baru ditambahkan ke total yang sudah tersimpan.');
+        $this->assertSame(900000, (int) $row->bayar_tunai, 'Total tunai lama tidak tertimpa.');
+    }
+
+    public function testTotalSparepartTerbaruMembukaSisaPembayaranSetelahTagihanBertambah(): void
+    {
+        $this->sesi();
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-TAMBAH-SPAREPART',
+            'total_service' => 350000,
+            'harus_dibayar' => 350000,
+            'dp_bayar'      => 100000,
+            'bayar_tunai'   => 250000,
+            'bayar'         => 250000,
+        ]);
+        $this->db->table('service_sparepart')->insertBatch([
+            ['service_idservice' => 1, 'sub_total' => 350000],
+            ['service_idservice' => 1, 'sub_total' => 100000],
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '450000',
+            'bayar_pembayaran'       => '100000',
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(450000, (int) $row->total_service, 'Tagihan dihitung ulang dari sparepart terkini.');
+        $this->assertSame(350000, (int) $row->bayar, 'Pembayaran baru hanya menutup sisa Rp100.000.');
+        $this->assertSame(350000, (int) $row->bayar_tunai);
+    }
+
+    public function testKelebihanPembayaranDitolakTanpaModeKoreksi(): void
+    {
+        $this->sesi();
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-LEBIH',
+            'total_service' => 350000,
+            'harus_dibayar' => 350000,
+            'dp_bayar'      => 100000,
+            'bayar_tunai'   => 400000,
+            'bayar'         => 400000,
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '350000',
+            'bayar_pembayaran'       => '750000',
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(400000, (int) $row->bayar, 'Tanpa mode koreksi, kelebihan pembayaran tidak mengubah nilai lama.');
+        $this->assertSame(400000, (int) $row->bayar_tunai);
+        $this->assertSame(100000, (int) $row->dp_bayar);
+    }
+
+    public function testKelebihanPembayaranDapatDikoreksi(): void
+    {
+        $this->sesi();
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-KOREKSI',
+            'total_service' => 350000,
+            'harus_dibayar' => 350000,
+            'dp_bayar'      => 100000,
+            'bayar_tunai'   => 150000,
+            'bayar'         => 400000,
+        ]);
+        $this->db->table('pembayaran_bank')->insert([
+            'kode_pembayaran'  => 'ksr-lama',
+            'bank_idbank'      => 3,
+            'jumlah'           => 250000,
+            'tabel_referensi'  => 'service_baru',
+            'id_referensi'     => 1,
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '350000',
+            'bayar_pembayaran'       => '250000',
+            'koreksi_pembayaran'     => '1',
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(250000, (int) $row->bayar, 'Mode koreksi mengganti nilai pembayaran lama.');
+        $this->assertSame(250000, (int) $row->bayar_tunai);
+        $this->assertSame(100000, (int) $row->dp_bayar, 'DP tidak berubah saat koreksi.');
+        $this->assertSame(350000, (int) $row->total_service);
+        $this->assertSame(
+            0,
+            (int) $db->table('pembayaran_bank')->where('id_referensi', 1)->countAllResults(),
+            'Baris bank lama diganti, bukan ditambah.'
+        );
+    }
+
+    public function testOperatorBiasaJugaDapatMengoreksiKelebihanPembayaran(): void
+    {
+        // Koreksi tidak dibatasi jabatan: siapa pun yang mengakses halaman
+        // pembayaran boleh memperbaiki salah input saat status kelebihan.
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 41,
+        ]);
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-OPERATOR',
+            'total_service' => 350000,
+            'harus_dibayar' => 350000,
+            'dp_bayar'      => 100000,
+            'bayar_tunai'   => 400000,
+            'bayar'         => 400000,
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '350000',
+            'bayar_pembayaran'       => '250000',
+            'koreksi_pembayaran'     => '1',
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(250000, (int) $row->bayar);
+        $this->assertSame(250000, (int) $row->bayar_tunai);
+    }
+
+    public function testMetodeTransferMengabaikanNilaiTunaiTersisa(): void
+    {
+        $this->sesi();
+        $this->buatTabelPembayaran();
+
+        $this->db->table('service')->insert([
+            'idservice'     => 1,
+            'no_service'    => 'SRV-TRANSFER',
+            'total_service' => 1000000,
+            'harus_dibayar' => 1000000,
+            'bayar_tunai'   => 0,
+            'bayar'         => 0,
+        ]);
+
+        $response = $this->post(self::URI_GROSS, [
+            'idservice_p'            => 1,
+            'total_harga_pembayaran' => '1000000',
+            'metode_bayar'           => 'transfer',
+            'bayar_pembayaran'       => '500000',
+            'bank'                   => [['id' => 3, 'jumlah' => '300000']],
+        ]);
+
+        $response->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $row = $db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(300000, (int) $row->bayar, 'Metode transfer mengabaikan kolom tunai yang tersisa.');
+        $this->assertSame(0, (int) $row->bayar_tunai);
+        $this->assertSame(
+            300000,
+            (int) $db->table('pembayaran_bank')->where('id_referensi', 1)->get()->getRow()->jumlah
         );
     }
 }

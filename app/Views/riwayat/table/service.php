@@ -1,3 +1,31 @@
+<?php
+    $serviceTagihanRingkasan = (int) (@$old_service_pelanggan->total_service ?? 0);
+    if (!empty($oldsparepart)) {
+        $serviceTagihanRingkasan = 0;
+        foreach ($oldsparepart as $sparepartRingkasan) {
+            $serviceTagihanRingkasan += max(0, (int) ($sparepartRingkasan->sub_total ?? 0));
+        }
+    }
+    $serviceTunaiRingkasan = max(0, (int) (@$old_service_pelanggan->bayar_tunai ?? 0));
+    $serviceTransferRingkasan = 0;
+    foreach (($pembayaran_lama ?? []) as $transferRingkasan) {
+        $serviceTransferRingkasan += max(0, (int) ($transferRingkasan->jumlah ?? 0));
+    }
+    $serviceBayarRingkasan = max(
+        0,
+        (int) (@$old_service_pelanggan->bayar ?? 0),
+        $serviceTunaiRingkasan + $serviceTransferRingkasan
+    );
+    $serviceTerkumpulRingkasan = $serviceBayarRingkasan
+        + max(0, (int) (@$old_service_pelanggan->dp_bayar ?? 0));
+    $serviceSudahLunas = $serviceTagihanRingkasan > 0
+        && $serviceTerkumpulRingkasan === $serviceTagihanRingkasan;
+    $serviceLebihBayar = $serviceTagihanRingkasan > 0
+        && $serviceTerkumpulRingkasan > $serviceTagihanRingkasan
+        && $serviceTerkumpulRingkasan > 0;
+    $serviceSisaRingkasan = max(0, $serviceTagihanRingkasan - $serviceTerkumpulRingkasan);
+    $serviceLebihRingkasan = max(0, $serviceTerkumpulRingkasan - $serviceTagihanRingkasan);
+?>
 <style>
     /* Vertical journey rail for service intake */
     .service-rail {
@@ -271,11 +299,18 @@
                     <div class="sv-label"><i class="bi bi-wallet2"></i> DP</div>
                     <div class="sv-value" id="sv-dp">-</div>
                 </div>
-                <div class="ms-lg-auto">
+                <div class="ms-lg-auto d-flex flex-wrap align-items-center justify-content-lg-end gap-2">
                     <div class="service-summary-metric text-lg-end">
                         <div class="sv-label"><i class="bi bi-tag-fill"></i> Total Akhir</div>
                         <div class="sv-value text-primary fs-4" id="sv-total">Rp 0</div>
                     </div>
+                    <span class="badge rounded-pill <?= $serviceSudahLunas ? 'text-bg-success' : 'text-bg-warning text-dark' ?> <?= $serviceTagihanRingkasan > 0 || $serviceLebihBayar ? '' : 'd-none' ?>"
+                        id="service-payment-status"
+                        data-dp="<?= max(0, (int) (@$old_service_pelanggan->dp_bayar ?? 0)) ?>"
+                        data-bayar="<?= $serviceBayarRingkasan ?>">
+                        <i class="bi <?= $serviceSudahLunas ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?> me-1" id="service-payment-status-icon" aria-hidden="true"></i>
+                        <span id="service-payment-status-text"><?= $serviceSudahLunas ? 'Lunas' : ($serviceLebihBayar ? 'Kelebihan tercatat · Rp ' . number_format($serviceLebihRingkasan, 0, ',', '.') : 'Belum lunas · sisa ' . ('Rp ' . number_format($serviceSisaRingkasan, 0, ',', '.'))) ?></span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -385,7 +420,7 @@
             const checked = document.querySelectorAll('.checkbox-fungsi:checked').length;
             const rows = document.querySelectorAll('#sparepart-table-body tr').length;
             const hargaAkhir = (el('harga_akhir_sparepart') && el('harga_akhir_sparepart').value) || 'Rp 0';
-            const hargaFinal = (el('total_harga_pembayaran_akhir') && el('total_harga_pembayaran_akhir').value) || hargaAkhir;
+            const hargaFinal = (el('total_harga_pembayaran') && el('total_harga_pembayaran').value) || hargaAkhir;
             const dpRaw = document.querySelector('form[action*="pelanggan_service"] input[name="dp_bayar"], #dp_bayar');
             let dpTxt = '-';
             if (dpRaw && dpRaw.value) {
@@ -404,6 +439,30 @@
             if (el('sv-dp')) el('sv-dp').textContent = dpTxt;
             const totalShown = (rows > 0 || checked > 0) ? hargaFinal : hargaAkhir;
             if (el('sv-total')) el('sv-total').textContent = totalShown;
+
+            const paymentStatus = el('service-payment-status');
+            if (paymentStatus) {
+                const totalAmount = parseRp(totalShown);
+                const dpAmount = parseInt(paymentStatus.dataset.dp || '0', 10) || 0;
+                const paidAmount = parseInt(paymentStatus.dataset.bayar || '0', 10) || 0;
+                const collected = dpAmount + paidAmount;
+                const remaining = Math.max(0, totalAmount - collected);
+                const excess = Math.max(0, collected - totalAmount);
+                const lunas = totalAmount > 0 && collected === totalAmount;
+                const overpaid = totalAmount > 0 && collected > totalAmount && collected > 0;
+                paymentStatus.classList.toggle('d-none', totalAmount <= 0 && !overpaid);
+                paymentStatus.classList.toggle('text-bg-success', lunas);
+                paymentStatus.classList.toggle('text-bg-warning', !lunas);
+                paymentStatus.classList.toggle('text-dark', !lunas);
+                const statusIcon = el('service-payment-status-icon');
+                if (statusIcon) statusIcon.className = 'bi ' + (lunas ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill') + ' me-1';
+                const statusText = el('service-payment-status-text');
+                if (statusText) statusText.textContent = lunas
+                    ? 'Lunas'
+                    : (overpaid
+                        ? 'Kelebihan tercatat · Rp ' + excess.toLocaleString('id-ID')
+                        : 'Belum lunas · sisa Rp ' + remaining.toLocaleString('id-ID'));
+            }
 
             /* rail states */
             document.querySelectorAll('#service-rail .service-rail-item').forEach(function (item) {

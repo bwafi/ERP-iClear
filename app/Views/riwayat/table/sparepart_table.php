@@ -351,7 +351,8 @@
     function updateTotalHarga() {
         const harga = document.getElementById('harga_akhir_sparepart').value;
         const diskon_akhir = document.getElementById('diskon_sparepart').value;
-        const dp = parseRupiah(document.getElementById('dp_bayar').value);
+        const dpEl = document.getElementById('dp_bayar') || document.querySelector('input[name="dp_bayar"]');
+        const dp = dpEl ? parseRupiah(dpEl.value) : 0;
         const harga_akhir = parseRupiah(harga) - dp;
 
 

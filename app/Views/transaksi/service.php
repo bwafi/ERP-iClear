@@ -385,7 +385,7 @@
             const checked = document.querySelectorAll('.checkbox-fungsi:checked').length;
             const rows = document.querySelectorAll('#sparepart-table-body tr').length;
             const hargaAkhir = (el('harga_akhir_sparepart') && el('harga_akhir_sparepart').value) || 'Rp 0';
-            const hargaFinal = (el('total_harga_pembayaran_akhir') && el('total_harga_pembayaran_akhir').value) || hargaAkhir;
+            const hargaFinal = (el('total_harga_pembayaran') && el('total_harga_pembayaran').value) || hargaAkhir;
             const dpRaw = document.querySelector('form[action*="pelanggan_service"] input[name="dp_bayar"], #dp_bayar');
             let dpTxt = '-';
             if (dpRaw && dpRaw.value) {

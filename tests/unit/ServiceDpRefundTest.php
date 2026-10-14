@@ -21,7 +21,7 @@ final class ServiceDpRefundTest extends CIUnitTestCase
         $this->prefixAsli = (string) $this->db->DBPrefix;
         $this->db->setPrefix('');
 
-        foreach (['service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun'] as $table) {
+        foreach (['sparepart_invoice_guard', 'detail_penjualan', 'penjualan', 'service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun'] as $table) {
             $this->db->query("DROP TABLE IF EXISTS {$table}");
         }
 
@@ -34,13 +34,29 @@ final class ServiceDpRefundTest extends CIUnitTestCase
             bayar_tunai BIGINT DEFAULT 0,
             dp_bayar BIGINT DEFAULT 0,
             tanggal_bisa_diambil DATETIME NULL,
-            updated_at DATETIME NULL)');
+            updated_at DATETIME NULL) ENGINE=InnoDB');
         $this->db->query('CREATE TABLE pelanggan (
             id_pelanggan INT PRIMARY KEY,
             nama VARCHAR(100) NULL)');
         $this->db->query('CREATE TABLE service_sparepart (
             idservice_sparepart INT AUTO_INCREMENT PRIMARY KEY,
-            service_idservice INT NULL)');
+            service_idservice INT NULL) ENGINE=InnoDB');
+        $this->db->query('CREATE TABLE penjualan (
+            idpenjualan INT PRIMARY KEY,
+            service_idservice INT NULL,
+            total_penjualan BIGINT NULL,
+            harus_dibayar BIGINT NULL) ENGINE=InnoDB');
+        $this->db->query('CREATE TABLE detail_penjualan (
+            iddetail_penjualan INT AUTO_INCREMENT PRIMARY KEY,
+            penjualan_idpenjualan INT NULL,
+            barang_idbarang INT NULL,
+            jumlah INT NULL,
+            sub_total BIGINT NULL) ENGINE=InnoDB');
+        $this->db->query('CREATE TABLE sparepart_invoice_guard (
+            id INT PRIMARY KEY,
+            penjualan_id INT NOT NULL,
+            CONSTRAINT fk_sparepart_invoice_guard FOREIGN KEY (penjualan_id)
+                REFERENCES penjualan(idpenjualan)) ENGINE=InnoDB');
         $this->db->query('CREATE TABLE service_dp (
             id BIGINT PRIMARY KEY,
             service_idservice INT NOT NULL,
@@ -63,7 +79,7 @@ final class ServiceDpRefundTest extends CIUnitTestCase
             refund_referensi VARCHAR(100) NULL,
             refund_alasan TEXT NULL,
             refund_by INT NULL,
-            refund_at DATETIME NULL)');
+            refund_at DATETIME NULL) ENGINE=InnoDB');
         $this->db->query('CREATE TABLE kategori_kas (
             idkategori_kas INT PRIMARY KEY,
             kategori VARCHAR(60) NOT NULL,
@@ -84,7 +100,7 @@ final class ServiceDpRefundTest extends CIUnitTestCase
             penerima VARCHAR(100) NULL,
             idbank VARCHAR(20) NULL,
             idunit INT NULL,
-            created_on DATETIME NULL)');
+            created_on DATETIME NULL) ENGINE=InnoDB');
         $this->db->query('CREATE TABLE jurnal (
             idjurnal INT AUTO_INCREMENT PRIMARY KEY,
             tanggal DATE NULL,
@@ -96,7 +112,7 @@ final class ServiceDpRefundTest extends CIUnitTestCase
             id_referensi VARCHAR(40) NULL,
             tabel_referensi VARCHAR(40) NULL,
             id_unit INT NULL,
-            id_akun INT NULL)');
+            id_akun INT NULL) ENGINE=InnoDB');
         $this->db->query('CREATE TABLE template_jurnal (
             idtemplate_jurnal INT AUTO_INCREMENT PRIMARY KEY,
             kode_template VARCHAR(80) NULL,
@@ -147,7 +163,7 @@ final class ServiceDpRefundTest extends CIUnitTestCase
 
     protected function tearDown(): void
     {
-        foreach (['service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun'] as $table) {
+        foreach (['sparepart_invoice_guard', 'detail_penjualan', 'penjualan', 'service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun'] as $table) {
             $this->db->query("DROP TABLE IF EXISTS {$table}");
         }
         $this->db->setPrefix($this->prefixAsli);
@@ -157,6 +173,29 @@ final class ServiceDpRefundTest extends CIUnitTestCase
     private function service(): ServiceDpService
     {
         return new ServiceDpService($this->db);
+    }
+
+    private function tambahSparepartKeluar(): void
+    {
+        $this->db->table('service_sparepart')->insert(['service_idservice' => 1]);
+        $this->db->table('penjualan')->insert([
+            'idpenjualan' => 101,
+            'service_idservice' => 1,
+        ]);
+        $this->db->table('detail_penjualan')->insertBatch([
+            ['penjualan_idpenjualan' => 101, 'barang_idbarang' => 501, 'jumlah' => 1, 'sub_total' => 100000],
+            ['penjualan_idpenjualan' => 101, 'barang_idbarang' => 502, 'jumlah' => 2, 'sub_total' => 50000],
+        ]);
+        $this->db->table('jurnal')->insert([
+            'tanggal' => '2026-10-14',
+            'no_akun' => '1010101000',
+            'nama_akun' => 'Kas Besar',
+            'debet' => 150000,
+            'kredit' => 0,
+            'id_referensi' => '101',
+            'tabel_referensi' => 'penjualan',
+            'id_unit' => 1,
+        ]);
     }
 
     public function testRefundPenuhMencatatKasKeluarJurnalDanTetapMenyimpanPenerimaanAsal(): void
@@ -218,5 +257,89 @@ final class ServiceDpRefundTest extends CIUnitTestCase
 
         $this->assertSame('aktif', $this->db->table('service_dp')->where('id', 1)->get()->getRow()->status);
         $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testRefundOtomatisMemakaiHardDeleteSparepartTerkait(): void
+    {
+        $this->tambahSparepartKeluar();
+        $this->db->table('penjualan')->insert([
+            'idpenjualan' => 202,
+            'service_idservice' => 2,
+        ]);
+        $this->db->table('detail_penjualan')->insert([
+            'penjualan_idpenjualan' => 202,
+            'barang_idbarang' => 777,
+            'jumlah' => 1,
+        ]);
+        $this->db->table('jurnal')->insert([
+            'tanggal' => '2026-10-14',
+            'no_akun' => '1010101000',
+            'nama_akun' => 'Kas Besar',
+            'debet' => 100000,
+            'kredit' => 0,
+            'id_referensi' => '202',
+            'tabel_referensi' => 'penjualan',
+            'id_unit' => 1,
+        ]);
+
+        // Role tidak diubah: pemanggil yang sebelumnya boleh refund tetap boleh
+        // melakukannya; hard delete ikut transaksi refund yang sama.
+        $hasil = $this->service()->refund(1, 'Service dibatalkan', null, 7, 1);
+
+        $this->assertSame('ok', $hasil['status']);
+        $this->assertSame(0, $this->db->table('detail_penjualan')->where('penjualan_idpenjualan', 101)->countAllResults());
+        $this->assertSame(0, $this->db->table('penjualan')->where('idpenjualan', 101)->countAllResults());
+        $this->assertSame(0, $this->db->table('jurnal')->where('tabel_referensi', 'penjualan')->where('id_referensi', '101')->countAllResults());
+        $this->assertSame(1, $this->db->table('service_sparepart')->where('service_idservice', 1)->countAllResults());
+        $this->assertSame(1, $this->db->table('detail_penjualan')->where('penjualan_idpenjualan', 202)->countAllResults());
+        $this->assertSame(1, $this->db->table('penjualan')->where('idpenjualan', 202)->countAllResults());
+        $this->assertSame(1, $this->db->table('jurnal')->where('tabel_referensi', 'penjualan')->where('id_referensi', '202')->countAllResults());
+        $this->assertSame(1, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testKegagalanHardDeleteTidakMeninggalkanPerubahanParsial(): void
+    {
+        $this->tambahSparepartKeluar();
+        $this->db->table('sparepart_invoice_guard')->insert([
+            'id' => 1,
+            'penjualan_id' => 101,
+        ]);
+
+        try {
+            $this->service()->refund(1, 'Service dibatalkan', null, 7, 1);
+            $this->fail('Invoice guard harus menggagalkan hard delete dan refund.');
+        } catch (\Throwable $e) {
+            $this->assertNotSame('', $e->getMessage());
+        }
+
+        $this->assertSame(2, $this->db->table('detail_penjualan')->where('penjualan_idpenjualan', 101)->countAllResults());
+        $this->assertSame(1, $this->db->table('penjualan')->where('idpenjualan', 101)->countAllResults());
+        $this->assertSame(1, $this->db->table('jurnal')->where('tabel_referensi', 'penjualan')->where('id_referensi', '101')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertNull($this->db->table('service_dp')->where('id', 1)->get()->getRow()->refund_idkas_keluar);
+        $this->assertSame(2, (int) $this->db->table('service')->where('idservice', 1)->get()->getRow()->status_service);
+    }
+
+    public function testKegagalanJurnalRefundMengembalikanHardDeleteDanInvoice(): void
+    {
+        $this->tambahSparepartKeluar();
+        $this->db->table('template_jurnal')
+            ->where('kode_template', 'refund_dp_service_tunai')
+            ->where('no_akun', '1010101000')
+            ->update(['debet_kredit' => 'debet']);
+
+        try {
+            $this->service()->refund(1, 'Service dibatalkan', null, 7, 1);
+            $this->fail('Jurnal tidak seimbang harus membatalkan seluruh transaksi refund.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('jurnal refund dp gagal', strtolower($e->getMessage()));
+        }
+
+        $this->assertSame(2, $this->db->table('detail_penjualan')->where('penjualan_idpenjualan', 101)->countAllResults());
+        $this->assertSame(1, $this->db->table('penjualan')->where('idpenjualan', 101)->countAllResults());
+        $this->assertSame(1, $this->db->table('jurnal')->where('tabel_referensi', 'penjualan')->where('id_referensi', '101')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertNull($this->db->table('service_dp')->where('id', 1)->get()->getRow()->refund_idkas_keluar);
+        $this->assertSame(2, (int) $this->db->table('service')->where('idservice', 1)->get()->getRow()->status_service);
     }
 }

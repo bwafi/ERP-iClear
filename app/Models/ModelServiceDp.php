@@ -157,8 +157,29 @@ class ModelServiceDp extends Model
                 : 'NULL AS ' . $field;
         }
 
+        $penjualanPunyaLinkService = $this->db->fieldExists('service_idservice', 'penjualan');
+        $adaTabelServiceSparepart = $this->db->tableExists($this->db->getPrefix() . 'service_sparepart', false);
+        if ($penjualanPunyaLinkService) {
+            $detailPenjualan = $this->db->prefixTable('detail_penjualan');
+            $penjualan = $this->db->prefixTable('penjualan');
+            $sparepartPendingSelect = '(SELECT COUNT(*) FROM ' . $detailPenjualan . ' dp_retur'
+                . ' JOIN ' . $penjualan . ' p_retur ON p_retur.idpenjualan = dp_retur.penjualan_idpenjualan'
+                . ' WHERE p_retur.service_idservice = s.idservice) AS sparepart_belum_diretur';
+        } elseif ($adaTabelServiceSparepart) {
+            // Fallback untuk database sebelum migrasi relasi invoice-service:
+            // hitung historinya agar DataTables tetap hidup dan refund tidak
+            // aktif diam-diam sebelum database diperbarui.
+            $serviceSparepart = $this->db->prefixTable('service_sparepart');
+            $sparepartPendingSelect = '(SELECT COUNT(*) FROM ' . $serviceSparepart
+                . ' sp_retur WHERE sp_retur.service_idservice = s.idservice) AS sparepart_belum_diretur';
+        } else {
+            $sparepartPendingSelect = '0 AS sparepart_belum_diretur';
+        }
+
         $builder = $this->db->table($this->table . ' sd')
             ->select('sd.id, sd.kode_dp, sd.tanggal, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.status, sd.keterangan, s.idservice, s.no_service, s.status_service, s.tipe_hp, p.nama AS nama_pelanggan, u.NAMA_UNIT AS nama_unit, b.nama_bank, ' . implode(', ', $refundSelect))
+            ->select($sparepartPendingSelect, false)
+            ->select(((int) $penjualanPunyaLinkService) . ' AS sparepart_retur_siap', false)
             ->join('service s', 's.idservice = sd.service_idservice')
             ->join('pelanggan p', 'p.id_pelanggan = s.pelanggan_id_pelanggan', 'left')
             ->join('unit u', 'u.idunit = s.unit_idunit', 'left')

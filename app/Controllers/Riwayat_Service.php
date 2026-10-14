@@ -27,6 +27,8 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
+use App\Services\Service\SparepartKeluarHardDeleteService;
+use App\Services\Service\ServiceSparepartPenjualanSyncService;
 use App\Models\ModelServiceDp;
 
 class Riwayat_Service extends BaseController
@@ -296,91 +298,115 @@ class Riwayat_Service extends BaseController
 
     public function insert_sparepart()
     {
+        $idservice = (int) $this->request->getPost('idservice_s');
         $produkData = $this->request->getPost('produk');
-        $idservice = $this->request->getPost('idservice_s');
-
+        $produkData = is_array($produkData) ? $produkData : [];
         $garansi = $this->request->getPost('garansi');
-
         if ($garansi === 'manual') {
-
             $garansi = $this->request->getPost('garansi_manual');
         }
 
-
-        $garansi = (int) $garansi;
-        $garansiupdate = array(
-            'garansi_hari' => $garansi
-        );
-        $this->ServiceModel->updateService($idservice, $garansiupdate);
-
-
-        $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
-        $existingMap = [];
-
-        foreach ($existingItems as $item) {
-            $existingMap[$item->barang_idbarang] = $item;
+        $urlKembali = base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart');
+        if ($idservice <= 0) {
+            return redirect()->to($urlKembali)->with('gagal', 'ID service tidak valid. Sparepart tidak disimpan.');
         }
 
-        $submittedIds = [];
+        $db = Database::connect();
+        $db->transBegin();
 
-        if (!empty($produkData)) {
+        try {
+            $service = $db->table('service')->where('idservice', $idservice)->get()->getRow();
+            if (! $service) {
+                throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+
+            // Ambil snapshot lama sebelum mengubah service_sparepart. Invoice
+            // lama dibersihkan/dicocokkan dalam transaksi yang sama, lalu satu
+            // invoice baru dibuat dari pilihan sparepart terbaru.
+            $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
+            (new ServiceSparepartPenjualanSyncService($db))->hapusTransaksiLama(
+                $idservice,
+                $existingItems,
+                (int) ($service->unit_idunit ?? session('ID_UNIT'))
+            );
+
+            if (! $this->ServiceModel->updateService($idservice, [
+                'garansi_hari' => (int) $garansi,
+            ])) {
+                throw new \RuntimeException('Gagal memperbarui garansi service.');
+            }
+
+            $existingMap = [];
+            foreach ($existingItems as $item) {
+                $existingMap[$item->barang_idbarang] = $item;
+            }
+
+            $submittedIds = [];
             foreach ($produkData as $produk) {
-                $id     = $produk['id'];
-                $jumlah = (int) $produk['jumlah'];
-                $harga  = $this->rupiahToInt($produk['harga']);
-                $diskon_item = $this->rupiahToInt($produk['diskon']);
-                $total  = $this->rupiahToInt($produk['total']);
+                $id = (int) ($produk['id'] ?? 0);
+                if ($id <= 0) {
+                    throw new \RuntimeException('Data sparepart tidak valid.');
+                }
+                $jumlah = (int) ($produk['jumlah'] ?? 0);
+                $harga = $this->rupiahToInt($produk['harga'] ?? '0');
+                $diskonItem = $this->rupiahToInt($produk['diskon'] ?? '0');
+                $total = $this->rupiahToInt($produk['total'] ?? '0');
                 $submittedIds[] = $id;
 
-                $datahppbarang = $this->HppBarangModel->getById($id);
-                $hpp = $datahppbarang->hpp ?? 0;
-
-                $datastokawal = $this->StokAwalModel->getById($id);
-                $satuan_terkecil = $datastokawal->satuan_terkecil ?? 'pcs';
-
-                $datas = [
+                $dataHppBarang = $this->HppBarangModel->getById($id);
+                $stokAwal = $this->StokAwalModel->getById($id);
+                $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,
                     'sub_total' => $total,
-                    'hpp_penjualan' => $hpp,
-                    'satuan_jual' => $satuan_terkecil,
-                    'diskon_penjualan' => $diskon_item,
+                    'hpp_penjualan' => $dataHppBarang->hpp ?? 0,
+                    'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
+                    'diskon_penjualan' => $diskonItem,
                     'service_idservice' => $idservice,
                     'barang_idbarang' => $id,
-                    'unit_idunit' => session('ID_UNIT')
+                    'unit_idunit' => (int) ($service->unit_idunit ?? session('ID_UNIT')),
                 ];
 
-                if (array_key_exists($id, $existingMap)) {
-                    // ID sudah ada → Update
-                    $this->ServiceSparepartModel
-                        ->updateByServiceAndBarang($idservice, $id, $datas);
-                } else {
-                    // ID belum ada → Insert
-                    $this->ServiceSparepartModel
-                        ->insert_SerModelServiceSparepart($datas);
+                $saved = array_key_exists($id, $existingMap)
+                    ? $this->ServiceSparepartModel->updateByServiceAndBarang($idservice, $id, $data)
+                    : $this->ServiceSparepartModel->insert_SerModelServiceSparepart($data);
+                if (! $saved) {
+                    throw new \RuntimeException('Gagal menyimpan detail sparepart service.');
                 }
             }
-        }
 
-        $this->buatPenjualanDariService($idservice, $produkData);
-
-        // Hapus data sparepart yang tidak lagi ada di form
-        foreach ($existingMap as $barangId => $item) {
-            if (!in_array($barangId, $submittedIds)) {
-                $this->ServiceSparepartModel
-                    ->deleteByServiceAndBarang($idservice, $barangId);
+            foreach ($existingMap as $barangId => $item) {
+                if (! in_array((int) $barangId, $submittedIds, true)
+                    && ! $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId)) {
+                    throw new \RuntimeException('Gagal menghapus sparepart yang dilepas dari service.');
+                }
             }
+
+            $this->buatPenjualanDariService($idservice, $produkData);
+
+            if ($db->transStatus() === false || ! $db->transCommit()) {
+                throw new \RuntimeException('Sinkronisasi sparepart keluar gagal disimpan.');
+            }
+
+            return redirect()->to($urlKembali)->with('sukses', 'Sparepart service dan sparepart keluar berhasil disinkronkan.');
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'Riwayat_Service::insert_sparepart gagal untuk service ' . $idservice . ': ' . $e->getMessage());
+            return redirect()->to($urlKembali)->with('gagal', 'Sparepart tidak tersimpan: ' . $e->getMessage());
         }
-        return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart'))->with('sukses', 'Data sparepart berhasil diperbarui.');
     }
 
     private function buatPenjualanDariService($idservice, $produkData)
     {
-        $db = \Config\Database::connect();
-        $db->transStart();
+        if (empty($produkData)) {
+            return;
+        }
 
         // ambil data service
         $service = $this->ServiceModel->find($idservice);
+        if (! $service) {
+            throw new \RuntimeException('Data service tidak ditemukan saat membuat invoice sparepart.');
+        }
 
         // generate invoice (copy dari insert_penjualan, tapi sederhana)
         $no_invoice = 'SRV' . date('YmdHis');
@@ -403,11 +429,17 @@ class Riwayat_Service extends BaseController
             'bayar' => 0,
             'keterangan' => 'Belum Lunas',
             'unit_idunit' => session('ID_UNIT'),
-            'id_pelanggan' => $service->id_pelanggan ?? null,
+            'id_pelanggan' => $service->pelanggan_id_pelanggan ?? null,
+            'service_idservice' => (int) $idservice,
         ];
 
-        $this->PenjualanModel->insert_Penjualan($dataPenjualan);
+        if (! $this->PenjualanModel->insert_Penjualan($dataPenjualan)) {
+            throw new \RuntimeException('Gagal membuat invoice sparepart service.');
+        }
         $idPenjualan = $this->PenjualanModel->insertID();
+        if ((int) $idPenjualan <= 0) {
+            throw new \RuntimeException('ID invoice sparepart service tidak valid.');
+        }
 
         // insert detail + potong stok
         foreach ($produkData as $p) {
@@ -420,7 +452,7 @@ class Riwayat_Service extends BaseController
 
             $hpp = $this->HppBarangModel->getById($produkid);
 
-            $this->DetailPenjualanModel->insert_detail([
+            if (! $this->DetailPenjualanModel->insert_detail([
                 'barang_idbarang' => $produkid,
                 'jumlah' => $qty,
                 'harga_penjualan' => $harga,
@@ -428,10 +460,10 @@ class Riwayat_Service extends BaseController
                 'penjualan_idpenjualan' => $idPenjualan,
                 'hpp_penjualan' => $hpp->hpp ?? 0,
                 'unit_idunit' => session('ID_UNIT'),
-            ]);
+            ])) {
+                throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
+            }
         }
-
-        $db->transComplete();
     }
 
     public function insert_pembayaran()
@@ -1493,62 +1525,38 @@ class Riwayat_Service extends BaseController
             session()->setFlashdata('gagal', 'Tidak punya hak akses');
             return redirect()->to(base_url('sparepart_keluar'));
         }
-        $idDetail = $this->request->getPost('iddetail_penjualan');
-        $detail = $this->DetailPenjualanModel->getById($idDetail);
-        if (!$detail) {
-            session()->setFlashdata('gagal', 'Data tidak ditemukan');
-            return redirect()->to(base_url('sparepart_keluar'));
-        }
-
-        $idPenjualan = $detail->penjualan_idpenjualan;
-
+        $idDetail = (int) $this->request->getPost('iddetail_penjualan');
         $db = \Config\Database::connect();
-        $db->transStart();
+        $db->transBegin();
 
-        // hapus detail penjualan (stok VIEW otomatis menyesuaikan)
-        $this->DetailPenjualanModel->deleteDetail($idDetail);
+        try {
+            $hasil = (new SparepartKeluarHardDeleteService($db))->hapusDetail($idDetail);
+            if (! $hasil['ok']) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Data tidak ditemukan');
 
-        $remaining = $db->table('detail_penjualan')
-            ->where('penjualan_idpenjualan', $idPenjualan)
-            ->countAllResults();
+                return redirect()->to(base_url('sparepart_keluar'));
+            }
 
-        if ($remaining === 0) {
-            // Detail terakhir → invoice penjualan jadi kosong, hapus header-nya
-            // beserta jurnal yang mereferensikannya agar tidak ada sisa di laporan.
-            $db->table('jurnal')
-                ->where('tabel_referensi', 'penjualan')
-                ->where('id_referensi', $idPenjualan)
-                ->delete();
+            if ($db->transStatus() === false) {
+                throw new \RuntimeException('Hard delete sparepart gagal.');
+            }
 
-            $db->table('penjualan')
-                ->where('idpenjualan', $idPenjualan)
-                ->delete();
-
-            $db->transComplete();
-
-            session()->setFlashdata('sukses', 'Data sparepart & invoice penjualan berhasil dihapus. Stok otomatis disesuaikan.');
-            return redirect()->to(base_url('sparepart_keluar'));
+            if (! $db->transCommit()) {
+                throw new \RuntimeException('Commit hard delete sparepart gagal.');
+            }
+            session()->setFlashdata(
+                'sukses',
+                $hasil['invoice_deleted']
+                    ? 'Data sparepart & invoice penjualan berhasil dihapus. Stok otomatis disesuaikan.'
+                    : 'Data sparepart berhasil dihapus. Stok & total penjualan otomatis disesuaikan.'
+            );
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'delete_sparepart_keluar gagal: ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menghapus sparepart: ' . $e->getMessage());
         }
 
-        //Masih ada detail lain → update total pada tabel penjualan (induk)
-        $recalc = $db->table('detail_penjualan')
-            ->selectSum('sub_total', 'total_sub')
-            ->where('penjualan_idpenjualan', $idPenjualan)
-            ->get()
-            ->getRow();
-
-        $newTotal = (int) ($recalc->total_sub ?? 0);
-
-        $db->table('penjualan')
-            ->where('idpenjualan', $idPenjualan)
-            ->update([
-                'total_penjualan' => $newTotal,
-                'harus_dibayar'   => $newTotal,
-            ]);
-
-        $db->transComplete();
-
-        session()->setFlashdata('sukses', 'Data sparepart berhasil dihapus. Stok & total penjualan otomatis disesuaikan.');
         return redirect()->to(base_url('sparepart_keluar'));
     }
 }

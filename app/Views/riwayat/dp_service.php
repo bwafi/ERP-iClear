@@ -129,7 +129,7 @@
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-warning py-2 px-3 mb-3" role="note">
-                            Refund penuh akan sekaligus membatalkan service dan dikembalikan melalui metode/rekening asal DP. Jika ada pembayaran lain atau sparepart terpakai, selesaikan pengembaliannya terlebih dahulu.
+                            Refund membatalkan service dan mengembalikan DP lewat metode/rekening asal. Jika ada sparepart, detail keluar, invoice kosong, dan jurnal terkait otomatis dihapus seperti aksi hard delete di Sparepart Keluar.
                         </div>
                         <div class="d-flex justify-content-between gap-3 py-2 border-bottom">
                             <span class="text-muted">Nominal refund</span>
@@ -284,16 +284,20 @@
                             if (![1, 2, 90].includes(Number(row.status_service))) {
                                 return '<span class="text-muted small">Service siap diambil/selesai</span>';
                             }
-
+                            const sparepartBelumDiretur = Number(row.sparepart_belum_diretur) || 0;
+                            if (sparepartBelumDiretur > 0 && Number(row.sparepart_retur_siap) !== 1) {
+                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}<span class="text-warning-emphasis small" title="Jalankan migrasi penghubung invoice service sebelum refund sparepart.">Skema retur perlu diperbarui</span></div>`;
+                            }
                             return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}<button type="button" class="btn btn-sm btn-outline-danger btn-refund-dp"
                                 data-dp-id="${Number(row.id)}"
                                 data-kode="${escapeHtml(row.kode_dp)}"
                                 data-service="${escapeHtml(row.no_service)}"
                                 data-jumlah="${Number(row.jumlah) || 0}"
+                                data-sparepart-pending="${sparepartBelumDiretur}"
                                 data-metode="${escapeHtml(row.metode)}"
                                 data-bank="${escapeHtml(row.nama_bank || row.bank_idbank || '')}"
                                 data-bs-toggle="modal" data-bs-target="#refundDpModal">
-                                <iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>Refund
+                                <iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>${sparepartBelumDiretur > 0 ? 'Refund + Retur' : 'Refund'}
                             </button></div>`;
                         }
                     }
@@ -333,6 +337,11 @@
                 document.getElementById('refundDpMethod').textContent = metode === 'transfer'
                     ? `Transfer${bank ? ` · ${bank}` : ''}`
                     : 'Tunai';
+
+                const sparepartPending = Number(button.dataset.sparepartPending) || 0;
+                refundSubmit.innerHTML = sparepartPending > 0
+                    ? '<iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>Konfirmasi Refund + Retur Sparepart'
+                    : '<iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>Konfirmasi Refund Penuh';
 
                 const referenceWrap = document.getElementById('refundDpReferenceWrap');
                 const referenceInput = document.getElementById('refundDpBankReference');
