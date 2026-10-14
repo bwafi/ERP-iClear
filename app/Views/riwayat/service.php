@@ -356,8 +356,8 @@
                         }
 
                         // Tombol Cetak
-                        buttons += `<a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}" class="me-1"><button type="button" class="btn btn-sm btn-danger"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20" height="20"></iconify-icon> Cetak</button></a>`;
-                        buttons += `<a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}?mode=thermal" class="me-1"><button type="button" class="btn btn-sm btn-danger"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20" height="20"></iconify-icon> Thermal</button></a>`;
+                        buttons += `<a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-danger me-1 js-service-print" data-print-mode="invoice"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20" height="20"></iconify-icon> Cetak</a>`;
+                        buttons += `<a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}?mode=thermal" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-danger me-1 js-service-print" data-print-mode="thermal"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20" height="20"></iconify-icon> Thermal</a>`;
 
                         // Tombol Hapus (Admin Root Only)
                         if (is_admin) {
@@ -387,6 +387,22 @@
         startDateInput.addEventListener('change', filterData);
         endDateInput.addEventListener('change', filterData);
         unitFilter.addEventListener('change', filterData);
+
+        // Cetak invoice/thermal dibuka di tab baru; kunci link yang diklik agar
+        // satu render tabel hanya mengirim satu permintaan cetak per tombol.
+        $(document).on('click', '.js-service-print', function(event) {
+            if (this.dataset.printing === '1') {
+                event.preventDefault();
+                return;
+            }
+
+            this.dataset.printing = '1';
+            this.classList.add('disabled');
+            this.setAttribute('aria-disabled', 'true');
+            this.setAttribute('aria-busy', 'true');
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>'
+                + (this.dataset.printMode === 'thermal' ? 'Membuka thermal...' : 'Membuka invoice...');
+        });
 
         // WhatsApp button
         $(document).on('click', '.btn-wa', function() {
