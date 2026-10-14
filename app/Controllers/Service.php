@@ -85,6 +85,7 @@ class Service extends BaseController
             'akun' => $akun,
             'teknisi' => $teknisi,
             'bank' => $this->BankModel->getBank(),
+            'dp_bank' => $this->BankModel->getBankDalamScopeUnit((int) $unitId),
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'idservice' => $idservice,
             'old_service_pelanggan' => $this->ServiceModel->getByIdWithPelanggan($idservice),

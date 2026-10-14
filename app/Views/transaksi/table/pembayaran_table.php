@@ -520,14 +520,23 @@
                             <label class="form-label" for="dp_bank_idbank">Rekening Tujuan (DP)</label>
                             <select id="dp_bank_idbank" name="dp_bank_idbank" class="form-select sv-pay-input">
                                 <option value="">-- Pilih Rekening --</option>
-                                <?php if (!empty($bank)): ?>
-                                    <?php foreach ($bank as $p): ?>
+                                <?php $dpBankTersedia = $dp_bank ?? $bank ?? []; ?>
+                                <?php if (!empty($dpBankTersedia)): ?>
+                                    <?php foreach ($dpBankTersedia as $p): ?>
                                         <option value="<?= htmlspecialchars($p->idbank) ?>">
                                             <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama ?? '') ?> : <?= htmlspecialchars($p->norek ?? '') ?>
                                         </option>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </select>
+                            <?php if (empty($dpBankTersedia)): ?>
+                                <div class="form-text text-warning">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    Belum ada rekening untuk unit ini. Hubungi Finance untuk menambah rekening.
+                                </div>
+                            <?php else: ?>
+                                <div class="form-text">Hanya rekening unit ini yang ditampilkan.</div>
+                            <?php endif; ?>
                         </div>
                         <div class="col-sm-6 d-none" id="dp-referensi-pembayaran-col">
                             <label class="form-label" for="dp_referensi">No. Referensi Transfer (DP)</label>

@@ -179,6 +179,7 @@ class Riwayat_Service extends BaseController
             'teknisi' => $teknisi,
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'bank' => $this->BankModel->getBank(),
+            'dp_bank' => $this->BankModel->getBankDalamScopeUnit((int) $unitId),
             'idservice' => $idservice,
             'pembayaran_lama' => $this->PembayaranBankModel->getByServiceBaru($idservice),
             'old_service_pelanggan' => $this->ServiceModel->getByIdWithPelanggan($idservice),
