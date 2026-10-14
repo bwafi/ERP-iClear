@@ -13,7 +13,9 @@ $namaBulan = [
     11 => 'November',
     12 => 'Desember'
 ];
-$bolehPilihUnit = in_array($id_jabatan, [1, 0, 34, 40]);
+// Ditentukan controller (resolveUnitScope) agar konsisten dengan otorisasi
+// ?unit= di TutupKasir — termasuk Direktur (2) dengan batasan unit per akun.
+$bolehPilihUnit = (bool) ($boleh_pilih_unit ?? in_array($id_jabatan, [1, 0, 2, 34, 40], true));
 ?>
 
 <style>
@@ -159,9 +161,11 @@ $bolehPilihUnit = in_array($id_jabatan, [1, 0, 34, 40]);
                         <h6 class="mb-2 fw-semibold text-muted">Total Tanggungan Asset</h6>
                         <h3 class="fw-bold mb-1 metric-figure text-primary">
                             <?php
+                            $total = 0;
                             if ($selected_unit == 4) {
                                 $total = (($omset_bulan - $pengeluaran - $totalGajiUnit) * 20 / 100);
-                            } elseif ($selected_unit == 3) {
+                            } elseif (in_array($selected_unit, [3, 5])) {
+                                // Franchise: Banyuwangi (3) & Genteng (5) tanggungan 0.
                                 $total = 0;
                             } elseif (in_array($selected_unit, [1, 2])) {
                                 $total = $hariDalamBulan * 355000;
@@ -206,7 +210,9 @@ $bolehPilihUnit = in_array($id_jabatan, [1, 0, 34, 40]);
                         <h6 class="mb-2 fw-semibold text-muted">Hak Cabang</h6>
                         <h3 class="fw-bold mb-1 metric-figure text-primary">
                             <?php
-                            if (in_array($selected_unit, [3, 4])) {
+                            $total = 0;
+                            if (in_array($selected_unit, [3, 4, 5])) {
+                                // Franchise (Banyuwangi, Pandaan, Genteng): hak cabang 60%.
                                 $total = 60 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
                             } elseif (in_array($selected_unit, [1, 2])) {
                                 $total = 0;
@@ -233,7 +239,9 @@ $bolehPilihUnit = in_array($id_jabatan, [1, 0, 34, 40]);
                         <h6 class="mb-2 fw-semibold text-muted">Tagihan Center</h6>
                         <h3 class="fw-bold mb-1 metric-figure text-primary">
                             <?php
-                            if (in_array($selected_unit, [3, 4])) {
+                            $total = 0;
+                            if (in_array($selected_unit, [3, 4, 5])) {
+                                // Franchise (Banyuwangi, Pandaan, Genteng): tagihan center 40%.
                                 $total = 40 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
                             } elseif (in_array($selected_unit, [1, 2])) {
                                 $total = 0;

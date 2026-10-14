@@ -16,6 +16,75 @@ class TutupKasir extends BaseController
         $this->TutupKasir = new ModelTutupKasir();
     }
 
+    /**
+     * Resolusi daftar unit + unit aktif untuk laporan lintas cabang
+     * (/omset_bulanan & /asset_berjalan).
+     *
+     * Aturan:
+     *   - Finance (0), Admin root (1), Manager (34), SPV (40): boleh memilih
+     *     seluruh unit cabang (Head Office dikecualikan) lewat ?unit=.
+     *   - Direktur (2): boleh memilih unit seperti Admin root, TETAPI dibatasi
+     *     daftar unit per akun di $direkturUnitMap. Direktur yang belum
+     *     dipetakan diperlakukan "lintas unit" (semua cabang).
+     *   - Jabatan lain (mis. Kasir/Kepala Toko): terkunci ke ID_UNIT sesi.
+     *
+     * Daftar unit pada dasarnya tidak menampilkan Head Office (idunit 50).
+     *
+     * @return array{list_unit: array, unit: int, id_jabatan: int, boleh_pilih_unit: bool}
+     */
+    private function resolveUnitScope(): array
+    {
+        $id_jabatan = (int) session()->get('ID_JABATAN');
+        $id_akun    = (int) session()->get('ID_AKUN');
+
+        // Direktur/investor (jabatan 2) yang hanya memegang sebagian unit.
+        $direkturUnitMap = [
+            46 => [3, 5], // Wahid Alfarizki: Banyuwangi, Genteng
+            70 => [4],    // Guruh Dwi Prasetyo: Pandaan
+        ];
+
+        $unitQuery = function () {
+            return $this->db->table('unit')
+                ->where('idunit !=', 50)
+                ->notLike('NAMA_UNIT', 'Head Office');
+        };
+
+        $bolehPilihUnit = in_array($id_jabatan, [0, 1, 2, 34, 40], true);
+
+        if ($bolehPilihUnit && $id_jabatan === 2 && isset($direkturUnitMap[$id_akun])) {
+            // Direktur terbatas: daftar unit + validasi ?unit= terhadap daftarnya.
+            $allowedIds = $direkturUnitMap[$id_akun];
+            $list_unit  = $unitQuery()->whereIn('idunit', $allowedIds)->orderBy('idunit', 'ASC')->get()->getResultArray();
+
+            $unit = (int) ($this->request->getGet('unit') ?: 0);
+            if (! in_array($unit, $allowedIds, true)) {
+                $unit = $allowedIds[0];
+            }
+        } elseif ($bolehPilihUnit) {
+            // Lintas unit: boleh memilih unit mana pun (Head Office dikecualikan).
+            $list_unit = $unitQuery()->orderBy('idunit', 'ASC')->get()->getResultArray();
+
+            $unit = (int) ($this->request->getGet('unit') ?: session()->get('ID_UNIT'));
+        } else {
+            // Terkunci ke unit sesi (pemilih unit tidak ditampilkan view).
+            $list_unit = $unitQuery()->orderBy('idunit', 'ASC')->get()->getResultArray();
+            $unit      = (int) session()->get('ID_UNIT');
+        }
+
+        // Jaga-jaga: unit di luar daftar yang diizinkan -> unit pertama.
+        $availableUnitIds = array_map(static fn ($u) => (int) $u['idunit'], $list_unit);
+        if ($availableUnitIds !== [] && ! in_array($unit, $availableUnitIds, true)) {
+            $unit = $availableUnitIds[0];
+        }
+
+        return [
+            'list_unit'        => $list_unit,
+            'unit'             => $unit,
+            'id_jabatan'       => $id_jabatan,
+            'boleh_pilih_unit' => $bolehPilihUnit,
+        ];
+    }
+
     public function index()
     {
         $today = date('Y-m-d');
@@ -236,63 +305,11 @@ class TutupKasir extends BaseController
 
     public function omsetbulanan()
     {
-        $id_jabatan = session()->get('ID_JABATAN');
-        $id_akun    = session()->get('ID_AKUN');
-
-        // Mapping khusus untuk direktur/investor (jabatan 2) yang punya multi unit
-        $allowedUnitsByAkun = [
-            46 => [3, 5], // Wahid Alfarizki: Banyuwangi, Genteng
-            70 => [4],    // Guruh Dwi Prasetyo: Pandaan
-        ];
-
-        // Ambil list unit (kecualikan Head Office)
-        if (in_array($id_jabatan, [1, 40])) {
-            $list_unit = $this->db->table('unit')
-                ->where('idunit !=', 50)
-                ->notLike('NAMA_UNIT', 'Head Office')
-                ->get()
-                ->getResultArray();
-        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
-            $allowed = $allowedUnitsByAkun[$id_akun];
-            $list_unit = $this->db->table('unit')
-                ->whereIn('idunit', $allowed)
-                ->where('idunit !=', 50)
-                ->notLike('NAMA_UNIT', 'Head Office')
-                ->get()
-                ->getResultArray();
-        } else {
-            $list_unit = $this->db->table('unit')
-                ->where('idunit !=', 50)
-                ->notLike('NAMA_UNIT', 'Head Office')
-                ->get()
-                ->getResultArray();
-        }
-
-        // Penentuan unit.
-        // Role Finance (0) dan Manager (34) ikut cabang ini: berhak memilih unit
-        // lewat ?unit= — selaras dengan daftar role yang menampilkan filter unit
-        // di view halaman ini ([1, 0, 34, 40]). Sebelumnya keduanya jatuh ke
-        // else (terkunci unit sesi); karena ID_UNIT Finance = 50 (Head Office)
-        // tidak ada di list_unit, hasilnya selalu fallback ke unit pertama
-        // (Probolinggo) berapa pun unit yang dipilih di filter.
-        if (in_array($id_jabatan, [0, 1, 34, 40])) {
-            $unit = $this->request->getGet('unit');
-            if (!$unit) {
-                $unit = session()->get('ID_UNIT');
-            }
-        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
-            $unit = $this->request->getGet('unit');
-            if (!$unit || !in_array((int)$unit, $allowedUnitsByAkun[$id_akun], true)) {
-                $unit = $allowedUnitsByAkun[$id_akun][0];
-            }
-        } else {
-            $unit = session()->get('ID_UNIT');
-        }
-
-        $availableUnitIds = array_map(function($u) { return (int)$u['idunit']; }, $list_unit);
-        if (!in_array((int)$unit, $availableUnitIds, true) && !empty($availableUnitIds)) {
-            $unit = $availableUnitIds[0];
-        }
+        $scope = $this->resolveUnitScope();
+        $list_unit      = $scope['list_unit'];
+        $unit           = $scope['unit'];
+        $id_jabatan     = $scope['id_jabatan'];
+        $bolehPilihUnit = $scope['boleh_pilih_unit'];
 
         // FILTER BULAN/TAHUN
         $bulan = $this->request->getGet('bulan');
@@ -621,6 +638,7 @@ class TutupKasir extends BaseController
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
+            'boleh_pilih_unit' => $bolehPilihUnit,
             'bulan'          => $bulan,
             'tahun'          => $tahun,
             'periodeLabel'   => $periodeLabel,
@@ -655,86 +673,11 @@ class TutupKasir extends BaseController
 
     public function assetberjalan()
     {
-        
-        $db = \Config\Database::connect();
-
-
-        $id_jabatan = session()->get('ID_JABATAN');
-        $id_akun    = session()->get('ID_AKUN');
-
-        // Mapping khusus untuk direktur/investor (jabatan 2) yang punya multi unit
-        $allowedUnitsByAkun = [
-            46 => [3, 5], // Wahid Alfarizki: Banyuwangi, Genteng
-            70 => [4],    // Guruh Dwi Prasetyo: Pandaan
-        ];
-
-        // Ambil list unit (kecualikan Head Office)
-        if (in_array($id_jabatan, [1, 40])) {
-            $list_unit = $this->db->table('unit')
-                ->where('idunit !=', 50)
-                ->notLike('NAMA_UNIT', 'Head Office')
-                ->get()
-                ->getResultArray();
-        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
-            $allowed = $allowedUnitsByAkun[$id_akun];
-            $list_unit = $this->db->table('unit')
-                ->whereIn('idunit', $allowed)
-                ->where('idunit !=', 50)
-                ->notLike('NAMA_UNIT', 'Head Office')
-                ->get()
-                ->getResultArray();
-        } else {
-            $list_unit = $this->db->table('unit')
-                ->where('idunit !=', 50)
-                ->notLike('NAMA_UNIT', 'Head Office')
-                ->get()
-                ->getResultArray();
-        }
-
-        // Penentuan unit.
-        // Role Finance (0) dan Manager (34) ikut cabang ini: berhak memilih unit
-        // lewat ?unit= — selaras dengan daftar role yang menampilkan filter unit
-        // di view halaman ini ([1, 0, 34, 40]). Sebelumnya keduanya jatuh ke
-        // else (terkunci unit sesi); karena ID_UNIT Finance = 50 (Head Office)
-        // tidak ada di list_unit, hasilnya selalu fallback ke unit pertama
-        // (Probolinggo) berapa pun unit yang dipilih di filter.
-        if (in_array($id_jabatan, [0, 1, 34, 40])) {
-            $unit = $this->request->getGet('unit');
-            if (!$unit) {
-                $unit = session()->get('ID_UNIT');
-            }
-        } elseif ($id_jabatan == 2 && isset($allowedUnitsByAkun[$id_akun])) {
-            $unit = $this->request->getGet('unit');
-            if (!$unit || !in_array((int)$unit, $allowedUnitsByAkun[$id_akun], true)) {
-                $unit = $allowedUnitsByAkun[$id_akun][0];
-            }
-        } else {
-            $unit = session()->get('ID_UNIT');
-        }
-
-        $availableUnitIds = array_map(function($u) { return (int)$u['idunit']; }, $list_unit);
-        if (!in_array((int)$unit, $availableUnitIds, true) && !empty($availableUnitIds)) {
-            $unit = $availableUnitIds[0];
-        }
-
-        // FILTER BULAN/TAHUN
-        $bulan = $this->request->getGet('bulan');
-        $tahun = $this->request->getGet('tahun');
-
-        if (!$bulan || !$tahun) {
-            $bulan = date('m');
-            $tahun = date('Y');
-        }
-
-        $bulanSebelum = (int)$bulan - 1;
-        $tahunSebelum = (int)$tahun;
-        if ($bulanSebelum < 1) {
-            $bulanSebelum = 12;
-            $tahunSebelum = (int)$tahun - 1;
-        }
-        $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
-        $isBulanBerjalan = ((int)$bulan == (int)date('m') && (int)$tahun == (int)date('Y'));
-
+        $scope = $this->resolveUnitScope();
+        $list_unit      = $scope['list_unit'];
+        $unit           = $scope['unit'];
+        $id_jabatan     = $scope['id_jabatan'];
+        $bolehPilihUnit = $scope['boleh_pilih_unit'];
 
         // FILTER BULAN/TAHUN
         $bulan = $this->request->getGet('bulan');
@@ -810,7 +753,9 @@ class TutupKasir extends BaseController
             ->getRowArray();
 
         $jabatan = $karyawan['ID_JABATAN'];
-        $unit    = $karyawan['ID_UNIT'];
+        // Catatan: JANGAN menimpa $unit di sini. $unit adalah unit terpilih
+        // untuk laporan; unit pegawai selalu sama karena query di atas sudah
+        // memfilter ID_UNIT = $unit.
 
         $akun = $this->db->table('akun')
                             ->select('NAMA_AKUN, ALAMAT, ID_UNIT')
@@ -860,16 +805,29 @@ class TutupKasir extends BaseController
                 'upselling' => 14,
                 'followup'  => 80,
                 'roas'      => 4,
+            ],
+
+            // Unit 5 Genteng: target dasar mirror Jember (unit 2), sesuai
+            // migrasi 2026-10-12-060000_MirrorJemberTargetsToGenteng.
+            5 => [
+                'customer'  => 118,
+                'closing'   => 96,
+                'upselling' => 14,
+                'followup'  => 80,
+                'roas'      => 4,
             ]
         ];
 
-        $target = $target_unit[$unit] ?? $target_unit[1];
+        // Default Jember (unit 2) bila unit di luar 1-5 (jaga-jaga agar tidak
+        // memunculkan warning "Undefined array key" untuk unit baru).
+        $target = $target_unit[$unit] ?? $target_unit[2];
 
         $batas_awal = [
             1 => 30000000, // Probolinggo
             2 => 18000000, // Jember
             3 => 40000000, // Banyuwangi
             4 => 18000000, // Pandaan
+            5 => 18000000, // Genteng (mirror Jember)
         ];
 
         $batas_kedua = [
@@ -877,6 +835,7 @@ class TutupKasir extends BaseController
             2 => 22000000, // Jember
             3 => 45000000, // Banyuwangi
             4 => 22000000, // Pandaan
+            5 => 22000000, // Genteng (mirror Jember)
         ];
 
         $batas_ketiga = [
@@ -884,6 +843,7 @@ class TutupKasir extends BaseController
             2 => 26000000, // Jember
             3 => 50000000, // Banyuwangi
             4 => 26000000, // Pandaan
+            5 => 26000000, // Genteng (mirror Jember)
         ];
 
         $batas_keempat = [
@@ -891,6 +851,7 @@ class TutupKasir extends BaseController
             2 => 30000000, // Jember
             3 => 55000000, // Banyuwangi
             4 => 30000000, // Pandaan
+            5 => 30000000, // Genteng (mirror Jember)
         ];
 
         $target_omset = [
@@ -898,6 +859,7 @@ class TutupKasir extends BaseController
             2 => 35000000, // Jember
             3 => 60000000, // Banyuwangi
             4 => 35000000, // Pandaan
+            5 => 35000000, // Genteng (mirror Jember)
         ];
 
         //nilai dari db
@@ -940,12 +902,21 @@ class TutupKasir extends BaseController
                     ->get()
                     ->getRow()
                     ->total ?? 0,
+            5 => $this->db->table('detail_penjualan') // Genteng
+                    ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
+                    ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+                    ->where('MONTH(penjualan.tanggal)', date('m'))
+                    ->where('YEAR(penjualan.tanggal)', date('Y'))
+                    ->where('penjualan.unit_idunit =', 5)
+                    ->get()
+                    ->getRow()
+                    ->total ?? 0,
 
         ];
         $aktual_omset = $aktual_omset_unit[$unit] ?? 0;
 
         $aktual_customer = [];
-        foreach ([1, 2, 3, 4] as $idUnit) {
+        foreach ([1, 2, 3, 4, 5] as $idUnit) {
             $countService = $this->db->table('service')
                 ->select('COUNT(idservice) AS total')
                 ->where('MONTH(tanggal_selesai)', date('m'))
@@ -1215,12 +1186,13 @@ class TutupKasir extends BaseController
         $totalSop = $aktual_sop->total ?? 0;
 
         //persentas nilai
-        $batas1 = $batas_awal[$unit];
-        $batas2 = $batas_kedua[$unit];
-        $batas3 = $batas_ketiga[$unit];
-        $batas4 = $batas_keempat[$unit];
+        // Fallback Jember (unit 2) bila unit di luar 1-5.
+        $batas1 = $batas_awal[$unit]    ?? $batas_awal[2];
+        $batas2 = $batas_kedua[$unit]   ?? $batas_kedua[2];
+        $batas3 = $batas_ketiga[$unit]  ?? $batas_ketiga[2];
+        $batas4 = $batas_keempat[$unit] ?? $batas_keempat[2];
 
-        $targetOmset = $target_omset[$unit];
+        $targetOmset = $target_omset[$unit] ?? $target_omset[2];
 
         $aktual_operasional = 0;
 
@@ -1632,6 +1604,7 @@ class TutupKasir extends BaseController
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
+            'boleh_pilih_unit' => $bolehPilihUnit,
             'bulan'          => $bulan,
             'tahun'          => $tahun,
             'periodeLabel'   => $periodeLabel,

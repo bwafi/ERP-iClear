@@ -8,12 +8,16 @@ use CodeIgniter\Test\FeatureTestTrait;
 /**
  * Regresi filter unit di /omset_bulanan.
  *
- * View menampilkan dropdown unit untuk role [1, 0, 34, 40] (lihat
- * jurnal/omset_bulanan.php). Sebelumnya controller hanya menghormati `?unit=`
- * untuk jabatan 1 & 40; Finance (0) dan Manager (34) jatuh ke cabang else dan
- * terkunci ke ID_UNIT sesi-nya. Karena ID_UNIT Finance = 50 (Head Office) yang
- * tidak ada di list_unit (HO dikecualikan), halaman selalu fallback ke unit
- * pertama (Probolinggo), berapa pun unit yang dipilih.
+ * View menampilkan dropdown unit untuk role yang boleh memilih unit (lihat
+ * jurnal/omset_bulanan.php, kini dikendalikan `$boleh_pilih_unit` dari
+ * TutupKasir::resolveUnitScope()). Sebelumnya controller hanya menghormati
+ * `?unit=` untuk jabatan 1 & 40; Finance (0) dan Manager (34) jatuh ke cabang
+ * else dan terkunci ke ID_UNIT sesi-nya. Karena ID_UNIT Finance = 50 (Head
+ * Office) yang tidak ada di list_unit (HO dikecualikan), halaman selalu
+ * fallback ke unit pertama (Probolinggo), berapa pun unit yang dipilih.
+ *
+ * Termasuk regresi Direktur (jabatan 2): boleh memilih unit seperti Admin root,
+ * tetapi dibatasi daftar unit per akun; direktur tanpa pemetaan lintas unit.
  *
  * Marker deterministik: view menulis `const ARUS_KAS_UNIT = <selected_unit>;`.
  *
@@ -100,12 +104,17 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $q("INSERT INTO unit (idunit, NAMA_UNIT, LOGO) VALUES
             (1, 'ICLEAR Probolinggo', 'logo.png'),
             (2, 'ICLEAR Jember', 'logo.png'),
+            (3, 'ICLEAR Banyuwangi', 'logo.png'),
             (4, 'ICLEAR Pandaan', 'logo.png'),
+            (5, 'ICLEAR Genteng', 'logo.png'),
             (50, 'Head Office', 'logo.png')");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES
-            (0, 'Finance', '[]'), (35, 'ADMIN / KASIR', '[]')");
+            (0, 'Finance', '[]'), (2, 'Direktur', '[]'), (35, 'ADMIN / KASIR', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN) VALUES
             (44, 50, 0, 'Ira Kurniawati'),
+            (46, 3, 2, 'Wahid Alfarizki'),
+            (70, 4, 2, 'Guruh Dwi Prasetyo'),
+            (99, 3, 2, 'Direktur Tanpa Mapping'),
             (43, 2, 35, 'Kasir Jember')");
     }
 
@@ -178,5 +187,50 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $html = $this->halaman('?unit=1');
 
         $this->assertSame(2, $this->marker($html), 'Kasir harus tetap terkunci ke unit sesinya');
+    }
+
+    // ── Direktur (jabatan 2): boleh memilih unit seperti Admin root, tetapi
+    //    dibatasi daftar unit per akun (resolveUnitScope::$direkturUnitMap). ──
+
+    public function testDirekturTerbatasBisaMemilihUnitYangDiizinkan(): void
+    {
+        // Akun 46 diizinkan unit [3, 5] (Banyuwangi, Genteng).
+        $this->sesi(46, 3, 2);
+
+        $this->assertSame(5, $this->marker($this->halaman('?unit=5')));
+        $this->assertSame(3, $this->marker($this->halaman('?unit=3')));
+    }
+
+    public function testDirekturTerbatasDitolakDiUnitLain(): void
+    {
+        // Akun 46 tidak boleh melihat unit 1 walau diminta lewat query.
+        $this->sesi(46, 3, 2);
+
+        $this->assertSame(3, $this->marker($this->halaman('?unit=1')));
+    }
+
+    public function testDirekturTerbatasTanpaFilterJatuhKeUnitPertama(): void
+    {
+        $this->sesi(46, 3, 2);
+
+        $this->assertSame(3, $this->marker($this->halaman('')));
+    }
+
+    public function testDirekturPandaanTetapTerbatas(): void
+    {
+        // Akun 70 hanya diizinkan unit [4].
+        $this->sesi(70, 4, 2);
+
+        $this->assertSame(4, $this->marker($this->halaman('?unit=5')));
+        $this->assertSame(4, $this->marker($this->halaman('?unit=4')));
+    }
+
+    public function testDirekturTanpaMappingBertindakLintasUnit(): void
+    {
+        // Akun tanpa pemetaan diperlakukan seperti Admin root (semua cabang).
+        $this->sesi(99, 3, 2);
+
+        $this->assertSame(5, $this->marker($this->halaman('?unit=5')));
+        $this->assertSame(1, $this->marker($this->halaman('?unit=1')));
     }
 }
