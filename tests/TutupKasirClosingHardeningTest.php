@@ -80,13 +80,12 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
      * Fixture transaksi (penjualan, kas_keluar, Setor/Tarik) TIDAK diberi
      * tanggal tetap.
      *
-     * `simpan()` menolak tanggal selain HARI INI — supaya form lama tidak bisa
-     * menulis closing lampau yang menggeser Opening hari-hari berikutnya. Kalau
-     * fixture di tanggal lain, `hitung()` di dalam `simpan()` tidak akan
-     * merasakannya dan test jadi menguji kondisi kosong, bukan kondisi yang
-     * dimaksud. Jadi semua fixture memakai tanggal server.
+     * `simpan()` hanya mengizinkan tanggal lampau jika caller mengaktifkan
+     * izin Admin Root. Fixture transaksi harian tetap memakai tanggal server
+     * agar angka di dalam `simpan()` sama dengan kondisi yang sedang diuji.
      *
-     * Perilaku historis diuji lewat `hitung()` yang menerima tanggal bebas.
+     * Perilaku historis diuji memakai izin Admin Root; `hitung()` tetap
+     * menerima tanggal bebas untuk kebutuhan pemeriksaan.
      */
     private const SEBELUM_BASELINE = '2026-10-04';
 
@@ -284,7 +283,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
             WHERE akun_kas_bank_id = " . self::AKUN_KAS);
     }
 
-    /** Tanggal server. `simpan()` hanya menerima tanggal ini. */
+    /** Tanggal server. */
     private function hariIni(): string
     {
         return date('Y-m-d');
@@ -404,9 +403,8 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
     /**
      * Simpan closing lewat service.
      *
-     * Default-nya HARI INI (`date('Y-m-d')`) karena `simpan()` menolak
-     * tanggal selain hari ini. Test yang butuh closing di tanggal historis
-     * memakai `tutup()` di bawah.
+     * Default-nya HARI INI (`date('Y-m-d')`); tanggal historis perlu izin
+     * Admin Root eksplisit di parameter terakhir.
      */
     private function simpan($cashLaci, int $unit = self::UNIT, ?string $tanggal = null): array
     {
@@ -689,6 +687,37 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
             $this->jumlahClosing(date('Y-m-d')),
             'Closing harus pada tanggal server'
         );
+    }
+
+    public function testTanggalHistorisHanyaDiizinkanDenganIzinAdminRoot(): void
+    {
+        $tanggalKemarin = date('Y-m-d', strtotime('-1 day'));
+        if ($tanggalKemarin < FinanceScopeService::kasBankCutoffDate()) {
+            $this->markTestSkipped('Belum ada tanggal closing historis sejak baseline kas-bank dimulai.');
+        }
+
+        $tanpaIzin = $this->closing->simpan(self::UNIT, $tanggalKemarin, self::OPENING, 43);
+        $this->assertFalse($tanpaIzin['ok'], 'Role biasa tetap hanya boleh closing hari ini');
+        $this->assertSame(0, $this->jumlahClosing($tanggalKemarin));
+
+        $denganIzin = $this->closing->simpan(self::UNIT, $tanggalKemarin, self::OPENING, 43, true);
+        $this->assertTrue($denganIzin['ok'], 'Admin Root boleh menutup tanggal lampau: ' . $denganIzin['alasan']);
+        $this->assertSame('tersimpan', $denganIzin['kode']);
+        $this->assertSame(1, $this->jumlahClosing($tanggalKemarin));
+
+        $duplikat = $this->closing->simpan(self::UNIT, $tanggalKemarin, self::OPENING, 43, true);
+        $this->assertSame('sudah_ada', $duplikat['kode']);
+        $this->assertSame(1, $this->jumlahClosing($tanggalKemarin), 'Tanggal+unit tidak boleh tersimpan dua kali');
+    }
+
+    public function testTanggalMendatangTetapDitolakTermasukAdminRoot(): void
+    {
+        $besok = date('Y-m-d', strtotime('+1 day'));
+        $hasil = $this->closing->simpan(self::UNIT, $besok, self::OPENING, 43, true);
+
+        $this->assertFalse($hasil['ok']);
+        $this->assertSame('ditolak', $hasil['kode']);
+        $this->assertSame(0, $this->jumlahClosing($besok));
     }
 
     public function testUnitTanpaNilaiDitolak(): void
@@ -1202,13 +1231,20 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
      * form, jadi view dirender langsung dengan variabel yang sama seperti
      * yang dikirim controller. Pola yang sama dipakai `RenderProbeTest`.
      */
-    private function renderViewTutupKasir(): string
+    private function renderViewTutupKasir(bool $isAdminRoot = false): string
     {
         $h = $this->closing->hitung(self::UNIT, date('Y-m-d'));
 
         $r = service('renderer');
         $r->setVar('tanggal', date('Y-m-d'));
+        $r->setVar('hari_ini', date('Y-m-d'));
         $r->setVar('unit', self::UNIT);
+        $r->setVar('nama_unit', 'Probolinggo');
+        $r->setVar('is_admin_root', $isAdminRoot);
+        $r->setVar('unit_list', [
+            ['idunit' => 1, 'NAMA_UNIT' => 'Probolinggo'],
+            ['idunit' => 2, 'NAMA_UNIT' => 'Jember'],
+        ]);
         $r->setVar('saldo_awal_kas', $h['saldo_awal_kas']);
         $r->setVar('saldo_awal_tf', $h['saldo_awal_tf']);
         $r->setVar('setor', $h['setor']);
@@ -1245,6 +1281,19 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
         );
         $this->assertStringContainsString('type="submit"', $body, 'Form harus punya tombol submit');
         $this->assertStringContainsString('btnTutupKasir', $body);
+    }
+
+    public function testFilterTanggalDanUnitHanyaTampilUntukAdminRoot(): void
+    {
+        $bodyBiasa = $this->renderViewTutupKasir();
+        $this->assertStringNotContainsString('filter_tanggal', $bodyBiasa);
+        $this->assertStringNotContainsString('filter_unit', $bodyBiasa);
+
+        $bodyRoot = $this->renderViewTutupKasir(true);
+        $this->assertStringContainsString('filter_tanggal', $bodyRoot);
+        $this->assertStringContainsString('filter_unit', $bodyRoot);
+        $this->assertStringContainsString('name="tanggal" value="' . date('Y-m-d') . '"', $bodyRoot);
+        $this->assertStringContainsString('name="unit" value="1"', $bodyRoot);
     }
 
     public function testFormTidakMenampilkanAngkaSaldoPalsu(): void
@@ -1303,10 +1352,11 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
      * Konsekuensinya filter `auth`/`csrf` TIDAK ikut teruji di sini; keduanya
      * sudah punya test sendiri (test 10) di level route.
      */
-    private function panggilControllerTutup(array $post): ?array
+    private function panggilControllerTutup(array $post, int $jabatan = 2): ?array
     {
         session()->set('ID_UNIT', self::UNIT);
         session()->set('ID_AKUN', self::AKUN_KAS);
+        session()->set('ID_JABATAN', $jabatan);
 
         $request = \Config\Services::request(null, false);
         $request->setMethod('POST');
@@ -1414,6 +1464,25 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
                 ->countAllResults(),
             'Tidak boleh ada baris untuk unit 999 dari POST'
         );
+    }
+
+    public function testControllerAdminRootBisaMenutupUnitDanTanggalPilihan(): void
+    {
+        $tanggalKemarin = date('Y-m-d', strtotime('-1 day'));
+        if ($tanggalKemarin < FinanceScopeService::kasBankCutoffDate()) {
+            $this->markTestSkipped('Belum ada tanggal closing historis sejak baseline kas-bank dimulai.');
+        }
+
+        $row = $this->panggilControllerTutup([
+            'cash_laci' => '900.000',
+            'tanggal'   => $tanggalKemarin,
+            'unit'      => 2,
+        ], 1);
+
+        $this->assertNotNull($row, 'Admin Root harus dapat menyimpan tanggal/unit pilihannya');
+        $this->assertSame($tanggalKemarin, substr((string) $row['tanggal'], 0, 10));
+        $this->assertSame(2, (int) $row['unit']);
+        $this->assertSame(1, $this->jumlahClosing($tanggalKemarin, 2));
     }
 
     public function testControllerTetapMengambilCashLaciDariPost(): void

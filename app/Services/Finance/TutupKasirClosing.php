@@ -392,11 +392,12 @@ class TutupKasirClosing
      * @param string $tanggal  YYYY-MM-DD
      * @param mixed  $cashLaci hasil POST apa adanya, divalidasi di sini
      * @param int    $userId
+     * @param bool   $bolehTanggalHistoris Hanya controller Admin Root yang mengizinkan ini.
      *
      * @return array{ok:bool, alasan:string, kode:string, id:int|null, closing:array|null, hitung:array}
      *   `kode`: 'tersimpan' | 'sudah_ada' | 'ditolak'
      */
-    public function simpan(int $unitId, string $tanggal, $cashLaci, $userId): array
+    public function simpan(int $unitId, string $tanggal, $cashLaci, $userId, bool $bolehTanggalHistoris = false): array
     {
         // `ok` HARUS false di sini. Kalau penolakan dilaporkan `ok = true`,
         // pemanggil melihat success, masuk ke cabang "berhasil menyimpan",
@@ -408,11 +409,19 @@ class TutupKasirClosing
         ];
 
         $hariIni = date('Y-m-d');
+        $tanggalObj = \DateTimeImmutable::createFromFormat('!Y-m-d', $tanggal);
 
-        // Closing hanya boleh untuk HARI INI. Ini mencegah form lama (atau
-        // request crafted) menulis closing bertanggal lampau dan menggeser
-        // retroaktif seluruhOpening harian berikutnya.
-        if ($tanggal !== $hariIni) {
+        if (
+            $tanggalObj === false
+            || $tanggalObj->format('Y-m-d') !== $tanggal
+            || $tanggal > $hariIni
+        ) {
+            return $gagal('ditolak', 'Tanggal closing tidak valid. Pilih tanggal hari ini atau sebelumnya.');
+        }
+
+        // Closing lampau hanya dibuka untuk Admin Root yang sudah diotorisasi
+        // controller. Tanggal mendatang tetap ditolak untuk semua role.
+        if (! $bolehTanggalHistoris && $tanggal !== $hariIni) {
             return $gagal('ditolak', 'Tanggal tutup kasir harus hari ini (' . $hariIni . ').');
         }
 
