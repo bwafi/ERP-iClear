@@ -275,9 +275,9 @@ class TutupKasirSourceDefinition
     // itu harus dikeluarkan lagi (`dpServiceSelesai()`) supaya tidak terhitung
     // dua kali.
     //
-    // Method di bawah TIDAK mengubah `cashMasuk()` / `transferMasuk()` yang
-    // dipakai laporan Finance lain — hanya menambah komponen DP yang dipakai
-    // TutupKasirClosing.
+    // `cashMasuk()` / `transferMasuk()` tetap menyediakan komponen transaksi
+    // service dan penjualan saja. DP ditambahkan secara eksplisit oleh
+    // `kasMasukDp()`, ringkasan rentang Kas & Bank, dan pergerakan rekening.
 
     /** DP tunai yang diterima pada tanggal tertentu (`service_dp.tanggal`). */
     public function dpMasukTunai(int $unitId, string $tanggal): int
@@ -289,6 +289,61 @@ class TutupKasirSourceDefinition
     public function dpMasukTransfer(int $unitId, string $tanggal): int
     {
         return $this->dpMasuk($unitId, $tanggal, 'transfer');
+    }
+
+    /** DP tunai aktif yang diterima pada rentang tanggal untuk saldo Kas & Bank. */
+    public function dpMasukTunaiRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        return $this->dpMasukRentang($unitId, $dari, $sampai, 'tunai');
+    }
+
+    /** DP transfer aktif yang diterima unit pada rentang tanggal. */
+    public function dpMasukTransferRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        return $this->dpMasukRentang($unitId, $dari, $sampai, 'transfer');
+    }
+
+    /** DP transfer yang diterima untuk rekening bank dan unit pada rentang tanggal. */
+    public function dpMasukTransferBankRange(
+        string $bankIdbank,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): int {
+        $bankIdbank = trim($bankIdbank);
+        if ($bankIdbank === '') {
+            return 0;
+        }
+
+        return $this->dpMasukRentang($unitId, $dari, $sampai, 'transfer', $bankIdbank);
+    }
+
+    /** DP aktif dari service yang selesai dalam rentang tanggal. */
+    public function dpServiceSelesaiRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        if (! $this->punyaLedgerDp()) {
+            return 0;
+        }
+
+        $builder = $this->db->table('service_dp sd')
+            ->selectSum('sd.jumlah', 'total')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('s.status_service', 4)
+            ->where('s.unit_idunit', $unitId)
+            ->where('DATE(s.tanggal_selesai) >=', $dari);
+
+        if ($sampai !== null) {
+            $builder->where('DATE(s.tanggal_selesai) <=', $sampai);
+        }
+
+        if ($this->db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            $builder->where('sd.refund_idkas_keluar', null);
+        }
+
+        $row = $builder->get()->getRow();
+
+        return (int) ($row->total ?? 0);
     }
 
     /**
@@ -434,19 +489,41 @@ class TutupKasirSourceDefinition
     /** @param string $metode 'tunai' | 'transfer' */
     private function dpMasuk(int $unitId, string $tanggal, string $metode): int
     {
+        return $this->dpMasukRentang($unitId, $tanggal, $tanggal, $metode);
+    }
+
+    private function dpMasukRentang(
+        ?int $unitId,
+        string $dari,
+        ?string $sampai,
+        string $metode,
+        ?string $bankIdbank = null
+    ): int
+    {
         if (! $this->punyaLedgerDp()) {
             return 0;
         }
 
-        $row = $this->db->table('service_dp sd')
+        $builder = $this->db->table('service_dp sd')
             ->selectSum('sd.jumlah', 'total')
             ->join('service s', 's.idservice = sd.service_idservice')
             ->where('sd.status', 'aktif')
             ->where('sd.metode', $metode)
-            ->where('DATE(sd.tanggal)', $tanggal)
-            ->where('s.unit_idunit', $unitId)
-            ->get()
-            ->getRow();
+            ->where('DATE(sd.tanggal) >=', $dari);
+
+        if ($unitId !== null) {
+            $builder->where('s.unit_idunit', $unitId);
+        }
+
+        if ($bankIdbank !== null) {
+            $builder->where('sd.bank_idbank', $bankIdbank);
+        }
+
+        if ($sampai !== null) {
+            $builder->where('DATE(sd.tanggal) <=', $sampai);
+        }
+
+        $row = $builder->get()->getRow();
 
         return (int) ($row->total ?? 0);
     }
@@ -690,8 +767,11 @@ class TutupKasirSourceDefinition
         $tfPenjualan   = $sum($p('tanggal')->selectSum('bayar_bank', 't'));
         $tfService     = $sum($s()->select('SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)) AS t'));
 
-        $cash     = $cashPenjualan + $cashService;
-        $transfer = $tfPenjualan + $tfService;
+        $dpTunai         = $this->dpMasukTunaiRange($unitId, $dari, $sampai);
+        $dpTransfer      = $this->dpMasukTransferRange($unitId, $dari, $sampai);
+        $dpServiceSelesai = $this->dpServiceSelesaiRange($unitId, $dari, $sampai);
+        $cash            = $cashPenjualan + $cashService + $dpTunai;
+        $transfer        = $tfPenjualan + $tfService + $dpTransfer - $dpServiceSelesai;
 
         $kk = function (string $bank) use ($unitId, $dari, $sampai) {
             $b = $this->db->table('kas_keluar')
@@ -710,8 +790,11 @@ class TutupKasirSourceDefinition
         return [
             'cashpenjualan'    => $cashPenjualan,
             'cashservice'      => $cashService,
+            'dp_tunai'         => $dpTunai,
             'tfpenjualan'      => $tfPenjualan,
             'tfservice'        => $tfService,
+            'dp_transfer'      => $dpTransfer,
+            'dp_service_selesai' => $dpServiceSelesai,
             'cash'             => $cash,
             'transfer'         => $transfer,
             'total_pendapatan' => $transfer + $cash,
