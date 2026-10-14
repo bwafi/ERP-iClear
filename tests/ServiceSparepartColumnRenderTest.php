@@ -12,13 +12,13 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 class ServiceSparepartColumnRenderTest extends CIUnitTestCase
 {
-    private function render(): string
+    private function render(string $view = 'transaksi/table/sparepart_table'): string
     {
         $r = service('renderer');
         $r->setVar('idservice', 0);
         $r->setVar('oldsparepart', []);
 
-        return (string) $r->include('transaksi/table/sparepart_table');
+        return (string) $r->include($view);
     }
 
     public function testModalMenampilkanKodeSparepartDanStokAkhir(): void
@@ -47,5 +47,18 @@ class ServiceSparepartColumnRenderTest extends CIUnitTestCase
             'baris terpilih harus punya kolom stok akhir read-only'
         );
         $this->assertStringContainsString('${kode ?', $html, 'kode sparepart ditampilkan pada baris terpilih');
+    }
+
+    public function testModalMenampilkanSuplierDiKeduaHalaman(): void
+    {
+        foreach (['transaksi/table/sparepart_table', 'riwayat/table/sparepart_table'] as $view) {
+            $html = $this->render($view);
+
+            $this->assertStringContainsString('<th>Suplier</th>', $html, "kolom Suplier harus ada di modal ({$view})");
+            $this->assertStringContainsString('item.nama_suplier', $html, "modal harus merender nama_suplier ({$view})");
+
+            $this->assertStringContainsString('colspan="9"', $html, "placeholder modal harus membentang 9 kolom ({$view})");
+            $this->assertStringNotContainsString('colspan="8"', $html, "tidak boleh ada placeholder modal 8 kolom ({$view})");
+        }
     }
 }

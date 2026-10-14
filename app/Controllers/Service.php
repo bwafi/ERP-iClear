@@ -762,13 +762,23 @@ class Service extends BaseController
         $unitId = session('ID_UNIT');
 
         $db = \Config\Database::connect();
-        // Jangan join supplier: satu barang bisa punya stok_awal dari beberapa
-        // supplier, sehingga join `stok_awal`/`suplier` menggandakan baris dan
-        // sparepart tampil dobel di modal pencarian. Kolom supplier memang tidak
-        // dipakai di modal pilih sparepart. `stok_barang` sendiri adalah view
-        // yang sudah terkelompok per (barang, unit), jadi satu baris per barang.
+        // Nama suplier diambil lewat subquery agregat (GROUP_CONCAT) yang
+        // dikorelasi per (barang, unit). Satu barang bisa punya stok_awal dari
+        // beberapa suplier; kalau di-join langsung, hasilnya menggandakan baris
+        // sehingga sparepart tampil dobel di modal. Subquery ini mengembalikan
+        // satu baris per sparepart berisi daftar suplier (dipisah koma).
+        $tabelStokAwal = $db->prefixTable('stok_awal');
+        $tabelSuplier  = $db->prefixTable('suplier');
+
+        $namaSuplier = "(SELECT GROUP_CONCAT(DISTINCT s.nama_suplier ORDER BY s.nama_suplier SEPARATOR ', ')
+            FROM {$tabelStokAwal} sa
+            JOIN {$tabelSuplier} s ON s.id_suplier = sa.suplier_id_suplier
+            WHERE sa.barang_idbarang = sb.idbarang
+              AND sa.unit_idunit = sb.id_unit
+              AND sa.suplier_id_suplier != 0) AS nama_suplier";
+
         $builder = $db->table('stok_barang sb')
-            ->select('sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT')
+            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT, {$namaSuplier}")
             ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
             ->join('unit u', 'u.idunit = sb.id_unit', 'left');
         

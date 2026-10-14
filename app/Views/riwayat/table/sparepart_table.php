@@ -33,6 +33,7 @@
                                     <th>Nama Sparepart</th>
                                     <th>Warna</th>
                                     <th>Nama Unit</th>
+                                    <th>Suplier</th>
                                     <th>HPP</th>
                                     <th>Stok Akhir</th>
                                     <th>Harga</th>
@@ -206,6 +207,7 @@
                                 <td>${item.nama_barang}</td>
                                 <td>${item.warna || '-'}</td>
                                 <td>${item.nama_unit || '-'}</td>
+                                <td>${item.nama_suplier || '-'}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_beli)}</td>
                                 <td>${item.stok_akhir ?? 0}</td>
                                 <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}</td>

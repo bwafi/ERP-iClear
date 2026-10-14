@@ -175,5 +175,10 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
         $this->assertIsArray($data, 'endpoint harus mengembalikan array JSON');
         $this->assertCount(1, $data, 'sparepart multi-supplier hanya boleh muncul sekali');
         $this->assertSame('SPRT-0001', $data[0]['kode_barang'] ?? null);
+        $this->assertSame(
+            'Suplier A, Suplier B',
+            $data[0]['nama_suplier'] ?? null,
+            'nama suplier digabung (GROUP_CONCAT) tanpa menggandakan baris'
+        );
     }
 }
