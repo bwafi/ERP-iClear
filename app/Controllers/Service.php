@@ -762,12 +762,15 @@ class Service extends BaseController
         $unitId = session('ID_UNIT');
 
         $db = \Config\Database::connect();
+        // Jangan join supplier: satu barang bisa punya stok_awal dari beberapa
+        // supplier, sehingga join `stok_awal`/`suplier` menggandakan baris dan
+        // sparepart tampil dobel di modal pencarian. Kolom supplier memang tidak
+        // dipakai di modal pilih sparepart. `stok_barang` sendiri adalah view
+        // yang sudah terkelompok per (barang, unit), jadi satu baris per barang.
         $builder = $db->table('stok_barang sb')
-            ->select('sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT, sup.nama_suplier')
+            ->select('sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT')
             ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
-            ->join('unit u', 'u.idunit = sb.id_unit', 'left')
-            ->join('(SELECT barang_idbarang, suplier_id_suplier FROM stok_awal WHERE suplier_id_suplier != 0 GROUP BY barang_idbarang, suplier_id_suplier) sa', 'sa.barang_idbarang = b.idbarang', 'left')
-            ->join('suplier sup', 'sup.id_suplier = sa.suplier_id_suplier', 'left');
+            ->join('unit u', 'u.idunit = sb.id_unit', 'left');
         
         if (!empty($search)) {
             $builder->groupStart()
