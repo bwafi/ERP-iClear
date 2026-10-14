@@ -85,4 +85,48 @@ class ServiceDpBankDropdownRenderTest extends CIUnitTestCase
         $this->assertStringNotContainsString('value="1"', $select);
         $this->assertStringContainsString('Belum ada rekening untuk unit ini', $html);
     }
+
+    /**
+     * DP yang baru diisi di step Pembayaran harus dihitung sebagai uang yang
+     * sudah diterima: ikut mengurangi "Sisa tagihan" dan "Kembalian", serta
+     * ikut dihitung di peringatan sebelum simpan. Sebelumnya DP baru sengaja
+     * tidak dihitung, sehingga merekam DP saja memicu peringatan "Jumlah
+     * dibayar (Rp 0) kurang dari tagihan (...)".
+     */
+    public function testDpBaruDihitungSebagaiUangDiterima(): void
+    {
+        $html = $this->render($this->vars([$this->bank('1', 'Bank BCA Pandaan', '0391796181', 'SABRINA')]));
+
+        $this->assertStringContainsString('function newDpValue()', $html);
+        $this->assertStringContainsString('newDpValue()', $html);
+        $this->assertStringContainsString(
+            'total - dpTercatat - bayarTercatat - dpBaru',
+            $html,
+            'DP baru harus dikurangkan dari sisa tagihan'
+        );
+
+        $this->assertStringNotContainsString('kurang dari tagihan', $html, 'peringatan lama harus diganti');
+        $this->assertStringContainsString('Masih ada sisa tagihan', $html);
+    }
+
+    /**
+     * Saat operator hanya mencatat DP (tanpa pembayaran ke tagihan), metode
+     * pembayaran utama boleh dikosongkan: kolom tunai/transfer memang tidak
+     * terbuka, dan metode DP sudah menandai cara pembayarannya.
+     */
+    public function testMetodePembayaranTidakWajibSaatHanyaCatatDp(): void
+    {
+        $html = $this->render($this->vars([$this->bank('1', 'Bank BCA Pandaan', '0391796181', 'SABRINA')]));
+
+        $this->assertStringContainsString(
+            'if (!method && dpVal <= 0)',
+            $html,
+            'metode utama hanya wajib bila tidak ada DP yang dicatat'
+        );
+        $this->assertStringContainsString(
+            'if (method && sisaAkhir > 0',
+            $html,
+            'peringatan sisa dilewati saat hanya mencatat DP'
+        );
+    }
 }

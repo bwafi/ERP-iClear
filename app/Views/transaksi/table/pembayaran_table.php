@@ -454,7 +454,7 @@
                     <!-- Empty state: nothing is fillable until a method is chosen -->
                     <div class="sv-bank-empty mt-3 sv-method-empty">
                         <i class="bi bi-arrow-up-circle"></i>
-                        <span>Pilih salah satu metode di atas untuk membuka kolom jumlah pembayaran.</span>
+                        <span>Pilih salah satu metode di atas untuk membuka kolom jumlah pembayaran. Lewati bila hanya mencatat Uang Muka (DP).</span>
                     </div>
 
                     <!-- Tunai -->
@@ -764,10 +764,16 @@
             dpInput.addEventListener("input", function () {
                 dpInput.value = formatRp(parseRp(dpInput.value));
                 applyDp();
+                syncBill();
             });
         }
         var dpMetode = el("dp_metode_bayar");
         if (dpMetode) dpMetode.addEventListener("change", applyDp);
+
+        /* Nominal DP yang BARU diisi di step ini (belum tersimpan). */
+        function newDpValue() {
+            return dpInput ? parseRp(dpInput.value) : 0;
+        }
 
         /* ---------------------------------------------------------------- recap */
 
@@ -816,6 +822,12 @@
         function syncBill() {
             var total = sourceTotal();
             var diskon = sourceDiskon();
+            // DP yang baru diisi di step ini dihitung sebagai uang yang sudah
+            // diterima, sehingga "Sisa tagihan" dan "Kembalian" ikut menyesuaikan.
+            // Status lunas/koreksi tetap dihitung dari nilai yang tersimpan saja,
+            // supaya form tidak terkunci sebelum DP benar-benar disimpan.
+            var dpBaru = newDpValue();
+            var dpTampil = dpTercatat + dpBaru;
             var totalTerkumpul = dpTercatat + bayarTercatat;
             var lunasNow = total > 0 && totalTerkumpul === total;
             var overpaidNow = total > 0 && totalTerkumpul > total && totalTerkumpul > 0;
@@ -823,7 +835,7 @@
             var lockedNow = lunasNow;
             var due = correctionNow
                 ? Math.max(0, total - dpTercatat)
-                : Math.max(0, total - dpTercatat - bayarTercatat);
+                : Math.max(0, total - dpTercatat - bayarTercatat - dpBaru);
 
             if (el("diskon_pembayaran")) el("diskon_pembayaran").value = formatRp(diskon);
             if (el("total_harga_pembayaran")) el("total_harga_pembayaran").value = formatRp(total);
@@ -833,8 +845,8 @@
             setText("sv-diskon", diskon > 0 ? "\u2212 " + formatRp(diskon) : formatRp(0));
 
             var dpRow = el("sv-dp-row");
-            if (dpRow) dpRow.hidden = dpTercatat <= 0;
-            setText("sv-dp", "\u2212 " + formatRp(dpTercatat));
+            if (dpRow) dpRow.hidden = dpTampil <= 0;
+            setText("sv-dp", "\u2212 " + formatRp(dpTampil));
             var pembayaranTercatatRow = el("sv-pembayaran-tercatat-row");
             if (pembayaranTercatatRow) pembayaranTercatatRow.hidden = bayarTercatat <= 0;
             setText("sv-pembayaran-tercatat", formatRp(bayarTercatat));
@@ -880,7 +892,7 @@
             setText("sv-payment-due-label", correctionNow ? "Nominal pembayaran pengganti" : "Sisa tagihan");
 
             var notice = el("sv-payment-status-notice");
-            var showNotice = lunasNow || overpaidNow || totalTerkumpul > 0;
+            var showNotice = lunasNow || overpaidNow || totalTerkumpul > 0 || dpBaru > 0;
             if (notice) {
                 notice.classList.toggle("d-none", !showNotice);
                 notice.classList.toggle("alert-success", lunasNow);
@@ -896,7 +908,7 @@
                     " dan pembayaran " + formatRp(bayarTercatat) + ". Pembayaran baru dikunci."
                 : (overpaidNow
                     ? "Tercatat lebih " + formatRp(totalTerkumpul - total) + ". Masukkan ulang nominal tunai/transfer yang benar; nominal lama akan diganti. DP tetap."
-                    : "Sisa tagihan saat ini " + formatRp(due) + " setelah DP " + formatRp(dpTercatat) +
+                    : "Sisa tagihan saat ini " + formatRp(due) + " setelah DP " + formatRp(dpTampil) +
                         " dan pembayaran tersimpan " + formatRp(bayarTercatat) + "."));
 
             hitungKembalian();
@@ -955,8 +967,13 @@
                 return;
             }
 
+            var dpVal = dpInput ? parseRp(dpInput.value) : 0;
+
+            // Metode pembayaran utama hanya wajib bila ada pembayaran ke
+            // tagihan. Bila operator hanya mencatat DP baru, kolom tunai/
+            // transfer tidak terbuka, jadi metode utama boleh dikosongkan.
             var method = currentMethod();
-            if (!method) {
+            if (!method && dpVal <= 0) {
                 e.preventDefault();
                 alert("Pilih metode pembayaran terlebih dahulu.");
                 return;
@@ -982,7 +999,6 @@
                 }
             }
 
-            var dpVal = dpInput ? parseRp(dpInput.value) : 0;
             if (dpVal > 0) {
                 var metodeDp = el("dp_metode_bayar") ? el("dp_metode_bayar").value : "";
                 if (!metodeDp) {
@@ -997,10 +1013,17 @@
                 }
             }
 
+            // `total_harga_pembayaran_akhir` = sisa tagihan SETELAH DP baru
+            // (diisi oleh syncBill). Karena DP sudah dihitung sebagai uang
+            // diterima, peringatan hanya muncul kalau sisa benar-benar tersisa.
             var due = parseRp(el("total_harga_pembayaran_akhir") ? el("total_harga_pembayaran_akhir").value : 0);
             var paid = totalDibayar();
-            if (paid < due && !confirm("Jumlah dibayar (" + formatRp(paid) + ") kurang dari tagihan (" +
-                formatRp(due) + "). Lanjutkan simpan?")) {
+            var sisaAkhir = Math.max(0, due - paid);
+            // Peringatan sisa hanya perlu saat operator memang memilih metode
+            // pembayaran (berniat melunasi tagihan). Mencatat DP saja adalah
+            // aksi yang disengaja, jadi tidak perlu diperingatkan.
+            if (method && sisaAkhir > 0 && !confirm("Masih ada sisa tagihan " + formatRp(sisaAkhir) +
+                " yang belum dibayar. Lanjutkan simpan?")) {
                 e.preventDefault();
             }
         });
