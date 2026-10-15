@@ -63,9 +63,25 @@ Route names, field names, multi-position insert, single-position update, unit lo
 
 ---
 
-## /asset_berjalan — Month-ruler report deck
+## /asset_berjalan — Monthly report deck (omset_bulanan language)
 
-Status: shipped earlier (see `.impeccable/surfaces/dashboard-asset-berjalan.md`, seed `b777bde7`). 6 committed metrics preserved; month/unit ruler as hero element; formula notes kept. Rasters: `.impeccable/review/desktop.png`, `.impeccable/review/mobile.png`.
+Status: redesigned 2026-10-15 to share the `/omset_bulanan` report language (page header + breadcrumb · period navigation bar · filter toolbar · tinted metric grid). Brief: `.impeccable/surfaces/dashboard-asset-berjalan.md` (seed `b777bde7`). Scope: `app/Views/dashboard/asset_berjalan.php` only — no controller, route, or formula change.
+
+### Composition
+- **Masthead** (title + subtitle + breadcrumb) → **period navigation bar** (prev month · current-month pill · next month; the hero) → **filter toolbar** (`unit` / `bulan` / `tahun` GET selects, authorized roles only) → **6-metric report grid** → **formula note** → **HO salary distribution panel**.
+- The 6 committed metrics sit in a 3×2 grid (`col-md-6 col-lg-4`): row 1 is the P&L read (Omset · Pengeluaran · Total Gaji); row 2 is the distribution read (Total Tanggungan Asset · Hak Cabang · Tagihan Center).
+- Cards reuse `/omset_bulanan`'s tinted-tile pattern verbatim: `card border shadow-none h-100 bg-{semantic}-subtle bg-opacity-10 border-{semantic}-subtle`, a tinted uppercase `<h6>` label, a large `tabular-nums` Rupiah value, a tinted icon tile, and a one-line muted note.
+
+### Decisions worth keeping
+- **`<h6>` card titles are a test contract, not a style choice.** `tests/AssetBerjalanCardTest.php` matches `<h6[^>]*>Total Tanggungan Asset</h6>` etc. followed by the Rupiah figure — the titles must stay literal (`Hak Cabang`, *not* `Hak Cabang (60%)`; the 60/40 split moved into the note).
+- **Label hues use the readable emphasis variants** (`text-warning-emphasis`, `text-info-emphasis`) where the base `text-*` would fail on the tint; `text-success` / `text-danger` / `text-primary` match `/omset_bulanan`'s own use.
+- **Optional controller vars are null-guarded** (`$pertumbuhan_omset ?? null`) so the view stays warning-free when rendered in isolation by the test, which does not pass the trend fields.
+
+### Preserved exactly
+Formulas verbatim — Tanggungan: unit 4 = 20% laba, units 1 & 2 = `hari × 355.000`, franchise (3 & 5) = 0; Hak Cabang = 60% and Tagihan Center = 40% of laba for units 3/4/5. Role gating via `boleh_pilih_unit` (with the same jabatan fallback), month/unit GET params, and the HO distribution panel.
+
+### Verification
+`php -l` clean. `tests/AssetBerjalanCardTest.php` 5/5 PASS (units 2/3/4/5 formulas + the unit-5 no-warning render); an isolated render with the HO panel emits no PHP notices. Detector: disabled in this repo. No new rasters this pass — the build environment has no headless browser (earlier `.impeccable/review/desktop.png` / `mobile.png` predate this change), so geometry/contrast sign-off is pending a browser pass.
 ---
 
 ## /finance/rekonsiliasi — Day-index + day-detail console
