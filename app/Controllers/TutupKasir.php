@@ -688,6 +688,8 @@ class TutupKasir extends BaseController
             $tahun = date('Y');
         }
 
+        $bulanStr = sprintf('%04d-%02d', (int)$tahun, (int)$bulan);
+
         // Hitung bulan/tahun sebelumnya
         $bulanSebelum = (int)$bulan - 1;
         $tahunSebelum = (int)$tahun;
@@ -698,6 +700,13 @@ class TutupKasir extends BaseController
         $periodeLabel = date('F Y', mktime(0, 0, 0, $bulan, 1, $tahun));
         $isBulanBerjalan = ((int)$bulan == (int)date('m') && (int)$tahun == (int)date('Y'));
 
+        // ============================
+        // HO SALARY DISTRIBUTION
+        // ============================
+        $hoDistribution = (new \App\Services\Payroll\HoSalaryDistributionService())
+            ->calculateDistribution($bulanStr, (string)$tahun);
+        $hoUnitShares = (new \App\Services\Payroll\HoSalaryDistributionService())
+            ->getUnitShares($bulanStr, (string)$tahun);
 
         // ==========================
         // TOTAL OMSET BULAN INI
@@ -1619,6 +1628,9 @@ class TutupKasir extends BaseController
             'omset_bulan_lalu'  => $omset_bulan_lalu,
             'periodeLaluLabel'  => $periodeLaluLabel,
             'selisih_omset'     => $selisih_omset,
+            // HO Salary Distribution
+            'ho_distribution' => $hoDistribution,
+            'ho_unit_shares'  => $hoUnitShares,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }

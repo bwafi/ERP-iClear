@@ -39,7 +39,7 @@ $bank           = $bank ?? [];
 <!-- ====================================================== -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3">
-        <form class="row g-2 align-items-center" method="get" action="<?= base_url('payroll2') ?>">
+        <form class="row g-2 align-items-center" method="get" action="<?= base_url('payroll') ?>">
             <div class="col-12 col-sm-auto d-flex align-items-center gap-2">
                 <label class="form-label mb-0 fw-semibold text-nowrap"><i class="ti ti-calendar me-1"></i>Periode Bulan:</label>
                 <input type="month" class="form-control form-control-sm" name="bulan" value="<?= esc($bulan) ?>" placeholder="Semua Bulan">
@@ -338,14 +338,14 @@ $bank           = $bank ?? [];
                                                     <i class="ti ti-trash"></i>
                                                 </button>
 
-                                                <form action="<?= base_url('lock_payroll2') ?>" method="post" class="d-inline">
+                                                <form action="<?= base_url('payroll/lock') ?>" method="post" class="d-inline">
                                                     <input type="hidden" name="idkas_keluar" value="<?= esc($row->idkas_keluar) ?>">
                                                     <button type="submit" class="btn btn-outline-secondary btn-sm" title="Lock Transaksi">
                                                         <i class="ti ti-lock"></i>
                                                     </button>
                                                 </form>
                                             <?php else: ?>
-                                                <form action="<?= base_url('unlock_payroll2') ?>" method="post" class="d-inline">
+                                                <form action="<?= base_url('payroll/unlock') ?>" method="post" class="d-inline">
                                                     <input type="hidden" name="idkas_keluar" value="<?= esc($row->idkas_keluar) ?>">
                                                     <button type="submit" class="btn btn-success btn-sm" title="Unlock Transaksi">
                                                         <i class="ti ti-lock-open"></i>
@@ -372,7 +372,7 @@ $bank           = $bank ?? [];
 <div class="modal fade" id="generate-payroll-modal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('payroll2/generate') ?>" method="post">
+            <form action="<?= base_url('payroll/generate') ?>" method="post">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Susun Payroll Otomatis</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -423,7 +423,7 @@ $bank           = $bank ?? [];
 <div class="modal fade" id="edit-register-modal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('payroll2/update-register') ?>" method="post">
+            <form action="<?= base_url('payroll/update-register') ?>" method="post">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Koreksi Payroll</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -534,7 +534,7 @@ $bank           = $bank ?? [];
 <div class="modal fade" id="bayar-payroll-modal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('payroll2/bayar') ?>" method="post">
+            <form action="<?= base_url('payroll/bayar') ?>" method="post">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Konfirmasi Pembayaran</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -566,7 +566,7 @@ $bank           = $bank ?? [];
 <div class="modal fade" id="input-kas-modal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('insert_payroll2') ?>" method="post">
+            <form action="<?= base_url('payroll/insert') ?>" method="post">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Input Bonus / Lembur</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -646,7 +646,7 @@ $bank           = $bank ?? [];
 <div class="modal fade" id="edit-kas-modal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('update_payroll2') ?>" method="post">
+            <form action="<?= base_url('payroll/update') ?>" method="post">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Edit Mutasi Bonus / Lembur</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

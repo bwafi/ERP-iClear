@@ -61,7 +61,7 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * halaman mana yang membuat barisnya:
      *
      *   - dari /kas_keluar -> teks atas_nama pemilik rekening pilihan
-     *   - dari /payroll2   -> akun.ID_AKUN karyawan (kasbon/lembur)
+     *   - dari /payroll   -> akun.ID_AKUN karyawan (kasbon/lembur)
      *
      * Karena itu `akun` di-join dan diambil sebagai `penerima_akun`, supaya
      * pemanggil bisa menampilkan nama karyawan untuk baris payroll. Join-nya

@@ -31,6 +31,7 @@ class Unit extends BaseController
             'KELURAHAN_UNIT' => $this->request->getPost('kelurahan_unit'),
             'jenis'          => $this->request->getPost('kepemilikan'),
             'tanggungan'     => $this->request->getPost('tanggungan'),
+            'is_trial'       => $this->request->getPost('is_trial') ? 1 : 0,
         ]);
 
         session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
@@ -51,6 +52,7 @@ class Unit extends BaseController
                 'KELURAHAN_UNIT' => $this->request->getPost('kelurahan_unit'),
                 'jenis'          => $this->request->getPost('kepemilikan'),
                 'tanggungan'     => $this->request->getPost('tanggungan'),
+                'is_trial'       => $this->request->getPost('is_trial') ? 1 : 0,
             ]);
 
         session()->setFlashdata('sukses', 'Data Berhasil Di Ubah');

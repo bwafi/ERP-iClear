@@ -505,15 +505,15 @@ $routes->get('penilaian/spv_kpi', 'Penilaian::spv_kpi_index', ['filter' => 'auth
 $routes->post('penilaian/save_spv_kpi', 'Penilaian::save_spv_kpi', ['filter' => 'auth']);
 
 //payroll
-$routes->get('payroll2', 'Payroll::index', ['filter' => 'auth']);
-$routes->post('payroll2/generate', 'Payroll::generateRegister', ['filter' => 'auth']);
-$routes->post('payroll2/update-register', 'Payroll::updateRegister', ['filter' => 'auth']);
-$routes->post('insert_payroll2', 'Payroll::insert', ['filter' => 'auth']);
-$routes->post('update_payroll2', 'Payroll::update', ['filter' => 'auth']);
-$routes->post('delete_payroll2', 'Payroll::delete', ['filter' => 'auth']);
-$routes->post('lock_payroll2', 'Payroll::lockPayroll', ['filter' => 'auth']);
-$routes->post('unlock_payroll2', 'Payroll::unlockPayroll', ['filter' => 'auth']);
-$routes->post('payroll2/bayar', 'Payroll::bayar', ['filter' => 'auth']);
+$routes->get('payroll', 'Payroll::index', ['filter' => 'auth']);
+$routes->post('payroll/generate', 'Payroll::generateRegister', ['filter' => 'auth']);
+$routes->post('payroll/update-register', 'Payroll::updateRegister', ['filter' => 'auth']);
+$routes->post('payroll/insert', 'Payroll::insert', ['filter' => 'auth']);
+$routes->post('payroll/update', 'Payroll::update', ['filter' => 'auth']);
+$routes->post('payroll/delete', 'Payroll::delete', ['filter' => 'auth']);
+$routes->post('payroll/lock', 'Payroll::lockPayroll', ['filter' => 'auth']);
+$routes->post('payroll/unlock', 'Payroll::unlockPayroll', ['filter' => 'auth']);
+$routes->post('payroll/bayar', 'Payroll::bayar', ['filter' => 'auth']);
 
 //penilaian kpi
 $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);

@@ -260,3 +260,155 @@ $bolehPilihUnit = (bool) ($boleh_pilih_unit ?? in_array($id_jabatan, [1, 0, 2, 3
     </div>
 
 </div>
+
+<!-- HO Salary Distribution Section -->
+<?php if (!empty($ho_distribution) && $ho_distribution['divisor'] > 0): ?>
+<div class="card border shadow-none mb-4">
+    <div class="card-header bg-light-subtle border-0 py-3 px-4">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <h5 class="fw-semibold mb-1 text-dark">Pembagian Gaji HO (Head Office)</h5>
+                <small class="text-muted">
+                    Aturan: Semua unit <strong>Pribadi</strong> = 1 bagian, Setiap unit <strong>Franchise</strong> = 1 bagian.
+                    Total pembagi: <strong><?= $ho_distribution['divisor'] ?></strong> (Pribadi: <?= $ho_distribution['pribadi_count'] ?>, Franchise: <?= $ho_distribution['franchise_count'] ?>)
+                </small>
+            </div>
+            <div class="d-flex gap-2">
+                <span class="badge bg-primary-subtle text-primary fw-medium px-3 py-2">
+                    Total Perkiraan: Rp <?= number_format($ho_distribution['total_perkiraan'] ?? 0, 0, ',', '.') ?>
+                </span>
+                <span class="badge bg-success-subtle text-success fw-medium px-3 py-2">
+                    Total Dipotong (Payroll2): Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?>
+                </span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-4">
+        <!-- Ringkasan Per Bagian -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6 col-xl-3">
+                <div class="card border shadow-none h-100">
+                    <div class="card-body p-3 text-center">
+                        <h6 class="fw-semibold text-muted mb-1">Bagian per Unit (Perkiraan)</h6>
+                        <h3 class="fw-bold mb-0 metric-figure text-primary">Rp <?= number_format($ho_distribution['per_employee_share'] ?? 0, 0, ',', '.') ?></h3>
+                        <small class="text-muted">Perkiraan slip gaji / divisor</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="card border shadow-none h-100">
+                    <div class="card-body p-3 text-center">
+                        <h6 class="fw-semibold text-muted mb-1">Bagian per Unit (Dipotong)</h6>
+                        <h3 class="fw-bold mb-0 metric-figure text-success">Rp <?= number_format($ho_distribution['per_employee_actual'] ?? 0, 0, ',', '.') ?></h3>
+                        <small class="text-muted">Aktual payroll / divisor</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="card border shadow-none h-100">
+                    <div class="card-body p-3 text-center">
+                        <h6 class="fw-semibold text-muted mb-1">Selisih</h6>
+                        <h3 class="fw-bold mb-0 metric-figure text-<?= (($ho_distribution['per_employee_share'] ?? 0) - ($ho_distribution['per_employee_actual'] ?? 0)) >= 0 ? 'warning' : 'danger' ?>">
+                            Rp <?= number_format(abs(($ho_distribution['per_employee_share'] ?? 0) - ($ho_distribution['per_employee_actual'] ?? 0)), 0, ',', '.') ?>
+                        </h3>
+                        <small class="text-muted">Perkiraan - Aktual</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="card border shadow-none h-100">
+                    <div class="card-body p-3 text-center">
+                        <h6 class="fw-semibold text-muted mb-1">Jumlah Karyawan HO</h6>
+                        <h3 class="fw-bold mb-0 metric-figure text-info"><?= count($ho_distribution['employees'] ?? []) ?></h3>
+                        <small class="text-muted">Unit 50 (Head Office)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Karyawan HO -->
+        <div class="mb-4">
+            <h6 class="fw-semibold text-dark mb-3">Detail Gaji Karyawan HO</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nama</th>
+                            <th class="text-end">Perkiraan Gaji<br><small class="text-muted">(seperti slip gaji)</small></th>
+                            <th class="text-end">Dipotong<br><small class="text-muted">(payroll aktual)</small></th>
+                            <th class="text-end">Selisih</th>
+                            <th>Status Payroll</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach (($ho_distribution['employees'] ?? []) as $emp): ?>
+                            <?php $selisih = $emp['perkiraan_gaji'] - $emp['gaji_dipotong']; ?>
+                            <tr>
+                                <td><?= esc($emp['nama']) ?></td>
+                                <td class="text-end">Rp <?= number_format($emp['perkiraan_gaji'], 0, ',', '.') ?></td>
+                                <td class="text-end">Rp <?= number_format($emp['gaji_dipotong'], 0, ',', '.') ?></td>
+                                <td class="text-end fw-<?= $selisih >= 0 ? 'bold text-warning' : 'bold text-danger' ?>">
+                                    Rp <?= number_format(abs($selisih), 0, ',', '.') ?>
+                                </td>
+                                <td>
+                                    <?php if ($emp['payroll_status'] === 'dibayar'): ?>
+                                        <span class="badge bg-success">Dibayar</span>
+                                    <?php elseif ($emp['payroll_status'] === 'rencana'): ?>
+                                        <span class="badge bg-warning text-dark">Rencana</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary">Belum Ada</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($ho_distribution['employees'])): ?>
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Tidak ada karyawan HO aktif</td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Distribusi ke Unit -->
+        <div>
+            <h6 class="fw-semibold text-dark mb-3">Distribusi ke Setiap Unit</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Unit</th>
+                            <th class="text-center">Jenis</th>
+                            <th class="text-center">Bagian (%)</th>
+                            <th class="text-end">Perkiraan<br><small class="text-muted">Rp</small></th>
+                            <th class="text-end">Aktual<br><small class="text-muted">Rp</small></th>
+                            <th>Keterangan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach (($ho_unit_shares ?? []) as $share): ?>
+                            <tr>
+                                <td><?= esc($share['unit_nama']) ?></td>
+                                <td class="text-center">
+                                    <?php if ($share['unit_jenis'] === 'pribadi'): ?>
+                                        <span class="badge bg-info">Pribadi</span>
+                                    <?php elseif ($share['unit_jenis'] === 'franchise'): ?>
+                                        <span class="badge bg-warning text-dark">Franchise</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary"><?= esc($share['unit_jenis']) ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center"><?= number_format($share['share_pct'], 2) ?>%</td>
+                                <td class="text-end">Rp <?= number_format($share['share_nominal_perkiraan'], 0, ',', '.') ?></td>
+                                <td class="text-end">Rp <?= number_format($share['share_nominal_actual'], 0, ',', '.') ?></td>
+                                <td><?= esc($share['note'] ?? '-') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>

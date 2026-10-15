@@ -374,7 +374,7 @@ class PayrollGenerator
     /**
      * Total lembur per karyawan dari kas_keluar bulan ini.
      *
-     * `kas_keluar.penerima` tidak seragam: baris dari /payroll2 mengisi
+     * `kas_keluar.penerima` tidak seragam: baris dari /payroll mengisi
      * akun.ID_AKUN, sedangkan baris dari /kas_keluar mengisi teks nama
      * (mis. "ICLEAR"). Karena itu hanya isian angka yang dipakai sebagai
      * ID_AKUN; sisanya bukan karyawan dan diabaikan.

@@ -246,7 +246,7 @@ class Payroll extends BaseController
 
         $this->db->table('kas_keluar')->insert($data);
 
-        return redirect()->to(base_url('payroll2'))
+        return redirect()->to(base_url('payroll'))
             ->with('sukses', 'Data kas keluar berhasil ditambahkan.');
     }
 
@@ -289,7 +289,7 @@ class Payroll extends BaseController
             ->where('idkas_keluar', $id)
             ->update($data);
 
-        return redirect()->to(base_url('payroll2'))
+        return redirect()->to(base_url('payroll'))
             ->with('sukses', 'Data kas keluar berhasil diperbarui.');
     }
 
@@ -345,7 +345,7 @@ class Payroll extends BaseController
         }
 
         return redirect()
-            ->to(base_url('payroll2') . '?bulan=' . $bulan)
+            ->to(base_url('payroll') . '?bulan=' . $bulan)
             ->with('sukses', $this->pesanGenerate($hasil));
     }
 
@@ -475,7 +475,7 @@ class Payroll extends BaseController
             ->where('idkas_keluar', $id)
             ->delete();
 
-        return redirect()->to(base_url('payroll2'))
+        return redirect()->to(base_url('payroll'))
             ->with('sukses', 'Data kas keluar berhasil dihapus.');
     }
 

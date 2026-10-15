@@ -327,7 +327,7 @@ class KasBankCutoffService
      *
      * Unit yang tidak ditemukan TIDAK boleh diam-diam dibebaskan dari
      * kewajiban opening KAS, jadi hanya baris yang jelas is_operational = 0
-     * (Head Office) yang dianggap non-operasional.
+     * (Head Office) ATAU is_trial = 1 yang dianggap non-operasional.
      *
      * @return array<int, bool>
      */
@@ -335,8 +335,10 @@ class KasBankCutoffService
     {
         $peta = [];
 
-        foreach (db_connect()->table('unit')->select('idunit, is_operational')->get()->getResult() as $u) {
-            $peta[(int) $u->idunit] = (int) ($u->is_operational ?? 1) === 1;
+        foreach (db_connect()->table('unit')->select('idunit, is_operational, is_trial')->get()->getResult() as $u) {
+            $isOperational = (int) ($u->is_operational ?? 1) === 1;
+            $isTrial       = (int) ($u->is_trial ?? 0) === 1;
+            $peta[(int) $u->idunit] = $isOperational && ! $isTrial;
         }
 
         return $peta;

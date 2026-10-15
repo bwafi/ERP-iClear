@@ -194,7 +194,7 @@ class Kas_Keluar extends BaseController
      * Nama penerima untuk ditampilkan di tabel kas keluar.
      *
      * `kas_keluar.penerima` tidak seragam: baris yang dibuat dari halaman ini
-     * mengisi teks atas_nama pemilik rekening, sedangkan baris dari /payroll2
+     * mengisi teks atas_nama pemilik rekening, sedangkan baris dari /payroll
      * mengisi akun.ID_AKUN karyawan (kasbon, lembur, gaji). Kalau isinya angka
      * dan cocok dengan sebuah akun, yang ditampilkan adalah nama karyawannya —
      * kalau tidak cocok, teks mentahnya tetap ditampilkan supaya tidak ada
@@ -391,11 +391,11 @@ class Kas_Keluar extends BaseController
         $atasnama  = $cekRek['bank']->atas_nama ?? '';
         $posisi_drk = $this->request->getPost('posisi_drk');
 
-        // Baris yang dibuat dari /payroll2 menyimpan akun.ID_AKUN di `penerima`.
+        // Baris yang dibuat dari /payroll menyimpan akun.ID_AKUN di `penerima`.
         // Select "Penerima / Rekening" di form edit ini menunjuk rekening
         // (idbank), jadi untuk baris seperti itu `penerima` TIDAK ditimpa dengan
         // atas_nama — kalau ditimpa, hubungan ke karyawan putus dan namanya
-        // hilang lagi di /payroll2. Rekeningnya tetap berubah lewat `idbank`.
+        // hilang lagi di /payroll. Rekeningnya tetap berubah lewat `idbank`.
         $barisLama    = $this->KasKeluarModel->getById((int)$id);
         $penerimaLama = $barisLama ? trim((string)$barisLama->penerima) : '';
         if ($penerimaLama !== '' && ctype_digit($penerimaLama)) {

@@ -20,7 +20,14 @@ class ModelUnit extends Model
         'KABUPATEN_UNIT',
         'PROVINSI_UNIT',
         'LATITUDE',
-        'LONGTITUDE'
+        'LONGTITUDE',
+        'kode_unit',
+        'NOTELP',
+        'jenis',
+        'tanggungan',
+        'RADIUS',
+        'is_operational',
+        'is_trial',
     ];
 
     //
@@ -88,5 +95,29 @@ class ModelUnit extends Model
         unset($data['idunit']);
         $this->insert($data);
         return (int)$this->insertID();
+    }
+
+    /**
+     * Cek apakah unit adalah unit percobaan (trial).
+     *
+     * @param int $idunit
+     * @return bool
+     */
+    public function isTrial(int $idunit): bool
+    {
+        $unit = $this->select('is_trial')->find($idunit);
+        return $unit ? (bool) ($unit->is_trial ?? 0) : false;
+    }
+
+    /**
+     * Cek apakah unit adalah unit operasional.
+     *
+     * @param int $idunit
+     * @return bool
+     */
+    public function isOperational(int $idunit): bool
+    {
+        $unit = $this->select('is_operational')->find($idunit);
+        return $unit ? (bool) ($unit->is_operational ?? 1) : true;
     }
 }

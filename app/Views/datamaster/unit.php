@@ -55,6 +55,9 @@
                         <h6 class="fs-4 fw-semibold mb-0">Tanggungan</h6>
                     </th>
                     <th>
+                        <h6 class="fs-4 fw-semibold mb-0">Trial</h6>
+                    </th>
+                    <th>
                         <h6 class="fs-4 fw-semibold mb-0">Action</h6>
                     </th>
                 </tr>
@@ -70,6 +73,7 @@
                     <td><?= esc($row->KELURAHAN_UNIT) ?></td>
                     <td><?= esc($row->jenis) ?></td>
                     <td><?= esc($row->tanggungan) ?></td>
+                    <td><?= esc($row->is_trial ? 'Ya' : 'Tidak') ?></td>
 
                     <td>
                         <button class="btn btn-warning edit-button"
@@ -82,7 +86,8 @@
                             data-telp="<?= $row->NOTELP ?>"
                             data-kelurahan="<?= $row->KELURAHAN_UNIT ?>"
                             data-tanggungan="<?= $row->tanggungan ?>"
-                            data-jenis="<?= $row->jenis ?>">
+                            data-jenis="<?= $row->jenis ?>"
+                            data-is_trial="<?= $row->is_trial ?>">
                             Edit
                         </button>
 
@@ -145,6 +150,13 @@
                         <label for="edit_hp_suplier" class="form-label">Tanggungan</label>
                         <input type="number" class="form-control" id="edit_tanggungan" name="tanggungan">
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="edit_is_trial" name="is_trial" value="1">
+                            <label class="form-check-label" for="edit_is_trial">Unit Percobaan (Trial)</label>
+                        </div>
+                        <div class="form-text">Unit percobaan tidak dihitung dalam KPI/omset konsolidasi & tidak wajib opening KAS.</div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn bg-danger-subtle text-danger"
@@ -196,6 +208,13 @@
                     <div class="mb-3">
                         <label for="edit_hp_suplier" class="form-label">Tanggungan</label>
                         <input type="number" class="form-control" id="edit_tanggungan" name="tanggungan">
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is_trial" name="is_trial" value="1">
+                            <label class="form-check-label" for="is_trial">Unit Percobaan (Trial)</label>
+                        </div>
+                        <div class="form-text">Unit percobaan tidak dihitung dalam KPI/omset konsolidasi & tidak wajib opening KAS.</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -265,6 +284,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('edit_kelurahan_unit').value = b.dataset.kelurahan;
             document.getElementById('edit_kepemilikan').value = b.dataset.jenis;
             document.getElementById('edit_tanggungan').value = b.dataset.tanggungan;
+            document.getElementById('edit_is_trial').checked = b.dataset.is_trial === '1';
         }
 
         if(e.target.closest('.delete-button')){
