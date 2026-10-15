@@ -56,8 +56,8 @@ $group = $memberModel->where('unit_id', 1)
     ->countAllResults();
 echo "member count: $group\n";
 $r = $service->calculateGroupIncentive('KEPALA_TOKO', 1, 100000000, 100, $date);
-check('KT pool = 3% x 100jt', 3000000, $r['pool_amount']);
-check('KT individual = pool/3', 1000000, $r['incentive_amount']);
+check('KT pool = 1% x 100jt x 3 (per_member)', 3000000, $r['pool_amount']);
+check('KT individual = 1% x 100jt (per_member)', 1000000, $r['incentive_amount']);
 
 // ===== TEST 2: DIGITAL_DIVISION, omset 100jt, 4 member =====
 echo "\n--- Test 2: DIGITAL_DIVISION (omset 100jt, 4 member) ---\n";
@@ -83,8 +83,8 @@ if ($extraEmp) {
     $groupNow = $memberModel->countActiveMembers((int)$ktGroup->id, 1, $date);
     echo "member count now: $groupNow\n";
     $r2 = $service->calculateGroupIncentive('KEPALA_TOKO', 1, 100000000, 100, $date);
-    check('KT dynamic pool', 3000000, $r2['pool_amount']);
-    check('KT individual = pool/4 (dinamis, tanpa ubah code)', 750000, $r2['incentive_amount']);
+    check('KT dynamic pool = 1% x 100jt x 4', 4000000, $r2['pool_amount']);
+    check('KT individual = 1% x 100jt (per_member, tidak dibagi)', 1000000, $r2['incentive_amount']);
     // cleanup: hapus member test
     $db->table('incentive_members')->where('employee_id', $extraEmp->ID_AKUN)->where('incentive_group_id', $ktGroup->id)->delete();
 } else {
@@ -100,8 +100,8 @@ $unit2Count = $memberModel->where('unit_id', 2)
     ->countAllResults();
 echo "unit 2 member count: $unit2Count\n";
 $r3 = $service->calculateGroupIncentive('KEPALA_TOKO', 2, 100000000, 100, $date);
-check('KT unit2 pool', 3000000, $r3['pool_amount']);
-check('KT unit2 individual = pool/3', 1000000, $r3['incentive_amount']);
+check('KT unit2 pool = 1% x 100jt x 3 (per_member)', 3000000, $r3['pool_amount']);
+check('KT unit2 individual = 1% x 100jt (per_member)', 1000000, $r3['incentive_amount']);
 
 // ===== TEST 5: Achievement < minimum =====
 echo "\n--- Test 5: achievement 80% < minimum 100% ---\n";

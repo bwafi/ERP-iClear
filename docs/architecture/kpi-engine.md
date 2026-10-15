@@ -116,7 +116,8 @@ gaji = gaji_pokok + tunjangan + insentif
 ### Business Rule (CONFIRMED)
 
 ```
-KEPALA_TOKO      : pool = 3% × omset toko ; individual = pool / countActiveMembers(group, unit, date)
+KEPALA_TOKO      : individual = 1% × omset toko (PER ANGGOTA, tidak dibagi jumlah anggota)
+                   pool = individual × countActiveMembers(group, unit, date)
 DIGITAL_DIVISION : pool = 1% × omset toko ; individual = pool / countActiveMembers(group, unit, date)
 ```
 
@@ -126,6 +127,10 @@ DIGITAL_DIVISION : pool = 1% × omset toko ; individual = pool / countActiveMemb
 - effective period
 - is_active
 
+**Metode pembagian** ditentukan `incentive_rules.division_method`:
+- `per_member` (KEPALA_TOKO) → tiap anggota dapat rate% × omset
+- `member_count` (DIGITAL_DIVISION) → pool rate% × omset dibagi rata anggota
+
 ### Struktur
 
 ```
@@ -133,7 +138,7 @@ incentive_groups        (KEPALA_TOKO, DIGITAL_DIVISION)
     ↓
 incentive_members       (employee_id + unit_id + effective_from/to + is_active)
     ↓
-incentive_rules         (rate per group: 3% / 1%)
+incentive_rules         (rate per group + division_method: KEPALA_TOKO 1% per_member, DIGITAL_DIVISION 1% member_count)
     ↓
 IncentiveCalculationService::calculateGroupIncentive(code, unit, omset, achievement, date)
 ```
@@ -171,7 +176,9 @@ Dibandingkan untuk 19 karyawan × 3 context (gaji, penilaian_kinerja, slip_gaji)
 
 Alasan:
 - Service belum di-wiring ke controller (sesuai instruksi).
-- `assetberjalan()` (dashboard) di TutupKasir masih berisi formula & query terpisah yang belum direplikasi.
+- `assetberjalan()` (dashboard) di TutupKasir masih menyimpan formula & query KPI terpisah;
+  **insentif-nya sudah memakai engine tunggal** `KpiCalculationService::computeIncentive()`
+  (sama dengan gaji/payroll) sejak 2026-10-15.
 - Salary / manual KPI / evaluasi multi-periode masih tahap berikutnya.
 
 ---

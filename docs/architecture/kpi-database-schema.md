@@ -609,8 +609,8 @@ CREATE TABLE incentive_rules (
 
 -- Seed from TutupKasir lines 1009, 1027, 1073, 1116:
 INSERT INTO incentive_rules VALUES
--- Kepala Toko (41): 3% omset / 4 when omset >= target
-(NULL, 41, 1, 'Kepala Toko Omset Bonus', 'percentage', 3.00, 100, 'divide_by_4', '2024-01-01', NULL, NULL, NOW(), NOW()),
+-- Kepala Toko (group KEPALA_TOKO): 1% omset PER ANGGOTA (per_member) when omset >= target
+(NULL, 41, 1, 'Kepala Toko 1% per Anggota', 'percentage', 1.00, 100, 'per_member', '2024-01-01', NULL, NULL, NOW(), NOW()),
 -- SPV (40): 0.5% omset when omset >= target per unit
 (NULL, 40, 1, 'SPV Omset Bonus', 'percentage', 0.50, 100, 'per_unit', '2024-01-01', NULL, NULL, NOW(), NOW()),
 -- Pengiklan (43): 1% omset when omset >= target

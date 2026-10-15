@@ -7,14 +7,18 @@ use CodeIgniter\Database\Seeder;
  * IncentiveGroupSeeder
  *
  * Men-Seed BUSINESS RULE INCEntif yang sudah dikonfirmasi:
- *   KEPALA_TOKO        : rate 3% omset toko, dibagi jumlah anggota aktif group per unit
+ *   KEPALA_TOKO        : rate 1% PER ANGGOTA (setiap anggota dapat 1% × omset toko,
+ *                        TIDAK dibagi jumlah anggota) — division_method 'per_member'
  *   DIGITAL_DIVISION   : rate 1% omset toko, dibagi jumlah anggota aktif group per unit
+ *                        — division_method 'member_count'
  *
  * Membership diambil dari struktur organisasi SAAT INI (baseline existing):
  *   KEPALA_TOKO   : Kepala Toko (41) + Teknisi (36) + Admin (35)
  *   DIGITAL_DIVISION : Pengiklan (43) + IT (45) + Multimedia (44) + CS (42)
  *
- * Divisor TIDAK di-hardcode — dihitung dari baris aktif incentive_members per unit & periode.
+ * Jumlah anggota (divisor) TIDAK di-hardcode — dihitung dari baris aktif
+ * incentive_members per unit & periode. Untuk mode 'per_member', jumlah anggota
+ * hanya menentukan total kewajiban group, bukan besar insentif per orang.
  */
 class IncentiveGroupSeeder extends Seeder
 {
@@ -33,7 +37,7 @@ class IncentiveGroupSeeder extends Seeder
             [
                 'code'           => 'KEPALA_TOKO',
                 'name'           => 'Kelompok Kepala Toko (Store Team)',
-                'description'    => '3% omset toko dibagi rata ke anggota toko (Kepala Toko, Teknisi, Admin)',
+                'description'    => '1% omset toko per anggota toko (Kepala Toko, Teknisi, Admin)',
                 'is_active'      => 1,
                 'effective_from' => '2024-01-01',
                 'effective_to'   => null,
@@ -58,11 +62,11 @@ class IncentiveGroupSeeder extends Seeder
             [
                 'incentive_group_id'  => $groupMap['KEPALA_TOKO'],
                 'kpi_component_id'    => 1, // OMSET_TOKO (asal)
-                'incentive_name'      => 'Kepala Toko 3% Pool',
+                'incentive_name'      => 'Kepala Toko 1% per Anggota',
                 'calculation_type'    => 'percentage',
-                'base_value'          => 3.00,
+                'base_value'          => 1.00,
                 'minimum_achievement' => 100.00,
-                'division_method'     => 'member_count',
+                'division_method'     => 'per_member',
                 'effective_from'      => '2024-01-01',
                 'effective_to'        => null,
             ],

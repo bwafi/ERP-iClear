@@ -1222,7 +1222,6 @@ class TutupKasir extends BaseController
 
             } elseif ($aktual_omset >= $targetOmset) {
                 $nilai_omset = 100;
-                $insentif = (3 / 100) * $aktual_omset / 4;
             } else{
                 $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
             }
@@ -1236,11 +1235,6 @@ class TutupKasir extends BaseController
 
                 if ($omset >= $batasCabang) {
                     $cabang_aman++;
-                }
-
-                // insentif jika target cabang tercapai
-                if ($omset >= $target_omset[$idUnit]) {
-                    $insentif += (5 / 1000) * $omset;
                 }
             }
 
@@ -1283,11 +1277,6 @@ class TutupKasir extends BaseController
                 if ($omset >= $batasCabang) {
                     $cabang_aman++;
                 }
-
-                // insentif jika target cabang tercapai
-                if ($omset >= $target_omset[$idUnit]) {
-                    $insentif += (1 / 100) * $omset;
-                }
             }
 
             switch ($cabang_aman) {
@@ -1329,15 +1318,23 @@ class TutupKasir extends BaseController
 
             } elseif ($aktual_omset >= $targetOmset) {
                 $nilai_omset = 100;
-                $insentif = (3 / 100) * $aktual_omset / 4;                
-
-                
             } else{
                 $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
                 
                 
             }
         }
+
+        // Insentif dihitung oleh engine tunggal (KpiCalculationService) supaya
+        // /asset_berjalan konsisten dengan /gaji, /penilaian_kinerja,
+        // /slip_gaji, dan payroll. Sumber aturan: incentive_groups/incentive_rules.
+        $insentif = (new \App\Services\Kpi\KpiCalculationService())->computeIncentive(
+            (int) $selected_karyawan,
+            (int) $unit,
+            sprintf('%02d', (int) $bulan),
+            (string) $tahun,
+            sprintf('%04d-%02d-15', (int) $tahun, (int) $bulan)
+        );
 
         $nilai_customer = min(
             ($aktual_customer / $target['customer']) * 100,

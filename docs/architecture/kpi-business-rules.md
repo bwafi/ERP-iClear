@@ -9,13 +9,15 @@
 
 | Rule | Nilai | Divisi | Sumber |
 |---|---|---|---|
-| Insentif Kepala Toko | pool = 3% × omset toko | dinamis dari `incentive_members` (group+unit+periode) | Owner |
+| Insentif Kepala Toko | **1% × omset toko PER ANGGOTA** (tidak dibagi jumlah anggota) | `division_method = 'per_member'` di `incentive_rules`; anggota dari `incentive_members` (group+unit+periode) | Owner |
 | Insentif Digital Division | pool = 1% × omset toko | dinamis dari `incentive_members` | Owner |
-| Basic compute | individual = pool / member_count | — | Owner |
+| Basic compute (DIGITAL_DIVISION) | individual = pool / member_count | — | Owner |
 
 Saat ini:
-- KEPALA_TOKO → 3 member/unit (Kepala Toko + Teknisi + Admin)
-- DIGITAL_DIVISION → 4 member (Pengiklan + IT + Multimedia + CS)
+- KEPALA_TOKO → Kepala Toko + Teknisi + Admin; **setiap anggota dapat 1% × omset unit**
+- DIGITAL_DIVISION → 4 member (Pengiklan + IT + Multimedia + CS); 1% pool dibagi rata
+
+> Syarat `minimum_achievement` (harus capai target omset) tetap berlaku untuk KEPALA_TOKO.
 
 ---
 

@@ -701,10 +701,15 @@ class KpiCalculationService
     /**
      * Compute incentive via DB-driven IncentiveCalculationService.
      *
-     * Business rule (confirmed): KT pool = 3% × omzet / active members.
+     * Business rule:
+     *   - KEPALA_TOKO (division_method 'per_member'): setiap anggota menerima
+     *     rate% × omset (mis. 1%), TANPA dibagi jumlah anggota.
+     *   - DIGITAL_DIVISION (division_method 'member_count'): pool = rate% × omset,
+     *     dibagi rata jumlah anggota aktif.
+     *   - SPV: 0.5% per cabang yang capai target.
      * SPV/other jabatan → checks incentive_members membership.
      */
-    protected function computeIncentive(
+    public function computeIncentive(
         int $employeeId,
         int $unit,
         string $month,
@@ -779,14 +784,22 @@ class KpiCalculationService
             return 0.0;
         }
 
-        $pool        = ((float)$rule->base_value / 100.0) * $omsetToko;
         $memberCount = $memberModel->countActiveMembers((int)$group->id, $unit, $date);
 
         if ($memberCount <= 0) {
             return 0.0;
         }
 
-        return $pool / $memberCount;
+        $rate = (float)$rule->base_value / 100.0;
+
+        // NEW RULE (KEPALA_TOKO, division_method = 'per_member'):
+        // setiap anggota menerima rate% × omset, TIDAK dibagi jumlah anggota.
+        if (($rule->division_method ?? '') === 'per_member') {
+            return $rate * $omsetToko;
+        }
+
+        // Rule diwarisi: pool = rate% × omset, dibagi rata ke anggota.
+        return ($rate * $omsetToko) / $memberCount;
     }
 
     /**

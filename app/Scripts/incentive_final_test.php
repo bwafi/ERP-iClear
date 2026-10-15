@@ -21,13 +21,13 @@ $date = '2026-08-28';
 $pass=0;$fail=0;
 function chk($l,$e,$a,$tol=0.001){global $pass,$fail; if(abs($e-$a)<=$tol){echo "[PASS] $l = $a\n";$pass++;}else{echo "[FAIL] $l = $a (expected $e)\n";$fail++;}}
 
-echo "=== CASE 1: omzet 30jt, rate 3%, pool 900k, per member 300k ===\n";
+echo "=== CASE 1: omzet 30jt, rate 1% per member, per member 300k, pool 900k (3) ===\n";
 $r = $service->calculateGroupIncentive('KEPALA_TOKO', 2, 30000000, 100, $date);
 chk('member count', 3, $r['member_count']);
 chk('pool', 900000, $r['pool_amount']);
 chk('per member (3)', 300000, $r['incentive_amount']);
 
-echo "\n=== CASE 2: omzet 50jt, rate 3%, pool 1.5jt, per member 500k ===\n";
+echo "\n=== CASE 2: omzet 50jt, rate 1% per member, per member 500k, pool 1.5jt ===\n";
 $r = $service->calculateGroupIncentive('KEPALA_TOKO', 2, 50000000, 100, $date);
 chk('pool', 1500000, $r['pool_amount']);
 chk('per member (3)', 500000, $r['incentive_amount']);
@@ -48,7 +48,7 @@ if ($extraEmp) {
     $newId = $db->insertID();
     $r = $service->calculateGroupIncentive('KEPALA_TOKO', 2, 30000000, 100, $date);
     chk('member count (4)', 4, $r['member_count']);
-    chk('per member (4 dynamic)', 225000, $r['incentive_amount']);
+    chk('per member (4 dynamic, tetap 1% x 30jt)', 300000, $r['incentive_amount']);
     // cleanup PRESISI via insertID
     $db->table('incentive_members')->where('id',$newId)->delete();
     chk('cleanup row', 0, $db->table('incentive_members')->where('id',$newId)->countAllResults());

@@ -17,7 +17,8 @@ use Config\Database;
  *   1. Customer query: COUNT(DISTINCT dp.penjualan_idpenjualan) via detail_penjualan + barang + penjualan
  *   2. Hanya current month (date('m')/date('Y') hardcoded) — dipertahankan sama
  *   3. Loop SEMUA employee dalam unit → aggregate totalGajiUnit
- *   4. Insentif KT hardcoded /4 (bukan via pembagi context)
+ *   4. Insentif memakai engine tunggal KpiCalculationService::computeIncentive()
+ *      (sama seperti /gaji, /penilaian_kinerja, /slip_gaji, payroll) — konsisten
  *   5. Total_feed overwritten by feed_mingguan (bukan fallback ke feed_pl)
  *   6. Tidak ada case jabatan 46 (PIC)
  *
@@ -229,7 +230,6 @@ class UnitSalaryCalculationService
                 elseif ($aktual_omset >= $batas4 && $aktual_omset < $targetOmset) { $nilai_omset = 100; }
                 elseif ($aktual_omset >= $targetOmset) {
                     $nilai_omset = 100;
-                    $insentif = (3 / 100) * $aktual_omset / 4; // HARDCODED /4
                 } else {
                     $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
                 }
@@ -237,7 +237,6 @@ class UnitSalaryCalculationService
                 $cabang_aman = 0;
                 foreach ($aktual_omset_unit as $idUnit => $omset) {
                     if ($omset >= $batas_keempat[$idUnit]) { $cabang_aman++; }
-                    if ($omset >= $target_omset[$idUnit]) { $insentif += (5 / 1000) * $omset; }
                 }
                 switch ($cabang_aman) {
                     case 1: $nilai_omset = 33; $aktual_operasional = 33; break;
@@ -249,7 +248,6 @@ class UnitSalaryCalculationService
                 $cabang_aman = 0;
                 foreach ($aktual_omset_unit as $idUnit => $omset) {
                     if ($omset >= $batas_keempat[$idUnit]) { $cabang_aman++; }
-                    if ($omset >= $target_omset[$idUnit]) { $insentif += (1 / 100) * $omset; }
                 }
                 switch ($cabang_aman) {
                     case 1: $nilai_omset = 33; break;
@@ -264,11 +262,20 @@ class UnitSalaryCalculationService
                 elseif ($aktual_omset >= $batas4 && $aktual_omset < $targetOmset) { $nilai_omset = 100; }
                 elseif ($aktual_omset >= $targetOmset) {
                     $nilai_omset = 100;
-                    $insentif = (3 / 100) * $aktual_omset / 4; // HARDCODED /4
                 } else {
                     $nilai_omset = (($aktual_omset - $batas1) / ($batas4 - $batas1)) * 100;
                 }
             }
+
+            // Insentif via engine tunggal (KpiCalculationService) — konsisten
+            // dengan /gaji, /penilaian_kinerja, /slip_gaji, dan payroll.
+            $insentif = (new \App\Services\Kpi\KpiCalculationService())->computeIncentive(
+                (int) $selected_karyawan,
+                (int) $unit,
+                sprintf('%02d', (int) $bulan),
+                (string) $tahun,
+                sprintf('%04d-%02d-15', (int) $tahun, (int) $bulan)
+            );
 
             $nilai_customer    = min(($aktual_customer / $target['customer']) * 100, 100);
             $nilai_closing     = min(($total_closing / $target['closing']) * 100, 100);

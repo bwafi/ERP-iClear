@@ -10,9 +10,13 @@ use App\Models\ModelIncentiveRule;
  * IncentiveCalculationService
  *
  * Menghitung insentif berbasis GROUP (bukan jabatan hardcoded).
- * Business rule (CONFIRMED):
- *   pool = omset_toko × rate%
- *   individual = pool / countActiveMembers(group, unit, date)
+ * Business rule:
+ *   - division_method = 'member_count' (mis. DIGITAL_DIVISION):
+ *       pool = omset_toko × rate%
+ *       individual = pool / countActiveMembers(group, unit, date)
+ *   - division_method = 'per_member' (mis. KEPALA_TOKO):
+ *       individual = rate% × omset_toko  (setiap anggota, TANPA dibagi jumlah anggota)
+ *       pool = individual × countActiveMembers(group, unit, date)
  *
  * Angka pembagi (divisor) TIDAK di-hardcode di service.
  * Jumlah anggota dihitung dari tabel incentive_members (per unit & periode).
@@ -66,8 +70,9 @@ class IncentiveCalculationService
             ));
         }
 
-        // pool = omset × rate%
-        $poolAmount = ((float) $rule->base_value / 100) * $omsetToko;
+        // rate rule (mis. 1.00 => 1%) & metode pembagian
+        $ratePercent    = (float) $rule->base_value;
+        $divisionMethod = $rule->division_method ?? 'member_count';
 
         // divisor = JML ANGGOTA AKTIF group pada unit & periode (dinamis)
         $memberCount = $this->memberModel->countActiveMembers((int) $group->id, $unitId, $date);
@@ -76,12 +81,21 @@ class IncentiveCalculationService
             return $this->fail('No active members for group ' . $groupCode . ' on unit ' . $unitId, [
                 'group_code'   => $groupCode,
                 'unit_id'      => $unitId,
-                'pool_amount'  => round($poolAmount, 2),
+                'pool_amount'  => 0,
                 'member_count' => 0,
             ]);
         }
 
-        $individual = $poolAmount / $memberCount;
+        if ($divisionMethod === 'per_member') {
+            // NEW RULE (KEPALA_TOKO): setiap anggota menerima rate% × omset,
+            // TIDAK dibagi jumlah anggota.
+            $individual = ($ratePercent / 100) * $omsetToko;
+            $poolAmount = $individual * $memberCount;
+        } else {
+            // Rule diwarisi: pool = rate% × omset, dibagi rata ke anggota.
+            $poolAmount = ($ratePercent / 100) * $omsetToko;
+            $individual = $poolAmount / $memberCount;
+        }
 
         return [
             'success'          => true,
@@ -89,7 +103,7 @@ class IncentiveCalculationService
             'group_name'       => $group->name,
             'unit_id'          => $unitId,
             'omset_toko'       => $omsetToko,
-            'rate_percent'     => (float) $rule->base_value,
+            'rate_percent'     => $ratePercent,
             'achievement'      => $achievement,
             'pool_amount'      => round($poolAmount, 2),
             'member_count'     => $memberCount,
