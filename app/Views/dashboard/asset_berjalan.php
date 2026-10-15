@@ -13,402 +13,273 @@ $namaBulan = [
     11 => 'November',
     12 => 'Desember'
 ];
-// Ditentukan controller (resolveUnitScope) agar konsisten dengan otorisasi
-// ?unit= di TutupKasir — termasuk Direktur (2) dengan batasan unit per akun.
 $bolehPilihUnit = (bool) ($boleh_pilih_unit ?? in_array($id_jabatan, [1, 0, 2, 34, 40], true));
+
+// Kalkulasi nilai metrik
+$tanggunganAsset = 0;
+if ($selected_unit == 4) {
+    $tanggunganAsset = (($omset_bulan - $pengeluaran - $totalGajiUnit) * 20 / 100);
+} elseif (in_array($selected_unit, [1, 2])) {
+    $tanggunganAsset = $hariDalamBulan * 355000;
+}
+
+$hakCabang = 0;
+$tagihanCenter = 0;
+if (in_array($selected_unit, [3, 4, 5])) {
+    $profitNett = $omset_bulan - $pengeluaran - $totalGajiUnit;
+    $hakCabang = 0.60 * $profitNett;
+    $tagihanCenter = 0.40 * $profitNett;
+}
 ?>
 
 <style>
     .metric-figure {
         font-variant-numeric: tabular-nums;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.02em;
+    }
+
+    .card-accent-primary {
+        border-top: 3px solid var(--bs-primary) !important;
+    }
+
+    .card-accent-success {
+        border-top: 3px solid var(--bs-success) !important;
+    }
+
+    .card-accent-warning {
+        border-top: 3px solid var(--bs-warning) !important;
+    }
+
+    .card-accent-danger {
+        border-top: 3px solid var(--bs-danger) !important;
+    }
+
+    .card-accent-info {
+        border-top: 3px solid var(--bs-info) !important;
     }
 </style>
 
-<!-- Page Header & Breadcrumb -->
-<div class="card shadow-none position-relative overflow-hidden mb-4 bg-light-subtle border">
-    <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 p-4">
-        <div>
-            <h4 class="fw-semibold mb-1 text-dark">Asset Berjalan</h4>
-            <p class="fs-3 text-muted mb-0">Laporan asset berjalan dan pembagian hasil per cabang</p>
-        </div>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0 bg-transparent p-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a>
-                </li>
-                <li class="breadcrumb-item text-primary fw-medium" aria-current="page">Asset Berjalan</li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
-<!-- Period Ruler Bar -->
+<!-- Top Toolbar: Header & Control Filter -->
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body py-3 px-4">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-
-            <div class="d-flex align-items-center gap-2">
-                <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSebelum . '&tahun=' . $tahunSebelum) ?>"
-                    class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
-                    <iconify-icon icon="solar:arrow-left-bold-duotone" class="text-primary"></iconify-icon>
-                    <span class="fw-medium d-none d-md-inline"><?= $namaBulan[$bulanSebelum] . ' ' . $tahunSebelum ?></span>
-                    <span class="fw-medium d-md-none">Sebelumnya</span>
-                </a>
-
-                <div class="d-flex align-items-center gap-2 px-3 py-2 border rounded-pill bg-primary-subtle bg-opacity-10 border-primary-subtle">
-                    <iconify-icon icon="solar:calendar-bold-duotone" class="text-primary fs-5"></iconify-icon>
-                    <span class="fs-4 fw-bold text-primary"><?= $namaBulan[$bulan] . ' ' . $tahun ?></span>
-                </div>
-
-                <?php if (!$isBulanBerjalan): ?>
-                    <?php $bulanSesudah = (int)date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
-                    <?php $tahunSesudah = (int)date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
-                    <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSesudah . '&tahun=' . $tahunSesudah) ?>"
-                        class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
-                        <span class="fw-medium d-none d-md-inline"><?= $namaBulan[$bulanSesudah] . ' ' . $tahunSesudah ?></span>
-                        <span class="fw-medium d-md-none">Berikutnya</span>
-                        <iconify-icon icon="solar:arrow-right-bold-duotone" class="text-primary"></iconify-icon>
-                    </a>
-                <?php else: ?>
-                    <span class="btn btn-light text-muted border disabled d-inline-flex align-items-center gap-2 py-2 px-3 opacity-50" title="Bulan berikutnya belum tersedia">
-                        <span class="fw-medium d-none d-md-inline">Berikutnya</span>
-                        <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
-                    </span>
-                <?php endif; ?>
+    <div class="card-body p-3 p-md-4">
+        <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+            <!-- Title -->
+            <div>
+                <h4 class="fw-bold mb-1 text-dark">Asset Berjalan</h4>
+                <p class="fs-3 text-muted mb-0">Ringkasan performa finansial dan distribusi hasil operasional cabang</p>
             </div>
 
-            <form method="GET" class="d-flex align-items-end flex-wrap gap-2">
-                <?php if ($bolehPilihUnit): ?>
-                    <div>
-                        <label class="form-label fw-semibold fs-3 text-dark mb-1">Unit</label>
-                        <select name="unit" class="form-select form-select-sm bg-white" onchange="this.form.submit()">
+            <!-- Global Controls -->
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <!-- Navigation Month -->
+                <div class="btn-group shadow-sm">
+                    <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSebelum . '&tahun=' . $tahunSebelum) ?>"
+                        class="btn btn-white border text-dark py-2 px-3" title="Bulan Sebelumnya">
+                        <iconify-icon icon="solar:alt-arrow-left-bold" class="align-middle fs-5"></iconify-icon>
+                    </a>
+
+                    <div class="btn btn-white border px-3 py-2 fw-bold text-primary bg-light-subtle d-flex align-items-center gap-2 pointer-events-none">
+                        <iconify-icon icon="solar:calendar-mark-bold-duotone" class="fs-5"></iconify-icon>
+                        <span><?= $namaBulan[$bulan] . ' ' . $tahun ?></span>
+                    </div>
+
+                    <?php if (!$isBulanBerjalan): ?>
+                        <?php
+                        $bulanSesudah = (int)date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun));
+                        $tahunSesudah = (int)date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun));
+                        ?>
+                        <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSesudah . '&tahun=' . $tahunSesudah) ?>"
+                            class="btn btn-white border text-dark py-2 px-3" title="Bulan Berikutnya">
+                            <iconify-icon icon="solar:alt-arrow-right-bold" class="align-middle fs-5"></iconify-icon>
+                        </a>
+                    <?php else: ?>
+                        <button class="btn btn-white border text-muted py-2 px-3 opacity-50" disabled>
+                            <iconify-icon icon="solar:alt-arrow-right-bold" class="align-middle fs-5"></iconify-icon>
+                        </button>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Form Filter -->
+                <form method="GET" class="d-flex align-items-center gap-2 ms-lg-2">
+                    <?php if ($bolehPilihUnit): ?>
+                        <select name="unit" class="form-select border-secondary-subtle fw-medium" onchange="this.form.submit()">
                             <?php foreach ($list_unit as $u): ?>
                                 <option value="<?= $u['idunit'] ?>" <?= $selected_unit == $u['idunit'] ? 'selected' : '' ?>>
                                     <?= $u['NAMA_UNIT'] ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                    </div>
-                <?php endif; ?>
-                <div>
-                    <label class="form-label fw-semibold fs-3 text-dark mb-1">Bulan</label>
-                    <select name="bulan" class="form-select form-select-sm bg-white" onchange="this.form.submit()">
+                    <?php endif; ?>
+
+                    <select name="bulan" class="form-select border-secondary-subtle fw-medium" onchange="this.form.submit()">
                         <?php for ($i = 1; $i <= 12; $i++): ?>
                             <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>><?= $namaBulan[$i] ?></option>
                         <?php endfor; ?>
                     </select>
-                </div>
-                <div>
-                    <label class="form-label fw-semibold fs-3 text-dark mb-1">Tahun</label>
-                    <select name="tahun" class="form-select form-select-sm bg-white" onchange="this.form.submit()">
+
+                    <select name="tahun" class="form-select border-secondary-subtle fw-medium" onchange="this.form.submit()">
                         <?php for ($i = (int) date('Y'); $i >= (int) date('Y') - 3; $i--): ?>
                             <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>><?= $i ?></option>
                         <?php endfor; ?>
                     </select>
-                </div>
-            </form>
-
+                </form>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Metric Report Grid (3 x 2) -->
-<div class="row g-4 mb-4">
-
+<!-- Financial Metrics Grid -->
+<div class="row g-3 mb-4">
     <!-- Omset Bulan Ini -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card border shadow-none h-100 mb-0">
+    <div class="col-sm-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 card-accent-success">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-2 fw-semibold text-muted">Omset Bulan Ini</h6>
-                        <h3 class="fw-bold mb-1 metric-figure text-dark">Rp <?= number_format($omset_bulan ?? 0, 0, ',', '.') ?></h3>
-                        <small class="text-muted">Total omset <?= $namaBulan[$bulan] . ' ' . $tahun ?></small>
-                    </div>
-                    <div class="p-3 bg-success-subtle rounded-3 text-success d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:chart-bold" width="32" height="32"></iconify-icon>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted fw-semibold fs-3">Omset Bulan Ini</span>
+                    <span class="badge bg-success-subtle text-success p-2 rounded-circle">
+                        <iconify-icon icon="solar:graph-up-bold" class="fs-5 d-block"></iconify-icon>
+                    </span>
                 </div>
+                <h3 class="fw-bold text-dark metric-figure mb-1">Rp <?= number_format($omset_bulan ?? 0, 0, ',', '.') ?></h3>
+                <span class="fs-2 text-muted">Total bruto <?= $namaBulan[$bulan] ?></span>
             </div>
         </div>
     </div>
 
     <!-- Pengeluaran Bulan Ini -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card border shadow-none h-100 mb-0">
+    <div class="col-sm-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 card-accent-warning">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-2 fw-semibold text-muted">Pengeluaran Bulan Ini</h6>
-                        <h3 class="fw-bold mb-1 metric-figure text-dark">Rp <?= number_format($pengeluaran ?? 0, 0, ',', '.') ?></h3>
-                        <small class="text-muted">Total pengeluaran <?= $namaBulan[$bulan] . ' ' . $tahun ?></small>
-                    </div>
-                    <div class="p-3 bg-warning-subtle rounded-3 text-warning d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:cart-3-bold" width="32" height="32"></iconify-icon>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted fw-semibold fs-3">Pengeluaran Operasional</span>
+                    <span class="badge bg-warning-subtle text-warning p-2 rounded-circle">
+                        <iconify-icon icon="solar:card-send-bold" class="fs-5 d-block"></iconify-icon>
+                    </span>
                 </div>
+                <h3 class="fw-bold text-dark metric-figure mb-1">Rp <?= number_format($pengeluaran ?? 0, 0, ',', '.') ?></h3>
+                <span class="fs-2 text-muted">Biaya operasional unit</span>
             </div>
         </div>
     </div>
 
-    <!-- Total Tanggungan Asset -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card border shadow-none h-100 mb-0">
+    <!-- Total Gaji Unit -->
+    <div class="col-sm-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 card-accent-danger">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-2 fw-semibold text-muted">Total Tanggungan Asset</h6>
-                        <h3 class="fw-bold mb-1 metric-figure text-primary">
-                            <?php
-                            $total = 0;
-                            if ($selected_unit == 4) {
-                                $total = (($omset_bulan - $pengeluaran - $totalGajiUnit) * 20 / 100);
-                            } elseif (in_array($selected_unit, [3, 5])) {
-                                // Franchise: Banyuwangi (3) & Genteng (5) tanggungan 0.
-                                $total = 0;
-                            } elseif (in_array($selected_unit, [1, 2])) {
-                                $total = $hariDalamBulan * 355000;
-                            }
-                            ?>
-                            Rp <?= number_format($total ?? 0, 0, ',', '.') ?>
-                        </h3>
-                        <small class="text-muted">Tanggungan asset berjalan <?= $namaBulan[$bulan] . ' ' . $tahun ?></small>
-                    </div>
-                    <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:wallet-money-bold" width="32" height="32"></iconify-icon>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted fw-semibold fs-3">Total Gaji Unit</span>
+                    <span class="badge bg-danger-subtle text-danger p-2 rounded-circle">
+                        <iconify-icon icon="solar:users-group-two-rounded-bold" class="fs-5 d-block"></iconify-icon>
+                    </span>
                 </div>
+                <h3 class="fw-bold text-dark metric-figure mb-1">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></h3>
+                <span class="fs-2 text-muted">Beban gaji cabang</span>
             </div>
         </div>
     </div>
 
-    <!-- Total Gaji -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card border shadow-none h-100 mb-0">
+    <!-- Tanggungan Asset -->
+    <div class="col-sm-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 card-accent-primary">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-2 fw-semibold text-muted">Total Gaji</h6>
-                        <h3 class="fw-bold mb-1 metric-figure text-dark">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></h3>
-                        <small class="text-muted">Total gaji <?= $namaBulan[$bulan] . ' ' . $tahun ?></small>
-                    </div>
-                    <div class="p-3 bg-danger-subtle rounded-3 text-danger d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:hand-money-bold" width="32" height="32"></iconify-icon>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted fw-semibold fs-3">Tanggungan Asset</span>
+                    <span class="badge bg-primary-subtle text-primary p-2 rounded-circle">
+                        <iconify-icon icon="solar:vault-bold" class="fs-5 d-block"></iconify-icon>
+                    </span>
                 </div>
+                <h3 class="fw-bold text-primary metric-figure mb-1">Rp <?= number_format($tanggunganAsset, 0, ',', '.') ?></h3>
+                <span class="fs-2 text-muted">Alokasi tanggungan berjalan</span>
             </div>
         </div>
     </div>
 
     <!-- Hak Cabang -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card border shadow-none h-100 mb-0">
+    <div class="col-sm-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 card-accent-info">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-2 fw-semibold text-muted">Hak Cabang</h6>
-                        <h3 class="fw-bold mb-1 metric-figure text-primary">
-                            <?php
-                            $total = 0;
-                            if (in_array($selected_unit, [3, 4, 5])) {
-                                // Franchise (Banyuwangi, Pandaan, Genteng): hak cabang 60%.
-                                $total = 60 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
-                            } elseif (in_array($selected_unit, [1, 2])) {
-                                $total = 0;
-                            }
-                            ?>
-                            Rp <?= number_format($total ?? 0, 0, ',', '.') ?>
-                        </h3>
-                        <small class="text-muted">Total hak cabang <?= $namaBulan[$bulan] . ' ' . $tahun ?></small>
-                    </div>
-                    <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:shop-bold" width="32" height="32"></iconify-icon>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted fw-semibold fs-3">Hak Cabang (60%)</span>
+                    <span class="badge bg-info-subtle text-info p-2 rounded-circle">
+                        <iconify-icon icon="solar:shop-2-bold" class="fs-5 d-block"></iconify-icon>
+                    </span>
                 </div>
+                <h3 class="fw-bold text-dark metric-figure mb-1">Rp <?= number_format($hakCabang, 0, ',', '.') ?></h3>
+                <span class="fs-2 text-muted">Bagian untuk pengelola cabang</span>
             </div>
         </div>
     </div>
 
     <!-- Tagihan Center -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card border shadow-none h-100 mb-0">
+    <div class="col-sm-6 col-xl-4">
+        <div class="card border-0 shadow-sm h-100 card-accent-primary">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-2 fw-semibold text-muted">Tagihan Center</h6>
-                        <h3 class="fw-bold mb-1 metric-figure text-primary">
-                            <?php
-                            $total = 0;
-                            if (in_array($selected_unit, [3, 4, 5])) {
-                                // Franchise (Banyuwangi, Pandaan, Genteng): tagihan center 40%.
-                                $total = 40 * (($omset_bulan - $pengeluaran - $totalGajiUnit)) / 100;
-                            } elseif (in_array($selected_unit, [1, 2])) {
-                                $total = 0;
-                            }
-                            ?>
-                            Rp <?= number_format($total ?? 0, 0, ',', '.') ?>
-                        </h3>
-                        <small class="text-muted">Total tagihan center <?= $namaBulan[$bulan] . ' ' . $tahun ?></small>
-                    </div>
-                    <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:buildings-bold" width="32" height="32"></iconify-icon>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted fw-semibold fs-3">Tagihan Center (40%)</span>
+                    <span class="badge bg-primary-subtle text-primary p-2 rounded-circle">
+                        <iconify-icon icon="solar:buildings-3-bold" class="fs-5 d-block"></iconify-icon>
+                    </span>
                 </div>
+                <h3 class="fw-bold text-primary metric-figure mb-1">Rp <?= number_format($tagihanCenter, 0, ',', '.') ?></h3>
+                <span class="fs-2 text-muted">Kewajiban penyetoran HO</span>
             </div>
         </div>
     </div>
-
 </div>
 
-<!-- HO Salary Distribution Section -->
+<!-- Head Office (HO) Salary Distribution Panel -->
 <?php if (!empty($ho_distribution) && $ho_distribution['divisor'] > 0): ?>
-<div class="card border shadow-none mb-4">
-    <div class="card-header bg-light-subtle border-0 py-3 px-4">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div class="card border-0 shadow-sm mb-4 overflow-hidden">
+        <!-- Panel Header -->
+        <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
             <div>
-                <h5 class="fw-semibold mb-1 text-dark">Pembagian Gaji HO (Head Office)</h5>
-                <small class="text-muted">
-                    Aturan: Semua unit <strong>Pribadi</strong> = 1 bagian, Setiap unit <strong>Franchise</strong> = 1 bagian.
-                    Total pembagi: <strong><?= $ho_distribution['divisor'] ?></strong> (Pribadi: <?= $ho_distribution['pribadi_count'] ?>, Franchise: <?= $ho_distribution['franchise_count'] ?>)
-                </small>
-            </div>
-            <div class="d-flex gap-2">
-                <span class="badge bg-primary-subtle text-primary fw-medium px-3 py-2">
-                    Total Perkiraan: Rp <?= number_format($ho_distribution['total_perkiraan'] ?? 0, 0, ',', '.') ?>
-                </span>
-                <span class="badge bg-success-subtle text-success fw-medium px-3 py-2">
-                    Total Dipotong (Payroll2): Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?>
+                <h5 class="fw-bold text-dark mb-0">Pembagian Gaji Head Office (HO)</h5>
+                <span class="fs-2 text-muted">
+                    Aturan Pembagi: <strong><?= $ho_distribution['divisor'] ?> bagian</strong>
+                    (Pribadi: <?= $ho_distribution['pribadi_count'] ?>, Franchise: <?= $ho_distribution['franchise_count'] ?>)
                 </span>
             </div>
-        </div>
-    </div>
-    <div class="card-body p-4">
-        <!-- Ringkasan Per Bagian -->
-        <div class="row g-3 mb-4">
-            <div class="col-md-6 col-xl-3">
-                <div class="card border shadow-none h-100">
-                    <div class="card-body p-3 text-center">
-                        <h6 class="fw-semibold text-muted mb-1">Bagian per Unit (Perkiraan)</h6>
-                        <h3 class="fw-bold mb-0 metric-figure text-primary">Rp <?= number_format($ho_distribution['per_employee_share'] ?? 0, 0, ',', '.') ?></h3>
-                        <small class="text-muted">Perkiraan slip gaji / divisor</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="card border shadow-none h-100">
-                    <div class="card-body p-3 text-center">
-                        <h6 class="fw-semibold text-muted mb-1">Bagian per Unit (Dipotong)</h6>
-                        <h3 class="fw-bold mb-0 metric-figure text-success">Rp <?= number_format($ho_distribution['per_employee_actual'] ?? 0, 0, ',', '.') ?></h3>
-                        <small class="text-muted">Aktual payroll / divisor</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="card border shadow-none h-100">
-                    <div class="card-body p-3 text-center">
-                        <h6 class="fw-semibold text-muted mb-1">Selisih</h6>
-                        <h3 class="fw-bold mb-0 metric-figure text-<?= (($ho_distribution['per_employee_share'] ?? 0) - ($ho_distribution['per_employee_actual'] ?? 0)) >= 0 ? 'warning' : 'danger' ?>">
-                            Rp <?= number_format(abs(($ho_distribution['per_employee_share'] ?? 0) - ($ho_distribution['per_employee_actual'] ?? 0)), 0, ',', '.') ?>
-                        </h3>
-                        <small class="text-muted">Perkiraan - Aktual</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 col-xl-3">
-                <div class="card border shadow-none h-100">
-                    <div class="card-body p-3 text-center">
-                        <h6 class="fw-semibold text-muted mb-1">Jumlah Karyawan HO</h6>
-                        <h3 class="fw-bold mb-0 metric-figure text-info"><?= count($ho_distribution['employees'] ?? []) ?></h3>
-                        <small class="text-muted">Unit 50 (Head Office)</small>
-                    </div>
-                </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-light text-dark border px-3 py-2 fw-medium">
+                    Perkiraan: <strong class="text-primary ms-1">Rp <?= number_format($ho_distribution['total_perkiraan'] ?? 0, 0, ',', '.') ?></strong>
+                </span>
+                <span class="badge bg-light text-dark border px-3 py-2 fw-medium">
+                    Dipotong: <strong class="text-success ms-1">Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?></strong>
+                </span>
             </div>
         </div>
 
-        <!-- Detail Karyawan HO -->
-        <div class="mb-4">
-            <h6 class="fw-semibold text-dark mb-3">Detail Gaji Karyawan HO</h6>
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Nama</th>
-                            <th class="text-end">Perkiraan Gaji<br><small class="text-muted">(seperti slip gaji)</small></th>
-                            <th class="text-end">Dipotong<br><small class="text-muted">(payroll aktual)</small></th>
-                            <th class="text-end">Selisih</th>
-                            <th>Status Payroll</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach (($ho_distribution['employees'] ?? []) as $emp): ?>
-                            <?php $selisih = $emp['perkiraan_gaji'] - $emp['gaji_dipotong']; ?>
-                            <tr>
-                                <td><?= esc($emp['nama']) ?></td>
-                                <td class="text-end">Rp <?= number_format($emp['perkiraan_gaji'], 0, ',', '.') ?></td>
-                                <td class="text-end">Rp <?= number_format($emp['gaji_dipotong'], 0, ',', '.') ?></td>
-                                <td class="text-end fw-<?= $selisih >= 0 ? 'bold text-warning' : 'bold text-danger' ?>">
-                                    Rp <?= number_format(abs($selisih), 0, ',', '.') ?>
-                                </td>
-                                <td>
-                                    <?php if ($emp['payroll_status'] === 'dibayar'): ?>
-                                        <span class="badge bg-success">Dibayar</span>
-                                    <?php elseif ($emp['payroll_status'] === 'rencana'): ?>
-                                        <span class="badge bg-warning text-dark">Rencana</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-secondary">Belum Ada</span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        <?php if (empty($ho_distribution['employees'])): ?>
-                            <tr>
-                                <td colspan="5" class="text-center text-muted">Tidak ada karyawan HO aktif</td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Distribusi ke Unit -->
-        <div>
-            <h6 class="fw-semibold text-dark mb-3">Distribusi ke Setiap Unit</h6>
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Unit</th>
-                            <th class="text-center">Jenis</th>
-                            <th class="text-center">Bagian (%)</th>
-                            <th class="text-end">Perkiraan<br><small class="text-muted">Rp</small></th>
-                            <th class="text-end">Aktual<br><small class="text-muted">Rp</small></th>
-                            <th>Keterangan</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach (($ho_unit_shares ?? []) as $share): ?>
-                            <tr>
-                                <td><?= esc($share['unit_nama']) ?></td>
-                                <td class="text-center">
-                                    <?php if ($share['unit_jenis'] === 'pribadi'): ?>
-                                        <span class="badge bg-info">Pribadi</span>
-                                    <?php elseif ($share['unit_jenis'] === 'franchise'): ?>
-                                        <span class="badge bg-warning text-dark">Franchise</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-secondary"><?= esc($share['unit_jenis']) ?></span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="text-center"><?= number_format($share['share_pct'], 2) ?>%</td>
-                                <td class="text-end">Rp <?= number_format($share['share_nominal_perkiraan'], 0, ',', '.') ?></td>
-                                <td class="text-end">Rp <?= number_format($share['share_nominal_actual'], 0, ',', '.') ?></td>
-                                <td><?= esc($share['note'] ?? '-') ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+        <div class="card-body p-4">
+            <!-- Metric Summary Cards -->
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light-subtle border">
+                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Per Unit (Perkiraan)</span>
+                        <h5 class="fw-bold text-primary metric-figure mb-0">Rp <?= number_format($ho_distribution['per_employee_share'] ?? 0, 0, ',', '.') ?></h5>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light-subtle border">
+                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Per Unit (Dipotong)</span>
+                        <h5 class="fw-bold text-success metric-figure mb-0">Rp <?= number_format($ho_distribution['per_employee_actual'] ?? 0, 0, ',', '.') ?></h5>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <?php $selisihTotal = ($ho_distribution['per_employee_share'] ?? 0) - ($ho_distribution['per_employee_actual'] ?? 0); ?>
+                    <div class="p-3 rounded-3 bg-light-subtle border">
+                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Selisih Alokasi</span>
+                        <h5 class="fw-bold text-<?= $selisihTotal >= 0 ? 'warning' : 'danger' ?> metric-figure mb-0">
+                            Rp <?= number_format(abs($selisihTotal), 0, ',', '.') ?>
+                        </h5>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light-subtle border">
+                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Total Karyawan HO</span>
+                        <h5 class="fw-bold text-dark metric-figure mb-0"><?= count($ho_distribution['employees'] ?? []) ?> <span class="fs-2 font-normal text-muted">Orang</span></h5>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</div>
 <?php endif; ?>
