@@ -203,6 +203,7 @@
                         'gap_piutang' => 'Piutang GAP',
                         'data_belum_valid' => 'Saldo belum valid',
                         'kebutuhan_nol' => 'Kebutuhan nol',
+                        'belum_verifikasi' => 'Belum terverifikasi',
                         'fallback_manual' => 'Fallback manual',
                     ][$row['status']] ?? $row['status'];
 
@@ -326,6 +327,13 @@
             <div class="tab-content">
                 <!-- Akurasi -->
                 <div class="tab-pane fade show active" id="tab-akurasi">
+                    <div class="alert alert-light border small py-2 mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Tab ini hanya untuk memantau selisih <b>omzet ERP vs omzet sheet</b>.
+                        Nilai KPI <b>Akurasi Laporan Keuangan</b> kini diambil dari
+                        <a href="<?= base_url('finance/rekonsiliasi?unit_id=' . (int) $unit_id . '&month=' . $month) ?>">Rekonsiliasi Harian</a>
+                        (hari terverifikasi tanpa selisih).
+                    </div>
                     <?php
                     $akurasiTotal = 0;
                     $akurasiCocok = 0;

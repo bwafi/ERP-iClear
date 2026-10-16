@@ -367,6 +367,11 @@ class KpiCalculationService
                 if ($component->code === 'FIN_KESEHATAN_UANG') {
                     $targetInfo['cabang'] = $this->financeKpiService()
                         ->kesehatanUangBreakdown((int) $month, (int) $year);
+                } elseif ($component->code === 'FIN_AKURASI') {
+                    // Akurasi Laporan Keuangan: jumlah hari rekonsiliasi
+                    // terverifikasi tanpa selisih per cabang.
+                    $targetInfo['cabang'] = $this->financeKpiService()
+                        ->akurasiBreakdown((int) $month, (int) $year);
                 }
             }
 
@@ -613,7 +618,9 @@ class KpiCalculationService
                 'cabang'     => $item['cabang'] ?? null,
                 'format'     => $item['code'] === 'FIN_KESEHATAN_UANG'
                     ? 'health'
-                    : (in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number'),
+                    : ($item['code'] === 'FIN_AKURASI'
+                        ? 'accuracy'
+                        : (in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number')),
             ];
         }
 

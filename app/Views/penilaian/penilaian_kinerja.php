@@ -517,6 +517,11 @@
                                                 'cabang'  => $kpi['cabang'],
                                                 'modalId' => 'kuModal' . $rowNo,
                                             ]) ?>
+                                        <?php elseif (($kpi['format'] ?? 'currency') === 'accuracy'): ?>
+                                            <?= view('penilaian/_akurasi_laporan', [
+                                                'cabang'  => $kpi['cabang'],
+                                                'modalId' => 'akModal' . $rowNo,
+                                            ]) ?>
                                         <?php else: ?>
                                             <div class="small mt-2 p-3 bg-light rounded-3 border">
                                                 <?php foreach ($kpi['cabang'] as $cb): ?>
@@ -668,8 +673,9 @@
 </div>
 
 <!-- ============================================================
-     Modal rincian Kesehatan Uang per Cabang (satu modal per baris KPI
-     ber-format `health`, id-nya harus sama dengan tombol di atas).
+     Modal rincian per cabang untuk baris KPI ber-format `health`
+     (Kesehatan Uang) dan `accuracy` (Akurasi Laporan Keuangan).
+     id-nya harus sama dengan tombol pada baris tabel di atas.
      ============================================================ -->
 <?php if (!empty($detail_kpi)): ?>
     <?php
@@ -681,14 +687,23 @@
     $no = 1;
     foreach ($detail_kpi as $kpi):
         $rowNo = $no++;
-        if (($kpi['format'] ?? 'currency') !== 'health' || empty($kpi['cabang'])) {
+        $format = $kpi['format'] ?? 'currency';
+        if (empty($kpi['cabang'])) {
             continue;
         }
-        echo view('penilaian/_kesehatan_uang_modal', [
-            'cabang'  => $kpi['cabang'],
-            'modalId' => 'kuModal' . $rowNo,
-            'periode' => $periodeLabel,
-        ]);
+        if ($format === 'health') {
+            echo view('penilaian/_kesehatan_uang_modal', [
+                'cabang'  => $kpi['cabang'],
+                'modalId' => 'kuModal' . $rowNo,
+                'periode' => $periodeLabel,
+            ]);
+        } elseif ($format === 'accuracy') {
+            echo view('penilaian/_akurasi_laporan_modal', [
+                'cabang'  => $kpi['cabang'],
+                'modalId' => 'akModal' . $rowNo,
+                'periode' => $periodeLabel,
+            ]);
+        }
     endforeach;
     ?>
 <?php endif; ?>

@@ -219,6 +219,55 @@ class FinanceKpiService
     }
 
     /**
+     * Rincian KPI Akurasi Laporan Keuangan PER CABANG untuk halaman penilaian
+     * kinerja (pola sama seperti kesehatanUangBreakdown).
+     *
+     * Sumber: Rekonsiliasi Harian (finance_rekon_daily). Nilai tiap cabang =
+     * (hari terverifikasi tanpa selisih ÷ hari terverifikasi) x 100.
+     *
+     * @return array<int,array{unit:int,nama:string,skor:?float,akurasi:?float,
+     *   bobot:float,kontribusi:?float,hari_terekon:int,hari_cocok:int,
+     *   hari_selisih:int,status:string,reached:bool,shortfall:?float}>
+     */
+    public function akurasiBreakdown(int $month, int $year): array
+    {
+        $ym   = sprintf('%04d-%02d', $year, $month);
+        $nama = $this->branchUnitNames();
+        $out  = [];
+
+        foreach ($this->branchUnits() as $unit) {
+            $this->rowsFor($unit, $month, $year); // pastikan cache terisi
+
+            $detail = $this->scorecardsFull[$ym][$unit]['akurasi_rekon_detail'] ?? null;
+            if ($detail === null) {
+                continue;
+            }
+
+            $d        = $detail['detail'] ?? [];
+            $skor     = $detail['score'] ?? null;
+            $terekon  = (int) ($d['hari_terekon'] ?? 0);
+            $cocok    = (int) ($d['hari_cocok'] ?? 0);
+
+            $out[] = [
+                'unit'         => $unit,
+                'nama'         => $nama[$unit] ?? '',
+                'skor'         => $skor,
+                'akurasi'      => $d['akurasi'] ?? null,
+                'bobot'        => (float) ($d['bobot'] ?? 20),
+                'kontribusi'   => $d['kontribusi'] ?? null,
+                'hari_terekon' => $terekon,
+                'hari_cocok'   => $cocok,
+                'hari_selisih' => (int) ($d['hari_selisih'] ?? max($terekon - $cocok, 0)),
+                'status'       => (string) ($detail['status'] ?? ''),
+                'reached'      => $skor !== null && (float) $skor >= 100.0,
+                'shortfall'    => $skor === null ? null : round(max(100.0 - (float) $skor, 0), 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Peta idunit => NAMA_UNIT untuk cabang (tanpa Head Office).
      *
      * @return array<int,string>
