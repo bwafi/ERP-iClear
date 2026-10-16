@@ -349,6 +349,86 @@ class ModelService extends Model
         return $this->countAllResults();
     }
 
+    /**
+     * Data untuk halaman Garansi Service (pagination server-side).
+     *
+     * Mengembalikan seluruh service (tanpa filter status) karena status garansi
+     * dihitung di sisi tampilan dari garansi_hari, tanggal_selesai, dan
+     * tanggal_claim_garansi.
+     */
+    public function getGaransiServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate)
+    {
+        $allowedColumns = [
+            0 => 'service.no_service',
+            1 => 'service.created_at',
+            2 => 'service.tanggal_selesai',
+            3 => 'pelanggan.nama',
+            4 => 'service.no_hp',
+            5 => 'service.alamat',
+            6 => 'service.garansi_hari',
+            7 => 'service.tanggal_claim_garansi'
+        ];
+
+        $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.created_at';
+
+        $whereConditions = ['1=1'];
+        $params = [];
+
+        if (!empty($startDate)) {
+            $whereConditions[] = 'DATE(service.created_at) >= ?';
+            $params[] = $startDate;
+        }
+        if (!empty($endDate)) {
+            $whereConditions[] = 'DATE(service.created_at) <= ?';
+            $params[] = $endDate;
+        }
+
+        $searchCondition = '';
+        if (!empty($searchValue)) {
+            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR service.alamat LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+        }
+
+        $whereClause = implode(' AND ', $whereConditions) . $searchCondition;
+
+        $sql = "SELECT
+                service.idservice,
+                service.no_service,
+                service.created_at,
+                service.tanggal_selesai,
+                service.no_hp,
+                service.alamat,
+                service.garansi_hari,
+                service.tanggal_claim_garansi,
+                pelanggan.nama as nama_pelanggan
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}
+            ORDER BY {$orderColumnName} {$orderDir}
+            LIMIT ? OFFSET ?";
+
+        $params[] = (int) $length;
+        $params[] = (int) $start;
+
+        $query = $this->db->query($sql, $params);
+        $data = $query->getResult();
+
+        $countSql = "SELECT COUNT(*) as total
+            FROM service
+            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            WHERE {$whereClause}";
+
+        $countQuery = $this->db->query($countSql, array_slice($params, 0, -2));
+        $totalFiltered = $countQuery->getRow()->total;
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered
+        ];
+    }
+
     public function getRiwayatServiceTanpaClaimGaransi()
     {
         return $this->select('service.*, pelanggan.nama as nama_pelanggan')

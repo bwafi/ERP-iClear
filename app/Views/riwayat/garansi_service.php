@@ -1,4 +1,4 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
+ <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <h4 class="fw-semibold mb-0">Garansi Service</h4>
         <nav aria-label="breadcrumb">
@@ -13,236 +13,111 @@
 </div>
 
 <div class="card w-100 position-relative overflow-hidden">
-    <div class="px-4 py-3 border-bottom">
-    </div>
-
-    <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data">
-        <button type="submit" class="btn btn-danger"
-            style="margin-left: 20px; display: inline-flex; align-items: center;">
-            <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;"></iconify-icon>
-            Export
-        </button>
-        <br><br>
-
-
-        <!-- Filter Tanggal & Unit -->
-        <div class="mb-3 px-4">
-
-            <label class="ms-3 me-2">Tanggal Awal:</label>
-            <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
-                style="width: auto; display: inline-block;" onchange="filterData()">
-
-            <label class="ms-3 me-2">Tanggal Akhir:</label>
-            <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
-                style="width: auto; display: inline-block;" onchange="filterData()">
-
-            <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label fw-semibold mb-2">Tanggal Awal</label>
+                <input type="date" id="startDate" class="form-control">
+            </div>
+            <div class="col-lg-2 col-md-6">
+                <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
+                <input type="date" id="endDate" class="form-control">
+            </div>
+            <div class="col-lg-4 col-md-6">
+                <label class="form-label fw-semibold mb-2">Search</label>
+                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, alamat...">
+            </div>
+            <div class="col-lg-2 col-md-3">
+                <label class="form-label fw-semibold mb-2">Show</label>
+                <select id="pageLength" class="form-select">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-3 d-flex align-items-end">
+                <button type="button"
+                    onclick="resetFilter()"
+                    class="btn btn-outline-secondary w-100 d-flex justify-content-center align-items-center gap-1">
+                    <iconify-icon icon="solar:refresh-linear" width="18" height="18"></iconify-icon>
+                    Reset
+                </button>
+            </div>
         </div>
-    </form>
 
+        <div class="d-flex justify-content-end mb-3">
+            <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
+                <input type="hidden" name="tanggal_awal" id="exportStartDate">
+                <input type="hidden" name="tanggal_akhir" id="exportEndDate">
+                <button type="submit" class="btn btn-danger">
+                    <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
+                    Export
+                </button>
+            </form>
+        </div>
 
-
-
-
-    <div class="table-responsive mb-4 px-4">
-        <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
-            <thead class="text-dark fs-4">
-                <tr>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">No Service</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Service Masuk</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Diambil</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
-                    </th>
-                    <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
-                    </th>
-
-                    <th style="display: flex; justify-content: center;">
-                        <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
-                    </th>
-
-
-
-                    <th>
-                        <h6 style="justify-content: center; display: flex;" class="fs-4 fw-semibold mb-0">Status garansi</h6>
-                    </th>
-
-                    <th>
-                        <h6 style="justify-content: center; display: flex;" class="fs-4 fw-semibold mb-0">Riwayat garansi</h6>
-                    </th>
-
-                    <th style="display: flex; justify-content: center;">
-                        <h6 class="fs-4 fw-semibold mb-0">Action</h6>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($service)): ?>
-                    <?php foreach ($service as $row): ?>
-                        <tr>
-                            <td><?= esc($row->no_service) ?></td>
-                            <td><?= esc(date('d-m-Y', strtotime($row->created_at))) ?></td>
-                            <td><?= esc(date('d-m-Y', strtotime($row->tanggal_selesai))) ?></td>
-                            <td><?= esc($row->nama_pelanggan) ?></td>
-                            <td><?= esc($row->no_hp) ?></td>
-                            <td><?= esc($row->alamat) ?></td>
-
-                            <td>
-                                <?php if ($row->garansi_hari > 0 && !empty($row->tanggal_selesai)): ?>
-                                    <?php
-
-                                    $tanggal_selesai = new DateTime($row->tanggal_selesai);
-                                    $tanggal_akhir = clone $tanggal_selesai;
-                                    $tanggal_akhir->modify("+{$row->garansi_hari} days");
-                                    $today = new DateTime();
-
-
-                                    $claim_date = $row->tanggal_claim_garansi;
-                                    $is_claimed = !is_null($claim_date) && $claim_date > '1971-01-01 00:00:00';
-
-                                    if ($is_claimed) {
-                                        // KONDISI 1: Garansi sudah di-claim
-                                        // Tampilkan tanggal kapan garansi tersebut di-claim
-                                        echo "Di klaim pada " . date('d-m-Y', strtotime($claim_date));
-                                    } else {
-                                        // Garansi belum di-claim, cek apakah aktif atau sudah kadaluarsa
-                                        if ($today > $tanggal_akhir) {
-                                            // KONDISI 2: Garansi tidak di-claim dan sudah kadaluarsa
-                                            echo "Tidak Claim (kadaluarsa pada " . $tanggal_akhir->format('d-m-Y') . ")";
-                                        } else {
-                                            // KONDISI 3: Garansi belum di-claim dan masih aktif
-                                            echo esc($row->garansi_hari) . " hari (aktif sampai " . $tanggal_akhir->format('d-m-Y') . ")";
-                                        }
-                                    }
-                                    ?>
-                                <?php else: ?>
-                                    <?php
-                                    // KONDISI 4: Memang tidak ada garansi dari awal
-                                    echo "Tidak ada garansi";
-                                    ?>
-                                <?php endif; ?>
-                            </td>
-
-                            <td>
-                                <?php if (!empty($row->tanggal_claim_garansi) && $row->tanggal_claim_garansi > '1971-01-01'): ?>
-                                    Klaim pada tanggal <?= date('d-m-Y', strtotime($row->tanggal_claim_garansi)) ?>
-                                <?php else: ?>
-                                    Tidak ada riwayat
-                                <?php endif; ?>
-                            </td>
-
-
-
-
-                            <td>
-                                <!-- tombol garansi -->
-                                <?php
-                                $tanggal_selesai = !empty($row->tanggal_selesai) ? $row->tanggal_selesai : null;
-                                $garansi_hari = (int)$row->garansi_hari;
-
-                                // Cek apakah ada garansi
-                                $ada_garansi = $garansi_hari > 0 && !empty($tanggal_selesai);
-
-                                // Hitung tanggal akhir garansi
-                                $masih_dalam_garansi = false;
-                                if ($ada_garansi) {
-                                    $tanggal_akhir_garansi = date('Y-m-d', strtotime($tanggal_selesai . " +{$garansi_hari} days"));
-                                    $hari_ini = date('Y-m-d');
-                                    $masih_dalam_garansi = $hari_ini <= $tanggal_akhir_garansi;
-                                }
-
-                                if ($ada_garansi && $masih_dalam_garansi) {
-                                    // KONDISI: Tombol Aktif selama masa garansi
-                                ?>
-                                    <button type="button" class="btn btn-sm btn-danger"
-                                        style="display: inline-flex; align-items: center;"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#ClaimGaransiModal-<?= esc($row->idservice) ?>"
-                                        data-idservice="<?= esc($row->idservice) ?>">
-                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
-                                        Claim Garansi
-                                    </button>
-                                <?php
-                                } else {
-                                    // KONDISI: Tombol Tidak Aktif (Tidak ada garansi atau garansi sudah habis)
-                                ?>
-                                    <button type="button" class="btn btn-sm btn-danger" style="display: inline-flex; align-items: center;" disabled>
-                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
-                                        Claim Garansi
-                                    </button>
-                                <?php
-                                }
-                                ?>
-                                <!-- end tombol garansi -->
-
-                                <button type="button" class="btn btn-wa"
-                                    data-nohp="<?= esc($row->no_hp) ?>"
-                                    data-nama="<?= esc($row->nama_pelanggan) ?>"
-                                    style="width: 100px; height: 40px; background-color: greenyellow;">
-                                    <iconify-icon icon="solar:phone-bold" width="24" height="24"></iconify-icon>
-                                </button>
-                                <!-- Tombol -->
-                                <button type="button" class="btn btn-wa btn-riwayat"
-                                    data-idservice="<?= esc($row->idservice) ?>"
-                                    style=" height: 40px; background-color: antiquewhite;">
-
-                                    Riwayat Klaim
-                                </button>
-
-
-
-                            </td>
-
-                        </tr>
-
-                        <!-- modal bsa dimabil -->
-
-                        <div class="modal fade" id="ClaimGaransiModal-<?= esc($row->idservice) ?>" tabindex="-1" aria-labelledby="ClaimGaransiModalLabel-<?= esc($row->idservice) ?>" aria-hidden="true">
-                            <div class="modal-dialog" role="document">
-                                <div class="modal-content">
-                                    <div class="modal-header d-flex align-items-center">
-                                        <h4 class="modal-title" id="ClaimGaransiModalLabel-<?= esc($row->idservice) ?>">Konfirmasi Klaim Garansi</h4>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-                                    </div>
-                                    <form action="<?= base_url('claim_garansi') ?>" method="post">
-                                        <div class="modal-body">
-                                            <input type="hidden" name="idservice" value="<?= esc($row->idservice) ?>">
-                                            <p>Apakah Anda yakin service Akan klaim garansi?</p>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                                            <button type="submit" class="btn btn-success">Konfirmasi</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-
-
-
-                    <?php endforeach; ?>
-                <?php else: ?>
+        <div class="table-responsive">
+            <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
+                <thead class="text-dark fs-4">
                     <tr>
-                        <td colspan="3" class="text-center">Tidak ada data</td>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">No Service</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Tanggal Service Masuk</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Tanggal Diambil</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Status garansi</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Riwayat garansi</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Action</h6>
+                        </th>
                     </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
-
-
-
-
+<!-- Modal Konfirmasi Claim Garansi (dipakai bersama semua baris) -->
+<div class="modal fade" id="ClaimGaransiModal" tabindex="-1" aria-labelledby="ClaimGaransiModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header d-flex align-items-center">
+                <h4 class="modal-title" id="ClaimGaransiModalLabel">Konfirmasi Klaim Garansi</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <form action="<?= base_url('claim_garansi') ?>" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="idservice" id="modal-claim-idservice">
+                    <p>Apakah Anda yakin service Akan klaim garansi?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success">Konfirmasi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <!-- Modal Global Riwayat Klaim -->
 <div class="modal fade" id="modalRiwayatKlaim" tabindex="-1" aria-hidden="true">
@@ -264,21 +139,22 @@
     </div>
 </div>
 
-
-
-
-
-
-
 <script>
     let dataTable;
+    let searchTimeout;
+
+    const formatDate = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+    };
 
     window.onload = function() {
-        // Inisialisasi DataTable
-        dataTable = $('#zero_config').DataTable();
-
-        const endDateInput = document.getElementById('endDate');
         const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const searchBox = document.getElementById('searchBox');
+        const pageLength = document.getElementById('pageLength');
 
         const today = new Date();
         const fifteenDaysAgo = new Date();
@@ -294,74 +170,205 @@
         // Set default 15 hari ke belakang
         startDateInput.value = toDateInputValue(fifteenDaysAgo);
         endDateInput.value = toDateInputValue(today);
+        document.getElementById('exportStartDate').value = startDateInput.value;
+        document.getElementById('exportEndDate').value = endDateInput.value;
 
-        // Jalankan filter pertama kali
-        filterData();
+        if ($.fn.DataTable.isDataTable('#zero_config')) {
+            $('#zero_config').DataTable().destroy();
+        }
 
-        // Tambahkan event agar filter jalan otomatis saat tanggal diganti
+        dataTable = $('#zero_config').DataTable({
+            serverSide: true,
+            processing: true,
+            scrollY: '50vh',
+            scrollX: true,
+            scrollCollapse: true,
+            searching: false,
+            lengthChange: false,
+            pageLength: 10,
+            language: {
+                processing: '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>',
+                emptyTable: 'Tidak ada data',
+                info: 'Menampilkan _START_ sampai _END_ dari _TOTAL_ data',
+                infoEmpty: 'Menampilkan 0 sampai 0 dari 0 data',
+                infoFiltered: '(difilter dari _MAX_ total data)',
+                paginate: {
+                    first: 'Pertama',
+                    last: 'Terakhir',
+                    next: 'Selanjutnya',
+                    previous: 'Sebelumnya'
+                }
+            },
+            ajax: {
+                url: '<?= base_url('garansi_service/ajax') ?>',
+                type: 'POST',
+                data: function(d) {
+                    d.startDate = startDateInput.value;
+                    d.endDate = endDateInput.value;
+                    d.search = {
+                        value: searchBox.value
+                    };
+                }
+            },
+            columns: [{
+                    data: 'no_service'
+                },
+                {
+                    data: 'created_at',
+                    render: function(data) {
+                        if (!data) return '';
+                        return formatDate(new Date(data));
+                    }
+                },
+                {
+                    data: 'tanggal_selesai',
+                    render: function(data) {
+                        if (!data) return '';
+                        return formatDate(new Date(data));
+                    }
+                },
+                {
+                    data: 'nama_pelanggan'
+                },
+                {
+                    data: 'no_hp'
+                },
+                {
+                    data: 'alamat'
+                },
+                {
+                    data: 'garansi_hari',
+                    render: function(data, type, row) {
+                        if (row.garansi_hari > 0 && row.tanggal_selesai) {
+                            const tanggalSelesai = new Date(row.tanggal_selesai);
+                            const tanggalAkhir = new Date(tanggalSelesai);
+                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
+                            const today = new Date();
+
+                            const claimDate = row.tanggal_claim_garansi;
+                            const isClaimed = claimDate && claimDate > '1971-01-01 00:00:00';
+
+                            if (isClaimed) {
+                                return 'Di klaim pada ' + formatDate(new Date(claimDate));
+                            }
+
+                            if (today > tanggalAkhir) {
+                                return 'Tidak Claim (kadaluarsa pada ' + formatDate(tanggalAkhir) + ')';
+                            }
+
+                            return row.garansi_hari + ' hari (aktif sampai ' + formatDate(tanggalAkhir) + ')';
+                        }
+
+                        return 'Tidak ada garansi';
+                    }
+                },
+                {
+                    data: 'tanggal_claim_garansi',
+                    render: function(data) {
+                        if (data && data > '1971-01-01') {
+                            return 'Klaim pada tanggal ' + formatDate(new Date(data));
+                        }
+                        return 'Tidak ada riwayat';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(data, type, row) {
+                        const adaGaransi = parseInt(row.garansi_hari) > 0 && !!row.tanggal_selesai;
+                        let masihDalamGaransi = false;
+
+                        if (adaGaransi) {
+                            const tanggalAkhir = new Date(row.tanggal_selesai);
+                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
+                            tanggalAkhir.setHours(0, 0, 0, 0);
+
+                            const hariIni = new Date();
+                            hariIni.setHours(0, 0, 0, 0);
+
+                            masihDalamGaransi = hariIni <= tanggalAkhir;
+                        }
+
+                        let buttons = '';
+
+                        // Tombol Claim Garansi
+                        if (adaGaransi && masihDalamGaransi) {
+                            buttons += `<button type="button" class="btn btn-sm btn-danger btn-claim-garansi me-1" style="display: inline-flex; align-items: center;" data-idservice="${row.idservice}">
+                                <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
+                                Claim Garansi
+                            </button>`;
+                        } else {
+                            buttons += `<button type="button" class="btn btn-sm btn-danger me-1" style="display: inline-flex; align-items: center;" disabled>
+                                <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
+                                Claim Garansi
+                            </button>`;
+                        }
+
+                        // Tombol WhatsApp
+                        buttons += `<button type="button" class="btn btn-wa me-1"
+                            data-nohp="${row.no_hp ?? ''}"
+                            data-nama="${row.nama_pelanggan ?? ''}"
+                            style="width: 100px; height: 40px; background-color: greenyellow;">
+                            <iconify-icon icon="solar:phone-bold" width="24" height="24"></iconify-icon>
+                        </button>`;
+
+                        // Tombol Riwayat Klaim
+                        buttons += `<button type="button" class="btn btn-wa btn-riwayat"
+                            data-idservice="${row.idservice}"
+                            style="height: 40px; background-color: antiquewhite;">
+                            Riwayat Klaim
+                        </button>`;
+
+                        return buttons;
+                    }
+                }
+            ],
+            order: [
+                [1, 'desc']
+            ]
+        });
+
+        searchBox.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                dataTable.ajax.reload();
+            }, 500);
+        });
+
+        pageLength.addEventListener('change', function() {
+            dataTable.page.len(this.value).draw();
+        });
+
         startDateInput.addEventListener('change', filterData);
         endDateInput.addEventListener('change', filterData);
-    };
 
-    function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-
-        const startDate = start ? new Date(start) : null;
-        const endDate = end ? new Date(end) : null;
-
-        // Custom filter DataTable
-        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-            // Ambil tanggal dari kolom ke-2 (index 1)
-            const dateText = data[1].trim(); // Ubah jika kolom tanggal bukan index 1
-            const parts = dateText.split('-'); // Asumsi format dd-mm-yyyy
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-
-            if (startDate && rowDate < startDate) return false;
-            if (endDate && rowDate > endDate) return false;
-            return true;
+        // Buka modal konfirmasi claim untuk baris yang dipilih
+        $(document).on('click', '.btn-claim-garansi', function() {
+            $('#modal-claim-idservice').val($(this).data('idservice'));
+            $('#ClaimGaransiModal').modal('show');
         });
 
-        dataTable.draw(); // redraw tabel setelah filter
-        $.fn.dataTable.ext.search.pop(); // hapus filter setelah dipakai
-    }
+        // WhatsApp button (delegated agar tetap jalan untuk baris dari server)
+        $(document).on('click', '.btn-wa', function() {
+            if (!this.dataset.nohp) {
+                return;
+            }
 
-    function resetFilter() {
-        document.getElementById('startDate').value = '';
-        document.getElementById('endDate').value = '';
+            let nomor = this.dataset.nohp.trim();
+            let nama = (this.dataset.nama ?? '').trim();
 
-        filterData();
-    }
-</script>
+            // Normalisasi nomor HP
+            if (nomor.startsWith('0')) {
+                nomor = '62' + nomor.substring(1);
+            } else if (nomor.startsWith('+62')) {
+                nomor = nomor.substring(1); // hapus +
+            }
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const buttons = document.querySelectorAll('.btn-wa');
-
-        buttons.forEach(button => {
-            button.addEventListener('click', function() {
-                let nomor = this.dataset.nohp.trim();
-                let nama = this.dataset.nama.trim();
-
-                // Normalisasi nomor HP
-                if (nomor.startsWith('0')) {
-                    nomor = '62' + nomor.substring(1);
-                } else if (nomor.startsWith('+62')) {
-                    nomor = nomor.substring(1); // hapus +
-                }
-
-                const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent("Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama " + nama);
-
-                // Buka WhatsApp
-                window.open(waUrl, '_blank');
-            });
+            const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent("Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama " + nama);
+            window.open(waUrl, '_blank');
         });
-    });
-</script>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // pakai event delegation
+        // Riwayat klaim (delegated)
         $(document).on('click', '.btn-riwayat', function() {
             const idservice = $(this).data('idservice');
 
@@ -374,5 +381,31 @@
                 $('#riwayat-klaim-content').html(response.html);
             });
         });
-    });
+    };
+
+    function filterData() {
+        dataTable.ajax.reload();
+        document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
+        document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
+    }
+
+    function resetFilter() {
+        const today = new Date();
+        const fifteenDaysAgo = new Date();
+        fifteenDaysAgo.setDate(today.getDate() - 15);
+
+        const toDateInputValue = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        document.getElementById('startDate').value = toDateInputValue(fifteenDaysAgo);
+        document.getElementById('endDate').value = toDateInputValue(today);
+        document.getElementById('searchBox').value = '';
+        document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
+        document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
+        dataTable.ajax.reload();
+    }
 </script>

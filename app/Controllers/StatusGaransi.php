@@ -69,19 +69,48 @@ class StatusGaransi extends BaseController
 
     public function index()
     {
-        $service = $this->ServiceModel->getRiwayatService();
-        $riwayatKlaim = [];
-        foreach ($service as $s) {
-            $riwayatKlaim[$s->idservice] = $this->RiwayatKlaimGaransiModel->getByService($s->idservice);
-        }
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'riwayatKlaim' => $riwayatKlaim,
-            'service' => $this->ServiceModel->getRiwayatService(),
+            'service' => [],
             'body'  => 'riwayat/garansi_service'
         );
         return view('template', $data);
+    }
+
+
+    public function garansi_service_ajax()
+    {
+        $request = \Config\Services::request();
+
+        $draw = $request->getPost('draw');
+        $start = $request->getPost('start') ?? 0;
+        $length = $request->getPost('length') ?? 10;
+        $searchValue = $request->getPost('search')['value'] ?? '';
+        $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 1;
+        $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
+
+        $startDate = $request->getPost('startDate') ?? '';
+        $endDate = $request->getPost('endDate') ?? '';
+
+        $result = $this->ServiceModel->getGaransiServiceServerSide(
+            $start,
+            $length,
+            $searchValue,
+            $orderColumnIndex,
+            $orderDir,
+            $startDate,
+            $endDate
+        );
+
+        $recordsTotal = $this->ServiceModel->getRiwayatServiceTotal();
+
+        return $this->response->setJSON([
+            'draw' => intval($draw),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data']
+        ]);
     }
 
 

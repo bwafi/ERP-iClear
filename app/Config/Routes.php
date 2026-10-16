@@ -209,6 +209,7 @@ $routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pe
 
 //garansiservice
 $routes->get('garansi_service', 'StatusGaransi::index', ['filter' => 'auth']);
+$routes->post('garansi_service/ajax', 'StatusGaransi::garansi_service_ajax', ['filter' => 'auth']);
 $routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => 'auth']);
 $routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1');
 
