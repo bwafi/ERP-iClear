@@ -522,6 +522,11 @@
                                                 'cabang'  => $kpi['cabang'],
                                                 'modalId' => 'akModal' . $rowNo,
                                             ]) ?>
+                                        <?php elseif (($kpi['format'] ?? 'currency') === 'cashflow'): ?>
+                                            <?= view('penilaian/_cashflow', [
+                                                'cabang'  => $kpi['cabang'],
+                                                'modalId' => 'cfModal' . $rowNo,
+                                            ]) ?>
                                         <?php else: ?>
                                             <div class="small mt-2 p-3 bg-light rounded-3 border">
                                                 <?php foreach ($kpi['cabang'] as $cb): ?>
@@ -674,7 +679,8 @@
 
 <!-- ============================================================
      Modal rincian per cabang untuk baris KPI ber-format `health`
-     (Kesehatan Uang) dan `accuracy` (Akurasi Laporan Keuangan).
+     (Kesehatan Uang), `accuracy` (Akurasi Laporan Keuangan), dan
+     `cashflow` (Net Cash Flow).
      id-nya harus sama dengan tombol pada baris tabel di atas.
      ============================================================ -->
 <?php if (!empty($detail_kpi)): ?>
@@ -701,6 +707,12 @@
             echo view('penilaian/_akurasi_laporan_modal', [
                 'cabang'  => $kpi['cabang'],
                 'modalId' => 'akModal' . $rowNo,
+                'periode' => $periodeLabel,
+            ]);
+        } elseif ($format === 'cashflow') {
+            echo view('penilaian/_cashflow_modal', [
+                'cabang'  => $kpi['cabang'],
+                'modalId' => 'cfModal' . $rowNo,
                 'periode' => $periodeLabel,
             ]);
         }

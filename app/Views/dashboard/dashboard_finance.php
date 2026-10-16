@@ -306,7 +306,7 @@
                     <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-akurasi" type="button">Akurasi Omzet</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cashflow" type="button">Cash Flow</button>
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cashflow" type="button">Net Cash Flow</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hutang" type="button">Hutang & Piutang</button>
@@ -751,7 +751,7 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-3">
                             <div class="border rounded p-3 h-100">
-                                <div class="text-muted small mb-1">Skor KPI (Verified)</div>
+                                <div class="text-muted small mb-1">Skor KPI</div>
                                 <div class="fs-4 fw-semibold">
                                     <?= $rekonScore !== null ? number_format((float) $rekonScore, 2, ',', '.') . '%' : '—' ?>
                                 </div>
@@ -759,14 +759,14 @@
                         </div>
                         <div class="col-md-3">
                             <div class="border rounded p-3 h-100">
-                                <div class="text-muted small mb-1">Hari Dilalui</div>
-                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_dilalui'] ?? 0) ?></div>
+                                <div class="text-muted small mb-1">Hari dalam Bulan</div>
+                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_bulan'] ?? 0) ?></div>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="border rounded p-3 h-100">
-                                <div class="text-muted small mb-1">Lengkap &amp; Verified</div>
-                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_lengkap_verified'] ?? 0) ?></div>
+                                <div class="text-muted small mb-1">Hari Lengkap</div>
+                                <div class="fs-4 fw-semibold"><?= (int) ($rekonDetail['hari_lengkap'] ?? 0) ?></div>
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -779,8 +779,8 @@
 
                     <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
                         <span>
-                            Hanya hari yang <strong>lengkap</strong> (ketua kelompok diperiksa) dan sudah
-                            <strong>VERIFIED</strong> yang dihitung ke KPI. Selisih tidak menurunkan skor.
+                            KPI = hari <strong>lengkap</strong> (ketiga angka terisi) ÷ jumlah hari dalam bulan.
+                            Setiap hari yang belum direkonsiliasi menurunkan skor. Selisih tidak menurunkan skor.
                         </span>
                         <a href="<?= base_url($rekonLink) ?>" class="btn btn-primary btn-sm">
                             <i class="bi bi-arrow-right-circle me-1"></i>Buka Rekonsiliasi Harian
@@ -884,7 +884,7 @@
                                     </table>
                                 </div>
                                 <div class="card-footer bg-white small text-muted">
-                                    Definisi sama dengan KPI Cash Flow: penjualan + service selesai, tunai + transfer.
+                                    Definisi sama dengan KPI Net Cash Flow: penjualan + service selesai, tunai + transfer.
                                 </div>
                             </div>
                         </div>

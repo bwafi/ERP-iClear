@@ -12,8 +12,9 @@ use Config\Finance;
  * kecuali HO) dari scorecard FinanceKpiCalculationService.
  *
  * Bobot mengikuti keputusan bisnis Dashboard Finance (Config\Finance::
- * $kpiWeights: 30/20/15/10/10/5/5/5) dan ditulis ke kpi_weights posisi 0 —
- * bukan di-hardcode di sini.
+ * $kpiWeights: 30/20/15/10/10/10/5) dan ditulis ke kpi_weights posisi 0 —
+ * bukan di-hardcode di sini. KPI "Improvement Finance" dihapus 2026-10-16;
+ * bobotnya (5) dipindah ke Payroll (jadi 10).
  *
  * Kode komponen memakai prefix FIN_ agar tidak bentrok dengan komponen
  * divisi lain (mis. IMPROVEMENT dipakai jabatan 43/44).
@@ -29,7 +30,6 @@ class FinanceKpiService
         'FIN_REKONSILIASI',
         'FIN_PAYROLL',
         'FIN_COMPLIANCE',
-        'FIN_IMPROVEMENT',
     ];
 
     /** NAMA_UNIT Head Office — unit pusat, bukan cabang. */
@@ -261,6 +261,65 @@ class FinanceKpiService
                 'status'       => (string) ($detail['status'] ?? ''),
                 'reached'      => $skor !== null && (float) $skor >= 100.0,
                 'shortfall'    => $skor === null ? null : round(max(100.0 - (float) $skor, 0), 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Rincian KPI Net Cash Flow PER CABANG untuk halaman penilaian kinerja
+     * (pola sama seperti kesehatanUangBreakdown/akurasiBreakdown).
+     *
+     * Nilai tiap cabang = skor dari CashFlowCalculator:
+     *   NCF%  = Net Cash Flow ÷ Penerimaan × 100
+     *   skor  = min((NCF% ÷ target) × 100, 100)
+     * sehingga target bisnis (20%) terlihat berdampingan dengan capaian tiap
+     * cabang — bukan hanya skor 0–100.
+     *
+     * Memakai cache scorecard yang sudah dihitung componentData(), jadi tidak
+     * mengulang query per cabang.
+     *
+     * @return array<int,array{unit:int,nama:string,target_persen:float,
+     *   persen:?float,skor:?float,bobot:float,kontribusi:?float,
+     *   penjualan:int,service:int,penerimaan:int,kas_keluar:int,net:int,
+     *   status:string,reached:bool,shortfall:?float}>
+     */
+    public function cashflowBreakdown(int $month, int $year): array
+    {
+        $ym   = sprintf('%04d-%02d', $year, $month);
+        $nama = $this->branchUnitNames();
+        $bobot = (float) ($this->weights()['cash_flow'] ?? 15);
+        $out  = [];
+
+        foreach ($this->branchUnits() as $unit) {
+            $this->rowsFor($unit, $month, $year); // pastikan cache terisi
+
+            $detail = $this->scorecardsFull[$ym][$unit]['cashflow_monthly'] ?? null;
+            if ($detail === null) {
+                continue;
+            }
+
+            $d      = $detail['detail'] ?? [];
+            $skor   = $detail['score'] ?? null;
+            $persen = $d['persen'] ?? null;
+
+            $out[] = [
+                'unit'          => $unit,
+                'nama'          => $nama[$unit] ?? '',
+                'target_persen' => (float) ($d['target_persen'] ?? 20),
+                'persen'        => $persen,
+                'skor'          => $skor,
+                'bobot'         => $bobot,
+                'kontribusi'    => $skor === null ? null : round((float) $skor * $bobot / 100, 2),
+                'penjualan'     => (int) ($d['penjualan'] ?? 0),
+                'service'       => (int) ($d['service'] ?? 0),
+                'penerimaan'    => (int) ($d['kas_masuk'] ?? 0),
+                'kas_keluar'    => (int) ($d['kas_keluar'] ?? 0),
+                'net'           => (int) ($d['net'] ?? 0),
+                'status'        => (string) ($detail['status'] ?? ''),
+                'reached'       => $skor !== null && (float) $skor >= 100.0,
+                'shortfall'     => $skor === null ? null : round(max(100.0 - (float) $skor, 0), 2),
             ];
         }
 

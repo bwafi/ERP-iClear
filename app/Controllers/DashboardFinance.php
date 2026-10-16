@@ -166,7 +166,7 @@ class DashboardFinance extends BaseController
     }
 
     /**
-     * Simpan penilaian manual (Kesehatan Uang, Compliance, Improvement).
+     * Simpan penilaian manual (Kesehatan Uang, Rekonsiliasi, Compliance).
      */
     public function entryManual()
     {

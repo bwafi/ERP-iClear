@@ -12,7 +12,7 @@ use Config\Finance;
  *
  * - Auto  : akurasi (rekonsiliasi harian: hari terverifikasi tanpa selisih),
  *           cash_flow, hutang_piutang, payroll
- * - Manual: kesehatan_uang, compliance, improvement
+ * - Manual: kesehatan_uang, compliance
  * - Auto + fallback manual: rekonsiliasi
  *
  * Transisi aman rekonsiliasi: 'rekonsiliasi' tetap terdaftar di

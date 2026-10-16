@@ -889,8 +889,8 @@ $linkStatus = static function (string $nilai) use ($unit_id, $month): string {
                                                                         // $list sudah difilter status, jadi angka "dari … hari"
                                                                         // diambil dari detail KPI yang dihitung untuk
                                                                         // seluruh bulan — bukan dari daftar yang difilter.
-                                                                        if (! empty($rekon_score['detail']['hari_dilalui'])): ?>
-                        dari <b class="rk-num"><?= (int) $rekon_score['detail']['hari_dilalui'] ?></b> hari
+                                                                        if (! empty($rekon_score['detail']['hari_bulan'])): ?>
+                        dari <b class="rk-num"><?= (int) $rekon_score['detail']['hari_bulan'] ?></b> hari
                     <?php endif; ?>
                     &nbsp;·&nbsp;
                     <a class="rk-count rk-count-reset" href="<?= base_url($linkStatus('')) ?>">Tampilkan semua</a>
@@ -913,12 +913,12 @@ $linkStatus = static function (string $nilai) use ($unit_id, $month): string {
                                             ? max(0, min(100, (float) $rekon_score['score'])) : 0 ?>%"></i>
                 </div>
                 <div class="rk-score-sub">
-                    <?php if (! empty($rekon_score['detail']['hari_dilalui'])): ?>
-                        <span class="rk-num"><?= (int) $rekon_score['detail']['hari_lengkap_verified'] ?></span>
-                        / <span class="rk-num"><?= (int) $rekon_score['detail']['hari_dilalui'] ?></span>
-                        hari lengkap &amp; verified
+                    <?php if (! empty($rekon_score['detail']['hari_bulan'])): ?>
+                        <span class="rk-num"><?= (int) $rekon_score['detail']['hari_lengkap'] ?></span>
+                        / <span class="rk-num"><?= (int) $rekon_score['detail']['hari_bulan'] ?></span>
+                        hari lengkap
                     <?php else: ?>
-                        Semua hari kalender, dipotong di hari ini
+                        Seluruh hari kalender dalam bulan
                     <?php endif; ?>
                 </div>
             </div>

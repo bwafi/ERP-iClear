@@ -171,10 +171,12 @@ Target: Rp 250.000.000 (Target HO), dihitung per pencapaian masing-masing cabang
 | Cash Flow | 15% |
 | Hutang & Piutang | 10% |
 | Rekonsiliasi | 10% |
-| Payroll | 5% |
+| Payroll | 10% |
 | Compliance | 5% |
-| Improvement Finance | 5% |
 | **TOTAL** | **100%** |
+
+> Catatan (2026-10-16): KPI **Improvement Finance** dihapus; bobot 5% dipindahkan
+> ke **Payroll** (5% → 10%).
 
 ---
 

@@ -22,7 +22,7 @@ final class FinanceKpiTest extends CIUnitTestCase
         $this->assertSame('kesehatan_uang', FinanceKpiService::configCode('FIN_KESEHATAN_UANG'));
         $this->assertSame('hutang_piutang', FinanceKpiService::configCode('FIN_HUTANG_PIUTANG'));
         $this->assertSame('cash_flow',      FinanceKpiService::configCode('FIN_CASH_FLOW'));
-        $this->assertSame('improvement',    FinanceKpiService::configCode('FIN_IMPROVEMENT'));
+        $this->assertSame('akurasi',        FinanceKpiService::configCode('FIN_AKURASI'));
     }
 
     public function testSemuaKodeKomponenPunyaBobotDiConfigFinance(): void
@@ -42,6 +42,20 @@ final class FinanceKpiTest extends CIUnitTestCase
     public function testBobotConfigFinanceTotalSeratus(): void
     {
         $this->assertSame(100, (int) array_sum((new Finance())->kpiWeights));
+    }
+
+    public function testImprovementDihapusDanBobotnyaKePayroll(): void
+    {
+        $finance = new Finance();
+
+        // KPI "Improvement Finance" dihapus 2026-10-16; bobotnya (5) pindah ke
+        // Payroll (5 -> 10).
+        $this->assertArrayNotHasKey('improvement', $finance->kpiWeights);
+        $this->assertArrayNotHasKey('improvement', $finance->kpiLabels);
+        $this->assertNotContains('improvement', $finance->manualKpiCodes);
+        $this->assertNotContains('FIN_IMPROVEMENT', FinanceKpiService::CODES);
+
+        $this->assertSame(10, $finance->kpiWeights['payroll']);
     }
 
     // ── Agregasi rata-rata antar-cabang ────────────────────────────

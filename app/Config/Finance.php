@@ -21,9 +21,8 @@ class Finance extends BaseConfig
         'cash_flow'      => 15, // Auto
         'hutang_piutang' => 10, // Auto (Fase 2)
         'rekonsiliasi'   => 10, // Manual
-        'payroll'        => 5,  // Auto (Fase 4)
+        'payroll'        => 10, // Auto (Fase 4) — bobot Improvement dipindah ke sini (2026-10-16)
         'compliance'     => 5,  // Manual
-        'improvement'    => 5,  // Manual
     ];
 
     /**
@@ -32,12 +31,11 @@ class Finance extends BaseConfig
     public array $kpiLabels = [
         'kesehatan_uang' => 'Kesehatan Uang per Cabang',
         'akurasi'        => 'Akurasi Laporan Keuangan',
-        'cash_flow'      => 'Cash Flow',
+        'cash_flow'      => 'Net Cash Flow',
         'hutang_piutang' => 'Hutang & Piutang',
         'rekonsiliasi'   => 'Rekonsiliasi',
         'payroll'        => 'Payroll',
         'compliance'     => 'Compliance',
-        'improvement'    => 'Improvement Finance',
     ];
 
     /**
@@ -53,7 +51,6 @@ class Finance extends BaseConfig
         'kesehatan_uang',
         'rekonsiliasi',
         'compliance',
-        'improvement',
     ];
 
     /**
@@ -66,7 +63,10 @@ class Finance extends BaseConfig
     public float $kesehatanUangTargetPercent = 120.0;
 
     /**
-     * Target/batas Cash Flow (%). Score = (CF% / target) x 100, maks 100.
+     * Target/batas Net Cash Flow (%). Score = (NCF% / target) x 100, maks 100.
+     *
+     * NCF% = Net Cash Flow ÷ Penerimaan x 100. Yang berubah hanya LABEL KPI
+     * ("Cash Flow" -> "Net Cash Flow"); rumus tetap sama.
      */
     public float $cashFlowTargetPercent = 20.0;
 

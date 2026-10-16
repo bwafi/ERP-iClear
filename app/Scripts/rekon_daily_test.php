@@ -9,7 +9,7 @@
  * C. Workflow DRAFT -> SUBMITTED -> VERIFIED / NEED_REVISION + lock
  * D. Validasi nominal (negatif & non-numerik ditolak, bigint aman)
  * E. Otorisasi (scope, financeApproveRoles, self-verify ditolak)
- * F. KPI berbasis VERIFIED + denominator hari kerja
+ * F. KPI rekonsiliasi = hari lengkap / jumlah hari dalam bulan
  * G. Konfigurasi & fallback manual
  * H. Integritas data (upsert unik, cast int, kolom workflow)
  */
@@ -540,9 +540,9 @@ ok(
 $_SESSION = [];
 
 // ================================================================
-// F. KPI berbasis VERIFIED
+// F. KPI rekonsiliasi = kelengkapan / jumlah hari dalam bulan
 // ================================================================
-section('F. KPI rekonsiliasi berbasis VERIFIED');
+section('F. KPI rekonsiliasi = hari lengkap / jumlah hari dalam bulan');
 
 $db->transBegin();
 
@@ -550,24 +550,32 @@ $yearNow = (int) date('Y');
 $monthNow = (int) date('m');
 $startM = date('Y-m-01');
 $endM = date('Y-m-t');
+$endMin = $endM < $today ? $endM : $today;
 $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
 
-// SEMUA hari kalender yang sudah lewat, dibatasi hari ini.
-//
-// 2026-09-27: dulu daftar ini hanya Senin-Sabatu karena KPI-nya memakai
-// countHariKerja(). Aturan bisnisnya rekonsiliasi wajib tiap hari kalender
-// (Minggu & hari libur termasuk, boleh disusulkan), jadi denominator KPI
-// sekarang juga semua hari. Lihat RekonDailyCalculator::countHariDilalui().
+// Aturan bisnis (2026-10-16): "dalam sebulan ada 30 hari, jadi harus 30
+// rekonsiliasi; kalau tidak direkonsiliasi, nilainya berkurang."
+//   Pembagi   = SELURUH hari dalam bulan (bukan hanya yang sudah lewat).
+//   Pembilang = hari yang ketiga actual_* terisi (lengkap), TANPA syarat
+//               verified — approval diukur KPI Akurasi, bukan di sini.
+$hariBulan = [];
+$d = $startM;
+while ($d <= $endM) {
+    $hariBulan[] = $d;
+    $d = date('Y-m-d', strtotime($d . ' +1 day'));
+}
+$jmlHariBulan = count($hariBulan);
+
+// Hari yang sudah lewat (info; dipakai menyebar data uji).
 $hariDilalui = [];
 $d = $startM;
-$endMin = $endM < $today ? $endM : $today;
 while ($d <= $endMin) {
     $hariDilalui[] = $d;
     $d = date('Y-m-d', strtotime($d . ' +1 day'));
 }
-
 $jmlHariDilalui = count($hariDilalui);
-ok('F1: minimal 1 hari dalam bulan berjalan', $jmlHariDilalui >= 1, "hari_dilalui={$jmlHariDilalui}");
+
+ok('F1: bulan berjalan minimal 1 hari lewat', $jmlHariDilalui >= 1, "hari_dilalui={$jmlHariDilalui}");
 
 // $terisi = false -> actual_* NULL (hari ada, tapi belum direkonsiliasi).
 $seed = function (string $tgl, string $status, bool $terisi = true) use ($model, $unitId) {
@@ -584,38 +592,39 @@ if ($jmlHariDilalui < 3) {
     skip('F2-F7: butuh minimal 3 hari');
 } else {
     // H+1 verified, H+2 submitted, H+3 draft, sisanya kosong.
+    // Ketiganya LENGKAP -> semuanya masuk pembilang (approval tidak lagi
+    // disyaratkan), jadi pembilang = 3.
     $seed($hariDilalui[0], ModelFinanceRekonDaily::STATUS_VERIFIED);
     $seed($hariDilalui[1], ModelFinanceRekonDaily::STATUS_SUBMITTED);
     $seed($hariDilalui[2], ModelFinanceRekonDaily::STATUS_DRAFT);
 
     $res = $calc->calculate($unitId, $monthNow, $yearNow);
-    $expected = round((1 / $jmlHariDilalui) * 100, 2);
+    $expected = round((3 / $jmlHariBulan) * 100, 2);
     ok(
-        'F2: hanya 1 hari verified dari ' . $jmlHariDilalui . ' hari',
+        'F2: 3 hari lengkap dari ' . $jmlHariBulan . ' hari dalam bulan',
         (float) $res['score'] === $expected,
         "score={$res['score']} expected={$expected}"
     );
-    ok('F3: numerator hanya menghitung verified', (int) $res['detail']['hari_lengkap_verified'] === 1, json_encode($res['detail']));
-    ok('F4: hari lengkap (tanpa syarat verified) = 3', (int) $res['detail']['hari_lengkap'] === 3, json_encode($res['detail']));
-    ok('F5: denominator = semua hari kalender yang lewat', (int) $res['detail']['hari_dilalui'] === $jmlHariDilalui, json_encode($res['detail']));
+    ok('F3: numerator menghitung lengkap tanpa syarat verified', (int) $res['detail']['hari_lengkap'] === 3, json_encode($res['detail']));
+    ok('F4: hari verified (info) dihitung terpisah = 1', (int) $res['detail']['hari_lengkap_verified'] === 1, json_encode($res['detail']));
+    ok('F5: denominator = seluruh hari dalam bulan', (int) $res['detail']['hari_bulan'] === $jmlHariBulan, json_encode($res['detail']));
+    ok('F5b: hari_dilalui (info) = hari yang sudah lewat', (int) $res['detail']['hari_dilalui'] === $jmlHariDilalui, json_encode($res['detail']));
 
-    // Semua hari kerja verified -> 100
-    foreach ($hariDilalui as $tgl) {
+    // Semua hari dalam bulan lengkap -> 100
+    $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
+    foreach ($hariBulan as $tgl) {
         $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
     }
     $res100 = $calc->calculate($unitId, $monthNow, $yearNow);
-    ok('F6: semua hari verified -> 100', (float) $res100['score'] === 100.0, "score={$res100['score']}");
+    ok('F6: semua hari lengkap -> 100', (float) $res100['score'] === 100.0, "score={$res100['score']}");
 
-    // Tidak ada verified -> 0
-    foreach ($hariDilalui as $tgl) {
-        $seed($tgl, ModelFinanceRekonDaily::STATUS_DRAFT);
-    }
-    $res0 = $calc->calculate($unitId, $monthNow, $yearNow);
-    ok('F7: tidak ada verified -> 0', (float) $res0['score'] === 0.0, "score={$res0['score']}");
-
-    // Verified dengan selisih tetap dihitung (selisih tidak menurunkan skor)
+    // Tidak ada satu pun hari direkonsiliasi -> 0
     $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
-    foreach ($hariDilalui as $tgl) {
+    $res0 = $calc->calculate($unitId, $monthNow, $yearNow);
+    ok('F7: tidak ada rekonsiliasi -> 0', (float) $res0['score'] === 0.0, "score={$res0['score']}");
+
+    // Lengkap dengan selisih tetap dihitung (kelengkapan, bukan kebenaran)
+    foreach ($hariBulan as $tgl) {
         $model->upsert([
             'unit_id' => $unitId, 'tanggal' => $tgl,
             'erp_cash_masuk' => 100, 'actual_cash_masuk' => 7777, 'selisih_cash_masuk' => 7677,
@@ -625,73 +634,34 @@ if ($jmlHariDilalui < 3) {
         ]);
     }
     $resSelisih = $calc->calculate($unitId, $monthNow, $yearNow);
-    ok('F8: verified + selisih tetap 100 (selisih tidak menurunkan skor)', (float) $resSelisih['score'] === 100.0, "score={$resSelisih['score']}");
+    ok('F8: lengkap + selisih tetap 100 (selisih tidak menurunkan skor)', (float) $resSelisih['score'] === 100.0, "score={$resSelisih['score']}");
 
-    // --- F8b-F8e: aturan "rekonsiliasi tiap hari kalender" -------------------
+    // --- F8b-F8d: satu hari kosong menurunkan skor --------------------------
     //
-    // Aturan bisnis: admin WAJIB mengisi tiap hari, Minggu & hari libur
-    // termasuk, dan boleh disusulkan di hari berikutnya. Dulu denominator
-    // hanya Senin-Sabatu sementara numerator menghitung semua hari — akibatnya
-    // 19 dari 23 hari kerja + 4 Minggu = 23/23 = 100% (lalu di-cap), padahal
-    // 4 hari kerja belum diisi. Kedua sisi harus memakai rentang yang sama.
-    $minggu = array_values(array_filter($hariDilalui, static function (string $t): bool {
-        return (int) date('w', strtotime($t)) === 0;
-    }));
-
-    if (count($minggu) < 1) {
-        skip('F8b-F8e: bulan berjalan tidak punya Minggu yang sudah lewat');
-    } else {
-        // Semua hari KECUALISKAN Minggu pertama -> verified. Kalau denominator
-        // masih Sen-Sab, mengisi Minggu akan menutupi lubang itu dan skor
-        // akan terbaca 100%.
-        $tanpaMinggu = array_values(array_diff($hariDilalui, [$minggu[0]]));
-        $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
-        foreach ($tanpaMinggu as $tgl) {
-            $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
-        }
-        // Minggu pertama sengaja DIISI verified: harus menambah skor, karena
-        // aturan bisnis menyatakan Minggu wajib direkonsiliasi.
-        $seed($minggu[0], ModelFinanceRekonDaily::STATUS_VERIFIED);
-
-        $resSemua = $calc->calculate($unitId, $monthNow, $yearNow);
-        $expectedSemua = round((count($hariDilalui) / $jmlHariDilalui) * 100, 2);
-
-        ok(
-            'F8b: denominator = semua hari kalender (Minggu masuk hitungan)',
-            (int) $resSemua['detail']['hari_dilalui'] === $jmlHariDilalui
-                && $jmlHariDilalui > count($tanpaMinggu),
-            'dilalui=' . $resSemua['detail']['hari_dilalui'] . ' tanpaMinggu=' . count($tanpaMinggu)
-        );
-        ok(
-            'F8c: mengisi Minggu MENAMBAH skor (bukan diabaikan)',
-            (int) $resSemua['detail']['hari_lengkap_verified'] === $jmlHariDilalui
-                && (float) $resSemua['score'] === $expectedSemua,
-            'verified=' . $resSemua['detail']['hari_lengkap_verified'] . " score={$resSemua['score']} expected={$expectedSemua}"
-        );
-
-        // Cermin skenario bug lama: semua hari kerja verified, semua Minggu
-        // KOSONG. Skor harus di bawah 100 kalau denominator = semua hari.
-        $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
-        $bukanMinggu = array_values(array_filter($hariDilalui, static function (string $t): bool {
-            return (int) date('w', strtotime($t)) !== 0;
-        }));
-        foreach ($bukanMinggu as $tgl) {
-            $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
-        }
-        $resTanpaMinggu = $calc->calculate($unitId, $monthNow, $yearNow);
-        $expectedTanpaMinggu = round((count($bukanMinggu) / $jmlHariDilalui) * 100, 2);
-        ok(
-            'F8d: Minggu kosong menurunkan skor (tidak ada lagi "100% palsu")',
-            (float) $resTanpaMinggu['score'] === $expectedTanpaMinggu && (float) $resTanpaMinggu['score'] < 100.0,
-            "score={$resTanpaMinggu['score']} expected={$expectedTanpaMinggu}"
-                . ' (nonMinggu=' . count($bukanMinggu) . '/' . $jmlHariDilalui . ')'
-        );
-        ok(
-            'F8e: numerator tidak pernah melebihi denominator',
-            (int) $resSemua['detail']['hari_lengkap_verified'] <= (int) $resSemua['detail']['hari_dilalui'],
-            json_encode($resSemua['detail'])
-        );
+    // Aturan bisnis: pembagi = seluruh hari dalam bulan, jadi tiap hari yang
+    // tidak direkonsiliasi (termasuk hari yang belum lewat) mengurangi skor.
+    $db->table('finance_rekon_daily')->where('unit_id', $unitId)->where('tanggal >=', $startM)->where('tanggal <=', $endM)->delete();
+    $kurangSatu = array_slice($hariBulan, 1); // semua hari kecuali hari pertama
+    foreach ($kurangSatu as $tgl) {
+        $seed($tgl, ModelFinanceRekonDaily::STATUS_VERIFIED);
     }
+    $resKurang = $calc->calculate($unitId, $monthNow, $yearNow);
+    $expectedKurang = round((count($kurangSatu) / $jmlHariBulan) * 100, 2);
+    ok(
+        'F8b: satu hari tidak direkonsiliasi menurunkan skor',
+        (float) $resKurang['score'] === $expectedKurang && (float) $resKurang['score'] < 100.0,
+        "score={$resKurang['score']} expected={$expectedKurang}"
+    );
+    ok(
+        'F8c: numerator tidak pernah melebihi denominator',
+        (int) $resKurang['detail']['hari_lengkap'] <= (int) $resKurang['detail']['hari_bulan'],
+        json_encode($resKurang['detail'])
+    );
+
+    // Mengisi hari yang kosong menaikkan skor ke 100.
+    $seed($hariBulan[0], ModelFinanceRekonDaily::STATUS_VERIFIED);
+    $resLengkap = $calc->calculate($unitId, $monthNow, $yearNow);
+    ok('F8d: mengisi hari yang kosong menaikkan skor ke 100', (float) $resLengkap['score'] === 100.0, "score={$resLengkap['score']}");
 
     // Filter status proses di list bulanan
     $listAll = $calc->monthlyList($unitId, $monthNow, $yearNow);

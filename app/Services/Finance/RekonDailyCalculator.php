@@ -28,8 +28,11 @@ use Config\Database;
  * Status proses approval (TERPISAH):
  *  draft | submitted | verified | need_revision
  *
- * KPI Score = (hari lengkap+VERIFIED / hari kerja) × 100.
- * - Sen–Sab (hari libur BELUM diperhitungkan).
+ * KPI Score = (hari LENGKAP / jumlah hari dalam bulan) × 100.
+ * - Kelengkapan saja: draft/submitted/verified sama-sama dihitung; approval
+ *   dipakai KPI Akurasi, bukan di sini.
+ * - Pembagi = seluruh hari kalender bulan itu (tidak dipotong di hari ini),
+ *   jadi tiap hari yang tidak direkonsiliasi menurunkan skor.
  * - Selisih TIDAK mengurangi skor; disimpan sebagai temuan untuk KPI Akurasi.
  *
  * ================================================================
@@ -592,27 +595,26 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * KPI Score Rekonsiliasi = (hari lengkap+VERIFIED / hari kerja) × 100.
+     * KPI Score Rekonsiliasi = (hari LENGKAP / jumlah hari dalam bulan) × 100.
      *
-     * Numerator: ketiga actual_* terisi (IS NOT NULL) DAN status_proses =
-     *            'verified'. 'submitted'/'need_revision'/'draft' TIDAK dihitung.
-     *            Tidak ada pengecualian hari: Minggu & hari libur ikut dihitung
-     *            kalau sudah diverifikasi.
-     * Selisih TIDAK memengaruhi skor: LENGKAP_COCOK dan LENGKAP_SELISIH
-     *            sama-sama dihitung sebagai hari selesai selama terverifikasi.
-     * Denominator: SEMUA hari kalender dalam periode, dipotong di hari ini.
+     * Numerator: ketiga actual_* terisi (IS NOT NULL). Status approval TIDAK
+     *            lagi disyaratkan — hari yang sudah direkonsiliasi (draft /
+     *            submitted / verified) sama-sama dihitung, karena KPI ini
+     *            mengukur KELENGKAPAN pengisian, bukan kebenaran/approval.
+     *            Kebenaran + approval diukur terpisah oleh KPI Akurasi.
+     *            Selisih TIDAK memengaruhi skor.
+     * Denominator: SELURUH hari kalender dalam bulan (mis. Oktober = 31),
+     *            TIDAK dipotong di hari ini. Aturan bisnis (2026-10-16):
+     *            "dalam sebulan ada 30 hari, jadi harus 30 rekonsiliasi;
+     *            kalau tidak direkonsiliasi, nilainya berkurang." Hari tanpa
+     *            rekonsiliasi langsung menurunkan skor.
      *
-     * PENTING (2026-09-27): denominator dulu hanya Senin-Sabatu sementara
-     * numerator menghitung semua hari. Akibatnya mengisi hari Minggu bisa
-     * mendorong skor ke 100% (lalu di-cap) padahal masih ada hari kerja
-     * yang belum diisi. Contoh Sept 2026: 19 dari 23 hari kerja + 4 Minggu
-     * = 23/23 = 100%. Aturan bisnisnya: rekonsiliasi WAJIB tiap hari kalender,
-     * termasuk Minggu/libur, dan boleh disusulkan di hari berikutnya — jadi
-     * kedua sisi harus memakai rentang yang sama.
+     * Catatan: `hari_dilalui` (hari yang sudah lewat) tetap dilaporkan sebagai
+     * informasi, tetapi tidak lagi dipakai sebagai pembagi. Bulan yang belum
+     * berjalan sama sekali (belum ada hari lewat) mengembalikan score = null
+     * supaya caller (FinanceKpiCalculationService) jatuh ke skor manual.
      *
-     * Mengembalikan score = null bila tabel/kolom belum tersedia atau belum
-     * ada satu pun hari yang lewat, sehingga pemanggil
-     * (FinanceKpiCalculationService) dapat jatuh ke skor manual.
+     * Mengembalikan score = null bila tabel/kolom belum tersedia.
      */
     public function calculate(int $unitId, int $month, int $year): array
     {
@@ -620,15 +622,17 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
         $endDate = date('Y-m-t', strtotime($startDate));
         $today = date('Y-m-d');
 
-        if ($endDate > $today) {
-            $endDate = $today;
-        }
+        // Pembagi = seluruh hari dalam bulan.
+        $hariBulan = $this->countHariDilalui($startDate, $endDate);
 
-        $hariDilalui = $this->countHariDilalui($startDate, $endDate);
+        // Informasi: hari yang sudah lewat (dipotong di hari ini).
+        $batasData = $endDate < $today ? $endDate : $today;
+        $hariDilalui = $this->countHariDilalui($startDate, $batasData);
+
         $hariLengkap = 0;
         $hariLengkapVerified = 0;
 
-        if ($hariDilalui > 0) {
+        if ($hariBulan > 0) {
             try {
                 $hariLengkap = $this->model->countLengkapInRange($unitId, $startDate, $endDate);
                 $hariLengkapVerified = $this->model->countLengkapVerifiedInRange($unitId, $startDate, $endDate);
@@ -640,6 +644,7 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
                     'detail' => [
                         'start_date'           => $startDate,
                         'end_date'             => $endDate,
+                        'hari_bulan'           => $hariBulan,
                         'hari_dilalui'        => $hariDilalui,
                         'hari_lengkap'         => 0,
                         'hari_lengkap_verified' => 0,
@@ -652,12 +657,14 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
         $detail = [
             'start_date'           => $startDate,
             'end_date'             => $endDate,
+            'hari_bulan'           => $hariBulan,
             'hari_dilalui'        => $hariDilalui,
             'hari_lengkap'         => $hariLengkap,
             'hari_lengkap_verified' => $hariLengkapVerified,
         ];
 
-        if ($hariDilalui <= 0) {
+        // Bulan belum berjalan sama sekali (belum ada hari lewat) -> belum bisa dinilai.
+        if ($hariBulan <= 0 || $hariDilalui <= 0) {
             return [
                 'score'  => null,
                 'status' => 'data_kosong',
@@ -666,9 +673,9 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
         }
 
         // min(100) adalah jaring pengaman, bukan aturan: dengan denominator
-        // semua hari kalender dan unique key (unit_id, tanggal), numerator
+        // seluruh hari bulan dan unique key (unit_id, tanggal), numerator
         // tidak mungkin melebihi denominator.
-        $score = min(($hariLengkapVerified / $hariDilalui) * 100, 100);
+        $score = min(($hariLengkap / $hariBulan) * 100, 100);
 
         return [
             'score'  => round($score, 2),
@@ -678,13 +685,11 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Hitung hari kalender yang sudah lewat dalam rentang (Senin–Minggu).
+     * Hitung jumlah hari kalender dalam rentang (Senin–Minggu).
      *
-     * Ini denominator KPI Rekonsiliasi. Sengaja TIDAK menyaring hari: rekonsiliasi
-     * wajib diisi setiap hari kalender, termasuk Minggu dan hari libur, dan
-     * boleh disusulkan pada hari-hari berikutnya. Karena numerator
-     * (countLengkapVerifiedInRange) juga tidak menyaring hari, kedua sisi memakai
-     * rentang yang sama dan skor tidak bisa "digelembungkan" oleh hari Minggu.
+     * Dipakai untuk dua hal: pembagi KPI (seluruh bulan) dan info hari yang
+     * sudah lewat. Sengaja TIDAK menyaring hari: rekonsiliasi wajib diisi
+     * setiap hari kalender, termasuk Minggu dan hari libur.
      */
     protected function countHariDilalui(string $startDate, string $endDate): int
     {

@@ -100,7 +100,7 @@ Status: shipped 2026-09-27 · brief + verdict + provenance: `.impeccable/surface
 - **`--bs-card-bg` is card-scoped** (precedent above), so the sticky index head takes `var(--bs-card-bg, var(--bs-body-bg))` — inside the card it resolves, and the fallback still matches the card stock exactly (white / `#111c2d`).
 - **Sticky offsets sit at `4.375rem`**, the measured topbar height, so nothing slides under it. Below 992px the topbar wraps (140px at 768 and 360), so the index head goes `static` and the aside is already `static` — sticky head + one long column buys nothing there.
 - **Every calendar day is reconciled — see *Semua hari kalender* below for the rule change (2026-09-27).** This section originally muted Sundays and labelled them "Bukan hari kerja". That was wrong twice over: it told finance a day they are required to fill could be skipped, and it shipped alongside a real KPI bug. `countHariKerja()` was Mon–Sat while the numerator counted every day, so filling Sundays could push the score to a capped 100% with weekdays still unfilled (Sept 2026: 19 of 23 weekdays + 4 Sundays = 23/23 = 100%). The calculator now counts all elapsed days (`countHariDilalui()`, detail key `hari_dilalui`), the index gives Sundays no special treatment, and the "di luar KPI" / "Bukan hari kerja" copy is gone.
-- **The band can only show the five counts honestly when unfiltered** — the controller filters `$list` before the view ever sees it. With an active status filter the band switches to "Menampilkan *Perlu Revisi* · 2 dari 27 hari · Tampilkan semua", taking the denominator from `rekon_score.detail.hari_dilalui` (unfiltered by construction) instead of counting a filtered list twice.
+- **The band can only show the five counts honestly when unfiltered** — the controller filters `$list` before the view ever sees it. With an active status filter the band switches to "Menampilkan *Perlu Revisi* · 2 dari 27 hari · Tampilkan semua", taking the denominator from `rekon_score.detail.hari_bulan` (unfiltered by construction) instead of counting a filtered list twice.
 - **Panel copy describes, it does not authorize.** "Menunggu verifikasi Anda" is display only; `DashboardFinance::canApproveRekon` still decides. The form page was not touched.
 
 ### Preserved exactly
@@ -242,6 +242,37 @@ So the UI copy "Minggu bukan hari kerja … isian hari ini tidak menambah atau m
 - Numerator and denominator now cover the same range, so the score cannot be inflated. `min(…, 100)` stays as a safety net only — the `uq_rekon_daily_unit_tanggal` unique key makes numerator > denominator impossible.
 - **Copy removed, not reworded.** The "Bukan hari kerja" day-index label, the "Minggu · di luar KPI" flag, the panel paragraph, and the `is-nonaktif` muting are all gone from `finance_rekonsiliasi.php`; the `.rk-daynav-sub` label on the form is now the month (`September 2026`) — orientation, never permission to skip. The legend states the opposite of what it used to.
 - `recon_daily_test.php` F1/F5 were reworded to the new rule, and **F8b–F8e are new regressions**: Sunday days are in the denominator, filling a Sunday raises the score, an unfilled Sunday drops it below 100, and the numerator can never exceed the denominator.
+
+## KPI Rekonsiliasi = kelengkapan / jumlah hari dalam bulan (2026-10-16)
+
+> Supersedes the *Semua hari kalender* rule above for the KPI formula only.
+> The obligation to reconcile every calendar day is unchanged; what changed is
+> how the score is computed.
+
+**The rule:** `rekon = (hari LENGKAP ÷ jumlah hari dalam bulan) × 100`.
+
+- Pembilang = hari yang ketiga `actual_*` terisi (lengkap). Status approval
+  (`draft` / `submitted` / `verified`) **tidak lagi** disyaratkan: KPI ini
+  mengukur kelengkapan pengisian, bukan kebenaran/approval. Kebenaran +
+  approval diukur terpisah oleh KPI Akurasi Laporan Keuangan.
+- Pembagi = SELURUH hari kalender bulan itu (mis. Oktober = 31), **tidak**
+  dipotong di hari ini. Aturan bisnis: "dalam sebulan ada 30 hari, jadi harus
+  30 rekonsiliasi; kalau tidak direkonsiliasi, nilainya berkurang." Hari yang
+  belum lewat pun ikut menekan skor sampai diisi.
+- Selisih tetap tidak menurunkan skor (itu ranah Akurasi).
+
+Perubahan teknis:
+- `RekonDailyCalculator::calculate()` — pembilang `countLengkapVerifiedInRange()`
+  → `countLengkapInRange()`; `endDate` tidak lagi dipotong `today`, jadi
+  denominator = `hari_bulan`.
+- Detail baru `hari_bulan` (pembagi). `hari_dilalui` tetap dilaporkan sebagai
+  info; `hari_lengkap_verified` tetap untuk drill-down approval.
+- Konsumen diperbarui: `finance_rekonsiliasi.php` ("X / Y hari lengkap",
+  "dari Y hari"), `dashboard_finance.php` tab Rekonsiliasi ("Hari dalam Bulan",
+  "Hari Lengkap"), `rekon_daily_test.php` (F2–F8d).
+- Tes baru: `tests/RekonKpiTest.php` (8 kasus, DB) mengunci pembilang tanpa
+  syarat verified, pembagi seluruh bulan, satu hari kosong menurunkan skor,
+  dan selisih tidak menurunkan skor.
 
 ## Panel daftar yang bisa diisi (2026-09-27)
 

@@ -139,7 +139,7 @@ class KpiCalculationService
                     (int)$month,
                     (int)$year
                 );
-            // ==== FINANCE (jabatan 0): 8 KPI Finance (rata-rata antar-cabang) ====
+            // ==== FINANCE (jabatan 0): 7 KPI Finance (rata-rata antar-cabang) ====
             // Nilai tiap KPI = rata-rata skor cabang dari scorecard Dashboard
             // Finance. Bobot mengikuti kpi_weights posisi 0 (Config\Finance).
             } elseif ($positionId === 0 && in_array($component->code, FinanceKpiService::CODES, true)) {
@@ -372,6 +372,11 @@ class KpiCalculationService
                     // terverifikasi tanpa selisih per cabang.
                     $targetInfo['cabang'] = $this->financeKpiService()
                         ->akurasiBreakdown((int) $month, (int) $year);
+                } elseif ($component->code === 'FIN_CASH_FLOW') {
+                    // Net Cash Flow: NCF% tiap cabang vs target 20% + skornya,
+                    // supaya target bisnis terlihat (bukan hanya skor 0–100).
+                    $targetInfo['cabang'] = $this->financeKpiService()
+                        ->cashflowBreakdown((int) $month, (int) $year);
                 }
             }
 
@@ -620,7 +625,9 @@ class KpiCalculationService
                     ? 'health'
                     : ($item['code'] === 'FIN_AKURASI'
                         ? 'accuracy'
-                        : (in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number')),
+                        : ($item['code'] === 'FIN_CASH_FLOW'
+                            ? 'cashflow'
+                            : (in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number'))),
             ];
         }
 
