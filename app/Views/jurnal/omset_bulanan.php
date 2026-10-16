@@ -327,13 +327,35 @@
 <!-- Chart Section -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
             <div>
                 <h5 class="fw-bold mb-1">Grafik Omset Harian</h5>
-                <small class="text-muted">Tren pendapatan per hari untuk bulan <?= esc($periodeLabel) ?></small>
+                <small class="text-muted">Tren pendapatan per hari bulan <?= esc($periodeLabel) ?>. Pilih satu atau beberapa bulan pembanding untuk membandingkan.</small>
             </div>
-            <div class="p-2 bg-light rounded-2 text-primary">
-                <iconify-icon icon="solar:graph-up-bold-duotone" width="24" height="24"></iconify-icon>
+            <div class="d-flex align-items-center gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary d-inline-flex align-items-center gap-2 py-2 px-3" type="button"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <iconify-icon icon="solar:layers-minimalistic-bold-duotone" class="fs-5"></iconify-icon>
+                        <span class="fw-medium">Bandingkan</span>
+                        <span class="badge bg-primary-subtle text-primary fw-semibold" id="compareCount">1</span>
+                        <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="fs-5"></iconify-icon>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end p-3 shadow border-0" style="min-width: 280px; max-height: 340px; overflow-y: auto;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-semibold text-dark fs-2">Bulan Pembanding</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fs-2" onclick="resetCompare()">Bulan lalu</button>
+                                <span class="text-muted">·</span>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fs-2 text-muted" onclick="clearCompare()">Kosongkan</button>
+                            </div>
+                        </div>
+                        <div id="compareOptions" class="d-flex flex-column gap-1"></div>
+                    </div>
+                </div>
+                <div class="p-2 bg-light rounded-2 text-primary d-none d-lg-flex">
+                    <iconify-icon icon="solar:graph-up-bold-duotone" width="24" height="24"></iconify-icon>
+                </div>
             </div>
         </div>
         <div style="position: relative; height: 320px; width: 100%;">
@@ -553,6 +575,11 @@
 </div>
 
 <!-- Chart.js Script & Logic -->
+<style>
+    .compare-option { cursor: pointer; transition: background-color .15s ease; }
+    .compare-option:hover { background-color: var(--bs-tertiary-bg); }
+    .compare-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: 0 0 auto; }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     const ARUS_KAS_URL = '<?= base_url('omset_bulanan/arus_kas') ?>';
@@ -569,35 +596,58 @@
         <?php endforeach; ?>
     ];
 
+    // Bulan-bulan pembanding (12 bulan ke belakang dari periode terpilih).
+    const compareMonths = <?= json_encode($listBulanPembanding ?? [], JSON_UNESCAPED_UNICODE) ?>;
+
+    const COMPARE_COLORS = [
+        '#fd7e14', '#198754', '#6f42c1', '#dc3545',
+        '#0dcaf0', '#d63384', '#20c997', '#6c757d',
+        '#ffc107', '#3d5a80', '#795548', '#6610f2'
+    ];
+
+    // Warna tetap per bulan supaya tidak berubah saat pilihan lain di-toggle.
+    compareMonths.forEach((month, index) => {
+        month.color = COMPARE_COLORS[index % COMPARE_COLORS.length];
+    });
+
+    // Default: bulan sebelumnya (entri pertama = 1 bulan sebelum periode terpilih).
+    let selectedCompareKeys = compareMonths.length ? [compareMonths[0].value] : [];
+    let currentChartData = rawData;
+
+    const dayOfMonth = (tanggal) => parseInt(String(tanggal).slice(8, 10), 10);
+
     const ctx = document.getElementById('chartOmset').getContext('2d');
     let chartOmset = new Chart(ctx, {
         type: 'line',
         data: {
             labels: [],
-            datasets: [{
-                label: 'Omset Harian',
-                data: [],
-                tension: 0.3,
-                fill: true,
-                backgroundColor: 'rgba(13, 110, 253, 0.05)',
-                borderColor: '#0d6efd',
-                borderWidth: 2.5,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
+            datasets: []
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        font: {
+                            size: 12
+                        }
+                    }
                 },
                 tooltip: {
                     callbacks: {
                         label: function(context) {
+                            if (context.raw === null || context.raw === undefined) {
+                                return ' ' + context.dataset.label + ': -';
+                            }
                             let value = context.raw || 0;
-                            return ' Omset: Rp ' + new Intl.NumberFormat('id-ID').format(value);
+                            return ' ' + context.dataset.label + ': Rp ' + new Intl.NumberFormat('id-ID').format(value);
                         }
                     }
                 }
@@ -626,12 +676,104 @@
         }
     });
 
+    renderCompareOptions();
     renderChart(rawData);
 
+    function buildDatasets(data) {
+        const datasets = [{
+            label: 'Omset Harian',
+            data: data.map(item => item.total),
+            tension: 0.3,
+            fill: true,
+            backgroundColor: 'rgba(13, 110, 253, 0.05)',
+            borderColor: '#0d6efd',
+            borderWidth: 2.5,
+            pointRadius: 4,
+            pointHoverRadius: 6
+        }];
+
+        selectedCompareKeys.forEach((key) => {
+            const month = compareMonths.find(item => item.value === key);
+            if (!month) return;
+
+            datasets.push({
+                label: month.label,
+                // Sejajarkan per tanggal (day-of-month). Bulan pembanding yang
+                // lebih pendek diisi null agar garis terputus, bukan turun ke 0.
+                data: data.map(item => {
+                    const day = dayOfMonth(item.tanggal);
+                    return day <= month.days ? (month.hari[day] ?? 0) : null;
+                }),
+                tension: 0.3,
+                fill: false,
+                borderColor: month.color,
+                backgroundColor: month.color,
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                spanGaps: false
+            });
+        });
+
+        return datasets;
+    }
+
     function renderChart(data) {
+        currentChartData = data;
         chartOmset.data.labels = data.map(item => item.label);
-        chartOmset.data.datasets[0].data = data.map(item => item.total);
+        chartOmset.data.datasets = buildDatasets(data);
         chartOmset.update();
+    }
+
+    function renderCompareOptions() {
+        const container = document.getElementById('compareOptions');
+        if (!container) return;
+
+        container.innerHTML = compareMonths.map((month) => {
+            const checked = selectedCompareKeys.includes(month.value);
+            return `
+                <label class="compare-option d-flex align-items-center gap-2 px-2 py-1 rounded-2">
+                    <input class="form-check-input m-0" type="checkbox" value="${month.value}" ${checked ? 'checked' : ''}
+                        onchange="toggleCompare('${month.value}', this.checked)">
+                    <span class="compare-swatch" style="background:${month.color}"></span>
+                    <span class="fs-3 text-dark flex-grow-1">${month.label}</span>
+                    <span class="fs-2 text-muted">${formatRupiah(month.total)}</span>
+                </label>
+            `;
+        }).join('');
+
+        updateCompareSummary();
+    }
+
+    function toggleCompare(key, checked) {
+        if (checked) {
+            if (!selectedCompareKeys.includes(key)) {
+                selectedCompareKeys.push(key);
+            }
+        } else {
+            selectedCompareKeys = selectedCompareKeys.filter(item => item !== key);
+        }
+
+        updateCompareSummary();
+        renderChart(currentChartData);
+    }
+
+    function resetCompare() {
+        selectedCompareKeys = compareMonths.length ? [compareMonths[0].value] : [];
+        renderCompareOptions();
+        renderChart(currentChartData);
+    }
+
+    function clearCompare() {
+        selectedCompareKeys = [];
+        renderCompareOptions();
+        renderChart(currentChartData);
+    }
+
+    function updateCompareSummary() {
+        const badge = document.getElementById('compareCount');
+        if (badge) badge.textContent = selectedCompareKeys.length;
     }
 
     function filterData() {

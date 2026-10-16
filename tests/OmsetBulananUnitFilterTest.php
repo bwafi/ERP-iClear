@@ -233,4 +233,33 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $this->assertSame(5, $this->marker($this->halaman('?unit=5')));
         $this->assertSame(1, $this->marker($this->halaman('?unit=1')));
     }
+
+    // ── Grafik Omset Harian: filter pembanding banyak bulan ────────────────
+    // View mengirim `const compareMonths = [...]` berisi 12 bulan ke belakang
+    // dari periode terpilih, dan default pilihannya adalah bulan sebelumnya.
+
+    public function testGrafikMenyediakanDuaBelasBulanPembanding(): void
+    {
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan) VALUES
+            (9001, 'INV-JAN', '2025-01-10 10:00:00', 1, NULL),
+            (9002, 'INV-DEC', '2024-12-20 10:00:00', 1, NULL)");
+        $this->db->query("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES
+            (9001, NULL, 500000, 200000),
+            (9002, NULL, 300000, 100000)");
+
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=1&bulan=2&tahun=2025');
+
+        $this->assertStringContainsString('const compareMonths = ', $html);
+
+        // Bulan sebelumnya (Januari 2025) tersedia dan memuat omset hariannya
+        // (sub_total - hpp = 300000 pada 10 Jan).
+        $this->assertStringContainsString('"value":"2025-01"', $html);
+        $this->assertStringContainsString('"label":"January 2025"', $html);
+        $this->assertStringContainsString('"10":300000', $html);
+
+        // Dua belas bulan ke belakang: yang tertua adalah Februari 2024.
+        $this->assertStringContainsString('"value":"2024-02"', $html);
+    }
 }

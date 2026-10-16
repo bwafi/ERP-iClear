@@ -609,6 +609,63 @@ class TutupKasir extends BaseController
             $dataHarian[$row->tgl] = $row->total;
         }
 
+        // ==========================
+        // DATA HARIAN BULAN PEMBANDING (12 bulan ke belakang)
+        // ==========================
+        // Dipakai grafik untuk membandingkan omset harian periode terpilih
+        // dengan beberapa bulan sekaligus. Default di view: bulan sebelumnya.
+        $awalPeriodeTerpilih = sprintf('%04d-%02d-01', (int) $tahun, (int) $bulan);
+        $awalBulanTerlama = date('Y-m-01', mktime(0, 0, 0, (int) $bulan - 12, 1, (int) $tahun));
+
+        $resultsPembanding = $this->db->table('detail_penjualan')
+            ->select("
+                DATE(penjualan.tanggal) AS tgl,
+                SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total
+            ")
+            ->join(
+                'penjualan',
+                'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
+            )
+            ->where('penjualan.tanggal >=', $awalBulanTerlama)
+            ->where('penjualan.tanggal <', $awalPeriodeTerpilih)
+            ->where('penjualan.unit_idunit', $unit)
+            ->groupBy('DATE(penjualan.tanggal)')
+            ->get()
+            ->getResult();
+
+        $dataHarianPembanding = [];
+
+        foreach ($resultsPembanding as $row) {
+            $dataHarianPembanding[$row->tgl] = $row->total;
+        }
+
+        $listBulanPembanding = [];
+
+        for ($n = 1; $n <= 12; $n++) {
+            $bulanPembanding = (int) $bulan - $n;
+            $tahunPembanding = (int) $tahun;
+            while ($bulanPembanding < 1) {
+                $bulanPembanding += 12;
+                $tahunPembanding--;
+            }
+
+            $jumlahHariPembanding = (int) date('t', mktime(0, 0, 0, $bulanPembanding, 1, $tahunPembanding));
+
+            $hariPembanding = [];
+            for ($d = 1; $d <= $jumlahHariPembanding; $d++) {
+                $tglPembanding = sprintf('%04d-%02d-%02d', $tahunPembanding, $bulanPembanding, $d);
+                $hariPembanding[$d] = (float) ($dataHarianPembanding[$tglPembanding] ?? 0);
+            }
+
+            $listBulanPembanding[] = [
+                'value' => sprintf('%04d-%02d', $tahunPembanding, $bulanPembanding),
+                'label' => date('F Y', mktime(0, 0, 0, $bulanPembanding, 1, $tahunPembanding)),
+                'days'  => $jumlahHariPembanding,
+                'hari'  => $hariPembanding,
+                'total' => array_sum($hariPembanding),
+            ];
+        }
+
         // Cari hari dengan omset tertinggi
         $hariTerbaik = null;
         $omsetTerbaik = 0;
@@ -620,16 +677,16 @@ class TutupKasir extends BaseController
         }
 
 
-                $jumlahHari = date('t');
+        $jumlahHari = (int) date('t', mktime(0, 0, 0, (int) $bulan, 1, (int) $tahun));
         $listHari = [];
 
         for ($i = 1; $i <= $jumlahHari; $i++) {
 
-            $tgl = date('Y-m-') . str_pad($i, 2, '0', STR_PAD_LEFT);
+            $tgl = sprintf('%04d-%02d-%02d', (int) $tahun, (int) $bulan, $i);
 
             $listHari[] = [
                 'tanggal' => $tgl,
-                'total' => $dataHarian[$tgl] ?? 0
+                'total'   => $dataHarian[$tgl] ?? 0,
             ];
         }
 
@@ -647,6 +704,7 @@ class TutupKasir extends BaseController
             'hpp'           => $hpp,
             'value'         => $value,
             'listHari'          => $listHari,
+            'listBulanPembanding' => $listBulanPembanding,
             'bestseller'        => $bestseller,
             'bestsellerproduct' => $bestsellerproduct,
             'omset_bulan'       => $omset_bulan,
