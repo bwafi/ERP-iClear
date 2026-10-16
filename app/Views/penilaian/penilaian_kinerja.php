@@ -57,6 +57,241 @@
     }
 </style>
 
+<style>
+    /* ============================================================
+       KPI Kesehatan Uang per Cabang — ringkas di sel tabel (ringkasan
+       + tombol), rinci lewat modal. Warna memakai variabel tema
+       Bootstrap agar ikut mode terang/gelap tanpa palet baru.
+       ============================================================ */
+    .ku,
+    .ku-modal {
+        --ku-line: var(--bs-border-color);
+        --ku-track: var(--bs-secondary-bg);
+    }
+
+    .ku {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-top: .5rem;
+        padding: .6rem .75rem;
+        border: 1px solid var(--ku-line);
+        border-radius: .7rem;
+        background: var(--bs-tertiary-bg);
+    }
+
+    .ku__eyebrow {
+        display: block;
+        font-size: .68rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+
+    .ku__meta {
+        display: block;
+        margin-top: .15rem;
+        font-size: .74rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .ku__meta b {
+        color: var(--bs-body-color);
+        font-weight: 700;
+    }
+
+    .ku__btn {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .35rem .7rem;
+        border: 1px solid var(--ku-line);
+        border-radius: .55rem;
+        background: transparent;
+        color: var(--bs-body-color);
+        font-size: .74rem;
+        font-weight: 600;
+        transition: background-color .15s ease, border-color .15s ease;
+    }
+
+    .ku__btn:hover {
+        background: var(--bs-body-bg);
+        border-color: var(--bs-secondary-color);
+    }
+
+    /* --- dipakai modal rincian --- */
+    .ku-tname {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        min-width: 0;
+        font-size: .82rem;
+    }
+
+    .ku-tname b {
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .ku__unit {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--bs-secondary-color);
+    }
+
+    .ku__dot {
+        flex: none;
+        width: .5rem;
+        height: .5rem;
+        border-radius: 50%;
+        background: var(--bs-secondary);
+    }
+
+    .ku-modal__sub {
+        margin-top: .15rem;
+        font-size: .75rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .ku-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: .6rem;
+        margin-bottom: 1rem;
+    }
+
+    .ku-stat {
+        padding: .6rem .7rem;
+        border: 1px solid var(--ku-line);
+        border-radius: .7rem;
+        background: var(--bs-body-bg);
+    }
+
+    .ku-stat__label {
+        font-size: .66rem;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+
+    .ku-stat__value {
+        margin-top: .15rem;
+        font-size: 1rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ku-table thead th {
+        font-size: .68rem;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+        white-space: nowrap;
+        border-bottom: 1px solid var(--ku-line);
+    }
+
+    .ku-table td {
+        font-size: .85rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ku-table td.text-end,
+    .ku-table th.text-end {
+        white-space: nowrap;
+    }
+
+    .ku-ratio {
+        font-weight: 700;
+        font-size: .82rem;
+    }
+
+    .ku-mini {
+        height: 5px;
+        margin-top: .3rem;
+        border-radius: 999px;
+        background: var(--ku-track);
+        overflow: hidden;
+    }
+
+    .ku-mini>span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--bs-secondary);
+        transform: scaleX(0);
+        transform-origin: left center;
+        animation: ku-grow .5s ease forwards;
+    }
+
+    /* --- tone status per baris modal (.ku-trow--*) --- */
+    .ku-trow--ok .ku__dot,
+    .ku-trow--ok .ku-mini>span {
+        background: var(--bs-success);
+    }
+
+    .ku-trow--ok .ku-ratio {
+        color: var(--bs-success);
+    }
+
+    .ku-trow--warn .ku__dot,
+    .ku-trow--warn .ku-mini>span {
+        background: var(--bs-warning);
+    }
+
+    .ku-trow--warn .ku-ratio {
+        color: var(--bs-warning-text-emphasis);
+    }
+
+    .ku-trow--bad .ku__dot,
+    .ku-trow--bad .ku-mini>span {
+        background: var(--bs-danger);
+    }
+
+    .ku-trow--bad .ku-ratio {
+        color: var(--bs-danger);
+    }
+
+    .ku-trow--muted .ku__dot,
+    .ku-trow--muted .ku-mini>span {
+        background: var(--bs-secondary);
+    }
+
+    .ku-modal__foot {
+        display: block;
+        font-size: .72rem;
+        color: var(--bs-secondary-color);
+    }
+
+    @keyframes ku-grow {
+        to {
+            transform: scaleX(var(--w, 0));
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .ku-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .ku-mini>span {
+            animation: none;
+            transform: scaleX(var(--w, 0));
+        }
+
+        .ku__btn {
+            transition: none;
+        }
+    }
+</style>
+
 <div class="card border-0 bg-white shadow-sm mb-4 rounded-4">
     <div class="card-body d-flex align-items-center p-4">
         <div class="d-flex align-items-center gap-3">
@@ -270,30 +505,38 @@
                     <?php if (!empty($detail_kpi)): ?>
                         <?php $no = 1;
                         foreach ($detail_kpi as $kpi): ?>
+                            <?php $rowNo = $no++; ?>
                             <tr>
-                                <td class="ps-4 text-muted fw-medium"><?= $no++ ?></td>
+                                <td class="ps-4 text-muted fw-medium"><?= $rowNo ?></td>
                                 <td class="py-3">
                                     <span class="fw-bold text-dark d-block mb-1"><?= $kpi['nama'] ?></span>
                                     <?php $isCurrency = ($kpi['format'] ?? 'currency') === 'currency'; ?>
                                     <?php if (!empty($kpi['cabang'])): ?>
-                                        <div class="small mt-2 p-3 bg-light rounded-3 border">
-                                            <?php foreach ($kpi['cabang'] as $cb): ?>
-                                                <div class="<?= !empty($cb['reached']) ? 'text-success' : 'text-danger' ?> mb-1 d-flex align-items-center justify-content-between">
-                                                    <div>
-                                                        <i class="<?= !empty($cb['reached']) ? 'fa fa-check-circle' : 'fa fa-times-circle' ?> me-1"></i>
-                                                        <strong>Cab. <?= $cb['unit'] ?>:</strong>
-                                                        <span>Rp <?= number_format((float)$cb['target_ho'], 0, ',', '.') ?> &rarr; Rp <?= number_format((float)$cb['actual'], 0, ',', '.') ?></span>
+                                        <?php if (($kpi['format'] ?? 'currency') === 'health'): ?>
+                                            <?= view('penilaian/_kesehatan_uang', [
+                                                'cabang'  => $kpi['cabang'],
+                                                'modalId' => 'kuModal' . $rowNo,
+                                            ]) ?>
+                                        <?php else: ?>
+                                            <div class="small mt-2 p-3 bg-light rounded-3 border">
+                                                <?php foreach ($kpi['cabang'] as $cb): ?>
+                                                    <div class="<?= !empty($cb['reached']) ? 'text-success' : 'text-danger' ?> mb-1 d-flex align-items-center justify-content-between">
+                                                        <div>
+                                                            <i class="<?= !empty($cb['reached']) ? 'fa fa-check-circle' : 'fa fa-times-circle' ?> me-1"></i>
+                                                            <strong>Cab. <?= $cb['unit'] ?>:</strong>
+                                                            <span>Rp <?= number_format((float)$cb['target_ho'], 0, ',', '.') ?> &rarr; Rp <?= number_format((float)$cb['actual'], 0, ',', '.') ?></span>
+                                                        </div>
+                                                        <div>
+                                                            <?php if (!empty($cb['reached'])): ?>
+                                                                <span class="badge bg-success-subtle text-success">Tercapai</span>
+                                                            <?php else: ?>
+                                                                <span class="badge bg-danger-subtle text-danger">-Rp <?= number_format((float)$cb['shortfall_ho'], 0, ',', '.') ?></span>
+                                                            <?php endif; ?>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <?php if (!empty($cb['reached'])): ?>
-                                                            <span class="badge bg-success-subtle text-success">Tercapai</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-danger-subtle text-danger">-Rp <?= number_format((float)$cb['shortfall_ho'], 0, ',', '.') ?></span>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-center"><span class="badge bg-light text-secondary border px-2 py-1"><?= $kpi['bobot'] ?>%</span></td>
@@ -330,6 +573,8 @@
                                         <?php else: ?>
                                             <span class="text-success fw-medium small"><i class="fa fa-check me-1"></i> Semua tercapai</span>
                                         <?php endif; ?>
+                                    <?php elseif (!$isCurrency && $kpi['shortfall'] !== null && $kpi['shortfall'] > 0): ?>
+                                        <span class="text-danger fw-medium small"><i class="fa fa-arrow-down me-1"></i> Kurang <?= number_format((float)$kpi['shortfall'], 2, ',', '.') ?> poin</span>
                                     <?php elseif ($kpi['shortfall'] !== null && $kpi['shortfall'] > 0): ?>
                                         <span class="text-danger fw-medium small"><i class="fa fa-arrow-down me-1"></i> <?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['shortfall'], 0, ',', '.') ?></span>
                                     <?php elseif ($kpi['shortfall'] !== null): ?>
@@ -421,3 +666,29 @@
         </div>
     </div>
 </div>
+
+<!-- ============================================================
+     Modal rincian Kesehatan Uang per Cabang (satu modal per baris KPI
+     ber-format `health`, id-nya harus sama dengan tombol di atas).
+     ============================================================ -->
+<?php if (!empty($detail_kpi)): ?>
+    <?php
+    $bulanNama = [
+        1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+    ];
+    $periodeLabel = ($bulanNama[(int) $bulan] ?? $bulan) . ' ' . $tahun;
+    $no = 1;
+    foreach ($detail_kpi as $kpi):
+        $rowNo = $no++;
+        if (($kpi['format'] ?? 'currency') !== 'health' || empty($kpi['cabang'])) {
+            continue;
+        }
+        echo view('penilaian/_kesehatan_uang_modal', [
+            'cabang'  => $kpi['cabang'],
+            'modalId' => 'kuModal' . $rowNo,
+            'periode' => $periodeLabel,
+        ]);
+    endforeach;
+    ?>
+<?php endif; ?>
