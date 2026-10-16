@@ -300,28 +300,19 @@ if (in_array($selected_unit, [3, 4, 5])) {
         <div class="card-body p-4">
             <!-- Metric Summary Cards -->
             <div class="row g-3">
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-4">
                     <div class="p-3 rounded-3 bg-light-subtle border">
                         <span class="fs-2 text-muted fw-semibold d-block mb-1">Per Unit (Perkiraan)</span>
                         <h5 class="fw-bold text-primary metric-figure mb-0">Rp <?= number_format($ho_distribution['per_employee_share'] ?? 0, 0, ',', '.') ?></h5>
                     </div>
                 </div>
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-4">
                     <div class="p-3 rounded-3 bg-light-subtle border">
                         <span class="fs-2 text-muted fw-semibold d-block mb-1">Per Unit (Dipotong)</span>
                         <h5 class="fw-bold text-success metric-figure mb-0">Rp <?= number_format($ho_distribution['per_employee_actual'] ?? 0, 0, ',', '.') ?></h5>
                     </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <?php $selisihTotal = ($ho_distribution['per_employee_share'] ?? 0) - ($ho_distribution['per_employee_actual'] ?? 0); ?>
-                    <div class="p-3 rounded-3 bg-light-subtle border">
-                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Selisih Alokasi</span>
-                        <h5 class="fw-bold text-<?= $selisihTotal >= 0 ? 'warning-emphasis' : 'danger' ?> metric-figure mb-0">
-                            Rp <?= number_format(abs($selisihTotal), 0, ',', '.') ?>
-                        </h5>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-4">
                     <div class="p-3 rounded-3 bg-light-subtle border">
                         <span class="fs-2 text-muted fw-semibold d-block mb-1">Total Karyawan HO</span>
                         <h5 class="fw-bold text-dark metric-figure mb-0"><?= count($ho_distribution['employees'] ?? []) ?> <span class="fs-2 fw-normal text-muted">Orang</span></h5>
