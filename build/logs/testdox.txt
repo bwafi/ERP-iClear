@@ -1,3 +1,11 @@
+Akurasi Laporan Calculator (Tests\AkurasiLaporanCalculator)
+ [x] Tujuh dari delapan hari terverifikasi cocok
+ [x] Hari belum verifikasi tidak ikut pembagi maupun pembilang
+ [x] Tanpa hari terverifikasi skor null
+ [x] Hari belum lengkap tidak dihitung
+ [x] Baris unit lain dan di luar bulan diabaikan
+ [x] Model menghitung pembagi dan pembilang terpisah
+
 Asset Berjalan Card (Tests\AssetBerjalanCard)
  [x] Unit 5 mengikuti aturan franchise banyuwangi
  [x] Unit 3 tetap franchise banyuwangi
@@ -25,6 +33,12 @@ Customer Satisfaction (Tests\CustomerSatisfaction)
  [ ] Spv view only read only
  [ ] Kepala toko cannot input unit lain
  [ ] Kepala toko save valid
+
+Direktur Unit Scope (Tests\DirekturUnitScope)
+ [x] Direktur terpetakan mengembalikan daftar unit
+ [x] Direktur tanpa pemetaan mengembalikan null
+ [x] Filter branches membuang unit di luar area
+ [x] Filter branches tanpa batas mengembalikan semua
 
 Entitlement Mapping (Tests\EntitlementMapping)
  [x] Mapping resmi sesuai keputusan
@@ -603,6 +617,16 @@ Example Database
 
 Example Session
  [x] Session simple
+
+Akurasi Laporan Calculator (Tests\unit\AkurasiLaporanCalculator)
+ [x] Tujuh dari delapan hari terverifikasi cocok
+ [x] Semua hari cocok memberi seratus
+ [x] Satu hari selisih dari lima menurunkan nilai
+ [x] Semua hari selisih memberi nol
+ [x] Tanpa hari terverifikasi skor null
+ [x] Error saat tabel tidak siap
+ [x] Pembilang tidak boleh melebihi pembagi
+ [x] Nilai negatif dianggap nol hari
 
 Daily Cash Flow Service (Tests\unit\DailyCashFlowService)
  [x] Penjualan terpisah tunai dan transfer

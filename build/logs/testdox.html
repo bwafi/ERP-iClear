@@ -51,6 +51,15 @@
         </style>
     </head>
     <body>
+        <h2>Akurasi Laporan Calculator (Tests\AkurasiLaporanCalculator)</h2>
+        <ul>
+            <li class="success">Tujuh dari delapan hari terverifikasi cocok</li>
+            <li class="success">Hari belum verifikasi tidak ikut pembagi maupun pembilang</li>
+            <li class="success">Tanpa hari terverifikasi skor null</li>
+            <li class="success">Hari belum lengkap tidak dihitung</li>
+            <li class="success">Baris unit lain dan di luar bulan diabaikan</li>
+            <li class="success">Model menghitung pembagi dan pembilang terpisah</li>
+        </ul>
         <h2>Asset Berjalan Card (Tests\AssetBerjalanCard)</h2>
         <ul>
             <li class="success">Unit 5 mengikuti aturan franchise banyuwangi</li>
@@ -81,6 +90,13 @@
             <li class="defect">Spv view only read only</li>
             <li class="defect">Kepala toko cannot input unit lain</li>
             <li class="defect">Kepala toko save valid</li>
+        </ul>
+        <h2>Direktur Unit Scope (Tests\DirekturUnitScope)</h2>
+        <ul>
+            <li class="success">Direktur terpetakan mengembalikan daftar unit</li>
+            <li class="success">Direktur tanpa pemetaan mengembalikan null</li>
+            <li class="success">Filter branches membuang unit di luar area</li>
+            <li class="success">Filter branches tanpa batas mengembalikan semua</li>
         </ul>
         <h2>Entitlement Mapping (Tests\EntitlementMapping)</h2>
         <ul>
@@ -697,6 +713,17 @@
         <h2>Example Session</h2>
         <ul>
             <li class="success">Session simple</li>
+        </ul>
+        <h2>Akurasi Laporan Calculator (Tests\unit\AkurasiLaporanCalculator)</h2>
+        <ul>
+            <li class="success">Tujuh dari delapan hari terverifikasi cocok</li>
+            <li class="success">Semua hari cocok memberi seratus</li>
+            <li class="success">Satu hari selisih dari lima menurunkan nilai</li>
+            <li class="success">Semua hari selisih memberi nol</li>
+            <li class="success">Tanpa hari terverifikasi skor null</li>
+            <li class="success">Error saat tabel tidak siap</li>
+            <li class="success">Pembilang tidak boleh melebihi pembagi</li>
+            <li class="success">Nilai negatif dianggap nol hari</li>
         </ul>
         <h2>Daily Cash Flow Service (Tests\unit\DailyCashFlowService)</h2>
         <ul>
