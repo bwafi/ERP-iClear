@@ -1,3 +1,15 @@
+<?php
+if (!function_exists('nota_val')) {
+    function nota_val($value)
+    {
+        if (is_string($value)) {
+            $value = trim($value);
+        }
+
+        return ($value === null || $value === '') ? '-' : $value;
+    }
+}
+?>
 <style>
     body {
         margin: 0;
@@ -28,9 +40,47 @@
         margin: 5px 0;
     }
 
-    .syarat {
+    /* --- Nota: Ketentuan Service & Garansi --- */
+    .nota-terms {
+        width: 100%;
+        border-collapse: collapse;
         font-size: 10px;
-        line-height: 1.3;
+        line-height: 1.4;
+        color: #000;
+    }
+
+    .nota-terms td {
+        padding: 0;
+    }
+
+    .nota-terms .nt-head {
+        font-size: 10px;
+        font-weight: bold;
+        letter-spacing: .06em;
+        border-bottom: 1px solid #000;
+        padding-top: 26px;
+        padding-bottom: 3px;
+    }
+
+    .nota-terms .nt-head.first {
+        padding-top: 0;
+    }
+
+    .nota-terms .nt-num {
+        width: 16px;
+        padding-top: 3px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .nota-terms .nt-txt {
+        padding-top: 3px;
+        padding-right: 2px;
+    }
+
+    .nota-terms .nt-note {
+        padding-top: 10px;
+        font-style: italic;
     }
 
     .ttd td,
@@ -50,6 +100,27 @@
     .nowrap {
         white-space: nowrap;
     }
+
+    /* Blok data service: label rata kiri, titik dua segaris, tanpa jarak berlebih */
+    .hdr-data {
+        width: auto;
+        border-collapse: collapse;
+    }
+
+    .hdr-data td {
+        padding: 1px 0;
+        vertical-align: top;
+    }
+
+    .hdr-data .k {
+        text-align: left;
+        white-space: nowrap;
+        padding-right: 3px;
+    }
+
+    .hdr-data .v {
+        text-align: left;
+    }
 </style>
 <div id="printable" class="container">
     <table cellpadding="0" cellspacing="0" width="485" class="border" style="overflow-x:auto;">
@@ -59,19 +130,16 @@
                 <td style="text-align: left;" colspan="2"><img src="<?= base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></td>
             </tr>
             <tr>
-                <td style="text-align: left;" colspan="2">No.Faktur : <?= @$service->no_service ?></td>
-                <td colspan="2"></td>
-                <td style="font-size: 10px;" colspan="2">Nama : <?= @$human->nama_pelanggan ?></td>
+                <td style="text-align: left; width:50%;" class="nowrap" colspan="3"><?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?></td>
+                <td style="text-align: left;" colspan="3">IG : <?= @$dataunit->KELURAHAN_UNIT?></td>
             </tr>
             <tr>
-                <td style="text-align: left; width:50%;" class="nowrap" colspan="2"><?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?></td>
-                <td style="text-align: left;" colspan="2">IG : <?= @$dataunit->KELURAHAN_UNIT?></td>
-                <td style="font-size: 10px;" colspan="2">No.HP : <?= @$human->no_hp ?></td>
+                <td style="text-align: left;" colspan="3"><?= @$dataunit->NOTELP_KOMPLAIN ?></td>
+                <td style="text-align: left;" colspan="3">Tiktok : iclear.service</td>
             </tr>
             <tr>
-                <td style="text-align: left;" colspan="2"><?= @$dataunit->NOTELP_KOMPLAIN ?></td>
-                <td style="text-align: left;" colspan="2">Tiktok : iclear.service</td>
-                <td style="font-size: 10px;" colspan="2">Tanggal : <?= date('d-m-Y', strtotime(@$service->created_at)) ?></td>
+                <td style="text-align: left;" colspan="3"></td>
+                <td style="text-align: left;" colspan="3">Website : iclear.my.id</td>
             </tr>
             <tr>
                 <td colspan="6">
@@ -79,24 +147,52 @@
                 </td>
             </tr>
             <tr>
-                <td style="text-align:left; width:5px;" colspan="1">Tipe : <?= @$service->tipe_hp ?></td>
-                <td class="left kop"></td>
-                <td></td>
-                <td></td>
-                <td style="text-align:center;">iCloud</td>
-            </tr>
-            <tr>
-                <td style="text-align:left; width:5px;">IMEI : <?= @$service->imei ?></td>
-                <td class="left kop"></td>
-                <td colspan="2"></td>
-                <td style="text-align:left; width:5px; font-size: 10px;" colspan="2">Email : <?= @$service->email_icloud ?></td>
-            </tr>
-            <tr>
-                <td style="text-align:left; width:5px;">Passcode : <?= @$service->passcode ?></td>
-                <td class="left kop"></td>
-                <td></td>
-                <td></td>
-                <td style="text-align:left; font-size: 10px;" colspan="2">Password : <?= @$service->password_icloud ?></td>
+                <td style="text-align:left; vertical-align: top;" colspan="4">
+                    <table class="hdr-data">
+                        <tr>
+                            <td class="k">No.Faktur</td>
+                            <td class="v">: <?= nota_val(@$service->no_service) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Tanggal</td>
+                            <td class="v">: <?= @$service->created_at ? date('d-m-Y', strtotime($service->created_at)) : '-' ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Nama</td>
+                            <td class="v">: <?= nota_val(@$human->nama_pelanggan) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">No.HP</td>
+                            <td class="v">: <?= nota_val(@$human->no_hp) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Tipe</td>
+                            <td class="v">: <?= nota_val(@$service->tipe_hp) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">IMEI</td>
+                            <td class="v">: <?= nota_val(@$service->imei) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Passcode</td>
+                            <td class="v">: <?= nota_val(@$service->passcode) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Email</td>
+                            <td class="v">: <?= nota_val(@$service->email_icloud) ?></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Password</td>
+                            <td class="v">: <?= nota_val(@$service->password_icloud) ?></td>
+                        </tr>
+                    </table>
+                </td>
+                <td style="text-align:center; vertical-align: middle;" colspan="2">
+                    <?php if (!empty($qrImageUrl)): ?>
+                        <img src="<?= $qrImageUrl ?>" width="90" alt="QR Code">
+                        <div style="font-size: 9px; margin-top: 3px;">Scan untuk melihat<br>detail service</div>
+                    <?php endif; ?>
+                </td>
             </tr>
             <tr>
                 <!-- KOLOM GAMBAR -->
@@ -189,39 +285,68 @@
         </thead>
         <tbody>
             <tr>
-                <td colspan="4" style="text-align:left;">
-                    Ketentuan Garansi Iphone Hangus :<br>
-                    1. Masa Gransi Berakhir<br>
-                    2. Tidak membawa nota garansi<br>
-                    3. Segel Rusak/Hilang<br>
-                    4. Kesalahan pemakaian conoth : terjatuh, terkena cairan, selama dalam penggunaan, pecah/retak, salah penyimpanan, berkarat, tergores, berjamur, atau human error, lupa iCloud<br><br>
-                    Yang tidak termasuk garansi<br>
-                    1. Accesoris (Kabel Cas, Charger, Handfree)<br>
-                    2. Data dan Update OS<br>
-                    3. Fisik iPhone Second<br>
-                    4. Tidak Garansi IMEI
-                </td>
-            </tr>
-            <tr>
-                <td colspan="6">
-                    <hr style="border: 1px solid black;">
-                </td>
-            </tr>
-            <tr>
                 <td colspan="6" style="text-align:left;">
-                    Ketentuan Garansi IPhone:<br>
-                    1. Disarankan Nota dan Segel dibawah Handphone masih utuh tidak rusak<br>
-                    2. Untuk Garansi Sparepart 7 hari, 1 bulan, 1 tahun, 2 tahun, dan selamanya terhitung dari tanggal Pengambilan Barang<br>
-                    3. Untuk Caransi Service Mesin 7 dan 30 Hari terhitung dari tanggal Pengambilan Barang<br>
-                    4. Untuk Garansi penggantian LCD berlaku yang cacat pabrik (Ghost touch, Blank, Sentuh tidak bisa) Selain Cacat Pabrik kita tidak Menerima Garansi<br><br>
-                    Ketentuan Service iPhone:<br>
-                    1. Kami tidak bertanggung jawab atas hilangnya data<br>
-                    2. Bukan Lock icloud<br>
-                    3. Tanda Terima wajib dibawa waktu pengambilan barang<br>
-                    4. Perbaikan berhak kami cancel apabila: gagal service, kerusakan yang parah<br>
-                    5. Garansi uang kembali selama masa garansi iPhone masih ada dan tetap ERROR yang sama<br>
-                    6. Apabila Unit Service tidak diambil lebih dari 2 bulan, kehilangan bukan tanggung jawab karni<br><br>
-                    <b>Note : Klaim garansi hanya berlaku 1 (satu) kali.</b>
+                    <table class="nota-terms" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td class="nt-head first" colspan="2">KETENTUAN SERVICE</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">1.</td>
+                            <td class="nt-txt">Reparasi berhak kami tolak/cancel apabila: Gagal repair, rusak parah (cairan parah, putus jalur, berkarat, IC Besar), bagian mesin sudah tidak lengkap.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">2.</td>
+                            <td class="nt-txt">Untuk kondisi handphone (mode DFU, matot, kena cairan, jatuh, putus jalur, IC mesin lemah, bekas service mesin, eror base band signal dll) tidak memungkinkan untuk pengecekan fungsi secara keseluruhan. Sehingga bisa menyebabkan fungsi handphone bisa menurun.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">3.</td>
+                            <td class="nt-txt">Garansi uang kembali selama garansi jika iPhone tetap eror yang SAMA, atau karena CANCEL.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">4.</td>
+                            <td class="nt-txt">Kami tidak bertanggung jawab atas data di dalam handphone.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">5.</td>
+                            <td class="nt-txt">Barang yang sudah selesai dikerjakan akan dikonfirmasi sebelumnya, dan apabila barang tidak diambil lebih dari 1 bulan, jika terjadi kehilangan diluar tanggung jawab kami.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">6.</td>
+                            <td class="nt-txt">Tanda terima wajib dibawa pada waktu pengambilan barang.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">7.</td>
+                            <td class="nt-txt">Sparepart lama wajib dibawa customer / user.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-head" colspan="2">KETENTUAN GARANSI</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">1.</td>
+                            <td class="nt-txt">Garansi berlaku selama masa garansi, segel dan nota masih utuh.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">2.</td>
+                            <td class="nt-txt">Garansi sparepart sesuai yang tertera di struk atau nota garansi, dihitung dari tanggal pengambilan barang.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">3.</td>
+                            <td class="nt-txt">Garansi Mesin sesuai yang tertera di struk atau nota garansi, dihitung dari tanggal pengambilan barang.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">4.</td>
+                            <td class="nt-txt">Garansi Replace LCD berlaku untuk cacat pabrik, dengan kondisi fisik LCD seperti baru (Touch Loncat, Blank, Touch No Respon). Garansi LCD tidak termasuk jika Garis Vertikal, Fisik Pecah, Retak, Dot, Black Dot, Flicker, Tergores, Air, Dead Pixel, dll.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-num">5.</td>
+                            <td class="nt-txt">Garansi Replace Baterai untuk kerusakan drop / boros, cacat pabrik. Garansi baterai tidak termasuk jika ada cacat fisik, bekas congkel, tusukan, goresan, sobekan di flexible.</td>
+                        </tr>
+                        <tr>
+                            <td class="nt-note" colspan="2">
+                                *Note : Klaim garansi hanya berlaku 1 (satu) kali.
+                            </td>
+                        </tr>
+                    </table>
                 </td>
             </tr>
             <tr>
@@ -232,18 +357,12 @@
         </tbody>
         <tr class="ttd">
             <td colspan="1" style="text-align: center;">Teknisi</td>
-            <td rowspan="2" colspan="3" style="text-align: center;">
-                <?php if (isset($qrImageUrl)): ?>
-                    <div>
-                        <img src="<?= $qrImageUrl ?>" width="70" alt="QR Code">
-                        <p style="font-size: 11px;">Scan untuk melihat detail service</p>
-                    </div>
-                <?php endif; ?>
-            </td>
+            <td colspan="3"></td>
             <td colspan="2" style="text-align: center;">Customer</td>
         </tr>
         <tr class="ttd">
-            <td colspan="1" style="text-align: center;"><?= @$human->nama_service_by ?></td>
+            <td colspan="1" style="text-align: center;"><?= nota_val(@$human->nama_service_by) ?></td>
+            <td colspan="3"></td>
             <td colspan="2" style="text-align: center;">____________________</td>
         </tr>
     </table>
