@@ -11,9 +11,9 @@ use Config\Finance;
  * Orkestrator perhitungan & snapshot KPI Finance untuk satu unit+periode.
  *
  * - Auto  : akurasi (rekonsiliasi harian: hari terverifikasi tanpa selisih),
- *           cash_flow, hutang_piutang, payroll
- * - Manual: kesehatan_uang, compliance
- * - Auto + fallback manual: rekonsiliasi
+ *           cash_flow, hutang_piutang, payroll,
+ *           compliance (agregat: total terbobot KPI lain)
+ * - Auto + fallback manual: rekonsiliasi, kesehatan_uang
  *
  * Transisi aman rekonsiliasi: 'rekonsiliasi' tetap terdaftar di
  * Finance::$manualKpiCodes, tetapi kpiRow() mencoba calculator auto lebih
@@ -74,7 +74,16 @@ class FinanceKpiCalculationService
 
         $rows = [];
         foreach (array_keys($this->config->kpiWeights) as $code) {
+            // Compliance = agregasi KPI lain; dihitung setelah semua baris
+            // lain selesai (lihat complianceRow()).
+            if ($code === 'compliance') {
+                continue;
+            }
             $rows[$code] = $this->kpiRow($unitId, $month, $year, $startDate, $endDate, $code);
+        }
+
+        if (array_key_exists('compliance', $this->config->kpiWeights)) {
+            $rows['compliance'] = $this->complianceRow($rows);
         }
 
         $totalScore = 0.0;
@@ -180,9 +189,44 @@ class FinanceKpiCalculationService
                 // ditangani sebelum switch oleh rekonRow()
                 return $this->rekonRow($unitId, $month, $year, $weight);
 
+            case 'compliance':
+                // Compliance agregat dari KPI lain; tidak punya baris mandiri.
+                // Dibuat oleh complianceRow() di dalam scorecard().
+                throw new \LogicException('Compliance dihitung dari baris KPI lain (lihat complianceRow()).');
+
             default:
                 throw new \RuntimeException("KPI code tidak dikenal: {$code}");
         }
+    }
+
+    /**
+     * Baris KPI Compliance = "hasil dari semua KPI lain".
+     *
+     * Skor = FinanceKpiService::complianceScore() = sum(skor x bobot) / 100
+     * atas seluruh KPI lain, dengan KPI tanpa data DIANGGAP 0. Bobot KPI lain
+     * totalnya 95, jadi nilai maksimal yang wajar adalah 95.
+     *
+     * @param array<string,array> $rows baris KPI lain (kode => baris)
+     */
+    protected function complianceRow(array $rows): array
+    {
+        $weight = (float) $this->config->kpiWeights['compliance'];
+
+        $scores = [];
+        foreach ($rows as $code => $row) {
+            $scores[$code] = $row['score'];
+        }
+
+        $score = FinanceKpiService::complianceScore($scores, $this->config->kpiWeights);
+
+        return $this->buildRow(
+            'compliance',
+            $weight,
+            'auto',
+            $score,
+            'Total terbobot seluruh KPI lain; KPI tanpa data dianggap 0.',
+            'ok'
+        );
     }
 
     /**

@@ -177,6 +177,11 @@ Target: Rp 250.000.000 (Target HO), dihitung per pencapaian masing-masing cabang
 
 > Catatan (2026-10-16): KPI **Improvement Finance** dihapus; bobot 5% dipindahkan
 > ke **Payroll** (5% → 10%).
+>
+> Catatan (2026-10-16): **Compliance** kini tidak diisi manual, melainkan
+> dihitung otomatis sebagai **hasil semua KPI lain** =
+> jumlah(skor × bobot) ÷ 100 (KPI tanpa data dianggap 0). Bobot KPI lain
+> totalnya 95, jadi nilai maksimal Compliance wajar sekitar 95.
 
 ---
 

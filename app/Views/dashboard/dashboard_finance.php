@@ -214,6 +214,7 @@
                         'payroll' => '#tab-payroll',
                         'rekonsiliasi' => '#tab-rekon',
                         'kesehatan_uang' => '#tab-kesehatan',
+                        'compliance' => '#tab-compliance',
                     ][$row['code']] ?? '#tab-manual';
                     ?>
                     <div class="col-md-3">
@@ -319,6 +320,9 @@
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-kesehatan" type="button">Kesehatan Uang</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-compliance" type="button">Compliance</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manual" type="button">Riwayat Manual</button>
@@ -911,6 +915,50 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Compliance -->
+                <div class="tab-pane fade" id="tab-compliance">
+                    <?php $complianceScore = $rows['compliance']['score'] ?? null; ?>
+                    <div class="alert alert-light border small py-2 mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <b>Compliance</b> dihitung otomatis sebagai <b>hasil semua KPI lain</b>:
+                        jumlah (skor &times; bobot) tiap KPI dibagi 100. KPI yang belum punya
+                        data dianggap 0. Bobot KPI lain totalnya 95, jadi nilai maksimal wajar 95.
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>KPI</th>
+                                    <th class="text-end">Bobot</th>
+                                    <th class="text-end">Skor</th>
+                                    <th class="text-end">Kontribusi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php $sumBobot = 0; ?>
+                                <?php foreach ($rows as $code => $row): ?>
+                                    <?php if ($code === 'compliance') { continue; } ?>
+                                    <?php $sumBobot += (float) $row['weight']; ?>
+                                    <tr>
+                                        <td><?= esc($labels[$code] ?? $code) ?></td>
+                                        <td class="text-end"><?= (int) $row['weight'] ?>%</td>
+                                        <td class="text-end"><?= $row['score'] === null ? '— (0)' : number_format((float) $row['score'], 2, ',', '.') ?></td>
+                                        <td class="text-end"><?= number_format((float) ($row['contribution'] ?? 0), 2, ',', '.') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                <tr class="table-light fw-semibold">
+                                    <td colspan="3">Compliance = jumlah kontribusi</td>
+                                    <td class="text-end"><?= $complianceScore === null ? '—' : number_format((float) $complianceScore, 2, ',', '.') ?></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mb-0">
+                        Total bobot KPI lain: <?= (int) $sumBobot ?>% (bukan 100%) — itulah sebabnya
+                        nilai maksimal Compliance sekitar 95, bukan 100.
+                    </p>
                 </div>
 
                 <!-- Riwayat Manual -->

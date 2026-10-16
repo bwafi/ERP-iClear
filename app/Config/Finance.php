@@ -22,7 +22,7 @@ class Finance extends BaseConfig
         'hutang_piutang' => 10, // Auto (Fase 2)
         'rekonsiliasi'   => 10, // Manual
         'payroll'        => 10, // Auto (Fase 4) — bobot Improvement dipindah ke sini (2026-10-16)
-        'compliance'     => 5,  // Manual
+        'compliance'     => 5,  // Auto (hasil semua KPI lain: sum(skor x bobot) / 100)
     ];
 
     /**
@@ -50,7 +50,6 @@ class Finance extends BaseConfig
     public array $manualKpiCodes = [
         'kesehatan_uang',
         'rekonsiliasi',
-        'compliance',
     ];
 
     /**

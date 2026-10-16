@@ -108,4 +108,39 @@ final class FinanceKpiTest extends CIUnitTestCase
 
         $this->assertSame(50.0, FinanceKpiService::averageScore($rowsByUnit, 'rekonsiliasi'));
     }
+
+    // ── Compliance = total terbobot seluruh KPI lain ───────────────
+
+    public function testComplianceTotalTerbobotKpiLain(): void
+    {
+        $weights = (new Finance())->kpiWeights;
+        $scores  = array_fill_keys(array_keys($weights), 100.0);
+
+        // Semua KPI 100 kecuali bobot: (30+20+15+10+10+10) = 95.
+        // Compliance sendiri (5) diabaikan.
+        $this->assertSame(95.0, FinanceKpiService::complianceScore($scores, $weights));
+    }
+
+    public function testComplianceMenganggapKpiTanpaDataSebagaiNol(): void
+    {
+        $weights = ['kesehatan_uang' => 30, 'cash_flow' => 15, 'compliance' => 5];
+        $scores  = ['kesehatan_uang' => 50.0, 'cash_flow' => null];
+
+        // 50 x 30 / 100 = 15; cash_flow null -> 0.
+        $this->assertSame(15.0, FinanceKpiService::complianceScore($scores, $weights));
+    }
+
+    public function testComplianceMengabaikanDirinyaSendiri(): void
+    {
+        $weights = ['cash_flow' => 15, 'compliance' => 5];
+        $scores  = ['cash_flow' => 80.0, 'compliance' => 100.0];
+
+        // Hanya cash_flow: 80 x 15 / 100 = 12 (tanpa tambahan dari compliance).
+        $this->assertSame(12.0, FinanceKpiService::complianceScore($scores, $weights));
+    }
+
+    public function testComplianceTidakLagiManual(): void
+    {
+        $this->assertNotContains('compliance', (new Finance())->manualKpiCodes);
+    }
 }

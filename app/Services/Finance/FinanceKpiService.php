@@ -82,6 +82,33 @@ class FinanceKpiService
     }
 
     /**
+     * Compliance = "hasil dari semua KPI lain": total terbobot KPI lain.
+     *
+     * Rumus (keputusan bisnis 2026-10-16): sum(skor x bobot) / 100 — memakai
+     * bobot posisi 0 apa adanya (tanpa dibagi ulang), dan KPI yang belum punya
+     * data (skor null) DIANGGAP 0. KPI 'compliance' sendiri tidak ikut
+     * dijumlahkan (mencegah perhitungan berulang).
+     *
+     * @param array<string,?float> $scoresByCode skor tiap kode KPI (null = belum ada data)
+     * @param array<string,float>  $weightsByCode bobot dari Config\Finance::$kpiWeights
+     */
+    public static function complianceScore(array $scoresByCode, array $weightsByCode): float
+    {
+        $total = 0.0;
+        foreach ($weightsByCode as $code => $weight) {
+            if ($code === 'compliance') {
+                continue;
+            }
+            $score = $scoresByCode[$code] ?? null;
+            $total += (($score === null ? 0.0 : (float) $score) * (float) $weight) / 100.0;
+        }
+
+        // Bobot KPI lain menjumlah 95, jadi nilai wajar maksimal 95 (cap 100
+        // hanya jaring pengaman).
+        return round(min($total, 100.0), 2);
+    }
+
+    /**
      * Daftar unit operasional (cabang) dari master `unit`, bukan HO.
      *
      * @return int[]
