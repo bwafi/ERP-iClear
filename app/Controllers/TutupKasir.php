@@ -24,8 +24,8 @@ class TutupKasir extends BaseController
      *   - Finance (0), Admin root (1), Manager (34), SPV (40): boleh memilih
      *     seluruh unit cabang (Head Office dikecualikan) lewat ?unit=.
      *   - Direktur (2): boleh memilih unit seperti Admin root, TETAPI dibatasi
-     *     daftar unit per akun di $direkturUnitMap. Direktur yang belum
-     *     dipetakan diperlakukan "lintas unit" (semua cabang).
+     *     daftar unit per akun (DirekturUnitScopeService::UNIT_MAP). Direktur
+     *     yang belum dipetakan diperlakukan "lintas unit" (semua cabang).
      *   - Jabatan lain (mis. Kasir/Kepala Toko): terkunci ke ID_UNIT sesi.
      *
      * Daftar unit pada dasarnya tidak menampilkan Head Office (idunit 50).
@@ -38,10 +38,9 @@ class TutupKasir extends BaseController
         $id_akun    = (int) session()->get('ID_AKUN');
 
         // Direktur/investor (jabatan 2) yang hanya memegang sebagian unit.
-        $direkturUnitMap = [
-            46 => [3, 5], // Wahid Alfarizki: Banyuwangi, Genteng
-            70 => [4],    // Guruh Dwi Prasetyo: Pandaan
-        ];
+        // Pemetaan dipusatkan di DirekturUnitScopeService agar konsisten dengan
+        // halaman penilaian kinerja.
+        $direkturUnits = \App\Services\DirekturUnitScopeService::unitsFor($id_akun);
 
         $unitQuery = function () {
             return $this->db->table('unit')
@@ -51,9 +50,9 @@ class TutupKasir extends BaseController
 
         $bolehPilihUnit = in_array($id_jabatan, [0, 1, 2, 34, 40], true);
 
-        if ($bolehPilihUnit && $id_jabatan === 2 && isset($direkturUnitMap[$id_akun])) {
+        if ($bolehPilihUnit && $id_jabatan === 2 && $direkturUnits !== null) {
             // Direktur terbatas: daftar unit + validasi ?unit= terhadap daftarnya.
-            $allowedIds = $direkturUnitMap[$id_akun];
+            $allowedIds = $direkturUnits;
             $list_unit  = $unitQuery()->whereIn('idunit', $allowedIds)->orderBy('idunit', 'ASC')->get()->getResultArray();
 
             $unit = (int) ($this->request->getGet('unit') ?: 0);

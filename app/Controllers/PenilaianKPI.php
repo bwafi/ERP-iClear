@@ -1466,27 +1466,38 @@ class PenilaianKPI extends BaseController
         $bulan = $this->request->getGet('bulan') ?? date('m');
         $tahun = $this->request->getGet('tahun') ?? date('Y');
 
-        $idJabatan = session()->get('ID_JABATAN');
-        $idUnit = session()->get('ID_UNIT');
+        $idJabatan = (int) session()->get('ID_JABATAN');
+        $idUnit    = (int) session()->get('ID_UNIT');
+        $idAkun    = (int) session()->get('ID_AKUN');
 
-        if ($idJabatan == 2) {
-            $list_karyawan = $this->db->table('akun')
-                ->where('STATUS_PEGAWAI', 1)
-                ->where('ID_JABATAN !=', 1)
-                ->where('ID_JABATAN !=', 2)
-                ->where('ID_UNIT=', $idUnit)
-                ->get()
-                ->getResultArray();
-        } else {
-            $list_karyawan = $this->db->table('akun')
-                ->where('STATUS_PEGAWAI', 1)
-                ->where('ID_JABATAN !=', 1)
-                ->where('ID_JABATAN !=', 2)
-                ->get()
-                ->getResultArray();
+        // Direktur (jabatan 2) adalah investor: hanya boleh melihat area (unit)
+        // yang dipegangnya — mis. Alfarizki = Banyuwangi + Genteng. Direktur
+        // yang belum dipetakan tetap terkunci ke unit sesinya.
+        $areaUnits = ($idJabatan === 2)
+            ? (\App\Services\DirekturUnitScopeService::unitsFor($idAkun) ?? [$idUnit])
+            : null;
+
+        $listBuilder = $this->db->table('akun')
+            ->where('STATUS_PEGAWAI', 1)
+            ->where('ID_JABATAN !=', 1)
+            ->where('ID_JABATAN !=', 2);
+
+        if ($areaUnits !== null) {
+            $listBuilder->whereIn('ID_UNIT', $areaUnits);
         }
 
+        $list_karyawan = $listBuilder->get()->getResultArray();
+
         $selected_karyawan = $this->request->getGet('karyawan');
+
+        // Direktur: pilihan karyawan di luar area tidak boleh dilihat.
+        if ($areaUnits !== null) {
+            $allowedIds = array_map(static fn ($k) => (int) $k['ID_AKUN'], $list_karyawan);
+            if ($selected_karyawan && ! in_array((int) $selected_karyawan, $allowedIds, true)) {
+                $selected_karyawan = null;
+            }
+        }
+
         if (!$selected_karyawan && !empty($list_karyawan)) {
             $selected_karyawan = $list_karyawan[0]['ID_AKUN'];
         }
@@ -1527,9 +1538,12 @@ class PenilaianKPI extends BaseController
             $compByCode[$comp['component_code']] = (float) $comp['amount'];
         }
 
-        // Rincian omset seluruh cabang + total omset global.
-        $omsetCabang = $kpi['omset_cabang'] ?? [];
-        $omsetGlobal = array_sum(array_column($omsetCabang, 'omset'));
+        // Rincian omset per cabang. Direktur (investor) hanya melihat cabang
+        // milik areanya; "Omset Global" tetap total seluruh cabang (metrik
+        // perusahaan) sehingga dihitung dari daftar penuh.
+        $omsetCabangAll = $kpi['omset_cabang'] ?? [];
+        $omsetCabang    = \App\Services\DirekturUnitScopeService::filterBranches($omsetCabangAll, $areaUnits);
+        $omsetGlobal    = array_sum(array_column($omsetCabangAll, 'omset'));
 
         return view('template', [
             'list_karyawan'        => $list_karyawan,
