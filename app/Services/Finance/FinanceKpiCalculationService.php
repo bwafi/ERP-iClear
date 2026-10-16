@@ -10,7 +10,8 @@ use Config\Finance;
 /**
  * Orkestrator perhitungan & snapshot KPI Finance untuk satu unit+periode.
  *
- * - Auto  : akurasi (omzet ERP vs sheet), cash_flow, hutang_piutang, payroll
+ * - Auto  : akurasi (rekonsiliasi harian: hari terverifikasi tanpa selisih),
+ *           cash_flow, hutang_piutang, payroll
  * - Manual: kesehatan_uang, compliance, improvement
  * - Auto + fallback manual: rekonsiliasi
  *
@@ -31,6 +32,7 @@ class FinanceKpiCalculationService
     protected $payroll;
     protected $rekon;
     protected $kesehatan;
+    protected $akurasi;
     protected $payrollModel;
     protected $config;
 
@@ -45,6 +47,7 @@ class FinanceKpiCalculationService
         $this->payroll = new PayrollTimelinessCalculator();
         $this->rekon = new RekonDailyCalculator();
         $this->kesehatan = new KesehatanUangCalculator();
+        $this->akurasi = new AkurasiLaporanCalculator();
         $this->payrollModel = new ModelFinancePayroll();
         $this->config = new Finance();
     }
@@ -57,6 +60,7 @@ class FinanceKpiCalculationService
      *   total_score: float, counted: int, weights: array, labels: array,
      *   akurasi_detail: array, cashflow_monthly: array, cashflow_daily: array,
      *   hutang_detail: array, piutang_detail: array, payroll_detail: array,
+     *   rekon_detail: array, akurasi_rekon_detail: array,
      *   manual_records: array, manual_options: array
      * }
      */
@@ -65,12 +69,12 @@ class FinanceKpiCalculationService
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        // data harian tandem dalam bulan berjalan (untuk akurasi)
+        // data harian tandem dalam bulan berjalan (untuk tab info "Akurasi Omzet")
         $akurasiDetail = $this->akurasiDetail($unitId, $startDate, $endDate);
 
         $rows = [];
         foreach (array_keys($this->config->kpiWeights) as $code) {
-            $rows[$code] = $this->kpiRow($unitId, $month, $year, $startDate, $endDate, $code, $akurasiDetail);
+            $rows[$code] = $this->kpiRow($unitId, $month, $year, $startDate, $endDate, $code);
         }
 
         $totalScore = 0.0;
@@ -100,6 +104,7 @@ class FinanceKpiCalculationService
             'piutang_detail' => $this->piutang->calculate($unitId, $month, $year),
             'payroll_detail' => $this->payroll->calculate($unitId, $month, $year),
             'rekon_detail' => $this->rekon->calculate($unitId, $month, $year),
+            'akurasi_rekon_detail' => $this->akurasi->calculate($unitId, $month, $year),
             'kesehatan_uang_detail' => $this->kesehatan->calculate($unitId, $month, $year),
             'manual_records' => $this->kpiRecord->getByUnitAndPeriod($unitId, $year, $month),
             'manual_options' => $this->config->manualKpiCodes,
@@ -110,7 +115,7 @@ class FinanceKpiCalculationService
     /**
      * Satu baris KPI lengkap (nilai, skor, kontribusi, status + snapshot).
      */
-    protected function kpiRow(int $unitId, int $month, int $year, string $startDate, string $endDate, string $code, array $akurasiDetail): array
+    protected function kpiRow(int $unitId, int $month, int $year, string $startDate, string $endDate, string $code): array
     {
         $weight = (float) $this->config->kpiWeights[$code];
 
@@ -136,8 +141,10 @@ class FinanceKpiCalculationService
 
         switch ($code) {
             case 'akurasi':
-                $score = $this->akurasiScore($akurasiDetail);
-                return $this->buildRow($code, $weight, 'auto', $score, null, $score === null ? 'data_kosong' : 'ok');
+                // Akurasi Laporan Keuangan = hari rekonsiliasi terverifikasi
+                // tanpa selisih ÷ hari terverifikasi (lihat AkurasiLaporanCalculator).
+                $akurasi = $this->akurasi->calculate($unitId, $month, $year);
+                return $this->buildRow($code, $weight, 'auto', $akurasi['score'], null, $akurasi['status']);
 
             case 'cash_flow':
                 $cf = $this->cashFlow->calculate($unitId, $month, $year);
@@ -330,32 +337,6 @@ class FinanceKpiCalculationService
         usort($detail, fn ($a, $b) => strcmp($a['tanggal'], $b['tanggal']));
 
         return $detail;
-    }
-
-    /**
-     * Nilai akurasi = jumlah hari cocok / jumlah hari dengan input sheet.
-     * Hari tanpa input sheet ikut dibagikan (dianggap belum cocok) — hanya
-     * dihitung dari data sheet yang sudah ada.
-     */
-    protected function akurasiScore(array $detail): ?float
-    {
-        $cocok = 0;
-        $total = 0;
-        foreach ($detail as $row) {
-            if ($row['omzet_sheet'] === null) {
-                continue;
-            }
-            $total++;
-            if ($row['is_match']) {
-                $cocok++;
-            }
-        }
-
-        if ($total === 0) {
-            return null;
-        }
-
-        return round(($cocok / $total) * 100, 2);
     }
 
     /**

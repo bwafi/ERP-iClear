@@ -17,7 +17,7 @@ class Finance extends BaseConfig
      */
     public array $kpiWeights = [
         'kesehatan_uang' => 30, // Auto (rasio saldo vs kebutuhan 30 hari) + fallback manual
-        'akurasi'        => 20, // Auto + Manual (omzet ERP vs Sheet)
+        'akurasi'        => 20, // Auto (rekonsiliasi harian: hari terverifikasi tanpa selisih)
         'cash_flow'      => 15, // Auto
         'hutang_piutang' => 10, // Auto (Fase 2)
         'rekonsiliasi'   => 10, // Manual

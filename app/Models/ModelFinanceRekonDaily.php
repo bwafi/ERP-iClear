@@ -164,6 +164,26 @@ class ModelFinanceRekonDaily extends Model
     }
 
     /**
+     * Numerator KPI Akurasi Laporan Keuangan: ketiga actual_* terisi,
+     * approval = 'verified', DAN tidak ada selisih sama sekali (ketiga
+     * selisih_* = 0).
+     *
+     * Satu hari dengan selisih != 0 TIDAK dihitung (hari itu tetap ikut
+     * pembagi lewat countLengkapVerifiedInRange, sehingga akurasi turun).
+     */
+    public function countLengkapVerifiedCocokInRange(int $unitId, string $startDate, string $endDate): int
+    {
+        return $this->applyLengkap($this->where('unit_id', $unitId)
+            ->where('tanggal >=', $startDate)
+            ->where('tanggal <=', $endDate))
+            ->where('status_proses', self::STATUS_VERIFIED)
+            ->where('selisih_cash_masuk', 0)
+            ->where('selisih_transfer_masuk', 0)
+            ->where('selisih_kas_keluar', 0)
+            ->countAllResults();
+    }
+
+    /**
      * Terapkan syarat "ketiga actual_* terisi" ke sebuah query builder.
      */
     private function applyLengkap($builder)
