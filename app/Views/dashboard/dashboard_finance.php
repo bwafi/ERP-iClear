@@ -201,6 +201,9 @@
                         'belum_dinilai' => 'Belum dinilai',
                         'terisi' => 'Terisi',
                         'gap_piutang' => 'Piutang GAP',
+                        'data_belum_valid' => 'Saldo belum valid',
+                        'kebutuhan_nol' => 'Kebutuhan nol',
+                        'fallback_manual' => 'Fallback manual',
                     ][$row['status']] ?? $row['status'];
 
                     $tabTarget = [
@@ -209,6 +212,7 @@
                         'hutang_piutang' => '#tab-hutang',
                         'payroll' => '#tab-payroll',
                         'rekonsiliasi' => '#tab-rekon',
+                        'kesehatan_uang' => '#tab-kesehatan',
                     ][$row['code']] ?? '#tab-manual';
                     ?>
                     <div class="col-md-3">
@@ -311,6 +315,9 @@
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-rekon" type="button">Rekonsiliasi</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-kesehatan" type="button">Kesehatan Uang</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manual" type="button">Riwayat Manual</button>
@@ -770,6 +777,131 @@
                         <a href="<?= base_url($rekonLink) ?>" class="btn btn-primary btn-sm">
                             <i class="bi bi-arrow-right-circle me-1"></i>Buka Rekonsiliasi Harian
                         </a>
+                    </div>
+                </div>
+
+                <!-- Kesehatan Uang -->
+                <div class="tab-pane fade" id="tab-kesehatan">
+                    <?php
+                    $ks  = $kesehatan_uang_detail ?? [];
+                    $ksd = $ks['detail'] ?? [];
+                    $ksScore  = $ks['score'] ?? null;
+                    $ksStatus = $ks['status'] ?? '';
+
+                    // Bobot diambil dari baris scorecard (bukan hardcode) supaya
+                    // konsisten dengan Config\Finance::$kpiWeights.
+                    $ksWeight = 30;
+                    foreach (($rows ?? []) as $r) {
+                        if (($r['code'] ?? '') === 'kesehatan_uang') {
+                            $ksWeight = (int) ($r['weight'] ?? 30);
+                            break;
+                        }
+                    }
+                    ?>
+                    <div class="alert alert-light border small mb-3">
+                        <strong>Rumus:</strong>
+                        rasio = (uang masuk tunai + transfer) / (HPP + kas keluar + payroll) x 100;
+                        skor kategori = min((rasio / <?= number_format((float) ($ksd['target_rasio'] ?? 120), 0, ',', '.') ?>%) x 100, 100);
+                        kontribusi KPI = skor kategori x <strong><?= $ksWeight ?>%</strong>.
+                        Uang masuk = penjualan + service (definisi Tutup Kasir/Cash Flow); periode = bulan penuh.
+                    </div>
+
+                    <?php if ($ksStatus === 'kebutuhan_nol'): ?>
+                        <div class="alert alert-warning mb-3">
+                            <strong>Kebutuhan operasional nol / negatif.</strong>
+                            Rasio tidak dapat dihitung (tidak ada pembagian dengan nol) sehingga skor kategori kosong.
+                        </div>
+                    <?php elseif ($ksStatus === 'fallback_manual'): ?>
+                        <div class="alert alert-info mb-3">
+                            Skor diambil dari penilaian <strong>manual</strong> karena calculator auto belum dapat menghitung.
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <div class="card text-bg-primary fn-metric-tile h-100">
+                                <div class="card-body">
+                                    <h6 class="text-white-50 mb-2">Rasio Aktual</h6>
+                                    <h4 class="text-white mb-0">
+                                        <?= $ksd['rasio'] !== null ? number_format((float) $ksd['rasio'], 2, ',', '.') . '%' : '—' ?>
+                                    </h4>
+                                    <small class="text-white-50">masuk / keluar</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-bg-secondary fn-metric-tile h-100">
+                                <div class="card-body">
+                                    <h6 class="text-white-50 mb-2">Target Rasio</h6>
+                                    <h4 class="text-white mb-0"><?= number_format((float) ($ksd['target_rasio'] ?? 120), 0, ',', '.') ?>%</h4>
+                                    <small class="text-white-50">standar kesehatan</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-bg-success fn-metric-tile h-100">
+                                <div class="card-body">
+                                    <h6 class="text-white-50 mb-2">Skor Kategori</h6>
+                                    <h4 class="text-white mb-0">
+                                        <?= $ksScore !== null ? number_format((float) $ksScore, 2, ',', '.') : '—' ?>
+                                    </h4>
+                                    <small class="text-white-50">0–100</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-bg-dark fn-metric-tile h-100">
+                                <div class="card-body">
+                                    <h6 class="text-white-50 mb-2">Kontribusi KPI</h6>
+                                    <h4 class="text-white mb-0">
+                                        <?= $ksd['kontribusi'] !== null ? number_format((float) $ksd['kontribusi'], 2, ',', '.') : '—' ?>
+                                    </h4>
+                                    <small class="text-white-50">dari bobot <?= $ksWeight ?>%</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-white fw-semibold small">Uang Masuk (periode <?= esc($ksd['periode_mulai'] ?? '—') ?> s/d <?= esc($ksd['periode_akhir'] ?? '—') ?>)</div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0">
+                                        <tbody>
+                                            <tr><td>Tunai (penjualan + service)</td><td class="text-end">Rp <?= number_format((float) ($ksd['masuk_tunai'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr><td>Transfer (penjualan + service)</td><td class="text-end">Rp <?= number_format((float) ($ksd['masuk_transfer'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr class="table-light fw-semibold"><td>Total Uang Masuk</td><td class="text-end">Rp <?= number_format((float) ($ksd['total_masuk'] ?? 0), 0, ',', '.') ?></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="card-footer bg-white small text-muted">
+                                    Definisi sama dengan KPI Cash Flow: penjualan + service selesai, tunai + transfer.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-white fw-semibold small">Uang Keluar</div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0">
+                                        <tbody>
+                                            <tr><td>HPP (harga pokok penjualan)</td><td class="text-end">Rp <?= number_format((float) ($ksd['hpp'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr><td>Kas Keluar Operasional</td><td class="text-end">Rp <?= number_format((float) ($ksd['kas_keluar'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr><td>Payroll</td><td class="text-end">Rp <?= number_format((float) ($ksd['payroll'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr class="table-light fw-semibold"><td>Total Uang Keluar</td><td class="text-end">Rp <?= number_format((float) ($ksd['total_keluar'] ?? 0), 0, ',', '.') ?></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <?php $ex = $ksd['kas_keluar_excluded'] ?? []; ?>
+                                <div class="card-footer bg-white small text-muted">
+                                    Dikecualikan dari operasional (agar tidak dobel):
+                                    HPP Rp <?= number_format((float) ($ex['hpp'] ?? 0), 0, ',', '.') ?>,
+                                    SDM Rp <?= number_format((float) ($ex['sdm'] ?? 0), 0, ',', '.') ?>.
+                                    Transfer internal tidak dihitung sebagai pengeluaran operasional.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

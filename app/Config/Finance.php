@@ -16,7 +16,7 @@ class Finance extends BaseConfig
      * Bobot tiap KPI (dalam %).
      */
     public array $kpiWeights = [
-        'kesehatan_uang' => 30, // Manual
+        'kesehatan_uang' => 30, // Auto (rasio saldo vs kebutuhan 30 hari) + fallback manual
         'akurasi'        => 20, // Auto + Manual (omzet ERP vs Sheet)
         'cash_flow'      => 15, // Auto
         'hutang_piutang' => 10, // Auto (Fase 2)
@@ -43,11 +43,11 @@ class Finance extends BaseConfig
     /**
      * KPI yang bisa diisi manual oleh Finance.
      *
-     * 'rekonsiliasi' sengaja DISISIPKAN sebagai FALLBACK: modul sudah punya
-     * calculator auto, dan FinanceKpiCalculationService mencoba auto lebih
-     * dahulu. Jika auto tidak tersedia / error / tidak dapat dihitung, skor
-     * manual dari finance_kpi_records tetap dipakai. Jangan hapus item ini
-     * sebelum calculator auto terbukti stabil di produksi.
+     * 'rekonsiliasi' dan 'kesehatan_uang' sengaja DISISIPKAN sebagai FALLBACK:
+     * keduanya sudah punya calculator auto, dan FinanceKpiCalculationService
+     * mencoba auto lebih dahulu. Jika auto tidak tersedia / error / tidak dapat
+     * dihitung, skor manual dari finance_kpi_records tetap dipakai. Jangan hapus
+     * item ini sebelum calculator auto terbukti stabil di produksi.
      */
     public array $manualKpiCodes = [
         'kesehatan_uang',
@@ -55,6 +55,15 @@ class Finance extends BaseConfig
         'compliance',
         'improvement',
     ];
+
+    /**
+     * Target rasio kesehatan uang (%). Score = (rasio / target) x 100, maks 100.
+     *
+     * rasio = uang masuk bulan itu / uang keluar bulan itu x 100 (arus kas
+     * bulan penuh). Target 120% berarti uang masuk harus menutup 1,2x uang
+     * keluar (HPP + kas keluar operasional + payroll).
+     */
+    public float $kesehatanUangTargetPercent = 120.0;
 
     /**
      * Target/batas Cash Flow (%). Score = (CF% / target) x 100, maks 100.

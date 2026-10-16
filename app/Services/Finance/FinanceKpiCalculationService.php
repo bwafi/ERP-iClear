@@ -30,6 +30,7 @@ class FinanceKpiCalculationService
     protected $piutang;
     protected $payroll;
     protected $rekon;
+    protected $kesehatan;
     protected $payrollModel;
     protected $config;
 
@@ -43,6 +44,7 @@ class FinanceKpiCalculationService
         $this->piutang = new PiutangTimelinessCalculator();
         $this->payroll = new PayrollTimelinessCalculator();
         $this->rekon = new RekonDailyCalculator();
+        $this->kesehatan = new KesehatanUangCalculator();
         $this->payrollModel = new ModelFinancePayroll();
         $this->config = new Finance();
     }
@@ -98,6 +100,7 @@ class FinanceKpiCalculationService
             'piutang_detail' => $this->piutang->calculate($unitId, $month, $year),
             'payroll_detail' => $this->payroll->calculate($unitId, $month, $year),
             'rekon_detail' => $this->rekon->calculate($unitId, $month, $year),
+            'kesehatan_uang_detail' => $this->kesehatan->calculate($unitId, $month, $year),
             'manual_records' => $this->kpiRecord->getByUnitAndPeriod($unitId, $year, $month),
             'manual_options' => $this->config->manualKpiCodes,
             'approve_roles' => $this->config->financeApproveRoles,
@@ -114,6 +117,10 @@ class FinanceKpiCalculationService
         // Auto-first: coba calculator, jatuh ke manual bila tidak bisa dihitung.
         if ($code === 'rekonsiliasi') {
             return $this->rekonRow($unitId, $month, $year, $weight);
+        }
+
+        if ($code === 'kesehatan_uang') {
+            return $this->kesehatanRow($unitId, $month, $year, $weight);
         }
 
         $manual = in_array($code, $this->config->manualKpiCodes, true);
@@ -220,6 +227,57 @@ class FinanceKpiCalculationService
             null,
             null,
             'belum_dinilai'
+        );
+    }
+
+    /**
+     * Baris KPI Kesehatan Uang per Cabang dengan transisi aman auto -> manual.
+     *
+     * Sama seperti rekonRow(): calculator auto dicoba lebih dahulu. Bila skor
+     * auto tersedia (baseline saldo valid & kebutuhan > 0) skor auto dipakai;
+     * bila tidak, skor manual dari finance_kpi_records jadi fallback supaya
+     * deploy calculator tidak diam-diam membuat KPI yang sudah dinilai jadi 0.
+     */
+    protected function kesehatanRow(int $unitId, int $month, int $year, float $weight): array
+    {
+        $autoScore = null;
+        $autoStatus = 'error';
+
+        try {
+            $kesehatan = $this->kesehatan->calculate($unitId, $month, $year);
+            $autoScore = $kesehatan['score'];
+            $autoStatus = (string) $kesehatan['status'];
+        } catch (\Throwable $e) {
+            $autoScore = null;
+            $autoStatus = 'error';
+        }
+
+        if ($autoScore !== null) {
+            return $this->buildRow('kesehatan_uang', $weight, 'auto', (float) $autoScore, null, $autoStatus);
+        }
+
+        $record = $this->kpiRecord->findOneByUnitCodePeriod($unitId, 'kesehatan_uang', $year, $month);
+        if ($record && $record->score !== null) {
+            $notes = 'Fallback manual: calculator auto tidak dapat menghitung '
+                . '(status: ' . $autoStatus . ').';
+
+            return $this->buildRow(
+                'kesehatan_uang',
+                $weight,
+                (string) $record->mode,
+                (float) $record->score,
+                $notes,
+                'fallback_manual'
+            );
+        }
+
+        return $this->buildRow(
+            'kesehatan_uang',
+            $weight,
+            $autoStatus !== 'error' ? 'auto' : 'manual',
+            null,
+            null,
+            $autoStatus !== 'error' ? $autoStatus : 'belum_dinilai'
         );
     }
 

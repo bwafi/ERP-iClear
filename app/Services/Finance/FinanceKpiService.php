@@ -40,6 +40,9 @@ class FinanceKpiService
     /** @var array<string,array<int,array<string,array>>> cache rows[ym][unit][code] */
     private array $scorecards = [];
 
+    /** @var array<string,array<int,array<string,mixed>>> cache scorecard penuh[ym][unit] */
+    private array $scorecardsFull = [];
+
     public function __construct(?FinanceKpiCalculationService $calc = null)
     {
         $this->calc = $calc ?? new FinanceKpiCalculationService();
@@ -147,9 +150,94 @@ class FinanceKpiService
 
         if (!isset($this->scorecards[$ym][$unit])) {
             $scorecard = $this->calc->scorecard($unit, $month, $year);
-            $this->scorecards[$ym][$unit] = $scorecard['rows'] ?? [];
+            $this->scorecards[$ym][$unit]     = $scorecard['rows'] ?? [];
+            $this->scorecardsFull[$ym][$unit] = $scorecard;
         }
 
         return $this->scorecards[$ym][$unit];
+    }
+
+    /**
+     * Rincian Kesehatan Uang PER CABANG untuk ditampilkan di halaman penilaian
+     * kinerja (pola sama seperti "Omset Wilayah"/"Target Cabang" milik SPV).
+     *
+     * Memakai cache scorecard yang sudah dihitung componentData(), jadi tidak
+     * mengulang query per cabang.
+     *
+     * @return array<int,array{unit:int,nama:string,target_rasio:float,rasio:?float,
+     *   skor:?float,kontribusi:?float,masuk:int,masuk_tunai:int,masuk_transfer:int,
+     *   keluar:int,hpp:int,kas_keluar:int,payroll:int,target_masuk:int,
+     *   selisih_masuk:int,status:string,reached:bool,shortfall:?float}>
+     */
+    public function kesehatanUangBreakdown(int $month, int $year): array
+    {
+        $ym    = sprintf('%04d-%02d', $year, $month);
+        $nama  = $this->branchUnitNames();
+        $out   = [];
+
+        foreach ($this->branchUnits() as $unit) {
+            $this->rowsFor($unit, $month, $year); // pastikan cache terisi
+
+            $detail = $this->scorecardsFull[$ym][$unit]['kesehatan_uang_detail'] ?? null;
+            if ($detail === null) {
+                continue;
+            }
+
+            $d    = $detail['detail'] ?? [];
+            $skor = $detail['score'] ?? null;
+
+            $masuk       = (int) ($d['total_masuk'] ?? 0);
+            $keluar      = (int) ($d['total_keluar'] ?? 0);
+            $targetRasio = (float) ($d['target_rasio'] ?? 120);
+            // Uang masuk minimal agar rasio menyentuh target: keluar x target%.
+            $targetMasuk = (int) round($keluar * $targetRasio / 100);
+
+            $out[] = [
+                'unit'           => $unit,
+                'nama'           => $nama[$unit] ?? '',
+                'target_rasio'   => $targetRasio,
+                'rasio'          => $d['rasio'] ?? null,
+                'skor'           => $skor,
+                'kontribusi'     => $d['kontribusi'] ?? null,
+                'masuk'          => $masuk,
+                'masuk_tunai'    => (int) ($d['masuk_tunai'] ?? 0),
+                'masuk_transfer' => (int) ($d['masuk_transfer'] ?? 0),
+                'keluar'         => $keluar,
+                'hpp'            => (int) ($d['hpp'] ?? 0),
+                'kas_keluar'     => (int) ($d['kas_keluar'] ?? 0),
+                'payroll'        => (int) ($d['payroll'] ?? 0),
+                'target_masuk'   => $targetMasuk,
+                // Positif = uang masuk kurang dari target; negatif = berlebih.
+                'selisih_masuk'  => $targetMasuk - $masuk,
+                'status'         => (string) ($detail['status'] ?? ''),
+                'reached'        => $skor !== null && (float) $skor >= 100.0,
+                'shortfall'      => $skor === null ? null : round(max(100.0 - (float) $skor, 0), 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Peta idunit => NAMA_UNIT untuk cabang (tanpa Head Office).
+     *
+     * @return array<int,string>
+     */
+    private function branchUnitNames(): array
+    {
+        $rows = \Config\Database::connect()
+            ->table('unit')
+            ->select('idunit, NAMA_UNIT')
+            ->where('NAMA_UNIT !=', self::HO_UNIT_NAME)
+            ->where('idunit >', 0)
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['idunit']] = (string) $r['NAMA_UNIT'];
+        }
+
+        return $map;
     }
 }

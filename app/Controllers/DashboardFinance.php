@@ -101,6 +101,7 @@ class DashboardFinance extends BaseController
             'hutang_detail' => $scorecard['hutang_detail'],
             'piutang_detail' => $scorecard['piutang_detail'],
             'payroll_detail' => $scorecard['payroll_detail'],
+            'kesehatan_uang_detail' => $scorecard['kesehatan_uang_detail'],
             'manual_records' => $scorecard['manual_records'],
             'manual_options' => $scorecard['manual_options'],
             'can_input' => $info['isLintas'],

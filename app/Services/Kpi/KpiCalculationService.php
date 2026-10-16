@@ -360,6 +360,14 @@ class KpiCalculationService
                     'ho'        => true,
                     'cabang'    => null,
                 ];
+
+                // Kesehatan Uang ditampilkan per cabang (pola sama seperti
+                // Omset Wilayah/Target Cabang milik SPV): rasio + skor tiap
+                // cabang, supaya Finance tahu cabang mana yang menahan nilai.
+                if ($component->code === 'FIN_KESEHATAN_UANG') {
+                    $targetInfo['cabang'] = $this->financeKpiService()
+                        ->kesehatanUangBreakdown((int) $month, (int) $year);
+                }
             }
 
             $items[] = [
@@ -603,7 +611,9 @@ class KpiCalculationService
                 'reached'    => $item['reached'] ?? null,
                 'ho'         => $item['ho'] ?? null,
                 'cabang'     => $item['cabang'] ?? null,
-                'format'     => in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number',
+                'format'     => $item['code'] === 'FIN_KESEHATAN_UANG'
+                    ? 'health'
+                    : (in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number'),
             ];
         }
 
