@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="Tests\unit\DailyCashFlowServiceTest" file="/home/syro/Projects/ERP/tests/unit/DailyCashFlowServiceTest.php" tests="1" assertions="8" errors="0" warnings="0" failures="0" skipped="0" time="0.017033">
-    <testcase name="testDpMasukDikelompokkanMenurutMetodeDanTidakDihitungUlangSaatServiceSelesai" class="Tests\unit\DailyCashFlowServiceTest" classname="Tests.unit.DailyCashFlowServiceTest" file="/home/syro/Projects/ERP/tests/unit/DailyCashFlowServiceTest.php" line="56" assertions="8" time="0.017033"/>
+  <testsuite name="Tests\KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" tests="8" assertions="28" errors="0" warnings="0" failures="0" skipped="0" time="0.466631">
+    <testcase name="testUangMasukMenjumlahkanPenjualanTunaiTransferDanService" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="125" assertions="3" time="0.093460"/>
+    <testcase name="testPerhitunganPenuhTepatSeratusDuaPuluhPersen" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="154" assertions="8" time="0.056334"/>
+    <testcase name="testPeriodeBulanPenuhTermasukTanggalSebelumCutoff" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="181" assertions="3" time="0.050774"/>
+    <testcase name="testKasKeluarKategoriHppDanSdmDikecualikan" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="197" assertions="3" time="0.052793"/>
+    <testcase name="testPerhitunganTidakMenghitungHppDuaKali" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="215" assertions="3" time="0.055094"/>
+    <testcase name="testHppPakaiJumlahDanTidakMencampurUnitLain" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="233" assertions="2" time="0.050620"/>
+    <testcase name="testPayrollDiambilDariRegisterPerUnit" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="247" assertions="2" time="0.054212"/>
+    <testcase name="testUangKeluarNolTidakMenghasilkanSkorOtomatis" class="Tests\KesehatanUangCalculatorTest" classname="Tests.KesehatanUangCalculatorTest" file="/home/syro/Projects/ERP/tests/KesehatanUangCalculatorTest.php" line="260" assertions="4" time="0.053343"/>
   </testsuite>
 </testsuites>

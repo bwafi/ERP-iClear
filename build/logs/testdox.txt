@@ -1,3 +1,10 @@
-Daily Cash Flow Service (Tests\unit\DailyCashFlowService)
- [x] Dp masuk dikelompokkan menurut metode dan tidak dihitung ulang saat service selesai
+Kesehatan Uang Calculator (Tests\KesehatanUangCalculator)
+ [x] Uang masuk menjumlahkan penjualan tunai transfer dan service
+ [x] Perhitungan penuh tepat seratus dua puluh persen
+ [x] Periode bulan penuh termasuk tanggal sebelum cutoff
+ [x] Kas keluar kategori hpp dan sdm dikecualikan
+ [x] Perhitungan tidak menghitung hpp dua kali
+ [x] Hpp pakai jumlah dan tidak mencampur unit lain
+ [x] Payroll diambil dari register per unit
+ [x] Uang keluar nol tidak menghasilkan skor otomatis
 
