@@ -14,6 +14,10 @@ foreach ($unitList as $u) {
 $kompTotal = $periode ? (float)$periode->jumlah_komp : null;
 $selisih   = ($periode && $periode->jumlah_selisih !== null) ? (float)$periode->jumlah_selisih : null;
 
+// Kolom "Stok Komputer" di daftar opname disembunyikan untuk Admin (35) &
+// Kepala Toko (41) agar hitung fisik tidak terpengaruh angka acuan.
+$showKomp = $showKomp ?? true;
+
 // Stempel pembekuan: kapan stok komputer disalin dari stok_barang ke daftar opname.
 $freezeTs  = $periode ? strtotime((string)($periode->created_at ?? '')) : false;
 $freezeBy  = $periode ? (int)($periode->mulai_by ?? 0) : 0;
@@ -407,7 +411,9 @@ $who      = static function ($id) use ($akunNama): string {
                                         <th scope="col" class="so-idx">#</th>
                                         <th scope="col">Kode</th>
                                         <th scope="col">Nama Barang</th>
-                                        <th scope="col" class="text-center">Stok Komputer</th>
+                                        <?php if ($showKomp) : ?>
+                                            <th scope="col" class="text-center">Stok Komputer</th>
+                                        <?php endif; ?>
                                         <th scope="col" class="text-center">Jumlah Real</th>
                                         <th scope="col" class="text-center">Selisih</th>
                                         <th scope="col" class="text-center">Status</th>
@@ -440,7 +446,9 @@ $who      = static function ($id) use ($akunNama): string {
                                     <th scope="col" class="so-idx">#</th>
                                     <th scope="col">Kode</th>
                                     <th scope="col">Nama Barang</th>
-                                    <th scope="col" class="text-center">Stok Komputer</th>
+                                    <?php if ($showKomp) : ?>
+                                        <th scope="col" class="text-center">Stok Komputer</th>
+                                    <?php endif; ?>
                                     <th scope="col" class="text-center">Jumlah Real</th>
                                     <th scope="col" class="text-center">Selisih</th>
                                     <th scope="col" class="text-center">Status</th>
@@ -459,7 +467,9 @@ $who      = static function ($id) use ($akunNama): string {
                                                 </span>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="so-num"><?= number_format($it['jumlah_komp'], 0, ',', '.') ?></td>
+                                        <?php if ($showKomp) : ?>
+                                            <td class="so-num"><?= number_format($it['jumlah_komp'], 0, ',', '.') ?></td>
+                                        <?php endif; ?>
                                         <td class="text-center">
                                             <span class="so-num" style="font-size:.9375rem">
                                                 <?= $it['jumlah_real'] !== null ? number_format($it['jumlah_real'], 0, ',', '.') : '—' ?>
@@ -702,6 +712,8 @@ $who      = static function ($id) use ($akunNama): string {
         var soItems = <?= $opnameItemsJson ?>;
         // Role pengawas: hanya melihat (input readonly, tanpa aksi mutasi).
         var soReadonly = <?= empty($canMutate) ? 'true' : 'false' ?>;
+        // Kolom "Stok Komputer" hanya tampil untuk pengawas tertentu.
+        var soShowKomp = <?= !empty($showKomp) ? 'true' : 'false' ?>;
         // Status "belum disimpan" per baris + urutan terbaru diinput (client-side).
         var soSeq = 0;
         soItems.forEach(function(it) {
@@ -825,9 +837,9 @@ $who      = static function ($id) use ($akunNama): string {
                     + '<td>' + soEsc(it.nama)
                     + ((it.jenis || it.warna) ? '<span class="so-sub">' + soEsc(it.jenis) + (it.warna ? ' · ' + soEsc(it.warna) : '') + '</span>' : '')
                     + '</td>'
-                    + '<td class="so-num">' + soFmt(it.komp) + '</td>'
+                    + (soShowKomp ? '<td class="so-num">' + soFmt(it.komp) + '</td>' : '')
                     + '<td class="text-center"><input type="number" step="1" min="0" class="form-control form-control-sm text-center input-real" name="items[' + it.id + '][jumlah_real]" value="' + (realVal === null ? '' : realVal) + '" placeholder="" aria-label="Jumlah real ' + soEsc(it.kode) + '"' + (soReadonly ? ' readonly' : '') + '></td>'
-                    + '<td class="text-center">' + soSelHtml(it) + '</td>'
+                    + '<td class="text-center so-sel-cell">' + soSelHtml(it) + '</td>'
                     + '<td class="text-center">' + soStatusHtml(it.terisi) + '</td>'
                     + '</tr>';
             });
@@ -940,7 +952,7 @@ $who      = static function ($id) use ($akunNama): string {
             it.touchedAt = ++soSeq;
 
             // Update selisih & badge pada baris yang terlihat.
-            $tr.find('td:nth-child(6)').html(soSelHtml(it));
+            $tr.find('.so-sel-cell').html(soSelHtml(it));
             $tr.find('td:last-child').html(soStatusHtml(it.terisi));
             $tr.toggleClass('table-warning', it.komp != 0 && !it.terisi);
             $tr.attr('data-terisi', it.terisi ? '1' : '0');

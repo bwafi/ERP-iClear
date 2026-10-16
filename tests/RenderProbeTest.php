@@ -417,4 +417,34 @@ class RenderProbeTest extends CIUnitTestCase
 
         $this->assertStringNotContainsString('id="soSelisih"', $html, 'Tabel FINAL tidak perlu filter selisih');
     }
+
+    // =====================================================================
+    // Kolom "Stok Komputer" di daftar opname disembunyikan untuk operator
+    // hitung fisik (Admin 35, Kepala Toko 41) lewat flag $showKomp; pengawas
+    // (Finance/Admin Root/Manager) tetap melihatnya.
+    // =====================================================================
+
+    public function testStokOpnameSembunyikanKolomStokKomputerSaatShowKompFalse(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpname('FINAL') + ['showKomp' => false], 'stok_opname');
+
+        $this->assertStringNotContainsString(
+            '<th scope="col" class="text-center">Stok Komputer</th>',
+            $html,
+            'Kolom Stok Komputer harus hilang dari tabel saat $showKomp false'
+        );
+        // Papan kendali (ringkasan) tidak termasuk lingkup yang disembunyikan.
+        $this->assertStringContainsString('so-cell__label">Stok Komputer</span>', $html);
+        // Kolom turunan tetap ada.
+        $this->assertStringContainsString('>Jumlah Real<', $html);
+        $this->assertStringContainsString('>Selisih<', $html);
+    }
+
+    public function testStokOpnameTampilkanKolomStokKomputerSaatShowKompTrue(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpname('DRAFT') + ['showKomp' => true], 'stok_opname');
+
+        $this->assertStringContainsString('<th scope="col" class="text-center">Stok Komputer</th>', $html);
+        $this->assertStringContainsString('var soShowKomp = true;', $html);
+    }
 }

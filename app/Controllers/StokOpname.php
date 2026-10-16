@@ -38,6 +38,15 @@ class StokOpname extends BaseController
     /** Role yang boleh melakukan reopen stok opname (koreksi hasil final). */
     private const REOPEN_ROLES = [1];
 
+    /**
+     * Role yang TIDAK melihat kolom "Stok Komputer" di daftar opname.
+     *
+     * Admin (35) & Kepala Toko (41) adalah operator hitung fisik; angka acuan
+     * disembunyikan supaya hitungan tidak terpengaruh. Pengawas (Finance 0,
+     * Admin Root 1, Manager 34) tetap melihatnya untuk menelusuri selisih.
+     */
+    private const HIDE_KOMP_ROLES = [35, 41];
+
     /** Target KPI stok opname per bulan. */
     private const KPI_TARGET = 4;
 
@@ -102,6 +111,7 @@ class StokOpname extends BaseController
             'canPickUnit'      => $isCrossUnit,
             'canMutate'        => $canMutate,
             'canReopen'        => in_array($myJabatan, self::REOPEN_ROLES, true),
+            'showKomp'         => ! in_array($myJabatan, self::HIDE_KOMP_ROLES, true),
             'periode'          => $periode,
             'namaUnit'         => ($this->UnitModel->where('idunit', $unit)->first()->NAMA_UNIT ?? '-'),
             'items'            => $this->svc->periodeItems($unit, $tanggal),
