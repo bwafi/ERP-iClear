@@ -182,6 +182,10 @@ class KasBankCutoffService
      * migration 2026-10-03-000400 kolomnya belum ada, dan saat itu statement
      * dianggap belum terverifikasi (konservatif — lebih baik milestone
      * "butuh konfirmasi Finance" muncul daripada hilang).
+     *
+     * @deprecated 2026-10-15 Verifikasi statement bank bukan lagi syarat
+     *   pemakaian saldo (keputusan bisnis). Disimpan sebagai info/riwayat;
+     *   jangan dipakai sebagai gerbang baru.
      */
     public function statementVerified(int $akunId, ?string $tanggal = null): bool
     {
@@ -602,12 +606,14 @@ class KasBankCutoffService
      *
      * Tipe-aware:
      *   - KAS  -> baris opening pada tanggal cut-off ada (opening langsung
-     *             sah sebagai acuan; tidak ada verifikasi).
-     *   - BANK -> statement sudah diverifikasi Finance.
+     *             sah sebagai acuan).
+     *   - BANK -> selalu tersedia. Verifikasi statement bank BUKAN lagi syarat
+     *             (keputusan bisnis 2026-10-15): saldo koran dianggap bisa
+     *             dipakai apa adanya, tanpa status VERIFIED.
      *
      * Inilah syarat yang dipakai Setor/Tarik sebelum memakai saldo rekening
-     * sebagai acuan, jadi "baseline laci" ditentukan oleh keberadaan opening,
-     * sedangkan "baseline koran" tetap wajib diverifikasi.
+     * sebagai acuan. Setelah keputusan di atas hanya "baseline laci" (opening
+     * KAS) yang masih bisa kosong; rekening bank tidak lagi diblokir.
      */
     public function openingTersedia(int $akunId, ?string $tanggal = null): bool
     {
@@ -615,7 +621,7 @@ class KasBankCutoffService
             return $this->openingSrc()->openingAda($akunId, $tanggal);
         }
 
-        return $this->statementVerified($akunId, $tanggal);
+        return true;
     }
 
     /**

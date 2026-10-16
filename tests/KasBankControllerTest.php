@@ -856,8 +856,8 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
      *
      * Padahal mutasi hak rekening SAMA TIDAK menggerakkan saldo fisik bank
      * (pasangan leg atribusi net-nol terhadap fisik) — jadi tidak ada baseline
-     * fisik baru yang perlu dibuktikan statement. Alur rekening BEDA tetap
-     * wajib statement (test terpisah di bawah).
+     * fisik baru yang perlu dibuktikan statement. (Sejak 2026-10-15 rekening
+     * BEDA pun tidak lagi butuh statement; lihat test terpisah di bawah.)
      */
     public function testAntarUnitRekeningSamaCVTanpaStatementMenggeserHak(): void
     {
@@ -925,20 +925,24 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     }
 
     /**
-     * Regresi arah berlawanan: rekening BEDA tetap WAJIB statement VERIFIED.
-     *
-     * CV (akun 55, bank_idbank '2', statement BELUM terverifikasi) dipakai
-     * sebagai PENGIRIM ke rekening fisik yang berbeda (akun 5). Pengiriman
-     * antar rekening yang berbeda menggerakkan saldo FISIK bank, jadi guard
-     * statement harus tetap menolak — inilah "tidak melonggarkan validasi".
+     * Sejak keputusan bisnis 2026-10-15, verifikasi statement bank BUKAN lagi
+     * syarat di alur manapun. Rekening BEDA (yang menggerakkan saldo FISIK
+     * bank) pun tetap boleh dipakai tanpa statement VERIFIED; yang tetap
+     * dijaga adalah posisi hak unit (`cekTarikUnit`).
      */
-    public function testAntarUnitRekeningBedaTetapMenolakTanpaStatementTerverifikasi(): void
+    public function testAntarUnitRekeningBedaTetapBerhasilTanpaStatementTerverifikasi(): void
     {
         $this->db->query("INSERT INTO db_akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared) VALUES
             (55, NULL, 'BANK', 'CV Bersama Unit 1&2', '2', '1010202050', 'aktif', 1)");
         $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
             (55, 1, 3000000, 'Alokasi Unit 1 CV'),
             (5, 2, 400000, 'Alokasi Unit 2 BCA Bersama')");
+
+        // Guard statement lama akan menolak: pastikan verifikasinya memang belum ada.
+        $this->assertFalse(
+            (new \App\Services\Finance\KasBankCutoffService())->statementVerified(55, $this->tglMulai),
+            'CV sengaja tanpa statement terverifikasi'
+        );
 
         $tok = 'tok-cv-beda';
         $this->sesiDenganToken($tok);
@@ -952,21 +956,21 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'submit_token'      => $tok,
         ]);
         $r->assertStatus(302);
-        $this->assertStringContainsString('belum punya statement', $this->flashGagal());
+        $this->assertSame('', $this->flashGagal(), 'rekening BEDA tanpa statement tidak lagi ditolak');
 
-        // Tidak ada apa pun yang ditulis: ledger, pembayaran, sisa, posisi.
-        $this->assertSame(0, $this->model(ModelTransaksiKasBank::class)->countAllResults());
-        $this->assertSame(0, $this->model(ModelPembayaranHutangPiutang::class)->countAllResults());
-        $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
-        $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
-        $this->assertSame(3000000, $this->posisiUnit(55, 1), 'posisi sumber tidak boleh bergeser saat ditolak');
-        $this->assertSame(400000, $this->posisiUnit(5, 2), 'posisi penerima tidak boleh bergeser saat ditolak');
+        // Leg fisik antar rekening berbeda: KELUAR + MASUK = 2 baris (bukan atribusi).
+        $this->assertSame(2, $this->model(ModelTransaksiKasBank::class)
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->countAllResults());
+        $this->assertSame(2900000, $this->posisiUnit(55, 1), 'posisi sumber 3jt - 100k');
+        $this->assertSame(500000, $this->posisiUnit(5, 2), 'posisi penerima 400k + 100k');
+        $this->assertSame(400000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
+        $this->assertSame(400000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
     }
 
     /**
-     * Regresi sisi positif: rekening BEDA DENGAN statement VERIFIED tetap
-     * berhasil — bukti guard statement tidak dimatikan, hanya dikecualikan
-     * untuk mutasi hak rekening SAMA.
+     * Rekening BEDA DENGAN statement VERIFIED tetap berhasil — verifikasi kini
+     * opsional, bukan syarat; hasil transaksinya sama saja.
      */
     public function testAntarUnitRekeningBedaStatementTerverifikasiTetapBerhasil(): void
     {
@@ -2494,8 +2498,9 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     // Verifikasi statement adalah proses TERPISAH. Ia bukan prerequisite
     // untuk input saldo awal, edit saldo awal, maupun input alokasi shared,
     // dan tidak boleh dibuat otomatis hanya untuk meloloskan guard.
-    // Alur yang memang butuh angka terkonfirmasi (setor/tarik, transfer,
-    // bayar hutang/piutang) tetap memakai statementVerified().
+    // Sejak keputusan bisnis 2026-10-15 verifikasi statement bank BUKAN lagi
+    // syarat di alur manapun; metode `statementVerified()` disimpan sebagai
+    // info/riwayat saja.
     // =================================================================
 
     private function cutofff(): \App\Services\Finance\KasBankCutoffService

@@ -12,11 +12,11 @@
  *   1. "Shared account" ditulis terbuka. Rekening bersama tidak milik satu
  *      unit, jadi tidak boleh ditampilkan seolah-olah milik unit pemohon.
  *
- *   2. Saldo yang belum tersedia (laci kas tanpa opening, atau bank tanpa
- *      statement terverifikasi) ditampilkan sebagai "belum tersedia",
- *      bukan Rp 0. Angka 0 yang belum terbukti artinya "belum tahu",
- *      bukan "tidak ada uang". Menampilkan 0 membuat user salah mengambil
- *      keputusan.
+ *   2. Saldo laci kas yang belum tersedia (tanpa opening KAS) ditampilkan
+ *      sebagai "belum tersedia", bukan Rp 0. Angka 0 yang belum terbukti
+ *      artinya "belum tahu", bukan "tidak ada uang". Menampilkan 0 membuat
+ *      user salah mengambil keputusan. (Saldo bank tidak lagi menunggu
+ *      verifikasi statement — keputusan bisnis 2026-10-15.)
  *
  * Layout sengaja tidak memakai kb-tile-sm / kb-pane-head / kb-empty. Semua
  * gaya ada di blok <style> di bawah (awalan "pv-") supaya tampilan tidak
@@ -222,19 +222,10 @@ $blokir     = $preview['blokir'] ?? [];
                 <div class="pv-full">
                     <div class="pv-status">
                         <span class="pv-name">Saldo statement cut-off</span>
-                        <?php if (! empty($bank['terverifikasi'])) : ?>
-                            <span class="kb-badge kb-badge-green">Terverifikasi</span>
-                        <?php else : ?>
-                            <span class="kb-badge kb-badge-amber">Belum diverifikasi</span>
-                        <?php endif; ?>
                     </div>
                     <div class="pv-sub">
-                        Statement <?= esc($cutoff_info['tanggal_cutoff'] ?? '') ?>
-                        <?php if (empty($bank['terverifikasi'])) : ?>
-                            — koran bank belum diverifikasi finance, jadi saldo fisik di atas
-                            <strong>belum tersedia</strong>. Nilai placeholder
-                            <span class="kb-mono">0</span> tidak ditampilkan sebagai saldo faktual.
-                        <?php endif; ?>
+                        Saldo fisik rekening per statement
+                        <?= esc($cutoff_info['tanggal_cutoff'] ?? '') ?>.
                     </div>
                 </div>
             </div>

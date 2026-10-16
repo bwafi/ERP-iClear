@@ -781,7 +781,7 @@ class KasBankSetorTarikUiTest extends CIUnitTestCase
         $this->assertStringContainsString('Shared Account', $body);
     }
 
-    public function testStatementBelumTerverifikasiTidakDitampilkanSebagaiSaldoNol(): void
+    public function testSaldoBankTidakLagiMenungguVerifikasiStatement(): void
     {
         $this->sesi();
 
@@ -798,11 +798,11 @@ class KasBankSetorTarikUiTest extends CIUnitTestCase
             'csrf_test_name' => $security->getHash(),
         ])->getBody();
 
-        $this->assertStringContainsString('BELUM DIVERIFIKASI', $body);
-        $this->assertStringContainsString('belum tersedia', $body);
-
-        // Angka placeholder 0 tidak boleh muncul sebagai saldo rekening.
-        $this->assertStringNotContainsString('saldo fisik Rp 0', $body);
+        // Verifikasi statement bukan lagi syarat (keputusan bisnis 2026-10-15):
+        // koran bank yang belum diverifikasi tidak lagi ditandai "belum
+        // tersedia" — saldo dipakai apa adanya.
+        $this->assertStringNotContainsString('koran bank belum diverifikasi', $body);
+        $this->assertStringNotContainsString('Belum diverifikasi', $body);
     }
 
     public function testPreviewMenolakSimpanKalauEntitlementTidakCukup(): void

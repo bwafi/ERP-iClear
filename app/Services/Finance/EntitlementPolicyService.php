@@ -209,6 +209,10 @@ class EntitlementPolicyService
      *
      * Rekening Finance/HO dikecualikan: bukan rekening operasional unit dan
      * tidak punya statement cutoff.
+     *
+     * @deprecated 2026-10-15 Verifikasi statement bank bukan lagi syarat
+     *   pemakaian saldo di manapun. Disimpan untuk migrasi historis
+     *   (`2026-10-03-000504`); jangan dipakai sebagai gerbang baru.
      */
     public function wajibStatementVerifikasi(int $akunId): bool
     {

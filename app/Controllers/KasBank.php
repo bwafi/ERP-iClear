@@ -1967,7 +1967,8 @@ class KasBank extends BaseController
         // dua jawaban berbeda tergantung lewat mana dia datang.
         $kasOpeningAda = $kasDipakai !== null && $svc->openingTersedia((int) $kasDipakai->idakun_kas_bank);
         $kasSaldo      = ($kasDipakai !== null && $unit !== null) ? $svc->saldoFisik((int) $kasDipakai->idakun_kas_bank) : null;
-        $bankTerverifikasi = $bankDipakai !== null && $svc->statementVerified((int) $bankDipakai->idakun_kas_bank);
+        // Verifikasi statement bank bukan lagi syarat (keputusan bisnis
+        // 2026-10-15): saldo bank ditampilkan apa adanya.
         $bankSaldo     = $bankDipakai !== null ? $svc->saldoFisik((int) $bankDipakai->idakun_kas_bank) : null;
         $posisiUnit    = ($bankDipakai !== null && $unit !== null)
             ? $svc->posisiUnit((int) $bankDipakai->idakun_kas_bank, $unit)
@@ -2015,9 +2016,8 @@ class KasBank extends BaseController
             $bisaSubmit = false;
         }
 
-        // Setor ke rekening bank TIDAK butuh statement terverifikasi — uang
-        // masuk boleh dicatat sebelum koran bank datang. Yang ditampilkan
-        // hanya statusnya, supaya user tahu saldo rekening belum terverifikasi.
+        // Setor ke rekening bank tidak lagi memerlukan statement terverifikasi
+        // (keputusan bisnis 2026-10-15): saldo bank dipakai apa adanya.
         $tanggal = (string) $input['tanggal'];
         if ($tanggal !== '' && $tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
             $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
@@ -2044,8 +2044,7 @@ class KasBank extends BaseController
                 'nama'        => $bankDipakai->nama_akun ?? null,
                 'norek'       => $bankDipakai->bank_idbank ?? null,
                 'is_shared'   => $bankDipakai !== null && (int) ($bankDipakai->is_shared ?? 0) === 1,
-                'terverifikasi' => $bankTerverifikasi,
-                'saldo'       => $bankTerverifikasi ? $bankSaldo : null,
+                'saldo'       => $bankSaldo,
             ],
             'posisi_unit_sebelum' => $posisiUnit,
             'posisi_unit_setelah' => $posisiUnit !== null ? $posisiUnit + $nominal : null,
@@ -2071,7 +2070,8 @@ class KasBank extends BaseController
         $kasDipakai  = ($kas !== null && (string) $kas->tipe === 'KAS') ? $kas : null;
         $bankDipakai = ($bank !== null && (string) $bank->tipe === 'BANK') ? $bank : null;
 
-        $bankTerverifikasi = $bankDipakai !== null && $svc->statementVerified((int) $bankDipakai->idakun_kas_bank);
+        // Verifikasi statement bank bukan lagi syarat (keputusan bisnis
+        // 2026-10-15): saldo bank ditampilkan apa adanya.
         $bankSaldo     = $bankDipakai !== null ? $svc->saldoFisik((int) $bankDipakai->idakun_kas_bank) : null;
         $entitlement   = ($bankDipakai !== null && $unit !== null)
             ? $svc->posisiUnit((int) $bankDipakai->idakun_kas_bank, $unit)
@@ -2163,8 +2163,7 @@ class KasBank extends BaseController
                 'nama'         => $bankDipakai->nama_akun ?? null,
                 'norek'        => $bankDipakai->bank_idbank ?? null,
                 'is_shared'    => $bankDipakai !== null && (int) ($bankDipakai->is_shared ?? 0) === 1,
-                'terverifikasi' => $bankTerverifikasi,
-                'saldo'        => $bankTerverifikasi ? $bankSaldo : null,
+                'saldo'        => $bankSaldo,
             ],
             'entitlement_sebelum' => $entitlement,
             'entitlement_setelah' => $entitlement !== null ? $entitlement - $nominal : null,
@@ -2639,33 +2638,10 @@ class KasBank extends BaseController
         // Berlaku JUGA untuk rekening SAMA: pelunasan itu menggeser HAK unit
         // pengirim (posisi unitnya berkurang), jadi haknya harus cukup. Sisi
         // penerima tidak dicek — ia hanya bertambah.
-        $rekeningDipakai = [$akunKirim, $akunTerima];
-
-        $cutoff = new KasBankCutoffService();
-        $policy = new \App\Services\Finance\EntitlementPolicyService();
-
-        // Guard statement VERIFIED: saldo yang dipindah HARUS berbasis angka
-        // yang sudah disahkan Finance (daftar rekeningnya dari config.
-        // `rekeningWajibStatementByBank`, bukan tebakan).
         //
-        // KETENTUAN rekening SAMA: mutasi hak antar unit TIDAK menggerakkan
-        // saldo fisik bank — pasangan leg atribusi (KELUAR/MASUK) net-nol
-        // terhadap fisik, yang berpindah hanya hak/alokasi per unit. Tidak ada
-        // baseline fisik baru yang perlu dibuktikan statement, jadi guard ini
-        // tidak berlaku di skenario itu. `cekTarikUnit()` di bawah tetap
-        // membatasi hak unit pengirim. Alur rekening BEDA, Setor/Tarik, dan
-        // Pindah Saldo tetap tunduk pada guard statement seperti semula.
-        if ($akunKirimId !== $akunTerimaId) {
-            foreach ($rekeningDipakai as $akun) {
-                if ($policy->wajibStatementVerifikasi((int) $akun->idakun_kas_bank)
-                    && ! $cutoff->statementVerified((int) $akun->idakun_kas_bank, $tanggal)
-                ) {
-                    return $this->gagal('Rekening "' . $akun->nama_akun . '" belum punya statement yang '
-                        . 'diverifikasi Finance pada ' . $cutoff->tanggalCutoff() . '. '
-                        . 'Isi dan verifikasi statement di menu "Rekening & Saldo Awal" dulu.');
-                }
-            }
-        }
+        // Guard statement VERIFIED dihapus (keputusan bisnis 2026-10-15):
+        // rekening bank tidak lagi wajib punya statement yang diverifikasi.
+        $cutoff = new KasBankCutoffService();
 
         // Sumber selalu dicek: entah rekening berbeda (uang fisik keluar) atau
         // rekening sama (hak unit pengirim berkurang), posisi hak unit

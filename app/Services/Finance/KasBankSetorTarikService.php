@@ -645,17 +645,16 @@ class KasBankSetorTarikService
             );
         }
 
-        // ---- STATEMENT VERIFIED (DILEPAS untuk Setor/Tarik) ----
+        // ---- STATEMENT VERIFIED (DILEPAS) ----
         //
         // Requirement 2026-10-08: Setor Tunai dan Tarik Tunai tidak boleh diblokir
-        // hanya karena statement cutoff belum verified. Baseline tetap boleh
-        // unverified, dan transaksi operasional harus tetap bisa berjalan.
+        // hanya karena statement cutoff belum verified.
         //
-        // Guard ini tetap ada di flow Pindah Saldo (KasBank.php) dan Pembayaran
-        // Hutang/Piutang (KasBank.php) karena policy Finance mensyaratkan
-        // statement verified untuk rekening tertentu pada flow tersebut.
+        // Keputusan bisnis 2026-10-15 melangkah lebih jauh: verifikasi statement
+        // bank TIDAK lagi menjadi syarat di flow manapun — guard di Pindah Saldo
+        // dan Pembayaran Hutang/Piutang (KasBank.php) juga sudah dilepas.
         //
-        // Setor/Tarik: guard ini di-bypass. Validasi saldo/entitlement tetap berjalan.
+        // Validasi saldo/entitlement tetap berjalan.
 
         return null;
     }
