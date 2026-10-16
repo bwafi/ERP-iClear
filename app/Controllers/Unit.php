@@ -27,6 +27,7 @@ class Unit extends BaseController
         $db->table('unit')->insert([
             'NAMA_UNIT'      => $this->request->getPost('nama_unit'),
             'NOTELP'         => $this->request->getPost('notelp'),
+            'NOTELP_KOMPLAIN' => $this->request->getPost('notelp_komplain'),
             'JALAN_UNIT'     => $this->request->getPost('alamat_unit'),
             'KELURAHAN_UNIT' => $this->request->getPost('kelurahan_unit'),
             'jenis'          => $this->request->getPost('kepemilikan'),
@@ -48,6 +49,7 @@ class Unit extends BaseController
             ->update([
                 'NAMA_UNIT'      => $this->request->getPost('nama_unit'),
                 'NOTELP'         => $this->request->getPost('notelp'),
+                'NOTELP_KOMPLAIN' => $this->request->getPost('notelp_komplain'),
                 'JALAN_UNIT'     => $this->request->getPost('alamat_unit'),
                 'KELURAHAN_UNIT' => $this->request->getPost('kelurahan_unit'),
                 'jenis'          => $this->request->getPost('kepemilikan'),

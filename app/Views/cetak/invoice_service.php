@@ -69,7 +69,7 @@
                 <td style="font-size: 10px;" colspan="2">No.HP : <?= @$human->no_hp ?></td>
             </tr>
             <tr>
-                <td style="text-align: left;" colspan="2">0851 8327 0910</td>
+                <td style="text-align: left;" colspan="2"><?= @$dataunit->NOTELP_KOMPLAIN ?></td>
                 <td style="text-align: left;" colspan="2">Tiktok : iclear.service</td>
                 <td style="font-size: 10px;" colspan="2">Tanggal : <?= date('d-m-Y', strtotime(@$service->created_at)) ?></td>
             </tr>
@@ -220,7 +220,8 @@
                     3. Tanda Terima wajib dibawa waktu pengambilan barang<br>
                     4. Perbaikan berhak kami cancel apabila: gagal service, kerusakan yang parah<br>
                     5. Garansi uang kembali selama masa garansi iPhone masih ada dan tetap ERROR yang sama<br>
-                    6. Apabila Unit Service tidak diambil lebih dari 2 bulan, kehilangan bukan tanggung jawab karni<br>
+                    6. Apabila Unit Service tidak diambil lebih dari 2 bulan, kehilangan bukan tanggung jawab karni<br><br>
+                    <b>Note : Klaim garansi hanya berlaku 1 (satu) kali.</b>
                 </td>
             </tr>
             <tr>

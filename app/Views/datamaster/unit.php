@@ -46,6 +46,9 @@
                         <h6 class="fs-4 fw-semibold mb-0">Nomer HP</h6>
                     </th>
                     <th>
+                        <h6 class="fs-4 fw-semibold mb-0">Nomer Komplain</h6>
+                    </th>
+                    <th>
                         <h6 class="fs-4 fw-semibold mb-0">IG</h6>
                     </th>
                     <th>
@@ -70,6 +73,7 @@
                     <td><?= esc($row->NAMA_UNIT) ?></td>
                     <td><?= esc($row->JALAN_UNIT) ?></td>
                     <td><?= esc($row->NOTELP) ?></td>
+                    <td><?= esc($row->NOTELP_KOMPLAIN) ?></td>
                     <td><?= esc($row->KELURAHAN_UNIT) ?></td>
                     <td><?= esc($row->jenis) ?></td>
                     <td><?= esc($row->tanggungan) ?></td>
@@ -84,6 +88,7 @@
                             data-nama="<?= $row->NAMA_UNIT ?>"
                             data-jalan="<?= $row->JALAN_UNIT ?>"
                             data-telp="<?= $row->NOTELP ?>"
+                            data-komplain="<?= $row->NOTELP_KOMPLAIN ?>"
                             data-kelurahan="<?= $row->KELURAHAN_UNIT ?>"
                             data-tanggungan="<?= $row->tanggungan ?>"
                             data-jenis="<?= $row->jenis ?>"
@@ -102,7 +107,7 @@
                 <?php endforeach; ?>
                 <?php else: ?>
                 <tr>
-                    <td colspan="4" class="text-center">Tidak ada data</td>
+                    <td colspan="10" class="text-center">Tidak ada data</td>
                 </tr>
                 <?php endif; ?>
             </tbody>
@@ -134,6 +139,10 @@
                     <div class="mb-3">
                         <label for="edit_hp_suplier" class="form-label">Nomer HP</label>
                         <input type="text" class="form-control" id="edit_notelp" name="notelp">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_notelp_komplain" class="form-label">Nomer Komplain</label>
+                        <input type="text" class="form-control" id="edit_notelp_komplain" name="notelp_komplain">
                     </div>
                     <div class="mb-3">
                         <label for="edit_hp_suplier" class="form-label">IG</label>
@@ -189,10 +198,14 @@
                     <div class="mb-3">
                         <label for="edit_nama_suplier" class="form-label">Alamat Unit</label>
                         <input type="text" class="form-control" id="edit_jalan_unit" name="alamat_unit">
-                    </div>    
+                    </div>
                     <div class="mb-3">
                         <label for="edit_hp_suplier" class="form-label">Nomer HP</label>
                         <input type="text" class="form-control" id="edit_notelp" name="notelp">
+                    </div>
+                    <div class="mb-3">
+                        <label for="input_notelp_komplain" class="form-label">Nomer Komplain</label>
+                        <input type="text" class="form-control" id="input_notelp_komplain" name="notelp_komplain">
                     </div>
                     <div class="mb-3">
                         <label for="edit_hp_suplier" class="form-label">IG</label>
@@ -281,6 +294,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('edit_nama_unit').value = b.dataset.nama;
             document.getElementById('edit_jalan_unit').value = b.dataset.jalan;
             document.getElementById('edit_notelp').value = b.dataset.telp;
+            document.getElementById('edit_notelp_komplain').value = b.dataset.komplain;
             document.getElementById('edit_kelurahan_unit').value = b.dataset.kelurahan;
             document.getElementById('edit_kepemilikan').value = b.dataset.jenis;
             document.getElementById('edit_tanggungan').value = b.dataset.tanggungan;

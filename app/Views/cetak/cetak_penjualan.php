@@ -102,7 +102,7 @@
         <div class="invoice-header">
             <h2><?= @$dataunit->NAMA_UNIT ?></h2>
             <p><?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?><br>
-                Telp: <?= @$dataunit->NOTELP ?></p>
+                Telp: <?= @$dataunit->NOTELP_KOMPLAIN ?></p>
         </div>
 
         <table class="invoice-info">

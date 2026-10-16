@@ -80,6 +80,7 @@ class ModelUnit extends Model
             'kode_unit'     => 'GNT',
             'NOID_UNIT'     => '05',
             'NOTELP'        => '085183270910',
+            'NOTELP_KOMPLAIN' => '0856-0124-8829',
             'JALAN_UNIT'    => 'Genteng, Banyuwangi',
             'KELURAHAN_UNIT'=> 'iclear.genteng',
             'KABUPATEN_UNIT'=> 'Banyuwangi',

@@ -64,7 +64,7 @@
         <div class="bold"><?= @$dataunit->NAMA_UNIT ?></div>
         <div>
             <?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?><br>
-            Telp: <?= @$dataunit->NOTELP ?>
+            Telp: <?= @$dataunit->NOTELP_KOMPLAIN ?>
         </div>
     </div>
     <div class="line"></div>

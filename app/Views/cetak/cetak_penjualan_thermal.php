@@ -109,7 +109,7 @@
             <h2><?= @$dataunit->NAMA_UNIT ?></h2>
             <p>
                 <?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?><br>
-                Telp: <?= @$dataunit->NOTELP ?>
+                Telp: <?= @$dataunit->NOTELP_KOMPLAIN ?>
             </p>
         </div>
 
