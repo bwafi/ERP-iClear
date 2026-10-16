@@ -45,6 +45,9 @@ $can_approve = $can_approve ?? false;
 $status_proses = $status_proses ?? '';
 $akun_names = $akun_names ?? [];
 $my_id = (int) ($my_id ?? 0);
+// Kolom "ERP" disembunyikan untuk role tertentu (mis. Finance) — lihat
+// DashboardFinance::HIDE_ERP_ROLES. Default tampil.
+$show_erp = $show_erp ?? true;
 
 // ── Nama bulan & hari dalam bahasa Indonesia ────────────────────────────
 $bulanPanjang = [
@@ -581,6 +584,11 @@ $linkStatus = static function (string $nilai) use ($unit_id, $month): string {
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: .75rem;
         margin-top: .5rem;
+    }
+
+    /* Saat kolom ERP disembunyikan (mis. untuk Finance), sisakan dua kolom. */
+    .rk-comp-grid.is-duo {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .rk-cell-k {
@@ -1120,6 +1128,7 @@ $linkStatus = static function (string $nilai) use ($unit_id, $month): string {
                                             'catatanRevisi' => $row ? $row->catatan_revisi : null,
                                             'idPrefix'      => $prefix,
                                             'showLockNote'  => true,
+                                            'showErp'       => $show_erp,
                                         ]) ?>
 
                                         <?php if ($bolehUbah): ?>
@@ -1152,11 +1161,13 @@ $linkStatus = static function (string $nilai) use ($unit_id, $month): string {
                                                         <?= esc(RekonDailyCalculator::labelKomponen($stKomponen)) ?>
                                                     </span>
                                                 </div>
-                                                <div class="rk-comp-grid">
-                                                    <div>
-                                                        <span class="rk-cell-k">ERP</span>
-                                                        <span class="rk-cell-v rk-num<?= $erp === null ? ' is-nihil' : '' ?>"><?= $erp === null ? '—' : $fmt($erp) ?></span>
-                                                    </div>
+                                                <div class="rk-comp-grid<?= $show_erp ? '' : ' is-duo' ?>">
+                                                    <?php if ($show_erp) : ?>
+                                                        <div>
+                                                            <span class="rk-cell-k">ERP</span>
+                                                            <span class="rk-cell-v rk-num<?= $erp === null ? ' is-nihil' : '' ?>"><?= $erp === null ? '—' : $fmt($erp) ?></span>
+                                                        </div>
+                                                    <?php endif; ?>
                                                     <div>
                                                         <span class="rk-cell-k">Aktual</span>
                                                         <span class="rk-cell-v rk-num is-actual<?= $aktual === null ? ' is-nihil' : '' ?>"><?= $aktual === null ? '—' : $fmt($aktual) ?></span>

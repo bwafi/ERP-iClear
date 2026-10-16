@@ -260,7 +260,43 @@ function panelHari(string $html, string $tgl): string
 $panelRev = panelHari((string) $listView, $today);
 check('panel need_revision ditemukan', $panelRev !== '');
 check('panel menampilkan input actual terformat', strpos($panelRev, '700.000') !== false);
-check('panel menampilkan nilai ERP terformat', strpos($panelRev, '5.468.205') !== false);
+// Kolom ERP disembunyikan untuk Finance (role 0); role pengawas
+// (Manager/Admin Root/Direktur) tetap melihatnya. Assertion mengikuti flag
+// yang benar-benar dipakai view, bukan menduplikasi daftar role di sini.
+$erpTampil = ! empty($listData['show_erp']);
+check(
+    $erpTampil ? 'panel menampilkan nilai ERP terformat' : 'panel Finance menyembunyikan kolom ERP',
+    $erpTampil
+        ? strpos($panelRev, '5.468.205') !== false
+        : (strpos($panelRev, '>ERP</th>') === false && strpos($panelRev, '5.468.205') === false)
+);
+
+// Flag showErp pada partial input benar-benar mengontrol header & sel ERP
+// (dipakai Finance lewat flag yang sama).
+[$partialErpOff, $partialErpOffErr] = renderView(APPPATH . 'Views/inc/rek_input_fields.php', [
+    'showErp' => false,
+    'erp'     => ['cash_masuk' => 5468205, 'transfer_masuk' => 0, 'kas_keluar' => 0],
+]);
+check(
+    'partial input: showErp=false menyembunyikan header & nilai ERP',
+    $partialErpOffErr === null
+        && strpos((string) $partialErpOff, '>ERP</th>') === false
+        && strpos((string) $partialErpOff, '5.468.205') === false
+        && strpos((string) $partialErpOff, '>Aktual</th>') !== false,
+    (string) $partialErpOffErr
+);
+
+[$partialErpOn, $partialErpOnErr] = renderView(APPPATH . 'Views/inc/rek_input_fields.php', [
+    'showErp' => true,
+    'erp'     => ['cash_masuk' => 5468205, 'transfer_masuk' => 0, 'kas_keluar' => 0],
+]);
+check(
+    'partial input: showErp=true menampilkan header & nilai ERP',
+    $partialErpOnErr === null
+        && strpos((string) $partialErpOn, '>ERP</th>') !== false
+        && strpos((string) $partialErpOn, '5.468.205') !== false,
+    (string) $partialErpOnErr
+);
 check('panel menampilkan catatan revisi manager', strpos($panelRev, 'cek transfer 25.000') !== false);
 check('panel menampilkan label "Catatan manager (perlu revisi)"', strpos($panelRev, 'Catatan manager (perlu revisi)') !== false);
 check('panel punya form Simpan &amp; Kirim', strpos($panelRev, 'Simpan &amp; Kirim') !== false);

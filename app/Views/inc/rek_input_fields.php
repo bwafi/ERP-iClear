@@ -34,6 +34,9 @@ $ex = $ex ?? null;
 $erp = $erp ?? ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
 $idPrefix = $idPrefix ?? '';
 $showLockNote = $showLockNote ?? false;
+// Kolom "ERP" disembunyikan untuk role tertentu (mis. Finance) agar pengisian
+// angka Aktual tidak terpaut angka sistem. Default tampil.
+$showErp = $showErp ?? true;
 $catatanRevisi = $catatanRevisi ?? ($ex ? $ex->catatan_revisi : null);
 
 // Penentu akhir: kalau locked tidak diberi, tanyakan ke kalkulator dengan
@@ -108,7 +111,9 @@ foreach ([
         <thead>
             <tr>
                 <th scope="col">Kelompok</th>
-                <th scope="col" class="text-end">ERP</th>
+                <?php if ($showErp) : ?>
+                    <th scope="col" class="text-end">ERP</th>
+                <?php endif; ?>
                 <th scope="col" class="text-end">Aktual</th>
                 <th scope="col" class="text-end">Selisih</th>
                 <th scope="col" class="text-center">Status</th>
@@ -124,7 +129,9 @@ foreach ([
                 ?>
                 <tr>
                     <td class="rk-k" data-label="Kelompok"><?= esc($b['nama']) ?></td>
-                    <td class="rk-erp text-end" data-label="ERP"><?= esc($fmt($erpNilai)) ?></td>
+                    <?php if ($showErp) : ?>
+                        <td class="rk-erp text-end" data-label="ERP"><?= esc($fmt($erpNilai)) ?></td>
+                    <?php endif; ?>
                     <td class="rk-input-cell" data-label="Aktual">
                         <input type="text"
                                class="form-control rupiah-rekon text-end"

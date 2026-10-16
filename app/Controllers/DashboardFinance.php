@@ -20,6 +20,15 @@ class DashboardFinance extends BaseController
      */
     public const AKTUAL_INVALID = 'invalid';
 
+    /**
+     * Role yang TIDAK melihat kolom "ERP" di Rekonsiliasi Harian.
+     *
+     * Finance (0) adalah pihak yang mengisi angka Aktual; kolom ERP
+     * disembunyikan agar pengisian tidak terpaut angka sistem. Pemverifikasi
+     * — Manager (34) & Admin Root (1) — tetap melihatnya untuk menilai selisih.
+     */
+    private const HIDE_ERP_ROLES = [0];
+
     protected $kpiService;
     protected $scopeService;
     protected $omsetDaily;
@@ -345,6 +354,7 @@ class DashboardFinance extends BaseController
             'rekon_score'   => $rekonScore,
             'can_input'     => $info['isLintas'],
             'can_approve'   => $this->canApproveRekon(),
+            'show_erp'      => ! in_array((int) $info['myRole'], self::HIDE_ERP_ROLES, true),
             'my_id'         => (int) $info['myId'],
             'status_proses' => $statusProses,
             'akun_names'    => $akunNames,
