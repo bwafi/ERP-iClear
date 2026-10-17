@@ -91,3 +91,6 @@ phpunit.xml
 
 # Database dumps (snapshot produksi: berisi data & credential asli)
 /icleargr_erp_backup*.sql
+
+# Scratch workspace Superpowers (ledger/paket review, bukan kode)
+/.superpowers/
