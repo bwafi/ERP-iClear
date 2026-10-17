@@ -38,6 +38,14 @@ class KpiCalculationService
     public const CS_OMSET_UNIT_ID = 1;
 
     /**
+     * Unit 1 (ICLEAR Probolinggo): Kepala Toko-nya merangkap Admin dan tidak
+     * mengerjakan service sendiri. Realisasi Total Pelanggan-nya diambil dari
+     * akumulasi service para teknisi unit ini (CustomerCalculator::handledByUnitTeknisi),
+     * bukan dari service yang ia tangani sendiri.
+     */
+    public const KEPALA_TOKO_TEKNISI_UNIT_ID = 1;
+
+    /**
      * NAMA_UNIT Head Office — unit pusat, bukan cabang.
      *
      * HO tidak bertransaksi penjualan sehingga omsetnya 0; memaksakan HO
@@ -184,23 +192,25 @@ class KpiCalculationService
                     // target_value DB = target pelanggan UNIT (full): BWI 220 / JBR 180 /
                     // BWI 350 / Pandaan 250. Target per pegawai = target_value ÷ 2
                     // (dibagi di kode, bukan di DB) utk teknisi & kepala toko.
+                    // KECUALI Kepala Toko unit 1: realisasi = akumulasi teknisi unit
+                    // (skala unit), jadi target memakai nilai PENUH (lihat customerTarget).
                     // Nilai KPI 0 jika aktual < target; jika tercapai → min(ratio, 100).
-                    $targetHalf = (float) $target->target_value / 2.0;
+                    $effectiveTarget = $this->customerTarget($positionId, (int)$unitId, (float) $target->target_value);
 
                     if (in_array($positionId, [36, 41], true)) {
-                        // TEKNISI & KEPALA TOKO: aktual = jumlah service yg pegawai
-                        // tsb tangani pd bulan tsb (service_by, semua status, unit tsb)
-                        // — TIDAK menghitung seluruh pelanggan unit.
-                        $customerCalc = $this->calculators['customer_count'];
-                        $handled     = (float) $customerCalc->handledByTeknisi($employeeId, $unitId, (int)$month, (int)$year);
-                        $achievement = ($targetHalf > 0 && $handled >= $targetHalf)
-                            ? min(($handled / $targetHalf) * 100.0, 100.0)
+                        // TEKNISI & KEPALA TOKO: aktual = service yg ditangani.
+                        // Khusus Kepala Toko unit 1: akumulasi service para teknisi
+                        // unit tsb (lihat customerHandledActual) — TIDAK menghitung
+                        // seluruh pelanggan unit.
+                        $handled     = $this->customerHandledActual($positionId, $employeeId, (int)$unitId, (int)$month, (int)$year);
+                        $achievement = ($effectiveTarget > 0 && $handled >= $effectiveTarget)
+                            ? min(($handled / $effectiveTarget) * 100.0, 100.0)
                             : 0.0;
                     } else {
-                        // Lainnya: capped ratio terhadap target_value÷2,
+                        // Lainnya: capped ratio terhadap target efektif,
                         // tanpa threshold. 0 jika belum mencapai target.
-                        $achievement = ($targetHalf > 0 && $actualValue >= $targetHalf)
-                            ? $this->scoreService()->achievementScore($actualValue, $targetHalf)
+                        $achievement = ($effectiveTarget > 0 && $actualValue >= $effectiveTarget)
+                            ? $this->scoreService()->achievementScore($actualValue, $effectiveTarget)
                             : 0.0;
                     }
                 } else {
@@ -308,25 +318,25 @@ class KpiCalculationService
                     }
                 }
             } elseif ($component->code === 'CUSTOMER_COUNT' && isset($actualValue) && isset($target)) {
-                // CUSTOMER_COUNT: target per pegawai = target_value(unit, full) ÷ 2.
+                // CUSTOMER_COUNT: target per pegawai = target_value(unit, full) ÷ 2,
+                // kecuali Kepala Toko unit 1 (target penuh — lihat customerTarget).
                 // Aktual teknisi & kepala toko = service yg ditangani (service_by);
                 // aktual lainnya = TotalCustomer (service + penjualan ber-id pelanggan).
-                $targetHalf = (float) $target->target_value / 2.0;
+                $effectiveTarget = $this->customerTarget($positionId, (int)$unitId, (float) $target->target_value);
                 if (in_array($positionId, [36, 41], true)) {
-                    $handled = (float) $this->calculators['customer_count']
-                        ->handledByTeknisi($employeeId, $unitId, (int)$month, (int)$year);
+                    $handled = $this->customerHandledActual($positionId, $employeeId, (int)$unitId, (int)$month, (int)$year);
                     $targetInfo = [
-                        'target'    => round($targetHalf, 2),
+                        'target'    => round($effectiveTarget, 2),
                         'actual'    => $handled,
-                        'shortfall' => max($targetHalf - $handled, 0.0),
+                        'shortfall' => max($effectiveTarget - $handled, 0.0),
                         'ho'        => false,
                         'cabang'    => null,
                     ];
                 } else {
                     $targetInfo = [
-                        'target'    => round($targetHalf, 2),
+                        'target'    => round($effectiveTarget, 2),
                         'actual'    => (float)$actualValue,
-                        'shortfall' => max($targetHalf - (float)$actualValue, 0.0),
+                        'shortfall' => max($effectiveTarget - (float)$actualValue, 0.0),
                         'ho'        => false,
                         'cabang'    => null,
                     ];
@@ -500,6 +510,41 @@ class KpiCalculationService
         }
 
         return $unitId;
+    }
+
+    /**
+     * Aktual Total Pelanggan untuk pegawai yang dinilai dari service yang
+     * DITANGANI (teknisi 36 & kepala toko 41), bukan total pelanggan unit.
+     *
+     * Kepala Toko unit 1 (merangkap Admin, tidak mengerjakan service) memakai
+     * akumulasi service para teknisi unit tsb; teknisi dan Kepala Toko unit lain
+     * tetap memakai service yang ditangani sendiri.
+     */
+    protected function customerHandledActual(int $positionId, int $employeeId, int $unitId, int $month, int $year): float
+    {
+        $customerCalc = $this->calculators['customer_count'];
+
+        if ($positionId === 41 && $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID) {
+            return (float) $customerCalc->handledByUnitTeknisi($unitId, $month, $year);
+        }
+
+        return (float) $customerCalc->handledByTeknisi($employeeId, $unitId, $month, $year);
+    }
+
+    /**
+     * Target Total Pelanggan yang efektif.
+     *
+     * Default: target pelanggan UNIT ÷ 2 (dibagi di kode, bukan di DB) untuk
+     * teknisi & kepala toko. Khusus Kepala Toko unit 1 — realisasi-nya akumulasi
+     * teknisi se-unit (skala unit) — target memakai nilai PENUH (tidak dibagi 2).
+     */
+    protected function customerTarget(int $positionId, int $unitId, float $targetValue): float
+    {
+        if ($positionId === 41 && $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID) {
+            return $targetValue;
+        }
+
+        return $targetValue / 2.0;
     }
 
     /**
