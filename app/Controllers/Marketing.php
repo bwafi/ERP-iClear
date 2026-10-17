@@ -688,8 +688,58 @@ class Marketing extends BaseController
             'campaigns' => $this->AdsPerfModel->campaigns($bulan, $tahun),
             'channels' => $this->ChannelModel->active(),
             'units'    => $this->units(),
+            'logMeta'  => (new \App\Models\ModelMetaPullLog())->terakhir(),
             'canWrite' => $this->canWrite(),
         ]);
+    }
+
+    /**
+     * Tarik biaya & insight Meta untuk bulan yang sedang dilihat.
+     *
+     * Rentangnya sengaja satu bulan penuh (bukan 7 hari seperti command) supaya
+     * menyusul bulan berjalan setelah pemetaan campaign baru diisi.
+     */
+    public function ads_performa_tarik()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/ads_performa'));
+        }
+
+        $bulan = (int)$this->request->getPost('period_month');
+        $tahun = (int)$this->request->getPost('period_year');
+        if (!$this->validPeriod($bulan, $tahun)) {
+            return redirect()->back()->with('error', 'Periode tarikan Meta tidak valid.');
+        }
+
+        $dari   = sprintf('%04d-%02d-01', $tahun, $bulan);
+        $sampai = date('Y-m-t', strtotime($dari));
+
+        // Satu tarikan = beberapa panggilan ke Meta. Batas 30 detik bawaan PHP
+        // bisa terlampaui, terutama saat percobaan ulang jaringan.
+        set_time_limit(120);
+
+        try {
+            $hasil = (new \App\Services\Meta\MetaAdsPullService())->pull($dari, $sampai);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Tarikan Meta gagal: ' . $e->getMessage());
+        }
+
+        $pesan = sprintf(
+            'Tarikan Meta %s s/d %s: %d baris baru, %d diperbarui, %d dilewati.',
+            $dari,
+            $sampai,
+            $hasil['baru'],
+            $hasil['diperbarui'],
+            $hasil['dilewati']
+        );
+        if (!empty($hasil['tanpa_peta'])) {
+            $pesan .= ' ' . count($hasil['tanpa_peta']) . ' campaign Meta belum dipetakan — isi kolom "ID Campaign Meta" di menu Campaign.';
+        }
+
+        return redirect()->to(base_url('marketing/ads_performa?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $pesan);
     }
 
     public function ads_performa_simpan()

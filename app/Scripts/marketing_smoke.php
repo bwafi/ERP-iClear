@@ -50,6 +50,16 @@ function campaignKirim($ctrl, array $post)
     return (new ReflectionMethod($ctrl, 'campaign_simpan'))->invoke($ctrl);
 }
 
+/** Potongan HTML satu baris tabel yang memuat teks tertentu. */
+function barisTabel(string $html, string $teks): string
+{
+    if (!preg_match('#<tr\b(?:(?!</tr>).)*?' . preg_quote($teks, '#') . '(?:(?!</tr>).)*?</tr>#s', $html, $m)) {
+        return '';
+    }
+
+    return $m[0];
+}
+
 // Bootstrap request (meniru WebRequest).
 try {
     $config = new \Config\App();
@@ -178,6 +188,85 @@ try {
     $db->transRollback();
     $_POST = [];
     ok('data uji campaign dibersihkan', (int) $db->table('marketing_campaigns')->like('nama', '[SMOKE]')->countAllResults() === 0);
+
+    // ── Performa Ads: tombol tarik, kolom turunan, panel limit ────
+    $_POST = [];
+    $_GET  = [];
+    $reqProp->setValue($ctrl, \Config\Services::request(null, false));
+
+    $db->transBegin();
+
+    $hari = date('Y-m-d');
+    $db->table('marketing_campaigns')->insert([
+        'nama' => '[SMOKE] ads nol', 'status' => 'draft',
+        'period_month' => $bulan, 'period_year' => $tahun,
+    ]);
+    $campNol = (int) $db->insertID();
+    $db->table('marketing_campaigns')->insert([
+        'nama' => '[SMOKE] ads normal', 'status' => 'draft',
+        'period_month' => $bulan, 'period_year' => $tahun,
+    ]);
+    $campAda = (int) $db->insertID();
+
+    // Baris tanpa pembagi: impression/reach/klik/hasil = 0 → kolom turunan '-'.
+    $db->table('marketing_ads_performance')->insert([
+        'period_month' => $bulan, 'period_year' => $tahun, 'tanggal' => $hari,
+        'campaign_id' => $campNol, 'amount' => 100000, 'ppn' => 5, 'sumber' => 'manual',
+        'reach' => 0, 'impression' => 0, 'klik' => 0, 'hasil' => 0,
+    ]);
+    // Baris dengan angka jelas → kolom turunan bisa diperiksa nilainya.
+    $db->table('marketing_ads_performance')->insert([
+        'period_month' => $bulan, 'period_year' => $tahun, 'tanggal' => $hari,
+        'campaign_id' => $campAda, 'amount' => 200000, 'ppn' => 5, 'sumber' => 'meta',
+        'ditarik_pada' => $hari . ' 03:00:00',
+        'reach' => 5000, 'impression' => 10000, 'klik' => 500, 'hasil' => 25,
+    ]);
+    $db->table('meta_pull_log')->insert([
+        'tanggal_mulai' => date('Y-m-01'), 'tanggal_sampai' => $hari,
+        'jumlah_kampanye' => 6, 'jumlah_baris' => 10, 'baru' => 4, 'diperbarui' => 6, 'dilewati' => 0,
+        'call_count' => 3, 'total_time' => 30, 'total_cputime' => 6,
+        'app_id_util_pct' => 0.01, 'acc_id_util_pct' => 0.02,
+        'tier' => 'development_access', 'status' => 'ok',
+    ]);
+    $logUji = (int) $db->insertID();
+
+    $html = (string) $ctrl->ads_performa();
+
+    ok('ads_performa render — tombol Tarik dari Meta', strpos($html, 'Tarik dari Meta') !== false);
+    ok('ads_performa render — tombol menuju POST ads_performa/tarik', strpos($html, 'marketing/ads_performa/tarik') !== false);
+
+    foreach (['Frek', 'CTR', 'CPC', 'CPM', 'CPR Platform'] as $kolom) {
+        ok("ads_performa render — kolom {$kolom}", strpos($html, '>' . $kolom . '<') !== false);
+    }
+
+    $barisNol = barisTabel($html, '[SMOKE] ads nol');
+    ok('baris ter-render (pencarian baris bekerja)', $barisNol !== '');
+    ok(
+        'pembagi nol → kolom turunan "-" (bukan error/NaN)',
+        substr_count($barisNol, '>-</td>') >= 5 && substr_count($barisNol, 'Rp ') === 2,
+        'sel-minus=' . substr_count($barisNol, '>-</td>') . ' rp=' . substr_count($barisNol, 'Rp ')
+    );
+    ok(
+        'tidak ada error pembagian di halaman',
+        stripos($html, 'division by zero') === false && strpos($html, 'NAN') === false && strpos($html, 'Warning') === false
+    );
+
+    $barisAda = barisTabel($html, '[SMOKE] ads normal');
+    ok('Frek = impression ÷ reach (2,00)', strpos($barisAda, '2,00') !== false, substr($barisAda, 0, 120));
+    ok('CTR = klik ÷ impression (5,00%)', strpos($barisAda, '5,00%') !== false);
+    ok('CPC = amount ÷ klik (Rp 400)', strpos($barisAda, 'Rp 400<') !== false);
+    ok('CPM = amount ÷ impression × 1000 (Rp 20.000)', strpos($barisAda, 'Rp 20.000<') !== false);
+    ok('CPR Platform = amount ÷ hasil (Rp 8.000)', strpos($barisAda, 'Rp 8.000<') !== false);
+
+    ok('badge sumber Meta + tooltip waktu tarik', stripos($barisAda, '>Meta<') !== false && stripos($barisAda, 'ditarik') !== false);
+    ok('badge sumber Manual pada baris manual', stripos($barisNol, '>Manual<') !== false);
+
+    ok('panel info limit tampil', strpos($html, 'Tarikan Meta terakhir') !== false);
+    ok('panel info limit memuat tier & pemakaian kuota', strpos($html, 'development_access') !== false && strpos($html, '0,02') !== false);
+
+    $db->transRollback();
+    ok('data uji Ads dibersihkan', (int) $db->table('marketing_ads_performance')->where('period_year', $tahun)->whereIn('campaign_id', [$campNol, $campAda])->countAllResults() === 0);
+    ok('data uji log dibersihkan', (int) $db->table('meta_pull_log')->where('id', $logUji)->countAllResults() === 0);
 
     // ── Laporan ──────────────────────────────────────────────────
     $html = (string)$ctrl->laporan();

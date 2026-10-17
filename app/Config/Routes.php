@@ -713,6 +713,7 @@ $routes->group('marketing', ['filter' => 'auth'], function ($routes) {
     $routes->get('ads_performa', 'Marketing::ads_performa');
     $routes->post('ads_performa/simpan', 'Marketing::ads_performa_simpan');
     $routes->post('ads_performa/hapus', 'Marketing::ads_performa_hapus');
+    $routes->post('ads_performa/tarik', 'Marketing::ads_performa_tarik');
     $routes->get('laporan', 'Marketing::laporan');
     $routes->get('campaign', 'Marketing::campaign');
     $routes->post('campaign/simpan', 'Marketing::campaign_simpan');

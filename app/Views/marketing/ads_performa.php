@@ -34,6 +34,44 @@
     </div>
 <?php endif; ?>
 
+<!-- Panel info kuota Meta (dari meta_pull_log terakhir) -->
+<?php if (!empty($logMeta)) : ?>
+    <div class="card dm-filter-card shadow-sm border-0 mb-4">
+        <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2">
+                <iconify-icon icon="solar:cloud-download-bold" class="text-primary fs-4"></iconify-icon>
+                <div>
+                    <div class="fw-semibold small">Tarikan Meta terakhir</div>
+                    <small class="text-muted"><?= date('d M Y H:i', strtotime($logMeta->created_at)) ?></small>
+                </div>
+            </div>
+            <span class="badge px-2 py-1 <?= $logMeta->status === 'ok'
+                ? 'bg-success-subtle text-success border border-success-subtle'
+                : 'bg-danger-subtle text-danger border border-danger-subtle' ?>">
+                <?= $logMeta->status === 'ok' ? 'Berhasil' : 'Gagal' ?>
+            </span>
+            <span class="text-muted small">
+                Periode <?= esc((string)$logMeta->tanggal_mulai) ?> s/d <?= esc((string)$logMeta->tanggal_sampai) ?>
+                · <?= (int)$logMeta->baru ?> baru / <?= (int)$logMeta->diperbarui ?> diperbarui / <?= (int)$logMeta->dilewati ?> dilewati
+            </span>
+            <span class="text-muted small">
+                Kuota: <?= (int)$logMeta->call_count ?> panggilan
+                · <?= number_format((float)$logMeta->total_time, 0, ',', '.') ?> ms
+                · terpakai <?= number_format((float)$logMeta->acc_id_util_pct, 2, ',', '.') ?>%
+                · <?= esc((string)$logMeta->tier) ?>
+            </span>
+            <?php if ((int)$logMeta->estimated_time_to_regain_access > 0) : ?>
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                    Kuota penuh — pulih ± <?= (int)$logMeta->estimated_time_to_regain_access ?> menit
+                </span>
+            <?php endif; ?>
+            <?php if (!empty($logMeta->pesan)) : ?>
+                <span class="text-muted small fst-italic"><?= esc($logMeta->pesan) ?></span>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Filter & Actions Card -->
 <div class="card dm-filter-card shadow-sm border-0 mb-4">
     <div class="card-body py-3">
@@ -76,6 +114,16 @@
                     <iconify-icon icon="solar:list-bold" class="me-1 align-text-bottom"></iconify-icon>Lihat Campaign
                 </a>
                 <?php if ($canWrite) : ?>
+                    <form method="post" action="<?= base_url('marketing/ads_performa/tarik') ?>" class="d-inline"
+                        onsubmit="return confirm('Tarik biaya iklan Meta untuk <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?>? Baris yang sudah ada akan ditimpa angka Meta.');">
+                        <input type="hidden" name="period_month" value="<?= $bulan ?>">
+                        <input type="hidden" name="period_year" value="<?= $tahun ?>">
+                        <button type="submit" class="btn btn-warning btn-sm px-3">
+                            <iconify-icon icon="solar:refresh-bold" class="me-1 align-text-bottom"></iconify-icon>Tarik dari Meta
+                        </button>
+                    </form>
+                <?php endif; ?>
+                <?php if ($canWrite) : ?>
                     <button type="button" class="btn btn-success btn-sm px-3" onclick="openPerformaModal()">
                         <iconify-icon icon="solar:add-circle-bold" class="me-1 align-text-bottom"></iconify-icon>Input Performa
                     </button>
@@ -105,6 +153,17 @@
         <?php foreach ($units as $u) : ?>
             <?php $unitName[(int)$u->idunit] = $u->NAMA_UNIT; ?>
         <?php endforeach; ?>
+        <?php
+        // Kolom turunan dihitung di sini, tidak disimpan (lihat spec §8).
+        // Pembagi nol atau kosong → null → ditampilkan '-'.
+        $rasio = function ($atas, $bawah) {
+            if ($atas === null || $bawah === null || (float)$bawah == 0.0) {
+                return null;
+            }
+
+            return (float)$atas / (float)$bawah;
+        };
+        ?>
 
         <?php if (empty($rows)) : ?>
             <div class="text-center py-5">
@@ -191,6 +250,11 @@
                             <th class="text-end">Impression</th>
                             <th class="text-end">Klik</th>
                             <th class="text-end">Hasil</th>
+                            <th class="text-end">Frek</th>
+                            <th class="text-end">CTR</th>
+                            <th class="text-end">CPC</th>
+                            <th class="text-end">CPM</th>
+                            <th class="text-end">CPR Platform</th>
                             <th class="text-end">Kualitas Leads</th>
                             <th class="text-start">Catatan</th>
                             <?php if ($canWrite) : ?>
@@ -206,6 +270,13 @@
                                         <div class="fw-semibold text-dark"><?= date('d M Y', strtotime($row->tanggal)) ?></div>
                                     <?php else : ?>
                                         <span class="badge bg-light text-dark border"><?= date('Y-m', mktime(0, 0, 0, $row->period_month, 1, $row->period_year)) ?></span>
+                                    <?php endif; ?>
+                                    <?php if (($row->sumber ?? '') === 'meta') : ?>
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2"
+                                            data-bs-toggle="tooltip"
+                                            title="Ditarik dari Meta<?= !empty($row->ditarik_pada) ? ' pada ' . esc((string)$row->ditarik_pada, 'attr') : '' ?>">Meta</span>
+                                    <?php else : ?>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2">Manual</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-center">
@@ -259,6 +330,16 @@
                                 <td class="text-end"><?= $row->impression !== null ? number_format($row->impression, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end"><?= $row->klik !== null ? number_format($row->klik, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end fw-semibold text-success"><?= $row->hasil !== null ? number_format($row->hasil, 0, ',', '.') : '-' ?></td>
+                                <?php $frek = $rasio($row->impression, $row->reach); ?>
+                                <td class="text-end"><?= $frek !== null ? number_format($frek, 2, ',', '.') : '-' ?></td>
+                                <?php $ctr = $rasio($row->klik, $row->impression); ?>
+                                <td class="text-end"><?= $ctr !== null ? number_format($ctr * 100, 2, ',', '.') . '%' : '-' ?></td>
+                                <?php $cpc = $rasio($row->amount, $row->klik); ?>
+                                <td class="text-end"><?= $cpc !== null ? 'Rp ' . number_format($cpc, 0, ',', '.') : '-' ?></td>
+                                <?php $cpm = $rasio($row->amount, $row->impression); ?>
+                                <td class="text-end"><?= $cpm !== null ? 'Rp ' . number_format($cpm * 1000, 0, ',', '.') : '-' ?></td>
+                                <?php $cpr = $rasio($row->amount, $row->hasil); ?>
+                                <td class="text-end"><?= $cpr !== null ? 'Rp ' . number_format($cpr, 0, ',', '.') : '-' ?></td>
                                 <td class="text-end">
                                     <?php if ($row->qualified !== null) : ?>
                                         <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><?= number_format($row->qualified, 0, ',', '.') ?></span>
