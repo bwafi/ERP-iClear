@@ -38,6 +38,8 @@ class ModelMarketingAdsPerf extends Model
         'hasil',
         'qualified',
         'note',
+        'sumber',
+        'ditarik_pada',
         'created_by',
     ];
 

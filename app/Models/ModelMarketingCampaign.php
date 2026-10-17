@@ -28,6 +28,8 @@ class ModelMarketingCampaign extends Model
         'period_year',
         'status',
         'pic',
+        'meta_campaign_id',
+        'unit_id',
         'created_by',
     ];
 
@@ -48,5 +50,27 @@ class ModelMarketingCampaign extends Model
             ->where('period_year', $year)
             ->orderBy('nama', 'ASC')
             ->findAll();
+    }
+
+    /**
+     * Peta campaign Meta → campaign ERP, untuk tarikan otomatis.
+     *
+     * @return array<string, array{campaign_id: int, unit_id: int|null}>
+     */
+    public function metaMap(): array
+    {
+        $map = [];
+        foreach ($this->where('meta_campaign_id IS NOT NULL', null, false)->findAll() as $row) {
+            $metaId = trim((string)$row->meta_campaign_id);
+            if ($metaId === '') {
+                continue;
+            }
+            $map[$metaId] = [
+                'campaign_id' => (int)$row->id,
+                'unit_id'     => $row->unit_id !== null && (int)$row->unit_id > 0 ? (int)$row->unit_id : null,
+            ];
+        }
+
+        return $map;
     }
 }
