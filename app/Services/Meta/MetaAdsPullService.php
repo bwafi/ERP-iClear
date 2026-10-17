@@ -81,13 +81,11 @@ class MetaAdsPullService
                 'ditarik_pada' => date('Y-m-d H:i:s'),
             ];
 
-            // Kunci pencarian: (tanggal, campaign). channel_id tidak dipakai
-            // karena tarikan Meta tidak menetapkan saluran.
-            $existing = $perf->getByUnique($bulan, $tahun, $campaignId, $tanggal, 0, $unitId ?? 0);
-            if (!$existing) {
-                // Baris manual lama sering tidak punya unit_id.
-                $existing = $perf->getByUnique($bulan, $tahun, $campaignId, $tanggal, 0, 0);
-            }
+            // Kunci pencarian: (periode, campaign, tanggal). channel_id dan
+            // unit_id sengaja TIDAK dipakai — baris manual lama punya keduanya
+            // terisi, dan kalau ikut jadi kunci, tarikan akan menambah baris
+            // kedua alih-alih menimpa.
+            $existing = $perf->getByPeriodeCampaignTanggal($bulan, $tahun, $campaignId, $tanggal);
 
             if ($dryRun) {
                 $existing ? $diperbarui++ : $baru++;
@@ -95,6 +93,13 @@ class MetaAdsPullService
             }
 
             if ($existing) {
+                // Saluran bukan milik tarikan Meta (tidak ada di payload),
+                // jadi nilainya di baris lama tetap utuh.
+                if ($unitId === null) {
+                    // Campaign belum dipetakan ke unit: pertahankan unit yang
+                    // sudah ada di baris manual, jangan dihapus.
+                    unset($payload['unit_id']);
+                }
                 $perf->update($existing->id, $payload);
                 $diperbarui++;
             } else {

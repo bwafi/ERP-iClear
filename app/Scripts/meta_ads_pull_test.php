@@ -106,11 +106,21 @@ $MC = new \App\Models\ModelMarketingCampaign();
 $id1 = (int)$MC->insert(['nama' => '[TEST] M1', 'status' => 'draft', 'period_month' => $bulan, 'period_year' => $tahun, 'meta_campaign_id' => 'META_TEST_1', 'unit_id' => null]);
 $id2 = (int)$MC->insert(['nama' => '[TEST] M2', 'status' => 'draft', 'period_month' => $bulan, 'period_year' => $tahun, 'meta_campaign_id' => 'META_TEST_2', 'unit_id' => null]);
 $id3 = (int)$MC->insert(['nama' => '[TEST] M3', 'status' => 'draft', 'period_month' => $bulan, 'period_year' => $tahun, 'meta_campaign_id' => 'META_TEST_3', 'unit_id' => null]);
+$id4 = (int)$MC->insert(['nama' => '[TEST] M4', 'status' => 'draft', 'period_month' => $bulan, 'period_year' => $tahun, 'meta_campaign_id' => 'META_TEST_4', 'unit_id' => 7]);
 
 // M2: baris MANUAL yang sudah ada → harus ditimpa angka Meta.
+// Saluran & unit diisi seperti baris manual sungguhan (channel_id=3, unit_id=1);
+// campaign-nya belum punya unit_id, jadi keduanya harus DIPERTAHANKAN —
+// kalau tidak, baris kedua akan dibuat dan saluran/unit pemilik hilang.
 $db->table('marketing_ads_performance')->insert([
     'period_month' => $bulan, 'period_year' => $tahun, 'tanggal' => $tgl,
-    'channel_id' => null, 'unit_id' => null, 'campaign_id' => $id2,
+    'channel_id' => 3, 'unit_id' => 1, 'campaign_id' => $id2,
+    'amount' => 777, 'sumber' => 'manual', 'note' => '[TEST]',
+]);
+// M4: campaign sudah punya unit_id (7) → unit pada baris ikut pemetaan.
+$db->table('marketing_ads_performance')->insert([
+    'period_month' => $bulan, 'period_year' => $tahun, 'tanggal' => $tgl,
+    'channel_id' => 3, 'unit_id' => 1, 'campaign_id' => $id4,
     'amount' => 777, 'sumber' => 'manual', 'note' => '[TEST]',
 ]);
 // M3: baris hasil tarikan sebelumnya; kampanye lalu pause → tidak boleh hilang.
@@ -123,14 +133,21 @@ $db->table('marketing_ads_performance')->insert([
 $camps = [
     'META_TEST_1' => ['daily_budget' => 100000.0, 'objective' => 'OUTCOME_SALES', 'optimization_goal' => 'CONVERSATIONS', 'destination_type' => 'WHATSAPP'],
     'META_TEST_2' => ['daily_budget' => 100000.0, 'objective' => 'OUTCOME_SALES', 'optimization_goal' => 'CONVERSATIONS', 'destination_type' => 'WHATSAPP'],
+    'META_TEST_4' => ['daily_budget' => 100000.0, 'objective' => 'OUTCOME_SALES', 'optimization_goal' => 'CONVERSATIONS', 'destination_type' => 'WHATSAPP'],
 ];
 
 // ── Tarikan 1 ───────────────────────────────────────────────────────
-$rows1 = [insightRow('META_TEST_1', $tgl, 100.0), insightRow('META_TEST_2', $tgl, 150.0), insightRow('999_UNMAPPED', $tgl, 50.0)];
+$rows1 = [
+    insightRow('META_TEST_1', $tgl, 100.0),
+    insightRow('META_TEST_2', $tgl, 150.0),
+    insightRow('META_TEST_4', $tgl, 150.0),
+    insightRow('999_UNMAPPED', $tgl, 50.0),
+];
 $r1    = (new MetaAdsPullService(new FakeMetaClient($rows1, $camps)))->pull($tgl, $tgl);
 
 $m1 = $db->table('marketing_ads_performance')->where(['period_year' => $tahun, 'campaign_id' => $id1])->get()->getResultArray();
-$m2 = $db->table('marketing_ads_performance')->where(['period_year' => $tahun, 'campaign_id' => $id2])->get()->getRowArray();
+$m2 = $db->table('marketing_ads_performance')->where(['period_year' => $tahun, 'campaign_id' => $id2])->get()->getResultArray();
+$m4 = $db->table('marketing_ads_performance')->where(['period_year' => $tahun, 'campaign_id' => $id4])->get()->getResultArray();
 
 ok('M1 tersimpan satu baris', count($m1) === 1, (string)count($m1));
 ok('M1 amount = spend Meta', isset($m1[0]) && (float)$m1[0]['amount'] === 100.0, (string)($m1[0]['amount'] ?? '-'));
@@ -142,7 +159,13 @@ ok('M1 periode diambil dari tanggal insight', isset($m1[0]) && (int)$m1[0]['peri
 
 ok('label objective jatuh ke kode mentah, tidak kosong', ($m1[0]['objective'] ?? '') === 'OUTCOME_SALES / CONVERSATIONS / WHATSAPP', (string)($m1[0]['objective'] ?? '-'));
 
-ok('baris manual ditimpa angka Meta', is_array($m2) && $m2['sumber'] === 'meta' && (float)$m2['amount'] === 150.0, (string)($m2['amount'] ?? '-'));
+ok('baris manual ditimpa angka Meta', count($m2) === 1 && $m2[0]['sumber'] === 'meta' && (float)$m2[0]['amount'] === 150.0, json_encode(array_column($m2, 'amount')));
+ok('baris manual ditimpa, BUKAN digandakan', count($m2) === 1, 'baris=' . count($m2));
+ok('saluran baris manual dipertahankan', count($m2) === 1 && (int)$m2[0]['channel_id'] === 3, (string)($m2[0]['channel_id'] ?? '-'));
+ok('unit baris manual dipertahankan bila campaign belum dipetakan', count($m2) === 1 && (int)$m2[0]['unit_id'] === 1, (string)($m2[0]['unit_id'] ?? '-'));
+
+ok('unit baris diambil dari pemetaan campaign bila ada', count($m4) === 1 && (int)$m4[0]['unit_id'] === 7, (string)($m4[0]['unit_id'] ?? '-'));
+ok('campaign ber-unit tidak digandakan', count($m4) === 1, 'baris=' . count($m4));
 
 ok('kampanye tanpa peta masuk daftar', in_array('999_UNMAPPED', $r1['tanpa_peta'] ?? [], true));
 $unmapped = (int)$db->query("SELECT COUNT(*) c FROM marketing_ads_performance WHERE period_year = 2099 AND note = '[TEST]' AND campaign_id IS NULL")->getRow()->c;
@@ -154,11 +177,11 @@ ok('baris lama kampanye pause tidak dihapus', count($m3) === 1 && $m3[0]['tangga
 $nol = (int)$db->query("SELECT COUNT(*) c FROM marketing_ads_performance WHERE period_year = 2099 AND campaign_id = {$id3} AND amount = 0")->getRow()->c;
 ok('tidak menulis baris nol palsu', $nol === 0, (string)$nol);
 
-ok('hasil tarikan melaporkan baru/diperbarui', ($r1['baru'] ?? -1) === 1 && ($r1['diperbarui'] ?? -1) === 1, json_encode($r1));
+ok('hasil tarikan melaporkan baru/diperbarui', ($r1['baru'] ?? -1) === 1 && ($r1['diperbarui'] ?? -1) === 2, json_encode($r1));
 ok('log tarikan tersimpan', !empty($r1['log_id']));
 
 // ── Tarikan 2: angka Meta berubah → harus UPDATE, bukan baris kedua ──
-$rows2 = [insightRow('META_TEST_1', $tgl, 200.0), insightRow('META_TEST_2', $tgl, 150.0)];
+$rows2 = [insightRow('META_TEST_1', $tgl, 200.0), insightRow('META_TEST_2', $tgl, 150.0), insightRow('META_TEST_4', $tgl, 150.0)];
 $r2    = (new MetaAdsPullService(new FakeMetaClient($rows2, $camps)))->pull($tgl, $tgl);
 
 $cnt = (int)$db->query("SELECT COUNT(*) c FROM marketing_ads_performance WHERE period_year = 2099 AND campaign_id = {$id1}")->getRow()->c;
@@ -178,7 +201,9 @@ ok('dry-run tidak menulis log', ($r3['log_id'] ?? null) === null);
 $db->query("DELETE FROM marketing_ads_performance WHERE period_year = 2099");
 $db->query("DELETE FROM marketing_campaigns WHERE nama LIKE '[TEST]%'");
 $db->query("DELETE FROM meta_label_objektif WHERE objective = 'OUTCOME_SALES'");
+$db->query("DELETE FROM meta_pull_log WHERE tanggal_mulai = '2099-12-01'");
 ok('data uji dibersihkan', (int)$db->query("SELECT COUNT(*) c FROM marketing_campaigns WHERE nama LIKE '[TEST]%'")->getRow()->c === 0);
+ok('log uji dibersihkan', (int)$db->query("SELECT COUNT(*) c FROM meta_pull_log WHERE tanggal_mulai = '2099-12-01'")->getRow()->c === 0);
 
 echo "\n============================================================\n";
 echo "PASS: {$pass}   FAIL: {$fail}\n";
