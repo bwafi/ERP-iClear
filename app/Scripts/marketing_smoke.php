@@ -32,6 +32,24 @@ function ok($label, $cond, $detail = '')
     if ($cond) { $pass++; echo "  PASS  {$label}\n"; } else { $fail++; echo "  FAIL  {$label}  " . ($detail !== '' ? "→ {$detail}" : '') . "\n"; }
 }
 
+/**
+ * Kirim POST ke method controller.
+ *
+ * IncomingRequest dibuat BARU tiap panggilan: kalau memakai request bersama,
+ * data POST panggilan pertama ikut ter-cache untuk panggilan berikutnya.
+ */
+function campaignKirim($ctrl, array $post)
+{
+    global $reqProp;
+
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_POST = $post;
+    $_GET  = [];
+    $reqProp->setValue($ctrl, \Config\Services::request(null, false));
+
+    return (new ReflectionMethod($ctrl, 'campaign_simpan'))->invoke($ctrl);
+}
+
 // Bootstrap request (meniru WebRequest).
 try {
     $config = new \Config\App();
@@ -55,6 +73,9 @@ $session->set([
 try {
     $ctrl = new \App\Controllers\Marketing();
     $ctrl->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
+
+    $reqProp = new ReflectionProperty(\CodeIgniter\Controller::class, 'request');
+    $reqProp->setAccessible(true);
 
     // ── Dashboard ────────────────────────────────────────────────
     $html = (string)$ctrl->index();
@@ -95,6 +116,68 @@ try {
     ok('campaign render — page-header + filter-card', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-card') !== false);
     ok('campaign render — judul Campaign Digital Marketing', strpos($html, 'Campaign Digital Marketing') !== false);
     ok('campaign render — daftar campaign + simpan POST', strpos($html, 'Daftar Campaign Digital Marketing') !== false && strpos($html, 'marketing/campaign/simpan') !== false);
+
+    // ── Pemetaan campaign ERP → campaign Meta + unit ──────────────
+    // Tarikan Meta mencocokkan berdasarkan kolom ini; tanpa form ini
+    // pemetaan tidak bisa diisi dari UI.
+    $html = (string)$ctrl->campaign();
+    ok('campaign render — input meta_campaign_id', strpos($html, 'name="meta_campaign_id"') !== false);
+    ok('campaign render — pilihan unit_id', strpos($html, 'name="unit_id"') !== false);
+
+    // Tulis-menulis di bawah dibungkus transaksi → data produksi tidak berubah.
+    $db = \Config\Database::connect();
+    $db->transBegin();
+
+    $unit   = $db->table('unit')->orderBy('idunit', 'ASC')->get()->getRow();
+    $unitId = (int) $unit->idunit;
+    $bulan  = (int) date('n');
+    $tahun  = (int) date('Y');
+    $metaA  = '555000111';
+
+    $base = [
+        'id' => 0, 'nama' => '[SMOKE] kampanye meta', 'status' => 'draft',
+        'period_month' => $bulan, 'period_year' => $tahun,
+        'meta_campaign_id' => $metaA, 'unit_id' => $unitId,
+    ];
+
+    campaignKirim($ctrl, $base);
+    $a = $db->table('marketing_campaigns')->where('meta_campaign_id', $metaA)->get()->getRow();
+    ok('simpan pemetaan Meta tersimpan', $a !== null);
+    ok('unit campaign tersimpan', $a !== null && (int) $a->unit_id === $unitId, (string) ($a->unit_id ?? '-'));
+
+    // Sudah dipakai campaign lain → ditolak dengan pesan, bukan error DB mentah.
+    $b = $base;
+    $b['nama'] = '[SMOKE] kampanye meta duplikat';
+    $hasilDupe = campaignKirim($ctrl, $b);
+    $dupe = (int) $db->table('marketing_campaigns')->where('nama', '[SMOKE] kampanye meta duplikat')->countAllResults();
+    ok('meta_campaign_id duplikat ditolak', $dupe === 0, 'baris=' . $dupe);
+    ok(
+        'penolakan memakai redirect + pesan error',
+        is_object($hasilDupe) && get_class($hasilDupe) === 'CodeIgniter\HTTP\RedirectResponse'
+            && (string) session()->getFlashdata('error') !== '',
+        get_class($hasilDupe) . ' / ' . var_export(session()->getFlashdata('error'), true)
+    );
+
+    // Ada karakter non-digit → disimpan digit saja.
+    $c = $base;
+    $c['nama'] = '[SMOKE] kampanye meta kotor';
+    $c['meta_campaign_id'] = 'act_777xyz';
+    campaignKirim($ctrl, $c);
+    $bersih = $db->table('marketing_campaigns')->where('nama', '[SMOKE] kampanye meta kotor')->get()->getRow();
+    ok('meta_campaign_id disanitasi jadi digit saja', $bersih !== null && $bersih->meta_campaign_id === '777', (string) ($bersih->meta_campaign_id ?? '-'));
+
+    // Unit tidak dikenal → NULL, bukan error.
+    $d = $base;
+    $d['nama'] = '[SMOKE] kampanye meta unit asing';
+    $d['meta_campaign_id'] = '555000222';
+    $d['unit_id'] = 99999999;
+    campaignKirim($ctrl, $d);
+    $asing = $db->table('marketing_campaigns')->where('nama', '[SMOKE] kampanye meta unit asing')->get()->getRow();
+    ok('unit_id tidak dikenal disimpan NULL', $asing !== null && $asing->unit_id === null, var_export($asing->unit_id ?? 'tidak-ada', true));
+
+    $db->transRollback();
+    $_POST = [];
+    ok('data uji campaign dibersihkan', (int) $db->table('marketing_campaigns')->like('nama', '[SMOKE]')->countAllResults() === 0);
 
     // ── Laporan ──────────────────────────────────────────────────
     $html = (string)$ctrl->laporan();

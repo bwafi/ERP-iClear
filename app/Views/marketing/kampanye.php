@@ -1,3 +1,10 @@
+<?php
+// Nama unit untuk kolom audit; petakan sekali saja.
+$unitNama = [];
+foreach ($unitList as $u) {
+    $unitNama[(int)$u->idunit] = $u->NAMA_UNIT;
+}
+?>
 <div class="card dm-page-header shadow-none border-0 mb-4">
     <div class="card-body d-flex flex-wrap align-items-start justify-content-between gap-3">
         <div class="dm-page-heading">
@@ -99,6 +106,7 @@
                             <th class="text-center">Status</th>
                             <th class="text-start">Periode Tanggal</th>
                             <th class="text-start">Deskripsi</th>
+                            <th class="text-start">Campaign Meta</th>
                             <?php if ($canWrite) : ?>
                                 <th class="text-center pe-3">Aksi</th>
                             <?php endif; ?>
@@ -130,6 +138,16 @@
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-start text-muted"><?= esc($row->deskripsi) ?: '-' ?></td>
+                                <td class="text-start text-nowrap">
+                                    <?php if (!empty($row->meta_campaign_id)) : ?>
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle font-monospace"><?= esc($row->meta_campaign_id) ?></span>
+                                        <small class="text-muted d-block">
+                                            <?= esc($unitNama[(int)$row->unit_id] ?? ($row->unit_id ? '#' . (int)$row->unit_id : 'tanpa unit')) ?>
+                                        </small>
+                                    <?php else : ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
                                 <?php if ($canWrite) : ?>
                                     <td class="text-center text-nowrap pe-3">
                                         <button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1"
@@ -139,6 +157,8 @@
                                             data-tanggal-mulai="<?= esc((string)$row->tanggal_mulai, 'attr') ?>"
                                             data-tanggal-selesai="<?= esc((string)$row->tanggal_selesai, 'attr') ?>"
                                             data-status="<?= esc((string)$row->status, 'attr') ?>"
+                                            data-meta="<?= esc((string)$row->meta_campaign_id, 'attr') ?>"
+                                            data-unit="<?= esc((string)$row->unit_id, 'attr') ?>"
                                             title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="post" action="<?= base_url('marketing/campaign/hapus') ?>" class="d-inline"
                                             onsubmit="return confirm('Hapus campaign ini?');">
@@ -202,6 +222,22 @@
                                 <textarea name="deskripsi" id="cp_deskripsi" class="form-control form-control-sm" rows="2"
                                     placeholder="Tujuan, segmentasi, dsb."></textarea>
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted mb-1 fw-semibold">ID Campaign Meta</label>
+                                <input type="text" name="meta_campaign_id" id="cp_meta" class="form-control form-control-sm"
+                                    inputmode="numeric" placeholder="angka saja">
+                                <div class="form-text">Untuk menarik biaya iklan dari Meta (menu Performa Ads). Kosongkan bila campaign ini tidak beriklan di Meta.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted mb-1 fw-semibold">Unit</label>
+                                <select name="unit_id" id="cp_unit" class="form-select form-select-sm">
+                                    <option value="">-</option>
+                                    <?php foreach ($unitList as $u) : ?>
+                                        <option value="<?= (int)$u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="form-text">Unit pemilik campaign. Biaya Meta dicatat ke unit ini.</div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer bg-light">
@@ -234,6 +270,8 @@
             document.getElementById('cp_mulai').value = this.dataset.tanggalMulai || '';
             document.getElementById('cp_selesai').value = this.dataset.tanggalSelesai || '';
             document.getElementById('cp_status').value = this.dataset.status || 'draft';
+            document.getElementById('cp_meta').value = this.dataset.meta || '';
+            document.getElementById('cp_unit').value = this.dataset.unit || '';
             var modal = new bootstrap.Modal(document.getElementById('modalCampaign'));
             modal.show();
         });

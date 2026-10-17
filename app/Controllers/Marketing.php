@@ -1306,6 +1306,7 @@ class Marketing extends BaseController
                 ->where('period_year', $tahun)
                 ->orderBy('nama', 'ASC')->findAll(),
             'statusLabels' => \App\Models\ModelMarketingCampaign::STATUS_LABELS,
+            'unitList' => (new \App\Models\ModelUnit())->getUnit(),
             'canWrite' => $this->canWrite(),
         ]);
     }
@@ -1350,6 +1351,27 @@ class Marketing extends BaseController
         }
 
         $model = new \App\Models\ModelMarketingCampaign();
+
+        // Pemetaan ke campaign Meta — dipakai `meta:pull`. Hanya digit yang
+        // disimpan; kolomnya UNIQUE, jadi pemakaian ganda ditolak di sini
+        // supaya tidak muncul error database mentah.
+        $metaCampaignId = preg_replace('/\D+/', '', (string)$this->request->getPost('meta_campaign_id') ?: '');
+        if ($metaCampaignId !== '') {
+            $dipakai = (new \App\Models\ModelMarketingCampaign())
+                ->where('meta_campaign_id', $metaCampaignId)
+                ->where('id !=', $id)
+                ->first();
+            if ($dipakai) {
+                return redirect()->back()->with('error', 'ID Campaign Meta ' . $metaCampaignId . ' sudah dipakai campaign "' . $dipakai->nama . '".');
+            }
+        }
+
+        // Unit tidak dikenal → dianggap belum dipetakan.
+        $unitId = (int)$this->request->getPost('unit_id');
+        if ($unitId > 0 && !(new \App\Models\ModelUnit())->getById($unitId)) {
+            $unitId = 0;
+        }
+
         $data = [
             'nama'             => $nama,
             'deskripsi'        => $deskripsi !== '' ? $deskripsi : null,
@@ -1358,6 +1380,8 @@ class Marketing extends BaseController
             'period_month'     => $bulan,
             'period_year'      => $tahun,
             'status'           => $status,
+            'meta_campaign_id' => $metaCampaignId !== '' ? $metaCampaignId : null,
+            'unit_id'          => $unitId > 0 ? $unitId : null,
             'pic'              => $this->currentAkun(),
             'created_by'       => $this->currentAkun(),
         ];
