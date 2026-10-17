@@ -149,9 +149,18 @@ function tutupKasirOracle($db, int $unitId, string $date): array
         ->where('idunit', $unitId)
         ->get()->getRow()->total ?? 0;
 
+    // Basis = query TutupKasir diimplementasikan ulang (independen dari kode
+    // yang diuji). Komponen DP dibaca dari satu sumber definisinya, karena
+    // Tutup Kasir sudah mengakuinya di tanggal penerimaan (lihat
+    // TutupKasirClosing). Tanpa ini, parity rekon vs Tutup Kasir akan
+    // melaporkan selisih palsu pada hari ada DP.
+    $dp = new \App\Services\Finance\TutupKasirSourceDefinition($db);
+
     return [
-        'transfer_masuk' => (int) $tfPenjualan + (int) $tfService,
-        'cash_masuk'     => (int) $cashPenjualan + (int) $cashService,
+        'cash_masuk'     => (int) $cashPenjualan + (int) $cashService
+            + $dp->dpMasukTunai($unitId, $date),
+        'transfer_masuk' => (int) $tfPenjualan + (int) $tfService
+            + $dp->dpMasukTransfer($unitId, $date) - $dp->dpServiceSelesai($unitId, $date),
         'kas_keluar'     => (int) $outCash + (int) $outTransfer,
     ];
 }

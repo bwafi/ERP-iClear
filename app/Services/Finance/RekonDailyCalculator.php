@@ -8,10 +8,15 @@ use Config\Database;
 /**
  * Rekonsiliasi Harian Finance — ERP query + KPI scoring.
  *
- * 3 kelompok transaksi harian (query DICERMINAI dari TutupKasir::index()):
- *  1. Cash Masuk     = penjualan.bayar_tunai + service.bayar_tunai
+ * 3 kelompok transaksi harian — sama persis dengan TutupKasir:
+ *  1. Cash Masuk     = penjualan.bayar_tunai + service.bayar_tunai + DP tunai diterima hari itu
  *  2. Transfer Masuk = penjualan.bayar_bank + service.(harus_dibayar - bayar_tunai)
+ *                      + DP transfer diterima - DP service yang selesai hari itu
  *  3. Kas Keluar     = kas_keluar.jumlah (cash + transfer, dijumlahkan utuh)
+ *
+ * Komponen DP TIDAK dihitung ulang di sini: semuanya dibaca dari
+ * `TutupKasirSourceDefinition` (`kasMasukDp` / `transferMasukDp` /
+ * `dpHarianRange`), sehingga angka rekon == Tutup Kasir.
  *
  * PENTING: query penjualan memakai notLike('kode_invoice','srv','after') —
  * sama seperti TutupKasir — agar invoice bertanda "srv" tidak terhitung dua kali
@@ -100,7 +105,9 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Nilai ERP untuk satu RENTANG tanggal, dihitung dengan 3 query total.
+     * Nilai ERP untuk satu RENTANG tanggal, dihitung dengan GROUP BY — satu
+     * query per sumber (penjualan, service, kas_keluar, plus komponen DP
+     * lewat `TutupKasirSourceDefinition::dpHarianRange`).
      *
      * Kenapa ada: daftar bulanan merender panel untuk setiap hari. Kalau panel
      * itu ikut menampilkan angka ERP, memanggil erpValues() per hari berarti 6
@@ -181,57 +188,44 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
             $out[$d]['kas_keluar'] += (int) ($r['total'] ?? 0);
         }
 
+        // DP service: diakui di TANGGAL PENERIMAAN (tunai/transfer), dan DP
+        // service yang SELESAI dikurangi dari transfer agar tidak dobel —
+        // sama persis dengan `TutupKasirSourceDefinition::kasMasukDp()` dkk.
+        $dp = (new TutupKasirSourceDefinition($this->db))->dpHarianRange($unitId, $startDate, $endDate);
+        $aturan = [
+            'tunai'    => ['kolom' => 'cash_masuk', 'tanda' => 1],
+            'transfer' => ['kolom' => 'transfer_masuk', 'tanda' => 1],
+            'selesai'  => ['kolom' => 'transfer_masuk', 'tanda' => -1],
+        ];
+        foreach ($aturan as $jenis => $a) {
+            foreach ($dp[$jenis] as $d => $nilai) {
+                if (! isset($out[$d])) {
+                    $out[$d] = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+                }
+                $out[$d][$a['kolom']] += $a['tanda'] * $nilai;
+            }
+        }
+
         return $out;
     }
 
     /**
-     * Cash Masuk = penjualan.bayar_tunai + service.bayar_tunai.
-     * Setara TutupKasir::index() "PENJUALAN CASH" + "SERVICE CASH".
+     * Cash Masuk = kas masuk Tutup Kasir + DP tunai yang diterima hari itu.
+     * Delegasi ke `TutupKasirSourceDefinition` supaya komponen DP ikut masuk
+     * dan definisinya tidak ditulis dua kali.
      */
     protected function erpCashMasuk(int $unitId, string $tanggal): int
     {
-        $cashPenjualan = $this->db->table('penjualan')
-            ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal)', $tanggal)
-            ->where('unit_idunit', $unitId)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow()->total ?? 0;
-
-        $cashService = $this->db->table('service')
-            ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal_selesai)', $tanggal)
-            ->where('status_service', 4)
-            ->where('unit_idunit', $unitId)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        return (int) $cashPenjualan + (int) $cashService;
+        return (new TutupKasirSourceDefinition($this->db))->kasMasukDp($unitId, $tanggal);
     }
 
     /**
-     * Transfer Masuk = penjualan.bayar_bank + service.(harus_dibayar - bayar_tunai).
-     * Setara TutupKasir::index() "PENJUALAN TRANSFER" + "SERVICE TRANSFER".
+     * Transfer Masuk = transfer masuk Tutup Kasir + DP transfer diterima
+     * - DP service yang selesai hari itu (agar DP tidak terhitung dua kali).
      */
     protected function erpTransferMasuk(int $unitId, string $tanggal): int
     {
-        $tfPenjualan = $this->db->table('penjualan')
-            ->selectSum('bayar_bank', 'total')
-            ->where('DATE(tanggal)', $tanggal)
-            ->where('unit_idunit', $unitId)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow()->total ?? 0;
-
-        $tfService = $this->db->table('service')
-            ->select('SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)) AS total')
-            ->where('DATE(tanggal_selesai)', $tanggal)
-            ->where('status_service', 4)
-            ->where('unit_idunit', $unitId)
-            ->get()
-            ->getRow()->total ?? 0;
-
-        return (int) $tfPenjualan + (int) $tfService;
+        return (new TutupKasirSourceDefinition($this->db))->transferMasukDp($unitId, $tanggal);
     }
 
     /**

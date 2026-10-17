@@ -475,6 +475,64 @@ class TutupKasirSourceDefinition
     }
 
     /**
+     * Komponen DP per tanggal untuk rentang — bentuk harian dari
+     * `dpMasukTunai()` / `dpMasukTransfer()` / `dpServiceSelesai()`.
+     *
+     * Ada supaya pemanggil yang butuh angka DP per hari (Rekonsiliasi Harian)
+     * tidak perlu satu query per hari. Definisi tetap SATU tempat di sini.
+     *
+     * @return array{tunai:array<string,int>, transfer:array<string,int>, selesai:array<string,int>}
+     */
+    public function dpHarianRange(int $unitId, string $dari, string $sampai): array
+    {
+        $out = ['tunai' => [], 'transfer' => [], 'selesai' => []];
+
+        if (! $this->punyaLedgerDp()) {
+            return $out;
+        }
+
+        foreach (['tunai', 'transfer'] as $metode) {
+            $rows = $this->db->table('service_dp sd')
+                ->select('DATE(sd.tanggal) AS d', false)
+                ->selectSum('sd.jumlah', 'total')
+                ->join('service s', 's.idservice = sd.service_idservice')
+                ->where('sd.status', 'aktif')
+                ->where('sd.metode', $metode)
+                ->where('DATE(sd.tanggal) >=', $dari)
+                ->where('DATE(sd.tanggal) <=', $sampai)
+                ->where('s.unit_idunit', $unitId)
+                ->groupBy('d')
+                ->get()
+                ->getResultArray();
+
+            foreach ($rows as $r) {
+                $out[$metode][(string) $r['d']] = (int) $r['total'];
+            }
+        }
+
+        $b = $this->db->table('service_dp sd')
+            ->select('DATE(s.tanggal_selesai) AS d', false)
+            ->selectSum('sd.jumlah', 'total')
+            ->join('service s', 's.idservice = sd.service_idservice')
+            ->where('sd.status', 'aktif')
+            ->where('s.status_service', 4)
+            ->where('DATE(s.tanggal_selesai) >=', $dari)
+            ->where('DATE(s.tanggal_selesai) <=', $sampai)
+            ->where('s.unit_idunit', $unitId)
+            ->groupBy('d');
+
+        if ($this->db->fieldExists('refund_idkas_keluar', 'service_dp')) {
+            $b->where('sd.refund_idkas_keluar', null);
+        }
+
+        foreach ($b->get()->getResultArray() as $r) {
+            $out['selesai'][(string) $r['d']] = (int) $r['total'];
+        }
+
+        return $out;
+    }
+
+    /**
      * Apakah tabel ledger DP (`service_dp`) sudah ada?
      *
      * Kalau belum (database pra-migrasi atau skema test yang tidak membuatnya),
