@@ -176,6 +176,111 @@ ok('pesan 401 memuat kode Meta (190)', is_string($err401) && strpos($err401, '19
 ok('pesan 401 memuat pesan Meta', is_string($err401) && strpos($err401, 'Invalid OAuth access token') !== false, (string)$err401);
 ok('pesan 401 TIDAK memuat token', $secret === '' || is_string($err401) === false || strpos((string)$err401, $secret) === false);
 
+/*
+ * ── 4. Peringatan TLS OpenSSL tidak boleh menggagalkan tarikan ───────
+ *
+ * Saat OpenSSL menutup koneksi tanpa close_notify, PHP memunculkan
+ * "fread(): SSL operation failed with code 1 ... unexpected eof while reading"
+ * SETELAH seluruh body diterima. Di CLI, CodeIgniter mengubah peringatan PHP
+ * menjadi ErrorException, sehingga Guzzle menganggap pembacaan gagal padahal
+ * datanya utuh — dan seluruh tarikan batal.
+ *
+ * Handler di bawah meniru perilaku CodeIgniter di CLI.
+ */
+function denganHandlerCI4(callable $fn)
+{
+    set_error_handler(function ($severity, $message, $file = '', $line = 0) {
+        if (!(error_reporting() & $severity)) {
+            return false;
+        }
+        throw new \ErrorException($message, 0, $severity, $file, $line);
+    });
+
+    try {
+        return $fn();
+    } finally {
+        restore_error_handler();
+    }
+}
+
+function clientDenganPeringatan(string $peringatan, array $headers, string $body): \App\Services\Meta\MetaAdsClient
+{
+    $mock = new MockHandler([
+        function ($request, $options) use ($peringatan, $headers, $body) {
+            trigger_error($peringatan, E_USER_WARNING);
+
+            return new Response(200, $headers, $body);
+        },
+    ]);
+
+    return new \App\Services\Meta\MetaAdsClient(new Client(['handler' => HandlerStack::create($mock)]));
+}
+
+$peringatanTls = 'fread(): SSL operation failed with code 1. OpenSSL Error messages: '
+    . 'error:0A000126:SSL routines::unexpected eof while reading';
+
+$errTls = null;
+$resTls = null;
+try {
+    $resTls = denganHandlerCI4(fn() => clientDenganPeringatan($peringatanTls, $headers, $body)
+        ->fetchCampaignInsights('2026-10-01', '2026-10-01'));
+} catch (\Throwable $e) {
+    $errTls = get_class($e) . ': ' . $e->getMessage();
+}
+ok(
+    'peringatan TLS OpenSSL tidak menggagalkan tarikan',
+    $errTls === null && count($resTls['rows'] ?? []) === 2,
+    (string)$errTls
+);
+
+// Peringatan lain TIDAK boleh ikut ditelan — kalau bukan penyebab yang dikenal,
+// harus tetap terlihat.
+$errLain = null;
+try {
+    denganHandlerCI4(fn() => clientDenganPeringatan('ada yang rusak lain', $headers, $body)
+        ->fetchCampaignInsights('2026-10-01', '2026-10-01'));
+} catch (\Throwable $e) {
+    $errLain = get_class($e);
+}
+ok('peringatan lain tetap dilaporkan (tidak ditelan)', $errLain === \ErrorException::class, (string)$errLain);
+
+/*
+ * ── 5. Kegagalan jaringan diulang, lalu menyerah dengan pesan jelas ──
+ *
+ * Transport di sini memakai stream PHP (ext-curl tidak aktif) dan sesekali
+ * gagal menyambung. GET bersifat idempoten, jadi aman diulang — tapi harus
+ * ada batasnya.
+ */
+function connectGagal(): \GuzzleHttp\Exception\ConnectException
+{
+    return new \GuzzleHttp\Exception\ConnectException(
+        'koneksi putus',
+        new \GuzzleHttp\Psr7\Request('GET', 'https://graph.facebook.com/x')
+    );
+}
+
+$mockUlang = new MockHandler([connectGagal(), connectGagal(), new Response(200, $headers, $body)]);
+$errUlang  = null;
+$resUlang  = [];
+try {
+    $resUlang = (new \App\Services\Meta\MetaAdsClient(new Client(['handler' => HandlerStack::create($mockUlang)])))
+        ->fetchCampaignInsights('2026-10-01', '2026-10-01');
+} catch (\Throwable $e) {
+    $errUlang = get_class($e) . ': ' . $e->getMessage();
+}
+ok('gagal jaringan diulang sampai berhasil', $errUlang === null && count($resUlang['rows'] ?? []) === 2, (string)$errUlang);
+
+$mockHabis = new MockHandler([connectGagal(), connectGagal(), connectGagal(), new Response(200, $headers, $body)]);
+$errHabis  = null;
+try {
+    (new \App\Services\Meta\MetaAdsClient(new Client(['handler' => HandlerStack::create($mockHabis)])))
+        ->fetchCampaignInsights('2026-10-01', '2026-10-01');
+} catch (\Throwable $e) {
+    $errHabis = $e;
+}
+ok('menyerah setelah batas percobaan', $errHabis instanceof \App\Services\Meta\MetaAdsException, get_class($errHabis ?? new \stdClass()));
+ok('batas percobaan = 3 (tidak mengulang tanpa henti)', $mockHabis->count() === 1, 'sisa=' . $mockHabis->count());
+
 echo "\n============================================================\n";
 echo "PASS: {$pass}   FAIL: {$fail}\n";
 echo "============================================================\n";

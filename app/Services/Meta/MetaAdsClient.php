@@ -5,6 +5,7 @@ namespace App\Services\Meta;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -24,6 +25,9 @@ class MetaAdsClient
     /** Action Meta yang dipetakan ke kolom "Klik" dan "Hasil" di laporan. */
     public const ACTION_LINK_CLICK    = 'link_click';
     public const ACTION_CONVERSATIONS = 'onsite_conversion.messaging_conversation_started_7d';
+
+    /** Batas percobaan ulang untuk kegagalan jaringan. */
+    public const COBA_MAKS = 3;
 
     private Client $http;
 
@@ -147,20 +151,38 @@ class MetaAdsClient
      */
     private function request(string $url): array
     {
+        $sebelumnya = null;
+        $sebelumnya = set_error_handler(function ($severity, $message, $file = '', $line = 0) use (&$sebelumnya) {
+            // OpenSSL memunculkan "SSL operation failed … unexpected eof while
+            // reading" SETELAH seluruh body diterima (koneksi ditutup tanpa
+            // close_notify). Di CLI, CodeIgniter mengubah peringatan itu jadi
+            // ErrorException, sehingga Guzzle menganggap pembacaan gagal
+            // padahal datanya utuh — dan seluruh tarikan batal.
+            //
+            // Hanya peringatan itu yang diabaikan; sisanya diteruskan ke
+            // handler sebelumnya supaya masalah sungguhan tetap terlihat.
+            // Respons tetap divalidasi (status HTTP, JSON, error Graph),
+            // jadi kegagalan nyata tidak ikut tertelan.
+            if (strpos((string)$message, 'SSL operation failed') !== false) {
+                return true;
+            }
+
+            return is_callable($sebelumnya) ? $sebelumnya($severity, $message, $file, $line) : false;
+        });
+
         try {
-            $response = $this->http->request('GET', $url, [
-                'headers'     => ['Accept' => 'application/json'],
-                'http_errors' => false,
-            ]);
+            $response = $this->kirim($url);
+
+            $status  = (int)$response->getStatusCode();
+            $decoded = json_decode((string)$response->getBody(), true);
+            $error   = $this->apiError($decoded);
         } catch (ConnectException $e) {
             throw new MetaAdsException('Timeout/koneksi gagal ke Meta Marketing API.', 0, $e);
         } catch (GuzzleException $e) {
             throw new MetaAdsException('HTTP request ke Meta Marketing API gagal.', 0, $e);
+        } finally {
+            restore_error_handler();
         }
-
-        $status  = (int)$response->getStatusCode();
-        $decoded = json_decode((string)$response->getBody(), true);
-        $error   = $this->apiError($decoded);
 
         if ($status < 200 || $status >= 300) {
             throw new MetaAdsException(sprintf(
@@ -175,6 +197,43 @@ class MetaAdsClient
         }
 
         return [$decoded, $response];
+    }
+
+    /**
+     * Kirim satu GET, dengan percobaan ulang terbatas untuk kegagalan jaringan.
+     *
+     * Transport di sini memakai stream PHP (ext-curl tidak aktif di server ini)
+     * dan sesekali gagal menyambung. GET bersifat idempoten, jadi aman diulang.
+     * Hanya kegagalan jaringan yang diulang: respons dari Meta (termasuk 4xx/5xx)
+     * tidak pernah diulang, karena itu keputusan server yang sudah final.
+     */
+    private function kirim(string $url): ResponseInterface
+    {
+        $percobaan = 0;
+
+        while (true) {
+            $percobaan++;
+
+            try {
+                return $this->http->request('GET', $url, [
+                    'headers'     => ['Accept' => 'application/json'],
+                    'http_errors' => false,
+                ]);
+            } catch (ConnectException $e) {
+                if ($percobaan >= self::COBA_MAKS) {
+                    throw new MetaAdsException('Timeout/koneksi gagal ke Meta Marketing API.', 0, $e);
+                }
+            } catch (RequestException $e) {
+                // Punya respons = Meta menjawab; jangan diulang.
+                if ($e->hasResponse() || $percobaan >= self::COBA_MAKS) {
+                    throw new MetaAdsException('HTTP request ke Meta Marketing API gagal.', 0, $e);
+                }
+            } catch (GuzzleException $e) {
+                throw new MetaAdsException('HTTP request ke Meta Marketing API gagal.', 0, $e);
+            }
+
+            usleep(500000 * $percobaan);
+        }
     }
 
     /** Kode & pesan error dari body Graph API, tanpa bagian yang memuat token. */
