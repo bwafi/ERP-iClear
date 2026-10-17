@@ -33,10 +33,27 @@ class MetaAdsPullService
     public function pull(string $since, string $until, bool $dryRun = false): array
     {
         $map    = (new ModelMarketingCampaign())->metaMap();
-        $data   = $this->client->fetchCampaignInsights($since, $until);
-        $camps  = $this->client->fetchCampaigns();
         $labels = new ModelMetaLabelObjektif();
         $perf   = new ModelMarketingAdsPerf();
+
+        try {
+            $data  = $this->client->fetchCampaignInsights($since, $until);
+            $camps = $this->client->fetchCampaigns();
+        } catch (\Throwable $e) {
+            // Tarikan gagal tetap dicatat (spec §4.4: catatan TIAP tarikan).
+            // Tanpa ini panel "Tarikan Meta terakhir" tidak menampilkan apa pun
+            // dan kegagalan hanya terlihat di log server.
+            if (!$dryRun) {
+                (new ModelMetaPullLog())->insert([
+                    'tanggal_mulai'  => $since,
+                    'tanggal_sampai' => $until,
+                    'status'         => 'gagal',
+                    'pesan'          => $e->getMessage(),
+                ]);
+            }
+
+            throw $e;
+        }
 
         $baru = 0;
         $diperbarui = 0;
@@ -103,7 +120,10 @@ class MetaAdsPullService
                 $perf->update($existing->id, $payload);
                 $diperbarui++;
             } else {
-                $perf->insert($payload);
+                // Baris baru: isi saluran bawaan supaya kolom "Channel" di
+                // laporan tidak tampil "Umum". Baris yang sudah ada TIDAK
+                // diubah — saluran bukan milik tarikan Meta.
+                $perf->insert($payload + ['channel_id' => $this->channelId()]);
                 $baru++;
             }
         }
@@ -148,5 +168,16 @@ class MetaAdsPullService
         $v = env('META_PPN_PERSEN');
 
         return ($v === null || $v === '') ? 5.0 : (float)$v;
+    }
+
+    /**
+     * Saluran bawaan untuk baris BARU hasil tarikan, diatur di .env
+     * (`META_CHANNEL_ID`, default 3 = Facebook). Baris lama tidak diubah.
+     */
+    private function channelId(): ?int
+    {
+        $v = env('META_CHANNEL_ID');
+
+        return ($v === null || $v === '') ? 3 : (int)$v;
     }
 }

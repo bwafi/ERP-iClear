@@ -83,6 +83,7 @@ META_AD_ACCOUNT_ID=act_1134662688368218
 ```
 
 Tarif pajak **per akun iklan**, bukan di kode: `META_PPN_PERSEN=5` (default 5).
+Saluran baris baru: `META_CHANNEL_ID` (default 3 = Facebook).
 
 Satu panggilan mengembalikan **semua kampanye sekaligus** untuk rentang tanggal —
 bukan satu panggilan per kampanye.
@@ -139,11 +140,16 @@ php spark meta:pull --dry-run             # tampilkan, tidak menyimpan
    - `daily_budget` = dari endpoint campaigns;
    - `klik` = **link_click**, `hasil` = `messaging_conversation_started_7d`;
    - `sumber` = 'meta', `ditarik_pada` = sekarang.
-4. Upsert berdasarkan **(tanggal, campaign_id)**:
-   - tidak ada baris → INSERT;
-   - ada baris `sumber='meta'` → UPDATE;
-   - ada baris `sumber='manual'` → **SKIP**, dilaporkan sebagai konflik
-     (jangan pernah menimpa ketikan manusia).
+4. Upsert berdasarkan **(periode, campaign_id, tanggal)** — `channel_id`/`unit_id`
+   sengaja TIDAK jadi kunci, karena baris manual lama sudah terisi keduanya dan
+   kalau ikut jadi kunci tarikan akan menambah baris kedua:
+   - tidak ada baris → INSERT (saluran diisi `META_CHANNEL_ID`, default 3);
+   - ada baris → UPDATE; **angka Meta menimpa angka manual** (keputusan pemilik
+     produk: "timpa dengan angka Meta");
+   - `channel_id` baris lama tidak diubah; `unit_id` lama dipertahankan bila
+     campaign belum dipetakan ke unit;
+   - jumlah baris baru/ditimpa/dilewati dicatat di `meta_pull_log`, jadi tidak
+     ada penimpaan yang senyap.
 5. Simpan hasil + header rate-limit ke `meta_pull_log`.
 6. Cetak ringkasan: berapa baris baru, diperbarui, dilewati, gagal.
 
@@ -225,9 +231,17 @@ Sudah terverifikasi: tier `development_access`, kuota besar (4 dari 668.200 pang
 batas berbentuk **bergulir** (bukan reset harian/bulanan). Blokir dev tier = 300 detik.
 
 - Setiap tarikan menyimpan header `x-business-use-case-usage` &
-  `x-fb-ads-insights-throttle` ke `meta_pull_log`.
-- Tangani `#17`, `#613`, `#80004`, `#4`: baca `estimated_time_to_regain_access`,
-  mundur (backoff) lalu ulangi. Jangan agresif.
+  `x-fb-ads-insights-throttle` ke `meta_pull_log`. `call_count`, `total_time`,
+  dan `total_cputime` adalah **persen kuota**, bukan detik/milidetik.
+- Tangani `#4`, `#17`, `#613`, `#80000`, `#80004`: baca
+  `estimated_time_to_regain_access`, mundur (backoff) lalu ulangi, maksimal 3
+  percobaan (spec §9 diterapkan di `MetaAdsClient::tungguBatasLaju()`).
+- Tunggu dibatasi 30 detik per percobaan: estimasi Meta bisa ratusan menit, dan
+  menunggu selama itu di dalam permintaan web tidak masuk akal. Setelah batas
+  percobaan habis, pesan error menyebut batas laju supaya bisa diulang manual
+  (atau menunggu jadwal cron berikutnya).
+- Tarikan yang GAGAL juga ditulis ke `meta_pull_log` (`status='gagal'` + pesan),
+  supaya panel "Tarikan Meta terakhir" tidak diam-diam kosong.
 
 ---
 
@@ -235,19 +249,27 @@ batas berbentuk **bergulir** (bukan reset harian/bulanan). Blokir dev tier = 300
 
 - Token hanya di `.env` (sudah gitignored). Tidak pernah ditulis ke DB, log, atau
   halaman web.
+- Token dikirim lewat header `Authorization: Bearer`, **bukan** query string.
+  URL paging Meta (`paging.next`) memuat token sendiri; parameter itu dibuang
+  sebelum URL dipakai. Dengan begitu token tidak pernah masuk ke URL permintaan —
+  dari sana ia bocor ke pesan exception dan jejak (trace) PHP.
 - Token yang pernah tersalin ke chat sebaiknya **di-rotate** setelah selesai.
-- Baris respons mentah **tidak** dicatat ke log (URL paging Meta memuat token).
+- Baris respons mentah **tidak** dicatat ke log.
 
 ---
 
 ## 11. Yang perlu keputusan Anda
 
-1. Isi kolom label pada tabel §7 (15 baris).
+1. Isi kolom label pada tabel §7 (15 baris). **Belum diisi** — sementara laporan
+   memakai kode mentah (`OUTCOME_SALES / CONVERSATIONS / ...`).
 2. Konfirmasi tarif pajak: 5% untuk akun ini, dan apakah sama untuk akun iklan lain.
-3. Pemetaan unit & channel: apakah cukup 1 unit per campaign (`marketing_campaigns.unit_id`),
-   atau ada campaign yang biayanya dibagi ke beberapa unit?
-4. Boleh tidak `meta:pull` **memperbarui** baris yang tadinya manual? Desain ini
-   memilih **tidak** (manual selalu menang) — konfirmasi.
+   **Belum terkonfirmasi**; tarifnya bisa diubah lewat `META_PPN_PERSEN`.
+3. Pemetaan unit & channel — **sudah diputuskan**: satu campaign = satu unit
+   (`marketing_campaigns.unit_id`), tidak dibagi ke beberapa unit. Saluran baris
+   baru diisi `META_CHANNEL_ID` (default 3 = Facebook); baris lama tidak diubah.
+4. Boleh tidak `meta:pull` **memperbarui** baris yang tadinya manual? —
+   **sudah diputuskan: ya, timpa** ("Timpa dengan angka Meta"). Jumlah baris yang
+   ditimpa dicatat di `meta_pull_log` supaya penimpaan tidak senyap.
 
 ---
 

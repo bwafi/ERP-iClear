@@ -50,6 +50,20 @@ function campaignKirim($ctrl, array $post)
     return (new ReflectionMethod($ctrl, 'campaign_simpan'))->invoke($ctrl);
 }
 
+/** Kirim POST ke aksi tarik Meta. Sama seperti campaignKirim, tapi bisa
+ *  memakai metode lain untuk menguji gerbangnya. */
+function tarikKirim($ctrl, array $post, string $metode = 'POST')
+{
+    global $reqProp;
+
+    $_SERVER['REQUEST_METHOD'] = $metode;
+    $_POST = $post;
+    $_GET  = [];
+    $reqProp->setValue($ctrl, \Config\Services::request(null, false));
+
+    return (new ReflectionMethod($ctrl, 'ads_performa_tarik'))->invoke($ctrl);
+}
+
 /** Potongan HTML satu baris tabel yang memuat teks tertentu. */
 function barisTabel(string $html, string $teks): string
 {
@@ -264,6 +278,24 @@ try {
     ok('panel info limit tampil', strpos($html, 'Tarikan Meta terakhir') !== false);
     ok('panel info limit memuat tier & pemakaian kuota', strpos($html, 'development_access') !== false && strpos($html, '0,02') !== false);
 
+    // ── Gerbang aksi "Tarik dari Meta" (tanpa panggilan jaringan) ──
+    // Yang diuji hanya penolakan: ketiganya harus berhenti SEBELUM menyentuh
+    // Meta, jadi jumlah baris meta_pull_log tidak boleh bertambah.
+    $logAwal = (int) $db->table('meta_pull_log')->countAllResults();
+
+    $bukanPost = tarikKirim($ctrl, [], 'GET');
+    ok('tarik: bukan POST → redirect', is_object($bukanPost) && get_class($bukanPost) === 'CodeIgniter\HTTP\RedirectResponse', get_class($bukanPost));
+
+    $periodeSalah = tarikKirim($ctrl, ['period_month' => 13, 'period_year' => $tahun]);
+    ok('tarik: periode tidak valid ditolak', is_object($periodeSalah) && get_class($periodeSalah) === 'CodeIgniter\HTTP\RedirectResponse', get_class($periodeSalah));
+    ok('tarik: periode tidak valid disertai pesan', (string) session()->getFlashdata('error') !== '');
+
+    ok('tarik: penolakan terjadi sebelum memanggil Meta', (int) $db->table('meta_pull_log')->countAllResults() === $logAwal);
+
+    $_POST = [];
+    $_GET  = [];
+    $reqProp->setValue($ctrl, \Config\Services::request(null, false));
+
     $db->transRollback();
     ok('data uji Ads dibersihkan', (int) $db->table('marketing_ads_performance')->where('period_year', $tahun)->whereIn('campaign_id', [$campNol, $campAda])->countAllResults() === 0);
     ok('data uji log dibersihkan', (int) $db->table('meta_pull_log')->where('id', $logUji)->countAllResults() === 0);
@@ -282,6 +314,11 @@ try {
     $ctrl2->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
     $out = $ctrl2->index();
     ok('Role 48 di-redirect (tidak berhak akses marketing)', is_object($out) && get_class($out) === 'CodeIgniter\HTTP\RedirectResponse', get_class($out));
+
+    // Tanpa hak tulis, tarikan tidak boleh jalan — walau POST & periodenya sah.
+    $tarik48 = tarikKirim($ctrl2, ['period_month' => $bulan, 'period_year' => $tahun]);
+    ok('Role 48 tidak bisa menarik dari Meta', is_object($tarik48) && get_class($tarik48) === 'CodeIgniter\HTTP\RedirectResponse', get_class($tarik48));
+    ok('Role 48: Meta tidak dipanggil', (int) $db->table('meta_pull_log')->countAllResults() === 0);
 } catch (\Throwable $e) {
     echo "  CRASH " . get_class($e) . ": {$e->getMessage()} @ {$e->getFile()}:{$e->getLine()}\n";
     $fail++;

@@ -1356,7 +1356,7 @@ class Marketing extends BaseController
                 ->where('period_year', $tahun)
                 ->orderBy('nama', 'ASC')->findAll(),
             'statusLabels' => \App\Models\ModelMarketingCampaign::STATUS_LABELS,
-            'unitList' => (new \App\Models\ModelUnit())->getUnit(),
+            'unitList' => $this->units(),
             'canWrite' => $this->canWrite(),
         ]);
     }

@@ -26,8 +26,20 @@ class MetaAdsClient
     public const ACTION_LINK_CLICK    = 'link_click';
     public const ACTION_CONVERSATIONS = 'onsite_conversion.messaging_conversation_started_7d';
 
-    /** Batas percobaan ulang untuk kegagalan jaringan. */
+    /** Batas percobaan ulang untuk kegagalan jaringan & pembatasan laju. */
     public const COBA_MAKS = 3;
+
+    /** Kode error Meta yang berarti "kena batas laju", bukan permintaan salah. */
+    private const KODE_BATAS_LAJU = [4, 17, 613, 80000, 80004];
+
+    /**
+     * Batas tunggu (detik) saat Meta membatasi laju.
+     *
+     * Estimasi Meta (`estimated_time_to_regain_access`) bisa ratusan menit;
+     * menunggu selama itu di dalam permintaan web tidak masuk akal. Tunggu
+     * dibatasi, lalu menyerah dengan pesan yang bisa ditindaklanjuti.
+     */
+    public int $tungguMaks = 30;
 
     private Client $http;
 
@@ -75,8 +87,11 @@ class MetaAdsClient
                 $rows[] = $this->normalizeInsightRow((array)$row);
             }
 
-            // URL paging sudah memuat access_token — jangan dijejali query lagi.
-            $url = $decoded['paging']['next'] ?? null;
+            // Meta menyisipkan access_token sendiri ke URL paging; token itu
+            // dibuang karena sudah dikirim lewat header Authorization.
+            $url = isset($decoded['paging']['next'])
+                ? $this->tanpaToken((string)$decoded['paging']['next'])
+                : null;
         }
 
         return ['rows' => $rows, 'rate' => $rate];
@@ -133,7 +148,9 @@ class MetaAdsClient
             foreach ((array)($decoded['data'] ?? []) as $row) {
                 $all[] = (array)$row;
             }
-            $url = $decoded['paging']['next'] ?? null;
+            $url = isset($decoded['paging']['next'])
+                ? $this->tanpaToken((string)$decoded['paging']['next'])
+                : null;
         }
 
         return $all;
@@ -141,9 +158,28 @@ class MetaAdsClient
 
     private function url(string $edge, array $query): string
     {
-        $query['access_token'] = $this->token();
-
         return self::GRAPH_BASE . $this->adAccountId() . '/' . $edge . '?' . http_build_query($query);
+    }
+
+    /**
+     * Buang `access_token` dari URL paging Meta.
+     *
+     * Token dikirim lewat header `Authorization: Bearer`, jadi parameternya
+     * tidak diperlukan. Ini juga menjaga ketentuan spec §10: token tidak
+     * pernah ikut ke dalam URL permintaan — dari sana ia bocor ke pesan
+     * exception dan jejak (trace) PHP.
+     */
+    private function tanpaToken(string $url): string
+    {
+        if (strpos($url, 'access_token=') === false) {
+            return $url;
+        }
+
+        $bagian = explode('?', $url, 2);
+        parse_str($bagian[1] ?? '', $query);
+        unset($query['access_token']);
+
+        return $query === [] ? $bagian[0] : $bagian[0] . '?' . http_build_query($query);
     }
 
     /**
@@ -171,32 +207,63 @@ class MetaAdsClient
         });
 
         try {
-            $response = $this->kirim($url);
+            $percobaan = 0;
 
-            $status  = (int)$response->getStatusCode();
-            $decoded = json_decode((string)$response->getBody(), true);
-            $error   = $this->apiError($decoded);
-        } catch (ConnectException $e) {
-            throw new MetaAdsException('Timeout/koneksi gagal ke Meta Marketing API.', 0, $e);
-        } catch (GuzzleException $e) {
-            throw new MetaAdsException('HTTP request ke Meta Marketing API gagal.', 0, $e);
+            while (true) {
+                $percobaan++;
+
+                // Kegagalan jaringan sudah diulang di dalam kirim().
+                $response = $this->kirim($url);
+
+                $status  = (int)$response->getStatusCode();
+                $decoded = json_decode((string)$response->getBody(), true);
+                $error   = $this->apiError($decoded);
+
+                // Kena batas laju: menunggu satu-satunya jalan keluar; mengulang
+                // segera hanya menambah hitungan kuota.
+                $tunggu = $this->tungguBatasLaju($status, $decoded);
+                if ($tunggu !== null && $percobaan < self::COBA_MAKS) {
+                    sleep($tunggu);
+                    continue;
+                }
+
+                if ($status < 200 || $status >= 300) {
+                    throw new MetaAdsException(sprintf(
+                        'Meta Marketing API menolak (HTTP %d)%s%s',
+                        $status,
+                        $error !== null ? ': ' . $error : '.',
+                        $tunggu !== null ? ' Batas laju Meta penuh — ulangi beberapa menit lagi.' : ''
+                    ));
+                }
+
+                if (!is_array($decoded)) {
+                    throw new MetaAdsException('Respons Meta bukan JSON yang valid.');
+                }
+
+                return [$decoded, $response];
+            }
         } finally {
             restore_error_handler();
         }
+    }
 
-        if ($status < 200 || $status >= 300) {
-            throw new MetaAdsException(sprintf(
-                'Meta Marketing API menolak (HTTP %d)%s',
-                $status,
-                $error !== null ? ': ' . $error : '.'
-            ));
+    /**
+     * Berapa detik perlu ditunggu bila respons ini kena batas laju Meta.
+     * `null` = bukan batas laju, jadi tidak ada yang perlu ditunggu.
+     */
+    private function tungguBatasLaju(int $status, $decoded): ?int
+    {
+        $error = is_array($decoded) ? ($decoded['error'] ?? null) : null;
+        $kode  = is_array($error) ? ($error['code'] ?? null) : null;
+
+        if ($kode === null || !in_array((int)$kode, self::KODE_BATAS_LAJU, true)) {
+            return null;
         }
 
-        if (!is_array($decoded)) {
-            throw new MetaAdsException('Respons Meta bukan JSON yang valid.');
-        }
+        $data  = is_array($error) && is_array($error['error_data'] ?? null) ? $error['error_data'] : [];
+        $menit = (int)($data['estimated_time_to_regain_access'] ?? 0);
 
-        return [$decoded, $response];
+        return $menit > 0 ? min($this->tungguMaks, $menit * 60) : $this->tungguMaks;
     }
 
     /**
@@ -210,13 +277,19 @@ class MetaAdsClient
     private function kirim(string $url): ResponseInterface
     {
         $percobaan = 0;
+        // Token lewat header, bukan query string: URL tidak pernah memuat token
+        // sehingga aman ikut tercetak di pesan exception & jejak PHP.
+        $headers = [
+            'Accept'        => 'application/json',
+            'Authorization' => 'Bearer ' . $this->token(),
+        ];
 
         while (true) {
             $percobaan++;
 
             try {
                 return $this->http->request('GET', $url, [
-                    'headers'     => ['Accept' => 'application/json'],
+                    'headers'     => $headers,
                     'http_errors' => false,
                 ]);
             } catch (ConnectException $e) {

@@ -71,6 +71,15 @@ class FakeMetaClient extends MetaAdsClient
     }
 }
 
+/** Klien palsu yang selalu gagal, untuk menguji pencatatan tarikan gagal. */
+class FakeMetaClientGagal extends MetaAdsClient
+{
+    public function fetchCampaignInsights(string $since, string $until): array
+    {
+        throw new \App\Services\Meta\MetaAdsException('[TEST] Meta tidak bisa dihubungi.');
+    }
+}
+
 function insightRow(string $metaId, string $tanggal, float $spend): array
 {
     return [
@@ -100,7 +109,9 @@ if (!class_exists(MetaAdsPullService::class)) {
 // ── Bersihkan sisa uji sebelumnya ───────────────────────────────────
 $db->query("DELETE FROM marketing_ads_performance WHERE period_year = 2099");
 $db->query("DELETE FROM marketing_campaigns WHERE nama LIKE '[TEST]%'");
-$db->query("DELETE FROM meta_label_objektif WHERE objective = 'OUTCOME_SALES'");
+// SENGAJA hanya baris berawalan '[TEST]': tabel ini diisi manusia (spec §7),
+// jadi menghapus berdasarkan objective sungguhan akan menghapus isian asli.
+$db->query("DELETE FROM meta_label_objektif WHERE objective LIKE '[TEST]%'");
 
 $MC = new \App\Models\ModelMarketingCampaign();
 $id1 = (int)$MC->insert(['nama' => '[TEST] M1', 'status' => 'draft', 'period_month' => $bulan, 'period_year' => $tahun, 'meta_campaign_id' => 'META_TEST_1', 'unit_id' => null]);
@@ -130,11 +141,22 @@ $db->table('marketing_ads_performance')->insert([
     'amount' => 500, 'sumber' => 'meta', 'note' => '[TEST]',
 ]);
 
+// Kombinasi sengaja berawalan '[TEST]': tidak akan pernah bentrok dengan 15
+// kombinasi sungguhan (spec §7), sehingga uji "belum dipetakan → kode mentah"
+// tetap sahih TANPA perlu menghapus label milik pengguna.
 $camps = [
-    'META_TEST_1' => ['daily_budget' => 100000.0, 'objective' => 'OUTCOME_SALES', 'optimization_goal' => 'CONVERSATIONS', 'destination_type' => 'WHATSAPP'],
-    'META_TEST_2' => ['daily_budget' => 100000.0, 'objective' => 'OUTCOME_SALES', 'optimization_goal' => 'CONVERSATIONS', 'destination_type' => 'WHATSAPP'],
-    'META_TEST_4' => ['daily_budget' => 100000.0, 'objective' => 'OUTCOME_SALES', 'optimization_goal' => 'CONVERSATIONS', 'destination_type' => 'WHATSAPP'],
+    'META_TEST_1' => ['daily_budget' => 100000.0, 'objective' => '[TEST] OBJ', 'optimization_goal' => '[TEST] GOAL', 'destination_type' => '[TEST] DEST'],
+    'META_TEST_2' => ['daily_budget' => 100000.0, 'objective' => '[TEST] OBJ', 'optimization_goal' => '[TEST] GOAL', 'destination_type' => '[TEST] DEST'],
+    'META_TEST_4' => ['daily_budget' => 100000.0, 'objective' => '[TEST] OBJ4', 'optimization_goal' => '[TEST] GOAL4', 'destination_type' => '[TEST] DEST4'],
 ];
+
+// Label yang sudah dipetakan manusia harus dipakai apa adanya.
+(new \App\Models\ModelMetaLabelObjektif())->insert([
+    'objective'        => '[TEST] OBJ4',
+    'optimization_goal' => '[TEST] GOAL4',
+    'destination_type' => '[TEST] DEST4',
+    'label'            => '[TEST] Label Empat',
+]);
 
 // ── Tarikan 1 ───────────────────────────────────────────────────────
 $rows1 = [
@@ -157,7 +179,9 @@ ok('M1 sumber = meta', isset($m1[0]) && $m1[0]['sumber'] === 'meta');
 ok('M1 ditarik_pada terisi', !empty($m1[0]['ditarik_pada'] ?? null));
 ok('M1 periode diambil dari tanggal insight', isset($m1[0]) && (int)$m1[0]['period_month'] === 12 && (int)$m1[0]['period_year'] === 2099);
 
-ok('label objective jatuh ke kode mentah, tidak kosong', ($m1[0]['objective'] ?? '') === 'OUTCOME_SALES / CONVERSATIONS / WHATSAPP', (string)($m1[0]['objective'] ?? '-'));
+ok('label objective jatuh ke kode mentah, tidak kosong', ($m1[0]['objective'] ?? '') === '[TEST] OBJ / [TEST] GOAL / [TEST] DEST', (string)($m1[0]['objective'] ?? '-'));
+ok('label objective terpakai bila sudah dipetakan', ($m4[0]['objective'] ?? '') === '[TEST] Label Empat', (string)($m4[0]['objective'] ?? '-'));
+ok('baris baru mengisi saluran bawaan (Meta = Facebook)', count($m1) === 1 && (int)$m1[0]['channel_id'] === 3, (string)($m1[0]['channel_id'] ?? '-'));
 
 ok('baris manual ditimpa angka Meta', count($m2) === 1 && $m2[0]['sumber'] === 'meta' && (float)$m2[0]['amount'] === 150.0, json_encode(array_column($m2, 'amount')));
 ok('baris manual ditimpa, BUKAN digandakan', count($m2) === 1, 'baris=' . count($m2));
@@ -197,10 +221,24 @@ $amtAfterDry = (float)$db->query("SELECT amount FROM marketing_ads_performance W
 ok('dry-run tidak mengubah data', $amtAfterDry === 200.0, (string)$amtAfterDry);
 ok('dry-run tidak menulis log', ($r3['log_id'] ?? null) === null);
 
+// ── Tarikan gagal tetap tercatat di log ─────────────────────────────
+$logSebelum = (int)$db->query("SELECT COUNT(*) c FROM meta_pull_log")->getRow()->c;
+$pesanGagal = '';
+try {
+    (new MetaAdsPullService(new FakeMetaClientGagal()))->pull($tgl, $tgl);
+} catch (\Throwable $e) {
+    $pesanGagal = $e->getMessage();
+}
+$logGagal = $db->query("SELECT status, pesan FROM meta_pull_log ORDER BY id DESC LIMIT 1")->getRow();
+ok('tarikan gagal tetap dicatat', (int)$db->query("SELECT COUNT(*) c FROM meta_pull_log")->getRow()->c === $logSebelum + 1);
+ok('log tarikan gagal berstatus gagal', $logGagal && $logGagal->status === 'gagal', (string)($logGagal->status ?? '-'));
+ok('pesan kegagalan ikut tersimpan', $logGagal && strpos((string)$logGagal->pesan, '[TEST]') !== false, (string)($logGagal->pesan ?? '-'));
+ok('kegagalan diteruskan ke pemanggil', strpos($pesanGagal, '[TEST]') !== false, $pesanGagal);
+
 // ── Bersihkan ───────────────────────────────────────────────────────
 $db->query("DELETE FROM marketing_ads_performance WHERE period_year = 2099");
 $db->query("DELETE FROM marketing_campaigns WHERE nama LIKE '[TEST]%'");
-$db->query("DELETE FROM meta_label_objektif WHERE objective = 'OUTCOME_SALES'");
+$db->query("DELETE FROM meta_label_objektif WHERE objective LIKE '[TEST]%'");
 $db->query("DELETE FROM meta_pull_log WHERE tanggal_mulai = '2099-12-01'");
 ok('data uji dibersihkan', (int)$db->query("SELECT COUNT(*) c FROM marketing_campaigns WHERE nama LIKE '[TEST]%'")->getRow()->c === 0);
 ok('log uji dibersihkan', (int)$db->query("SELECT COUNT(*) c FROM meta_pull_log WHERE tanggal_mulai = '2099-12-01'")->getRow()->c === 0);

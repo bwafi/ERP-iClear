@@ -281,6 +281,85 @@ try {
 ok('menyerah setelah batas percobaan', $errHabis instanceof \App\Services\Meta\MetaAdsException, get_class($errHabis ?? new \stdClass()));
 ok('batas percobaan = 3 (tidak mengulang tanpa henti)', $mockHabis->count() === 1, 'sisa=' . $mockHabis->count());
 
+/*
+ * ── 6. Token lewat header, bukan URL (spec §10) ──────────────────────
+ *
+ * Token di query string ikut tercatat di URL permintaan; dari sana ia bocor
+ * ke pesan exception dan jejak (trace) PHP. URL paging Meta juga membawa
+ * access_token sendiri, jadi URL itu harus dibersihkan sebelum dipakai.
+ */
+$halaman1 = json_encode([
+    'data'   => [['campaign_id' => '1', 'campaign_name' => 'A', 'date_start' => '2026-10-01',
+                  'spend' => '10', 'reach' => '1', 'frequency' => '1', 'impressions' => '1', 'actions' => []]],
+    'paging' => ['next' => 'https://graph.facebook.com/v25.0/act_1/insights?level=campaign&access_token=RAHASIA&after=CURSOR'],
+]);
+$halaman2 = json_encode(['data' => []]);
+
+$diminta  = [];
+$mockUri  = new MockHandler([new Response(200, $headers, $halaman1), new Response(200, $headers, $halaman2)]);
+$stackUri = HandlerStack::create($mockUri);
+$stackUri->push(function (callable $handler) use (&$diminta) {
+    return function ($request, $options) use ($handler, &$diminta) {
+        $diminta[] = $request;
+
+        return $handler($request, $options);
+    };
+});
+
+$resUri = (new \App\Services\Meta\MetaAdsClient(new Client(['handler' => $stackUri])))
+    ->fetchCampaignInsights('2026-10-01', '2026-10-01');
+
+ok('paging mengikuti halaman berikutnya', count($diminta) === 2 && count($resUri['rows'] ?? []) === 1, 'permintaan=' . count($diminta));
+ok('URL permintaan tidak memuat access_token', strpos((string)$diminta[0]->getUri(), 'access_token') === false, (string)$diminta[0]->getUri());
+ok('URL paging dibersihkan dari access_token', strpos((string)$diminta[1]->getUri(), 'access_token') === false, (string)$diminta[1]->getUri());
+ok('token TIDAK muncul di URL permintaan mana pun', $secret === '' || (strpos((string)$diminta[0]->getUri(), $secret) === false && strpos((string)$diminta[1]->getUri(), $secret) === false));
+ok('parameter lain di URL paging tetap ada', strpos((string)$diminta[1]->getUri(), 'after=CURSOR') !== false, (string)$diminta[1]->getUri());
+ok('token dikirim lewat header Authorization', strpos($diminta[0]->getHeaderLine('Authorization'), 'Bearer ') === 0, $diminta[0]->getHeaderLine('Authorization'));
+
+/*
+ * ── 7. Batas laju Meta: tunggu lalu ulangi (spec §9) ─────────────────
+ */
+function batasLajuBody(int $kode = 80004): string
+{
+    return json_encode(['error' => [
+        'message'    => 'There have been too many calls from this ad-account.',
+        'type'       => 'OAuthException',
+        'code'       => $kode,
+        'error_data' => ['estimated_time_to_regain_access' => 1],
+    ]]);
+}
+
+$errLaju = null;
+$resLaju = [];
+$klienLaju = new \App\Services\Meta\MetaAdsClient(new Client(['handler' => HandlerStack::create(new MockHandler([
+    new Response(429, ['Content-Type' => 'application/json'], batasLajuBody()),
+    new Response(200, $headers, $body),
+]))]));
+$klienLaju->tungguMaks = 0; // jangan benar-benar menunggu di uji
+try {
+    $resLaju = $klienLaju->fetchCampaignInsights('2026-10-01', '2026-10-01');
+} catch (\Throwable $e) {
+    $errLaju = get_class($e) . ': ' . $e->getMessage();
+}
+ok('batas laju ditunggu lalu diulang sampai berhasil', $errLaju === null && count($resLaju['rows'] ?? []) === 2, (string)$errLaju);
+
+$mockLajuHabis = new MockHandler([
+    new Response(429, ['Content-Type' => 'application/json'], batasLajuBody()),
+    new Response(429, ['Content-Type' => 'application/json'], batasLajuBody()),
+    new Response(429, ['Content-Type' => 'application/json'], batasLajuBody()),
+]);
+$pesanLaju = '';
+try {
+    $klienHabis = new \App\Services\Meta\MetaAdsClient(new Client(['handler' => HandlerStack::create($mockLajuHabis)]));
+    $klienHabis->tungguMaks = 0;
+    $klienHabis->fetchCampaignInsights('2026-10-01', '2026-10-01');
+} catch (\Throwable $e) {
+    $pesanLaju = $e->getMessage();
+}
+ok('batas laju berhenti setelah batas percobaan', $mockLajuHabis->count() === 0, 'sisa=' . $mockLajuHabis->count());
+ok('pesan batas laju bisa ditindaklanjuti', strpos($pesanLaju, 'Batas laju') !== false, $pesanLaju);
+ok('pesan batas laju menyebut kode Meta', strpos($pesanLaju, '80004') !== false, $pesanLaju);
+
 echo "\n============================================================\n";
 echo "PASS: {$pass}   FAIL: {$fail}\n";
 echo "============================================================\n";

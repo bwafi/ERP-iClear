@@ -56,8 +56,9 @@
             </span>
             <span class="text-muted small">
                 Kuota: <?= (int)$logMeta->call_count ?> panggilan
-                · <?= number_format((float)$logMeta->total_time, 0, ',', '.') ?> ms
-                · terpakai <?= number_format((float)$logMeta->acc_id_util_pct, 2, ',', '.') ?>%
+                · waktu <?= number_format((float)$logMeta->total_time, 0, ',', '.') ?>%
+                · CPU <?= number_format((float)$logMeta->total_cputime, 0, ',', '.') ?>%
+                · akun terpakai <?= number_format((float)$logMeta->acc_id_util_pct, 2, ',', '.') ?>%
                 · <?= esc((string)$logMeta->tier) ?>
             </span>
             <?php if ((int)$logMeta->estimated_time_to_regain_access > 0) : ?>
