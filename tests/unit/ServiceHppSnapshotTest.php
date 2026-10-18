@@ -41,4 +41,21 @@ final class ServiceHppSnapshotTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         ServiceHppSnapshot::resolveWarrantyReplacement($existingItem, 2, 250000);
     }
+
+    public function testSecondClaimUsesNewHppWithoutChangingFirstClaim(): void
+    {
+        $firstClaim = (object) ['jumlah' => 1, 'hpp_satuan' => 230000];
+
+        $this->assertSame(230000, ServiceHppSnapshot::resolveWarrantyClaimIssue($firstClaim, 1, 250000));
+        $this->assertSame(250000, ServiceHppSnapshot::resolveWarrantyClaimIssue(null, 1, 250000));
+        $this->assertSame(230000, $firstClaim->hpp_satuan);
+    }
+
+    public function testRecordedClaimCannotBeRemovedOnFormResubmit(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        ServiceHppSnapshot::resolveWarrantyClaimIssue(
+            (object) ['jumlah' => 1, 'hpp_satuan' => 230000], 0, 250000
+        );
+    }
 }
