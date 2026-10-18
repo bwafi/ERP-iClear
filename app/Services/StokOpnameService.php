@@ -8,6 +8,7 @@ use App\Models\ModelStokOpnameDraft;
 use App\Models\ModelStokOpnamePeriode;
 use App\Models\ModelHppBarang;
 use App\Models\ModelStokAwal;
+use App\Services\Inventory\ProductInventoryScope;
 
 /**
  * StokOpnameService
@@ -31,14 +32,13 @@ class StokOpnameService
 
     /**
      * Awalan nama barang yang BUKAN produk (jasa/internal) sehingga tidak
-     * relevan dihitung fisik pada stok opname. PUP, JASA, dan MESIN adalah
-     * penamaan item jasa, bukan barang berstok yang bisa dihitung.
+     * relevan dihitung fisik pada stok opname. Penanda non-produk digunakan
+     * bersama Kartu Stok agar nilai jasa tidak masuk persediaan.
      *
      * Dicocokkan dari AWAL nama (LIKE 'PUP%'); "Kuras Mesin" tetap ikut
      * karena "MESIN" bukan di awal. Samakan mental model dengan penamaan
      * kategori di StokAwal::input_stokawal().
      */
-    private const NON_PRODUK_AWALAN = ['PUP', 'JASA', 'MESIN'];
 
     protected $db;
     protected $model;
@@ -221,31 +221,20 @@ class StokOpnameService
 
     /**
      * Terapkan pengecualian barang non-produk (jasa) pada builder:
-     * NOT LIKE 'PUP%' / 'JASA%' / 'MESIN%', dikelompokkan agar aman
-     * disandingkan kondisi lain dengan AND.
+     * Disandingkan kondisi lain dengan AND.
      */
     private function kecualikanBukanProduk($builder, string $kolomNama = 'nama_barang'): void
     {
-        $builder->groupStart();
-        foreach (self::NON_PRODUK_AWALAN as $awalan) {
-            $builder->notLike($kolomNama, $awalan, 'after');
-        }
-        $builder->groupEnd();
+        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama), null, false);
     }
 
     /**
      * Kebalikan dari kecualikanBukanProduk(): cocokkan HANYA barang non-produk
-     * (LIKE 'PUP%' OR 'JASA%' OR 'MESIN%'). Dipakai saat membuang baris jasa.
+     * Dipakai saat membuang baris jasa.
      */
     private function saringBukanProduk($builder, string $kolomNama = 'nama_barang'): void
     {
-        $builder->groupStart();
-        foreach (self::NON_PRODUK_AWALAN as $i => $awalan) {
-            $i === 0
-                ? $builder->like($kolomNama, $awalan, 'after')
-                : $builder->orLike($kolomNama, $awalan, 'after');
-        }
-        $builder->groupEnd();
+        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama, false), null, false);
     }
 
     /**
