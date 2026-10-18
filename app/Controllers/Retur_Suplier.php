@@ -177,6 +177,17 @@ class Retur_Suplier extends BaseController
                 }
             }
 
+            if (! $db->table('kredit_retur_suplier')->insert([
+                'no_retur_suplier' => $noRetur,
+                'suplier_id' => $supplierId,
+                'unit_id' => $useridunit,
+                'status' => 'menunggu',
+                'nominal' => 0,
+                'created_at' => date('Y-m-d H:i:s'),
+            ])) {
+                throw new \RuntimeException('Kredit retur menunggu persetujuan gagal dicatat.');
+            }
+
             if ($db->transStatus() === false || ! $db->transCommit()) {
                 throw new \RuntimeException('Transaksi retur supplier gagal disimpan.');
             }
@@ -185,7 +196,7 @@ class Retur_Suplier extends BaseController
         } catch (\Throwable $error) {
             $db->transRollback();
             log_message('error', 'Retur_Suplier::insert gagal: ' . $error->getMessage());
-            return redirect()->to(base_url('/retur_suplier'))->with('gagal', 'Retur supplier tidak dapat diproses. Periksa jumlah dan unit pembelian.');
+            return redirect()->to(base_url('/retur_suplier'))->with('gagal', 'Retur supplier tidak dapat diproses. Periksa jumlah, unit, dan catatan Barang Rusak.');
         }
     }
 }
