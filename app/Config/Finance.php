@@ -246,9 +246,8 @@ class Finance extends BaseConfig
         '2' => [1, 2], // CV       — shared 2 unit
         '5' => [3],    // ALFARIZKI — unit 3 saja
         '1' => [4],    // SABRINA  — unit 4 saja
+        '6' => [5],    // GENTENG  — unit 5 saja (BNI 2115926040)
         '3' => [],     // FINANCE  — BUKAN rekening operasional unit
-        // GENTENG (unit 5) BELUM ADA di sini: nomor rekening 1802016123
-        // belum diverifikasi Finance. Jangan menambahkan sebelum konfirmasi.
     ];
 
     /**
@@ -271,6 +270,7 @@ class Finance extends BaseConfig
         '2' => ['unit_id' => null, 'is_shared' => 1], // CV
         '5' => ['unit_id' => 3,    'is_shared' => 0], // ALFARIZKI
         '1' => ['unit_id' => 4,    'is_shared' => 0], // SABRINA
+        '6' => ['unit_id' => 5,    'is_shared' => 0], // GENTENG
         '3' => ['unit_id' => null, 'is_shared' => 1], // FINANCE
     ];
 
