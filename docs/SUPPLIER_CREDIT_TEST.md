@@ -23,11 +23,13 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 - `php tests/smoke/warranty_profit.php`
 - `php tests/smoke/stock_valuation.php`
 - `php tests/integration/WarrantyStockMySql.php` pada MySQL lokal yang boleh membuat database sintetis sementara.
+- Jalankan `WarrantyExpenseJournalTest` dan `WarrantyJournalReconciliationTest` pada PHPUnit, lalu cek Posisi Keuangan: jumlah mutasi tanpa jurnal, jurnal tidak sesuai, dan jurnal tanpa mutasi harus nol.
 - Jalankan PHPUnit pada runtime PHP yang cocok dengan dependensi proyek.
 - Bandingkan `SUM(pembelian.sisa)` dengan total utang supplier pada dashboard dan posisi `hutang_piutang`.
 - Bandingkan `SUM(kredit_retur_suplier.sisa_kredit)` berstatus disetujui dengan piutang supplier.
 - Setiap referensi `kredit_retur_suplier` pada `jurnal` harus memiliki total debit sama dengan kredit.
 - Jangan melakukan merge atau deployment produksi sebelum seluruh langkah di atas lulus pada commit TEST yang sama.
+- Di TEST, admin root pilih akun beban dan persediaan pada `/akun_jurnal_garansi`; simpan satu klaim sintetis, ulangi simpan, dan buktikan hanya ada satu mutasi stok serta dua baris jurnal seimbang dengan referensi mutasi tersebut.
 
 ## Batasan historis
 
