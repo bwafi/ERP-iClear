@@ -238,6 +238,27 @@ class DigitalMarketingKpiService
     }
 
     /** Reporting: % campaign selesai (done) terhadap total campaign pada periode. */
+    /**
+     * Laporan mingguan periode ini: skor ketepatan waktu kirim.
+     *
+     * @return array{terkirim: array<int,string>, skor: ?float}
+     */
+    public function reportingWeekly(int $month, int $year): array
+    {
+        $terkirim = [];
+        foreach ($this->db->table('marketing_laporan_mingguan')
+            ->where('period_year', $year)
+            ->where('period_month', $month)
+            ->get()->getResultArray() as $row) {
+            $terkirim[(int)$row['minggu']] = (string)$row['submitted_at'];
+        }
+
+        return [
+            'terkirim' => $terkirim,
+            'skor'     => WeeklyReport::score($month, $year, $terkirim, date('Y-m-d')),
+        ];
+    }
+
     public function reportingCoverage(int $month, int $year): array
     {
         $db = $this->db;
@@ -413,6 +434,18 @@ class DigitalMarketingKpiService
                 ];
 
             case 'REPORTING':
+                // Sejak 2026-11 REPORTING = laporan mingguan tepat waktu.
+                if ((int)$year * 100 + (int)$month >= 202611) {
+                    $rw = $this->reportingWeekly($month, $year);
+                    return [
+                        'achievement' => $rw['skor'],
+                        'target'      => 100,
+                        'actual'      => $rw['skor'],
+                        'shortfall'   => $rw['skor'] === null ? null : round(max(100 - $rw['skor'], 0), 2),
+                        'source'      => 'Laporan mingguan tepat waktu',
+                    ];
+                }
+
                 $rc = $this->reportingCoverage($month, $year);
                 $pct = $rc['total'] > 0 ? round($rc['done'] / $rc['total'] * 100, 2) : null;
                 return [
