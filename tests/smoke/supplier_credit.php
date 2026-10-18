@@ -14,6 +14,10 @@ if (SupplierCreditAllocator::plan([11 => 500000, 12 => 300000], 200000) !== [11 
     throw new RuntimeException('Kredit sebagian tidak boleh memotong faktur kedua.');
 }
 
+if (SupplierCreditAllocator::split(500000, 300000) !== ['applied' => 300000, 'remaining' => 200000]) {
+    throw new RuntimeException('Sisa kredit supplier harus dibawa ke tagihan berikutnya.');
+}
+
 try {
     SupplierCreditAllocator::plan([11 => 500000], 600000);
     throw new RuntimeException('Kredit melebihi utang tidak ditolak.');
@@ -23,4 +27,4 @@ try {
     }
 }
 
-echo "Kredit Supplier: 3 skenario sintetis lulus.\n";
+echo "Kredit Supplier: 4 skenario sintetis lulus.\n";
