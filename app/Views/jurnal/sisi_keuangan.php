@@ -12,6 +12,22 @@
     </div>
 </div>
 
+<div class="alert <?= $reconciliation['selisih'] === 0 && $reconciliation['selisih_jurnal'] === 0 && $reconciliation['akun_tidak_terklasifikasi'] === [] && $reconciliation['jumlah_akun'] > 0 ? 'alert-info' : 'alert-warning' ?> mx-4">
+    <strong>Rekonsiliasi Neraca indikatif</strong> (saldo jurnal sampai <?= esc($reconciliation_date) ?>):
+    Aset Rp <?= number_format($reconciliation['aset'], 0, ',', '.') ?>;
+    Kewajiban Rp <?= number_format($reconciliation['kewajiban'], 0, ',', '.') ?>;
+    Ekuitas Rp <?= number_format($reconciliation['ekuitas'], 0, ',', '.') ?>;
+    Laba berjalan Rp <?= number_format($reconciliation['laba_berjalan'], 0, ',', '.') ?>;
+    Selisih Rp <?= number_format($reconciliation['selisih'], 0, ',', '.') ?>.
+    <?php if ($reconciliation['selisih_jurnal'] !== 0): ?>
+        Jurnal tidak seimbang Rp <?= number_format($reconciliation['selisih_jurnal'], 0, ',', '.') ?>.
+    <?php endif; ?>
+    <?php if ($reconciliation['akun_tidak_terklasifikasi'] !== []): ?>
+        Akun belum terklasifikasi: <?= esc(implode(', ', $reconciliation['akun_tidak_terklasifikasi'])) ?>.
+    <?php endif; ?>
+    <strong>Belum final</strong> sampai saldo awal, nilai persediaan, dan transaksi antarcabang diverifikasi.
+</div>
+
 <div class="card w-100 position-relative overflow-hidden">
     <div class="px-4 py-3 border-bottom">
         <h5 class="mb-0">Ringkasan Posisi Keuangan per Parent Akun</h5>
