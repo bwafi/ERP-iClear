@@ -407,12 +407,15 @@ class KpiCalculationService
                 }
             } elseif ($managerData !== null) {
                 // KPI Manager (jabatan 34): target/realisasi dari ManagerKpiService.
+                // TARGET_CABANG membawa rincian per-cabang (unit_count/reached/cabang).
                 $targetInfo = [
-                    'target'    => $managerData['target'],
-                    'actual'    => $managerData['actual'],
-                    'shortfall' => $managerData['shortfall'],
-                    'ho'        => true,
-                    'cabang'    => null,
+                    'target'     => $managerData['target'] ?? null,
+                    'actual'     => $managerData['actual'] ?? null,
+                    'shortfall'  => $managerData['shortfall'] ?? null,
+                    'unit_count' => $managerData['unit_count'] ?? null,
+                    'reached'    => $managerData['reached'] ?? null,
+                    'ho'         => true,
+                    'cabang'     => $managerData['cabang'] ?? null,
                 ];
             }
 

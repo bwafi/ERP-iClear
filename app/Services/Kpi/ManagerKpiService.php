@@ -206,34 +206,50 @@ class ManagerKpiService
     {
         $comp = $this->componentModel->where('code', 'OMSET_CABANG')->first();
         if (!$comp) {
-            return ['achievement' => null, 'target' => null, 'actual' => null, 'shortfall' => null, 'source' => ''];
+            return ['achievement' => null, 'target' => null, 'actual' => null, 'shortfall' => null, 'unit_count' => null, 'reached' => null, 'cabang' => null, 'source' => ''];
         }
 
         $units   = (new KpiCalculationService())->branchUnits();
         $omset   = new OmsetCabangCalculator();
         $reached = 0;
         $n       = 0;
+        $detail  = [];
 
         foreach ($units as $u) {
-            $unit   = (int) $u['unit'];
-            $target = $this->targetModel->getTargetByKpiAndUnit((int) $comp->id, $unit, $targetContext, $date, 40);
-            if (!$target || $target->target_value === null || (float) $target->target_value <= 0) {
+            $unit     = (int) $u['unit'];
+            $target   = $this->targetModel->getTargetByKpiAndUnit((int) $comp->id, $unit, $targetContext, $date, 40);
+            $targetHo = ($target && $target->target_value !== null) ? (float) $target->target_value : null;
+            $actual   = $omset->calculate(0, $unit, $month, $year);
+
+            if ($targetHo === null || $targetHo <= 0) {
                 continue; // cabang tanpa target tidak ikut hitungan.
             }
 
-            if ($omset->calculate(0, $unit, $month, $year) >= (float) $target->target_value) {
+            $isReached = $actual >= $targetHo;
+            if ($isReached) {
                 $reached++;
             }
             $n++;
+
+            $detail[] = [
+                'unit'         => $unit,
+                'target_ho'    => round($targetHo),
+                'actual'       => round($actual),
+                'reached'      => $isReached,
+                'shortfall_ho' => round(max($targetHo - $actual, 0)),
+            ];
         }
 
         $value = $n > 0 ? round($reached / $n * 100, 4) : null;
 
         return [
             'achievement' => $value,
-            'target'      => $n,
-            'actual'      => $reached,
-            'shortfall'   => $value === null ? null : max($n - $reached, 0),
+            'target'      => null, // bukan nilai rupiah: target = jumlah cabang ber-target.
+            'actual'      => null,
+            'shortfall'   => $n > 0 ? max($n - $reached, 0) : null,
+            'unit_count'  => $n > 0 ? $n : null,
+            'reached'     => $n > 0 ? $reached : null,
+            'cabang'      => $detail,
             'source'      => 'Cabang tercapai / total cabang',
         ];
     }
