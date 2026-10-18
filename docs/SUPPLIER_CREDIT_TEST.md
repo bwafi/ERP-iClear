@@ -4,7 +4,7 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 
 ## Urutan
 
-1. Pasang branch PR dan jalankan migrasi `2026-10-18-000500` lalu `000600`.
+1. Pasang branch PR dan jalankan migrasi `2026-10-18-000500`, `000600`, lalu `000700`.
 2. Catat saldo awal Kartu Stok, utang supplier, piutang supplier, dan jurnal.
 3. Buat pembelian simulasi supplier A: dua faktur tempo, Rp500.000 dan Rp300.000, satu batch barang yang dapat diretur.
 4. Catat dua barang pada **Barang Rusak**. Stok jual turun dua unit.
@@ -19,6 +19,7 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 
 - `php tests/smoke/linked_stock_view.php`
 - `php tests/smoke/supplier_credit.php`
+- `php tests/smoke/warranty_stock_view.php`
 - Jalankan PHPUnit pada runtime PHP yang cocok dengan dependensi proyek.
 - Bandingkan `SUM(pembelian.sisa)` dengan total utang supplier pada dashboard dan posisi `hutang_piutang`.
 - Bandingkan `SUM(kredit_retur_suplier.sisa_kredit)` berstatus disetujui dengan piutang supplier.
@@ -28,3 +29,7 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 ## Batasan historis
 
 Retur lama tanpa hubungan ke Barang Rusak tidak direklasifikasi otomatis. Dokumen lama perlu rekonsiliasi manual agar stok historis tidak berubah diam-diam. Kredit lama yang pernah dicatat manual di Hutang Piutang juga perlu ditandai dan direkonsiliasi agar tidak diakui dua kali.
+
+## Garansi pengganti
+
+Migrasi `000700` menambahkan mutasi stok tersendiri untuk sparepart pengganti. Simpan ulang formulir klaim yang sama tidak boleh mengurangi stok kedua kali. HPP pengganti tetap disimpan pada baris service dan pada mutasi tersebut. Klaim kedua untuk **barang yang sama** belum mendukung lapisan HPP baru dalam baris service yang sama; jangan mengubah kuantitas lama atau menganggapnya sebagai penggantian baru tanpa desain histori per klaim. Stok TEST dan jurnal harus direkonsiliasi sebelum rilis; migrasi ini belum mencatat jurnal beban garansi otomatis.
