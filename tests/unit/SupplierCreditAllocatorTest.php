@@ -28,4 +28,12 @@ final class SupplierCreditAllocatorTest extends TestCase
         $this->expectException(\RuntimeException::class);
         SupplierCreditAllocator::plan([11 => 500000], 600000);
     }
+
+    public function testCarriesUnusedCreditForward(): void
+    {
+        $this->assertSame(
+            ['applied' => 300000, 'remaining' => 200000],
+            SupplierCreditAllocator::split(500000, 300000)
+        );
+    }
 }
