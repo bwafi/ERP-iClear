@@ -19,7 +19,8 @@ class ModelBarangRusak extends Model
         'unit_idunit',
         'input_by',
         'created_at',
-        'keterangan'
+        'keterangan',
+        'claim_id'
     ];
 
     public function getBarangRusak()
