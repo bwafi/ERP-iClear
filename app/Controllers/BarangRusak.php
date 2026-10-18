@@ -74,42 +74,94 @@ class BarangRusak extends BaseController
 
     public function insert_barang_rusak()
     {
-
-
-
-        $idbarang       = $this->request->getPost('idbarang');
-        $idpembelian    = $this->request->getPost('idpembelian');
-        $no_batch       = $this->request->getPost('no_batch');
-        $kode_barang    = $this->request->getPost('kode_barang');
-        $nama_barang    = $this->request->getPost('nama_barang');
-        $imei           = $this->request->getPost('imei');
-        $nama_suplier   = $this->request->getPost('nama_suplier');
-        $tanggal        = $this->request->getPost('tanggal');
-        $jumlah_total   = $this->request->getPost('jumlah_total');
-        $jumlah_rusak   = $this->request->getPost('jumlah_rusak');
-        $tanggal_rusak  = $this->request->getPost('tanggal_rusak');
-        $keterangan     = $this->request->getPost('keterangan');
-
-
-        $totalBarang = count($idbarang);
-
-
-        for ($i = 0; $i < $totalBarang; $i++) {
-            $data = [
-                'idpembelian'    => $idpembelian[$i],
-                'no_nota_sup'       => $no_batch[$i],
-                'barang_idbarang'       => $idbarang[$i],
-                'jumlah'   => $jumlah_rusak[$i],
-                'tanggal_rusak'  => $tanggal_rusak[$i],
-                'unit_idunit' => $this->request->getPost('unit_idunit'),
-                'input_by' => session('ID_AKUN'),
-                'keterangan'     => $keterangan[$i],
-            ];
-
-
-            $this->BarangRusakModel->insert($data);
+        $products = $this->request->getPost('idbarang');
+        $purchases = $this->request->getPost('idpembelian');
+        $batches = $this->request->getPost('no_batch');
+        $quantities = $this->request->getPost('jumlah_rusak');
+        $dates = $this->request->getPost('tanggal_rusak');
+        $notes = $this->request->getPost('keterangan');
+        $unitId = (int) session('ID_UNIT');
+        $count = is_array($products) ? count($products) : 0;
+        if ($unitId <= 0 || $count === 0 || ! is_array($purchases) || ! is_array($batches)
+            || ! is_array($quantities) || ! is_array($dates) || ! is_array($notes)
+            || count($purchases) !== $count || count($batches) !== $count
+            || count($quantities) !== $count || count($dates) !== $count || count($notes) !== $count
+            || array_keys($products) !== array_keys($purchases) || array_keys($products) !== array_keys($batches)
+            || array_keys($products) !== array_keys($quantities) || array_keys($products) !== array_keys($dates)
+            || array_keys($products) !== array_keys($notes)) {
+            return redirect()->back()->with('gagal', 'Data barang rusak tidak lengkap.');
         }
-        session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
-        return redirect()->to(base_url('/barang_rusak'));
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $seen = [];
+            foreach ($products as $index => $productId) {
+                $productId = (int) $productId;
+                $purchaseId = (int) $purchases[$index];
+                $quantity = (int) $quantities[$index];
+                $batch = trim((string) $batches[$index]);
+                $date = (string) $dates[$index];
+                $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+                $dateErrors = \DateTimeImmutable::getLastErrors();
+                $key = $purchaseId . ':' . $productId . ':' . $batch;
+                if ($purchaseId <= 0 || $productId <= 0 || $quantity <= 0 || $batch === '' || isset($seen[$key])
+                    || ! $parsedDate || $parsedDate->format('Y-m-d') !== $date
+                    || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))) {
+                    throw new \RuntimeException('Baris barang rusak tidak valid.');
+                }
+                $seen[$key] = true;
+
+                $purchase = $db->query(
+                    'SELECT unit_idunit FROM ' . $db->prefixTable('pembelian') . ' WHERE idpembelian = ? FOR UPDATE',
+                    [$purchaseId]
+                )->getRow();
+                if (! $purchase || (int) $purchase->unit_idunit !== $unitId) {
+                    throw new \RuntimeException('Pembelian tidak sesuai unit.');
+                }
+
+                $purchased = $db->table('detail_pembelian')
+                    ->selectSum('jumlah')
+                    ->where('pembelian_idpembelian', $purchaseId)
+                    ->where('barang_idbarang', $productId)
+                    ->where('no_batch', $batch)
+                    ->where('unit_idunit', $unitId)
+                    ->get()->getRow();
+                $previous = $db->table('barang_rusak')
+                    ->selectSum('jumlah')
+                    ->where('idpembelian', $purchaseId)
+                    ->where('barang_idbarang', $productId)
+                    ->where('no_nota_sup', $batch)
+                    ->where('unit_idunit', $unitId)
+                    ->get()->getRow();
+                if ($quantity > (int) ($purchased->jumlah ?? 0) - (int) ($previous->jumlah ?? 0)) {
+                    throw new \RuntimeException('Jumlah rusak melebihi pembelian.');
+                }
+
+                if (! $this->BarangRusakModel->insert([
+                    'idpembelian' => $purchaseId,
+                    'no_nota_sup' => $batch,
+                    'barang_idbarang' => $productId,
+                    'jumlah' => $quantity,
+                    'tanggal_rusak' => $date,
+                    'unit_idunit' => $unitId,
+                    'input_by' => session('ID_AKUN'),
+                    'keterangan' => (string) $notes[$index],
+                ])) {
+                    throw new \RuntimeException('Barang rusak gagal disimpan.');
+                }
+            }
+
+            if ($db->transStatus() === false || ! $db->transCommit()) {
+                throw new \RuntimeException('Transaksi barang rusak gagal disimpan.');
+            }
+
+            return redirect()->to(base_url('/barang_rusak'))->with('sukses', 'Data Berhasil Di Simpan');
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            log_message('error', 'BarangRusak::insert_barang_rusak gagal: ' . $error->getMessage());
+            return redirect()->back()->with('gagal', 'Barang rusak tidak dapat disimpan. Periksa jumlah, nota, dan unit.');
+        }
     }
 }
