@@ -317,9 +317,18 @@ class Riwayat_Service extends BaseController
         $db->transBegin();
 
         try {
-            $service = $db->table('service')->where('idservice', $idservice)->get()->getRow();
+            $service = $db->query(
+                'SELECT * FROM ' . $db->prefixTable('service') . ' WHERE idservice = ? FOR UPDATE',
+                [$idservice]
+            )->getRow();
             if (! $service) {
                 throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+            $claimed = $db->table('riwayat_claim_garansi')
+                ->where('service_idservice', $idservice)
+                ->countAllResults();
+            if ($claimed > 0) {
+                throw new \RuntimeException('Sparepart service yang sudah diklaim garansi tidak boleh ditulis ulang.');
             }
 
             // Ambil snapshot lama sebelum mengubah service_sparepart. Invoice
@@ -351,6 +360,9 @@ class Riwayat_Service extends BaseController
                     throw new \RuntimeException('Data sparepart tidak valid.');
                 }
                 $jumlah = (int) ($produk['jumlah'] ?? 0);
+                if ($jumlah <= 0 || in_array($id, $submittedIds, true)) {
+                    throw new \RuntimeException('Jumlah sparepart harus positif dan barang tidak boleh duplikat.');
+                }
                 $harga = $this->rupiahToInt($produk['harga'] ?? '0');
                 $diskonItem = $this->rupiahToInt($produk['diskon'] ?? '0');
                 $total = $this->rupiahToInt($produk['total'] ?? '0');
