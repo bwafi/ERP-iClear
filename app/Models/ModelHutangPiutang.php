@@ -48,6 +48,9 @@ class ModelHutangPiutang extends Model
         'unit_id',
         'input_by',
         'deleted',
+        'kas_keluar_id',
+        'metode',
+        'bank_idbank',
     ];
 
     protected $useTimestamps = true;

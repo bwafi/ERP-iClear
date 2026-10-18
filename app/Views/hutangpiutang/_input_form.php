@@ -56,6 +56,19 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
             <label class="form-label">Jatuh Tempo</label>
             <input type="date" name="jatuh_tempo" id="jatuh_tempo" class="form-control" value="<?= esc($old('jatuh_tempo')) ?>">
         </div>
+        <div class="col-12 d-none" id="wrap-metode">
+            <label class="form-label">Metode Pencairan</label>
+            <select name="metode" id="metode" class="form-select">
+                <option value="tunai">Tunai (kas laci)</option>
+                <option value="transfer">Transfer bank</option>
+            </select>
+            <select name="bank_idbank" id="bank_idbank" class="form-select mt-2 d-none">
+                <option value="">-- Pilih Rekening --</option>
+                <?php foreach (($bank ?? []) as $b) : ?>
+                    <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank . ' - ' . $b->norek) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <div class="col-md-6">
             <label class="form-label">Total</label>
             <input type="text" name="total" id="hp-total" class="form-control" value="<?= esc($old('total')) ?>" required>
@@ -117,6 +130,9 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
         var ketWajib = document.getElementById('ket-wajib');
         var wrapJatuhTempo = document.getElementById('wrap-jatuh-tempo');
         var elJatuhTempo = document.getElementById('jatuh_tempo');
+        var wrapMetode = document.getElementById('wrap-metode');
+        var elMetode = document.getElementById('metode');
+        var elBank = document.getElementById('bank_idbank');
 
         function pihakOptions(jenis) {
             return jenis === 'hutang' ? ['suplier', 'teknisi', 'lainnya'] : ['suplier', 'pelanggan', 'pegawai', 'lainnya'];
@@ -187,6 +203,18 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
             elJatuhTempo.readOnly = kasbon;
             elJatuhTempo.classList.toggle('bg-light', kasbon);
             if (kasbon) { elJatuhTempo.value = firstOfNextMonth(); }
+
+            // Metode pencairan hanya relevan untuk kasbon.
+            wrapMetode.classList.toggle('d-none', !kasbon);
+            if (!kasbon) { elMetode.value = 'tunai'; }
+            syncBank();
+        }
+
+        function syncBank() {
+            var transfer = elMetode.value === 'transfer';
+            elBank.classList.toggle('d-none', !transfer);
+            elBank.required = transfer;
+            if (!transfer) { elBank.value = ''; }
         }
 
         function syncPihak() {
@@ -206,6 +234,7 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
             if (hrd[elSumber.value].pihak) { sync(); } else { elPihakTipe.value = ''; sync(); }
         });
         elPihakTipe.addEventListener('change', syncPihak);
+        elMetode.addEventListener('change', syncBank);
 
         if (INIT.sumber && hrd[INIT.sumber]) { elSumber.value = INIT.sumber; }
         if (INIT.jenis) { elJenis.value = INIT.jenis; }

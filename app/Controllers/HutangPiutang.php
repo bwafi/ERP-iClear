@@ -124,6 +124,7 @@ class HutangPiutang extends BaseController
             'pegawai' => $this->service->getPegawaiOptions(),
             'suplier' => $this->service->getSuplierOptions(),
             'teknisi' => $this->service->getTeknisiOptions(),
+            'bank' => $this->service->getBankOptions(),
             'units' => $this->scopeService->resolveAllowedUnits(),
             'unit_id' => $this->resolveUnitId(),
         ]);
@@ -150,6 +151,8 @@ class HutangPiutang extends BaseController
             'tanggal' => $this->request->getPost('tanggal') ?: date('Y-m-d'),
             'jatuh_tempo' => $this->request->getPost('jatuh_tempo'),
             'total' => $this->request->getPost('total'),
+            'metode' => (string) $this->request->getPost('metode'),
+            'bank_idbank' => $this->request->getPost('bank_idbank'),
             'uraian' => $this->request->getPost('uraian'),
             'keterangan' => $this->request->getPost('keterangan'),
             'unit_id' => (int) ($this->request->getPost('unit_id') ?: session('ID_UNIT')),

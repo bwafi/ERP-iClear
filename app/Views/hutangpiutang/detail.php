@@ -94,7 +94,7 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
 
                 <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="<?= base_url('hutangpiutang/cetak/' . $row->id) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">Cetak Bukti</a>
-                    <?php if ($can_input && $authoritative && $row->status !== 'lunas') : ?>
+                    <?php if ($can_input && $authoritative && $row->status !== 'lunas' && $row->sumber_tipe !== 'kasbon') : ?>
                         <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bayar-modal">Catat Pembayaran</button>
                     <?php endif; ?>
                     <?php if ($bisaKompensasi) : ?>

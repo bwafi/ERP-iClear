@@ -60,6 +60,23 @@ $svc = new HutangPiutangService();
 $createdKasbon = [];
 $createdKas = [];
 
+// Bersihkan sisa run sebelumnya (hanya baris bertanda SMOKE-KAS).
+$stale = $db->table('hutang_piutang')->select('id,kas_keluar_id')->like('uraian', 'SMOKE-KAS')->get()->getResult();
+if ($stale) {
+    $staleIds = array_map(static fn ($r) => (int) $r->id, $stale);
+    $staleKas = array_filter(array_map(static fn ($r) => (int) ($r->kas_keluar_id ?? 0), $stale));
+    $stalePay = array_column($db->table('pembayaran_hutang_piutang')->select('id')->whereIn('hutang_piutang_id', $staleIds)->get()->getResultArray(), 'id');
+    if ($stalePay) {
+        $db->table('jurnal')->where('tabel_referensi', 'pembayaran_hutang_piutang')->whereIn('id_referensi', $stalePay)->delete();
+    }
+    $db->table('jurnal')->where('tabel_referensi', 'hutang_piutang')->whereIn('id_referensi', $staleIds)->delete();
+    $db->table('pembayaran_hutang_piutang')->whereIn('hutang_piutang_id', $staleIds)->delete();
+    $db->table('hutang_piutang')->whereIn('id', $staleIds)->delete();
+    if ($staleKas) {
+        $db->table('kas_keluar')->whereIn('idkas_keluar', $staleKas)->delete();
+    }
+}
+
 try {
     // ---------- 1. kasbon tunai -> baris kas_keluar ----------
     $beforeKas = $db->table('kas_keluar')->countAllResults();

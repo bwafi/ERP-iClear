@@ -147,7 +147,7 @@ $labelSumber = [
                             <td><span class="badge bg-<?= $statusClass ?>"><?= esc(\App\Services\Finance\HutangPiutangService::labelStatus($row['status'])) ?></span><?php if ($scopeLabel !== '') : ?> <span class="badge bg-light text-dark border"><?= esc($scopeLabel) ?></span><?php endif; ?></td>
                             <td class="text-end text-nowrap">
                                 <a href="<?= base_url('hutangpiutang/detail/' . $row['id']) ?>" class="btn btn-sm btn-light">Detail</a>
-                                <?php if ($authoritative && $canInput && $row['status'] !== 'lunas') : ?>
+                                <?php if ($authoritative && $canInput && $row['status'] !== 'lunas' && $row['sumber_tipe'] !== 'kasbon') : ?>
                                     <button type="button" class="btn btn-sm btn-primary btn-bayar"
                                         data-id="<?= (int) $row['id'] ?>"
                                         data-kode="<?= esc($row['kode']) ?>"
@@ -190,6 +190,7 @@ $labelSumber = [
                     'pegawai' => $pegawai ?? [],
                     'suplier' => $suplier ?? [],
                     'teknisi' => $teknisi ?? [],
+                    'bank' => $bank ?? [],
                     'units' => $units ?? [],
                     'unit_id' => $unit_id ?? null,
                     'in_modal' => true,
