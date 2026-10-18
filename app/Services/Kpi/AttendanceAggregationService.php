@@ -271,10 +271,10 @@ class AttendanceAggregationService
      *
      * Skor non-kehadiran Manager TIDAK diinput manual — dihitung sebagai
      * rata-rata skor komponen yang SAMA (monthly normalized) dari pegawai
-     * SPV(40), Kepala Divisi(43), Team IT(45), dan Finance(0).
+     * SPV(40), Kepala Divisi(43), Team IT(45), Multimedia(44), dan Finance(0).
      *
      * Tiap jabatan diberi bobot rata-rata yang sama: rata-rata per jabatan,
-     * lalu dirata-ratakan antar 4 jabatan (jabatan tanpa data dilewati).
+     * lalu dirata-ratakan antar 5 jabatan (jabatan tanpa data dilewati).
      *
      * @param int|string $componentId id komponen absensi
      * @param string $month MM
@@ -283,7 +283,7 @@ class AttendanceAggregationService
      */
     protected function managerTeamAverage($componentId, string $month, string $year): float
     {
-        $roles = [40, 43, 45, 0];
+        $roles = [40, 43, 45, 44, 0];
         $authModel = new \App\Models\ModelAuth();
 
         $roleAverages = [];

@@ -28,7 +28,7 @@ use App\Models\ModelAuth;
  *   - CS(42): KEHADIRAN dinilai Admin/Kasir Unit 1, selain kehadiran dinilai Kadiv(43).
  *   - Manager(34): KEHADIRAN dinilai Finance; selain kehadiran TIDAK diinput manual,
  *       melainkan dihitung otomatis = rata-rata skor absen per komponen dari
- *       SPV(40), Kadiv(43), IT(45), dan Finance(0)
+ *       SPV(40), Kadiv(43), IT(45), Multimedia(44), dan Finance(0)
  *       (lihat AttendanceAggregationService::managerTeamAverage).
  *
  * Role tanpa aturan spesifik: TIDAK bisa menilai siapa pun (diri sendiri pun tidak) —
@@ -90,7 +90,7 @@ class EvaluatorAuthorizationService
      *
      * CATATAN: skor Manager "selain kehadiran" TIDAK diinput manual oleh siapa pun —
      * dihitung otomatis sebagai rata-rata skor absen per komponen dari SPV, Kepala
-     * Divisi, IT, dan Finance (lihat AttendanceAggregationService::managerTeamAverage).
+     * Divisi, IT, Multimedia(44), dan Finance (lihat AttendanceAggregationService::managerTeamAverage).
      * Karena itu Manager (34) TIDAK menjadi target input SPV/Kadiv/IT; Finance
      * tetap menginput KEHADIRAN Manager.
      */
