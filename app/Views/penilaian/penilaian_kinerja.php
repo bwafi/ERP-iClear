@@ -529,6 +529,7 @@
                                             ]) ?>
                                         <?php else: ?>
                                             <div class="small mt-2 p-3 bg-light rounded-3 border">
+                                                <div class="text-muted small mb-2">Target HO per cabang</div>
                                                 <?php foreach ($kpi['cabang'] as $cb): ?>
                                                     <div class="<?= !empty($cb['reached']) ? 'text-success' : 'text-danger' ?> mb-1 d-flex align-items-center justify-content-between">
                                                         <div>
@@ -562,6 +563,9 @@
                                         <?php endif; ?>
                                     <?php elseif ($kpi['unit_count'] !== null): ?>
                                         <span class="fw-medium text-dark"><?= $kpi['unit_count'] ?> Cabang</span>
+                                        <?php if (!empty($kpi['ho'])): ?>
+                                            <span class="badge bg-info-subtle text-info ms-1">HO</span>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <span class="text-muted">—</span>
                                     <?php endif; ?>
