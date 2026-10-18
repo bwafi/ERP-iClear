@@ -7,6 +7,7 @@ use App\Models\ModelAuth;
 use App\Models\ModelKategoriKas;
 use App\Models\ModelNoAkun;
 use App\Models\ModelBank;
+use App\Models\ModelAkunKasBank;
 use App\Models\ModelJurnal;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -44,13 +45,61 @@ class Kas_Keluar extends BaseController
     public function index()
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
+        $unitList = $this->UnitModel->getUnit();
+
+        // Dropdown "No. Rekening" hanya menawarkan rekening yang benar-benar
+        // bisa dipakai unit itu: milik sendiri atau shared yang sudah
+        // dialokasikan. Rekening unit lain pasti ditolak BankRekeningValidator,
+        // jadi tidak perlu muncul sebagai pilihan. Rekening Finance/HO tetap
+        // ikut untuk role yang boleh memakainya sebagai sumber dana.
+        $role = isset($akun->ID_JABATAN) ? (int) $akun->ID_JABATAN : null;
+        $bolehFinanceHo = $role !== null && in_array(
+            $role,
+            array_map('intval', config(\Config\Finance::class)->financeHoSourceRoles ?? []),
+            true
+        );
+
+        $financeHoBankIds = [];
+        if ($bolehFinanceHo) {
+            $financeHo = (new ModelAkunKasBank())
+                ->where('tipe', 'BANK')
+                ->where('is_finance_ho', 1)
+                ->where('status', 'aktif')
+                ->findAll();
+            foreach ($financeHo as $a) {
+                $financeHoBankIds[] = trim((string) $a->bank_idbank);
+            }
+        }
+
+        // Daftar rekening dibangun untuk SEMUA unit sekaligus supaya unit yang
+        // dipilih di form bisa langsung mengganti isi dropdown tanpa request
+        // tambahan. shortcut: biaya ~2 query per unit saat halaman dibuka;
+        // ubah ke endpoint per-unit kalau jumlah unit sudah besar.
+        $bankPerUnit = [];
+        foreach ($unitList as $u) {
+            $unitId = (int) $u->idunit;
+            $daftar = [];
+            foreach ($this->BankModel->getBankDalamScopeUnit($unitId) as $b) {
+                $daftar[(string) $b->idbank] = $b;
+            }
+            foreach ($financeHoBankIds as $idbank) {
+                $b = $this->BankModel->getById($idbank);
+                if ($b) {
+                    $daftar[(string) $b->idbank] = $b;
+                }
+            }
+            $bankPerUnit[$unitId] = array_values($daftar);
+        }
+
+        $loginUnit = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
 
         $data = [
             'akun' => $akun,
             'kategori_kas' => $this->KategoriKasModel->getKategoriKas(),
             'no_akun' =>  $this->NoAkunModel->getAkun(),
-            'bank' => $this->BankModel->getBank(),
-            'unit' => $this->UnitModel->getUnit(),
+            'bank' => $bankPerUnit[$loginUnit] ?? [],
+            'bank_per_unit' => $bankPerUnit,
+            'unit' => $unitList,
             'body' => 'jurnal/kas_keluar'
         ];
 
@@ -173,6 +222,7 @@ class Kas_Keluar extends BaseController
                 'penerima'  => $this->namaPenerimaUntukTabel($r),
                 'jumlah'    => (float)$r->jumlah,
                 'jenis'     => trim((string)($r->jenis ?? '')),
+                'idunit'    => (int)($r->idunit ?? 0),
                 // Kolom Aksi tidak menyimpan apa pun, tapi DataTables server-side
                 // menuntut setiap kolom yang dikonfigurasi punya kunci di payload.
                 'aksi'      => null,

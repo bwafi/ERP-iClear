@@ -1130,6 +1130,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                          benar-benar diterima route ini) -->
                     <form action="<?= base_url("update_kas_keluar") ?>" method="post" id="kkFormEdit" hidden>
                         <input type="hidden" name="idkas_keluar" id="kkEditId">
+                        <input type="hidden" name="idunit" id="kkEditUnit">
                         <div class="row g-3">
                             <div class="col-12 col-md-3">
                                 <label class="kk-field-label" for="kkEditTanggal">Tanggal</label>
@@ -1148,9 +1149,6 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                                 <label class="kk-field-label" for="kkEditPenerima">Penerima / Rekening</label>
                                 <select class="form-select" name="penerima" id="kkEditPenerima">
                                     <option value="">— Tidak ada rekening —</option>
-                                    <?php foreach ($bank as $b): ?>
-                                        <option value="<?= (int) $b->idbank ?>"><?= esc($b->nama_bank . " · " . $b->atas_nama . " · " . $b->norek) ?></option>
-                                    <?php endforeach; ?>
                                 </select>
                             </div>
                             <div class="col-12 col-md-8">
@@ -1342,7 +1340,31 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         // ── Option lists, dipakai untuk baris rincian akun ──────────
         const AKUN_OPTIONS = `<option value="">-- Pilih No. Akun --</option><?php foreach ($no_akun as $a): ?><option value="<?= esc($a->no_akun) ?>"><?= esc($a->no_akun) ?> &mdash; <?= esc($a->nama_akun) ?></option><?php endforeach; ?>`;
         const KAT_OPTIONS = `<option value="">-- Pilih Kategori --</option><?php foreach ($kategori_kas as $kat): ?><option value="<?= (int) $kat->idkategori_kas ?>"><?= esc($kat->kategori) ?></option><?php endforeach; ?>`;
-        const BANK_OPTIONS = `<option value="">-- Pilih No. Rekening --</option><?php foreach ($bank as $b): ?><option value="<?= (int) $b->idbank ?>"><?= esc($b->nama_bank . ' · ' . $b->atas_nama . ' · ' . $b->norek) ?></option><?php endforeach; ?>`;
+        const BANK_BY_UNIT = <?= json_encode(array_map(static function ($list) {
+            return array_map(static function ($b) {
+                return [
+                    'idbank' => (string) $b->idbank,
+                    'label'  => esc($b->nama_bank . ' · ' . $b->atas_nama . ' · ' . $b->norek),
+                ];
+            }, $list);
+        }, $bank_per_unit), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+        // Opsi rekening mengikuti unit yang sedang dipilih. Rekening unit lain
+        // tidak ditawarkan karena pasti ditolak validator saat disimpan.
+        function bankOptions(unitId, selected, placeholder) {
+            const list = BANK_BY_UNIT[String(unitId)] || [];
+            const sel = String(selected || '');
+            let html = '<option value="">' + (placeholder || '-- Pilih No. Rekening --') + '</option>';
+            list.forEach(function (b) {
+                const val = String(b.idbank);
+                html += '<option value="' + val + '"' + (val === sel ? ' selected' : '') + '>' + b.label + '</option>';
+            });
+            return html;
+        }
+
+        function unitTerpilih() {
+            return byId('#kkUnit').value;
+        }
 
         // ── Format angka & tanggal ─────────────────────────────────
         const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -1461,7 +1483,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                 '<td><select class="form-select kk-pos-kat" name="akun[' + i + '][kategori_idkategori]" required>' + KAT_OPTIONS + '</select></td>' +
                 '<td><select class="form-select kk-pos-sumber" name="akun[' + i + '][jenis_transaksi]">' +
                 '<option value="cash" selected>Kas</option><option value="bank">Bank</option></select></td>' +
-                '<td><select class="form-select kk-pos-rek" name="akun[' + i + '][no_rekening]" disabled>' + BANK_OPTIONS + '</select></td>' +
+                '<td><select class="form-select kk-pos-rek" name="akun[' + i + '][no_rekening]" disabled>' + bankOptions(unitTerpilih(), '') + '</select></td>' +
                 '<td><input type="text" class="form-control kk-pos-penerima" name="akun[' + i + '][penerima]" placeholder="Nama penerima" maxlength="255"></td>' +
                 '<td><select class="form-select kk-pos-posisi" name="akun[' + i + '][posisi_drk]">' +
                 '<option value="debet" selected>Debet</option><option value="kredit">Kredit</option></select></td>' +
@@ -1477,7 +1499,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                 const isBank = this.value === 'bank';
                 $rek.disabled = !isBank;
                 if (!isBank) {
-                    $(rek).val('');
+                    $($rek).val('').trigger('change');
                 }
             });
 
@@ -1574,6 +1596,12 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             byId('#kkEditKategori').value = row.kategori_id || '';
             byId('#kkEditDeskripsi').value = row.deskripsi;
             byId('#kkEditJumlah').value = digitsOnly(String(Math.round(Number(row.jumlah) || 0)));
+            byId('#kkEditUnit').value = row.idunit || '';
+            byId('#kkEditPenerima').innerHTML = bankOptions(
+                row.idunit,
+                row.idbank,
+                '— Tidak ada rekening —'
+            );
             byId('#kkEditPenerima').value = row.idbank || '';
             byId('#kkEditPosisi').value = (row.jenis || 'debet').toLowerCase();
             setComposerOpen(true);
@@ -1598,6 +1626,16 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         });
 
         byId('#kkAddPosisi').addEventListener('click', addPosisi);
+
+        // Rekening yang ditawarkan harus ikut unit yang dipilih. Untuk role
+        // yang boleh memilih unit, daftar di baris yang sudah ada dibangun ulang.
+        byId('#kkUnit').addEventListener('change', function () {
+            const unitId = this.value;
+            posBody.querySelectorAll('.kk-pos-rek').forEach(function (sel) {
+                sel.innerHTML = bankOptions(unitId, sel.value);
+                $(sel).trigger('change');
+            });
+        });
 
         // Aksi baris didelegasikan ke <tbody> supaya tetap hidup setelah
         // tabel digambar ulang oleh DataTables.
