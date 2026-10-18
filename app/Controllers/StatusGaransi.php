@@ -148,11 +148,12 @@ class StatusGaransi extends BaseController
         }
 
         $html = '<table class="table table-sm table-bordered">
-                <thead><tr><th>#</th><th>Tanggal Klaim</th><th>Sparepart Pengganti</th></tr></thead><tbody>';
+                <thead><tr><th>#</th><th>ID Klaim</th><th>Tanggal Klaim</th><th>Sparepart Pengganti</th></tr></thead><tbody>';
 
         foreach ($riwayat as $i => $row) {
             $html .= '<tr>
                     <td>' . ($i + 1) . '</td>
+                    <td>' . (int) $row->idriwayat_claim_garansi . '</td>
                     <td>' . date('d-m-Y', strtotime($row->tanggal_claim)) . '</td>
                     <td>';
             foreach ($issuesByClaim[(int) $row->idriwayat_claim_garansi] ?? [] as $issue) {
