@@ -4,6 +4,15 @@ namespace App\Services\Finance;
 
 final class SupplierCreditAllocator
 {
+    public static function split(int $credit, int $debt): array
+    {
+        if ($credit <= 0 || $debt < 0) {
+            throw new \InvalidArgumentException('Nominal kredit atau utang tidak valid.');
+        }
+        $applied = min($credit, $debt);
+        return ['applied' => $applied, 'remaining' => $credit - $applied];
+    }
+
     public static function plan(array $balances, int $amount): array
     {
         if ($amount <= 0) {
