@@ -205,6 +205,8 @@ $routes->get('service_by_garansi/(:num)', 'StatusGaransi::service_by_garansi/$1'
 $routes->post('update/pelanggan_service_garansi', 'StatusGaransi::update_service_pelanggan_garansi', ['filter' => 'auth']);
 $routes->post('update_garansi_service/saveKerusakan', 'StatusGaransi::insert_kerusakan_garansi', ['filter' => 'auth']);
 $routes->post('update_service_garansi/saveSparepart', 'StatusGaransi::insert_sparepart_garansi', ['filter' => 'auth']);
+$routes->get('akun_jurnal_garansi', 'WarrantyJournalSettings::index', ['filter' => 'auth']);
+$routes->post('akun_jurnal_garansi/save', 'WarrantyJournalSettings::save', ['filter' => 'auth']);
 $routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pembayaran_garansi', ['filter' => 'auth']);
 
 //garansiservice
