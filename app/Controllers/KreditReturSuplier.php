@@ -58,6 +58,7 @@ class KreditReturSuplier extends BaseController
                 trim((string) $this->request->getPost('nominal')),
                 trim((string) $this->request->getPost('nomor_nota_kredit')),
                 trim((string) $this->request->getPost('akun_debet')),
+                trim((string) $this->request->getPost('akun_piutang')),
                 trim((string) $this->request->getPost('akun_kredit')),
                 (int) session('ID_AKUN')
             );
@@ -65,6 +66,30 @@ class KreditReturSuplier extends BaseController
         } catch (\Throwable $error) {
             log_message('error', 'Persetujuan kredit retur gagal: ' . $error->getMessage());
             return redirect()->back()->with('gagal', 'Persetujuan gagal. Periksa nominal, sisa utang supplier, dan akun jurnal.');
+        }
+    }
+
+    public function applyRemaining()
+    {
+        $scope = new FinanceScopeService();
+        if (! $scope->canInput()) {
+            return redirect()->back()->with('gagal', 'Tidak berhak menggunakan kredit supplier.');
+        }
+        $creditId = (int) $this->request->getPost('credit_id');
+        $credit = Database::connect()->table('kredit_retur_suplier')->where('id', $creditId)->get()->getRow();
+        $unitIds = array_map(
+            static fn ($unit) => (int) $unit->idunit,
+            $scope->resolveAllowedUnits()
+        );
+        if (! $credit || ! in_array((int) $credit->unit_id, $unitIds, true)) {
+            return redirect()->back()->with('gagal', 'Kredit retur tidak tersedia untuk unit ini.');
+        }
+        try {
+            (new SupplierReturnCreditService())->applyRemaining($creditId, (int) session('ID_AKUN'));
+            return redirect()->to(base_url('kredit_retur_suplier'))->with('sukses', 'Sisa kredit dipakai untuk utang supplier.');
+        } catch (\Throwable $error) {
+            log_message('error', 'Pemakaian sisa kredit gagal: ' . $error->getMessage());
+            return redirect()->back()->with('gagal', 'Belum ada tagihan yang dapat dipotong atau transaksi gagal.');
         }
     }
 }
