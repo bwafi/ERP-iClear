@@ -1,8 +1,10 @@
 <?php
 
 require __DIR__ . '/../../app/Services/Finance/SupplierCreditAllocator.php';
+require __DIR__ . '/../../app/Services/Finance/SupplierCreditJournal.php';
 
 use App\Services\Finance\SupplierCreditAllocator;
+use App\Services\Finance\SupplierCreditJournal;
 
 $expected = [11 => 500000, 12 => 200000];
 $actual = SupplierCreditAllocator::plan([11 => 500000, 12 => 300000], 700000);
@@ -18,6 +20,15 @@ if (SupplierCreditAllocator::split(500000, 300000) !== ['applied' => 300000, 're
     throw new RuntimeException('Sisa kredit supplier harus dibawa ke tagihan berikutnya.');
 }
 
+$journal = SupplierCreditJournal::approvalLines(500000, 300000, 'AP', 'AR', 'RECOVERY');
+if (array_sum(array_column($journal, 1)) !== array_sum(array_column($journal, 2))) {
+    throw new RuntimeException('Jurnal persetujuan kredit harus seimbang.');
+}
+$journal = SupplierCreditJournal::applicationLines(200000, 'AP', 'AR');
+if (array_sum(array_column($journal, 1)) !== array_sum(array_column($journal, 2))) {
+    throw new RuntimeException('Jurnal pemakaian sisa kredit harus seimbang.');
+}
+
 try {
     SupplierCreditAllocator::plan([11 => 500000], 600000);
     throw new RuntimeException('Kredit melebihi utang tidak ditolak.');
@@ -27,4 +38,4 @@ try {
     }
 }
 
-echo "Kredit Supplier: 4 skenario sintetis lulus.\n";
+echo "Kredit Supplier: 6 skenario sintetis lulus.\n";
