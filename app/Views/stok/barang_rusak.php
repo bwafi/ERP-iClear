@@ -101,6 +101,7 @@
                     <th>Kategori</th>
                     <th>Sub Kategori</th>
                     <th>Jumlah Rusak</th>
+                    <th>Sumber</th>
                     <th>Tanggal Rusak</th>
                     <th>ID Unit</th>
                     <th>Input By</th>
@@ -122,6 +123,7 @@
                             <td><?= !empty($row->nama_sub_kategori) ? esc($row->nama_sub_kategori) : 'Belum disetting' ?></td>
 
                             <td><?= esc($row->jumlah) ?></td>
+                            <td><?= $row->claim_id ? 'Klaim #' . (int) $row->claim_id : 'Stok jual' ?></td>
                             <td><?= esc($row->tanggal_rusak) ?></td>
                             <td><?= esc($row->nama_unit) ?></td>
                             <td><?= esc($row->nama_input) ?></td>
