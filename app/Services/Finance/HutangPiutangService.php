@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelPembayaranHutangPiutang;
 use Config\Database;
@@ -263,9 +264,16 @@ class HutangPiutangService
                 throw new \RuntimeException($cek['alasan']);
             }
             $idbankFinal = $cek['idbank'];
+        } else {
+            // Tunai menambah kas laci: tanpa akun KAS aktif, baris ini tidak
+            // akan pernah muncul di Kas & Bank padahal Tutup Kasir menghitungnya.
+            $resolved = (new ModeKasBank())->resolveAkunDetail($unitId, null, ModeKasBank::ARAH_KELUAR);
+            if (empty($resolved['akun'])) {
+                throw new \RuntimeException((string) ($resolved['reason'] ?? 'Unit belum punya akun KAS aktif.'));
+            }
         }
 
-        $this->db->table('kas_keluar')->insert([
+        $tersimpan = $this->db->table('kas_keluar')->insert([
             'tanggal'             => $tanggal,
             'kategori_idkategori' => $this->resolveKategoriKasbonId(),
             'deskripsi'           => $deskripsi,
@@ -278,6 +286,10 @@ class HutangPiutangService
             'created_on'          => date('Y-m-d H:i:s'),
             'updated_on'          => date('Y-m-d H:i:s'),
         ]);
+
+        if (! $tersimpan) {
+            throw new \RuntimeException('Gagal menyimpan baris kas kasbon.');
+        }
 
         return (int) $this->db->insertID();
     }
@@ -302,6 +314,9 @@ class HutangPiutangService
         }
         if ($row->status === self::STATUS_LUNAS) {
             return ['ok' => false, 'message' => 'Kasbon sudah lunas dipotong gaji; baris kas tidak boleh diubah.'];
+        }
+        if ($jumlahBaru <= 0) {
+            return ['ok' => false, 'message' => 'Nominal kas harus lebih dari 0.'];
         }
         if ($jumlahBaru < (int) $row->total_dibayar) {
             return ['ok' => false, 'message' => 'Nominal kas lebih kecil dari yang sudah dibayar.'];
@@ -328,6 +343,9 @@ class HutangPiutangService
         }
 
         $total = (int) ($data['jumlah'] ?? $row->total);
+        if ($total <= 0) {
+            return ['ok' => false, 'message' => 'Nominal kas harus lebih dari 0.'];
+        }
         if ($total < (int) $row->total_dibayar) {
             return ['ok' => false, 'message' => 'Nominal kas lebih kecil dari yang sudah dibayar.'];
         }
@@ -429,7 +447,12 @@ class HutangPiutangService
         $sumberTipe = $in['sumber_tipe'] ?? '';
         $pihakTipe = $in['pihak_tipe'] ?? '';
         $pihakId = (int) ($in['pihak_id'] ?? 0);
-        $total = (int) preg_replace('/[^\d]/', '', (string) ($in['total'] ?? 0));
+        $totalRaw = trim((string) ($in['total'] ?? '0'));
+        // preg_replace membuang tanda minus, jadi -5000 akan lolos sebagai 5000.
+        if (str_contains($totalRaw, '-')) {
+            return ['success' => false, 'message' => 'Total tidak boleh negatif.'];
+        }
+        $total = (int) preg_replace('/[^\d]/', '', $totalRaw);
         $tanggal = $in['tanggal'] ?? date('Y-m-d');
         $jatuhTempo = $in['jatuh_tempo'] ?? null;
         // Kasbon dipotong dari slip gaji: jatuh tempo otomatis tanggal 1 bulan depan.

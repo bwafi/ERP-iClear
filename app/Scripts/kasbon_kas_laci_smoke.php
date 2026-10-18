@@ -221,6 +221,66 @@ try {
         $h2 = $svc->hapusKasbonDariKasKeluar($kasId1);
         ok('hapus ditolak bila kasbon sudah ada pembayaran', !empty($h2) && $h2['ok'] === false, $h2['message'] ?? '');
     }
+
+    // ---------- 9b. nominal 0 tidak boleh mengosongkan kasbon ----------
+    $kosong = $svc->createPosition([
+        'jenis' => 'piutang',
+        'sumber_tipe' => HutangPiutangService::SUMBER_KASBON,
+        'pihak_tipe' => 'pegawai',
+        'pihak_id' => (int) $pegawai->ID_AKUN,
+        'tanggal' => date('Y-m-d'),
+        'total' => 150000,
+        'uraian' => 'SMOKE-KAS kasbon nol',
+    ], (int) $pegawai->ID_AKUN);
+    if (!empty($kosong['id'])) {
+        $createdKasbon[] = (int) $kosong['id'];
+        $hpK = $svc->getById((int) $kosong['id']);
+        $kasIdK = (int) $hpK->kas_keluar_id;
+        if ($kasIdK > 0) { $createdKas[] = $kasIdK; }
+        $g3 = $svc->guardKasbonKasKeluar($kasIdK, 0);
+        ok('guard tolak jumlah 0', !empty($g3) && $g3['ok'] === false, $g3['message'] ?? '');
+        $s3 = $svc->syncKasbonDariKasKeluar($kasIdK, ['jumlah' => 0]);
+        $hpKb = $svc->getById((int) $kosong['id']);
+        ok('sync tolak jumlah 0 (kasbon utuh)', !empty($s3) && $s3['ok'] === false && (int) $hpKb->total === 150000, ($s3['message'] ?? '') . ' total=' . ($hpKb->total ?? 'null'));
+    }
+
+    // ---------- 9c. total negatif ditolak sebelum baris apa pun dibuat ----------
+    $neg = $svc->createPosition([
+        'jenis' => 'piutang',
+        'sumber_tipe' => HutangPiutangService::SUMBER_KASBON,
+        'pihak_tipe' => 'pegawai',
+        'pihak_id' => (int) $pegawai->ID_AKUN,
+        'tanggal' => date('Y-m-d'),
+        'total' => '-5000',
+        'uraian' => 'SMOKE-KAS negatif',
+    ], (int) $pegawai->ID_AKUN);
+    ok('kasbon total negatif ditolak', empty($neg['success']), $neg['message'] ?? '');
+    ok('  kasbon negatif tak tersimpan', $db->table('hutang_piutang')->where('uraian', 'SMOKE-KAS negatif')->countAllResults() === 0);
+
+    // ---------- 10. tunai tanpa akun KAS aktif ditolak (spec 6) ----------
+    $kasAkun = $db->table('akun_kas_bank')
+        ->where('unit_id', (int) $unit->idunit)->where('tipe', 'KAS')->where('status', 'aktif')
+        ->orderBy('idakun_kas_bank', 'ASC')->get()->getRow();
+    if ($kasAkun) {
+        $db->table('akun_kas_bank')->where('idakun_kas_bank', (int) $kasAkun->idakun_kas_bank)->update(['status' => 'nonaktif']);
+        try {
+            $tanpaKas = $svc->createPosition([
+                'jenis' => 'piutang',
+                'sumber_tipe' => HutangPiutangService::SUMBER_KASBON,
+                'pihak_tipe' => 'pegawai',
+                'pihak_id' => (int) $pegawai->ID_AKUN,
+                'tanggal' => date('Y-m-d'),
+                'total' => 250000,
+                'uraian' => 'SMOKE-KAS tanpa akun kas',
+            ], (int) $pegawai->ID_AKUN);
+            ok('tunai tanpa akun KAS aktif ditolak', empty($tanpaKas['success']), $tanpaKas['message'] ?? '');
+            if (!empty($tanpaKas['id'])) { $createdKasbon[] = (int) $tanpaKas['id']; }
+        } finally {
+            $db->table('akun_kas_bank')->where('idakun_kas_bank', (int) $kasAkun->idakun_kas_bank)->update(['status' => 'aktif']);
+        }
+    } else {
+        echo "  SKIP  tunai tanpa akun KAS: unit uji tidak punya akun KAS aktif\n";
+    }
 } catch (\Throwable $e) {
     ok('exception', false, $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
 } finally {

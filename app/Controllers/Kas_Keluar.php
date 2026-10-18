@@ -442,6 +442,18 @@ class Kas_Keluar extends BaseController
             $posting = $this->KasBankLib->postingKasKeluar((int)$id);
             PostingLedgerException::wajibBerhasil($posting, 'Kas keluar');
 
+            // Sinkron satu arah kas -> kasbon di dalam transaksi yang sama:
+            // kalau gagal, update kas ikut dibatalkan supaya laci dan kasbon
+            // tidak pernah terbelah diam-diam.
+            $sync = $hpSvc->syncKasbonDariKasKeluar((int) $id, [
+                'tanggal' => $tanggal,
+                'jumlah'  => (int) preg_replace('/[^\d]/', '', (string) $jumlah),
+                'idbank'  => $penerima,
+            ]);
+            if (! $sync['ok']) {
+                throw new \RuntimeException($sync['message']);
+            }
+
             $db->transComplete();
         } catch (PostingLedgerException $e) {
             $db->transRollback();
@@ -459,14 +471,6 @@ class Kas_Keluar extends BaseController
             session()->setFlashdata('gagal', 'Gagal mengupdate kas keluar.');
             return redirect()->to(base_url('/kas_keluar'));
         }
-
-        // Sinkron satu arah kas -> kasbon (tidak menggagalkan update kas bila
-        // tidak ada kasbon tertaut).
-        $hpSvc->syncKasbonDariKasKeluar((int) $id, [
-            'tanggal' => $tanggal,
-            'jumlah'  => (int) preg_replace('/[^\d]/', '', (string) $jumlah),
-            'idbank'  => $penerima,
-        ]);
 
         session()->setFlashdata('sukses', 'Data kas keluar berhasil diupdate.');
         return redirect()->to(base_url('/kas_keluar'));
