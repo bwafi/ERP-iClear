@@ -135,6 +135,58 @@ class MetaAdsClient
         return $map;
     }
 
+    /**
+     * Daftar campaign untuk pemilih pemetaan di form Campaign.
+     *
+     * Gabungan: campaign yang ada belanja pada periode `$since`–`$until` DAN
+     * campaign yang sedang ACTIVE (walau belum ada belanja — mis. baru dibuat
+     * di tengah bulan). Spend dijumlahkan per campaign.
+     *
+     * @return array<int, array{id:string, nama:string, spend:float, aktif:bool}>
+     */
+    public function fetchCampaignOptions(string $since, string $until): array
+    {
+        $spend = [];
+        $nama  = [];
+
+        foreach ($this->fetchCampaignInsights($since, $until)['rows'] as $row) {
+            $id = (string)($row['campaign_id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $spend[$id] = ($spend[$id] ?? 0.0) + (float)$row['spend'];
+            $nama[$id]  = (string)$row['campaign_name'];
+        }
+
+        $aktif = [];
+        foreach ($this->pagedGet('campaigns', [
+            'fields' => 'id,name', 'effective_status' => '["ACTIVE"]', 'limit' => 500,
+        ]) as $c) {
+            $id = trim((string)($c['id'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+            $aktif[$id] = true;
+            if (!isset($nama[$id])) {
+                $nama[$id] = (string)($c['name'] ?? '');
+            }
+        }
+
+        $opsi = [];
+        foreach ($nama as $id => $namaCamp) {
+            $opsi[] = [
+                'id'    => (string)$id,
+                'nama'  => $namaCamp,
+                'spend' => $spend[$id] ?? 0.0,
+                'aktif' => isset($aktif[$id]),
+            ];
+        }
+
+        usort($opsi, fn($a, $b) => $b['spend'] <=> $a['spend'] ?: strcasecmp($a['nama'], $b['nama']));
+
+        return $opsi;
+    }
+
     // ── internal ────────────────────────────────────────────────────
 
     /** Menelusuri seluruh halaman sebuah edge. */
