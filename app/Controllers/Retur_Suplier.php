@@ -80,9 +80,15 @@ class Retur_Suplier extends BaseController
             $supplierId = null;
 
             foreach ($selected as $item) {
-                $detailId = (int) ($item['iddetail_pembelian'] ?? 0);
-                $requested = (int) ($item['jumlah_retur'] ?? 0);
-                if ($detailId <= 0 || isset($seen[$detailId])) {
+                $rawDetailId = $item['iddetail_pembelian'] ?? null;
+                $rawRequested = $item['jumlah_retur'] ?? null;
+                if (! is_scalar($rawDetailId) || ! ctype_digit((string) $rawDetailId)
+                    || ! is_scalar($rawRequested) || ! ctype_digit((string) $rawRequested)) {
+                    throw new \RuntimeException('Detail atau jumlah retur tidak valid.');
+                }
+                $detailId = (int) $rawDetailId;
+                $requested = (int) $rawRequested;
+                if ($detailId <= 0 || $requested <= 0 || isset($seen[$detailId])) {
                     throw new \RuntimeException('Detail pembelian retur tidak valid.');
                 }
                 $seen[$detailId] = true;
