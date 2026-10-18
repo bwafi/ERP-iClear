@@ -58,7 +58,7 @@ class ModelKartuStok extends Model
                 barang.status_ppn,
                 kategori.nama_kategori
             ')
-            ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0');
@@ -143,7 +143,7 @@ class ModelKartuStok extends Model
                 COALESCE(SUM(stok_barang.stok_akhir), 0) AS total_stok,
                 COALESCE(SUM(stok_barang.stok_akhir * barang.harga_beli), 0) AS nilai_stok
             ')
-            ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
@@ -167,7 +167,7 @@ class ModelKartuStok extends Model
     public function getKartuStokWithKategori()
     {
         return $this->select('stok_barang.*, barang.status_ppn, kategori.nama_kategori')
-            ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
@@ -177,7 +177,7 @@ class ModelKartuStok extends Model
     public function getKartuStokTerlaris()
     {
         return $this->select('stok_barang.*, barang.status_ppn, kategori.nama_kategori')
-            ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
@@ -225,7 +225,7 @@ class ModelKartuStok extends Model
     public function exportfilter($namaUnit = null, $statusPpn = null)
 {
     $builder = $this->select('stok_barang.*, barang.imei, barang.status_ppn, kategori.nama_kategori')
-        ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+        ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
         ->join('kategori', 'kategori.id = barang.idkategori', 'left')
         ->where('barang.deleted', '0')
         ->where('kategori.delete', '0');
