@@ -10,7 +10,7 @@
         <?php endif; ?>
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>No. Retur</th><th>Supplier</th><th>Status</th><th>Nominal</th><th>Nota Kredit</th><th>Persetujuan</th></tr></thead>
+                <thead><tr><th>No. Retur</th><th>Supplier</th><th>Status</th><th>Nominal</th><th>Sisa Kredit</th><th>Nota Kredit</th><th>Persetujuan</th></tr></thead>
                 <tbody>
                 <?php foreach ($credits as $credit): ?>
                     <tr>
@@ -18,6 +18,7 @@
                         <td><?= esc($credit->nama_suplier) ?></td>
                         <td><?= esc($credit->status) ?></td>
                         <td>Rp <?= number_format((int) $credit->nominal, 0, ',', '.') ?></td>
+                        <td>Rp <?= number_format((int) $credit->sisa_kredit, 0, ',', '.') ?></td>
                         <td><?= esc($credit->nomor_nota_kredit ?? '-') ?></td>
                         <td>
                             <?php if ($canApprove && $credit->status === 'menunggu'): ?>
@@ -38,6 +39,14 @@
                                             <?php endforeach; ?>
                                         </select>
                                     </label>
+                                    <label>Akun piutang supplier
+                                        <select class="form-select" name="akun_piutang" required>
+                                            <option value="">Pilih akun</option>
+                                            <?php foreach ($accounts as $account): ?>
+                                                <option value="<?= esc($account->no_akun) ?>"><?= esc($account->no_akun . ' - ' . $account->nama_akun) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </label>
                                     <label>Akun kredit
                                         <select class="form-select" name="akun_kredit" required>
                                             <option value="">Pilih akun</option>
@@ -48,6 +57,12 @@
                                     </label>
                                     <button class="btn btn-primary mt-2" type="submit">Setujui dan catat jurnal</button>
                                 </form>
+                            <?php elseif ($canApprove && $credit->status === 'disetujui' && (int) $credit->sisa_kredit > 0): ?>
+                                <form method="post" action="<?= base_url('kredit_retur_suplier/apply') ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="credit_id" value="<?= (int) $credit->id ?>">
+                                    <button class="btn btn-outline-primary" type="submit">Gunakan sisa kredit</button>
+                                </form>
                             <?php else: ?>
                                 <?= esc($credit->disetujui_pada ?? '-') ?>
                             <?php endif; ?>
@@ -55,7 +70,7 @@
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($credits === []): ?>
-                    <tr><td colspan="6">Belum ada dokumen retur supplier.</td></tr>
+                    <tr><td colspan="7">Belum ada dokumen retur supplier.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
