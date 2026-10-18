@@ -449,7 +449,8 @@ class HutangPiutangService
         $pihakId = (int) ($in['pihak_id'] ?? 0);
         $totalRaw = trim((string) ($in['total'] ?? '0'));
         // preg_replace membuang tanda minus, jadi -5000 akan lolos sebagai 5000.
-        if (str_contains($totalRaw, '-')) {
+        // Pakai strpos(), bukan polyfill PHP 8: produksi masih PHP 7.4.
+        if (strpos($totalRaw, '-') !== false) {
             return ['success' => false, 'message' => 'Total tidak boleh negatif.'];
         }
         $total = (int) preg_replace('/[^\d]/', '', $totalRaw);
