@@ -59,6 +59,14 @@ namespace {
             throw new \RuntimeException('Duplikasi garansi mengubah stok.');
         }
     }
+    $database->exec('INSERT INTO garansi_sparepart_keluar VALUES (8, 12, 1, 1, 1, 250000)');
+    if ($stock() !== 5) {
+        throw new \RuntimeException('Klaim kedua tidak mengurangi stok satu unit tambahan.');
+    }
+    $hpp = (int) $database->query('SELECT SUM(jumlah * hpp_satuan) FROM garansi_sparepart_keluar WHERE service_id = 12')->fetchColumn();
+    if ($hpp !== 710000) {
+        throw new \RuntimeException('HPP dua klaim berbeda tidak tersimpan terpisah.');
+    }
 
     echo "Garansi: mutasi stok, retur terkait, dan deduplikasi sintetis lulus.\n";
 }
