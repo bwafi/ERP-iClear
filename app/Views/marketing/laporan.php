@@ -73,12 +73,46 @@ $hasDaily = !empty($tglKeys);
                     </select>
                 </div>
                 <div class="col-auto">
+                    <label class="form-label mb-1 small text-muted">Minggu</label>
+                    <select name="minggu" class="form-select form-select-sm">
+                        <option value="0" <?= $minggu === 0 ? 'selected' : '' ?>>Sebulan</option>
+                        <?php foreach ($mingguList as $w => $label) : ?>
+                            <option value="<?= $w ?>" <?= $minggu === $w ? 'selected' : '' ?>>Minggu <?= $w ?> (<?= $label ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-auto">
                     <button type="submit" class="btn btn-primary btn-sm">
                         <iconify-icon icon="solar:filter-bold"></iconify-icon> Tampilkan
                     </button>
                 </div>
             </form>
             <div class="d-flex gap-2">
+                <?php if (!empty($canWrite) && $minggu > 0) : ?>
+                    <?php if (empty($mingguAktif)) : ?>
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle align-self-center px-2 py-2">
+                            Laporan mingguan berlaku mulai November 2026
+                        </span>
+                    <?php elseif (!empty($laporanMinggu[$minggu])) : ?>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle align-self-center px-2 py-2">
+                            Dilaporkan <?= date('d M Y', strtotime($laporanMinggu[$minggu]->submitted_at)) ?>
+                            oleh <?= esc($laporanMinggu[$minggu]->nama_pengirim ?? '-') ?>
+                        </span>
+                    <?php elseif ($mingguSudahBerakhir) : ?>
+                        <form method="post" action="<?= base_url('marketing/laporan/minggu') ?>" class="align-self-center">
+                            <input type="hidden" name="bulan" value="<?= $bulan ?>">
+                            <input type="hidden" name="tahun" value="<?= $tahun ?>">
+                            <input type="hidden" name="minggu" value="<?= $minggu ?>">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <iconify-icon icon="solar:send-square-bold" class="me-1"></iconify-icon>Laporkan minggu ini
+                            </button>
+                        </form>
+                    <?php else : ?>
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle align-self-center px-2 py-2">
+                            Minggu ini belum berakhir
+                        </span>
+                    <?php endif; ?>
+                <?php endif; ?>
                 <a href="<?= base_url('marketing/ads_performa') ?>" class="btn btn-light btn-sm">
                     <iconify-icon icon="solar:chart-2-bold" class="me-1"></iconify-icon>Performa Ads
                 </a>

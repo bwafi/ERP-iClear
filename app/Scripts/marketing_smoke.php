@@ -283,6 +283,28 @@ try {
     $laporanAdaData = strpos($html, 'Performa Harian') !== false && strpos($html, 'Insight &amp; Evaluasi') !== false;
     $laporanEmpty = strpos($html, 'Belum ada data Ads') !== false;
     ok('laporan render — isi (performa harian & insight / empty state)', $laporanAdaData || $laporanEmpty, $laporanAdaData ? 'ada-data' : 'empty');
+    ok('laporan render — pilihan minggu', strpos($html, 'name="minggu"') !== false);
+
+    // Kirim laporan minggu yang belum berakhir → ditolak server (bukan hanya
+    // tombolnya disembunyikan).
+    $bulanDepan = (int) date('n') + 1;
+    $tahunDepan = (int) date('Y');
+    if ($bulanDepan > 12) {
+        $bulanDepan = 1;
+        $tahunDepan++;
+    }
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_POST = ['bulan' => $bulanDepan, 'tahun' => $tahunDepan, 'minggu' => 1];
+    $_GET  = [];
+    $reqProp->setValue($ctrl, \Config\Services::request(null, false));
+    $tolak = (new ReflectionMethod($ctrl, 'laporan_minggu_simpan'))->invoke($ctrl);
+    ok(
+        'laporan minggu belum berakhir ditolak',
+        is_object($tolak) && get_class($tolak) === 'CodeIgniter\HTTP\RedirectResponse'
+            && (string) session()->getFlashdata('error') !== '',
+        get_class($tolak) . ' / ' . var_export(session()->getFlashdata('error'), true)
+    );
+    $_POST = [];
 
     // ── Role 48 (Talent) tidak berhak ─────────────────────────────
     $session->set('ID_JABATAN', 48);

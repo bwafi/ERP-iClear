@@ -957,6 +957,12 @@ class Marketing extends BaseController
         }
         $campaignId = (int)($this->request->getGet('campaign') ?? 0);
 
+        $minggu = (int)($this->request->getGet('minggu') ?? 0);
+        if ($minggu < 0 || $minggu > 4) {
+            $minggu = 0;
+        }
+        $rentang = $minggu > 0 ? \App\Services\Marketing\WeeklyReport::range($bulan, $tahun, $minggu) : null;
+
         $db = $this->db();
 
         // ── Data spending per (tanggal, campaign, channel, unit) ────
@@ -965,6 +971,11 @@ class Marketing extends BaseController
         if ($campaignId > 0) {
             $where  .= ' AND a.campaign_id = ?';
             $params[] = $campaignId;
+        }
+        if ($rentang !== null) {
+            $where  .= ' AND a.tanggal BETWEEN ? AND ?';
+            $params[] = $rentang['mulai'];
+            $params[] = $rentang['selesai'];
         }
 
         $raw = $db->query(
@@ -976,13 +987,12 @@ class Marketing extends BaseController
             $params
         )->getResultArray();
 
-        // Daftar campaign utk filter (semua Campaign Digital Marketing periode ini).
-        $allCampaigns = $db->query(
-            'SELECT id, nama FROM marketing_campaigns
-             WHERE period_month = ? AND period_year = ?
-             ORDER BY nama ASC',
-            [$bulan, $tahun]
-        )->getResultArray();
+        // Daftar campaign utk filter: periode ini, yang aktif, atau yang
+        // berbelanja di periode ini (satu campaign Meta = satu baris).
+        $allCampaigns = array_map(
+            fn($c) => ['id' => (int)$c->id, 'nama' => $c->nama],
+            (new \App\Models\ModelMarketingCampaign())->options($bulan, $tahun)
+        );
 
         $channels = $this->ChannelModel->active();
         $chName   = [];
@@ -1001,6 +1011,11 @@ class Marketing extends BaseController
         if ($campaignId > 0) {
             $perfWhere  .= ' AND p.campaign_id = ?';
             $perfParams[] = $campaignId;
+        }
+        if ($rentang !== null) {
+            $perfWhere  .= ' AND p.tanggal BETWEEN ? AND ?';
+            $perfParams[] = $rentang['mulai'];
+            $perfParams[] = $rentang['selesai'];
         }
 
         $perfRows = $db->query(
@@ -1312,13 +1327,50 @@ class Marketing extends BaseController
             $metricsPerUnit = $perUnitRows;
         }
 
+        // ── Laporan mingguan: status kirim + daftar minggu ─────────
+        $laporanMinggu = [];
+        foreach ((new \App\Models\ModelMarketingLaporanMingguan())
+            ->where('period_year', $tahun)
+            ->where('period_month', $bulan)
+            ->findAll() as $lap) {
+            $laporanMinggu[(int)$lap->minggu] = $lap;
+        }
+        if ($laporanMinggu !== []) {
+            $ids = array_values(array_filter(array_map(fn($l) => (int)$l->submitted_by, $laporanMinggu)));
+            $namaAkun = [];
+            if ($ids !== []) {
+                foreach ($db->table('akun')->whereIn('ID_AKUN', $ids)->get()->getResultArray() as $a) {
+                    $namaAkun[(int)$a['ID_AKUN']] = $a['NAMA_AKUN'];
+                }
+            }
+            foreach ($laporanMinggu as $lap) {
+                $lap->nama_pengirim = $namaAkun[(int)$lap->submitted_by] ?? '-';
+            }
+        }
+
+        $mingguList = [];
+        for ($w = 1; $w <= 4; $w++) {
+            $r = \App\Services\Marketing\WeeklyReport::range($bulan, $tahun, $w);
+            $mingguList[$w] = date('d/m', strtotime($r['mulai'])) . '–' . date('d/m', strtotime($r['selesai']));
+        }
+
+        $mingguSudahBerakhir = $minggu > 0
+            && \App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, date('Y-m-d'));
+        $mingguAktif = ($tahun * 100 + $bulan) >= 202611;
+
         return view('template', [
             'body'       => 'marketing/laporan',
             'akun'       => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'bulan'      => $bulan,
             'tahun'      => $tahun,
             'kampanye'   => $campaignId,
-            'campaigns'  => array_map(fn($c) => ['id' => (int)$c['id'], 'nama' => $c['nama']], $allCampaigns),
+            'campaigns'  => $allCampaigns,
+            'minggu'     => $minggu,
+            'mingguList' => $mingguList,
+            'laporanMinggu' => $laporanMinggu,
+            'mingguSudahBerakhir' => $mingguSudahBerakhir,
+            'mingguAktif' => $mingguAktif,
+            'canWrite'   => $this->canWrite(),
             'sum'        => $summary,
             'daily'      => array_values($daily),
             'perTgl'     => $perTgl,
@@ -1328,6 +1380,51 @@ class Marketing extends BaseController
             'metricsPerChannel' => $metricsPerChannel,
             'metricsPerUnit' => $metricsPerUnit,
         ]);
+    }
+
+    public function laporan_minggu_simpan()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/laporan'));
+        }
+
+        $bulan  = (int)$this->request->getPost('bulan');
+        $tahun  = (int)$this->request->getPost('tahun');
+        $minggu = (int)$this->request->getPost('minggu');
+
+        $kembali = base_url('marketing/laporan?bulan=' . $bulan . '&tahun=' . $tahun . '&minggu=' . $minggu);
+
+        if (!$this->validPeriod($bulan, $tahun) || $minggu < 1 || $minggu > 4) {
+            return redirect()->to(base_url('marketing/laporan'))->with('error', 'Periode laporan tidak valid.');
+        }
+        if ($tahun * 100 + $bulan < 202611) {
+            return redirect()->to($kembali)->with('error', 'Laporan mingguan berlaku mulai November 2026.');
+        }
+        if (!\App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, date('Y-m-d'))) {
+            return redirect()->to($kembali)->with('error', 'Minggu ini belum berakhir, belum bisa dilaporkan.');
+        }
+
+        $model = new \App\Models\ModelMarketingLaporanMingguan();
+        $ada = $model->where('period_year', $tahun)
+            ->where('period_month', $bulan)
+            ->where('minggu', $minggu)
+            ->first();
+        if ($ada) {
+            return redirect()->to($kembali)->with('error', 'Laporan minggu ini sudah dikirim.');
+        }
+
+        $model->insert([
+            'period_year'  => $tahun,
+            'period_month' => $bulan,
+            'minggu'       => $minggu,
+            'submitted_by' => $this->currentAkun(),
+            'submitted_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return redirect()->to($kembali)->with('success', 'Laporan minggu ini terkirim.');
     }
 
     // ── Campaign Digital Marketing (master) ────────────────────────
