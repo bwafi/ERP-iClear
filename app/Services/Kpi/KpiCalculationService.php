@@ -61,6 +61,7 @@ class KpiCalculationService
     protected $marketingService;
     protected $digitalMarketingService;
     protected $financeKpiService;
+    protected $managerKpiService;
 
     public function __construct()
     {
@@ -107,6 +108,7 @@ class KpiCalculationService
         $omzetInfo = null; // cache ringkasan omzet SPV (target/actual per cabang) utk display
         $digitalData = null; // cache data target/actual KPI Digital Marketing (jabatan 43)
         $financeData = null; // cache data target/actual KPI Finance (jabatan 0)
+        $managerData = null; // cache data target/actual KPI Manager (jabatan 34)
         foreach ($weights as $w) {
             $component = $this->componentModel->where('id', $w->kpi_component_id)->first();
             if (!$component || !(int)$component->is_active) {
@@ -157,6 +159,21 @@ class KpiCalculationService
                     (int)$year
                 );
                 $achievement = $financeData['achievement'];
+            // ==== MANAGER (jabatan 34): 7 komponen perusahaan (ManagerKpiService) ====
+            // Omzet Global (rumus sama Kadiv), Profit & Kesehatan (Finance),
+            // Pencapaian Cabang (semua cabang), Efektivitas Organisasi (KPI SPV),
+            // SDM & Leadership (KPI bawahan langsung), dan 2 komponen manual.
+            } elseif ($positionId === 34 && in_array($component->code, ManagerKpiService::CODES, true)) {
+                $managerData = $this->managerService()->componentData(
+                    $component->code,
+                    (int)$employeeId,
+                    (int)$unitId,
+                    (int)$month,
+                    (int)$year,
+                    $context,
+                    $date
+                );
+                $achievement = $managerData['achievement'];
             // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
             } elseif ($component->code === 'CLOSING_RATE') {
                 $achievement = (new \App\Services\Kpi\Calculators\ClosingRateCalculator())
@@ -388,6 +405,15 @@ class KpiCalculationService
                     $targetInfo['cabang'] = $this->financeKpiService()
                         ->cashflowBreakdown((int) $month, (int) $year);
                 }
+            } elseif ($managerData !== null) {
+                // KPI Manager (jabatan 34): target/realisasi dari ManagerKpiService.
+                $targetInfo = [
+                    'target'    => $managerData['target'],
+                    'actual'    => $managerData['actual'],
+                    'shortfall' => $managerData['shortfall'],
+                    'ho'        => true,
+                    'cabang'    => null,
+                ];
             }
 
             $items[] = [
@@ -484,6 +510,14 @@ class KpiCalculationService
             $this->financeKpiService = new FinanceKpiService();
         }
         return $this->financeKpiService;
+    }
+
+    public function managerService(): ManagerKpiService
+    {
+        if ($this->managerKpiService === null) {
+            $this->managerKpiService = new ManagerKpiService();
+        }
+        return $this->managerKpiService;
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int
