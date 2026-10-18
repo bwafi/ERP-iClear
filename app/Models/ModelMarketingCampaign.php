@@ -30,6 +30,7 @@ class ModelMarketingCampaign extends Model
         'pic',
         'meta_campaign_id',
         'unit_id',
+        'unit_sumber',
         'created_by',
     ];
 
