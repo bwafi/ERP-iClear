@@ -9,6 +9,7 @@ namespace CodeIgniter\Database {
 namespace {
     require __DIR__ . '/../../app/Database/Migrations/2026-10-18-000500_LinkDamagedStockToSupplierReturn.php';
     require __DIR__ . '/../../app/Database/Migrations/2026-10-18-000700_CreateWarrantyStockIssues.php';
+    require __DIR__ . '/../../app/Database/Migrations/2026-10-18-000800_LinkWarrantyDamagedStock.php';
 
     $databaseName = 'codex_erp_warranty_' . bin2hex(random_bytes(4));
     $connection = new \PDO(
@@ -35,7 +36,7 @@ namespace {
         $connection->exec('CREATE TABLE detail_mutasi (barang_idbarang INT, kirim_idunit INT, terima_idunit INT, jumlah_kirim INT, jumlah_terima INT)');
         $connection->exec('CREATE TABLE retur_pelanggan (barang_idbarang INT, unit_idunit INT, jumlah INT)');
         $connection->exec('CREATE TABLE retur_suplier (barang_idbarang INT, unit_idunit INT, jumlah INT, barang_rusak_id INT)');
-        $connection->exec('CREATE TABLE barang_rusak (barang_idbarang INT, unit_idunit INT, jumlah INT)');
+        $connection->exec('CREATE TABLE barang_rusak (idbarang_rusak INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, claim_id INT NULL)');
         $connection->exec('CREATE TABLE stok_opname (barang_idbarang INT, unit_idunit INT, is_reverted INT)');
         $connection->exec('CREATE TABLE garansi_sparepart_keluar (
             claim_id INT, service_id INT, barang_id INT, unit_id INT, jumlah INT, hpp_satuan BIGINT,
@@ -45,11 +46,11 @@ namespace {
         $connection->exec("INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, 'TEST')");
         $connection->exec('INSERT INTO detail_pembelian VALUES (1, 1, 10)');
         $connection->exec('INSERT INTO detail_penjualan VALUES (1, 1, 1)');
-        $connection->exec('INSERT INTO barang_rusak VALUES (1, 1, 1)');
+        $connection->exec('INSERT INTO barang_rusak VALUES (100, 1, 1, 1, NULL)');
         $connection->exec('INSERT INTO retur_suplier VALUES (1, 1, 1, 100)');
 
-        $migration = new \App\Database\Migrations\CreateWarrantyStockIssues();
-        $viewMethod = new \ReflectionMethod($migration, 'warrantyStockView');
+        $migration = new \App\Database\Migrations\LinkWarrantyDamagedStock();
+        $viewMethod = new \ReflectionMethod($migration, 'warrantyDamagedStockView');
         $connection->exec($viewMethod->invoke($migration));
         $stock = static function () use ($connection): int {
             return (int) $connection->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 1 AND id_unit = 1')->fetchColumn();
@@ -60,6 +61,14 @@ namespace {
         $connection->exec('INSERT INTO garansi_sparepart_keluar VALUES (7, 12, 1, 1, 2, 230000)');
         if ($stock() !== 6) {
             throw new \RuntimeException('Penggantian garansi tidak mengurangi stok tepat dua unit.');
+        }
+        $connection->exec('INSERT INTO barang_rusak VALUES (101, 1, 1, 1, 7)');
+        if ($stock() !== 6) {
+            throw new \RuntimeException('Barang rusak garansi mengurangi stok jual lagi.');
+        }
+        $connection->exec('INSERT INTO retur_suplier VALUES (1, 1, 1, 101)');
+        if ($stock() !== 6) {
+            throw new \RuntimeException('Retur barang rusak garansi mengurangi stok jual lagi.');
         }
         try {
             $connection->exec('INSERT INTO garansi_sparepart_keluar VALUES (7, 12, 1, 1, 2, 230000)');
