@@ -661,8 +661,8 @@ class ModelService extends Model
     {
         $builder = $this->select('
             service.*,
-            SUM(service_sparepart.hpp_penjualan) AS total_hpp_penjualan,
-            (service.harus_dibayar - SUM(service_sparepart.hpp_penjualan)) AS laba_service,
+            COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0) AS total_hpp_penjualan,
+            (service.harus_dibayar - COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0)) AS laba_service,
             akun.NAMA_AKUN AS nama_teknisi
         ')
             ->join('service_sparepart', 'service_sparepart.service_idservice = service.idservice', 'left')
