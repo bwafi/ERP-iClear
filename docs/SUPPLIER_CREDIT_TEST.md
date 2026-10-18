@@ -20,6 +20,9 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 - `php tests/smoke/linked_stock_view.php`
 - `php tests/smoke/supplier_credit.php`
 - `php tests/smoke/warranty_stock_view.php`
+- `php tests/smoke/warranty_profit.php`
+- `php tests/smoke/stock_valuation.php`
+- `php tests/integration/WarrantyStockMySql.php` pada MySQL lokal yang boleh membuat database sintetis sementara.
 - Jalankan PHPUnit pada runtime PHP yang cocok dengan dependensi proyek.
 - Bandingkan `SUM(pembelian.sisa)` dengan total utang supplier pada dashboard dan posisi `hutang_piutang`.
 - Bandingkan `SUM(kredit_retur_suplier.sisa_kredit)` berstatus disetujui dengan piutang supplier.
@@ -33,3 +36,7 @@ Retur lama tanpa hubungan ke Barang Rusak tidak direklasifikasi otomatis. Dokume
 ## Garansi pengganti
 
 Migrasi `000700` menambahkan mutasi stok tersendiri untuk sparepart pengganti. Simpan ulang formulir klaim yang sama tidak boleh mengurangi stok kedua kali. HPP pengganti tetap disimpan pada baris service dan pada mutasi tersebut. Klaim kedua untuk **barang yang sama** belum mendukung lapisan HPP baru dalam baris service yang sama; jangan mengubah kuantitas lama atau menganggapnya sebagai penggantian baru tanpa desain histori per klaim. Stok TEST dan jurnal harus direkonsiliasi sebelum rilis; migrasi ini belum mencatat jurnal beban garansi otomatis.
+
+## Batas laporan
+
+Nilai Kartu Stok sekarang memakai sumber HPP yang sama dengan service, bukan harga beli master; baris tanpa HPP dan stok negatif ditandai sehingga total tidak dianggap final. Laba Rugi mode transaksi menghitung service awal saat klaim sedang diproses dan memisahkan HPP pengganti, sedangkan mode jurnal tetap menunggu pemetaan akun beban garansi/persediaan yang disetujui. Ringkasan rekonsiliasi Neraca pada Posisi Keuangan hanyalah indikator saldo jurnal; saldo awal, persediaan, dan eliminasi antarcabang belum dibuktikan. Jangan menyebut laporan ini final sebelum rekonsiliasi TEST lulus.
