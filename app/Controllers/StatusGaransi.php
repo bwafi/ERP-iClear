@@ -23,6 +23,7 @@ use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelRiwayatKlaimGaransi;
 use App\Models\ModelRegion;
+use App\Services\Service\WarrantyClaimEligibility;
 
 
 
@@ -142,26 +143,55 @@ class StatusGaransi extends BaseController
 
     public function claim_garansi()
     {
-        $idservice = $this->request->getPost('idservice');
-        $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
-        $data = array(
-            'status_service' => 2,
-            'tanggal_bisa_diambil' => null,
-            'tanggal_selesai' =>  null,
-            'status_proses' => 1,
-            'tanggal_claim_garansi' => $wibTime->format('Y-m-d H:i:s'),
-        );
-        $this->ServiceModel->updateService($idservice, $data);
-        $this->ProsesServiceModel->deleteByServiceId($idservice);
+        $idservice = (int) $this->request->getPost('idservice');
+        if ($idservice <= 0) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service tidak valid.');
+        }
 
-        $data2 = array(
-            'service_idservice' => $idservice,
-            'tanggal_claim' => $wibTime->format('Y-m-d H:i:s'),
-        );
-        $this->RiwayatKlaimGaransiModel->insertRiwayat($data2);
+        $db = Database::connect();
+        $db->transBegin();
 
-        session()->setFlashData('sukses', 'Berhasil claim garansi service');
-        return redirect()->to(base_url('garansi_service'));
+        try {
+            $serviceTable = $db->prefixTable('service');
+            $service = $db->query(
+                "SELECT status_service, garansi_hari, tanggal_selesai FROM {$serviceTable} WHERE idservice = ? FOR UPDATE",
+                [$idservice]
+            )->getRow();
+            $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
+            if (! $service || ! WarrantyClaimEligibility::allows($service, $today)) {
+                throw new \RuntimeException('Service tidak memenuhi syarat klaim garansi.');
+            }
+
+            $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
+            $data = array(
+                'status_service' => 2,
+                'tanggal_bisa_diambil' => null,
+                'tanggal_selesai' => null,
+                'status_proses' => 1,
+                'tanggal_claim_garansi' => $wibTime->format('Y-m-d H:i:s'),
+            );
+            if (! $this->ServiceModel->updateService($idservice, $data)
+                || ! $this->ProsesServiceModel->deleteByServiceId($idservice)) {
+                throw new \RuntimeException('Status klaim garansi gagal disimpan.');
+            }
+
+            $data2 = array(
+                'service_idservice' => $idservice,
+                'tanggal_claim' => $wibTime->format('Y-m-d H:i:s'),
+            );
+            if (! $this->RiwayatKlaimGaransiModel->insertRiwayat($data2)
+                || $db->transStatus() === false
+                || ! $db->transCommit()) {
+                throw new \RuntimeException('Riwayat klaim garansi gagal disimpan.');
+            }
+
+            session()->setFlashData('sukses', 'Berhasil claim garansi service');
+            return redirect()->to(base_url('garansi_service'));
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            log_message('error', 'StatusGaransi::claim_garansi gagal untuk service ' . $idservice . ': ' . $error->getMessage());
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Klaim garansi tidak dapat diproses. Periksa status dan masa garansi service.');
+        }
     }
 
     public function service_by_garansi($idservice)
