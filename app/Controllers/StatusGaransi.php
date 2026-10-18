@@ -119,6 +119,12 @@ class StatusGaransi extends BaseController
 
     public function getRiwayatKlaim($idservice)
     {
+        $idservice = (int) $idservice;
+        $service = $this->ServiceModel->find($idservice);
+        if (! $service || ((int) session('ID_JABATAN') !== 1
+            && (int) ($service->unit_idunit ?? 0) !== (int) session('ID_UNIT'))) {
+            return $this->response->setStatusCode(403)->setJSON(['html' => 'Akses ditolak.']);
+        }
         $riwayat = $this->RiwayatKlaimGaransiModel->getByService($idservice);
 
         if (empty($riwayat)) {
@@ -127,13 +133,36 @@ class StatusGaransi extends BaseController
             ]);
         }
 
+        $db = Database::connect();
+        $canSeeHpp = (int) session('ID_JABATAN') === 1;
+        $issuesByClaim = [];
+        if ($db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
+            $issues = $db->table('garansi_sparepart_keluar issue')
+                ->select('issue.claim_id, issue.jumlah, issue.hpp_satuan, barang.nama_barang')
+                ->join('barang', 'barang.idbarang = issue.barang_id')
+                ->where('issue.service_id', $idservice)
+                ->orderBy('issue.id')->get()->getResult();
+            foreach ($issues as $issue) {
+                $issuesByClaim[(int) $issue->claim_id][] = $issue;
+            }
+        }
+
         $html = '<table class="table table-sm table-bordered">
-                <thead><tr><th>#</th><th>Tanggal Klaim</th></tr></thead><tbody>';
+                <thead><tr><th>#</th><th>Tanggal Klaim</th><th>Sparepart Pengganti</th></tr></thead><tbody>';
 
         foreach ($riwayat as $i => $row) {
             $html .= '<tr>
                     <td>' . ($i + 1) . '</td>
                     <td>' . date('d-m-Y', strtotime($row->tanggal_claim)) . '</td>
+                    <td>';
+            foreach ($issuesByClaim[(int) $row->idriwayat_claim_garansi] ?? [] as $issue) {
+                $html .= esc($issue->nama_barang) . ' × ' . (int) $issue->jumlah;
+                if ($canSeeHpp) {
+                    $html .= ' — HPP Rp ' . number_format((int) $issue->hpp_satuan, 0, ',', '.');
+                }
+                $html .= '<br>';
+            }
+            $html .= '</td>
                 </tr>';
         }
 
@@ -165,6 +194,16 @@ class StatusGaransi extends BaseController
                 || ! WarrantyClaimEligibility::allows($service, $today)) {
                 throw new \RuntimeException('Service tidak memenuhi syarat klaim garansi.');
             }
+            $untracked = $db->query(
+                'SELECT COUNT(*) AS total FROM ' . $db->prefixTable('service_sparepart') . ' detail '
+                . 'WHERE detail.service_idservice = ? AND detail.jumlah_tambahan_garansi > 0 '
+                . 'AND NOT EXISTS (SELECT 1 FROM ' . $db->prefixTable('garansi_sparepart_keluar') . ' issue '
+                . 'WHERE issue.service_id = detail.service_idservice AND issue.barang_id = detail.barang_idbarang)',
+                [$idservice]
+            )->getRow();
+            if ((int) ($untracked->total ?? 0) > 0) {
+                throw new \RuntimeException('HPP garansi lama belum memiliki histori mutasi; rekonsiliasi dahulu.');
+            }
 
             $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
             $data = array(
@@ -175,7 +214,14 @@ class StatusGaransi extends BaseController
                 'tanggal_claim_garansi' => $wibTime->format('Y-m-d H:i:s'),
             );
             if (! $this->ServiceModel->updateService($idservice, $data)
-                || ! $this->ProsesServiceModel->deleteByServiceId($idservice)) {
+                || ! $this->ProsesServiceModel->deleteByServiceId($idservice)
+                || ! $db->table('service_sparepart')->where('service_idservice', $idservice)->update([
+                    'jumlah_tambahan_garansi' => 0,
+                    'hpp_penjualan_garansi' => 0,
+                    'harga_penjualan_garansi' => 0,
+                    'sub_total_garansi' => 0,
+                    'diskon_penjualan_garansi' => 0,
+                ])) {
                 throw new \RuntimeException('Status klaim garansi gagal disimpan.');
             }
 
@@ -351,27 +397,16 @@ class StatusGaransi extends BaseController
                 $submittedIds[$id] = true;
 
                 $existingItem = $existingMap[$id] ?? null;
-                $hppBarang = $existingItem && (int) ($existingItem->jumlah_tambahan_garansi ?? 0) > 0
-                    ? null
-                    : $this->HppBarangModel->getById($id);
-                $hpp = ServiceHppSnapshot::resolveWarrantyReplacement(
-                    $existingItem,
-                    $quantity,
-                    $hppBarang->hpp ?? 0
+                $previousIssue = $db->table('garansi_sparepart_keluar')
+                    ->where('claim_id', (int) $claim->idriwayat_claim_garansi)
+                    ->where('barang_id', $id)
+                    ->get()->getRow();
+                $hppBarang = $previousIssue || $quantity === 0 ? null : $this->HppBarangModel->getById($id);
+                $hpp = ServiceHppSnapshot::resolveWarrantyClaimIssue(
+                    $previousIssue, $quantity, $hppBarang->hpp ?? 0
                 );
                 if ($quantity > 0) {
-                    $previousIssue = $db->table('garansi_sparepart_keluar')
-                        ->where('service_id', $idservice)
-                        ->where('barang_id', $id)
-                        ->get()->getRow();
                     if ($previousIssue) {
-                        if ((int) $previousIssue->claim_id !== (int) $claim->idriwayat_claim_garansi) {
-                            throw new \RuntimeException('Penggantian ulang barang yang sama memerlukan histori HPP per klaim.');
-                        }
-                        if ((int) $previousIssue->jumlah !== $quantity
-                            || (int) $previousIssue->hpp_satuan !== (int) $hpp) {
-                            throw new \RuntimeException('Penggantian barang yang sama perlu dicatat pada histori klaim terpisah.');
-                        }
                         $journal = $db->table('jurnal')
                             ->select('COUNT(*) AS jumlah, SUM(debet) AS debet, SUM(kredit) AS kredit', false)
                             ->where('tabel_referensi', 'garansi_sparepart_keluar')
