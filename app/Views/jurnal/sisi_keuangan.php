@@ -12,6 +12,17 @@
     </div>
 </div>
 
+<?php if ($warranty_reconciliation !== null): ?>
+    <div class="alert <?= $warranty_reconciliation['tanpa_jurnal'] + $warranty_reconciliation['tidak_sesuai'] + $warranty_reconciliation['jurnal_tanpa_mutasi'] === 0 ? 'alert-info' : 'alert-danger' ?> mx-4">
+        <strong>Rekonsiliasi pengganti garansi:</strong>
+        <?= (int) $warranty_reconciliation['jumlah_mutasi'] ?> mutasi,
+        HPP Rp <?= number_format($warranty_reconciliation['hpp_total'], 0, ',', '.') ?>;
+        <?= (int) $warranty_reconciliation['tanpa_jurnal'] ?> tanpa jurnal,
+        <?= (int) $warranty_reconciliation['tidak_sesuai'] ?> jurnal tidak sesuai,
+        <?= (int) $warranty_reconciliation['jurnal_tanpa_mutasi'] ?> jurnal tanpa mutasi.
+    </div>
+<?php endif; ?>
+
 <div class="alert <?= $reconciliation['selisih'] === 0 && $reconciliation['selisih_jurnal'] === 0 && $reconciliation['akun_tidak_terklasifikasi'] === [] && $reconciliation['jumlah_akun'] > 0 ? 'alert-info' : 'alert-warning' ?> mx-4">
     <strong>Rekonsiliasi Neraca indikatif</strong> (saldo jurnal sampai <?= esc($reconciliation_date) ?>):
     Aset Rp <?= number_format($reconciliation['aset'], 0, ',', '.') ?>;
