@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelPembayaranHutangPiutang;
 use Config\Database;
@@ -62,6 +63,16 @@ class HutangPiutangService
         self::SUMBER_KELEBIHAN_TRANSFER,
         self::SUMBER_RETUR_BARANG,
     ];
+
+    /** Kategori kas untuk baris kas_keluar pencairan kasbon (khusus, bukan kategori 10). */
+    public const KATEGORI_KASBON = 'Kasbon';
+
+    /** Template jurnal input kasbon. */
+    public const TEMPLATE_KASBON_INPUT_TUNAI = 'hp_kasbon_input';
+    public const TEMPLATE_KASBON_INPUT_BANK = 'hp_kasbon_input_bank';
+
+    /** COA piutang pegawai, ditampilkan di baris kas keluar kasbon. */
+    public const NO_AKUN_PIUTANG_PEGAWAI = '1020201000';
 
     protected $db;
     protected $hp;
@@ -205,6 +216,223 @@ class HutangPiutangService
     }
 
     // =====================================================================
+    // Kasbon -> kas laci
+    // =====================================================================
+
+    /**
+     * idkategori_kas untuk kategori "Kasbon".
+     *
+     * Kategori khusus, BUKAN kategori gaji/lembur (10): "Ka*sbon*" akan
+     * nyangkut di filter LIKE '%bon%' slip gaji.
+     */
+    private function resolveKategoriKasbonId(): int
+    {
+        $row = $this->db->table('kategori_kas')
+            ->where('kategori', self::KATEGORI_KASBON)
+            ->where('jenis_kas', 'kas_keluar')
+            ->get()->getRow();
+
+        if (!$row) {
+            throw new \RuntimeException('Kategori kas "Kasbon" belum tersedia.');
+        }
+
+        return (int) $row->idkategori_kas;
+    }
+
+    /** Template jurnal input kasbon sesuai metode pencairan. */
+    private function templateKasbonInput(string $metode): string
+    {
+        return $metode === 'transfer'
+            ? self::TEMPLATE_KASBON_INPUT_BANK
+            : self::TEMPLATE_KASBON_INPUT_TUNAI;
+    }
+
+    /**
+     * Insert baris kas_keluar pencairan kasbon.
+     *
+     * Tidak memposting jurnal: jurnal kasbon tetap hp_kasbon_input /
+     * hp_kasbon_input_bank supaya Kas Besar/Bank tidak dobel.
+     *
+     * @return int idkas_keluar
+     */
+    private function insertKasKeluarKasbon(int $unitId, string $tanggal, int $jumlah, string $metode, ?string $idbank, string $deskripsi, int $penerimaAkun): int
+    {
+        $idbankFinal = null;
+        if ($metode === 'transfer') {
+            $cek = (new BankRekeningValidator())->validateUntukUnit($idbank, $unitId, null, false);
+            if (!$cek['ok']) {
+                throw new \RuntimeException($cek['alasan']);
+            }
+            $idbankFinal = $cek['idbank'];
+        } else {
+            // Tunai menambah kas laci: tanpa akun KAS aktif, baris ini tidak
+            // akan pernah muncul di Kas & Bank padahal Tutup Kasir menghitungnya.
+            $resolved = (new ModeKasBank())->resolveAkunDetail($unitId, null, ModeKasBank::ARAH_KELUAR);
+            if (empty($resolved['akun'])) {
+                throw new \RuntimeException((string) ($resolved['reason'] ?? 'Unit belum punya akun KAS aktif.'));
+            }
+        }
+
+        $tersimpan = $this->db->table('kas_keluar')->insert([
+            'tanggal'             => $tanggal,
+            'kategori_idkategori' => $this->resolveKategoriKasbonId(),
+            'deskripsi'           => $deskripsi,
+            'jumlah'              => $jumlah,
+            'penerima'            => (string) $penerimaAkun,
+            'idunit'              => $unitId,
+            'jenis'               => 'debet',
+            'idbank'              => $idbankFinal,
+            'no_akun'             => self::NO_AKUN_PIUTANG_PEGAWAI,
+            'created_on'          => date('Y-m-d H:i:s'),
+            'updated_on'          => date('Y-m-d H:i:s'),
+        ]);
+
+        if (! $tersimpan) {
+            throw new \RuntimeException('Gagal menyimpan baris kas kasbon.');
+        }
+
+        return (int) $this->db->insertID();
+    }
+
+    /**
+     * Boleh tidak baris kas_keluar diubah?
+     *
+     * Menolak bila kasbon tertaut sudah lunas (faktanya terkunci ke payroll)
+     * atau nominal baru lebih kecil dari yang sudah dibayar.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function guardKasbonKasKeluar(int $kasKeluarId, int $jumlahBaru): array
+    {
+        $row = $this->db->table('hutang_piutang')
+            ->where('kas_keluar_id', $kasKeluarId)
+            ->where('deleted', 0)
+            ->get()->getRow();
+
+        if (!$row) {
+            return ['ok' => true, 'message' => 'Tidak ada kasbon tertaut.'];
+        }
+        if ($row->status === self::STATUS_LUNAS) {
+            return ['ok' => false, 'message' => 'Kasbon sudah lunas dipotong gaji; baris kas tidak boleh diubah.'];
+        }
+        if ($jumlahBaru <= 0) {
+            return ['ok' => false, 'message' => 'Nominal kas harus lebih dari 0.'];
+        }
+        if ($jumlahBaru < (int) $row->total_dibayar) {
+            return ['ok' => false, 'message' => 'Nominal kas lebih kecil dari yang sudah dibayar.'];
+        }
+
+        return ['ok' => true, 'message' => 'Boleh diubah.'];
+    }
+
+    /**
+     * Terapkan perubahan baris kas_keluar ke kasbon tertaut (arah: kas -> kasbon).
+     *
+     * @param array{tanggal?:string,jumlah?:int,idbank?:?string} $data
+     * @return array{ok:bool,message:string}
+     */
+    public function syncKasbonDariKasKeluar(int $kasKeluarId, array $data): array
+    {
+        $row = $this->db->table('hutang_piutang')
+            ->where('kas_keluar_id', $kasKeluarId)
+            ->where('deleted', 0)
+            ->get()->getRow();
+
+        if (!$row) {
+            return ['ok' => true, 'message' => 'Tidak ada kasbon tertaut.'];
+        }
+
+        $total = (int) ($data['jumlah'] ?? $row->total);
+        if ($total <= 0) {
+            return ['ok' => false, 'message' => 'Nominal kas harus lebih dari 0.'];
+        }
+        if ($total < (int) $row->total_dibayar) {
+            return ['ok' => false, 'message' => 'Nominal kas lebih kecil dari yang sudah dibayar.'];
+        }
+        $idbank   = trim((string) ($data['idbank'] ?? ''));
+        $metode   = $idbank !== '' ? 'transfer' : 'tunai';
+        $tanggal  = (string) ($data['tanggal'] ?? $row->tanggal);
+        $sisa     = $total - (int) $row->total_dibayar;
+
+        $this->db->transBegin();
+        try {
+            $this->hp->update((int) $row->id, [
+                'total'       => $total,
+                'sisa'        => $sisa,
+                'status'      => $this->statusFromSisa($total, $sisa, (int) $row->total_dibayar),
+                'tanggal'     => $tanggal,
+                'metode'      => $metode,
+                'bank_idbank' => $idbank !== '' ? $idbank : null,
+            ]);
+
+            // Jurnal kasbon ikut disesuaikan: hapus lalu post ulang.
+            $this->db->table('jurnal')
+                ->where('tabel_referensi', 'hutang_piutang')
+                ->where('id_referensi', (int) $row->id)
+                ->delete();
+            $this->postJurnal(
+                $tanggal,
+                $this->templateKasbonInput($metode),
+                $total,
+                'Kasbon Pegawai: ' . $row->kode,
+                (int) $row->id,
+                'hutang_piutang',
+                $row->unit_id ? (int) $row->unit_id : null,
+                (int) session('ID_AKUN')
+            );
+
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['ok' => false, 'message' => 'Gagal sinkron kasbon: ' . $e->getMessage()];
+        }
+
+        return ['ok' => true, 'message' => 'Kasbon ikut diperbarui.'];
+    }
+
+    /**
+     * Hapus kasbon tertaut saat baris kas_keluar dihapus.
+     *
+     * Menolak bila kasbon sudah lunas atau sudah punya pembayaran potong gaji.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function hapusKasbonDariKasKeluar(int $kasKeluarId): array
+    {
+        $row = $this->db->table('hutang_piutang')
+            ->where('kas_keluar_id', $kasKeluarId)
+            ->where('deleted', 0)
+            ->get()->getRow();
+
+        if (!$row) {
+            return ['ok' => true, 'message' => 'Tidak ada kasbon tertaut.'];
+        }
+
+        $adaBayar = $this->db->table('pembayaran_hutang_piutang')
+            ->where('hutang_piutang_id', (int) $row->id)
+            ->countAllResults() > 0;
+
+        if ($adaBayar || $row->status === self::STATUS_LUNAS) {
+            return ['ok' => false, 'message' => 'Kasbon sudah dibayar/dipotong gaji; baris kas tidak boleh dihapus.'];
+        }
+
+        $this->db->transBegin();
+        try {
+            $this->db->table('jurnal')
+                ->where('tabel_referensi', 'hutang_piutang')
+                ->where('id_referensi', (int) $row->id)
+                ->delete();
+            $this->hp->update((int) $row->id, ['deleted' => 1]);
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['ok' => false, 'message' => 'Gagal hapus kasbon: ' . $e->getMessage()];
+        }
+
+        return ['ok' => true, 'message' => 'Kasbon ikut dihapus.'];
+    }
+
+    // =====================================================================
     // CRUD posisi authoritative
     // =====================================================================
 
@@ -219,7 +447,12 @@ class HutangPiutangService
         $sumberTipe = $in['sumber_tipe'] ?? '';
         $pihakTipe = $in['pihak_tipe'] ?? '';
         $pihakId = (int) ($in['pihak_id'] ?? 0);
-        $total = (int) preg_replace('/[^\d]/', '', (string) ($in['total'] ?? 0));
+        $totalRaw = trim((string) ($in['total'] ?? '0'));
+        // preg_replace membuang tanda minus, jadi -5000 akan lolos sebagai 5000.
+        if (str_contains($totalRaw, '-')) {
+            return ['success' => false, 'message' => 'Total tidak boleh negatif.'];
+        }
+        $total = (int) preg_replace('/[^\d]/', '', $totalRaw);
         $tanggal = $in['tanggal'] ?? date('Y-m-d');
         $jatuhTempo = $in['jatuh_tempo'] ?? null;
         // Kasbon dipotong dari slip gaji: jatuh tempo otomatis tanggal 1 bulan depan.
@@ -335,7 +568,25 @@ class HutangPiutangService
             // Jurnal hanya untuk jenis lama yang COA-nya sudah disetujui. Jenis
             // manual baru menunggu persetujuan mapping COA (tidak digubah di sini).
             if ($sumberTipe === self::SUMBER_KASBON) {
-                $this->postJurnal($tanggal, 'hp_kasbon_input', $total, 'Kasbon Pegawai: ' . $kode, (int) $id, 'hutang_piutang', $unitId, $inputBy);
+                // Pencairan kasbon mengurangi kas laci/bank: satu baris
+                // kas_keluar (dibaca Kas & Bank, arus kas, Tutup Kasir).
+                $metode = (($in['metode'] ?? 'tunai') === 'transfer') ? 'transfer' : 'tunai';
+                $idbank = $metode === 'transfer' ? trim((string) ($in['bank_idbank'] ?? '')) : null;
+                $kasId  = $this->insertKasKeluarKasbon(
+                    $unitId,
+                    $tanggal,
+                    $total,
+                    $metode,
+                    $idbank,
+                    'Kasbon ' . $kode . ' - ' . $namaPihak,
+                    $pihakId
+                );
+                $this->hp->update((int) $id, [
+                    'kas_keluar_id' => $kasId,
+                    'metode'        => $metode,
+                    'bank_idbank'   => $idbank,
+                ]);
+                $this->postJurnal($tanggal, $this->templateKasbonInput($metode), $total, 'Kasbon Pegawai: ' . $kode, (int) $id, 'hutang_piutang', $unitId, $inputBy);
             } elseif ($sumberTipe === self::SUMBER_PIUTANG_PELANGGAN) {
                 $this->postJurnal($tanggal, 'hp_piutang_pelanggan_input', $total, 'Piutang Pelanggan: ' . $kode, (int) $id, 'hutang_piutang', $unitId, $inputBy);
             }
@@ -2012,9 +2263,39 @@ class HutangPiutangService
         return $q->orderBy('a.NAMA_AKUN', 'ASC')->get()->getResult();
     }
 
-    public function getBankOptions(): array
+    /**
+     * Opsi rekening bank untuk pencairan kasbon transfer.
+     *
+     * Tiap bank ditandai `unit_ids`: unit yang berhak memakainya. Dihitung
+     * dengan validator yang sama seperti write path supaya dropdown dan
+     * validasi submit tidak pernah berbeda. Form memakainya untuk menyaring
+     * begitu unit diganti.
+     *
+     * @param int[] $unitIds unit yang boleh dipilih user; kosong = semua unit
+     * @return object[]
+     */
+    public function getBankOptions(array $unitIds = []): array
     {
-        return $this->db->table('bank')->orderBy('nama_bank', 'ASC')->get()->getResult();
+        if ($unitIds === []) {
+            $unitIds = array_map('intval', array_column(
+                $this->db->table('unit')->select('idunit')->get()->getResultArray(),
+                'idunit'
+            ));
+        }
+
+        $validator = new BankRekeningValidator();
+        $banks = $this->db->table('bank')->orderBy('nama_bank', 'ASC')->get()->getResult();
+
+        foreach ($banks as $b) {
+            $b->unit_ids = [];
+            foreach ($unitIds as $unitId) {
+                if ($validator->validateUntukUnit((string) $b->idbank, (int) $unitId, null, false)['ok']) {
+                    $b->unit_ids[] = (int) $unitId;
+                }
+            }
+        }
+
+        return $banks;
     }
 
     public function getUnitOptions(): array

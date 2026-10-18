@@ -415,6 +415,16 @@ class Kas_Keluar extends BaseController
             'updated_on' => date('Y-m-d H:i:s')
         ];
 
+        // Baris ini mungkin baris otomatis kasbon. Tolak perubahan yang merusak
+        // kasbon yang sudah lunas dipotong gaji / nominal di bawah yang dibayar.
+        $hpSvc = new \App\Services\Finance\HutangPiutangService();
+        $guard = $hpSvc->guardKasbonKasKeluar((int) $id, (int) preg_replace('/[^\d]/', '', (string) $jumlah));
+        if (! $guard['ok']) {
+            session()->setFlashdata('gagal', $guard['message']);
+
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+
         // Source update + refresh posting ledger dalam SATU transaksi:
         // hapus posting lama, posting ulang (idempotent).
         //
@@ -431,6 +441,18 @@ class Kas_Keluar extends BaseController
 
             $posting = $this->KasBankLib->postingKasKeluar((int)$id);
             PostingLedgerException::wajibBerhasil($posting, 'Kas keluar');
+
+            // Sinkron satu arah kas -> kasbon di dalam transaksi yang sama:
+            // kalau gagal, update kas ikut dibatalkan supaya laci dan kasbon
+            // tidak pernah terbelah diam-diam.
+            $sync = $hpSvc->syncKasbonDariKasKeluar((int) $id, [
+                'tanggal' => $tanggal,
+                'jumlah'  => (int) preg_replace('/[^\d]/', '', (string) $jumlah),
+                'idbank'  => $penerima,
+            ]);
+            if (! $sync['ok']) {
+                throw new \RuntimeException($sync['message']);
+            }
 
             $db->transComplete();
         } catch (PostingLedgerException $e) {
@@ -457,6 +479,15 @@ class Kas_Keluar extends BaseController
     public function delete_kas_keluar()
     {
         $id = (int) $this->request->getPost('idkas_keluar');
+
+        // Kasbon tertaut (bila ada) ikut terhapus. Ditolak bila kasbon sudah
+        // dibayar/dipotong gaji, supaya kas tetap sinkron dengan kasbon.
+        $guard = (new \App\Services\Finance\HutangPiutangService())->hapusKasbonDariKasKeluar($id);
+        if (! $guard['ok']) {
+            session()->setFlashdata('gagal', $guard['message']);
+
+            return redirect()->to(base_url('/kas_keluar'));
+        }
 
         $db = \Config\Database::connect();
         $db->transStart();

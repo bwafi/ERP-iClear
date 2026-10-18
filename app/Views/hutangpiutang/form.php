@@ -18,6 +18,7 @@
             'pegawai' => $pegawai ?? [],
             'suplier' => $suplier ?? [],
             'teknisi' => $teknisi ?? [],
+            'bank' => $bank ?? [],
             'units' => $units ?? [],
             'unit_id' => $unit_id ?? null,
             'in_modal' => false,

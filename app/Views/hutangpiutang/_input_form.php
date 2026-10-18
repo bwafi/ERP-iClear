@@ -20,7 +20,7 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
         </div>
         <div class="col-md-6">
             <label class="form-label">Unit</label>
-            <select name="unit_id" class="form-select" required>
+            <select name="unit_id" id="unit_id" class="form-select" required>
                 <?php foreach (($units ?? []) as $u) : ?>
                     <option value="<?= (int) $u->idunit ?>" <?= ($old('unit_id', $unit_id ?? null) == $u->idunit) ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
                 <?php endforeach; ?>
@@ -55,6 +55,22 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
         <div class="col-md-3" id="wrap-jatuh-tempo">
             <label class="form-label">Jatuh Tempo</label>
             <input type="date" name="jatuh_tempo" id="jatuh_tempo" class="form-control" value="<?= esc($old('jatuh_tempo')) ?>">
+        </div>
+        <div class="col-12 d-none" id="wrap-metode">
+            <label class="form-label">Metode Pencairan</label>
+            <select name="metode" id="metode" class="form-select">
+                <option value="tunai">Tunai (kas laci)</option>
+                <option value="transfer">Transfer bank</option>
+            </select>
+            <select name="bank_idbank" id="bank_idbank" class="form-select mt-2 d-none">
+                <option value="">-- Pilih Rekening --</option>
+                <?php $unitTerpilih = (int) $old('unit_id', $unit_id ?? 0); ?>
+                <?php foreach (($bank ?? []) as $b) : ?>
+                    <?php $unitBank = array_map('intval', $b->unit_ids ?? []); ?>
+                    <?php if ($unitTerpilih > 0 && ! in_array($unitTerpilih, $unitBank, true)) { continue; } ?>
+                    <option value="<?= esc($b->idbank) ?>" data-unit="<?= esc(implode(',', $unitBank)) ?>"><?= esc($b->nama_bank . ' - ' . $b->norek . (trim((string) $b->atas_nama) !== '' ? ' (' . $b->atas_nama . ')' : '')) ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div class="col-md-6">
             <label class="form-label">Total</label>
@@ -117,6 +133,10 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
         var ketWajib = document.getElementById('ket-wajib');
         var wrapJatuhTempo = document.getElementById('wrap-jatuh-tempo');
         var elJatuhTempo = document.getElementById('jatuh_tempo');
+        var wrapMetode = document.getElementById('wrap-metode');
+        var elMetode = document.getElementById('metode');
+        var elBank = document.getElementById('bank_idbank');
+        var elUnit = document.querySelector('#hp-input-form select[name="unit_id"]');
 
         function pihakOptions(jenis) {
             return jenis === 'hutang' ? ['suplier', 'teknisi', 'lainnya'] : ['suplier', 'pelanggan', 'pegawai', 'lainnya'];
@@ -187,6 +207,31 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
             elJatuhTempo.readOnly = kasbon;
             elJatuhTempo.classList.toggle('bg-light', kasbon);
             if (kasbon) { elJatuhTempo.value = firstOfNextMonth(); }
+
+            // Metode pencairan hanya relevan untuk kasbon.
+            wrapMetode.classList.toggle('d-none', !kasbon);
+            if (!kasbon) { elMetode.value = 'tunai'; }
+            syncBank();
+        }
+
+        function syncBank() {
+            var transfer = elMetode.value === 'transfer';
+            elBank.classList.toggle('d-none', !transfer);
+            elBank.required = transfer;
+            if (!transfer) { elBank.value = ''; }
+            filterBankUnit();
+        }
+
+        // Hanya rekening milik unit yang dipilih yang boleh muncul.
+        function filterBankUnit() {
+            var unit = elUnit ? elUnit.value : '';
+            Array.prototype.forEach.call(elBank.options, function (opt) {
+                if (!opt.value) { return; }
+                var boleh = (opt.dataset.unit || '').split(',').indexOf(unit) !== -1;
+                opt.hidden = !boleh;
+                opt.disabled = !boleh;
+                if (!boleh && elBank.value === opt.value) { elBank.value = ''; }
+            });
         }
 
         function syncPihak() {
@@ -206,6 +251,8 @@ $selectedSumber = $old('sumber_tipe', $default_sumber ?? '');
             if (hrd[elSumber.value].pihak) { sync(); } else { elPihakTipe.value = ''; sync(); }
         });
         elPihakTipe.addEventListener('change', syncPihak);
+        elMetode.addEventListener('change', syncBank);
+        if (elUnit) { elUnit.addEventListener('change', filterBankUnit); }
 
         if (INIT.sumber && hrd[INIT.sumber]) { elSumber.value = INIT.sumber; }
         if (INIT.jenis) { elJenis.value = INIT.jenis; }
