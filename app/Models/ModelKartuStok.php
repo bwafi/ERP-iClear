@@ -141,9 +141,12 @@ class ModelKartuStok extends Model
                 COUNT(*) AS total_barang,
                 COUNT(DISTINCT stok_barang.id_unit) AS total_unit,
                 COALESCE(SUM(stok_barang.stok_akhir), 0) AS total_stok,
-                COALESCE(SUM(stok_barang.stok_akhir * barang.harga_beli), 0) AS nilai_stok
+                COALESCE(SUM(stok_barang.stok_akhir * hpp_barang.hpp), 0) AS nilai_stok,
+                SUM(CASE WHEN stok_barang.stok_akhir > 0 AND hpp_barang.hpp IS NULL THEN 1 ELSE 0 END) AS jumlah_tanpa_hpp,
+                SUM(CASE WHEN stok_barang.stok_akhir < 0 THEN 1 ELSE 0 END) AS jumlah_stok_negatif
             ')
             ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
+            ->join('hpp_barang', 'hpp_barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
