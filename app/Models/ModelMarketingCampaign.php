@@ -44,13 +44,25 @@ class ModelMarketingCampaign extends Model
         self::STATUS_DONE   => 'Selesai',
     ];
 
-    /** Daftar campaign utk pilihan di form Performa Ads. */
+    /**
+     * Daftar campaign untuk pemilih di Performa Ads & Laporan.
+     *
+     * Satu campaign Meta hanya punya satu baris (`meta_campaign_id` UNIQUE),
+     * jadi saringan periode saja akan menyembunyikannya di bulan lain.
+     * Sertakan: periode itu, yang sedang aktif, dan yang punya baris iklan
+     * di periode itu.
+     */
     public function options(int $month, int $year): array
     {
-        return $this->where('period_month', $month)
-            ->where('period_year', $year)
-            ->orderBy('nama', 'ASC')
-            ->findAll();
+        return $this->db->query(
+            "SELECT * FROM marketing_campaigns
+             WHERE (period_month = ? AND period_year = ?)
+                OR status = ?
+                OR id IN (SELECT DISTINCT campaign_id FROM marketing_ads_performance
+                          WHERE period_month = ? AND period_year = ? AND campaign_id IS NOT NULL)
+             ORDER BY nama ASC",
+            [$month, $year, self::STATUS_ACTIVE, $month, $year]
+        )->getResult();
     }
 
     /**

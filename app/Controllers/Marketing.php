@@ -1338,23 +1338,12 @@ class Marketing extends BaseController
             return $r;
         }
 
-        $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
-        $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
-        if (!$this->validPeriod($bulan, $tahun)) {
-            $bulan = (int)date('n');
-            $tahun = (int)date('Y');
-        }
-
         $model = new \App\Models\ModelMarketingCampaign();
 
         return view('template', [
             'body'     => 'marketing/kampanye',
             'akun'     => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
-            'bulan'    => $bulan,
-            'tahun'    => $tahun,
-            'rows'     => $model->where('period_month', $bulan)
-                ->where('period_year', $tahun)
-                ->orderBy('nama', 'ASC')->findAll(),
+            'rows'     => $model->orderBy('nama', 'ASC')->findAll(),
             'statusLabels' => \App\Models\ModelMarketingCampaign::STATUS_LABELS,
             'unitList' => $this->units(),
             'canWrite' => $this->canWrite(),
@@ -1370,86 +1359,32 @@ class Marketing extends BaseController
             return redirect()->to(base_url('marketing/campaign'));
         }
 
-        $id           = (int)($this->request->getPost('id') ?? 0);
-        $nama         = trim((string)$this->request->getPost('nama') ?: '');
-        $deskripsi    = trim((string)$this->request->getPost('deskripsi') ?: '');
-        $tanggalMulai = trim((string)$this->request->getPost('tanggal_mulai') ?: '');
-        $tanggalSelesai = trim((string)$this->request->getPost('tanggal_selesai') ?: '');
-        $bulan        = (int)$this->request->getPost('period_month');
-        $tahun        = (int)$this->request->getPost('period_year');
-        $status       = trim((string)$this->request->getPost('status') ?: \App\Models\ModelMarketingCampaign::STATUS_DRAFT);
-
-        if (!$this->validPeriod($bulan, $tahun)) {
-            return redirect()->back()->with('error', 'Periode campaign tidak valid.');
-        }
-        if ($nama === '') {
-            return redirect()->back()->with('error', 'Nama campaign wajib diisi.');
-        }
-        if (!array_key_exists($status, \App\Models\ModelMarketingCampaign::STATUS_LABELS)) {
-            $status = \App\Models\ModelMarketingCampaign::STATUS_DRAFT;
-        }
-        $dateCheck = [];
-        foreach ([$tanggalMulai, $tanggalSelesai] as $d) {
-            if ($d !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
-                return redirect()->back()->with('error', 'Format tanggal campaign tidak valid.');
-            }
-            $dateCheck[$d === $tanggalMulai ? 'mulai' : 'selesai'] = $d;
-        }
-        if (!empty($dateCheck['mulai']) && !empty($dateCheck['selesai'])
-            && $dateCheck['selesai'] < $dateCheck['mulai']) {
-            return redirect()->back()->with('error', 'Tanggal selesai harus setelah tanggal mulai.');
-        }
-
+        $id = (int)($this->request->getPost('id') ?? 0);
         $model = new \App\Models\ModelMarketingCampaign();
 
-        // Pemetaan ke campaign Meta — dipakai `meta:pull`. Hanya digit yang
-        // disimpan; kolomnya UNIQUE, jadi pemakaian ganda ditolak di sini
-        // supaya tidak muncul error database mentah.
-        $metaCampaignId = preg_replace('/\D+/', '', (string)$this->request->getPost('meta_campaign_id') ?: '');
-        if ($metaCampaignId !== '') {
-            $dipakai = (new \App\Models\ModelMarketingCampaign())
-                ->where('meta_campaign_id', $metaCampaignId)
-                ->where('id !=', $id)
-                ->first();
-            if ($dipakai) {
-                return redirect()->back()->with('error', 'ID Campaign Meta ' . $metaCampaignId . ' sudah dipakai campaign "' . $dipakai->nama . '".');
-            }
+        if ($id <= 0 || !$model->find($id)) {
+            return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
         }
 
-        // Unit tidak dikenal → dianggap belum dipetakan.
+        // Satu-satunya yang bisa diubah: unit pembebanan biaya.
         $unitId = (int)$this->request->getPost('unit_id');
         if ($unitId > 0 && !(new \App\Models\ModelUnit())->getById($unitId)) {
             $unitId = 0;
         }
+        $unitId = $unitId > 0 ? $unitId : null;
 
-        $data = [
-            'nama'             => $nama,
-            'deskripsi'        => $deskripsi !== '' ? $deskripsi : null,
-            'tanggal_mulai'    => !empty($dateCheck['mulai']) ? $dateCheck['mulai'] : null,
-            'tanggal_selesai'  => !empty($dateCheck['selesai']) ? $dateCheck['selesai'] : null,
-            'period_month'     => $bulan,
-            'period_year'      => $tahun,
-            'status'           => $status,
-            'meta_campaign_id' => $metaCampaignId !== '' ? $metaCampaignId : null,
-            'unit_id'          => $unitId > 0 ? $unitId : null,
-            'pic'              => $this->currentAkun(),
-            'created_by'       => $this->currentAkun(),
-        ];
+        $model->update($id, [
+            'unit_id'     => $unitId,
+            'unit_sumber' => 'manual',
+        ]);
 
-        if ($id > 0 && $model->find($id)) {
-            $model->update($id, $data);
-            $msg = 'Campaign diperbarui.';
-        } else {
-            $model->insert($data);
-            $msg = 'Campaign tersimpan.';
-        }
+        // Baris iklan yang sudah tertulis ikut pindah unit.
+        (new \App\Models\ModelMarketingAdsPerf())
+            ->where('campaign_id', $id)
+            ->set('unit_id', $unitId)
+            ->update();
 
-        $ref = trim((string)$this->request->getPost('redirect') ?: '');
-        if ($ref !== '' && strpos($ref, base_url()) === 0) {
-            return redirect()->to($ref)->with('success', $msg);
-        }
-
-        return redirect()->to(base_url('marketing/campaign?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $msg);
+        return redirect()->to(base_url('marketing/campaign'))->with('success', 'Unit campaign diperbarui.');
     }
 
     public function campaign_hapus()

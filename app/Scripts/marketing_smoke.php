@@ -137,67 +137,43 @@ try {
 
     // ── Campaign ─────────────────────────────────────────────────
     $html = (string)$ctrl->campaign();
-    ok('campaign render — page-header + filter-card', strpos($html, 'dm-page-header') !== false && strpos($html, 'dm-filter-card') !== false);
+    ok('campaign render — page-header', strpos($html, 'dm-page-header') !== false);
     ok('campaign render — judul Campaign Digital Marketing', strpos($html, 'Campaign Digital Marketing') !== false);
     ok('campaign render — daftar campaign + simpan POST', strpos($html, 'Daftar Campaign Digital Marketing') !== false && strpos($html, 'marketing/campaign/simpan') !== false);
-
-    // ── Pemetaan campaign ERP → campaign Meta + unit ──────────────
-    // Tarikan Meta mencocokkan berdasarkan kolom ini; tanpa form ini
-    // pemetaan tidak bisa diisi dari UI.
-    $html = (string)$ctrl->campaign();
-    ok('campaign render — input meta_campaign_id', strpos($html, 'name="meta_campaign_id"') !== false);
-    ok('campaign render — pilihan unit_id', strpos($html, 'name="unit_id"') !== false);
+    ok('campaign render — form koreksi unit', strpos($html, 'name="unit_id"') !== false);
+    ok('campaign render — tanpa pembuatan manual', strpos($html, 'cp_meta_pick') === false);
+    ok('campaign render — tanpa endpoint opsi Meta', strpos($html, 'campaign/meta_options') === false);
 
     // Tulis-menulis di bawah dibungkus transaksi → data produksi tidak berubah.
     $db = \Config\Database::connect();
     $db->transBegin();
 
-    $unit   = $db->table('unit')->orderBy('idunit', 'ASC')->get()->getRow();
-    $unitId = (int) $unit->idunit;
+    $units  = $db->table('unit')->where('jenis !=', 'Kantor')->orderBy('idunit', 'ASC')->limit(2)->get()->getResultArray();
+    $unitA  = (int) $units[0]['idunit'];
+    $unitB  = (int) $units[1]['idunit'];
     $bulan  = (int) date('n');
     $tahun  = (int) date('Y');
-    $metaA  = '555000111';
 
-    $base = [
-        'id' => 0, 'nama' => '[SMOKE] kampanye meta', 'status' => 'draft',
-        'period_month' => $bulan, 'period_year' => $tahun,
-        'meta_campaign_id' => $metaA, 'unit_id' => $unitId,
-    ];
+    $db->table('marketing_campaigns')->insert([
+        'nama' => '[SMOKE] campaign unit', 'status' => 'draft',
+        'period_month' => $bulan, 'period_year' => $tahun, 'unit_id' => $unitA,
+    ]);
+    $campId = (int) $db->insertID();
+    $db->table('marketing_ads_performance')->insert([
+        'period_month' => $bulan, 'period_year' => $tahun, 'tanggal' => date('Y-m-d'),
+        'campaign_id' => $campId, 'unit_id' => $unitA, 'amount' => 1, 'sumber' => 'manual',
+    ]);
 
-    campaignKirim($ctrl, $base);
-    $a = $db->table('marketing_campaigns')->where('meta_campaign_id', $metaA)->get()->getRow();
-    ok('simpan pemetaan Meta tersimpan', $a !== null);
-    ok('unit campaign tersimpan', $a !== null && (int) $a->unit_id === $unitId, (string) ($a->unit_id ?? '-'));
+    campaignKirim($ctrl, ['id' => $campId, 'unit_id' => $unitB]);
+    $row = $db->table('marketing_campaigns')->where('id', $campId)->get()->getRow();
+    ok('koreksi unit tersimpan', $row !== null && (int) $row->unit_id === $unitB, (string) ($row->unit_id ?? '-'));
+    ok('sumber unit jadi manual', ($row->unit_sumber ?? '') === 'manual', (string) ($row->unit_sumber ?? '-'));
+    $adsUnit = (int) $db->table('marketing_ads_performance')->where('campaign_id', $campId)->get()->getRow()->unit_id;
+    ok('baris iklan ikut pindah unit', $adsUnit === $unitB, (string) $adsUnit);
 
-    // Sudah dipakai campaign lain → ditolak dengan pesan, bukan error DB mentah.
-    $b = $base;
-    $b['nama'] = '[SMOKE] kampanye meta duplikat';
-    $hasilDupe = campaignKirim($ctrl, $b);
-    $dupe = (int) $db->table('marketing_campaigns')->where('nama', '[SMOKE] kampanye meta duplikat')->countAllResults();
-    ok('meta_campaign_id duplikat ditolak', $dupe === 0, 'baris=' . $dupe);
-    ok(
-        'penolakan memakai redirect + pesan error',
-        is_object($hasilDupe) && get_class($hasilDupe) === 'CodeIgniter\HTTP\RedirectResponse'
-            && (string) session()->getFlashdata('error') !== '',
-        get_class($hasilDupe) . ' / ' . var_export(session()->getFlashdata('error'), true)
-    );
-
-    // Ada karakter non-digit → disimpan digit saja.
-    $c = $base;
-    $c['nama'] = '[SMOKE] kampanye meta kotor';
-    $c['meta_campaign_id'] = 'act_777xyz';
-    campaignKirim($ctrl, $c);
-    $bersih = $db->table('marketing_campaigns')->where('nama', '[SMOKE] kampanye meta kotor')->get()->getRow();
-    ok('meta_campaign_id disanitasi jadi digit saja', $bersih !== null && $bersih->meta_campaign_id === '777', (string) ($bersih->meta_campaign_id ?? '-'));
-
-    // Unit tidak dikenal → NULL, bukan error.
-    $d = $base;
-    $d['nama'] = '[SMOKE] kampanye meta unit asing';
-    $d['meta_campaign_id'] = '555000222';
-    $d['unit_id'] = 99999999;
-    campaignKirim($ctrl, $d);
-    $asing = $db->table('marketing_campaigns')->where('nama', '[SMOKE] kampanye meta unit asing')->get()->getRow();
-    ok('unit_id tidak dikenal disimpan NULL', $asing !== null && $asing->unit_id === null, var_export($asing->unit_id ?? 'tidak-ada', true));
+    campaignKirim($ctrl, ['id' => $campId, 'unit_id' => 99999999]);
+    $row = $db->table('marketing_campaigns')->where('id', $campId)->get()->getRow();
+    ok('unit tak dikenal → NULL', $row->unit_id === null, var_export($row->unit_id ?? 'tidak-ada', true));
 
     $db->transRollback();
     $_POST = [];
@@ -316,9 +292,10 @@ try {
     ok('Role 48 di-redirect (tidak berhak akses marketing)', is_object($out) && get_class($out) === 'CodeIgniter\HTTP\RedirectResponse', get_class($out));
 
     // Tanpa hak tulis, tarikan tidak boleh jalan — walau POST & periodenya sah.
+    $logSebelum48 = (int) $db->table('meta_pull_log')->countAllResults();
     $tarik48 = tarikKirim($ctrl2, ['period_month' => $bulan, 'period_year' => $tahun]);
     ok('Role 48 tidak bisa menarik dari Meta', is_object($tarik48) && get_class($tarik48) === 'CodeIgniter\HTTP\RedirectResponse', get_class($tarik48));
-    ok('Role 48: Meta tidak dipanggil', (int) $db->table('meta_pull_log')->countAllResults() === 0);
+    ok('Role 48: Meta tidak dipanggil', (int) $db->table('meta_pull_log')->countAllResults() === $logSebelum48);
 } catch (\Throwable $e) {
     echo "  CRASH " . get_class($e) . ": {$e->getMessage()} @ {$e->getFile()}:{$e->getLine()}\n";
     $fail++;

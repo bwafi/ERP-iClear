@@ -10,7 +10,7 @@ foreach ($unitList as $u) {
         <div class="dm-page-heading">
             <span class="dm-page-kicker">Digital Marketing</span>
             <h1 class="dm-page-title">Campaign Digital Marketing</h1>
-            <p class="dm-page-description">Master campaign per periode. KPI Reporting = % Campaign Selesai (Done) dari total campaign; pemakaian campaign wajib di Performa Ads.</p>
+            <p class="dm-page-description">Campaign ditarik dari Meta. Yang bisa diubah di sini hanya unit pembebanan biaya — biaya iklan dicatat ke unit tersebut.</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
@@ -41,61 +41,18 @@ foreach ($unitList as $u) {
     </div>
 <?php endif; ?>
 
-<!-- Filter & Actions -->
-<div class="card dm-filter-card shadow-sm border-0 mb-4">
-    <div class="card-body py-3">
-        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
-            <form method="get" class="row g-2 align-items-end flex-grow-1">
-                <div class="col-md-2">
-                    <label class="form-label small text-muted mb-1 fw-semibold">Bulan</label>
-                    <select name="bulan" class="form-select form-select-sm">
-                        <?php for ($i = 1; $i <= 12; $i++) : ?>
-                            <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>><?= date('F', mktime(0, 0, 0, $i, 1)) ?></option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small text-muted mb-1 fw-semibold">Tahun</label>
-                    <select name="tahun" class="form-select form-select-sm">
-                        <?php for ($i = date('Y') - 2; $i <= date('Y') + 1; $i++) : ?>
-                            <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>><?= $i ?></option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary btn-sm px-3">
-                        <iconify-icon icon="solar:filter-bold" class="me-1 align-text-bottom"></iconify-icon> Filter
-                    </button>
-                </div>
-            </form>
-
-            <?php if ($canWrite) : ?>
-                <button type="button" class="btn btn-success btn-sm px-3" onclick="openCampaignModal()">
-                    <iconify-icon icon="solar:add-circle-bold" class="me-1 align-text-bottom"></iconify-icon>Input Campaign
-                </button>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
-
 <!-- Table -->
 <div class="card shadow-sm border-0">
-    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
-        <div>
-            <h5 class="mb-0 fw-semibold">Daftar Campaign Digital Marketing</h5>
-            <small class="text-muted">Periode: <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?></small>
-        </div>
+    <div class="card-header bg-white py-3 border-bottom">
+        <h5 class="mb-0 fw-semibold">Daftar Campaign Digital Marketing</h5>
+        <small class="text-muted">Unit ditandai <em>otomatis</em> bila hasil tebakan nama campaign, <em>manual</em> bila sudah dikoreksi.</small>
     </div>
     <div class="card-body p-0">
         <?php if (empty($rows)) : ?>
             <div class="text-center py-5">
                 <iconify-icon icon="solar:megaphone-bold" class="text-muted fs-1 mb-2"></iconify-icon>
-                <p class="text-muted mb-1">Belum ada campaign untuk periode ini.</p>
-                <?php if ($canWrite) : ?>
-                    <button type="button" class="btn btn-sm btn-success mt-2 px-3" onclick="openCampaignModal()">
-                        <iconify-icon icon="solar:add-circle-bold" class="me-1 align-text-bottom"></iconify-icon>Input Campaign
-                    </button>
-                <?php endif; ?>
+                <p class="text-muted mb-1">Belum ada campaign.</p>
+                <small class="text-muted">Jalankan tarikan Meta (menu Performa Ads → Tarik dari Meta) untuk mengisinya.</small>
             </div>
         <?php else : ?>
             <div class="table-responsive">
@@ -104,8 +61,7 @@ foreach ($unitList as $u) {
                         <tr>
                             <th class="ps-3 text-start">Nama Campaign</th>
                             <th class="text-center">Status</th>
-                            <th class="text-start">Periode Tanggal</th>
-                            <th class="text-start">Deskripsi</th>
+                            <th class="text-start">Unit</th>
                             <th class="text-start">Campaign Meta</th>
                             <?php if ($canWrite) : ?>
                                 <th class="text-center pe-3">Aksi</th>
@@ -130,39 +86,38 @@ foreach ($unitList as $u) {
                                     </span>
                                 </td>
                                 <td class="text-start">
-                                    <?php if ($row->tanggal_mulai) : ?>
-                                        <?= date('d M Y', strtotime($row->tanggal_mulai)) ?>
-                                        <?= $row->tanggal_selesai ? ' s.d. ' . date('d M Y', strtotime($row->tanggal_selesai)) : '' ?>
+                                    <?php if ($canWrite) : ?>
+                                        <form method="post" action="<?= base_url('marketing/campaign/simpan') ?>" class="d-flex gap-1 align-items-center">
+                                            <input type="hidden" name="id" value="<?= (int)$row->id ?>">
+                                            <select name="unit_id" class="form-select form-select-sm" style="min-width: 11rem;">
+                                                <option value="">-</option>
+                                                <?php foreach ($unitList as $u) : ?>
+                                                    <option value="<?= (int)$u->idunit ?>" <?= (int)$row->unit_id === (int)$u->idunit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" title="Simpan unit">
+                                                <iconify-icon icon="solar:diskette-bold" width="15" height="15"></iconify-icon>
+                                            </button>
+                                        </form>
                                     <?php else : ?>
-                                        <span class="text-muted">-</span>
+                                        <?= esc($unitNama[(int)$row->unit_id] ?? '-') ?>
                                     <?php endif; ?>
+                                    <small class="text-muted d-block mt-1">
+                                        <?= ($row->unit_sumber ?? 'auto') === 'manual' ? 'manual' : 'otomatis' ?>
+                                    </small>
                                 </td>
-                                <td class="text-start text-muted"><?= esc($row->deskripsi) ?: '-' ?></td>
-                                <td class="text-start text-nowrap">
+                                <td class="text-start text-nowrap font-monospace small">
                                     <?php if (!empty($row->meta_campaign_id)) : ?>
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle font-monospace"><?= esc($row->meta_campaign_id) ?></span>
-                                        <small class="text-muted d-block">
-                                            <?= esc($unitNama[(int)$row->unit_id] ?? ($row->unit_id ? '#' . (int)$row->unit_id : 'tanpa unit')) ?>
-                                        </small>
+                                        <?= esc($row->meta_campaign_id) ?>
                                     <?php else : ?>
                                         <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
                                 <?php if ($canWrite) : ?>
                                     <td class="text-center text-nowrap pe-3">
-                                        <button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1"
-                                            data-id="<?= (int)$row->id ?>"
-                                            data-nama="<?= esc((string)$row->nama, 'attr') ?>"
-                                            data-deskripsi="<?= esc((string)$row->deskripsi, 'attr') ?>"
-                                            data-tanggal-mulai="<?= esc((string)$row->tanggal_mulai, 'attr') ?>"
-                                            data-tanggal-selesai="<?= esc((string)$row->tanggal_selesai, 'attr') ?>"
-                                            data-status="<?= esc((string)$row->status, 'attr') ?>"
-                                            data-meta="<?= esc((string)$row->meta_campaign_id, 'attr') ?>"
-                                            data-unit="<?= esc((string)$row->unit_id, 'attr') ?>"
-                                            title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="post" action="<?= base_url('marketing/campaign/hapus') ?>" class="d-inline"
                                             onsubmit="return confirm('Hapus campaign ini?');">
-                                            <input type="hidden" name="id" value="<?= $row->id ?>">
+                                            <input type="hidden" name="id" value="<?= (int)$row->id ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus">
                                                 <iconify-icon icon="solar:trash-bin-trash-bold" width="15" height="15"></iconify-icon>
                                             </button>
@@ -177,103 +132,3 @@ foreach ($unitList as $u) {
         <?php endif; ?>
     </div>
 </div>
-
-<!-- Modal Tambah / Edit Campaign -->
-<?php if ($canWrite) : ?>
-    <div class="modal fade" id="modalCampaign" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-            <form method="post" action="<?= base_url('marketing/campaign/simpan') ?>" id="campaignForm">
-                <input type="hidden" name="id" id="cp_id" value="">
-                <input type="hidden" name="period_month" id="cpPeriodMonth" value="<?= $bulan ?>">
-                <input type="hidden" name="period_year" id="cpPeriodYear" value="<?= $tahun ?>">
-                <div class="modal-content border-0 shadow">
-                    <div class="modal-header bg-light">
-                        <h5 class="modal-title fw-semibold">
-                            <iconify-icon icon="solar:megaphone-bold" class="text-primary me-1 align-text-bottom"></iconify-icon>
-                            <span id="cp_title">Input Campaign</span>
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row g-3">
-                            <div class="col-md-8">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Nama Campaign</label>
-                                <input type="text" name="nama" id="cp_nama" class="form-control form-control-sm"
-                                    placeholder="mis. Promo Ramadhan 2026" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Status</label>
-                                <select name="status" id="cp_status" class="form-select form-select-sm">
-                                    <option value="draft">Draft</option>
-                                    <option value="active">Aktif</option>
-                                    <option value="done">Selesai</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Tanggal Mulai</label>
-                                <input type="date" name="tanggal_mulai" id="cp_mulai" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Tanggal Selesai</label>
-                                <input type="date" name="tanggal_selesai" id="cp_selesai" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-md-12">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Deskripsi</label>
-                                <textarea name="deskripsi" id="cp_deskripsi" class="form-control form-control-sm" rows="2"
-                                    placeholder="Tujuan, segmentasi, dsb."></textarea>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small text-muted mb-1 fw-semibold">ID Campaign Meta</label>
-                                <input type="text" name="meta_campaign_id" id="cp_meta" class="form-control form-control-sm"
-                                    inputmode="numeric" placeholder="angka saja">
-                                <div class="form-text">Untuk menarik biaya iklan dari Meta (menu Performa Ads). Kosongkan bila campaign ini tidak beriklan di Meta.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small text-muted mb-1 fw-semibold">Unit</label>
-                                <select name="unit_id" id="cp_unit" class="form-select form-select-sm">
-                                    <option value="">-</option>
-                                    <?php foreach ($unitList as $u) : ?>
-                                        <option value="<?= (int)$u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <div class="form-text">Unit pemilik campaign. Biaya Meta dicatat ke unit ini.</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer bg-light">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" class="btn btn-success btn-sm px-4">
-                            <iconify-icon icon="solar:check-circle-bold" class="me-1 align-text-bottom"></iconify-icon>Simpan Data
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-<?php endif; ?>
-
-<script>
-    function openCampaignModal() {
-        document.getElementById('campaignForm').reset();
-        document.getElementById('cp_id').value = '';
-        document.getElementById('cp_title').textContent = 'Input Campaign';
-        var modal = new bootstrap.Modal(document.getElementById('modalCampaign'));
-        modal.show();
-    }
-
-    document.querySelectorAll('.btn-edit').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            document.getElementById('cp_title').textContent = 'Edit Campaign';
-            document.getElementById('cp_id').value = this.dataset.id || '';
-            document.getElementById('cp_nama').value = this.dataset.nama || '';
-            document.getElementById('cp_deskripsi').value = this.dataset.deskripsi || '';
-            document.getElementById('cp_mulai').value = this.dataset.tanggalMulai || '';
-            document.getElementById('cp_selesai').value = this.dataset.tanggalSelesai || '';
-            document.getElementById('cp_status').value = this.dataset.status || 'draft';
-            document.getElementById('cp_meta').value = this.dataset.meta || '';
-            document.getElementById('cp_unit').value = this.dataset.unit || '';
-            var modal = new bootstrap.Modal(document.getElementById('modalCampaign'));
-            modal.show();
-        });
-    });
-</script>
