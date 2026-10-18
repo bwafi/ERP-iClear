@@ -365,6 +365,9 @@ class StatusGaransi extends BaseController
                         ->where('barang_id', $id)
                         ->get()->getRow();
                     if ($previousIssue) {
+                        if ((int) $previousIssue->claim_id !== (int) $claim->idriwayat_claim_garansi) {
+                            throw new \RuntimeException('Penggantian ulang barang yang sama memerlukan histori HPP per klaim.');
+                        }
                         if ((int) $previousIssue->jumlah !== $quantity
                             || (int) $previousIssue->hpp_satuan !== (int) $hpp) {
                             throw new \RuntimeException('Penggantian barang yang sama perlu dicatat pada histori klaim terpisah.');
@@ -420,7 +423,9 @@ class StatusGaransi extends BaseController
                         foreach ($accounts as $account) {
                             $names[$account->no_akun] = $account->nama_akun;
                         }
-                        if ($issueId <= 0 || count($names) !== 2) {
+                        $inventoryAccount = $lines[0][2] > 0 ? $lines[0][0] : $lines[1][0];
+                        if ($issueId <= 0 || count($names) !== 2
+                            || ! preg_match('/persediaan|stok|inventory/i', $names[$inventoryAccount])) {
                             throw new \RuntimeException('Akun atau referensi jurnal garansi tidak valid.');
                         }
                         foreach ($lines as $line) {
