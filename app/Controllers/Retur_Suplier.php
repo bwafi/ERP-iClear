@@ -77,6 +77,7 @@ class Retur_Suplier extends BaseController
             $nextNumber = $lastRetur ? (int) substr($lastRetur->no_retur_suplier, -3) + 1 : 1;
             $noRetur = 'RTS' . $useridunit . $tanggal->format('Ymd') . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
             $seen = [];
+            $supplierId = null;
 
             foreach ($selected as $item) {
                 $detailId = (int) ($item['iddetail_pembelian'] ?? 0);
@@ -87,13 +88,21 @@ class Retur_Suplier extends BaseController
                 $seen[$detailId] = true;
 
                 $purchase = $db->query(
-                    'SELECT jumlah, satuan_beli, barang_idbarang, unit_idunit FROM '
-                    . $db->prefixTable('detail_pembelian') . ' WHERE iddetail_pembelian = ? FOR UPDATE',
+                    'SELECT detail.jumlah, detail.satuan_beli, detail.barang_idbarang, detail.unit_idunit, '
+                    . 'purchase.suplier_id_suplier FROM ' . $db->prefixTable('detail_pembelian') . ' detail '
+                    . 'JOIN ' . $db->prefixTable('pembelian') . ' purchase '
+                    . 'ON purchase.idpembelian = detail.pembelian_idpembelian '
+                    . 'WHERE detail.iddetail_pembelian = ? FOR UPDATE',
                     [$detailId]
                 )->getRow();
-                if (! $purchase || (int) $purchase->unit_idunit !== $useridunit) {
-                    throw new \RuntimeException('Detail pembelian tidak sesuai unit retur.');
+                if (! $purchase || (int) $purchase->unit_idunit !== $useridunit
+                    || (int) $purchase->suplier_id_suplier <= 0) {
+                    throw new \RuntimeException('Detail pembelian tidak sesuai unit atau supplier retur.');
                 }
+                if ($supplierId !== null && $supplierId !== (int) $purchase->suplier_id_suplier) {
+                    throw new \RuntimeException('Satu dokumen retur hanya boleh berisi barang dari satu supplier.');
+                }
+                $supplierId = (int) $purchase->suplier_id_suplier;
 
                 $previous = $db->table('retur_suplier')
                     ->selectSum('jumlah')
