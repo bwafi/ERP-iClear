@@ -174,7 +174,8 @@ final class SupplierReturnCreditService
             foreach ($accounts as $account) {
                 $accountNames[$account->no_akun] = $account->nama_akun;
             }
-            if (! isset($accountNames[$debitAccount], $accountNames[$receivableAccount], $accountNames[$creditAccount])) {
+            if (! isset($accountNames[$debitAccount], $accountNames[$receivableAccount], $accountNames[$creditAccount])
+                || ! SupplierCreditJournal::validAccountClasses($debitAccount, $receivableAccount, $creditAccount)) {
                 throw new \RuntimeException('Akun jurnal belum terdaftar.');
             }
 
