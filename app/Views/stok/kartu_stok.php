@@ -66,6 +66,7 @@
                 <div>
                     <h5 class="fs-5 fw-bold mb-1 text-dark"><?= 'Rp ' . number_format((float)$summary->nilai_stok, 0, ',', '.') ?></h5>
                     <span class="fs-2 text-muted fw-medium d-block">Nilai Stok (HPP)</span>
+                    <small class="text-muted d-block">Hanya barang fisik; jasa, PUP, mesin, restore, dan komisi tidak dihitung.</small>
                     <?php if ((int) ($summary->jumlah_tanpa_hpp ?? 0) > 0 || (int) ($summary->jumlah_stok_negatif ?? 0) > 0): ?>
                         <small class="text-danger">Nilai belum final: <?= (int) ($summary->jumlah_tanpa_hpp ?? 0) ?> baris tanpa HPP, <?= (int) ($summary->jumlah_stok_negatif ?? 0) ?> stok negatif.</small>
                     <?php endif; ?>
