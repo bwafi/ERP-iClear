@@ -23,6 +23,17 @@
     </div>
 <?php endif; ?>
 
+<?php if ($supplier_credit_reconciliation !== null): ?>
+    <div class="alert <?= $supplier_credit_reconciliation['alokasi_tidak_sesuai'] + $supplier_credit_reconciliation['jurnal_tidak_sesuai'] + $supplier_credit_reconciliation['referensi_yatim'] === 0 ? 'alert-info' : 'alert-danger' ?> mx-4">
+        <strong>Rekonsiliasi kredit supplier (posisi kini):</strong>
+        <?= (int) $supplier_credit_reconciliation['jumlah_kredit'] ?> dokumen,
+        sisa kredit Rp <?= number_format($supplier_credit_reconciliation['sisa_kredit'], 0, ',', '.') ?>;
+        <?= (int) $supplier_credit_reconciliation['alokasi_tidak_sesuai'] ?> alokasi tidak sesuai,
+        <?= (int) $supplier_credit_reconciliation['jurnal_tidak_sesuai'] ?> jurnal tidak sesuai,
+        <?= (int) $supplier_credit_reconciliation['referensi_yatim'] ?> referensi yatim.
+    </div>
+<?php endif; ?>
+
 <div class="alert <?= $reconciliation['selisih'] === 0 && $reconciliation['selisih_jurnal'] === 0 && $reconciliation['akun_tidak_terklasifikasi'] === [] && $reconciliation['jumlah_akun'] > 0 ? 'alert-info' : 'alert-warning' ?> mx-4">
     <strong>Rekonsiliasi Neraca indikatif</strong> (saldo jurnal sampai <?= esc($reconciliation_date) ?>):
     Aset Rp <?= number_format($reconciliation['aset'], 0, ',', '.') ?>;
