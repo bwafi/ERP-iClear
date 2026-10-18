@@ -281,6 +281,31 @@ try {
     } else {
         echo "  SKIP  tunai tanpa akun KAS: unit uji tidak punya akun KAS aktif\n";
     }
+    // ---------- 11. opsi bank: hanya rekening yang berhak untuk unit itu ----------
+    $validatorB = new \App\Services\Finance\BankRekeningValidator();
+    $semuaUnit = array_map('intval', array_column($db->table('unit')->select('idunit')->get()->getResultArray(), 'idunit'));
+    $unitUji = (int) $unit->idunit;
+    $harus = [];
+    foreach ($db->table('bank')->select('idbank')->get()->getResult() as $b) {
+        if ($validatorB->validateUntukUnit((string) $b->idbank, $unitUji, null, false)['ok']) {
+            $harus[] = (string) $b->idbank;
+        }
+    }
+    sort($harus);
+
+    $opts = $svc->getBankOptions($semuaUnit);
+    $dariOpsi = [];
+    $punyaAtasNama = false;
+    foreach ($opts as $o) {
+        if (in_array($unitUji, array_map('intval', $o->unit_ids ?? []), true)) {
+            $dariOpsi[] = (string) $o->idbank;
+        }
+        if (isset($o->atas_nama)) { $punyaAtasNama = true; }
+    }
+    sort($dariOpsi);
+    ok('opsi bank hanya yang berhak untuk unit', $dariOpsi === $harus, 'opsi=' . implode(',', $dariOpsi) . ' harus=' . implode(',', $harus));
+    ok('  opsi bank membawa unit_ids', !empty($opts) && isset($opts[0]->unit_ids));
+    ok('  opsi bank membawa atas_nama', $punyaAtasNama, 'unit=' . $unitUji);
 } catch (\Throwable $e) {
     ok('exception', false, $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
 } finally {

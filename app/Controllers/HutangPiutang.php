@@ -106,7 +106,7 @@ class HutangPiutang extends BaseController
             'pegawai' => $this->service->getPegawaiOptions(),
             'suplier' => $this->service->getSuplierOptions(),
             'teknisi' => $this->service->getTeknisiOptions(),
-            'bank' => $this->service->getBankOptions(),
+            'bank' => $this->service->getBankOptions($this->allowedUnitIds()),
         ]);
     }
 
@@ -124,7 +124,7 @@ class HutangPiutang extends BaseController
             'pegawai' => $this->service->getPegawaiOptions(),
             'suplier' => $this->service->getSuplierOptions(),
             'teknisi' => $this->service->getTeknisiOptions(),
-            'bank' => $this->service->getBankOptions(),
+            'bank' => $this->service->getBankOptions($this->allowedUnitIds()),
             'units' => $this->scopeService->resolveAllowedUnits(),
             'unit_id' => $this->resolveUnitId(),
         ]);
@@ -183,7 +183,7 @@ class HutangPiutang extends BaseController
             'pembayaran' => $this->service->getPembayaran((int) $row->id),
             'kompensasi' => $this->service->getKompensasi((int) $row->id),
             'lawan_kompensasi' => $this->service->getLawanKompensasi($row),
-            'bank' => $this->service->getBankOptions(),
+            'bank' => $this->service->getBankOptions($this->allowedUnitIds()),
             'can_input' => $this->scopeService->canInput(),
         ]);
     }

@@ -2263,9 +2263,39 @@ class HutangPiutangService
         return $q->orderBy('a.NAMA_AKUN', 'ASC')->get()->getResult();
     }
 
-    public function getBankOptions(): array
+    /**
+     * Opsi rekening bank untuk pencairan kasbon transfer.
+     *
+     * Tiap bank ditandai `unit_ids`: unit yang berhak memakainya. Dihitung
+     * dengan validator yang sama seperti write path supaya dropdown dan
+     * validasi submit tidak pernah berbeda. Form memakainya untuk menyaring
+     * begitu unit diganti.
+     *
+     * @param int[] $unitIds unit yang boleh dipilih user; kosong = semua unit
+     * @return object[]
+     */
+    public function getBankOptions(array $unitIds = []): array
     {
-        return $this->db->table('bank')->orderBy('nama_bank', 'ASC')->get()->getResult();
+        if ($unitIds === []) {
+            $unitIds = array_map('intval', array_column(
+                $this->db->table('unit')->select('idunit')->get()->getResultArray(),
+                'idunit'
+            ));
+        }
+
+        $validator = new BankRekeningValidator();
+        $banks = $this->db->table('bank')->orderBy('nama_bank', 'ASC')->get()->getResult();
+
+        foreach ($banks as $b) {
+            $b->unit_ids = [];
+            foreach ($unitIds as $unitId) {
+                if ($validator->validateUntukUnit((string) $b->idbank, (int) $unitId, null, false)['ok']) {
+                    $b->unit_ids[] = (int) $unitId;
+                }
+            }
+        }
+
+        return $banks;
     }
 
     public function getUnitOptions(): array
