@@ -6,6 +6,11 @@ require __DIR__ . '/../../app/Services/Finance/SupplierCreditJournal.php';
 use App\Services\Finance\SupplierCreditAllocator;
 use App\Services\Finance\SupplierCreditJournal;
 
+if (! SupplierCreditJournal::validAccountClasses('2000000001', '1000000001', '4000000001')
+    || SupplierCreditJournal::validAccountClasses('1000000001', '2000000001', '4000000001')) {
+    throw new RuntimeException('Klasifikasi akun utang/piutang/pemulihan tidak valid.');
+}
+
 $expected = [11 => 500000, 12 => 200000];
 $actual = SupplierCreditAllocator::plan([11 => 500000, 12 => 300000], 700000);
 if ($actual !== $expected) {
