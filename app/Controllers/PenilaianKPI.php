@@ -328,6 +328,29 @@ class PenilaianKPI extends BaseController
         }
         $csValue = $canEvaluateCs ? $supervisorSvc->customerSatisfaction((int)$target->ID_AKUN, (int)$target->ID_UNIT, (int)$bulan, (int)$tahun) : null;
 
+        // KPI manual bulanan Manager (jabatan 34): Improvement & Reporting.
+        $managerManual = [];
+        if ((int)($target->ID_JABATAN ?? 0) === 34) {
+            $managerSvc = new \App\Services\Kpi\ManagerKpiService();
+            $managerCompModel = new \App\Models\ModelKpiComponent();
+            foreach (['IMPROVEMENT_PERUSAHAAN', 'REPORTING_GOVERNANCE'] as $mCode) {
+                $mComp = $managerCompModel->where('code', $mCode)->first();
+                if (!$mComp) {
+                    continue;
+                }
+                $managerManual[] = [
+                    'code'         => $mCode,
+                    'name'         => $mComp->name,
+                    'value'        => $managerSvc->manualValue((int)$target->ID_AKUN, $mCode, $bulan, $tahun),
+                    'can_evaluate' => \App\Services\Kpi\EvaluatorAuthorizationService::canEvaluateComponent(
+                        (int)$me->ID_AKUN,
+                        (int)$target->ID_AKUN,
+                        $mCode
+                    ),
+                ];
+            }
+        }
+
         return view('template', [
             'target'        => $target,
             'namaJabatan'   => $namaJabatan,
@@ -340,6 +363,7 @@ class PenilaianKPI extends BaseController
             'csCodeSet'     => $csCodeSet,
             'csNameSet'     => array_flip($csCodeSet),
             'csValue'       => $csValue,
+            'managerManual' => $managerManual,
             'bulan'         => $bulan,
             'tahun'         => $tahun,
             'body'          => 'penilaian/kpi_detail',
@@ -874,6 +898,35 @@ class PenilaianKPI extends BaseController
         }
 
         return redirect()->to($back)->with('success', 'Customer Satisfaction berhasil disimpan.');
+    }
+
+    /**
+     * Simpan KPI manual bulanan Manager (jabatan 34) — Improvement & Reporting.
+     */
+    public function save_manager_manual()
+    {
+        $evaluatorId = (int)session()->get('ID_AKUN');
+        $employeeId  = (int)$this->request->getPost('employee_id');
+        $code        = (string)$this->request->getPost('code');
+        $bulan       = (int)($this->request->getPost('bulan') ?: date('m'));
+        $tahun       = (int)($this->request->getPost('tahun') ?: date('Y'));
+        $nilai       = (float)$this->request->getPost('nilai');
+
+        $back = '/penilaian/kpi/detail/' . $employeeId . '?bulan=' . $bulan . '&tahun=' . $tahun;
+
+        $target = $this->AuthModel->getById($employeeId);
+        if (!$target || (int)$target->STATUS_PEGAWAI !== 1) {
+            return redirect()->to($back)->with('error', 'Pegawai tidak ditemukan.');
+        }
+
+        $result = (new \App\Services\Kpi\ManagerKpiService())
+            ->saveManual($employeeId, $code, $evaluatorId, $bulan, $tahun, $nilai);
+
+        if (!$result['success']) {
+            return redirect()->to($back)->with('error', implode(', ', $result['errors']));
+        }
+
+        return redirect()->to($back)->with('success', 'Penilaian manual Manager berhasil disimpan.');
     }
 
     /**

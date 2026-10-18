@@ -44,4 +44,15 @@ final class ManagerKpiTest extends CIUnitTestCase
     {
         $this->assertSame(60.0, ManagerKpiService::averageAcrossRoles([80.0, null, 40.0]));
     }
+
+    public function testSaveManualRejectsOutOfRange()
+    {
+        // Review Focus #4: nilai di luar 0-100 ditolak (short-circuit, tanpa DB).
+        $svc  = new ManagerKpiService();
+        $low  = $svc->saveManual(41, 'REPORTING_GOVERNANCE', 46, 10, 2026, -1.0);
+        $high = $svc->saveManual(41, 'REPORTING_GOVERNANCE', 46, 10, 2026, 150.0);
+
+        $this->assertFalse($low['success']);
+        $this->assertFalse($high['success']);
+    }
 }

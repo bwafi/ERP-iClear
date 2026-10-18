@@ -173,6 +173,41 @@
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (!empty($managerManual)) : ?>
+        <div id="managerManualSection" class="mt-4 card border-0 bg-light">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-1">Penilaian Manual Manager (0-100)</h6>
+                <small class="text-muted d-block mb-3">
+                    Input manual bulanan untuk periode <?= date('F', mktime(0, 0, 0, $bulan, 1)) ?> <?= $tahun ?>.
+                </small>
+                <?php foreach ($managerManual as $mm) : ?>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold mb-1"><?= esc($mm['name']) ?></label>
+                        <?php if ($mm['can_evaluate']) : ?>
+                            <form method="post" action="<?= base_url('penilaian/kpi/save_manager_manual') ?>" class="row g-2 align-items-center">
+                                <div class="col-auto">
+                                    <input type="number" step="0.01" min="0" max="100" class="form-control" name="nilai"
+                                           value="<?= esc($mm['value'] ?? '') ?>" placeholder="0 - 100" required>
+                                </div>
+                                <div class="col-auto">
+                                    <input type="hidden" name="employee_id" value="<?= (int)$target->ID_AKUN ?>">
+                                    <input type="hidden" name="bulan" value="<?= (int)$bulan ?>">
+                                    <input type="hidden" name="tahun" value="<?= (int)$tahun ?>">
+                                    <input type="hidden" name="code" value="<?= esc($mm['code']) ?>">
+                                    <button type="submit" class="btn btn-warning">
+                                        <iconify-icon icon="solar:upload-bold" class="me-1"></iconify-icon>Simpan
+                                    </button>
+                                </div>
+                            </form>
+                        <?php else : ?>
+                            <small class="text-muted">Anda tidak berwenang mengisi komponen ini.</small>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
