@@ -31,7 +31,7 @@
                                     <label>Nomor nota kredit supplier
                                         <input class="form-control" type="text" maxlength="100" name="nomor_nota_kredit" required>
                                     </label>
-                                    <label>Akun debit
+                                    <label>Akun Utang Supplier (debit saat kredit dipakai)
                                         <select class="form-select" name="akun_debet" required>
                                             <option value="">Pilih akun</option>
                                             <?php foreach ($accounts as $account): ?>
@@ -39,7 +39,7 @@
                                             <?php endforeach; ?>
                                         </select>
                                     </label>
-                                    <label>Akun piutang supplier
+                                    <label>Akun Piutang Supplier (debit saat disetujui)
                                         <select class="form-select" name="akun_piutang" required>
                                             <option value="">Pilih akun</option>
                                             <?php foreach ($accounts as $account): ?>
@@ -47,7 +47,7 @@
                                             <?php endforeach; ?>
                                         </select>
                                     </label>
-                                    <label>Akun kredit
+                                    <label>Akun Pemulihan Barang Rusak (kredit saat disetujui)
                                         <select class="form-select" name="akun_kredit" required>
                                             <option value="">Pilih akun</option>
                                             <?php foreach ($accounts as $account): ?>
