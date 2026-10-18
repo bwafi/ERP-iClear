@@ -310,6 +310,7 @@ $routes->get('retur_suplier', 'Retur_Suplier::index', ['filter' => 'auth']);
 $routes->post('insert_retur_suplier', 'Retur_Suplier::insert', ['filter' => 'auth']);
 $routes->get('kredit_retur_suplier', 'KreditReturSuplier::index', ['filter' => 'auth']);
 $routes->post('kredit_retur_suplier/approve', 'KreditReturSuplier::approve', ['filter' => 'auth']);
+$routes->post('kredit_retur_suplier/apply', 'KreditReturSuplier::applyRemaining', ['filter' => 'auth']);
 
 //retur customer
 $routes->get('retur_customer', 'Retur_Customer::index', ['filter' => 'auth']);
