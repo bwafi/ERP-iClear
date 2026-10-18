@@ -79,6 +79,9 @@ if ($stale) {
 
 try {
     // ---------- 1. kasbon tunai -> baris kas_keluar ----------
+    $tkToday = date('Y-m-d');
+    $tkDef = new \App\Services\Finance\TutupKasirSourceDefinition();
+    $tkCashBefore = $tkDef->kasKeluarCash((int) $unit->idunit, $tkToday);
     $beforeKas = $db->table('kas_keluar')->countAllResults();
     $r1 = $svc->createPosition([
         'jenis' => 'piutang',
@@ -103,6 +106,8 @@ try {
     $kat = $kas1 ? $db->table('kategori_kas')->where('idkategori_kas', (int) $kas1->kategori_idkategori)->get()->getRow() : null;
     ok('  kategori = Kasbon', $kat && $kat->kategori === 'Kasbon', 'kategori=' . ($kat->kategori ?? 'null'));
     ok('  total baris kas bertambah 1', $db->table('kas_keluar')->countAllResults() === $beforeKas + 1);
+    $tkCashAfter = $tkDef->kasKeluarCash((int) $unit->idunit, $tkToday);
+    ok('  Tutup Kasir: pengeluaran kas naik sebesar kasbon', $tkCashAfter - $tkCashBefore === 750000, 'delta=' . ($tkCashAfter - $tkCashBefore));
 
     // ---------- 2. baris otomatis TIDAK memposting jurnal kas_keluar ----------
     $jmlKas = $kasId1 > 0 ? $db->table('jurnal')->where('tabel_referensi', 'kas_keluar')->where('id_referensi', $kasId1)->countAllResults() : -1;
@@ -122,6 +127,7 @@ try {
         }
     }
     if ($idbankOk !== null) {
+        $tkBankBefore = $tkDef->kasKeluarTransfer((int) $unit->idunit, $tkToday);
         $r2 = $svc->createPosition([
             'jenis' => 'piutang',
             'sumber_tipe' => HutangPiutangService::SUMBER_KASBON,
@@ -143,6 +149,8 @@ try {
         ok('  baris kas transfer idbank terisi', $kas2 && (string) $kas2->idbank === $idbankOk, 'idbank=' . ($kas2->idbank ?? 'null'));
         $bankJ = !empty($r2['id']) ? $db->table('jurnal')->where('tabel_referensi', 'hutang_piutang')->where('id_referensi', (int) $r2['id'])->where('no_akun', '1010102000')->countAllResults() : -1;
         ok('  jurnal transfer kredit Kas di Bank', $bankJ === 1, 'rows=' . $bankJ);
+        $tkBankAfter = $tkDef->kasKeluarTransfer((int) $unit->idunit, $tkToday);
+        ok('  Tutup Kasir: transfer naik sebesar kasbon', $tkBankAfter - $tkBankBefore === 400000, 'delta=' . ($tkBankAfter - $tkBankBefore));
     } else {
         echo "  SKIP  transfer: tidak ada rekening berhak untuk unit ini\n";
         $r2 = null;
