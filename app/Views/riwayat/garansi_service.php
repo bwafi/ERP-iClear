@@ -1,6 +1,9 @@
  <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <h4 class="fw-semibold mb-0">Garansi Service</h4>
+        <?php if ((int) session('ID_JABATAN') === 1): ?>
+            <a class="btn btn-outline-primary" href="<?= base_url('akun_jurnal_garansi') ?>">Akun Jurnal Garansi</a>
+        <?php endif; ?>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
