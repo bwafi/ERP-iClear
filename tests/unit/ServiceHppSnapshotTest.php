@@ -24,4 +24,21 @@ final class ServiceHppSnapshotTest extends TestCase
     {
         $this->assertSame(230000, ServiceHppSnapshot::resolve(null, 230000));
     }
+
+    public function testWarrantyReplacementKeepsItsOwnHistoricalHpp(): void
+    {
+        $existingItem = (object) ['jumlah_tambahan_garansi' => 1, 'hpp_penjualan_garansi' => 230000];
+
+        $this->assertSame(230000, ServiceHppSnapshot::resolveWarrantyReplacement($existingItem, 1, 250000));
+        $this->assertSame(250000, ServiceHppSnapshot::resolveWarrantyReplacement(null, 1, 250000));
+        $this->assertSame(0, ServiceHppSnapshot::resolveWarrantyReplacement(null, 0, 250000));
+    }
+
+    public function testWarrantyReplacementQuantityChangeIsRejected(): void
+    {
+        $existingItem = (object) ['jumlah_tambahan_garansi' => 1, 'hpp_penjualan_garansi' => 230000];
+
+        $this->expectException(\InvalidArgumentException::class);
+        ServiceHppSnapshot::resolveWarrantyReplacement($existingItem, 2, 250000);
+    }
 }
