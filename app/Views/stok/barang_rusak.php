@@ -129,10 +129,6 @@
 
                         </tr>
                     <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="7" class="text-center">Tidak ada data barang rusak</td>
-                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
