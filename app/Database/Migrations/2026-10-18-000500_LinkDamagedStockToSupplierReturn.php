@@ -33,7 +33,7 @@ class LinkDamagedStockToSupplierReturn extends Migration
         $this->forge->dropColumn('retur_suplier', 'barang_rusak_id');
     }
 
-    private function linkedStockView(): string
+    protected function linkedStockView(): string
     {
         $sql = $this->originalStockView();
         $sql = str_replace(
