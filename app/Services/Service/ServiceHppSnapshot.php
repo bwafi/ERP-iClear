@@ -26,4 +26,24 @@ final class ServiceHppSnapshot
 
         return $quantity > 0 ? $currentHpp : 0;
     }
+
+    public static function resolveWarrantyClaimIssue(?object $issue, int $quantity, $currentHpp): int
+    {
+        if ($quantity < 0) {
+            throw new \InvalidArgumentException('Jumlah pengganti tidak valid.');
+        }
+        if ($issue !== null) {
+            if ($quantity !== (int) $issue->jumlah || (int) $issue->hpp_satuan <= 0) {
+                throw new \InvalidArgumentException('Mutasi klaim yang sudah dicatat tidak boleh diubah.');
+            }
+            return (int) $issue->hpp_satuan;
+        }
+        if ($quantity === 0) {
+            return 0;
+        }
+        if ((int) $currentHpp <= 0) {
+            throw new \InvalidArgumentException('HPP sparepart pengganti belum tersedia.');
+        }
+        return (int) $currentHpp;
+    }
 }
