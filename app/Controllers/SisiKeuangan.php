@@ -7,6 +7,7 @@ use Config\Database;
 use App\Models\ModelAuth;
 use App\Models\ModelUnit;
 use App\Models\ModelJurnal;
+use App\Services\Finance\BalanceSheetReconciliation;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -38,8 +39,19 @@ class SisiKeuangan extends BaseController
         $tanggal_awal = $this->request->getGet('startDate') ?: null;
         $tanggal_akhir = $this->request->getGet('endDate') ?: null;
         $id_unit = $this->request->getGet('filterUnit') ?: null;
+        $reconciliationDate = $tanggal_akhir ?: date('Y-m-d');
 
         $data_parent = $this->JurnalModel->getSummaryPerParent($tanggal_awal, $tanggal_akhir, $id_unit);
+
+        $journalQuery = Database::connect()->table('jurnal')
+            ->select('no_akun, COALESCE(SUM(debet), 0) AS debet, COALESCE(SUM(kredit), 0) AS kredit', false)
+            ->where('tanggal <=', $reconciliationDate);
+        if ($id_unit !== null) {
+            $journalQuery->where('id_unit', $id_unit);
+        }
+        $reconciliation = BalanceSheetReconciliation::summarize(
+            $journalQuery->groupBy('no_akun')->get()->getResultArray()
+        );
 
 
         foreach ($data_parent as &$parent) {
@@ -67,6 +79,8 @@ class SisiKeuangan extends BaseController
             'tanggal_awal' => $tanggal_awal,
             'tanggal_akhir' => $tanggal_akhir,
             'id_unit' => $id_unit,
+            'reconciliation' => $reconciliation,
+            'reconciliation_date' => $reconciliationDate,
             'body' => 'jurnal/sisi_keuangan'
         ];
 
