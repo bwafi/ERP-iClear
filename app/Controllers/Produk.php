@@ -68,14 +68,8 @@ class Produk extends BaseController
         $idkategori = $data_kategori->id;
         $kode_kategori = $data_kategori->idkategori;
 
-        $lastBarang = $this->BarangModel->getLastBarangByKategori($idkategori);
-
-        if ($lastBarang) {
-            $lastNumber = (int) substr($lastBarang->kode_barang, strlen($kode_kategori));
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
-        }
+        $lastBarang = $this->BarangModel->getLastBarangByKategori($idkategori, $kode_kategori);
+        $newNumber = (int) ($lastBarang->max_kode ?? 0) + 1;
 
         $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
 
@@ -135,14 +129,8 @@ class Produk extends BaseController
 
         if ($idkategori != $idkategori_baru) {
 
-            $lastBarang = $this->BarangModel->getLastBarangByKategori($idkategori_baru);
-
-            if ($lastBarang) {
-                $lastNumber = (int) substr($lastBarang->kode_barang, strlen($kode_kategori_baru));
-                $newNumber = $lastNumber + 1;
-            } else {
-                $newNumber = 1;
-            }
+            $lastBarang = $this->BarangModel->getLastBarangByKategori($idkategori_baru, $kode_kategori_baru);
+            $newNumber = (int) ($lastBarang->max_kode ?? 0) + 1;
 
             $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
             $kode_barang = $kode_kategori_baru . $formattedNumber;
@@ -273,10 +261,8 @@ class Produk extends BaseController
 
             // Ambil nomor terakhir berdasarkan kategori
             if (!isset($lastNumbers[$idnyakategori])) {
-                $lastBarang = $this->BarangModel->getLastBarangByKategori($idnyakategori);
-                $lastNumbers[$idnyakategori] = $lastBarang
-                    ? (int) substr($lastBarang->kode_barang, strlen($kode_kategori))
-                    : 0;
+                $lastBarang = $this->BarangModel->getLastBarangByKategori($idnyakategori, $kode_kategori);
+                $lastNumbers[$idnyakategori] = (int) ($lastBarang->max_kode ?? 0);
             }
 
             $lastNumbers[$idnyakategori]++;
