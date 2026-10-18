@@ -95,6 +95,7 @@ class Retur_Suplier extends BaseController
 
                 $purchase = $db->query(
                     'SELECT detail.jumlah, detail.satuan_beli, detail.barang_idbarang, detail.unit_idunit, '
+                    . 'detail.pembelian_idpembelian, detail.no_batch, '
                     . 'purchase.suplier_id_suplier FROM ' . $db->prefixTable('detail_pembelian') . ' detail '
                     . 'JOIN ' . $db->prefixTable('pembelian') . ' purchase '
                     . 'ON purchase.idpembelian = detail.pembelian_idpembelian '
@@ -123,17 +124,56 @@ class Retur_Suplier extends BaseController
                     throw new \RuntimeException('Jumlah retur melebihi sisa pembelian.');
                 }
 
-                if (! $this->ReturSuplierModel->insert_ReturSuplier([
-                    'no_retur_suplier' => $noRetur,
-                    'tanggal' => $tanggalRetur,
-                    'jumlah' => $requested,
-                    'satuan' => $purchase->satuan_beli,
-                    'barang_idbarang' => $purchase->barang_idbarang,
-                    'detail_pembelian_iddetail_pembelian' => $detailId,
-                    'input_by' => session('ID_AKUN'),
-                    'unit_idunit' => $purchase->unit_idunit,
-                ])) {
-                    throw new \RuntimeException('Retur supplier gagal disimpan.');
+                $legacyReturn = $db->query(
+                    'SELECT COUNT(*) AS total FROM ' . $db->prefixTable('retur_suplier') . ' retur '
+                    . 'JOIN ' . $db->prefixTable('detail_pembelian') . ' detail '
+                    . 'ON detail.iddetail_pembelian = retur.detail_pembelian_iddetail_pembelian '
+                    . 'WHERE detail.pembelian_idpembelian = ? AND detail.no_batch = ? '
+                    . 'AND detail.barang_idbarang = ? AND retur.barang_rusak_id IS NULL',
+                    [$purchase->pembelian_idpembelian, $purchase->no_batch, $purchase->barang_idbarang]
+                )->getRow();
+                if ((int) ($legacyReturn->total ?? 0) > 0) {
+                    throw new \RuntimeException('Retur lama harus direkonsiliasi sebelum retur baru.');
+                }
+
+                $damagedRows = $db->query(
+                    'SELECT idbarang_rusak, jumlah FROM ' . $db->prefixTable('barang_rusak')
+                    . ' WHERE idpembelian = ? AND no_nota_sup = ? AND barang_idbarang = ?'
+                    . ' AND unit_idunit = ? ORDER BY idbarang_rusak FOR UPDATE',
+                    [$purchase->pembelian_idpembelian, $purchase->no_batch,
+                        $purchase->barang_idbarang, $useridunit]
+                )->getResult();
+                $remaining = $requested;
+                foreach ($damagedRows as $damaged) {
+                    $alreadyReturned = $db->table('retur_suplier')
+                        ->selectSum('jumlah')
+                        ->where('barang_rusak_id', $damaged->idbarang_rusak)
+                        ->get()->getRow();
+                    $available = (int) $damaged->jumlah - (int) ($alreadyReturned->jumlah ?? 0);
+                    $allocated = min($remaining, max(0, $available));
+                    if ($allocated === 0) {
+                        continue;
+                    }
+                    if (! $this->ReturSuplierModel->insert_ReturSuplier([
+                        'no_retur_suplier' => $noRetur,
+                        'tanggal' => $tanggalRetur,
+                        'jumlah' => $allocated,
+                        'satuan' => $purchase->satuan_beli,
+                        'barang_idbarang' => $purchase->barang_idbarang,
+                        'detail_pembelian_iddetail_pembelian' => $detailId,
+                        'barang_rusak_id' => $damaged->idbarang_rusak,
+                        'input_by' => session('ID_AKUN'),
+                        'unit_idunit' => $purchase->unit_idunit,
+                    ])) {
+                        throw new \RuntimeException('Retur supplier gagal disimpan.');
+                    }
+                    $remaining -= $allocated;
+                    if ($remaining === 0) {
+                        break;
+                    }
+                }
+                if ($remaining !== 0) {
+                    throw new \RuntimeException('Jumlah retur melebihi barang rusak yang tersedia.');
                 }
             }
 
