@@ -67,7 +67,7 @@ final class SupplierReturnCreditService
             if (! isset($accountNames[$credit->akun_debet], $accountNames[$credit->akun_piutang])) {
                 throw new \RuntimeException('Akun jurnal kredit tidak ditemukan.');
             }
-            foreach ([[$credit->akun_debet, $applied, 0], [$credit->akun_piutang, 0, $applied]] as $line) {
+            foreach (SupplierCreditJournal::applicationLines($applied, $credit->akun_debet, $credit->akun_piutang) as $line) {
                 if (! $db->table('jurnal')->insert([
                     'tanggal' => date('Y-m-d'),
                     'no_akun' => $line[0],
@@ -179,11 +179,7 @@ final class SupplierReturnCreditService
             }
 
             $date = date('Y-m-d');
-            $lines = [[$receivableAccount, $amount, 0], [$creditAccount, 0, $amount]];
-            if ($applied > 0) {
-                $lines[] = [$debitAccount, $applied, 0];
-                $lines[] = [$receivableAccount, 0, $applied];
-            }
+            $lines = SupplierCreditJournal::approvalLines($amount, $applied, $debitAccount, $receivableAccount, $creditAccount);
             foreach ($lines as $line) {
                 if (! $db->table('jurnal')->insert([
                     'tanggal' => $date,
