@@ -4,7 +4,7 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 
 ## Urutan
 
-1. Pasang branch PR dan jalankan migrasi `2026-10-18-000500`, `000600`, lalu `000700`.
+1. Pasang branch PR dan jalankan migrasi `2026-10-18-000500`, `000600`, `000700`, lalu `000800`.
 2. Catat saldo awal Kartu Stok, utang supplier, piutang supplier, dan jurnal.
 3. Buat pembelian simulasi supplier A: dua faktur tempo, Rp500.000 dan Rp300.000, satu batch barang yang dapat diretur.
 4. Catat dua barang pada **Barang Rusak**. Stok jual turun dua unit.
@@ -24,12 +24,14 @@ Jalankan hanya di ERP TEST dengan data simulasi. Branch PR tetap terpisah dari `
 - `php tests/smoke/stock_valuation.php`
 - `php tests/integration/WarrantyStockMySql.php` pada MySQL lokal yang boleh membuat database sintetis sementara.
 - Jalankan `WarrantyExpenseJournalTest` dan `WarrantyJournalReconciliationTest` pada PHPUnit, lalu cek Posisi Keuangan: jumlah mutasi tanpa jurnal, jurnal tidak sesuai, dan jurnal tanpa mutasi harus nol.
+- Jalankan `SupplierCreditReconciliationTest`; pada Posisi Keuangan, alokasi, jurnal kredit supplier, dan referensi yatim harus nol. Ringkasan ini posisi kini, bukan saldo historis pada tanggal filter.
 - Jalankan PHPUnit pada runtime PHP yang cocok dengan dependensi proyek.
 - Bandingkan `SUM(pembelian.sisa)` dengan total utang supplier pada dashboard dan posisi `hutang_piutang`.
 - Bandingkan `SUM(kredit_retur_suplier.sisa_kredit)` berstatus disetujui dengan piutang supplier.
 - Setiap referensi `kredit_retur_suplier` pada `jurnal` harus memiliki total debit sama dengan kredit.
 - Jangan melakukan merge atau deployment produksi sebelum seluruh langkah di atas lulus pada commit TEST yang sama.
 - Di TEST, admin root pilih akun beban dan persediaan pada `/akun_jurnal_garansi`; simpan satu klaim sintetis, ulangi simpan, dan buktikan hanya ada satu mutasi stok serta dua baris jurnal seimbang dengan referensi mutasi tersebut.
+- Setelah klaim, masukkan sparepart customer yang rusak di Barang Rusak dengan ID Klaim yang sesuai. Stok jual tidak boleh turun lagi saat masuk Barang Rusak atau saat retur supplier; kredit supplier tetap menunggu persetujuan nota.
 
 ## Batasan historis
 
