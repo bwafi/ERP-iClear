@@ -117,6 +117,7 @@ foreach ($detail_pembelian as $row) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                         </div>
                         <div class="modal-body">
+                            <p class="text-muted">Retur hanya dapat dikirim dari barang yang sudah tercatat di menu Barang Rusak. Retur lama pada batch yang sama perlu direkonsiliasi terlebih dahulu.</p>
                             <?php
                             $idUnit = session('ID_UNIT');
                             $tanggalSekarang = date('Y-m-d');
