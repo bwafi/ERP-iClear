@@ -8,6 +8,7 @@ use App\Models\ModelAuth;
 use App\Models\ModelUnit;
 use App\Models\ModelJurnal;
 use App\Services\Finance\BalanceSheetReconciliation;
+use App\Services\Finance\WarrantyJournalReconciliation;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -52,6 +53,25 @@ class SisiKeuangan extends BaseController
         $reconciliation = BalanceSheetReconciliation::summarize(
             $journalQuery->groupBy('no_akun')->get()->getResultArray()
         );
+        $warrantyReconciliation = null;
+        $db = Database::connect();
+        if ($db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
+            $issues = $db->table('garansi_sparepart_keluar')
+                ->select('id, jumlah, hpp_satuan')
+                ->where('created_at <=', $reconciliationDate . ' 23:59:59');
+            $journals = $db->table('jurnal')
+                ->select('id_referensi, debet, kredit')
+                ->where('tabel_referensi', 'garansi_sparepart_keluar')
+                ->where('tanggal <=', $reconciliationDate);
+            if ($id_unit !== null) {
+                $issues->where('unit_id', $id_unit);
+                $journals->where('id_unit', $id_unit);
+            }
+            $warrantyReconciliation = WarrantyJournalReconciliation::summarize(
+                $issues->get()->getResultArray(),
+                $journals->get()->getResultArray()
+            );
+        }
 
 
         foreach ($data_parent as &$parent) {
@@ -81,6 +101,7 @@ class SisiKeuangan extends BaseController
             'id_unit' => $id_unit,
             'reconciliation' => $reconciliation,
             'reconciliation_date' => $reconciliationDate,
+            'warranty_reconciliation' => $warrantyReconciliation,
             'body' => 'jurnal/sisi_keuangan'
         ];
 
