@@ -117,6 +117,14 @@ class DashboardKeuangan extends BaseController
 
         $totalPiutang = $piutangQuery->get()->getRow()->sisa ?? 0;
 
+        $supplierCreditQuery = $this->db->table('kredit_retur_suplier')
+            ->selectSum('sisa_kredit')
+            ->where('status', 'disetujui');
+        if ($unitId) {
+            $supplierCreditQuery->where('unit_id', $unitId);
+        }
+        $totalPiutang += (int) ($supplierCreditQuery->get()->getRow()->sisa_kredit ?? 0);
+
         // Chart data - Kas Masuk/Keluar per hari
         $kasMasukData = $this->KasMasukModel
             ->select("DATE(tanggal) as tanggal, SUM(jumlah) as total")
