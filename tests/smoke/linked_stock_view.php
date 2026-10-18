@@ -7,7 +7,7 @@ namespace CodeIgniter\Database {
 }
 
 namespace {
-    require __DIR__ . '/../../app/Database/Migrations/2026-10-18-000100_LinkDamagedStockToSupplierReturn.php';
+    require __DIR__ . '/../../app/Database/Migrations/2026-10-18-000500_LinkDamagedStockToSupplierReturn.php';
 
     $database = new \PDO('sqlite::memory:');
     $database->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
