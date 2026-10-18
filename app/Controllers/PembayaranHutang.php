@@ -164,9 +164,10 @@ class PembayaranHutang extends BaseController
 
         $total_bayar = $bayar_bank + $bayar_tunai;
         $bank_idbank = $this->request->getPost('bank_idbank');
-        $idpembelian = $this->request->getPost('idpembelian');
-        $sisa_hutang = $this->sanitizeRupiah($this->request->getPost('sisa'));
-        $idpembelian = $this->request->getPost('idpembelian');
+        $idpembelian = (int) $this->request->getPost('idpembelian');
+        if ($idpembelian <= 0 || $total_bayar <= 0) {
+            return redirect()->to(base_url('daftar_tagihan'))->with('gagal', 'Pembayaran harus memilih tagihan dan nominal positif.');
+        }
 
         $data = array(
             'tanggal_bayar' => date('Y-m-d'),
@@ -175,18 +176,10 @@ class PembayaranHutang extends BaseController
             'bayar_bank' => $bayar_bank,
             'bank_idbank' => $bank_idbank,
             'pembelian_idpembelian' => $idpembelian,
-            'sisa_hutang' => $sisa_hutang,
+            'sisa_hutang' => 0,
             'input_by' => session('ID_AKUN')
 
         );
-        // KENAPA read dulu di luar transaksi: kita butuh total_pembayaran lama
-        // untuk menghitung status lunas, dan nilainya tidak boleh ikut berubah
-        // kalau transaksi ini nanti di-rollback.
-        $datapembelian = $this->PembelianModel->getById($idpembelian);
-        $total_bayar_lama = $datapembelian->total_bayar;
-        $bayar_tunai_lama = $datapembelian->bayar_tunai;
-        $bayar_bank_lama = $datapembelian->bayar_bank;
-
         // ATOMIK: payment + ledger kas/bank + status lunas hutang + mirror
         // hutang_piutang dalam SATU transaksi.
         //
@@ -205,6 +198,19 @@ class PembayaranHutang extends BaseController
         $idPembayaran = 0;
 
         try {
+            $datapembelian = $db->query(
+                'SELECT sisa, total_bayar, bayar_tunai, bayar_bank FROM '
+                . $db->prefixTable('pembelian') . ' WHERE idpembelian = ? FOR UPDATE',
+                [$idpembelian]
+            )->getRow();
+            if (! $datapembelian || $total_bayar > (int) $datapembelian->sisa) {
+                throw new \RuntimeException('Pembayaran melebihi sisa tagihan terkini.');
+            }
+            $sisa_hutang = (int) $datapembelian->sisa - $total_bayar;
+            $data['sisa_hutang'] = $sisa_hutang;
+            $total_bayar_lama = (int) $datapembelian->total_bayar;
+            $bayar_tunai_lama = (int) $datapembelian->bayar_tunai;
+            $bayar_bank_lama = (int) $datapembelian->bayar_bank;
             $this->PembayaranHutangModel->insert($data);
             $idPembayaran = $this->PembayaranHutangModel->insertID();
 
