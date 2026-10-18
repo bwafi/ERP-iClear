@@ -152,8 +152,10 @@ class StokOpnameService
         }
 
         $stocks = $this->db->table('stok_barang')
-            ->where('id_unit', $unit);
-        $this->kecualikanBukanProduk($stocks);
+            ->select('stok_barang.*')
+            ->join('barang', 'barang.idbarang = stok_barang.idbarang')
+            ->where('stok_barang.id_unit', $unit);
+        $this->kecualikanBukanProduk($stocks, 'barang.nama_barang', 'barang.jenis_item');
         $stocks = $stocks->orderBy('kode_barang', 'ASC')
             ->get()
             ->getResultArray();
@@ -223,18 +225,18 @@ class StokOpnameService
      * Terapkan pengecualian barang non-produk (jasa) pada builder:
      * Disandingkan kondisi lain dengan AND.
      */
-    private function kecualikanBukanProduk($builder, string $kolomNama = 'nama_barang'): void
+    private function kecualikanBukanProduk($builder, string $kolomNama = 'nama_barang', ?string $kolomJenis = null): void
     {
-        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama), null, false);
+        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama, true, $kolomJenis), null, false);
     }
 
     /**
      * Kebalikan dari kecualikanBukanProduk(): cocokkan HANYA barang non-produk
      * Dipakai saat membuang baris jasa.
      */
-    private function saringBukanProduk($builder, string $kolomNama = 'nama_barang'): void
+    private function saringBukanProduk($builder, string $kolomNama = 'nama_barang', ?string $kolomJenis = null): void
     {
-        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama, false), null, false);
+        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama, false, $kolomJenis), null, false);
     }
 
     /**
@@ -267,7 +269,7 @@ class StokOpnameService
             ->select('d.idstok_opname, d.periode_id')
             ->join('barang b', 'b.idbarang = d.barang_idbarang')
             ->whereIn('d.periode_id', $periodeIds);
-        $this->saringBukanProduk($builder, 'b.nama_barang');
+        $this->saringBukanProduk($builder, 'b.nama_barang', 'b.jenis_item');
 
         $rows = $builder->get()->getResultArray();
         if ($rows === []) {

@@ -63,7 +63,7 @@ class ModelKartuStok extends Model
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
-            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang'), null, false);
+            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang', true, 'barang.jenis_item'), null, false);
     }
 
     private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '')
@@ -152,7 +152,7 @@ class ModelKartuStok extends Model
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
-            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang'), null, false)
+            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang', true, 'barang.jenis_item'), null, false)
             ->get()
             ->getRow();
     }
@@ -235,7 +235,7 @@ class ModelKartuStok extends Model
         ->join('kategori', 'kategori.id = barang.idkategori', 'left')
         ->where('barang.deleted', '0')
         ->where('kategori.delete', '0')
-        ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang'), null, false);
+        ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang', true, 'barang.jenis_item'), null, false);
 
     // Filter nama_unit
     if (!empty($namaUnit)) {

@@ -23,7 +23,9 @@ use App\Models\ModelKartuStok;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
 use App\Services\Service\ServiceHppSnapshot;
+use App\Services\Service\ServicePriceSnapshot;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
+use App\Services\Inventory\ProductInventoryScope;
 
 class Service extends BaseController
 
@@ -396,15 +398,29 @@ class Service extends BaseController
 
             $submittedIds = [];
             $hppByBarangId = [];
-            foreach ($produkData as $produk) {
+            foreach ($produkData as &$produk) {
                 $id = (int) ($produk['id'] ?? 0);
-                if ($id <= 0) {
+                if ($id <= 0 || in_array($id, $submittedIds, true)) {
                     throw new \RuntimeException('Data sparepart tidak valid.');
                 }
                 $jumlah = (int) ($produk['jumlah'] ?? 0);
-                $harga = $this->rupiahToInt($produk['harga'] ?? '0');
+                $barang = $db->table('barang')->where('idbarang', $id)->where('deleted', 0)->get()->getRow();
+                if ($jumlah <= 0 || ! $barang
+                    || ! ProductInventoryScope::isPhysicalProduct((string) $barang->nama_barang, $barang->jenis_item ?? null)) {
+                    throw new \RuntimeException('Sparepart harus barang fisik aktif dengan jumlah positif.');
+                }
                 $diskonItem = $this->rupiahToInt($produk['diskon'] ?? '0');
-                $total = $this->rupiahToInt($produk['total'] ?? '0');
+                $priceSnapshot = ServicePriceSnapshot::calculate(
+                    isset($existingMap[$id]) ? (int) $existingMap[$id]->harga_penjualan : null,
+                    (int) $barang->harga,
+                    $jumlah,
+                    $diskonItem
+                );
+                $harga = $priceSnapshot['price'];
+                $total = $priceSnapshot['subtotal'];
+                $produk['harga'] = $harga;
+                $produk['diskon'] = $diskonItem;
+                $produk['total'] = $total;
                 $submittedIds[] = $id;
 
                 $dataHppBarang = array_key_exists($id, $existingMap)
@@ -414,7 +430,7 @@ class Service extends BaseController
                     $existingMap[$id] ?? null,
                     $dataHppBarang->hpp ?? 0
                 );
-                $stokAwal = $this->StokAwalModel->getById($id);
+                $stokAwal = $this->StokAwalModel->getByIdBarang($id);
                 $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,
@@ -438,6 +454,7 @@ class Service extends BaseController
                     throw new \RuntimeException('Gagal menyimpan detail sparepart service.');
                 }
             }
+            unset($produk);
 
             foreach ($existingMap as $barangId => $item) {
                 if (! in_array((int) $barangId, $submittedIds, true)

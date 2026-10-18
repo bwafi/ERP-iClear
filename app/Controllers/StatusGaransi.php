@@ -482,7 +482,7 @@ class StatusGaransi extends BaseController
                         }
                     }
                 }
-                $stokAwal = $this->StokAwalModel->getById($id);
+                $stokAwal = $this->StokAwalModel->getByIdBarang($id);
                 $data = [
                     'jumlah_tambahan_garansi' => $quantity,
                     'harga_penjualan_garansi' => $this->rupiahToInt($produk['harga'] ?? '0'),

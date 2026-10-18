@@ -50,7 +50,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
-        $q('CREATE TABLE barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL, kode_barang TEXT NULL, deleted INTEGER DEFAULT 0)');
+        $q('CREATE TABLE barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL, kode_barang TEXT NULL, jenis_item VARCHAR(10) NULL, deleted INTEGER DEFAULT 0)');
 
         // Di produksi `stok_barang` adalah VIEW; di test cukup tabel datar dengan
         // kolom yang dibaca StokOpnameService::createPeriode().
@@ -66,7 +66,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
         $q('CREATE TABLE stok_opname_periode (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 unit_idunit INTEGER NOT NULL, tanggal TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT \'DRAFT\',
+                status VARCHAR(20) NOT NULL DEFAULT \'DRAFT\',
                 jumlah_komp REAL NOT NULL DEFAULT 0, jumlah_real REAL NULL,
                 jumlah_selisih REAL NULL, total_barang INTEGER NOT NULL DEFAULT 0,
                 terisi_barang INTEGER NOT NULL DEFAULT 0, mulai_by INTEGER NULL,

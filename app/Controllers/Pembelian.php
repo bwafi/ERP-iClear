@@ -21,6 +21,7 @@ use App\Models\ModelHppBarang;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
+use App\Services\Inventory\ProductInventoryScope;
 
 class Pembelian extends BaseController
 
@@ -86,6 +87,20 @@ class Pembelian extends BaseController
     public function insert()
     {
         $produkData = $this->request->getPost('produk');
+        if (!is_array($produkData) || $produkData === []) {
+            session()->setFlashdata('gagal', 'Pilih barang yang akan dibeli.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+        foreach ($produkData as $produk) {
+            $idBarang = $produk['id'] ?? null;
+            $barang = ctype_digit((string) $idBarang) ? $this->BarangModel->getById((int) $idBarang) : null;
+            if (!$barang || (int) $barang->deleted !== 0
+                || !ProductInventoryScope::isPhysicalProduct((string) $barang->nama_barang, $barang->jenis_item ?? null)
+                || !isset($produk['jumlah']) || !is_numeric($produk['jumlah']) || (float) $produk['jumlah'] <= 0) {
+                session()->setFlashdata('gagal', 'Pembelian stok harus memakai ID barang fisik aktif dan jumlah positif.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+        }
 
         date_default_timezone_set('Asia/Jakarta');
 
@@ -448,10 +463,16 @@ class Pembelian extends BaseController
             $nama_barang = $this->request->getPost('nama_barang');
         }
 
+        $jenisItem = $this->request->getPost('jenis_item');
+        if (!in_array($jenisItem, ['fisik', 'jasa'], true)) {
+            return redirect()->to(base_url('/pembelian'))->with('gagal', 'Pilih jenis item fisik atau jasa.');
+        }
+
 
         $data = array(
             'kode_barang' => $kode_barang,
             'nama_barang' => $nama_barang,
+            'jenis_item' => $jenisItem,
             'harga' => $harga,
             'harga_beli' => $harga_beli,
             'input' => $input,

@@ -25,8 +25,20 @@ if ((int) $summary['nilai_stok'] !== 460000 || (int) $summary['jumlah_tanpa_hpp'
 }
 if (ProductInventoryScope::isPhysicalProduct('Kuras Mesin HP') !== true
     || ProductInventoryScope::isPhysicalProduct(' jasa pasang') !== false
-    || ProductInventoryScope::isPhysicalProduct('Komisi Mesin') !== false) {
+    || ProductInventoryScope::isPhysicalProduct('Komisi Mesin') !== false
+    || ProductInventoryScope::isPhysicalProduct('JASA Pasang', 'fisik') !== true
+    || ProductInventoryScope::isPhysicalProduct('LCD iPhone', 'jasa') !== false) {
     throw new RuntimeException('Klasifikasi barang fisik dan jasa tidak konsisten.');
+}
+
+$database->exec('ALTER TABLE barang ADD COLUMN jenis_item TEXT');
+$database->exec("UPDATE barang SET jenis_item = 'jasa' WHERE idbarang = 1");
+$database->exec("UPDATE barang SET jenis_item = 'fisik' WHERE idbarang = 3");
+$explicitIds = $database->query('SELECT barang.idbarang FROM barang WHERE '
+    . ProductInventoryScope::sqlPredicate('barang.nama_barang', true, 'barang.jenis_item')
+    . ' ORDER BY barang.idbarang')->fetchAll(PDO::FETCH_COLUMN);
+if ($explicitIds !== [2, 3]) {
+    throw new RuntimeException('Jenis item eksplisit harus mengalahkan awalan nama legacy.');
 }
 
 echo "Kartu Stok: valuasi HPP dan penanda harga hilang sintetis lulus.\n";

@@ -375,7 +375,7 @@ class Riwayat_Service extends BaseController
                     $existingMap[$id] ?? null,
                     $dataHppBarang->hpp ?? 0
                 );
-                $stokAwal = $this->StokAwalModel->getById($id);
+                $stokAwal = $this->StokAwalModel->getByIdBarang($id);
                 $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,

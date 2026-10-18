@@ -10,6 +10,7 @@ use App\Models\ModelSuplier;
 use App\Models\ModelAuth;
 use App\Models\ModelUnit;
 use Config\Database;
+use App\Services\Inventory\ProductInventoryScope;
 
 class StokAwal extends BaseController
 {
@@ -41,7 +42,13 @@ class StokAwal extends BaseController
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
 
-        $allBarang = $this->BarangModel->getAllBarang();
+        $allBarang = array_values(array_filter(
+            $this->BarangModel->getAllBarang(),
+            static fn ($barang) => ProductInventoryScope::isPhysicalProduct(
+                (string) $barang->nama_barang,
+                $barang->jenis_item ?? null
+            )
+        ));
         $stok = $this->StokAwalModel->getAllStok();
 
         $barangSudahAda = [];
@@ -68,7 +75,8 @@ class StokAwal extends BaseController
     public function input_stokawal($jenis = null)
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
-        $builder = $this->db->table('barang');
+        $builder = $this->db->table('barang')->where('deleted', 0)
+            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang', true, 'barang.jenis_item'), null, false);
 
         // Filter berdasarkan jenis
         if (!empty($jenis)) {
@@ -140,20 +148,34 @@ class StokAwal extends BaseController
         $selectedProducts = $this->request->getPost('selected_products');
         $idUnit = $this->request->getPost('global_unit') ?? '';
 
-        if ($selectedProducts) {
-            foreach ($selectedProducts as $kodeBarang) {
-                $jumlah = $this->request->getPost('jumlah')[$kodeBarang] ?? 0;
+        if ($selectedProducts && is_array($selectedProducts) && ctype_digit((string) $idUnit) && (int) $idUnit > 0) {
+            $selectedProducts = array_unique(array_map('strval', $selectedProducts));
+            $this->db->transBegin();
+            foreach ($selectedProducts as $idBarang) {
+                if (!ctype_digit($idBarang) || (int) $idBarang <= 0) {
+                    $this->db->transRollback();
+                    session()->setFlashdata('error', 'ID barang tidak valid');
+                    return redirect()->to(base_url('/input_stokawal'));
+                }
+                $databarang = $this->BarangModel->getById((int) $idBarang);
+                $jumlah = $this->request->getPost('jumlah')[$idBarang] ?? 0;
+                if (!$databarang || (int) $databarang->deleted !== 0
+                    || !ProductInventoryScope::isPhysicalProduct((string) $databarang->nama_barang, $databarang->jenis_item ?? null)
+                    || !is_numeric($jumlah) || (float) $jumlah <= 0
+                    || $this->StokAwalModel->where('barang_idbarang', (int) $idBarang)->where('unit_idunit', (int) $idUnit)->first()) {
+                    $this->db->transRollback();
+                    session()->setFlashdata('error', 'Barang tidak valid atau stok awal sudah tercatat. Gunakan Pembelian untuk restock.');
+                    return redirect()->to(base_url('/input_stokawal'));
+                }
 
                 //hidden sementara
                 // $hargaBeli = $this->request->getPost("harga_beli")[$kodeBarang] ?? 0;
                 //hidden sementara
 
-                $satuanTerkecil = $this->request->getPost('satuan_terkecil')[$kodeBarang] ?? '';
-                $tipeRelasi = $this->request->getPost('tipe_relasi')[$kodeBarang] ?? '';
-                $idSuplier = $this->request->getPost('id_suplier_text')[$kodeBarang] ?? 0;
-                $idPelanggan = $this->request->getPost('id_pelanggan_text')[$kodeBarang] ?? 0;
-                $databarang = $this->BarangModel->getBykode($kodeBarang);
-                $idbarang = $databarang->idbarang;
+                $satuanTerkecil = $this->request->getPost('satuan_terkecil')[$idBarang] ?? '';
+                $tipeRelasi = $this->request->getPost('tipe_relasi')[$idBarang] ?? '';
+                $idSuplier = $this->request->getPost('id_suplier_text')[$idBarang] ?? 0;
+                $idPelanggan = $this->request->getPost('id_pelanggan_text')[$idBarang] ?? 0;
 
                 //sementara
                 $hargaBeli = $databarang->harga_beli;
@@ -161,7 +183,7 @@ class StokAwal extends BaseController
                 $data = [
                     'tanggal' => date('Y-m-d'),
                     'jumlah' => $jumlah,
-                    'barang_idbarang' => $idbarang,
+                    'barang_idbarang' => (int) $idBarang,
                     'harga_beli' => $hargaBeli,
                     'satuan_terkecil' => $satuanTerkecil,
                     'unit_idunit' => $idUnit,
@@ -169,8 +191,13 @@ class StokAwal extends BaseController
                     'pelanggan_id_pelanggan' => $tipeRelasi === 'pelanggan' ? $idPelanggan : 0,
                 ];
 
-                $this->StokAwalModel->insert_Stok($data);
+                if (!$this->StokAwalModel->insert_Stok($data) || $this->db->transStatus() === false) {
+                    $this->db->transRollback();
+                    session()->setFlashdata('error', 'Stok awal gagal disimpan');
+                    return redirect()->to(base_url('/input_stokawal'));
+                }
             }
+            $this->db->transCommit();
 
             session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
             return redirect()->to(base_url('/kartu_stok'));

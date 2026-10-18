@@ -1014,6 +1014,14 @@
                                 <label for="nama_barang" class="form-label">Nama Barang</label>
                                 <input type="text" class="form-control" id="nama_barang" name="nama_barang">
                             </div>
+                            <div class="mb-3">
+                                <label for="jenis_item" class="form-label">Jenis Item</label>
+                                <select class="form-control" id="jenis_item" name="jenis_item" required>
+                                    <option value="">-- Pilih Jenis --</option>
+                                    <option value="fisik">Barang fisik / sparepart</option>
+                                    <option value="jasa">Jasa / komisi (tanpa stok HPP)</option>
+                                </select>
+                            </div>
                             <!-- <div class="mb-3">
                                 <label for="">Nama Handphone</label>
                                 <select id="namahandphone-select" name="nama_hp" class="select2 form-control"
