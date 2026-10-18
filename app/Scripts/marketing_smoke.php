@@ -173,7 +173,9 @@ try {
 
     campaignKirim($ctrl, ['id' => $campId, 'unit_id' => 99999999]);
     $row = $db->table('marketing_campaigns')->where('id', $campId)->get()->getRow();
-    ok('unit tak dikenal → NULL', $row->unit_id === null, var_export($row->unit_id ?? 'tidak-ada', true));
+    ok('unit tak dikenal ditolak', (int) $row->unit_id === $unitB, (string) $row->unit_id);
+    $adsUnit = (int) $db->table('marketing_ads_performance')->where('campaign_id', $campId)->get()->getRow()->unit_id;
+    ok('baris iklan tidak ikut kosong', $adsUnit === $unitB, (string) $adsUnit);
 
     $db->transRollback();
     $_POST = [];

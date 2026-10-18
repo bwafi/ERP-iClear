@@ -697,7 +697,7 @@ class Marketing extends BaseController
      * Tarik biaya & insight Meta untuk bulan yang sedang dilihat.
      *
      * Rentangnya sengaja satu bulan penuh (bukan 7 hari seperti command) supaya
-     * menyusul bulan berjalan setelah pemetaan campaign baru diisi.
+     * menyusul bulan berjalan setelah campaign disinkronkan dari Meta.
      */
     public function ads_performa_tarik()
     {
@@ -721,6 +721,14 @@ class Marketing extends BaseController
         // bisa terlampaui, terutama saat percobaan ulang jaringan.
         set_time_limit(120);
 
+        // Campaign harus ada lebih dulu. Gagal sync (mis. periode sebelum
+        // 2026-10) tidak membatalkan tarikan.
+        try {
+            (new \App\Services\Meta\MetaCampaignSyncService())->sync($bulan, $tahun);
+        } catch (\Throwable $e) {
+            // biarkan; pull akan melaporkan campaign yang belum dikenal
+        }
+
         try {
             $hasil = (new \App\Services\Meta\MetaAdsPullService())->pull($dari, $sampai);
         } catch (\Throwable $e) {
@@ -736,7 +744,7 @@ class Marketing extends BaseController
             $hasil['dilewati']
         );
         if (!empty($hasil['tanpa_peta'])) {
-            $pesan .= ' ' . count($hasil['tanpa_peta']) . ' campaign Meta belum dipetakan — isi kolom "ID Campaign Meta" di menu Campaign.';
+            $pesan .= ' ' . count($hasil['tanpa_peta']) . ' campaign Meta belum dikenal — jalankan sync campaign Meta.';
         }
 
         return redirect()->to(base_url('marketing/ads_performa?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $pesan);
@@ -1355,7 +1363,7 @@ class Marketing extends BaseController
         }
 
         $mingguSudahBerakhir = $minggu > 0
-            && \App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, date('Y-m-d'));
+            && \App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, \App\Services\Marketing\WeeklyReport::today());
         $mingguAktif = ($tahun * 100 + $bulan) >= 202611;
 
         return view('template', [
@@ -1403,7 +1411,7 @@ class Marketing extends BaseController
         if ($tahun * 100 + $bulan < 202611) {
             return redirect()->to($kembali)->with('error', 'Laporan mingguan berlaku mulai November 2026.');
         }
-        if (!\App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, date('Y-m-d'))) {
+        if (!\App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, \App\Services\Marketing\WeeklyReport::today())) {
             return redirect()->to($kembali)->with('error', 'Minggu ini belum berakhir, belum bisa dilaporkan.');
         }
 
@@ -1416,13 +1424,18 @@ class Marketing extends BaseController
             return redirect()->to($kembali)->with('error', 'Laporan minggu ini sudah dikirim.');
         }
 
-        $model->insert([
-            'period_year'  => $tahun,
-            'period_month' => $bulan,
-            'minggu'       => $minggu,
-            'submitted_by' => $this->currentAkun(),
-            'submitted_at' => date('Y-m-d H:i:s'),
-        ]);
+        try {
+            $model->insert([
+                'period_year'  => $tahun,
+                'period_month' => $bulan,
+                'minggu'       => $minggu,
+                'submitted_by' => $this->currentAkun(),
+                'submitted_at' => \App\Services\Marketing\WeeklyReport::now(),
+            ]);
+        } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
+            // Kalah balapan dengan kiriman lain: UNIQUE (tahun, bulan, minggu).
+            return redirect()->to($kembali)->with('error', 'Laporan minggu ini sudah dikirim.');
+        }
 
         return redirect()->to($kembali)->with('success', 'Laporan minggu ini terkirim.');
     }
@@ -1465,10 +1478,9 @@ class Marketing extends BaseController
 
         // Satu-satunya yang bisa diubah: unit pembebanan biaya.
         $unitId = (int)$this->request->getPost('unit_id');
-        if ($unitId > 0 && !(new \App\Models\ModelUnit())->getById($unitId)) {
-            $unitId = 0;
+        if ($unitId <= 0 || !(new \App\Models\ModelUnit())->getById($unitId)) {
+            return redirect()->back()->with('error', 'Pilih unit pembebanan biaya.');
         }
-        $unitId = $unitId > 0 ? $unitId : null;
 
         $model->update($id, [
             'unit_id'     => $unitId,
@@ -1494,8 +1506,12 @@ class Marketing extends BaseController
         }
         $id = (int)$this->request->getPost('id');
         $model = new \App\Models\ModelMarketingCampaign();
-        if (!$model->find($id)) {
+        $row = $model->find($id);
+        if (!$row) {
             return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
+        }
+        if (!empty($row->meta_campaign_id)) {
+            return redirect()->back()->with('error', 'Campaign dari Meta tidak bisa dihapus; akan muncul lagi saat sync. Koreksi unitnya saja.');
         }
         $ads = new \App\Models\ModelMarketingAdsPerf();
         if ($ads->where('campaign_id', $id)->countAllResults() > 0) {

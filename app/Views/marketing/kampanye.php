@@ -113,7 +113,7 @@ foreach ($unitList as $u) {
                                         <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
-                                <?php if ($canWrite) : ?>
+                                <?php if ($canWrite && empty($row->meta_campaign_id)) : ?>
                                     <td class="text-center text-nowrap pe-3">
                                         <form method="post" action="<?= base_url('marketing/campaign/hapus') ?>" class="d-inline"
                                             onsubmit="return confirm('Hapus campaign ini?');">

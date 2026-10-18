@@ -88,7 +88,7 @@ $hasDaily = !empty($tglKeys);
                 </div>
             </form>
             <div class="d-flex gap-2">
-                <?php if (!empty($canWrite) && $minggu > 0) : ?>
+                <?php if ($minggu > 0) : ?>
                     <?php if (empty($mingguAktif)) : ?>
                         <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle align-self-center px-2 py-2">
                             Laporan mingguan berlaku mulai November 2026
@@ -98,7 +98,7 @@ $hasDaily = !empty($tglKeys);
                             Dilaporkan <?= date('d M Y', strtotime($laporanMinggu[$minggu]->submitted_at)) ?>
                             oleh <?= esc($laporanMinggu[$minggu]->nama_pengirim ?? '-') ?>
                         </span>
-                    <?php elseif ($mingguSudahBerakhir) : ?>
+                    <?php elseif (!empty($canWrite) && $mingguSudahBerakhir) : ?>
                         <form method="post" action="<?= base_url('marketing/laporan/minggu') ?>" class="align-self-center">
                             <input type="hidden" name="bulan" value="<?= $bulan ?>">
                             <input type="hidden" name="tahun" value="<?= $tahun ?>">
@@ -107,7 +107,7 @@ $hasDaily = !empty($tglKeys);
                                 <iconify-icon icon="solar:send-square-bold" class="me-1"></iconify-icon>Laporkan minggu ini
                             </button>
                         </form>
-                    <?php else : ?>
+                    <?php elseif (!empty($canWrite)) : ?>
                         <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle align-self-center px-2 py-2">
                             Minggu ini belum berakhir
                         </span>

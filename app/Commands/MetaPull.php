@@ -56,16 +56,24 @@ class MetaPull extends BaseCommand
         CLI::write("Menarik insight Meta {$dari} s/d {$sampai}" . ($dryRun ? ' (dry-run)' : '') . '…', 'yellow');
 
         if (!$dryRun) {
-            // Campaign baru harus ada dulu, kalau tidak barisnya dilewati
-            // sebagai "Tanpa peta". Kegagalan sync tidak menggagalkan tarikan.
-            try {
-                $h = (new \App\Services\Meta\MetaCampaignSyncService())->sync(
-                    (int)date('n', strtotime($sampai)),
-                    (int)date('Y', strtotime($sampai))
-                );
-                CLI::write("Campaign: {$h['dibuat']} baru, {$h['diperbarui']} diperbarui.", 'green');
-            } catch (\Throwable $e) {
-                CLI::write('Sync campaign dilewati: ' . $e->getMessage(), 'yellow');
+            // Campaign harus ada lebih dulu, kalau tidak barisnya dilewati
+            // sebagai "Tanpa peta". Rentang 7 hari bisa menyentuh dua bulan,
+            // jadi setiap bulan ikut disinkronkan. Gagal sync tidak
+            // menggagalkan tarikan.
+            $sync   = new \App\Services\Meta\MetaCampaignSyncService();
+            $kursor = new \DateTime(substr($dari, 0, 7) . '-01');
+            $akhir  = new \DateTime(substr($sampai, 0, 7) . '-01');
+
+            while ($kursor <= $akhir) {
+                $b = (int)$kursor->format('n');
+                $t = (int)$kursor->format('Y');
+                try {
+                    $h = $sync->sync($b, $t);
+                    CLI::write("Campaign {$b}/{$t}: {$h['dibuat']} baru, {$h['diperbarui']} diperbarui.", 'green');
+                } catch (\Throwable $e) {
+                    CLI::write("Sync campaign {$b}/{$t} dilewati: " . $e->getMessage(), 'yellow');
+                }
+                $kursor->modify('+1 month');
             }
         }
 
@@ -85,11 +93,11 @@ class MetaPull extends BaseCommand
         );
 
         if ($hasil['tanpa_peta'] !== []) {
-            CLI::write('Kampanye Meta ini belum dipetakan ke campaign ERP:', 'yellow');
+            CLI::write('Campaign Meta ini belum dikenal:', 'yellow');
             foreach ($hasil['tanpa_peta'] as $metaId) {
                 CLI::write("  - {$metaId}");
             }
-            CLI::write('Isi kolom "ID Campaign Meta" di menu Marketing → Campaign.', 'yellow');
+            CLI::write('Jalankan `php spark meta:sync-campaigns` untuk bulan ini.', 'yellow');
         }
 
         if ($dryRun) {

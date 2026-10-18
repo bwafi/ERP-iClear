@@ -255,7 +255,7 @@ class DigitalMarketingKpiService
 
         return [
             'terkirim' => $terkirim,
-            'skor'     => WeeklyReport::score($month, $year, $terkirim, date('Y-m-d')),
+            'skor'     => WeeklyReport::score($month, $year, $terkirim, WeeklyReport::today()),
         ];
     }
 

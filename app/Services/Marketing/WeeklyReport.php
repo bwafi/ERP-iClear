@@ -11,6 +11,19 @@ namespace App\Services\Marketing;
  */
 class WeeklyReport
 {
+    /** Zona bisnis; `appTimezone` framework UTC, jadi tanggal dihitung di sini. */
+    public const ZONA = 'Asia/Jakarta';
+
+    public static function today(): string
+    {
+        return (new \DateTimeImmutable('now', new \DateTimeZone(self::ZONA)))->format('Y-m-d');
+    }
+
+    public static function now(): string
+    {
+        return (new \DateTimeImmutable('now', new \DateTimeZone(self::ZONA)))->format('Y-m-d H:i:s');
+    }
+
     public static function range(int $month, int $year, int $minggu): array
     {
         $mulai = [1 => 1, 2 => 8, 3 => 15, 4 => 22][$minggu] ?? 1;
@@ -49,7 +62,7 @@ class WeeklyReport
 
             $total++;
             $at = $terkirim[$minggu] ?? null;
-            if ($at !== null && substr((string)$at, 0, 10) <= $deadline) {
+            if ($at !== null && $at !== '' && substr((string)$at, 0, 10) <= $deadline) {
                 $tepat++;
             }
         }

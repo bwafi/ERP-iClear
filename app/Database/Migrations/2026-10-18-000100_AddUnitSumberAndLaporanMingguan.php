@@ -45,6 +45,12 @@ class AddUnitSumberAndLaporanMingguan extends Migration
             $this->forge->createTable('marketing_laporan_mingguan', true);
         }
 
+        // Unit yang sudah diisi sebelum fitur ini dianggap koreksi manual,
+        // supaya sync pertama tidak menimpanya.
+        $db->table('marketing_campaigns')
+            ->where('unit_id IS NOT NULL', null, false)
+            ->update(['unit_sumber' => 'manual']);
+
         $maps = [
             'iClear Prob 76'       => '120251146211920189',
             'iClear Jember 64'     => '120251147591300189',
@@ -53,12 +59,21 @@ class AddUnitSumberAndLaporanMingguan extends Migration
             'iClear Genteng 04'    => '120251224385770189',
         ];
         foreach ($maps as $nama => $metaId) {
-            $db->table('marketing_campaigns')
+            $row = $db->table('marketing_campaigns')
+                ->select('id')
                 ->where('period_month', 10)
                 ->where('period_year', 2026)
                 ->where('meta_campaign_id', null)
                 ->like('nama', $nama)
-                ->update(['meta_campaign_id' => $metaId, 'unit_sumber' => 'auto']);
+                ->orderBy('id', 'ASC')
+                ->limit(1)
+                ->get()->getRow();
+
+            if ($row) {
+                $db->table('marketing_campaigns')
+                    ->where('id', (int)$row->id)
+                    ->update(['meta_campaign_id' => $metaId, 'unit_sumber' => 'auto']);
+            }
         }
     }
 

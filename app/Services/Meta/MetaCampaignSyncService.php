@@ -78,6 +78,13 @@ class MetaCampaignSyncService
 
         $opsi = $this->client->fetchCampaignOptions($dari, $sampai);
 
+        // fetchCampaignOptions ikut mengembalikan campaign yang ACTIVE hari ini.
+        // Untuk periode lama, hanya yang benar-benar belanja di periode itu yang
+        // boleh dibuatkan baris.
+        if (!((int)date('n') === $month && (int)date('Y') === $year)) {
+            $opsi = array_values(array_filter($opsi, fn($o) => (float)$o['spend'] > 0));
+        }
+
         $model = new ModelMarketingCampaign();
         $existing = [];
         foreach ($model->where('meta_campaign_id IS NOT NULL', null, false)->findAll() as $row) {
@@ -86,14 +93,25 @@ class MetaCampaignSyncService
                 continue;
             }
             $existing[$metaId] = [
-                'id'          => (int)$row->id,
-                'unit_id'     => $row->unit_id !== null ? (int)$row->unit_id : null,
-                'unit_sumber' => (string)($row->unit_sumber ?? 'auto'),
-                'status'      => (string)$row->status,
+                'id'           => (int)$row->id,
+                'unit_id'      => $row->unit_id !== null ? (int)$row->unit_id : null,
+                'unit_sumber'  => (string)($row->unit_sumber ?? 'auto'),
+                'status'       => (string)$row->status,
+                'period_month' => (int)$row->period_month,
+                'period_year'  => (int)$row->period_year,
             ];
         }
 
         $p = $this->plan($opsi, $existing);
+
+        // Sync bulan lama tidak boleh mengubah status baris bulan lain.
+        $bolehTurun = [];
+        foreach ($existing as $e) {
+            if ($e['period_month'] === $month && $e['period_year'] === $year) {
+                $bolehTurun[$e['id']] = true;
+            }
+        }
+        $p['demote'] = array_values(array_filter($p['demote'], fn($id) => isset($bolehTurun[$id])));
 
         $dibuat = 0;
         $diperbarui = 0;
