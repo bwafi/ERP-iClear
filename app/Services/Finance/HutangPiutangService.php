@@ -282,6 +282,138 @@ class HutangPiutangService
         return (int) $this->db->insertID();
     }
 
+    /**
+     * Boleh tidak baris kas_keluar diubah?
+     *
+     * Menolak bila kasbon tertaut sudah lunas (faktanya terkunci ke payroll)
+     * atau nominal baru lebih kecil dari yang sudah dibayar.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function guardKasbonKasKeluar(int $kasKeluarId, int $jumlahBaru): array
+    {
+        $row = $this->db->table('hutang_piutang')
+            ->where('kas_keluar_id', $kasKeluarId)
+            ->where('deleted', 0)
+            ->get()->getRow();
+
+        if (!$row) {
+            return ['ok' => true, 'message' => 'Tidak ada kasbon tertaut.'];
+        }
+        if ($row->status === self::STATUS_LUNAS) {
+            return ['ok' => false, 'message' => 'Kasbon sudah lunas dipotong gaji; baris kas tidak boleh diubah.'];
+        }
+        if ($jumlahBaru < (int) $row->total_dibayar) {
+            return ['ok' => false, 'message' => 'Nominal kas lebih kecil dari yang sudah dibayar.'];
+        }
+
+        return ['ok' => true, 'message' => 'Boleh diubah.'];
+    }
+
+    /**
+     * Terapkan perubahan baris kas_keluar ke kasbon tertaut (arah: kas -> kasbon).
+     *
+     * @param array{tanggal?:string,jumlah?:int,idbank?:?string} $data
+     * @return array{ok:bool,message:string}
+     */
+    public function syncKasbonDariKasKeluar(int $kasKeluarId, array $data): array
+    {
+        $row = $this->db->table('hutang_piutang')
+            ->where('kas_keluar_id', $kasKeluarId)
+            ->where('deleted', 0)
+            ->get()->getRow();
+
+        if (!$row) {
+            return ['ok' => true, 'message' => 'Tidak ada kasbon tertaut.'];
+        }
+
+        $total = (int) ($data['jumlah'] ?? $row->total);
+        if ($total < (int) $row->total_dibayar) {
+            return ['ok' => false, 'message' => 'Nominal kas lebih kecil dari yang sudah dibayar.'];
+        }
+        $idbank   = trim((string) ($data['idbank'] ?? ''));
+        $metode   = $idbank !== '' ? 'transfer' : 'tunai';
+        $tanggal  = (string) ($data['tanggal'] ?? $row->tanggal);
+        $sisa     = $total - (int) $row->total_dibayar;
+
+        $this->db->transBegin();
+        try {
+            $this->hp->update((int) $row->id, [
+                'total'       => $total,
+                'sisa'        => $sisa,
+                'status'      => $this->statusFromSisa($total, $sisa, (int) $row->total_dibayar),
+                'tanggal'     => $tanggal,
+                'metode'      => $metode,
+                'bank_idbank' => $idbank !== '' ? $idbank : null,
+            ]);
+
+            // Jurnal kasbon ikut disesuaikan: hapus lalu post ulang.
+            $this->db->table('jurnal')
+                ->where('tabel_referensi', 'hutang_piutang')
+                ->where('id_referensi', (int) $row->id)
+                ->delete();
+            $this->postJurnal(
+                $tanggal,
+                $this->templateKasbonInput($metode),
+                $total,
+                'Kasbon Pegawai: ' . $row->kode,
+                (int) $row->id,
+                'hutang_piutang',
+                $row->unit_id ? (int) $row->unit_id : null,
+                (int) session('ID_AKUN')
+            );
+
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['ok' => false, 'message' => 'Gagal sinkron kasbon: ' . $e->getMessage()];
+        }
+
+        return ['ok' => true, 'message' => 'Kasbon ikut diperbarui.'];
+    }
+
+    /**
+     * Hapus kasbon tertaut saat baris kas_keluar dihapus.
+     *
+     * Menolak bila kasbon sudah lunas atau sudah punya pembayaran potong gaji.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function hapusKasbonDariKasKeluar(int $kasKeluarId): array
+    {
+        $row = $this->db->table('hutang_piutang')
+            ->where('kas_keluar_id', $kasKeluarId)
+            ->where('deleted', 0)
+            ->get()->getRow();
+
+        if (!$row) {
+            return ['ok' => true, 'message' => 'Tidak ada kasbon tertaut.'];
+        }
+
+        $adaBayar = $this->db->table('pembayaran_hutang_piutang')
+            ->where('hutang_piutang_id', (int) $row->id)
+            ->countAllResults() > 0;
+
+        if ($adaBayar || $row->status === self::STATUS_LUNAS) {
+            return ['ok' => false, 'message' => 'Kasbon sudah dibayar/dipotong gaji; baris kas tidak boleh dihapus.'];
+        }
+
+        $this->db->transBegin();
+        try {
+            $this->db->table('jurnal')
+                ->where('tabel_referensi', 'hutang_piutang')
+                ->where('id_referensi', (int) $row->id)
+                ->delete();
+            $this->hp->update((int) $row->id, ['deleted' => 1]);
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            return ['ok' => false, 'message' => 'Gagal hapus kasbon: ' . $e->getMessage()];
+        }
+
+        return ['ok' => true, 'message' => 'Kasbon ikut dihapus.'];
+    }
+
     // =====================================================================
     // CRUD posisi authoritative
     // =====================================================================
