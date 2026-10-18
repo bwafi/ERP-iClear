@@ -25,6 +25,7 @@ use App\Models\ModelRiwayatKlaimGaransi;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceHppSnapshot;
 use App\Services\Service\WarrantyClaimEligibility;
+use App\Services\Finance\WarrantyExpenseJournal;
 
 
 
@@ -368,6 +369,16 @@ class StatusGaransi extends BaseController
                             || (int) $previousIssue->hpp_satuan !== (int) $hpp) {
                             throw new \RuntimeException('Penggantian barang yang sama perlu dicatat pada histori klaim terpisah.');
                         }
+                        $journal = $db->table('jurnal')
+                            ->select('COUNT(*) AS jumlah, SUM(debet) AS debet, SUM(kredit) AS kredit', false)
+                            ->where('tabel_referensi', 'garansi_sparepart_keluar')
+                            ->where('id_referensi', (int) $previousIssue->id)
+                            ->get()->getRow();
+                        if ((int) ($journal->jumlah ?? 0) !== 2
+                            || (int) ($journal->debet ?? 0) !== $quantity * (int) $hpp
+                            || (int) ($journal->kredit ?? 0) !== $quantity * (int) $hpp) {
+                            throw new \RuntimeException('Mutasi lama belum memiliki jurnal seimbang; perlu rekonsiliasi.');
+                        }
                     } else {
                         if ((int) ($existingItem->jumlah_tambahan_garansi ?? 0) > 0 || ! $hppBarang) {
                             throw new \RuntimeException('HPP atau histori stok pengganti belum tersedia.');
@@ -394,6 +405,39 @@ class StatusGaransi extends BaseController
                             'created_at' => date('Y-m-d H:i:s'),
                         ])) {
                             throw new \RuntimeException('Mutasi stok garansi gagal disimpan.');
+                        }
+                        $issueId = (int) $db->insertID();
+                        $template = $db->table('template_jurnal')
+                            ->select('no_akun, debet_kredit')
+                            ->where('kode_template', 'garansi_sparepart_keluar')
+                            ->get()->getResultArray();
+                        $lines = WarrantyExpenseJournal::lines($template, $quantity * (int) $hpp);
+                        $accounts = $db->table('no_akun')
+                            ->select('no_akun, nama_akun')
+                            ->whereIn('no_akun', array_column($lines, 0))
+                            ->get()->getResult();
+                        $names = [];
+                        foreach ($accounts as $account) {
+                            $names[$account->no_akun] = $account->nama_akun;
+                        }
+                        if ($issueId <= 0 || count($names) !== 2) {
+                            throw new \RuntimeException('Akun atau referensi jurnal garansi tidak valid.');
+                        }
+                        foreach ($lines as $line) {
+                            if (! $db->table('jurnal')->insert([
+                                'tanggal' => date('Y-m-d'),
+                                'no_akun' => $line[0],
+                                'nama_akun' => $names[$line[0]],
+                                'debet' => $line[1],
+                                'kredit' => $line[2],
+                                'keterangan' => 'HPP pengganti garansi service ' . $idservice,
+                                'id_referensi' => $issueId,
+                                'tabel_referensi' => 'garansi_sparepart_keluar',
+                                'id_unit' => (int) $service->unit_idunit,
+                                'id_akun' => (int) session('ID_AKUN'),
+                            ])) {
+                                throw new \RuntimeException('Jurnal beban garansi gagal disimpan.');
+                            }
                         }
                     }
                 }
