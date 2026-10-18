@@ -37,7 +37,7 @@ Retur lama tanpa hubungan ke Barang Rusak tidak direklasifikasi otomatis. Dokume
 
 ## Garansi pengganti
 
-Migrasi `000700` menambahkan mutasi stok tersendiri untuk sparepart pengganti. Admin root wajib memilih akun beban dan persediaan pada menu `/akun_jurnal_garansi` sebelum penggantian baru. Mutasi stok dan jurnal debit beban/kredit persediaan disimpan dalam satu transaksi; bila akun atau HPP belum valid, keduanya ditolak. Simpan ulang formulir klaim yang sama tidak boleh mengurangi stok atau membuat jurnal kedua kali. Mutasi lama tanpa jurnal harus direkonsiliasi manual. Klaim kedua untuk **barang yang sama** belum mendukung lapisan HPP baru dalam baris service yang sama; jangan mengubah kuantitas lama atau menganggapnya sebagai penggantian baru tanpa desain histori per klaim. Stok TEST dan jurnal harus direkonsiliasi sebelum rilis.
+Migrasi `000700` menambahkan mutasi stok tersendiri untuk sparepart pengganti. Admin root wajib memilih akun beban dan persediaan pada menu `/akun_jurnal_garansi` sebelum penggantian baru. Mutasi stok dan jurnal debit beban/kredit persediaan disimpan dalam satu transaksi; bila akun atau HPP belum valid, keduanya ditolak. Simpan ulang formulir klaim yang sama tidak boleh mengurangi stok atau membuat jurnal kedua kali. Klaim kedua untuk barang yang sama membuat mutasi baru dengan HPP saat klaim kedua; HPP klaim pertama tetap pada baris mutasi lama. Tampilan baris `service_sparepart` hanya menyimpan klaim aktif, bukan seluruh histori. Mutasi lama tanpa jurnal atau baris garansi lama tanpa mutasi harus direkonsiliasi manual. Stok TEST dan jurnal harus direkonsiliasi sebelum rilis.
 
 ## Batas laporan
 
