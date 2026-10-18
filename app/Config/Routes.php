@@ -308,6 +308,8 @@ $routes->get('cetak/invoice_mutasi/(:num)', 'MutasiStok::cetak_notamutasi/$1', [
 //retur
 $routes->get('retur_suplier', 'Retur_Suplier::index', ['filter' => 'auth']);
 $routes->post('insert_retur_suplier', 'Retur_Suplier::insert', ['filter' => 'auth']);
+$routes->get('kredit_retur_suplier', 'KreditReturSuplier::index', ['filter' => 'auth']);
+$routes->post('kredit_retur_suplier/approve', 'KreditReturSuplier::approve', ['filter' => 'auth']);
 
 //retur customer
 $routes->get('retur_customer', 'Retur_Customer::index', ['filter' => 'auth']);
@@ -523,7 +525,6 @@ $routes->get('penilaian/kpi/detail/(:num)', 'PenilaianKPI::kpi_detail/$1', ['fil
 $routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_daily', 'PenilaianKPI::save_manual_daily', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_customer_satisfaction', 'PenilaianKPI::save_customer_satisfaction', ['filter' => 'auth']);
-$routes->post('penilaian/kpi/save_manager_manual', 'PenilaianKPI::save_manager_manual', ['filter' => 'auth']);
 
 // Asset Master (Finance/Root/Direktur/Manager: 0,1,2,34)
 $routes->get('penilaian/kpi/aset_master', 'PenilaianKPI::aset_master_index', ['filter' => 'auth']);
