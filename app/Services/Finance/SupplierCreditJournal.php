@@ -4,6 +4,14 @@ namespace App\Services\Finance;
 
 final class SupplierCreditJournal
 {
+    public static function validAccountClasses(string $payable, string $receivable, string $recovery): bool
+    {
+        return preg_match('/^2[0-9]{9}$/D', $payable) === 1
+            && preg_match('/^1[0-9]{9}$/D', $receivable) === 1
+            && preg_match('/^[4567][0-9]{9}$/D', $recovery) === 1
+            && count(array_unique([$payable, $receivable, $recovery])) === 3;
+    }
+
     public static function approvalLines(int $amount, int $applied, string $payable, string $receivable, string $recovery): array
     {
         if ($amount <= 0 || $applied < 0 || $applied > $amount
