@@ -98,6 +98,11 @@ class BarangRusak extends BaseController
         try {
             $seen = [];
             foreach ($products as $index => $productId) {
+                if (! is_scalar($productId) || ! ctype_digit((string) $productId)
+                    || ! is_scalar($purchases[$index]) || ! ctype_digit((string) $purchases[$index])
+                    || ! is_scalar($quantities[$index]) || ! ctype_digit((string) $quantities[$index])) {
+                    throw new \RuntimeException('ID atau jumlah barang rusak tidak valid.');
+                }
                 $productId = (int) $productId;
                 $purchaseId = (int) $purchases[$index];
                 $quantity = (int) $quantities[$index];
