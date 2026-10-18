@@ -55,6 +55,20 @@ class MetaPull extends BaseCommand
 
         CLI::write("Menarik insight Meta {$dari} s/d {$sampai}" . ($dryRun ? ' (dry-run)' : '') . '…', 'yellow');
 
+        if (!$dryRun) {
+            // Campaign baru harus ada dulu, kalau tidak barisnya dilewati
+            // sebagai "Tanpa peta". Kegagalan sync tidak menggagalkan tarikan.
+            try {
+                $h = (new \App\Services\Meta\MetaCampaignSyncService())->sync(
+                    (int)date('n', strtotime($sampai)),
+                    (int)date('Y', strtotime($sampai))
+                );
+                CLI::write("Campaign: {$h['dibuat']} baru, {$h['diperbarui']} diperbarui.", 'green');
+            } catch (\Throwable $e) {
+                CLI::write('Sync campaign dilewati: ' . $e->getMessage(), 'yellow');
+            }
+        }
+
         try {
             $hasil = (new MetaAdsPullService())->pull($dari, $sampai, $dryRun);
         } catch (\Throwable $e) {
