@@ -60,11 +60,20 @@ class BarangRusak extends BaseController
 
     public function input()
     {
+        $claims = Database::connect()->table('riwayat_claim_garansi claim')
+            ->select('claim.idriwayat_claim_garansi')
+            ->join('service', 'service.idservice = claim.service_idservice')
+            ->where('service.unit_idunit', (int) session('ID_UNIT'))
+            ->orderBy('claim.idriwayat_claim_garansi', 'DESC')
+            ->limit(100)->get()->getResult();
 
         $data = array(
             'body' => 'stok/input_barang_rusak',
             'detail_pembelian' => $this->DetailPembelianModel->getDetailAll(),
-            'unit' => $this->UnitModel->getUnit()
+            'unit' => $this->UnitModel->getUnit(),
+            'warrantyClaims' => array_map(static function ($claim) {
+                return (int) $claim->idriwayat_claim_garansi;
+            }, $claims)
         );
 
 
@@ -80,6 +89,7 @@ class BarangRusak extends BaseController
         $quantities = $this->request->getPost('jumlah_rusak');
         $dates = $this->request->getPost('tanggal_rusak');
         $notes = $this->request->getPost('keterangan');
+        $claimIds = $this->request->getPost('claim_id');
         $unitId = (int) session('ID_UNIT');
         $count = is_array($products) ? count($products) : 0;
         if ($unitId <= 0 || $count === 0 || ! is_array($purchases) || ! is_array($batches)
@@ -90,6 +100,12 @@ class BarangRusak extends BaseController
             || array_keys($products) !== array_keys($quantities) || array_keys($products) !== array_keys($dates)
             || array_keys($products) !== array_keys($notes)) {
             return redirect()->back()->with('gagal', 'Data barang rusak tidak lengkap.');
+        }
+        if ($claimIds === null) {
+            $claimIds = array_fill_keys(array_keys($products), '');
+        }
+        if (! is_array($claimIds) || array_keys($claimIds) !== array_keys($products)) {
+            return redirect()->back()->with('gagal', 'Data klaim garansi tidak lengkap.');
         }
 
         $db = Database::connect();
@@ -117,6 +133,14 @@ class BarangRusak extends BaseController
                     throw new \RuntimeException('Baris barang rusak tidak valid.');
                 }
                 $seen[$key] = true;
+                $rawClaimId = $claimIds[$index];
+                if (! is_scalar($rawClaimId) || ((string) $rawClaimId !== '' && ! ctype_digit((string) $rawClaimId))) {
+                    throw new \RuntimeException('ID klaim tidak valid.');
+                }
+                $claimId = (int) $rawClaimId;
+                if ((string) $rawClaimId !== '' && $claimId <= 0) {
+                    throw new \RuntimeException('ID klaim tidak valid.');
+                }
 
                 $purchase = $db->query(
                     'SELECT unit_idunit FROM ' . $db->prefixTable('pembelian') . ' WHERE idpembelian = ? FOR UPDATE',
@@ -143,6 +167,33 @@ class BarangRusak extends BaseController
                 if ($quantity > (int) ($purchased->jumlah ?? 0) - (int) ($previous->jumlah ?? 0)) {
                     throw new \RuntimeException('Jumlah rusak melebihi pembelian.');
                 }
+                if ($claimId > 0) {
+                    $claim = $db->query(
+                        'SELECT service.idservice, service.unit_idunit, detail.jumlah FROM '
+                        . $db->prefixTable('riwayat_claim_garansi') . ' claim '
+                        . 'JOIN ' . $db->prefixTable('service') . ' service ON service.idservice = claim.service_idservice '
+                        . 'JOIN ' . $db->prefixTable('service_sparepart') . ' detail '
+                        . 'ON detail.service_idservice = service.idservice AND detail.barang_idbarang = ? '
+                        . 'WHERE claim.idriwayat_claim_garansi = ? FOR UPDATE',
+                        [$productId, $claimId]
+                    )->getRow();
+                    if (! $claim || (int) $claim->unit_idunit !== $unitId) {
+                        throw new \RuntimeException('Klaim tidak sesuai barang atau unit.');
+                    }
+                    $priorIssue = $db->table('garansi_sparepart_keluar')
+                        ->select('jumlah')
+                        ->where('service_id', $claim->idservice)
+                        ->where('barang_id', $productId)
+                        ->where('claim_id <', $claimId)
+                        ->orderBy('claim_id', 'DESC')->get()->getRow();
+                    $maxReturned = (int) ($priorIssue->jumlah ?? $claim->jumlah);
+                    $damaged = $db->table('barang_rusak')->selectSum('jumlah')
+                        ->where('claim_id', $claimId)
+                        ->where('barang_idbarang', $productId)->get()->getRow();
+                    if ($maxReturned <= 0 || $quantity > $maxReturned - (int) ($damaged->jumlah ?? 0)) {
+                        throw new \RuntimeException('Jumlah barang rusak melebihi sparepart yang dipakai customer.');
+                    }
+                }
 
                 if (! $this->BarangRusakModel->insert([
                     'idpembelian' => $purchaseId,
@@ -153,6 +204,7 @@ class BarangRusak extends BaseController
                     'unit_idunit' => $unitId,
                     'input_by' => session('ID_AKUN'),
                     'keterangan' => (string) $notes[$index],
+                    'claim_id' => $claimId > 0 ? $claimId : null,
                 ])) {
                     throw new \RuntimeException('Barang rusak gagal disimpan.');
                 }
