@@ -155,11 +155,13 @@ class StatusGaransi extends BaseController
         try {
             $serviceTable = $db->prefixTable('service');
             $service = $db->query(
-                "SELECT status_service, garansi_hari, tanggal_selesai FROM {$serviceTable} WHERE idservice = ? FOR UPDATE",
+                "SELECT unit_idunit, status_service, garansi_hari, tanggal_selesai FROM {$serviceTable} WHERE idservice = ? FOR UPDATE",
                 [$idservice]
             )->getRow();
             $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
-            if (! $service || ! WarrantyClaimEligibility::allows($service, $today)) {
+            if (! $service || (int) session('ID_UNIT') <= 0
+                || (int) $service->unit_idunit !== (int) session('ID_UNIT')
+                || ! WarrantyClaimEligibility::allows($service, $today)) {
                 throw new \RuntimeException('Service tidak memenuhi syarat klaim garansi.');
             }
 
