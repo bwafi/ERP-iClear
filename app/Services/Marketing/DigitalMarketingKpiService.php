@@ -25,7 +25,8 @@ use App\Services\Konten\MultimediaKpiService;
  *   CONVERSION           10  Closing CS / Lead CS (target % di kpi_targets).
  *   CPL                  10  Budget Ads (data Performa Ads) / Datang & Closing CS
  *   CAMPAIGN_PERFORMANCE  5  Ads ber-campaign valid / total ads.
- *   REPORTING             5  Campaign selesai (done) / total campaign.
+ *   REPORTING             5  Sejak 2026-11: laporan mingguan tepat waktu.
+ *                             Sebelumnya: campaign selesai (done) / total campaign.
  *   IMPROVEMENT           5  Reuse MultimediaKpiService::improvementResult.
  *
  * Seluruh komponen memakai periode KPI yang sama (month/year). Data kosong

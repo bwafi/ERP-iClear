@@ -7,9 +7,13 @@ use CodeIgniter\Model;
 /**
  * Master Campaign Digital Marketing.
  *
- * Status: draft (Draft) / active (Aktif) / done (Selesai) — mengikuti pola
- * content_campaigns. KPI Reporting = % campaign selesai (done) dari total
- * campaign pada periode (tanpa tautan laporan).
+ * Baris dibuat otomatis dari Meta (`meta:sync-campaigns`). Satu campaign Meta
+ * = satu baris (`meta_campaign_id` UNIQUE). Status mengikuti Meta: ACTIVE →
+ * active, selain itu draft. Unit ditebak dari nama (`unit_sumber='auto'`) dan
+ * boleh dikoreksi (`unit_sumber='manual'`).
+ *
+ * KPI Reporting sejak 2026-11 = laporan mingguan tepat waktu (bukan status
+ * campaign lagi).
  */
 class ModelMarketingCampaign extends Model
 {

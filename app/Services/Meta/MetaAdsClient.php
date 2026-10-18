@@ -136,7 +136,7 @@ class MetaAdsClient
     }
 
     /**
-     * Daftar campaign untuk pemilih pemetaan di form Campaign.
+     * Daftar campaign untuk sinkronisasi master Campaign (`meta:sync-campaigns`).
      *
      * Gabungan: campaign yang ada belanja pada periode `$since`–`$until` DAN
      * campaign yang sedang ACTIVE (walau belum ada belanja — mis. baru dibuat
