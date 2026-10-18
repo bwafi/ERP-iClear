@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use CodeIgniter\Model;
+use App\Services\Inventory\ProductInventoryScope;
 
 class ModelKartuStok extends Model
 {
@@ -61,7 +62,8 @@ class ModelKartuStok extends Model
             ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
-            ->where('kategori.delete', '0');
+            ->where('kategori.delete', '0')
+            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang'), null, false);
     }
 
     private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '')
@@ -150,6 +152,7 @@ class ModelKartuStok extends Model
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
+            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang'), null, false)
             ->get()
             ->getRow();
     }
@@ -231,7 +234,8 @@ class ModelKartuStok extends Model
         ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
         ->join('kategori', 'kategori.id = barang.idkategori', 'left')
         ->where('barang.deleted', '0')
-        ->where('kategori.delete', '0');
+        ->where('kategori.delete', '0')
+        ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang'), null, false);
 
     // Filter nama_unit
     if (!empty($namaUnit)) {
