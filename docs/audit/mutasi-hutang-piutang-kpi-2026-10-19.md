@@ -107,7 +107,7 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 **7. Batal terima menghapus utang, tetapi stok tetap di penerima. — ✅ DIPERBAIKI**
 View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_mutasi` tanpa melihat `mutasi.status`. Jadi mutasi yang belum diterima sudah memindahkan stok; saat penerimaan dibatalkan, stok tetap pindah sementara H/P di-soft-delete.
 **Perbaikan:** migration `2026-10-19-000400_StokBarangHanyaMutasiDiterima.php` membuat ulang view dengan `JOIN mutasi` dan `WHERE mutasi.status = 1`. Stok kini bergerak saat terima, dan otomatis kembali saat `batalTerima()` mengubah status ke 0. Mutasi lama yang masih `status=0` sengaja dibiarkan; stoknya tidak lagi dihitung.
-**Verifikasi:** uji scratch DB — sebelum migrasi unit 1=85/unit 2=15, sesudah migrasi unit 1=95/unit 2=5; `up()` dua kali aman dan `down()` mengembalikan view lama. Belum dijalankan di `erp_local`.
+**Test:** `StokBarangHanyaMutasiDiterimaTest::testStokHanyaDihitungSetelahDiterima` dan `testBatalTerimaMengembalikanStok` — sebelum filter unit 1=85/unit 2=15, sesudah filter 95/5, lalu saat status diubah 1 → 85/15 dan saat dibatalkan 0 → 95/5. Migration belum dijalankan di `erp_local`.
 
 **8. Nilai tagihan memakai jumlah kirim, stok masuk memakai jumlah terima.**
 `nilaiDetailMutasi()` memakai `jumlah_kirim`; view stok penerima memakai `jumlah_terima`. Form mengizinkan keduanya berbeda, jadi penerima bisa ditagih barang yang tidak diterima. Di data sekarang semuanya sama, tapi risikonya nyata.
