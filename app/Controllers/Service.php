@@ -426,9 +426,13 @@ class Service extends BaseController
                 $dataHppBarang = array_key_exists($id, $existingMap)
                     ? null
                     : $this->HppBarangModel->getById($id);
+                $currentHpp = array_key_exists($id, $existingMap)
+                    ? 0
+                    : ($this->HppBarangModel->currentUnitCost($id, (int) ($service->unit_idunit ?? session('ID_UNIT')))
+                        ?? ($dataHppBarang->hpp ?? 0));
                 $hppByBarangId[$id] = ServiceHppSnapshot::resolve(
                     $existingMap[$id] ?? null,
-                    $dataHppBarang->hpp ?? 0
+                    $currentHpp
                 );
                 $stokAwal = $this->StokAwalModel->getByIdBarang($id);
                 $data = [
@@ -523,6 +527,7 @@ class Service extends BaseController
         }
 
         // insert detail + potong stok
+        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge(\Config\Database::connect());
         foreach ($produkData as $p) {
             $produkid = $p['id'];
             $qty = (int)$p['jumlah'];
@@ -541,6 +546,10 @@ class Service extends BaseController
                 'unit_idunit' => session('ID_UNIT'),
             ])) {
                 throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
+            }
+            if ($inventoryBridge->isTracked((int) $produkid, (int) session('ID_UNIT'))) {
+                $inventoryBridge->outgoing((int) $produkid, (int) session('ID_UNIT'),
+                    'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', $qty);
             }
         }
     }

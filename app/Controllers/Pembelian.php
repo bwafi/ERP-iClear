@@ -96,7 +96,10 @@ class Pembelian extends BaseController
             $barang = ctype_digit((string) $idBarang) ? $this->BarangModel->getById((int) $idBarang) : null;
             if (!$barang || (int) $barang->deleted !== 0
                 || !ProductInventoryScope::isPhysicalProduct((string) $barang->nama_barang, $barang->jenis_item ?? null)
-                || !isset($produk['jumlah']) || !is_numeric($produk['jumlah']) || (float) $produk['jumlah'] <= 0) {
+                || !isset($produk['jumlah']) || !ctype_digit((string) $produk['jumlah']) || (int) $produk['jumlah'] <= 0
+                || $this->cleanRupiah($produk['harga_beli'] ?? '0') < 0
+                || $this->cleanRupiah($produk['diskon'] ?? '0') < 0
+                || $this->cleanRupiah($produk['diskon'] ?? '0') > $this->cleanRupiah($produk['harga_beli'] ?? '0') * (int) $produk['jumlah']) {
                 session()->setFlashdata('gagal', 'Pembelian stok harus memakai ID barang fisik aktif dan jumlah positif.');
                 return redirect()->to(base_url('/pembelian'));
             }
@@ -274,6 +277,7 @@ class Pembelian extends BaseController
         $total_hp_ppn = 0;
         $total_hp_non_ppn = 0;
         $total_hp_second = 0;
+        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
 
         //gor push ulang
 
@@ -294,8 +298,10 @@ class Pembelian extends BaseController
             $produktotalharga = $subtotalSetelahDiskon + $nilaiPPN;
             $satuan_beli = $datastokawal ? $datastokawal->satuan_terkecil : 'pcs';
             //
-            $datahpp = $this->HppBarangModel->getById($produk['id']);
-            $hitung_hpp  = $datahpp->hpp ?? 0;
+            $hitung_hpp = \App\Services\Inventory\PurchaseUnitCost::fromNetAmount(
+                (int) $subtotalSetelahDiskon,
+                (int) $produkjumlah
+            );
             if ($databarang->idkategori == 1 && $databarang->status_barang == 1) {
                 $total_hp_second += $subtotalSetelahDiskon;
             } elseif ($databarang->idkategori == 1 && $databarang->status_ppn == 0) {
@@ -327,6 +333,22 @@ class Pembelian extends BaseController
             );
 
             $result2 = $this->DetailPembelianModel->insert_detail($data2);
+            if (! $result2) {
+                $db->transRollback();
+                return redirect()->to(base_url('/pembelian'))->with('gagal', 'Detail pembelian gagal disimpan.');
+            }
+            $detailId = (int) $this->DetailPembelianModel->insertID();
+            try {
+                if ($inventoryBridge->isTracked((int) $produk['id'], (int) $useridunit)
+                    || $inventoryBridge->isFirstIncoming((int) $produk['id'], (int) $useridunit, 'detail_pembelian', $detailId, (int) $produkjumlah)) {
+                    $inventoryBridge->incomingAmount((int) $produk['id'], (int) $useridunit,
+                        'detail_pembelian', (string) $detailId, 'purchase', (int) $produkjumlah, (int) $subtotalSetelahDiskon);
+                }
+            } catch (\Throwable $error) {
+                $db->transRollback();
+                log_message('error', 'Ledger pembelian gagal: ' . $error->getMessage());
+                return redirect()->to(base_url('/pembelian'))->with('gagal', 'Pembelian dibatalkan karena saldo stok tidak cocok.');
+            }
         }
         if ($total_ppn > 0) {
             $jurnal[] = [

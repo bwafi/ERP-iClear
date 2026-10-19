@@ -208,6 +208,13 @@ class BarangRusak extends BaseController
                 ])) {
                     throw new \RuntimeException('Barang rusak gagal disimpan.');
                 }
+                if ($claimId <= 0) {
+                    $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
+                    if ($inventoryBridge->isTracked($productId, $unitId)) {
+                        $inventoryBridge->outgoing($productId, $unitId, 'barang_rusak',
+                            (string) $this->BarangRusakModel->insertID(), 'damaged', $quantity);
+                    }
+                }
             }
 
             if ($db->transStatus() === false || ! $db->transCommit()) {

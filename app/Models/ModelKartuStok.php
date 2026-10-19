@@ -36,30 +36,31 @@ class ModelKartuStok extends Model
      */
     private function kartuStokBuilder()
     {
-        return $this->db->table('stok_barang')
+        return $this->db->table('barang')
             ->select('
-                stok_barang.idbarang AS idbarang,
-                stok_barang.id_unit,
-                stok_barang.kode_barang,
-                stok_barang.nama_barang,
-                stok_barang.imei,
-                stok_barang.nama_unit,
-                stok_barang.harga AS harga,
-                stok_barang.stok_awal,
-                stok_barang.stok_akhir,
-                stok_barang.total_pembelian,
-                stok_barang.total_penjualan,
-                stok_barang.total_retur_pelanggan,
-                stok_barang.total_retur_supplier,
-                stok_barang.total_mutasi_masuk,
-                stok_barang.total_mutasi_keluar,
+                barang.idbarang AS idbarang,
+                unit.idunit AS id_unit,
+                barang.kode_barang,
+                barang.nama_barang,
+                barang.imei,
+                unit.NAMA_UNIT AS nama_unit,
+                barang.harga,
+                COALESCE(stok_barang.stok_awal, 0) AS stok_awal,
+                COALESCE(stok_barang.stok_akhir, 0) AS stok_akhir,
+                COALESCE(stok_barang.total_pembelian, 0) AS total_pembelian,
+                COALESCE(stok_barang.total_penjualan, 0) AS total_penjualan,
+                COALESCE(stok_barang.total_retur_pelanggan, 0) AS total_retur_pelanggan,
+                COALESCE(stok_barang.total_retur_supplier, 0) AS total_retur_supplier,
+                COALESCE(stok_barang.total_mutasi_masuk, 0) AS total_mutasi_masuk,
+                COALESCE(stok_barang.total_mutasi_keluar, 0) AS total_mutasi_keluar,
                 barang.harga_beli,
                 barang.jenis_hp,
                 barang.warna,
                 barang.status_ppn,
                 kategori.nama_kategori
             ')
-            ->join('barang', 'barang.idbarang = stok_barang.idbarang', 'left')
+            ->join('unit', '1 = 1', 'inner', false)
+            ->join('stok_barang', 'stok_barang.idbarang = barang.idbarang AND stok_barang.id_unit = unit.idunit', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
@@ -70,16 +71,16 @@ class ModelKartuStok extends Model
     {
         if ($search !== '') {
             $builder->groupStart()
-                ->like('stok_barang.kode_barang', $search)
-                ->orLike('stok_barang.nama_barang', $search)
-                ->orLike('stok_barang.imei', $search)
-                ->orLike('stok_barang.nama_unit', $search)
+                ->like('barang.kode_barang', $search)
+                ->orLike('barang.nama_barang', $search)
+                ->orLike('barang.imei', $search)
+                ->orLike('unit.NAMA_UNIT', $search)
                 ->orLike('kategori.nama_kategori', $search)
                 ->groupEnd();
         }
 
         if ($unit !== '') {
-            $builder->where('stok_barang.id_unit', $unit);
+            $builder->where('unit.idunit', $unit);
         }
 
         if ($ppn === 'PPN') {
@@ -94,18 +95,18 @@ class ModelKartuStok extends Model
     /**
      * Server-side processing DataTables Kartu Stok.
      */
-    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'stok_barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '')
+    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '')
     {
         $allowedOrder = [
-            'stok_barang.kode_barang',
-            'stok_barang.nama_barang',
-            'stok_barang.nama_unit',
+            'barang.kode_barang',
+            'barang.nama_barang',
+            'unit.NAMA_UNIT',
             'kategori.nama_kategori',
             'barang.status_ppn',
             'stok_barang.stok_akhir',
         ];
         if (!in_array($orderCol, $allowedOrder, true)) {
-            $orderCol = 'stok_barang.kode_barang';
+            $orderCol = 'barang.kode_barang';
         }
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
 

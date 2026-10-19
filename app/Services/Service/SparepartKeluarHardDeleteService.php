@@ -34,7 +34,7 @@ final class SparepartKeluarHardDeleteService
         }
 
         $detail = $this->db->table('detail_penjualan dp')
-            ->select('dp.iddetail_penjualan, dp.penjualan_idpenjualan, p.service_idservice')
+            ->select('dp.iddetail_penjualan, dp.penjualan_idpenjualan, dp.barang_idbarang, dp.unit_idunit, p.service_idservice')
             ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan', 'left')
             ->where('dp.iddetail_penjualan', $detailId)
             ->get()
@@ -57,6 +57,31 @@ final class SparepartKeluarHardDeleteService
             ->where('iddetail_penjualan', $detailId)
             ->delete()) {
             throw new RuntimeException('Gagal menghapus detail sparepart keluar.');
+        }
+
+        if ($this->db->tableExists('inventory_ledger_entries')) {
+            $entry = $this->db->table('inventory_ledger_entries')
+                ->where('source_type', 'detail_penjualan')
+                ->where('source_id', (string) $detailId)
+                ->where('source_event', 'sale')
+                ->get()->getRow();
+            if ($entry !== null) {
+                (new \App\Services\Inventory\InventoryLedger($this->db))
+                    ->reverse((int) $entry->id, 'detail_penjualan', (string) $detailId, 'cancel');
+                $balance = $this->db->table('inventory_ledger_balances')
+                    ->select('quantity')
+                    ->where('item_id', (int) $detail->barang_idbarang)
+                    ->where('unit_id', (int) $detail->unit_idunit)
+                    ->get()->getRow();
+                $stock = $this->db->table('stok_barang')
+                    ->select('stok_akhir')
+                    ->where('idbarang', (int) $detail->barang_idbarang)
+                    ->where('id_unit', (int) $detail->unit_idunit)
+                    ->get()->getRow();
+                if ((int) ($balance->quantity ?? 0) !== (int) ($stock->stok_akhir ?? 0)) {
+                    throw new RuntimeException('Pembatalan sparepart menghasilkan selisih stok ledger.');
+                }
+            }
         }
 
         $remaining = (int) $this->db->table('detail_penjualan')

@@ -187,6 +187,7 @@ class StokAwal extends BaseController
                     'harga_beli' => $hargaBeli,
                     'satuan_terkecil' => $satuanTerkecil,
                     'unit_idunit' => $idUnit,
+                    'input_by' => (int) session('ID_AKUN'),
                     'suplier_id_suplier' => $tipeRelasi === 'suplier' ? $idSuplier : 0,
                     'pelanggan_id_pelanggan' => $tipeRelasi === 'pelanggan' ? $idPelanggan : 0,
                 ];
@@ -195,6 +196,19 @@ class StokAwal extends BaseController
                     $this->db->transRollback();
                     session()->setFlashdata('error', 'Stok awal gagal disimpan');
                     return redirect()->to(base_url('/input_stokawal'));
+                }
+                $stockId = (int) $this->StokAwalModel->insertID();
+                $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($this->db);
+                try {
+                    if ($inventoryBridge->isTracked((int) $idBarang, (int) $idUnit)
+                        || $inventoryBridge->isFirstIncoming((int) $idBarang, (int) $idUnit, 'stok_awal', $stockId, (int) $jumlah)) {
+                        $inventoryBridge->incoming((int) $idBarang, (int) $idUnit,
+                            'stok_awal', (string) $stockId, 'opening', (int) $jumlah, (int) $hargaBeli);
+                    }
+                } catch (\Throwable $error) {
+                    $this->db->transRollback();
+                    log_message('error', 'Ledger stok awal gagal: ' . $error->getMessage());
+                    return redirect()->to(base_url('/input_stokawal'))->with('error', 'Stok awal dibatalkan karena ledger tidak cocok.');
                 }
             }
             $this->db->transCommit();

@@ -404,7 +404,11 @@ class StatusGaransi extends BaseController
                     ->get()->getRow();
                 $hppBarang = $previousIssue || $quantity === 0 ? null : $this->HppBarangModel->getById($id);
                 $hpp = ServiceHppSnapshot::resolveWarrantyClaimIssue(
-                    $previousIssue, $quantity, $hppBarang->hpp ?? 0
+                    $previousIssue, $quantity,
+                    $previousIssue || $quantity === 0 ? 0 : (
+                        $this->HppBarangModel->currentUnitCost($id, (int) $service->unit_idunit)
+                            ?? ($hppBarang->hpp ?? 0)
+                    )
                 );
                 if ($quantity > 0) {
                     if ($previousIssue) {
@@ -442,10 +446,16 @@ class StatusGaransi extends BaseController
                             'jumlah' => $quantity,
                             'hpp_satuan' => (int) $hpp,
                             'created_at' => date('Y-m-d H:i:s'),
+                            'input_by' => (int) session('ID_AKUN'),
                         ])) {
                             throw new \RuntimeException('Mutasi stok garansi gagal disimpan.');
                         }
                         $issueId = (int) $db->insertID();
+                        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
+                        if ($inventoryBridge->isTracked($id, (int) $service->unit_idunit)) {
+                            $inventoryBridge->outgoing($id, (int) $service->unit_idunit,
+                                'garansi_sparepart_keluar', (string) $issueId, 'warranty', $quantity);
+                        }
                         $template = $db->table('template_jurnal')
                             ->select('no_akun, debet_kredit')
                             ->where('kode_template', 'garansi_sparepart_keluar')
