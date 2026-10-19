@@ -94,6 +94,9 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
 
                 <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="<?= base_url('hutangpiutang/cetak/' . $row->id) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">Cetak Bukti</a>
+                    <?php if ($can_input && $outstanding && $row->sumber_tipe === 'mutasi_unit' && $row->jenis === 'hutang') : ?>
+                        <a href="<?= base_url('kas_bank/antar-unit?unit_id=' . (int) $row->unit_id) ?>" class="btn btn-sm btn-outline-primary">Lunasi di Kas &amp; Bank → Antar Unit</a>
+                    <?php endif; ?>
                     <?php if ($can_input && $authoritative && $row->status !== 'lunas' && $row->sumber_tipe !== 'kasbon') : ?>
                         <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bayar-modal">Catat Pembayaran</button>
                     <?php endif; ?>
@@ -106,6 +109,9 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#legacy-modal">Tandai Lunas Legacy</button>
                     <?php endif; ?>
                 </div>
+                <?php if ($outstanding && $row->sumber_tipe === 'mutasi_unit' && $row->jenis === 'piutang') : ?>
+                    <div class="small text-muted mt-2 mb-0">Pelunasan dilakukan unit yang berhutang melalui Kas &amp; Bank → Antar Unit.</div>
+                <?php endif; ?>
                 <?php if ($can_input && ! $settledLegacy && ! $bisaLegacy && ! $outstanding) : ?>
                     <div class="small text-muted mt-2 mb-0"><?= esc($alasanLegacy) ?></div>
                 <?php endif; ?>
