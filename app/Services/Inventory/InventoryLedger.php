@@ -109,6 +109,10 @@ final class InventoryLedger
     private function lockBalance(int $itemId, int $unitId): void
     {
         $table = $this->db->prefixTable('inventory_ledger_balances');
+        if ($this->db->DBDriver === 'SQLite3') {
+            $this->db->query('INSERT OR IGNORE INTO ' . $table . ' (item_id, unit_id, quantity, value) VALUES (?, ?, 0, 0)', [$itemId, $unitId]);
+            return;
+        }
         $this->db->query('INSERT IGNORE INTO ' . $table . ' (item_id, unit_id, quantity, value) VALUES (?, ?, 0, 0)', [$itemId, $unitId]);
         $this->db->query('SELECT item_id FROM ' . $table . ' WHERE item_id = ? AND unit_id = ? FOR UPDATE', [$itemId, $unitId]);
     }
