@@ -185,6 +185,11 @@ final class InventoryLedgerBridge
             $row['sumber'] === $label && (string) $row['referensi_id'] === $sourceId
             && (int) $row[$direction === 'incoming' ? 'masuk' : 'keluar'] === $quantity));
         if (count($matching) !== 1) {
+            log_message('error', 'InventoryLedgerBridge source mismatch: item={item} unit={unit} type={type} source={source} direction={direction} quantity={quantity} matches={matches} movements={movements}', [
+                'item' => $itemId, 'unit' => $unitId, 'type' => $sourceType, 'source' => $sourceId,
+                'direction' => $direction, 'quantity' => $quantity, 'matches' => count($matching),
+                'movements' => count($movements),
+            ]);
             throw new \RuntimeException('Gerakan sumber tidak cocok dengan kartu stok.');
         }
         $balance = $this->balance($itemId, $unitId);

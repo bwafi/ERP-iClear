@@ -476,7 +476,7 @@ class Riwayat_Service extends BaseController
 
             $subtotal = ($harga * $qty) - $diskon;
 
-            if (! $this->DetailPenjualanModel->insert_detail([
+            $detailId = $this->DetailPenjualanModel->insert_detail([
                 'barang_idbarang' => $produkid,
                 'jumlah' => $qty,
                 'harga_penjualan' => $harga,
@@ -484,12 +484,13 @@ class Riwayat_Service extends BaseController
                 'penjualan_idpenjualan' => $idPenjualan,
                 'hpp_penjualan' => $hppByBarangId[$produkid],
                 'unit_idunit' => session('ID_UNIT'),
-            ])) {
+            ]);
+            if ((int) $detailId <= 0) {
                 throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
             }
             if ($inventoryBridge->isTracked((int) $produkid, (int) session('ID_UNIT'))) {
                 $inventoryBridge->outgoing((int) $produkid, (int) session('ID_UNIT'),
-                    'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', $qty);
+                    'detail_penjualan', (string) $detailId, 'sale', $qty);
             }
         }
     }
