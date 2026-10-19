@@ -97,12 +97,29 @@ class ModelJurnal extends Model
     }
 
 
-    public function getJurnalWithUnit()
+    public function getJurnalWithUnit(array $filters = [])
     {
-        return $this->select('jurnal.*, unit.NAMA_UNIT')
-            ->join('unit', 'unit.idunit = jurnal.id_unit', 'left')
-            ->orderBy('jurnal.tanggal', 'DESC')
-            ->findAll();
+        $builder = $this->select('jurnal.*, unit.NAMA_UNIT')
+            ->join('unit', 'unit.idunit = jurnal.id_unit', 'left');
+        if (! empty($filters['startDate'])) {
+            $builder->where('jurnal.tanggal >=', $filters['startDate']);
+        }
+        if (! empty($filters['endDate'])) {
+            $builder->where('jurnal.tanggal <=', $filters['endDate']);
+        }
+        if (! empty($filters['filterUnit'])) {
+            $builder->where('jurnal.id_unit', $filters['filterUnit']);
+        }
+        if (! empty($filters['no_akun'])) {
+            $builder->where('jurnal.no_akun', trim($filters['no_akun']));
+        }
+        if (! empty($filters['tabel_referensi'])) {
+            $builder->where('jurnal.tabel_referensi', trim($filters['tabel_referensi']));
+        }
+        if (! empty($filters['id_referensi'])) {
+            $builder->where('jurnal.id_referensi', trim($filters['id_referensi']));
+        }
+        return $builder->orderBy('jurnal.tanggal', 'DESC')->findAll();
     }
 
 

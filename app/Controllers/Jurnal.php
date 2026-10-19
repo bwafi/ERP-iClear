@@ -33,9 +33,19 @@ class Jurnal extends BaseController
     //laporan jurnal
     public function index()
     {
+        $filters = [
+            'startDate' => $this->request->getGet('startDate'),
+            'endDate' => $this->request->getGet('endDate'),
+            'filterUnit' => $this->request->getGet('filterUnit'),
+            'no_akun' => $this->request->getGet('no_akun'),
+            'tabel_referensi' => $this->request->getGet('tabel_referensi'),
+            'id_referensi' => $this->request->getGet('id_referensi'),
+        ];
         $data = array(
             'body' => 'jurnal/laporan_jurnal',
-            'jurnal' => $this->JurnalModel->getJurnalWithUnit()
+            'jurnal' => $this->JurnalModel->getJurnalWithUnit($filters),
+            'journal_filters' => $filters,
+            'data_unit' => $this->UnitModel->getUnit(),
         );
         return view('template', $data);
     }

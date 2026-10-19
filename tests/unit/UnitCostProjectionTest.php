@@ -29,6 +29,7 @@ final class UnitCostProjectionTest extends CIUnitTestCase
             'garansi_sparepart_keluar (id INTEGER, created_at TEXT, barang_id INTEGER, unit_id INTEGER, jumlah INTEGER, hpp_satuan INTEGER, input_by INTEGER)',
             'stok_barang (idbarang INTEGER, id_unit INTEGER, stok_akhir INTEGER)',
             'inventory_ledger_balances (item_id INTEGER, unit_id INTEGER, quantity INTEGER, value INTEGER)',
+            'inventory_stock_adjustments (id INTEGER, created_at TEXT, item_id INTEGER, unit_id INTEGER, delta INTEGER, unit_cost INTEGER, actor_id INTEGER)',
         ] as $table) {
             $db->query('CREATE TABLE ' . $table);
         }

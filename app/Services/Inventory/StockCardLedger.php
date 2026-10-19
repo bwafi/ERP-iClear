@@ -61,7 +61,9 @@ FROM (
     FROM garansi_sparepart_keluar g WHERE g.barang_id = ? AND g.unit_id = ?
     UNION ALL
     SELECT adjustment.created_at, 10, 'Penyesuaian Stok', adjustment.id,
-        GREATEST(adjustment.delta, 0), GREATEST(-adjustment.delta, 0), adjustment.unit_cost, adjustment.actor_id
+        CASE WHEN adjustment.delta > 0 THEN adjustment.delta ELSE 0 END,
+        CASE WHEN adjustment.delta < 0 THEN -adjustment.delta ELSE 0 END,
+        adjustment.unit_cost, adjustment.actor_id
     FROM inventory_stock_adjustments adjustment WHERE adjustment.item_id = ? AND adjustment.unit_id = ?
 ) movements ORDER BY movements.tanggal, movements.urutan, movements.referensi_id
 SQL;

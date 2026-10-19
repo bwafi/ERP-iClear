@@ -7,7 +7,7 @@ use Config\Database;
 use App\Models\ModelAuth;
 use App\Models\ModelUnit;
 use App\Models\ModelJurnal;
-use App\Services\Finance\BalanceSheetReconciliation;
+use App\Services\Finance\BalanceSheetReport;
 use App\Services\Finance\WarrantyJournalReconciliation;
 use App\Services\Finance\SupplierCreditReconciliation;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -45,17 +45,20 @@ class SisiKeuangan extends BaseController
 
         $data_parent = $this->JurnalModel->getSummaryPerParent($tanggal_awal, $tanggal_akhir, $id_unit);
 
-        $journalQuery = Database::connect()->table('jurnal')
-            ->select('no_akun, COALESCE(SUM(debet), 0) AS debet, COALESCE(SUM(kredit), 0) AS kredit', false)
-            ->where('tanggal <=', $reconciliationDate);
-        if ($id_unit !== null) {
-            $journalQuery->where('id_unit', $id_unit);
-        }
-        $reconciliation = BalanceSheetReconciliation::summarize(
-            $journalQuery->groupBy('no_akun')->get()->getResultArray()
-        );
-        $warrantyReconciliation = null;
         $db = Database::connect();
+        $balanceSheetReport = new BalanceSheetReport($db);
+        $reconciliation = $balanceSheetReport->summarizeAsOf($reconciliationDate, $id_unit);
+        $balanceSheetAccounts = $balanceSheetReport->balanceAccountsAsOf($reconciliationDate, $id_unit);
+        $previousReconciliationDate = date('Y-m-d', strtotime($reconciliationDate . ' -1 year'));
+        $previousReconciliation = $balanceSheetReport->summarizeAsOf($previousReconciliationDate, $id_unit);
+        $reconciliationComparison = [];
+        foreach (['aset', 'kewajiban', 'ekuitas', 'laba_berjalan', 'selisih'] as $field) {
+            $reconciliationComparison[$field] = $reconciliation[$field] - $previousReconciliation[$field];
+        }
+        $sourceExceptions = $balanceSheetReport->sourceExceptionsAsOf($reconciliationDate, $id_unit);
+        $invalidJournalAccounts = $balanceSheetReport->invalidAccountsAsOf($reconciliationDate, $id_unit);
+        $inventoryReconciliation = $balanceSheetReport->inventoryReconciliation($reconciliationDate, $id_unit);
+        $warrantyReconciliation = null;
         if ($db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
             $issues = $db->table('garansi_sparepart_keluar')
                 ->select('id, jumlah, hpp_satuan')
@@ -124,6 +127,13 @@ class SisiKeuangan extends BaseController
             'id_unit' => $id_unit,
             'reconciliation' => $reconciliation,
             'reconciliation_date' => $reconciliationDate,
+            'balance_sheet_accounts' => $balanceSheetAccounts,
+            'previous_reconciliation' => $previousReconciliation,
+            'previous_reconciliation_date' => $previousReconciliationDate,
+            'reconciliation_comparison' => $reconciliationComparison,
+            'source_exceptions' => $sourceExceptions,
+            'invalid_journal_accounts' => $invalidJournalAccounts,
+            'inventory_reconciliation' => $inventoryReconciliation,
             'warranty_reconciliation' => $warrantyReconciliation,
             'supplier_credit_reconciliation' => $supplierCreditReconciliation,
             'body' => 'jurnal/sisi_keuangan'

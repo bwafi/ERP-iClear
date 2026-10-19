@@ -50,9 +50,70 @@
     <strong>Belum final</strong> sampai saldo awal, nilai persediaan, dan transaksi antarcabang diverifikasi.
 </div>
 
+<div class="alert <?= $source_exceptions['tidak_seimbang'] === [] && $source_exceptions['baris_tanpa_referensi'] === 0 && $invalid_journal_accounts === [] ? 'alert-info' : 'alert-warning' ?> mx-4">
+    <strong>Pemeriksaan jurnal sumber:</strong>
+    <?= count($source_exceptions['tidak_seimbang']) ?> referensi tidak seimbang;
+    <?= (int) $source_exceptions['baris_tanpa_referensi'] ?> baris tanpa referensi;
+    <?= count($invalid_journal_accounts) ?> baris dengan kode akun tidak valid/tidak terdaftar.
+    Pemeriksaan ini hanya mencakup jurnal yang tercatat; kelengkapan posting terhadap semua transaksi operasional belum dibuktikan.
+</div>
+
+<div class="card w-100 position-relative overflow-hidden mb-4">
+    <div class="px-4 py-3 border-bottom">
+        <h5 class="mb-0">Saldo Neraca per <?= esc($reconciliation_date) ?></h5>
+        <small class="text-muted">Saldo jurnal historis sampai tanggal laporan; laba tahun berjalan ditampilkan terpisah.</small>
+    </div>
+    <div class="table-responsive px-4 py-3">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Kode akun</th><th>Nama akun</th><th>Kelompok</th><th class="text-end">Saldo</th><th>Rincian</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($balance_sheet_accounts as $account): ?>
+                    <?php $journalUrl = base_url('laporan_jurnal') . '?' . http_build_query(array_filter([
+                        'endDate' => $reconciliation_date,
+                        'filterUnit' => $id_unit,
+                        'no_akun' => $account['no_akun'],
+                    ], static fn ($value) => $value !== null && $value !== '')); ?>
+                    <tr>
+                        <td><?= esc($account['no_akun']) ?></td>
+                        <td><?= esc($account['nama_akun']) ?></td>
+                        <td><?= esc($account['kelompok']) ?></td>
+                        <td class="text-end">Rp <?= number_format($account['saldo'], 0, ',', '.') ?></td>
+                        <td><a href="<?= esc($journalUrl) ?>">Buka jurnal</a></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if ($balance_sheet_accounts === []): ?>
+                    <tr><td colspan="5" class="text-center">Tidak ada saldo akun Neraca untuk cakupan ini.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+    <div class="px-4 pb-3">
+        <strong>Perbandingan dengan <?= esc($previous_reconciliation_date) ?>:</strong>
+        Aset Rp <?= number_format($reconciliation_comparison['aset'], 0, ',', '.') ?>;
+        Kewajiban Rp <?= number_format($reconciliation_comparison['kewajiban'], 0, ',', '.') ?>;
+        Ekuitas Rp <?= number_format($reconciliation_comparison['ekuitas'], 0, ',', '.') ?>;
+        Laba berjalan Rp <?= number_format($reconciliation_comparison['laba_berjalan'], 0, ',', '.') ?>;
+        Selisih Rp <?= number_format($reconciliation_comparison['selisih'], 0, ',', '.') ?>.
+    </div>
+    <div class="px-4 pb-3">
+        <?php if ($inventory_reconciliation['available']): ?>
+            <?php $inventoryTotal = $inventory_reconciliation['total']; ?>
+            <strong>Rekonsiliasi persediaan:</strong>
+            kuantitas selisih <?= number_format($inventoryTotal['selisih_jumlah']) ?>;
+            nilai ledger Rp <?= number_format($inventoryTotal['nilai_ledger'], 0, ',', '.') ?>;
+            nilai buku besar Rp <?= number_format($inventoryTotal['nilai_buku'], 0, ',', '.') ?>;
+            selisih Rp <?= number_format($inventoryTotal['selisih_nilai'], 0, ',', '.') ?>.
+        <?php else: ?>
+            <strong>Rekonsiliasi persediaan belum tersedia:</strong> <?= esc($inventory_reconciliation['reason']) ?>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card w-100 position-relative overflow-hidden">
     <div class="px-4 py-3 border-bottom">
-        <h5 class="mb-0">Ringkasan Posisi Keuangan per Parent Akun</h5>
+        <h5 class="mb-0">Ringkasan Mutasi Jurnal per Parent Akun (rentang tanggal)</h5>
     </div>
     <div style="display: flex; justify-content: left;">
 

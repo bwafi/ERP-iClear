@@ -13,48 +13,29 @@
     </div>
 </div>
 
-<!-- Filter Form -->
-<div class="card w-100 position-relative overflow-hidden">
-    <form action="<?= base_url('export_jurnal') ?>" method="post" enctype="multipart/form-data">
-        <div class="px-4 py-3 border-bottom">
-            <button type="submit" class="btn btn-danger"
-                style="margin-left: 20px; display: inline-flex; align-items: center;">
-                <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;">
-                </iconify-icon>
-                Export
-            </button>
-        </div>
+<!-- Server-side filters keep Neraca drill-downs on the selected account and cutoff. -->
+<form action="<?= base_url('laporan_jurnal') ?>" method="get" class="card card-body mb-3">
+    <div class="row g-3 align-items-end">
+        <div class="col-sm-6 col-lg-2"><label for="startDate" class="form-label">Tanggal awal</label><input name="startDate" id="startDate" type="date" class="form-control" value="<?= esc($journal_filters['startDate']) ?>"></div>
+        <div class="col-sm-6 col-lg-2"><label for="endDate" class="form-label">Tanggal akhir</label><input name="endDate" id="endDate" type="date" class="form-control" value="<?= esc($journal_filters['endDate']) ?>"></div>
+        <div class="col-sm-6 col-lg-2"><label for="unitSelect" class="form-label">Unit</label><select name="filterUnit" id="unitSelect" class="form-select"><option value="">Semua unit</option><?php foreach ($data_unit as $unit): ?><option value="<?= esc($unit->idunit) ?>" <?= (string) $journal_filters['filterUnit'] === (string) $unit->idunit ? 'selected' : '' ?>><?= esc($unit->NAMA_UNIT) ?></option><?php endforeach; ?></select></div>
+        <div class="col-sm-6 col-lg-2"><label for="filterAccount" class="form-label">Nomor akun</label><input name="no_akun" id="filterAccount" class="form-control" value="<?= esc($journal_filters['no_akun']) ?>"></div>
+        <div class="col-sm-6 col-lg-2"><label for="filterReferenceTable" class="form-label">Tabel sumber</label><input name="tabel_referensi" id="filterReferenceTable" class="form-control" value="<?= esc($journal_filters['tabel_referensi']) ?>"></div>
+        <div class="col-sm-6 col-lg-2"><label for="filterReferenceId" class="form-label">ID sumber</label><input name="id_referensi" id="filterReferenceId" class="form-control" value="<?= esc($journal_filters['id_referensi']) ?>"></div>
+    </div>
+    <div class="mt-3 d-flex gap-2"><button type="submit" class="btn btn-primary">Tampilkan</button><a href="<?= base_url('laporan_jurnal') ?>" class="btn btn-outline-secondary">Reset</a></div>
+</form>
 
-        <div class="row my-3 mx-1">
-            <div class="mb-3 px-4">
-                <label class="ms-3 me-2">Tanggal Awal:</label>
-                <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
-                    style="width: auto; display: inline-block;" onchange="filterData()">
-
-                <label class="ms-3 me-2">Tanggal Akhir:</label>
-                <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
-                    style="width: auto; display: inline-block;" onchange="filterData()">
-
-                <label class="ms-3 me-2">Nama Unit:</label>
-                <select name="nama_unit" id="unitSelect" class="form-control d-inline"
-                    style="width: auto; display: inline-block;" onchange="filterData()">
-                    <option value="">Semua Unit</option>
-                    <?php
-                    $unitList = [];
-                    foreach ($jurnal as $row) {
-                        if (!in_array($row->NAMA_UNIT, $unitList)) {
-                            $unitList[] = $row->NAMA_UNIT;
-                            echo '<option value="' . esc($row->NAMA_UNIT) . '">' . esc($row->NAMA_UNIT) . '</option>';
-                        }
-                    }
-                    ?>
-                </select>
-
-                <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
-                <input type="hidden" id="hiddenNamaUnit" name="hiddenNamaUnit">
-            </div>
-        </div>
+<div class="mb-3">
+    <form action="<?= base_url('export_jurnal') ?>" method="post">
+        <input type="hidden" name="tanggal_awal" value="<?= esc($journal_filters['startDate']) ?>">
+        <input type="hidden" name="tanggal_akhir" value="<?= esc($journal_filters['endDate']) ?>">
+        <input type="hidden" name="nama_unit" id="exportUnit" value="">
+        <button type="submit" class="btn btn-danger">Export</button>
     </form>
+</div>
+
+<div class="card w-100 position-relative overflow-hidden">
 
     <!-- Summary Cards -->
     <div class="row mx-3 mb-3">
@@ -106,11 +87,13 @@
                     <th>
                         <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
                     </th>
+                    <th><h6 class="fs-4 fw-semibold mb-0">Tabel sumber</h6></th>
+                    <th><h6 class="fs-4 fw-semibold mb-0">ID sumber</h6></th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($jurnal as $row): ?>
-                <tr>
+                <tr data-unit="<?= esc($row->id_unit) ?>">
                     <td data-raw="<?= esc($row->tanggal) ?>"><?= esc(date('d-m-Y', strtotime($row->tanggal))) ?></td>
                     <td><?= esc($row->no_akun) ?></td>
                     <td>
@@ -123,6 +106,8 @@
                     <td class="debet-cell" data-value="<?= esc($row->debet) ?>"></td>
                     <td class="kredit-cell" data-value="<?= esc($row->kredit) ?>"></td>
                     <td><?= esc($row->NAMA_UNIT) ?></td>
+                    <td><?= esc($row->tabel_referensi ?? '') ?></td>
+                    <td><?= esc($row->id_referensi ?? '') ?></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -144,8 +129,12 @@ document.addEventListener("DOMContentLoaded", function() {
         return `${year}-${month}-${day}`;
     };
 
-    document.getElementById('startDate').value = toDateInputValue(fifteenDaysAgo);
-    document.getElementById('endDate').value = toDateInputValue(today);
+    const hasSpecificFilter = ['filterAccount', 'filterReferenceTable', 'filterReferenceId']
+        .some(id => document.getElementById(id).value.trim() !== '');
+    if (!document.getElementById('startDate').value && !document.getElementById('endDate').value && !hasSpecificFilter) {
+        document.getElementById('startDate').value = toDateInputValue(fifteenDaysAgo);
+        document.getElementById('endDate').value = toDateInputValue(today);
+    }
 
     sortTableByDateDesc();
     formatTableCurrency();
@@ -199,12 +188,12 @@ function filterData() {
         const dateCell = row.children[0];
         const debetCell = row.children[3];
         const kreditCell = row.children[4];
-        const unitCell = row.children[6];
+        const unitCell = row.children[5];
 
         if (!dateCell || !unitCell) return;
 
         const dateText = dateCell.getAttribute('data-raw');
-        const unitText = unitCell.textContent.trim().toLowerCase();
+        const unitId = row.getAttribute('data-unit') || '';
 
         const rowDate = new Date(dateText);
         const startDate = start ? new Date(start) : null;
@@ -213,7 +202,7 @@ function filterData() {
         let visible = true;
         if (startDate && rowDate < startDate) visible = false;
         if (endDate && rowDate > endDate) visible = false;
-        if (selectedUnit && unitText !== selectedUnit) visible = false;
+        if (selectedUnit && unitId !== selectedUnit) visible = false;
 
         row.style.display = visible ? '' : 'none';
 
@@ -228,15 +217,16 @@ function filterData() {
 
     document.getElementById('totalDebet').textContent = formatRupiah(totalDebet);
     document.getElementById('totalKredit').textContent = formatRupiah(totalKredit);
-    document.getElementById('hiddenNamaUnit').value = selectedUnit;
+    const unitSelect = document.getElementById('unitSelect');
+    document.getElementById('exportUnit').value = unitSelect.selectedOptions[0]?.textContent === 'Semua unit'
+        ? ''
+        : unitSelect.selectedOptions[0]?.textContent || '';
 }
 
 function resetFilter() {
     document.getElementById('startDate').value = '';
     document.getElementById('endDate').value = '';
     document.getElementById('unitSelect').value = '';
-    document.getElementById('hiddenNamaUnit').value = '';
-
     formatTableCurrency();
     filterData();
 }

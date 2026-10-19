@@ -18,6 +18,7 @@ foreach ([
     'barang_rusak (idbarang_rusak INTEGER, tanggal_rusak TEXT, barang_idbarang INTEGER, unit_idunit INTEGER, jumlah INTEGER, claim_id INTEGER, input_by INTEGER)',
     'retur_suplier (idretur_suplier INTEGER, tanggal TEXT, barang_idbarang INTEGER, unit_idunit INTEGER, jumlah INTEGER, barang_rusak_id INTEGER, input_by INTEGER)',
     'garansi_sparepart_keluar (id INTEGER, created_at TEXT, barang_id INTEGER, unit_id INTEGER, jumlah INTEGER, hpp_satuan INTEGER, input_by INTEGER)',
+    'inventory_stock_adjustments (id INTEGER, created_at TEXT, item_id INTEGER, unit_id INTEGER, delta INTEGER, unit_cost INTEGER, actor_id INTEGER)',
 ] as $table) {
     $database->exec('CREATE TABLE ' . $table);
 }

@@ -99,7 +99,7 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
         $this->assertSame('10:15', $result['masuk']['tunai'][0]['waktu']);
     }
 
-    public function testKasMasukDanKasKeluarDibedakanIdbank(): void
+    public function testKasKeluarDibedakanIdbankDanKasMasukLegacyTidakDihitung(): void
     {
         $result = $this->service()->assemble([
             'kas_masuk' => [
@@ -112,11 +112,11 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
             ],
         ]);
 
-        $this->assertSame(500000, $result['subtotal']['masuk_tunai']);
-        $this->assertSame(700000, $result['subtotal']['masuk_transfer']);
+        $this->assertSame(0, $result['subtotal']['masuk_tunai']);
+        $this->assertSame(0, $result['subtotal']['masuk_transfer']);
         $this->assertSame(200000, $result['subtotal']['keluar_tunai']);
         $this->assertSame(400000, $result['subtotal']['keluar_transfer']);
-        $this->assertSame(600000, $result['net']);
+        $this->assertSame(-600000, $result['net']);
         $this->assertStringContainsString('Operasional', $result['keluar']['tunai'][0]['keterangan']);
     }
 
@@ -127,12 +127,12 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
                 (object) [
                     'jenis' => 'TRANSFER_INTERNAL', 'arah' => 'KELUAR', 'jumlah' => 1000000,
                     'keterangan' => 'Setor tunai ke bank', 'created_at' => '2026-10-01 16:00:00',
-                    'nama_akun' => 'Kas Toko', 'tipe' => 'KAS',
+                    'nama_akun' => 'Kas Toko', 'tipe' => 'KAS', 'transfer_ref' => 'TRF-1',
                 ],
                 (object) [
                     'jenis' => 'TRANSFER_INTERNAL', 'arah' => 'MASUK', 'jumlah' => 1000000,
                     'keterangan' => 'Setor tunai ke bank', 'created_at' => '2026-10-01 16:00:00',
-                    'nama_akun' => 'BCA', 'tipe' => 'BANK',
+                    'nama_akun' => 'BCA', 'tipe' => 'BANK', 'transfer_ref' => 'TRF-1',
                 ],
             ],
         ]);
@@ -144,10 +144,9 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
         $this->assertSame(0, $result['net']);
     }
 
-    public function testBarisKasKeluarSudahDiLedgerTidakDihitungDuaKali(): void
+    public function testKasKeluarSumberDihitungSekaliDanMirrorNonTransferDiabaikan(): void
     {
-        // Baris kas_keluar yang sudah dipromosikan ke transaksi_kas_bank hanya
-        // dihitung sekali, dari ledger.
+        // Source kas_keluar tetap dipakai; mirror non-transfer tidak menambah subtotal.
         $result = $this->service()->assemble([
             'kas_keluar' => [
                 (object) ['idkas_keluar' => 2080, 'deskripsi' => 'ATK', 'jumlah' => 50000, 'penerima' => null, 'idbank' => '1', 'created_on' => '2026-10-01 07:00:00', 'kategori' => 'Operasional'],
@@ -162,7 +161,7 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
             ],
         ]);
 
-        // Baris legacy dibuang, ledger yang dipakai: 50.000, bukan 100.000.
+        // Source kas_keluar tetap menjadi sumber; mirror ledger tanpa transfer_ref diabaikan.
         $this->assertCount(0, $result['keluar']['tunai']);
         $this->assertCount(1, $result['keluar']['transfer']);
         $this->assertSame(50000, $result['subtotal']['keluar_transfer']);
@@ -186,7 +185,7 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
         ]);
 
         $this->assertSame(500000, $result['subtotal']['keluar_tunai']);
-        $this->assertSame(50000, $result['subtotal']['keluar_transfer']);
+        $this->assertSame(0, $result['subtotal']['keluar_transfer']);
     }
 
     public function testNilaiKosongDiabaikan(): void
@@ -209,13 +208,13 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
     public function testBarisTanpaJamDiurutkanTerakhir(): void
     {
         $result = $this->service()->assemble([
-            'kas_masuk' => [
+            'kas_keluar' => [
                 (object) ['deskripsi' => 'A', 'jumlah' => 1000, 'penerima' => '', 'idbank' => null, 'created_on' => null, 'updated_on' => null],
                 (object) ['deskripsi' => 'B', 'jumlah' => 2000, 'penerima' => '', 'idbank' => null, 'created_on' => '2026-10-01 09:00:00'],
             ],
         ]);
 
-        $this->assertSame('B', $result['masuk']['tunai'][0]['keterangan']);
-        $this->assertSame('A', $result['masuk']['tunai'][1]['keterangan']);
+        $this->assertSame('B', $result['keluar']['tunai'][0]['keterangan']);
+        $this->assertSame('A', $result['keluar']['tunai'][1]['keterangan']);
     }
 }
