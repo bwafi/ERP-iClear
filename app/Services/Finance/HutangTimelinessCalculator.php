@@ -151,8 +151,19 @@ class HutangTimelinessCalculator implements FinanceCalculatorInterface
      *
      * @return array<int, string>
      */
+    /**
+     * Cache per-request: peta ini tanpa argumen (isinya sama untuk semua unit)
+     * tapi dipanggil berkali-kali dalam satu perhitungan KPI.
+     */
+    private static $memo = [];
+
     private function lastPaymentMap(): array
     {
+        $key = \App\Libraries\ReadCache::kunci('lastPayment');
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $rows = $this->db->table('pembayaran_hutang')
             ->select('pembelian_idpembelian, MAX(tanggal_bayar) AS last_pay')
             ->where('tanggal_bayar IS NOT NULL')
@@ -165,6 +176,6 @@ class HutangTimelinessCalculator implements FinanceCalculatorInterface
             $map[(int) $row->pembelian_idpembelian] = $row->last_pay;
         }
 
-        return $map;
+        return self::$memo[$key] = $map;
     }
 }

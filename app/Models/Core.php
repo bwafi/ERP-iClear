@@ -227,9 +227,26 @@ class Core extends Model
         return $response;
     }
 
+    /** Cache per-request: sidebar dibangun berkali-kali, isi menu tidak berubah. */
+    private static $menuMemo = [];
+
     function get_menu_show()
     {
-        $kategori = db_connect()->table("menu")->where(array("categories" => 1, "show_menu" => 1))->orderBy("urutan")->get()->getResult();
+        $key = \App\Libraries\ReadCache::kunci('menu');
+        if (array_key_exists($key, self::$menuMemo)) {
+            return self::$menuMemo[$key];
+        }
+
+        $db = db_connect();
+        $kategori = $db->table("menu")->where(array("categories" => 1, "show_menu" => 1))->orderBy("urutan")->get()->getResult();
+        // Semua baris menu diambil sekali lalu dikelompokkan di PHP. Dulu satu
+        // query per kategori DAN per baris menu (N+1 di setiap halaman).
+        $semua = $db->table("menu")->where(array("show_menu" => 1))->orderBy("urutan")->get()->getResult();
+        $perInduk = array();
+        foreach ($semua as $baris) {
+            $perInduk[$baris->parent][] = $baris;
+        }
+
         $response = array();
         // die(json_encode($kategori));
         $no_kat = 0;
@@ -243,9 +260,7 @@ class Core extends Model
                 'utama' => $kat->utama,
                 'menu' => array()
             );
-            $menu = db_connect()->table("menu")
-                ->where(array("parent" => $kat->idmenu, "show_menu" => 1))
-                ->orderBy("urutan")->get()->getResult();
+            $menu = $perInduk[$kat->idmenu] ?? array();
             // if (empty($menu)) {
             //     continue;
             // }
@@ -262,10 +277,7 @@ class Core extends Model
                     'sub' => array(),
                 );
                 array_push($response[$no_kat]['menu'], $res_menu);
-                $sub_menu = db_connect()->table("menu")
-                    ->where(array("parent" => $mymenu->idmenu, "show_menu" => 1))
-                    ->orderBy("urutan")->get()->getResult();
-                foreach ($sub_menu as $sub) {
+                foreach ($perInduk[$mymenu->idmenu] ?? array() as $sub) {
                     $res_sub = array(
                         'id' => $sub->idmenu,
                         'nama' => $sub->nama_menu,
@@ -279,7 +291,8 @@ class Core extends Model
             }
             $no_kat++;
         }
-        return $response;
+
+        return self::$menuMemo[$key] = $response;
     }
 
     function combine_harga($harga)

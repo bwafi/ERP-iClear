@@ -49,6 +49,13 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     protected TutupKasirSourceDefinition $src;
     protected Finance $config;
 
+    /**
+     * Cache per-request: komponen ini diminta berkali-kali dalam satu
+     * perhitungan KPI (dan oleh kalkulator lain) untuk unit/rentang yang sama.
+     * Tabel sumbernya tidak ditulis selama request.
+     */
+    private static $memo = [];
+
     public function __construct(?TutupKasirSourceDefinition $src = null, ?Finance $config = null)
     {
         $this->src    = $src ?? new TutupKasirSourceDefinition();
@@ -197,6 +204,11 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
      */
     public function hpp(int $unitId, string $dari, string $sampai): int
     {
+        $key = \App\Libraries\ReadCache::kunci('hpp', $unitId, $dari, $sampai);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $row = $this->db()->table('detail_penjualan dp')
             ->select('COALESCE(SUM(dp.hpp_penjualan * dp.jumlah), 0) AS total')
             ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
@@ -206,7 +218,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             ->get()
             ->getRow();
 
-        return (int) ($row->total ?? 0);
+        return self::$memo[$key] = (int) ($row->total ?? 0);
     }
 
     /**
@@ -220,6 +232,11 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
      */
     public function kasKeluarOperasional(int $unitId, string $dari, string $sampai): int
     {
+        $key = \App\Libraries\ReadCache::kunci('kasKeluarOperasional', $unitId, $dari, $sampai);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $row = $this->db()->table('kas_keluar kk')
             ->select('COALESCE(SUM(kk.jumlah), 0) AS total')
             ->join('kategori_kas kat', 'kat.idkategori_kas = kk.kategori_idkategori', 'left')
@@ -233,7 +250,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             ->get()
             ->getRow();
 
-        return (int) ($row->total ?? 0);
+        return self::$memo[$key] = (int) ($row->total ?? 0);
     }
 
     /**
@@ -244,6 +261,11 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
      */
     public function kasKeluarDikecualikan(int $unitId, string $dari, string $sampai): array
     {
+        $key = \App\Libraries\ReadCache::kunci('kasKeluarDikecualikan', $unitId, $dari, $sampai);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $rows = $this->db()->table('kas_keluar kk')
             ->select('kat.kategori AS kategori, COALESCE(SUM(kk.jumlah), 0) AS total')
             ->join('kategori_kas kat', 'kat.idkategori_kas = kk.kategori_idkategori', 'left')
@@ -264,7 +286,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             }
         }
 
-        return $out;
+        return self::$memo[$key] = $out;
     }
 
     /**
@@ -272,8 +294,13 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
      */
     public function payroll(int $unitId, string $dari, string $sampai): int
     {
+        $key = \App\Libraries\ReadCache::kunci('payroll', $unitId, $dari, $sampai);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         if (! $this->db()->tableExists('finance_payroll')) {
-            return 0;
+            return self::$memo[$key] = 0;
         }
 
         $row = $this->db()->table('finance_payroll')
@@ -284,6 +311,6 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             ->get()
             ->getRow();
 
-        return (int) ($row->total ?? 0);
+        return self::$memo[$key] = (int) ($row->total ?? 0);
     }
 }

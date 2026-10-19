@@ -23,10 +23,17 @@ class ModelKpiWeight extends Model
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
 
+    /** Cache per-request (lihat AttendanceAggregationService::$memo). */
+    private static $memo = [];
+
     public function getByPosition($position_id, $date = null, $group = null)
     {
         $date = $date ?? date('Y-m-d');
-        
+        $key = \App\Libraries\ReadCache::kunci('w', $position_id, $date, $group);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $query = $this->select('kpi_weights.*, kpi_components.code, kpi_components.name, kpi_components.type')
                     ->join('kpi_components', 'kpi_components.id = kpi_weights.kpi_component_id')
                     ->where('kpi_weights.position_id', $position_id)
@@ -40,7 +47,7 @@ class ModelKpiWeight extends Model
             $query->where('kpi_weights.weight_group', $group);
         }
 
-        return $query->findAll();
+        return self::$memo[$key] = $query->findAll();
     }
 
     public function getActiveWeightsByPosition($position_id, $group = null)

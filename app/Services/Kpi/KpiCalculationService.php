@@ -85,6 +85,38 @@ class KpiCalculationService
     }
 
     /**
+     * Cache per-request (lihat AttendanceAggregationService::$memo).
+     * Komponen & jabatan pegawai adalah data acuan: dibaca berkali-kali dalam
+     * satu perhitungan, tidak berubah selama request.
+     */
+    private static $memo = [];
+
+    protected function componentById(int $componentId)
+    {
+        $key = \App\Libraries\ReadCache::kunci('component', $componentId);
+        if (! isset(self::$memo[$key])) {
+            self::$memo[$key] = $this->componentModel->where('id', $componentId)->first();
+        }
+
+        return self::$memo[$key];
+    }
+
+    /**
+     * Realisasi satu komponen via calculator-nya, dihitung sekali per periode.
+     * Formula kalkulator hanya bergantung pada argumen ini (bukan urutan
+     * pemanggilan), dan tabel penjualan/service tidak ditulis selama request.
+     */
+    protected function calculatorValue(string $strategy, int $employeeId, int $unitId, int $month, int $year)
+    {
+        $key = \App\Libraries\ReadCache::kunci('calc', $strategy, $employeeId, $unitId, $month, $year);
+        if (! array_key_exists($key, self::$memo)) {
+            self::$memo[$key] = $this->calculators[$strategy]->calculate($employeeId, $unitId, $month, $year);
+        }
+
+        return self::$memo[$key];
+    }
+
+    /**
      * Hitung seluruh KPI (automatic) utk satu employee dalam satu periode.
      *
      * @param int    $employeeId
@@ -110,7 +142,7 @@ class KpiCalculationService
         $financeData = null; // cache data target/actual KPI Finance (jabatan 0)
         $managerData = null; // cache data target/actual KPI Manager (jabatan 34)
         foreach ($weights as $w) {
-            $component = $this->componentModel->where('id', $w->kpi_component_id)->first();
+            $component = $this->componentById((int) $w->kpi_component_id);
             if (!$component || !(int)$component->is_active) {
                 continue;
             }
@@ -185,7 +217,7 @@ class KpiCalculationService
                 }
                 // Unit sumber omset: default unit penempatan, kecuali CS (unit 1).
                 $omsetUnitId = $this->resolveOmsetUnitId($positionId, $component->code, (int)$unitId);
-                $actualValue = $calculator->calculate($employeeId, $omsetUnitId, $month, $year);
+                $actualValue = $this->calculatorValue($component->calculation_strategy, (int) $employeeId, $omsetUnitId, (int) $month, (int) $year);
                 $target = $this->targetModel->getTargetByKpiAndUnit($component->id, $omsetUnitId, $context, $date);
                 if (!$target) {
                     continue; // belum ada target utk KPI ini
@@ -525,9 +557,14 @@ class KpiCalculationService
 
     protected function getPositionOfEmployee(int $employeeId): ?int
     {
-        $model = new \App\Models\ModelAuth();
-        $emp = $model->where('ID_AKUN', $employeeId)->first();
-        return $emp ? (int)$emp->ID_JABATAN : null;
+        $key = \App\Libraries\ReadCache::kunci('pos', $employeeId);
+        if (! array_key_exists($key, self::$memo)) {
+            $model = new \App\Models\ModelAuth();
+            $emp = $model->where('ID_AKUN', $employeeId)->first();
+            self::$memo[$key] = $emp ? (int)$emp->ID_JABATAN : null;
+        }
+
+        return self::$memo[$key];
     }
 
     /**

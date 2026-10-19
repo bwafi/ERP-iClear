@@ -42,6 +42,14 @@ class ModelFinanceRekonDaily extends Model
     protected $updatedField = 'updated_at';
 
     /**
+     * Cache per-request: hitungan rekon harian diminta berkali-kali (Akurasi
+     * Laporan dan Kesehatan Uang sama-sama memakainya) untuk unit/rentang yang
+     * sama. Aman dari angka basi karena ReadCache membatalkan cache begitu ada
+     * query tulis (pola simpan-lalu-baca di rekon_daily_test.php).
+     */
+    private static $memo = [];
+
+    /**
      * Kolom yang SELALU dibaca sebagai int.
      *
      * Driver MySQL PDO mengembalikan BIGINT sebagai string, sehingga
@@ -141,7 +149,12 @@ class ModelFinanceRekonDaily extends Model
      */
     public function countLengkapInRange(int $unitId, string $startDate, string $endDate): int
     {
-        return $this->applyLengkap($this->where('unit_id', $unitId)
+        $key = \App\Libraries\ReadCache::kunci('countLengkapInRange', $unitId, $startDate, $endDate);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
+        return self::$memo[$key] = $this->applyLengkap($this->where('unit_id', $unitId)
             ->where('tanggal >=', $startDate)
             ->where('tanggal <=', $endDate))
             ->countAllResults();
@@ -156,7 +169,12 @@ class ModelFinanceRekonDaily extends Model
      */
     public function countLengkapVerifiedInRange(int $unitId, string $startDate, string $endDate): int
     {
-        return $this->applyLengkap($this->where('unit_id', $unitId)
+        $key = \App\Libraries\ReadCache::kunci('countLengkapVerifiedInRange', $unitId, $startDate, $endDate);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
+        return self::$memo[$key] = $this->applyLengkap($this->where('unit_id', $unitId)
             ->where('tanggal >=', $startDate)
             ->where('tanggal <=', $endDate))
             ->where('status_proses', self::STATUS_VERIFIED)
@@ -173,7 +191,12 @@ class ModelFinanceRekonDaily extends Model
      */
     public function countLengkapVerifiedCocokInRange(int $unitId, string $startDate, string $endDate): int
     {
-        return $this->applyLengkap($this->where('unit_id', $unitId)
+        $key = \App\Libraries\ReadCache::kunci('countLengkapVerifiedCocokInRange', $unitId, $startDate, $endDate);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
+        return self::$memo[$key] = $this->applyLengkap($this->where('unit_id', $unitId)
             ->where('tanggal >=', $startDate)
             ->where('tanggal <=', $endDate))
             ->where('status_proses', self::STATUS_VERIFIED)

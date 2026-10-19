@@ -692,6 +692,16 @@ class ModelService extends Model
         $modelKerusakan = new \App\Models\ModelServiceKerusakan();
         $modelSparepart = new \App\Models\ModelServiceSparepart();
 
+        // Hitungan per service diambil sekali per tabel (GROUP BY). Sebelumnya
+        // satu query per baris per tabel, dan daftar service aktif bisa ratusan.
+        // Daftar kosong tetap tanpa query sama sekali (perilaku lama).
+        $jumlahKerusakan = [];
+        $jumlahSparepart = [];
+        if ($services !== []) {
+            $jumlahKerusakan = $this->hitungPerService($modelKerusakan);
+            $jumlahSparepart = $this->hitungPerService($modelSparepart);
+        }
+
         foreach ($services as &$service) {
             // hitung lama service
             if ($service->created_at) {
@@ -704,18 +714,31 @@ class ModelService extends Model
                 $service->lama_service = 'Tanggal tidak tersedia';
             }
 
-            // hitung jumlah kerusakan untuk service ini
-            $service->jumlah_kerusakan = $modelKerusakan
-                ->where('service_idservice', $service->idservice)
-                ->countAllResults();
-
-            // hitung jumlah sparepart untuk service ini
-            $service->jumlah_sparepart = $modelSparepart
-                ->where('service_idservice', $service->idservice)
-                ->countAllResults();
+            // jumlah kerusakan & sparepart untuk service ini
+            $service->jumlah_kerusakan = $jumlahKerusakan[(int) $service->idservice] ?? 0;
+            $service->jumlah_sparepart = $jumlahSparepart[(int) $service->idservice] ?? 0;
         }
 
         return $services;
+    }
+
+    /**
+     * Jumlah baris per service_idservice untuk sebuah model anak service.
+     *
+     * @return array<int,int>
+     */
+    private function hitungPerService($model): array
+    {
+        $rows = $model->select('service_idservice, COUNT(*) AS jumlah', false)
+            ->groupBy('service_idservice')
+            ->findAll();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row->service_idservice] = (int) $row->jumlah;
+        }
+
+        return $out;
     }
 
     public function ProsesServiceAktifServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
@@ -847,6 +870,15 @@ class ModelService extends Model
         $modelKerusakan = new \App\Models\ModelServiceKerusakan();
         $modelSparepart = new \App\Models\ModelServiceSparepart();
 
+        // Hitungan per service diambil sekali per tabel (GROUP BY).
+        // Daftar kosong tetap tanpa query sama sekali (perilaku lama).
+        $jumlahKerusakan = [];
+        $jumlahSparepart = [];
+        if ($services !== []) {
+            $jumlahKerusakan = $this->hitungPerService($modelKerusakan);
+            $jumlahSparepart = $this->hitungPerService($modelSparepart);
+        }
+
         foreach ($services as &$service) {
             // hitung lama service
             if ($service->created_at) {
@@ -859,15 +891,9 @@ class ModelService extends Model
                 $service->lama_service = 'Tanggal tidak tersedia';
             }
 
-            // hitung jumlah kerusakan untuk service ini
-            $service->jumlah_kerusakan = $modelKerusakan
-                ->where('service_idservice', $service->idservice)
-                ->countAllResults();
-
-            // hitung jumlah sparepart untuk service ini
-            $service->jumlah_sparepart = $modelSparepart
-                ->where('service_idservice', $service->idservice)
-                ->countAllResults();
+            // jumlah kerusakan & sparepart untuk service ini
+            $service->jumlah_kerusakan = $jumlahKerusakan[(int) $service->idservice] ?? 0;
+            $service->jumlah_sparepart = $jumlahSparepart[(int) $service->idservice] ?? 0;
         }
 
         return $services;
@@ -886,6 +912,15 @@ class ModelService extends Model
         $modelKerusakan = new \App\Models\ModelServiceKerusakan();
         $modelSparepart = new \App\Models\ModelServiceSparepart();
 
+        // Hitungan per service diambil sekali per tabel (GROUP BY).
+        // Daftar kosong tetap tanpa query sama sekali (perilaku lama).
+        $jumlahKerusakan = [];
+        $jumlahSparepart = [];
+        if ($services !== []) {
+            $jumlahKerusakan = $this->hitungPerService($modelKerusakan);
+            $jumlahSparepart = $this->hitungPerService($modelSparepart);
+        }
+
         foreach ($services as &$service) {
             // Hitung lama service berdasarkan tanggal bisa diambil
             if ($service->tanggal_bisa_diambil) {
@@ -898,15 +933,9 @@ class ModelService extends Model
                 $service->lama_service = 'Tanggal tidak tersedia';
             }
 
-            // Hitung jumlah kerusakan
-            $service->jumlah_kerusakan = $modelKerusakan
-                ->where('service_idservice', $service->idservice)
-                ->countAllResults();
-
-            // Hitung jumlah sparepart
-            $service->jumlah_sparepart = $modelSparepart
-                ->where('service_idservice', $service->idservice)
-                ->countAllResults();
+            // Jumlah kerusakan & sparepart
+            $service->jumlah_kerusakan = $jumlahKerusakan[(int) $service->idservice] ?? 0;
+            $service->jumlah_sparepart = $jumlahSparepart[(int) $service->idservice] ?? 0;
         }
 
         return $services;

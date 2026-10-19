@@ -1,0 +1,224 @@
+{
+    "attendance": {
+        "41": {
+            "components": {
+                "KEHADIRAN": {
+                    "normalized": 99.2,
+                    "weighted": 39.68
+                },
+                "KEBERSIHAN": {
+                    "normalized": 81.0318,
+                    "weighted": 16.2064
+                },
+                "SERAGAM": {
+                    "normalized": 78.576,
+                    "weighted": 15.7152
+                },
+                "KEPATUHAN_SOP": {
+                    "normalized": 80.321,
+                    "weighted": 16.0642
+                }
+            },
+            "attendance_score": 87.6658,
+            "components_raw": {
+                "KEHADIRAN": {
+                    "sum": 124,
+                    "count": 25,
+                    "normalized": 99.2
+                },
+                "KEBERSIHAN": {
+                    "sum": 101.2897,
+                    "count": 0,
+                    "normalized": 81.0318
+                },
+                "SERAGAM": {
+                    "sum": 98.2199,
+                    "count": 0,
+                    "normalized": 78.576
+                },
+                "KEPATUHAN_SOP": {
+                    "sum": 100.4013,
+                    "count": 0,
+                    "normalized": 80.321
+                }
+            }
+        },
+        "44": {
+            "components": {
+                "KEHADIRAN": {
+                    "normalized": 87.6923,
+                    "weighted": 35.0769
+                },
+                "KEBERSIHAN": {
+                    "normalized": 100,
+                    "weighted": 20
+                },
+                "SERAGAM": {
+                    "normalized": 100,
+                    "weighted": 20
+                },
+                "KEPATUHAN_SOP": {
+                    "normalized": 100,
+                    "weighted": 20
+                }
+            },
+            "attendance_score": 95.0769,
+            "components_raw": {
+                "KEHADIRAN": {
+                    "sum": 114,
+                    "count": 26,
+                    "normalized": 87.6923
+                },
+                "KEBERSIHAN": {
+                    "sum": 135,
+                    "count": 27,
+                    "normalized": 100
+                },
+                "SERAGAM": {
+                    "sum": 135,
+                    "count": 27,
+                    "normalized": 100
+                },
+                "KEPATUHAN_SOP": {
+                    "sum": 135,
+                    "count": 27,
+                    "normalized": 100
+                }
+            }
+        },
+        "49": {
+            "components": {
+                "KEHADIRAN": {
+                    "normalized": 80.7692,
+                    "weighted": 32.3077
+                },
+                "KEBERSIHAN": {
+                    "normalized": 95.3846,
+                    "weighted": 19.0769
+                },
+                "SERAGAM": {
+                    "normalized": 77.6923,
+                    "weighted": 15.5385
+                },
+                "KEPATUHAN_SOP": {
+                    "normalized": 93.8462,
+                    "weighted": 18.7692
+                }
+            },
+            "attendance_score": 85.6923,
+            "components_raw": {
+                "KEHADIRAN": {
+                    "normalized": 80.76923076923077
+                },
+                "KEBERSIHAN": {
+                    "normalized": 95.38461538461539
+                },
+                "SERAGAM": {
+                    "normalized": 77.6923076923077
+                },
+                "KEPATUHAN_SOP": {
+                    "normalized": 93.84615384615384
+                }
+            }
+        }
+    },
+    "kpi": {
+        "41": {
+            "skor_total": 19.79,
+            "skor_total2": 87.67,
+            "insentif": 0
+        },
+        "44": {
+            "skor_total": 28.83,
+            "skor_total2": 95.08,
+            "insentif": 0
+        },
+        "49": {
+            "skor_total": 44.25,
+            "skor_total2": 85.69,
+            "insentif": 0
+        }
+    },
+    "dist": {
+        "divisor": 4,
+        "total_perkiraan": 16134325,
+        "total_dipotong": 0,
+        "per_employee_share": 4033581.25,
+        "employees": [
+            {
+                "perkiraan_gaji": 1500000,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 1500000,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 2377975,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 1801400,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 1874500,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 2521225,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 2459600,
+                "insentif": 0
+            },
+            {
+                "perkiraan_gaji": 2099625,
+                "insentif": 0
+            }
+        ]
+    },
+    "shares": {
+        "1": {
+            "unit_id": 1,
+            "unit_nama": "ICLEAR Probolinggo",
+            "unit_jenis": "pribadi",
+            "share_pct": 25,
+            "share_nominal_perkiraan": 4033581.25,
+            "share_nominal_actual": 0
+        },
+        "2": {
+            "unit_id": 2,
+            "unit_nama": "ICLEAR Jember",
+            "unit_jenis": "pribadi",
+            "share_pct": 25,
+            "share_nominal_perkiraan": 4033581.25,
+            "share_nominal_actual": 0
+        },
+        "3": {
+            "unit_id": 3,
+            "unit_nama": "ICLEAR Banyuwangi",
+            "unit_jenis": "franchise",
+            "share_pct": 25,
+            "share_nominal_perkiraan": 4033581.25,
+            "share_nominal_actual": 0
+        },
+        "4": {
+            "unit_id": 4,
+            "unit_nama": "ICLEAR Pandaan",
+            "unit_jenis": "franchise",
+            "share_pct": 25,
+            "share_nominal_perkiraan": 4033581.25,
+            "share_nominal_actual": 0
+        },
+        "5": {
+            "unit_id": 5,
+            "unit_nama": "ICLEAR Genteng",
+            "unit_jenis": "franchise",
+            "share_pct": 25,
+            "share_nominal_perkiraan": 4033581.25,
+            "share_nominal_actual": 0
+        }
+    }
+}

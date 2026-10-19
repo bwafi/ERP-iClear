@@ -32,6 +32,25 @@ class AttendanceAggregationService
     }
 
     /**
+     * Cache per-request. Selama satu request tabel absen tidak ditulis, jadi
+     * hasil baca boleh dipakai ulang. Statik supaya tetap berlaku walau
+     * pemanggil membuat service baru — /asset_berjalan membuat service baru
+     * per pegawai, dan itu akar N+1 yang di sini diperbaiki.
+     */
+    private static $memo = [];
+
+    protected function employeePosition(int $employeeId): int
+    {
+        $key = \App\Libraries\ReadCache::kunci('pos', $employeeId);
+        if (! isset(self::$memo[$key])) {
+            $employee = (new \App\Models\ModelAuth())->where('ID_AKUN', $employeeId)->first();
+            self::$memo[$key] = $employee ? (int) $employee->ID_JABATAN : 0;
+        }
+
+        return self::$memo[$key];
+    }
+
+    /**
      * Jumlah hari efektif = Jumlah hari kalender dalam bulan - jumlah tanggal unik OFF.
      *
      * Satu tanggal dihitung SEKALI meski ada beberapa komponen absen yang OFF pada tanggal
@@ -44,6 +63,11 @@ class AttendanceAggregationService
      */
     protected function getEffectiveDayCount(int $employeeId, string $month, string $year): int
     {
+        $key = \App\Libraries\ReadCache::kunci('days', $employeeId, $month, $year);
+        if (isset(self::$memo[$key])) {
+            return self::$memo[$key];
+        }
+
         // Jumlah hari kalender sebenarnya untuk bulan & tahun ini (bukan hardcode 26).
         $totalDaysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', (int)$year, (int)$month)));
 
@@ -92,7 +116,7 @@ class AttendanceAggregationService
 
         $offCount = count($offDates);
 
-        return max($totalDaysInMonth - $offCount, 0);
+        return self::$memo[$key] = max($totalDaysInMonth - $offCount, 0);
     }
 
     /**
@@ -123,12 +147,15 @@ class AttendanceAggregationService
      */
     public function calculateMonthlyAttendance(int $employeeId, int $unitId, string $month, string $year, string $context = 'gaji'): array
     {
-        $authModel = new \App\Models\ModelAuth();
-        $employee = $authModel->where('ID_AKUN', $employeeId)->first();
-        $positionId = $employee ? (int)$employee->ID_JABATAN : 0;
-        
+        $key = \App\Libraries\ReadCache::kunci('att', $employeeId, $unitId, $month, $year, $context);
+        if (isset(self::$memo[$key])) {
+            return self::$memo[$key];
+        }
+
+        $positionId = $this->employeePosition($employeeId);
+
         if ($positionId === 40) {
-            return $this->calculateSPVAttendance($employeeId, $unitId, $month, $year, $context);
+            return self::$memo[$key] = $this->calculateSPVAttendance($employeeId, $unitId, $month, $year, $context);
         }
 
         $date = sprintf('%04d-%02d-15', (int)$year, (int)$month);
@@ -229,7 +256,7 @@ class AttendanceAggregationService
         // Cap attendance score at 100
         $attendanceScore = min($attendanceScore, 100.0);
 
-        return [
+        return self::$memo[$key] = [
             'components' => $results,
             'attendance_score' => round($attendanceScore, 4),
             'components_raw' => $componentsRaw,
@@ -283,6 +310,11 @@ class AttendanceAggregationService
      */
     protected function managerTeamAverage($componentId, string $month, string $year): float
     {
+        $key = \App\Libraries\ReadCache::kunci('mgr', $componentId, $month, $year);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $roles = [40, 43, 45, 44, 0];
         $authModel = new \App\Models\ModelAuth();
 
@@ -317,10 +349,10 @@ class AttendanceAggregationService
         }
 
         if (empty($roleAverages)) {
-            return 0.0;
+            return self::$memo[$key] = 0.0;
         }
 
-        return array_sum($roleAverages) / count($roleAverages);
+        return self::$memo[$key] = array_sum($roleAverages) / count($roleAverages);
     }
 
     /**

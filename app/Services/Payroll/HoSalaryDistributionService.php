@@ -23,6 +23,13 @@ class HoSalaryDistributionService
     protected $db;
     protected $salaryService;
 
+    /**
+     * Cache per-request. calculateDistribution() sangat mahal (menghitung KPI
+     * tiap pegawai HO) dan getUnitShares() memakai hasil yang sama; tanpa
+     * cache, /asset_berjalan menjalankan seluruhnya dua kali.
+     */
+    private static $memo = [];
+
     public function __construct()
     {
         $this->db = Database::connect();
@@ -47,6 +54,11 @@ class HoSalaryDistributionService
     public function calculateDistribution(string $bulan, ?string $tahun = null): array
     {
         [$tahun, $bln] = $this->parseBulan($bulan, $tahun);
+
+        $key = \App\Libraries\ReadCache::kunci('dist', $tahun, $bln);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
 
         // 1. Ambil unit pribadi & franchise (non-trial, non-HO)
         $units = $this->db->table('unit')
@@ -183,7 +195,7 @@ class HoSalaryDistributionService
             ];
         }
 
-        return [
+        return self::$memo[$key] = [
             'divisor'           => $divisor,
             'pribadi_count'     => $pribadiCount,
             'franchise_count'   => $franchiseCount,

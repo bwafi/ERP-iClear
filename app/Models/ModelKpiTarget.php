@@ -27,6 +27,12 @@ class ModelKpiTarget extends Model
     protected $updatedField = 'updated_at';
 
     /**
+     * Cache per-request: target jarang berubah dan dipanggil berkali-kali dalam
+     * satu perhitungan KPI (lihat AttendanceAggregationService::$memo).
+     */
+    private static $memo = [];
+
+    /**
      * Ambil target aktif untuk KPI + unit + periode.
      *
      * Konteks sudah dikonsolidasi jadi SATU ('default'), sehingga parameter
@@ -35,6 +41,10 @@ class ModelKpiTarget extends Model
     public function getTargetByKpiAndUnit($kpi_component_id, $unit_id, $context = 'default', $date = null, $position_id = null)
     {
         $date = $date ?? date('Y-m-d');
+        $key = \App\Libraries\ReadCache::kunci('t', $kpi_component_id, $unit_id, $context, $date, $position_id);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
 
         $builder = $this->where('kpi_component_id', $kpi_component_id)
                          ->where('unit_id', $unit_id)
@@ -55,7 +65,7 @@ class ModelKpiTarget extends Model
             $builder->where('position_id IS NULL');
         }
 
-        return $builder->first();
+        return self::$memo[$key] = $builder->first();
     }
 
     public function getTargetsByUnit($unit_id, $date = null)

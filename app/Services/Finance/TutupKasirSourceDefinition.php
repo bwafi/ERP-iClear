@@ -121,6 +121,23 @@ class TutupKasirSourceDefinition
         $this->db = $db ?? Database::connect();
     }
 
+    /**
+     * Cache per-request. Agregat rentang dibaca berkali-kali oleh kalkulator
+     * yang berbeda (Kesehatan Uang, Cash Flow, Akurasi…) untuk unit & rentang
+     * yang sama, dan tabel sumbernya tidak ditulis selama satu request.
+     */
+    private static $memo = [];
+
+    private function memo(string $key, callable $fn)
+    {
+        $key = \App\Libraries\ReadCache::kunci($key);
+        if (! array_key_exists($key, self::$memo)) {
+            self::$memo[$key] = $fn();
+        }
+
+        return self::$memo[$key];
+    }
+
     // =================================================================
     // KAS AWAL — opening, BUKAN transaksi
     // =================================================================
@@ -541,7 +558,12 @@ class TutupKasirSourceDefinition
      */
     private function punyaLedgerDp(): bool
     {
-        return $this->db->tableExists($this->db->getPrefix() . 'service_dp', false);
+        $key = \App\Libraries\ReadCache::kunci('punyaLedgerDp');
+        if (! array_key_exists($key, self::$memo)) {
+            self::$memo[$key] = $this->db->tableExists($this->db->getPrefix() . 'service_dp', false);
+        }
+
+        return self::$memo[$key];
     }
 
     /** @param string $metode 'tunai' | 'transfer' */
@@ -649,46 +671,52 @@ class TutupKasirSourceDefinition
      */
     public function cashPenjualanRange(int $unitId, string $dari, string $sampai): int
     {
-        $row = $this->db->table('penjualan')
-            ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal) >=', $dari)
-            ->where('DATE(tanggal) <=', $sampai)
-            ->where('unit_idunit', $unitId)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow();
+        return $this->memo("cashPenjualanRange|$unitId|$dari|$sampai", function () use ($unitId, $dari, $sampai) {
+            $row = $this->db->table('penjualan')
+                ->selectSum('bayar_tunai', 'total')
+                ->where('DATE(tanggal) >=', $dari)
+                ->where('DATE(tanggal) <=', $sampai)
+                ->where('unit_idunit', $unitId)
+                ->notLike('kode_invoice', 'srv', 'after')
+                ->get()
+                ->getRow();
 
-        return (int) ($row->total ?? 0);
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /** SUM(bayar_bank) penjualan dalam rentang, filter TutupKasir. */
     public function transferPenjualanRange(int $unitId, string $dari, string $sampai): int
     {
-        $row = $this->db->table('penjualan')
-            ->selectSum('bayar_bank', 'total')
-            ->where('DATE(tanggal) >=', $dari)
-            ->where('DATE(tanggal) <=', $sampai)
-            ->where('unit_idunit', $unitId)
-            ->notLike('kode_invoice', 'srv', 'after')
-            ->get()
-            ->getRow();
+        return $this->memo("transferPenjualanRange|$unitId|$dari|$sampai", function () use ($unitId, $dari, $sampai) {
+            $row = $this->db->table('penjualan')
+                ->selectSum('bayar_bank', 'total')
+                ->where('DATE(tanggal) >=', $dari)
+                ->where('DATE(tanggal) <=', $sampai)
+                ->where('unit_idunit', $unitId)
+                ->notLike('kode_invoice', 'srv', 'after')
+                ->get()
+                ->getRow();
 
-        return (int) ($row->total ?? 0);
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /** SUM(bayar_tunai) service selesai dalam rentang. */
     public function cashServiceRange(int $unitId, string $dari, string $sampai): int
     {
-        $row = $this->db->table('service')
-            ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(tanggal_selesai) >=', $dari)
-            ->where('DATE(tanggal_selesai) <=', $sampai)
-            ->where('status_service', 4)
-            ->where('unit_idunit', $unitId)
-            ->get()
-            ->getRow();
+        return $this->memo("cashServiceRange|$unitId|$dari|$sampai", function () use ($unitId, $dari, $sampai) {
+            $row = $this->db->table('service')
+                ->selectSum('bayar_tunai', 'total')
+                ->where('DATE(tanggal_selesai) >=', $dari)
+                ->where('DATE(tanggal_selesai) <=', $sampai)
+                ->where('status_service', 4)
+                ->where('unit_idunit', $unitId)
+                ->get()
+                ->getRow();
 
-        return (int) ($row->total ?? 0);
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /**
@@ -700,46 +728,52 @@ class TutupKasirSourceDefinition
      */
     public function transferServiceRange(int $unitId, string $dari, string $sampai): int
     {
-        $row = $this->db->table('service')
-            ->select('COALESCE(SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)),0) AS total')
-            ->where('DATE(tanggal_selesai) >=', $dari)
-            ->where('DATE(tanggal_selesai) <=', $sampai)
-            ->where('status_service', 4)
-            ->where('unit_idunit', $unitId)
-            ->get()
-            ->getRow();
+        return $this->memo("transferServiceRange|$unitId|$dari|$sampai", function () use ($unitId, $dari, $sampai) {
+            $row = $this->db->table('service')
+                ->select('COALESCE(SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)),0) AS total')
+                ->where('DATE(tanggal_selesai) >=', $dari)
+                ->where('DATE(tanggal_selesai) <=', $sampai)
+                ->where('status_service', 4)
+                ->where('unit_idunit', $unitId)
+                ->get()
+                ->getRow();
 
-        return (int) ($row->total ?? 0);
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /** SUM(jumlah) kas_keluar idbank NULL dalam rentang. */
     public function kasKeluarCashRange(int $unitId, string $dari, string $sampai): int
     {
-        $row = $this->db->table('kas_keluar')
-            ->selectSum('jumlah', 'total')
-            ->where('DATE(tanggal) >=', $dari)
-            ->where('DATE(tanggal) <=', $sampai)
-            ->where('idunit', $unitId)
-            ->where('idbank', null)
-            ->get()
-            ->getRow();
+        return $this->memo("kasKeluarCashRange|$unitId|$dari|$sampai", function () use ($unitId, $dari, $sampai) {
+            $row = $this->db->table('kas_keluar')
+                ->selectSum('jumlah', 'total')
+                ->where('DATE(tanggal) >=', $dari)
+                ->where('DATE(tanggal) <=', $sampai)
+                ->where('idunit', $unitId)
+                ->where('idbank', null)
+                ->get()
+                ->getRow();
 
-        return (int) ($row->total ?? 0);
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /** SUM(jumlah) kas_keluar idbank NOT NULL dalam rentang. */
     public function kasKeluarTransferRange(int $unitId, string $dari, string $sampai): int
     {
-        $row = $this->db->table('kas_keluar')
-            ->selectSum('jumlah', 'total')
-            ->where('DATE(tanggal) >=', $dari)
-            ->where('DATE(tanggal) <=', $sampai)
-            ->where('idunit', $unitId)
-            ->where('idbank !=', null)
-            ->get()
-            ->getRow();
+        return $this->memo("kasKeluarTransferRange|$unitId|$dari|$sampai", function () use ($unitId, $dari, $sampai) {
+            $row = $this->db->table('kas_keluar')
+                ->selectSum('jumlah', 'total')
+                ->where('DATE(tanggal) >=', $dari)
+                ->where('DATE(tanggal) <=', $sampai)
+                ->where('idunit', $unitId)
+                ->where('idbank !=', null)
+                ->get()
+                ->getRow();
 
-        return (int) ($row->total ?? 0);
+            return (int) ($row->total ?? 0);
+        });
     }
 
     /**
@@ -874,6 +908,11 @@ class TutupKasirSourceDefinition
      */
     public function harianRange(int $unitId, string $dari, string $sampai): array
     {
+        $key = \App\Libraries\ReadCache::kunci('harianRange', $unitId, $dari, $sampai);
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $rowsPenjualan = $this->db->table('penjualan')
             ->select('DATE(tanggal) AS d', false)
             ->select('COALESCE(SUM(bayar_tunai),0) AS cash', false)
@@ -921,6 +960,6 @@ class TutupKasirSourceDefinition
             $out['keluar'][$r['d']] = (int) $r['keluar'];
         }
 
-        return $out;
+        return self::$memo[$key] = $out;
     }
 }
