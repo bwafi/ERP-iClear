@@ -1,7 +1,7 @@
 -- Read-only audit for the exact TEST cutoff and unit scope under review.
--- Set @as_of_date to the previously reported cutoff; do not infer it from today.
--- Set @unit_id to one unit, or NULL for the current combined view.
-SET @as_of_date = 'YYYY-MM-DD';
+-- Confirmed from the TEST Neraca report: 18 October 2026, all units combined.
+-- Change only if Finance confirms the original comparison used another scope.
+SET @as_of_date = '2026-10-18';
 SET @unit_id = NULL;
 
 START TRANSACTION READ ONLY;
@@ -9,9 +9,34 @@ START TRANSACTION READ ONLY;
 -- Confirm the queried schema and server version before reviewing any rows.
 SELECT DATABASE() AS schema_name, @@version AS server_version, @@read_only AS server_read_only;
 
+-- Reproduce the displayed report totals and its Aset - Kewajiban - Ekuitas - Laba.
+-- Result excludes unclassified codes from grouped totals, as the report does.
+SELECT totals.*,
+       (aset - kewajiban - ekuitas - laba_berjalan) AS selisih_neraca
+FROM (
+    SELECT
+        (SELECT COALESCE(SUM(debet - kredit), 0) FROM jurnal
+         WHERE tanggal <= @as_of_date AND no_akun REGEXP '^[0-9]{10}$' AND no_akun LIKE '1%'
+           AND (@unit_id IS NULL OR id_unit = @unit_id)) AS aset,
+        (SELECT COALESCE(SUM(kredit - debet), 0) FROM jurnal
+         WHERE tanggal <= @as_of_date AND no_akun REGEXP '^[0-9]{10}$' AND no_akun LIKE '2%'
+           AND (@unit_id IS NULL OR id_unit = @unit_id)) AS kewajiban,
+        (SELECT COALESCE(SUM(kredit - debet), 0) FROM jurnal
+         WHERE tanggal <= @as_of_date AND no_akun REGEXP '^[0-9]{10}$' AND no_akun LIKE '3%'
+           AND (@unit_id IS NULL OR id_unit = @unit_id)) AS ekuitas,
+        (SELECT COALESCE(SUM(kredit - debet), 0) FROM jurnal
+         WHERE tanggal >= CONCAT(YEAR(@as_of_date), '-01-01') AND tanggal <= @as_of_date
+           AND no_akun REGEXP '^[0-9]{10}$'
+           AND (no_akun LIKE '4%' OR no_akun LIKE '5%' OR no_akun LIKE '6%'
+                OR no_akun LIKE '701%' OR no_akun LIKE '702%')
+           AND (@unit_id IS NULL OR id_unit = @unit_id)) AS laba_berjalan,
+        (SELECT COALESCE(SUM(debet - kredit), 0) FROM jurnal
+         WHERE tanggal <= @as_of_date AND (@unit_id IS NULL OR id_unit = @unit_id)) AS selisih_jurnal
+) AS totals;
+
 -- Trial-balance movement through cutoff, per unit and account.
 SELECT id_unit, no_akun, SUM(debet) AS total_debet, SUM(kredit) AS total_kredit,
-       SUM(debet - kredit) AS saldo_debit_normal
+       SUM(debet - kredit) AS saldo_debet_minus_kredit
 FROM jurnal
 WHERE tanggal <= @as_of_date AND (@unit_id IS NULL OR id_unit = @unit_id)
 GROUP BY id_unit, no_akun
@@ -63,7 +88,7 @@ WHERE tanggal <= @as_of_date AND (@unit_id IS NULL OR id_unit = @unit_id)
 GROUP BY id_unit, tabel_referensi, id_referensi
 ORDER BY id_unit, tanggal_awal;
 
--- Current inventory ledger vs current stock and inventory GL by unit.
+-- Current ledger vs current stock by unit; this is not a historical cutoff balance.
 -- Historical ledger valuation is intentionally not inferred from created_at.
 SELECT b.id_unit, COUNT(DISTINCT b.idbarang) AS barang_fisik,
        SUM(b.stok_akhir) AS qty_stok_barang,
@@ -83,6 +108,7 @@ SELECT j.id_unit, GROUP_CONCAT(DISTINCT j.no_akun ORDER BY j.no_akun) AS akun_pe
 FROM jurnal j
 JOIN no_akun coa ON coa.no_akun = j.no_akun AND coa.jenis_akun = 'Persediaan'
 WHERE j.tanggal <= @as_of_date AND (@unit_id IS NULL OR j.id_unit = @unit_id)
+  AND @as_of_date = CURDATE()
 GROUP BY j.id_unit
 ORDER BY j.id_unit;
 

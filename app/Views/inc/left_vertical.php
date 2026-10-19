@@ -6,6 +6,7 @@ if (session()->get('logged_in') !== true) {
 
 use App\Models\ModelUnit;
 use App\Models\Core;
+use App\Services\Finance\FinanceMenuNavigation;
 
 $id_unit = session()->get('ID_UNIT');
 $ModelUnit = new ModelUnit();
@@ -14,8 +15,8 @@ $logoFile  = ($unitLogo && $unitLogo->LOGO) ? $unitLogo->LOGO : 'logo_iclear.png
 $namaUnit  = session()->get('NAMA_UNIT') ?: '';
 
 $MCore = new Core();
-$menu_utama = $MCore->get_menu_show();
 $role = $MCore->get_role();
+$menu_utama = FinanceMenuNavigation::group($MCore->get_menu_show(), $role);
 $currentUri = service('uri');
 ?>
 

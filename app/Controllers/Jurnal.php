@@ -7,6 +7,7 @@ use Config\Database;
 use App\Models\ModelAuth;
 use App\Models\ModelUnit;
 use App\Models\ModelJurnal;
+use App\Services\Finance\JournalReportFilters;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -33,14 +34,14 @@ class Jurnal extends BaseController
     //laporan jurnal
     public function index()
     {
-        $filters = [
+        $filters = JournalReportFilters::fromArray([
             'startDate' => $this->request->getGet('startDate'),
             'endDate' => $this->request->getGet('endDate'),
             'filterUnit' => $this->request->getGet('filterUnit'),
             'no_akun' => $this->request->getGet('no_akun'),
             'tabel_referensi' => $this->request->getGet('tabel_referensi'),
             'id_referensi' => $this->request->getGet('id_referensi'),
-        ];
+        ]);
         $data = array(
             'body' => 'jurnal/laporan_jurnal',
             'jurnal' => $this->JurnalModel->getJurnalWithUnit($filters),
@@ -52,15 +53,20 @@ class Jurnal extends BaseController
 
     public function export_jurnal()
     {
-        $tanggal_awal  = $this->request->getPost('tanggal_awal') ?? null;
-        $tanggal_akhir = $this->request->getPost('tanggal_akhir') ?? null;
-        $nama_unit     = $this->request->getPost('nama_unit') ?? null;
+        $filters = JournalReportFilters::fromArray([
+            'startDate' => $this->request->getPost('startDate'),
+            'endDate' => $this->request->getPost('endDate'),
+            'filterUnit' => $this->request->getPost('filterUnit'),
+            'no_akun' => $this->request->getPost('no_akun'),
+            'tabel_referensi' => $this->request->getPost('tabel_referensi'),
+            'id_referensi' => $this->request->getPost('id_referensi'),
+        ]);
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
 
 
-        $data = $this->JurnalModel->filterexport($tanggal_awal, $tanggal_akhir, $nama_unit);
+        $data = $this->JurnalModel->getJurnalWithUnit($filters);
 
 
         $headers = [

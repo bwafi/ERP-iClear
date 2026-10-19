@@ -28,9 +28,12 @@
 
 <div class="mb-3">
     <form action="<?= base_url('export_jurnal') ?>" method="post">
-        <input type="hidden" name="tanggal_awal" value="<?= esc($journal_filters['startDate']) ?>">
-        <input type="hidden" name="tanggal_akhir" value="<?= esc($journal_filters['endDate']) ?>">
-        <input type="hidden" name="nama_unit" id="exportUnit" value="">
+        <input type="hidden" name="startDate" value="<?= esc($journal_filters['startDate']) ?>">
+        <input type="hidden" name="endDate" value="<?= esc($journal_filters['endDate']) ?>">
+        <input type="hidden" name="filterUnit" value="<?= esc($journal_filters['filterUnit']) ?>">
+        <input type="hidden" name="no_akun" value="<?= esc($journal_filters['no_akun']) ?>">
+        <input type="hidden" name="tabel_referensi" value="<?= esc($journal_filters['tabel_referensi']) ?>">
+        <input type="hidden" name="id_referensi" value="<?= esc($journal_filters['id_referensi']) ?>">
         <button type="submit" class="btn btn-danger">Export</button>
     </form>
 </div>
@@ -107,7 +110,24 @@
                     <td class="kredit-cell" data-value="<?= esc($row->kredit) ?>"></td>
                     <td><?= esc($row->NAMA_UNIT) ?></td>
                     <td><?= esc($row->tabel_referensi ?? '') ?></td>
-                    <td><?= esc($row->id_referensi ?? '') ?></td>
+                    <td>
+                        <?php if (!empty($row->tabel_referensi) && !empty($row->id_referensi)): ?>
+                            <?php
+                            $sourceFilters = \App\Services\Finance\JournalReportFilters::forSource(
+                                $journal_filters,
+                                $row->id_unit,
+                                (string) $row->tabel_referensi,
+                                $row->id_referensi
+                            );
+                            $sourceJournalUrl = base_url('laporan_jurnal') . '?' . http_build_query($sourceFilters);
+                            ?>
+                            <a href="<?= esc($sourceJournalUrl) ?>" title="Lihat jurnal terkait sumber ini">
+                                <?= esc($row->id_referensi) ?>
+                            </a>
+                        <?php else: ?>
+                            <?= esc($row->id_referensi ?? '') ?>
+                        <?php endif; ?>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
