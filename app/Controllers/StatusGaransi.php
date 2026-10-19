@@ -34,7 +34,7 @@ class StatusGaransi extends BaseController
 
 {
 
-    private const WARRANTY_MENU_ID = 10151;
+    private const WARRANTY_MENU_ID = 76;
 
     protected $AuthModel;
     protected $KerusakanModel;
