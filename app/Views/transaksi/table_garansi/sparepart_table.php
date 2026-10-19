@@ -191,7 +191,7 @@
         <td>
   <input type="text" class="form-control harga" 
          name="produk[${nextIndex}][harga]" 
-         value="Rp ${formatNumber(harga_penjualan_garansi && harga_penjualan_garansi != 0 ? harga_penjualan_garansi : harga)}">
+         value="Rp ${formatNumber(jumlah_tambahan_garansi > 0 ? harga_penjualan_garansi : harga)}">
 </td>
 
         <td hidden>
