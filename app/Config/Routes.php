@@ -318,6 +318,7 @@ $routes->post('kredit_retur_suplier/apply', 'KreditReturSuplier::applyRemaining'
 
 //retur customer
 $routes->get('retur_customer', 'Retur_Customer::index', ['filter' => 'auth']);
+$routes->get('retur_customer/invoice/(:num)', 'Retur_Customer::invoiceDetail/$1', ['filter' => 'auth']);
 $routes->post('insert_retur_customer', 'Retur_Customer::insert', ['filter' => 'auth']);
 
 

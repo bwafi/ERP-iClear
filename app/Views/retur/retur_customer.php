@@ -1,295 +1,100 @@
-<?php
-$grouped_penjualan = [];
-foreach ($detail_penjualan as $row) {
-    $grouped_penjualan[$row->kode_invoice][] = $row;
-}
-?>
+<div class="card shadow-none mb-4"><div class="card-body">
+    <h4 class="fw-semibold mb-3">Retur Penjualan</h4>
+    <form method="get" action="<?= base_url('retur_customer') ?>" class="row g-2 align-items-end">
+        <div class="col-md-5"><label for="invoiceFilter" class="form-label">Nomor invoice</label><input id="invoiceFilter" name="invoice" class="form-control" value="<?= esc($invoiceFilter) ?>" placeholder="Cari nomor invoice"></div>
+        <div class="col-md-4"><label for="unitFilter" class="form-label">Unit</label><select id="unitFilter" name="unit" class="form-select"><option value="">Semua Unit</option>
+            <?php foreach ($units as $unit): ?><option value="<?= (int) $unit['idunit'] ?>" <?= (int) $unitFilter === (int) $unit['idunit'] ? 'selected' : '' ?>><?= esc($unit['NAMA_UNIT']) ?></option><?php endforeach; ?>
+        </select></div>
+        <div class="col-md-3"><button class="btn btn-primary" type="submit">Cari</button> <a class="btn btn-outline-secondary" href="<?= base_url('retur_customer') ?>">Reset</a></div>
+    </form>
+</div></div>
 
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Retur Penjualan</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Retur</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">Penjualan</li>
-            </ol>
-        </nav>
+<div class="card shadow-none"><div class="card-body">
+    <p class="text-muted">Maksimal 50 invoice per halaman. Detail barang dimuat saat dibuka.</p>
+    <div class="table-responsive"><table class="table table-striped align-middle">
+        <thead><tr><th>Invoice</th><th>Tanggal</th><th>Unit</th><th>Aksi</th></tr></thead>
+        <tbody>
+        <?php foreach ($invoices as $invoice): ?>
+            <tr><td><?= esc($invoice['kode_invoice']) ?></td><td><?= esc(date('d-m-Y', strtotime($invoice['tanggal']))) ?></td><td><?= esc($invoice['NAMA_UNIT']) ?></td>
+                <td><button type="button" class="btn btn-sm btn-primary buka-detail" data-id="<?= (int) $invoice['idpenjualan'] ?>">Lihat Detail</button></td></tr>
+        <?php endforeach; ?>
+        <?php if ($invoices === []): ?><tr><td colspan="4">Invoice tidak ditemukan.</td></tr><?php endif; ?>
+        </tbody>
+    </table></div>
+    <?php if ($hasMore): ?><a class="btn btn-outline-primary" href="<?= base_url('retur_customer') . '?' . http_build_query(['invoice' => $invoiceFilter, 'unit' => $unitFilter, 'before' => end($invoices)['idpenjualan']]) ?>">Invoice lebih lama</a><?php endif; ?>
+</div></div>
+
+<div class="modal fade" id="modalRetur" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modalReturTitle">Detail Penjualan</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+    <div class="modal-body"><div id="modalReturError" class="alert alert-danger d-none"></div>
+        <form method="post" action="<?= base_url('insert_retur_customer') ?>">
+            <div class="mb-3"><label for="tanggalRetur" class="form-label">Tanggal Pengembalian</label>
+                <input id="tanggalRetur" name="tanggal_pengembalian" type="date" class="form-control" value="<?= (int) session('ID_UNIT') === 1 ? '' : date('Y-m-d') ?>" <?= (int) session('ID_UNIT') === 1 ? '' : 'readonly' ?> required></div>
+            <div class="table-responsive"><table class="table table-bordered align-middle"><thead><tr><th>Pilih</th><th>Nama Barang</th><th>Jumlah</th><th>Harga Jual</th><th>Diskon</th><th>Subtotal</th><th>Jumlah Retur</th><th>Satuan</th></tr></thead><tbody id="modalReturRows"></tbody></table></div>
+            <button id="simpanRetur" type="submit" class="btn btn-success" disabled>Simpan Retur</button>
+        </form>
     </div>
-</div>
+</div></div></div>
 
-<div class="card w-100 position-relative overflow-hidden">
-    <div class="card-body px-4 pt-4 pb-2 mb-1"></div>
-
-
-    <!-- Filter Dropdown dan Tanggal -->
-    <div class="mb-3 px-4">
-        <label class="me-2">Nama Unit:</label>
-        <select id="unitFilter" class="form-select d-inline" style="width: auto; display: inline-block;" onchange="filterData()">
-            <option value="">Semua Unit</option>
-            <?php
-            $unitList = [];
-            foreach ($grouped_penjualan as $items) {
-                $unitName = $items[0]->NAMA_UNIT;
-                if (!in_array($unitName, $unitList)) {
-                    $unitList[] = $unitName;
-                    echo '<option value="' . esc($unitName) . '">' . esc($unitName) . '</option>';
-                }
+<script>
+document.querySelectorAll('.buka-detail').forEach(button => {
+    button.addEventListener('click', async () => {
+        const modal = new bootstrap.Modal(document.getElementById('modalRetur'));
+        const rows = document.getElementById('modalReturRows');
+        const error = document.getElementById('modalReturError');
+        const submit = document.getElementById('simpanRetur');
+        rows.replaceChildren();
+        error.classList.add('d-none');
+        submit.disabled = true;
+        document.getElementById('modalReturTitle').textContent = 'Memuat detail invoice...';
+        modal.show();
+        try {
+            const response = await fetch('<?= base_url('retur_customer/invoice') ?>/' + encodeURIComponent(button.dataset.id), {
+                headers: { 'Accept': 'application/json' }, credentials: 'same-origin'
+            });
+            if (!response.ok) throw new Error('Detail invoice tidak dapat dimuat. Coba lagi.');
+            const data = await response.json();
+            document.getElementById('modalReturTitle').textContent = 'Detail Penjualan - Invoice ' + data.invoice.kode_invoice;
+            data.details.forEach((item, index) => {
+                const remaining = Number(item.jumlah) - Number(item.jumlah_diretur);
+                if (remaining <= 0) return;
+                const row = rows.insertRow();
+                const choose = document.createElement('input');
+                choose.type = 'checkbox';
+                choose.className = 'form-check-input';
+                choose.name = `items[${index}][selected]`;
+                choose.value = '1';
+                row.insertCell().append(choose);
+                const id = document.createElement('input');
+                id.type = 'hidden';
+                id.name = `items[${index}][iddetail_penjualan]`;
+                id.value = item.iddetail_penjualan;
+                row.cells[0].append(id);
+                [item.nama_barang, remaining, item.harga_penjualan, item.diskon_penjualan, item.sub_total].forEach(value => row.insertCell().textContent = value ?? '-');
+                const quantity = document.createElement('input');
+                quantity.type = 'number';
+                quantity.className = 'form-control';
+                quantity.name = `items[${index}][jumlah_retur]`;
+                quantity.min = '1';
+                quantity.max = String(remaining);
+                quantity.disabled = true;
+                row.insertCell().append(quantity);
+                row.insertCell().textContent = item.satuan_jual ?? '-';
+                choose.addEventListener('change', () => {
+                    quantity.disabled = !choose.checked;
+                    quantity.required = choose.checked;
+                    if (!choose.checked) quantity.value = '';
+                    submit.disabled = !rows.querySelector('input[type="checkbox"]:checked');
+                });
+            });
+            if (rows.children.length === 0) {
+                error.textContent = 'Semua barang pada invoice ini sudah diretur.';
+                error.classList.remove('d-none');
             }
-            ?>
-        </select>
-
-        <label class="ms-3 me-2">Tanggal Awal:</label>
-        <input type="date" id="startDate" class="form-control d-inline" style="width: auto; display: inline-block;" onchange="filterData()">
-
-        <label class="ms-3 me-2">Tanggal Akhir:</label>
-        <input type="date" id="endDate" class="form-control d-inline" style="width: auto; display: inline-block;" onchange="filterData()">
-
-        <button onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
-    </div>
-
-
-    <div class="row px-4 mb-3">
-        <div class="table-responsive mb-4 px-4">
-            <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
-                <thead class="text-dark fs-4">
-                    <tr>
-                        <th>Invoice</th>
-                        <th>Tanggal</th>
-                        <th>Nama Barang</th>
-                        <th>Nama Unit</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($grouped_penjualan)): ?>
-                        <?php foreach ($grouped_penjualan as $kode_invoice => $items): ?>
-                            <?php $first = $items[0]; ?>
-                            <tr>
-                                <td><?= esc($kode_invoice) ?></td>
-                                <td><?= esc(date('d-m-Y', strtotime($first->tanggal))) ?></td>
-                                <td><?= esc($first->nama_barang) ?>, ...</td>
-                                <td><?= esc($first->NAMA_UNIT) ?></td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
-                                        data-bs-target="#modalDetail<?= esc($kode_invoice) ?>"
-                                        style="display: inline-flex; align-items: center;">
-                                        <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24">
-                                        </iconify-icon>
-                                        Lihat Detail
-                                    </button>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="4" class="text-center">Tidak ada data</td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<?php foreach ($grouped_penjualan as $kode_invoice => $items): ?>
-    <!-- Modal for each invoice -->
-    <div class="modal fade" id="modalDetail<?= esc($kode_invoice) ?>" tabindex="-1"
-        aria-labelledby="modalLabel<?= esc($kode_invoice) ?>" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Detail Penjualan - Invoice <?= esc($kode_invoice) ?></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-                </div>
-                <div class="modal-body">
-                    <form action="<?= base_url('insert_retur_customer') ?>" method="post">
-
-                        <input type="hidden" name="kode_invoice" value="<?= esc($kode_invoice) ?>">
-                        <?php
-                        $idUnit = session('ID_UNIT');
-                        $tanggalSekarang = date('Y-m-d');
-                        ?>
-
-
-
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <label style="font-weight: bold;" for="tanggal_pengembalian">
-                                Tanggal Pengembalian :
-                            </label>
-
-                            <input
-                                id="tanggal_pengembalian"
-                                style="width: 80%;"
-                                type="date"
-                                name="tanggal_pengembalian"
-                                class="form-control"
-                                value="<?= $idUnit == 1 ? '' : $tanggalSekarang ?>"
-                                <?= $idUnit == 1 ? '' : 'readonly' ?>>
-                        </div>
-
-
-                        <div class="table-responsive">
-                            <table class="table table-bordered detail-table" id="detailTable<?= esc($kode_invoice) ?>">
-                                <thead>
-                                    <tr>
-                                        <th>Pilih</th>
-                                        <th>Nama Barang</th>
-                                        <th>Jumlah</th>
-                                        <th>Harga Jual</th>
-                                        <th>Diskon</th>
-                                        <th>SubTotal</th>
-                                        <th>Jumlah Retur</th>
-                                        <th>Satuan</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($items as $index => $item): ?>
-                                        <tr>
-                                            <td>
-                                                <input type="checkbox"
-                                                    class="form-check-input pilih-retur"
-                                                    name="items[<?= $index ?>][selected]"
-                                                    value="1">
-
-                                                <input type="hidden" name="items[<?= $index ?>][iddetail_penjualan]" value="<?= esc($item->iddetail_penjualan) ?>">
-                                            </td>
-                                            <td><?= esc($item->nama_barang) ?></td>
-                                            <td><?= esc($item->jumlah) ?></td>
-                                            <td><?= esc(number_format($item->harga_penjualan, 0, ',', '.')) ?></td>
-                                            <td><?= esc(number_format($item->diskon_penjualan, 0, ',', '.')) ?></td>
-                                            <td><?= esc(number_format($item->sub_total, 0, ',', '.')) ?></td>
-                                            <td>
-                                                <input type="number"
-                                                    class="form-control jumlah-retur"
-                                                    name="items[<?= $index ?>][jumlah_retur]"
-                                                    min="1"
-                                                    max="<?= esc($item->jumlah) ?>"
-                                                    disabled>
-                                            </td>
-
-                                            <td>
-                                                <input type="text" class="form-control" name="items[<?= $index ?>][satuan]" value="<?= esc($item->satuan_jual) ?>" readonly>
-
-                                                <input type="hidden" name="items[<?= $index ?>][jumlah]" value="<?= esc($item->jumlah) ?>">
-                                                <input type="hidden" name="items[<?= $index ?>][barang_idbarang]" value="<?= esc($item->barang_idbarang) ?>">
-                                                <input type="hidden" name="items[<?= $index ?>][unit_idunit]" value="<?= esc($item->unit_idunit) ?>">
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="mt-3 text-end">
-                            <button type="submit" class="btn btn-success">Simpan Retur</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-<?php endforeach; ?>
-
-<script>
-    $(document).ready(function() {
-        $('#zero_config').DataTable();
-        $('.detail-table').DataTable();
-    });
-</script>
-
-<!-- JavaScript untuk filter -->
-<script>
-    let table;
-
-    window.onload = function() {
-        // Inisialisasi DataTables
-        table = $('#zero_config').DataTable();
-
-        const endDateInput = document.getElementById('endDate');
-        const startDateInput = document.getElementById('startDate');
-
-        const today = new Date();
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(today.getDate() - 15);
-
-        // Format ke yyyy-mm-dd
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        // Set default value 15 hari ke belakang
-        startDateInput.value = toDateInputValue(fifteenDaysAgo);
-        endDateInput.value = toDateInputValue(today);
-
-        // Auto-pilih unit pertama (selain "Semua Unit")
-        const unitSelect = document.getElementById('unitFilter');
-        if (unitSelect.options.length > 1) {
-            unitSelect.selectedIndex = 1;
-        }
-
-        filterData();
-    };
-
-    function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-        const selectedUnit = document.getElementById('unitFilter').value.toLowerCase();
-
-        // Reset filter lama
-        $.fn.dataTable.ext.search = [];
-
-        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-            // Sesuaikan index kolom
-            const dateText = data[1]; // kolom tanggal
-            const unitText = data[3].toLowerCase(); // kolom unit
-
-            // Parse tanggal (format view d-m-Y)
-            const parts = dateText.split('-');
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-
-            const startDate = start ? new Date(start) : null;
-            const endDate = end ? new Date(end) : null;
-
-            // Filter unit
-            const unitMatch = selectedUnit === "" || unitText === selectedUnit;
-
-            // Filter tanggal
-            let dateMatch = true;
-            if (startDate && rowDate < startDate) dateMatch = false;
-            if (endDate && rowDate > endDate) dateMatch = false;
-
-            return unitMatch && dateMatch;
-        });
-
-        table.draw();
-    }
-
-    function resetFilter() {
-        document.getElementById('startDate').value = '';
-        document.getElementById('endDate').value = '';
-        document.getElementById('unitFilter').value = '';
-        filterData();
-    }
-</script>
-
-<script>
-    $(document).on('change', '.pilih-retur', function() {
-        const row = $(this).closest('tr');
-        const inputJumlah = row.find('.jumlah-retur');
-
-        if ($(this).is(':checked')) {
-            inputJumlah.prop('disabled', false);
-            inputJumlah.prop('required', true);
-            inputJumlah.focus();
-        } else {
-            inputJumlah.prop('disabled', true);
-            inputJumlah.prop('required', false);
-            inputJumlah.val('');
+        } catch (failure) {
+            error.textContent = failure.message;
+            error.classList.remove('d-none');
         }
     });
+});
 </script>

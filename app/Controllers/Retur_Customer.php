@@ -30,14 +30,60 @@ class Retur_Customer extends BaseController
 
     public function index()
     {
-        $akun =   $this->AuthModel->getById(session('ID_AKUN'));
-        $data =  array(
-            'akun' => $akun,
-            'retur_pelanggan' => $this->ReturCustomerModel->getReturCustomer(),
-            'detail_penjualan' => $this->DetailPenjualanModel->getDetailPenjualan(),
-            'body'  => 'retur/retur_customer'
-        );
-        return view('template', $data);
+        $db = Database::connect();
+        $invoice = trim((string) $this->request->getGet('invoice'));
+        $unitId = filter_var($this->request->getGet('unit'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+        $before = filter_var($this->request->getGet('before'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+        $query = $db->table('penjualan p')
+            ->select('p.idpenjualan, p.kode_invoice, p.tanggal, u.NAMA_UNIT')
+            ->join('unit u', 'u.idunit = p.unit_idunit')
+            ->where('EXISTS (SELECT 1 FROM ' . $db->prefixTable('detail_penjualan')
+                . ' dp WHERE dp.penjualan_idpenjualan = p.idpenjualan)', null, false)
+            ->orderBy('p.idpenjualan', 'DESC')->limit(51);
+        if ($invoice !== '') {
+            $query->like('p.kode_invoice', $invoice, 'after');
+        }
+        if ($unitId !== null) {
+            $query->where('p.unit_idunit', $unitId);
+        }
+        if ($before !== null) {
+            $query->where('p.idpenjualan <', $before);
+        }
+        $invoices = $query->get()->getResultArray();
+        $hasMore = count($invoices) > 50;
+        if ($hasMore) {
+            array_pop($invoices);
+        }
+        return view('template', [
+            'akun' => $this->AuthModel->getById(session('ID_AKUN')),
+            'invoices' => $invoices,
+            'hasMore' => $hasMore,
+            'invoiceFilter' => $invoice,
+            'unitFilter' => $unitId,
+            'units' => $db->table('unit')->select('idunit, NAMA_UNIT')->orderBy('NAMA_UNIT')->get()->getResultArray(),
+            'body' => 'retur/retur_customer',
+        ]);
+    }
+
+    public function invoiceDetail(int $invoiceId)
+    {
+        if ($invoiceId <= 0) {
+            return $this->response->setStatusCode(404);
+        }
+        $db = Database::connect();
+        $invoice = $db->table('penjualan')->select('idpenjualan, kode_invoice, unit_idunit')
+            ->where('idpenjualan', $invoiceId)->get()->getRowArray();
+        if ($invoice === null) {
+            return $this->response->setStatusCode(404);
+        }
+        $details = $db->table('detail_penjualan dp')
+            ->select('dp.iddetail_penjualan, dp.jumlah, dp.harga_penjualan, dp.diskon_penjualan, dp.sub_total, dp.satuan_jual, b.nama_barang, '
+                . 'COALESCE((SELECT SUM(rp.jumlah) FROM ' . $db->prefixTable('retur_pelanggan')
+                . ' rp WHERE rp.detail_penjualan_iddetail_penjualan = dp.iddetail_penjualan), 0) AS jumlah_diretur', false)
+            ->join('barang b', 'b.idbarang = dp.barang_idbarang')
+            ->where('dp.penjualan_idpenjualan', $invoiceId)
+            ->orderBy('dp.iddetail_penjualan')->get()->getResultArray();
+        return $this->response->setJSON(['invoice' => $invoice, 'details' => $details]);
     }
 
     public function insert()
