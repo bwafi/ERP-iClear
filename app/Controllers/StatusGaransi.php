@@ -423,6 +423,12 @@ class StatusGaransi extends BaseController
                             throw new \RuntimeException('Mutasi lama belum memiliki jurnal seimbang; perlu rekonsiliasi.');
                         }
                     } else {
+                        $replacementBatchId = \App\Services\Inventory\PurchaseBatchOrigin::selection(
+                            $produk['purchase_detail_id'] ?? null);
+                        if ($replacementBatchId !== null) {
+                            (new \App\Services\Inventory\PurchaseBatchOrigin($db))->validate(
+                                $replacementBatchId, $id, (int) $service->unit_idunit, $quantity);
+                        }
                         if ((int) ($existingItem->jumlah_tambahan_garansi ?? 0) > 0 || ! $hppBarang) {
                             throw new \RuntimeException('HPP atau histori stok pengganti belum tersedia.');
                         }
@@ -447,6 +453,7 @@ class StatusGaransi extends BaseController
                             'hpp_satuan' => (int) $hpp,
                             'created_at' => date('Y-m-d H:i:s'),
                             'input_by' => (int) session('ID_AKUN'),
+                            'source_purchase_detail_id' => $replacementBatchId,
                         ])) {
                             throw new \RuntimeException('Mutasi stok garansi gagal disimpan.');
                         }
@@ -455,6 +462,9 @@ class StatusGaransi extends BaseController
                         if ($inventoryBridge->isTracked($id, (int) $service->unit_idunit)) {
                             $inventoryBridge->outgoing($id, (int) $service->unit_idunit,
                                 'garansi_sparepart_keluar', (string) $issueId, 'warranty', $quantity);
+                            (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                                $id, (int) $service->unit_idunit, 'garansi_sparepart_keluar',
+                                (string) $issueId, 'warranty', -$quantity, $replacementBatchId);
                         }
                         $template = $db->table('template_jurnal')
                             ->select('no_akun, debet_kredit')

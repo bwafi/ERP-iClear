@@ -180,6 +180,20 @@ class BarangRusak extends BaseController
                     if (! $claim || (int) $claim->unit_idunit !== $unitId) {
                         throw new \RuntimeException('Klaim tidak sesuai barang atau unit.');
                     }
+                    $serviceOrigin = $db->table('service_sparepart')
+                        ->select('source_purchase_detail_id')
+                        ->where('service_idservice', (int) $claim->idservice)
+                        ->where('barang_idbarang', $productId)->get()->getRow();
+                    if ($serviceOrigin !== null && $serviceOrigin->source_purchase_detail_id !== null) {
+                        $origin = $db->table('detail_pembelian')
+                            ->select('pembelian_idpembelian, no_batch')
+                            ->where('iddetail_pembelian', (int) $serviceOrigin->source_purchase_detail_id)
+                            ->get()->getRow();
+                        if ($origin === null || (int) $origin->pembelian_idpembelian !== $purchaseId
+                            || (string) $origin->no_batch !== $batch) {
+                            throw new \RuntimeException('Supplier atau nota barang rusak tidak cocok dengan asal service.');
+                        }
+                    }
                     $priorIssue = $db->table('garansi_sparepart_keluar')
                         ->select('jumlah')
                         ->where('service_id', $claim->idservice)
@@ -213,6 +227,9 @@ class BarangRusak extends BaseController
                     if ($inventoryBridge->isTracked($productId, $unitId)) {
                         $inventoryBridge->outgoing($productId, $unitId, 'barang_rusak',
                             (string) $this->BarangRusakModel->insertID(), 'damaged', $quantity);
+                        (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                            $productId, $unitId, 'barang_rusak',
+                            (string) $this->BarangRusakModel->insertID(), 'damaged', -$quantity);
                     }
                 }
             }

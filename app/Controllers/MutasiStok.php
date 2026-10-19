@@ -76,6 +76,18 @@ class MutasiStok extends BaseController
         return view('template', $data);
     }
 
+    public function purchase_batches($itemId, $unitId)
+    {
+        $itemId = (int) $itemId;
+        $unitId = (int) $unitId;
+        if ($itemId <= 0 || $unitId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Barang atau unit tidak valid.']);
+        }
+        return $this->response->setJSON(
+            (new \App\Services\Inventory\PurchaseBatchOrigin(Database::connect()))->candidates($itemId, $unitId)
+        );
+    }
+
     /**
      * Daftar mutasi yang ditujukan ke unit pengguna (admin cabang penerima),
      * untuk konfirmasi penerimaan. Admin lintas (root/direktur/manager/admin
@@ -522,6 +534,12 @@ class MutasiStok extends BaseController
             $datahpp = $this->HppBarangModel->getById($idbarang);
             $hpp = $this->HppBarangModel->currentUnitCost((int) $idbarang, (int) $kirim_idunit)
                 ?? ($datahpp->hpp ?? 0);
+            $batchId = \App\Services\Inventory\PurchaseBatchOrigin::selection(
+                $produk['purchase_detail_id'] ?? null);
+            if ($batchId !== null) {
+                (new \App\Services\Inventory\PurchaseBatchOrigin($db))->validate(
+                    $batchId, (int) $idbarang, (int) $kirim_idunit, (int) $produkjumlahKirim);
+            }
 
 
 
@@ -533,6 +551,7 @@ class MutasiStok extends BaseController
                 'satuan' => $satuan,
                 'hpp_barang' => $hpp,
                 'barang_idbarang' => $idbarang,
+                'source_purchase_detail_id' => $batchId,
                 'kirim_idunit' => $kirim_idunit,
                 'terima_idunit' => $terima_idunit,
                 'mutasi_idmutasi' => $idMutasi,
@@ -551,6 +570,11 @@ class MutasiStok extends BaseController
                 }
                 $inventoryBridge->transfer((int) $idbarang, (int) $kirim_idunit, (int) $terima_idunit,
                     (string) $this->DetailMutasiModel->insertID(), (int) $produkjumlahKirim);
+                $batchLedger = new \App\Services\Inventory\InventoryBatchLedger($db);
+                $batchLedger->post((int) $idbarang, (int) $kirim_idunit, 'detail_mutasi',
+                    (string) $this->DetailMutasiModel->insertID(), 'transfer_out', -(int) $produkjumlahKirim, $batchId);
+                $batchLedger->post((int) $idbarang, (int) $terima_idunit, 'detail_mutasi',
+                    (string) $this->DetailMutasiModel->insertID(), 'transfer_in', (int) $produkjumlahTerima, $batchId);
             }
         }
         if ($db->transStatus() === false || ! $db->transCommit()) {

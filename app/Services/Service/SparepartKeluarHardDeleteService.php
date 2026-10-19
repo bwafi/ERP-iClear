@@ -74,6 +74,16 @@ final class SparepartKeluarHardDeleteService
             if ($entry !== null) {
                 (new \App\Services\Inventory\InventoryLedger($this->db))
                     ->reverse((int) $entry->id, 'detail_penjualan', (string) $detailId, 'cancel');
+                if ($this->db->tableExists('inventory_batch_events')) {
+                    $batchEntry = $this->db->table('inventory_batch_events')
+                        ->where('source_type', 'detail_penjualan')
+                        ->where('source_id', (string) $detailId)
+                        ->where('source_event', 'sale')->get()->getRow();
+                    if ($batchEntry !== null) {
+                        (new \App\Services\Inventory\InventoryBatchLedger($this->db))
+                            ->reverse((int) $batchEntry->id, 'detail_penjualan', (string) $detailId, 'cancel');
+                    }
+                }
                 $balance = $this->db->table('inventory_ledger_balances')
                     ->select('quantity')
                     ->where('item_id', (int) $detail->barang_idbarang)

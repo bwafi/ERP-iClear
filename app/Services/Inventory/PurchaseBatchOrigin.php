@@ -30,12 +30,21 @@ final class PurchaseBatchOrigin
             return [];
         }
 
-        return $this->db->table('detail_pembelian detail')
+        $hasBalances = $this->db->tableExists('inventory_batch_balances');
+        $builder = $this->db->table('detail_pembelian detail')
             ->select('detail.iddetail_pembelian, detail.jumlah, detail.tanggal, purchase.no_nota_supplier, supplier.nama_suplier')
             ->join('pembelian purchase', 'purchase.idpembelian = detail.pembelian_idpembelian')
-            ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left')
+            ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left');
+        if ($hasBalances) {
+            $builder->select('COALESCE(batch_balance.quantity, 0) AS available_quantity', false)
+                ->join('inventory_batch_balances batch_balance',
+                    'batch_balance.batch_id = detail.iddetail_pembelian AND batch_balance.item_id = detail.barang_idbarang AND batch_balance.unit_id = ' . (int) $unitId, 'left')
+                ->where('batch_balance.quantity >', 0);
+        } else {
+            $builder->where('detail.unit_idunit', $unitId);
+        }
+        return $builder
             ->where('detail.barang_idbarang', $itemId)
-            ->where('detail.unit_idunit', $unitId)
             ->orderBy('detail.iddetail_pembelian', 'DESC')
             ->limit(100)
             ->get()->getResultArray();
@@ -61,12 +70,22 @@ final class PurchaseBatchOrigin
             ->where('detail.iddetail_pembelian', $purchaseDetailId)
             ->get()->getRow();
         if ($detail === null || (int) $detail->barang_idbarang !== $itemId
-            || (int) $detail->unit_idunit !== $unitId
+            || (! $this->db->tableExists('inventory_batch_balances') && (int) $detail->unit_idunit !== $unitId)
             || (int) $detail->suplier_id_suplier <= 0) {
             throw new \InvalidArgumentException('Batch bukan pembelian barang dan unit tersebut dengan supplier tercatat.');
         }
         if ($serviceAt !== null && $serviceAt !== '' && (string) $detail->tanggal > $serviceAt) {
             throw new \InvalidArgumentException('Tanggal pembelian batch lebih baru dari service asal.');
+        }
+
+        if ($this->db->tableExists('inventory_batch_balances')) {
+            $balance = $this->db->table('inventory_batch_balances')->select('quantity')
+                ->where('item_id', $itemId)->where('unit_id', $unitId)
+                ->where('batch_id', $purchaseDetailId)->get()->getRow();
+            if ((int) ($balance->quantity ?? 0) < $quantity) {
+                throw new \InvalidArgumentException('Jumlah melebihi saldo batch pembelian.');
+            }
+            return $purchaseDetailId;
         }
 
         $attributed = (int) ($this->db->table('detail_penjualan')

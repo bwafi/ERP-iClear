@@ -30,7 +30,8 @@ final class InventoryLedgerBridge
 
     public function isFirstIncoming(int $itemId, int $unitId, string $sourceType, int $sourceId, int $quantity): bool
     {
-        $labels = ['stok_awal' => 'Stok Awal', 'detail_pembelian' => 'Pembelian'];
+        $labels = ['stok_awal' => 'Stok Awal', 'detail_pembelian' => 'Pembelian',
+            'inventory_stock_adjustments' => 'Penyesuaian Stok'];
         if (! $this->db->tableExists('inventory_ledger_entries')
             || ! isset($labels[$sourceType]) || $this->isTracked($itemId, $unitId)) {
             return false;
@@ -174,6 +175,7 @@ final class InventoryLedgerBridge
             'barang_rusak' => ['outgoing' => 'Barang Rusak'],
             'retur_suplier' => ['outgoing' => 'Retur Supplier'],
             'garansi_sparepart_keluar' => ['outgoing' => 'Pengganti Garansi'],
+            'inventory_stock_adjustments' => ['incoming' => 'Penyesuaian Stok', 'outgoing' => 'Penyesuaian Stok'],
         ];
         $label = $labels[$sourceType][$direction] ?? null;
         if ($label === null || ! ctype_digit($sourceId)) {

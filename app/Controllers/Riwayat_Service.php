@@ -499,9 +499,19 @@ class Riwayat_Service extends BaseController
             if ((int) $detailId <= 0) {
                 throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
             }
-            if ($inventoryBridge->isTracked((int) $produkid, (int) session('ID_UNIT'))) {
+            $tracked = $inventoryBridge->isTracked((int) $produkid, (int) session('ID_UNIT'));
+            if (! $tracked && isset($batchByBarangId[$produkid])) {
+                throw new \RuntimeException('Batch tidak dapat dipilih untuk barang tanpa ledger stok.');
+            }
+            if ($tracked) {
                 $inventoryBridge->outgoing((int) $produkid, (int) session('ID_UNIT'),
                     'detail_penjualan', (string) $detailId, 'sale', $qty);
+            }
+            if ($tracked) {
+                (new \App\Services\Inventory\InventoryBatchLedger(\Config\Database::connect()))->post(
+                    (int) $produkid, (int) session('ID_UNIT'), 'detail_penjualan', (string) $detailId,
+                    'sale', -$qty, $batchByBarangId[$produkid] ?? null
+                );
             }
         }
     }

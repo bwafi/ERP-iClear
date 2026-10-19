@@ -174,6 +174,10 @@ class Retur_Customer extends BaseController
                     $inventoryBridge->incoming((int) $detail->barang_idbarang, $useridunit,
                         'retur_pelanggan', (string) $returnId, 'customer_return', $jumlah_retur,
                         (int) $detail->hpp_penjualan);
+                    (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                        (int) $detail->barang_idbarang, $useridunit, 'retur_pelanggan',
+                        (string) $returnId, 'customer_return', $jumlah_retur,
+                        $detail->source_purchase_detail_id === null ? null : (int) $detail->source_purchase_detail_id);
                 }
                 $lastDetailId = $iddetail_penjualan;
         }

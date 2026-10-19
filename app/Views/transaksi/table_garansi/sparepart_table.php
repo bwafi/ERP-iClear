@@ -203,6 +203,7 @@
         </td>
         <td>
     <input type="number" class="form-control qty-tambahan mb-1" name="produk[${nextIndex}][qty_tambahan]" value="${jumlah_tambahan_garansi}" min="0" placeholder="Qty Tambahan">
+    <select class="form-select replacement-batch" name="produk[${nextIndex}][purchase_detail_id]"><option value="">Asal pengganti belum diketahui</option></select>
     <div class="form-check mt-1">
         <input class="form-check-input gratiskan-checkbox" type="checkbox" id="gratiskan-${id}" data-row-id="${id}">
         <label class="form-check-label" for="gratiskan-${id}">Gratiskan</label>
@@ -213,6 +214,18 @@
         <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>
     `;
         tbody.appendChild(row);
+        fetch('<?= base_url('service/purchase-batches') ?>/' + encodeURIComponent(id))
+            .then(response => response.ok ? response.json() : [])
+            .then(batches => {
+                const selector = row.querySelector('.replacement-batch');
+                batches.forEach(batch => {
+                    const option = document.createElement('option');
+                    option.value = batch.iddetail_pembelian;
+                    option.textContent = (batch.nama_suplier || 'Supplier tidak tercatat') + ' — ' +
+                        (batch.no_nota_supplier || 'Nota tanpa nomor') + ' (sisa ' + batch.available_quantity + ')';
+                    selector.appendChild(option);
+                });
+            });
         row.querySelector('.source-batch-label').textContent = sourceSupplier
             ? 'Batch dipilih saat service: ' + sourceSupplier + (sourceNota ? ' — ' + sourceNota : '')
             : 'Asal supplier service belum diketahui';

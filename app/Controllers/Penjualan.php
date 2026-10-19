@@ -342,6 +342,9 @@ class Penjualan extends BaseController
                     if ($inventoryBridge->isTracked((int) $idBarangBundle, (int) $unit_idunit)) {
                         $inventoryBridge->outgoing((int) $idBarangBundle, (int) $unit_idunit,
                             'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', (int) $jumlahBundle);
+                        (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                            (int) $idBarangBundle, (int) $unit_idunit, 'detail_penjualan',
+                            (string) $this->DetailPenjualanModel->insertID(), 'sale', -(int) $jumlahBundle);
                     }
                 }
                 if ($datahpp->idkategori == 1 && $datahpp->status_barang == 1) {
@@ -358,6 +361,11 @@ class Penjualan extends BaseController
             } else {
                 // barang biasa
                 $datahpp = $this->HppBarangModel->getById($produkid);
+                $batchId = \App\Services\Inventory\PurchaseBatchOrigin::selection($produk['purchase_detail_id'] ?? null);
+                if ($batchId !== null) {
+                    (new \App\Services\Inventory\PurchaseBatchOrigin($db))->validate(
+                        $batchId, (int) $produkid, (int) $unit_idunit, (int) $produkjumlah);
+                }
                 $satuan_jual = $datahpp->satuan_terkecil ?? null;
                 $hpp_penjualan = $this->HppBarangModel->currentUnitCost((int) $produkid, (int) $unit_idunit)
                     ?? ($datahpp->hpp ?? 0);
@@ -372,6 +380,7 @@ class Penjualan extends BaseController
                     'satuan_jual' => $satuan_jual,
                     'diskon_penjualan' => $diskon_penjualan,
                     'unit_idunit' => $unit_idunit,
+                    'source_purchase_detail_id' => $batchId,
                 );
                 if (! $this->DetailPenjualanModel->insert_detail($data2)) {
                     throw new \RuntimeException('Detail penjualan gagal disimpan.');
@@ -379,6 +388,9 @@ class Penjualan extends BaseController
                 if ($inventoryBridge->isTracked((int) $produkid, (int) $unit_idunit)) {
                     $inventoryBridge->outgoing((int) $produkid, (int) $unit_idunit,
                         'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', (int) $produkjumlah);
+                    (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                        (int) $produkid, (int) $unit_idunit, 'detail_penjualan',
+                        (string) $this->DetailPenjualanModel->insertID(), 'sale', -(int) $produkjumlah, $batchId);
                 }
                 if ($datahpp->idkategori == 1 && $datahpp->status_barang == 1) {
                     $total_hp_second += $subtotalAwal;

@@ -205,6 +205,9 @@ class StokAwal extends BaseController
                         $inventoryBridge->incoming((int) $idBarang, (int) $idUnit,
                             'stok_awal', (string) $stockId, 'opening', (int) $jumlah, (int) $hargaBeli);
                     }
+                    (new \App\Services\Inventory\InventoryBatchLedger($this->db))->post(
+                        (int) $idBarang, (int) $idUnit, 'stok_awal', (string) $stockId, 'opening', (int) $jumlah
+                    );
                 } catch (\Throwable $error) {
                     $this->db->transRollback();
                     log_message('error', 'Ledger stok awal gagal: ' . $error->getMessage());

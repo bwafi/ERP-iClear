@@ -172,6 +172,7 @@
                             <th>Harga Mutasi</th>
                             <th>Jumlah Kirim</th>
                             <th>Jumlah Terima</th>
+                            <th>Asal batch</th>
                             <th>Aksi</th>
                         </tr>
                     </thead>
@@ -250,10 +251,12 @@
                     </td>
                     <td><input required type="number" name="produk[${id}][jumlah_kirim]" class="form-control jumlah-input" data-id="${id}" min="1"></td>
                     <td><input required type="number" name="produk[${id}][jumlah_terima]" class="form-control jumlah-input" data-id="${id}" min="1"></td>
+                    <td><select class="form-select origin-batch" data-item-id="${id}" name="produk[${id}][purchase_detail_id]"><option value="">Asal belum diketahui</option></select></td>
                     <td><button type="button" class="btn btn-sm btn-danger" onclick="hapusProduk('${id}')">
                         <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="20" height="20"></iconify-icon></button></td>
                 `;
                                 selectedTable.appendChild(row);
+                                refreshTransferBatches();
 
                                 // ✅ Validasi harga mutasi agar ≤ harga jual tanpa alert pop-up
                                 const hargaMutasiInput = row.querySelector('.harga-mutasi');
@@ -403,6 +406,28 @@
                     const idUnit1Input = document.getElementById('id_unit1_text');
                     const selectedValue = select.value;
                     idUnit1Input.value = selectedValue;
+                    refreshTransferBatches();
+                }
+
+                function refreshTransferBatches() {
+                    const unitId = document.getElementById('id_unit1_text').value;
+                    document.querySelectorAll('.origin-batch').forEach(selector => {
+                        selector.innerHTML = '<option value="">Asal belum diketahui</option>';
+                        if (!unitId) return;
+                        fetch('<?= base_url('mutasi_stok/purchase-batches') ?>/' +
+                            encodeURIComponent(selector.dataset.itemId) + '/' + encodeURIComponent(unitId))
+                            .then(response => response.ok ? response.json() : [])
+                            .then(batches => {
+                                if (document.getElementById('id_unit1_text').value !== unitId) return;
+                                batches.forEach(batch => {
+                                    const option = document.createElement('option');
+                                    option.value = batch.iddetail_pembelian;
+                                    option.textContent = (batch.nama_suplier || 'Supplier tidak tercatat') + ' — ' +
+                                        (batch.no_nota_supplier || 'Nota tanpa nomor') + ' (sisa ' + batch.available_quantity + ')';
+                                    selector.appendChild(option);
+                                });
+                            });
+                    });
                 }
 
                 function tampilkanIdUnit2() {

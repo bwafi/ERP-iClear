@@ -297,6 +297,7 @@
                                 <th>Kategori</th>
                                 <th>Harga</th>
                                 <th>Jumlah</th>
+                                <th>Asal batch</th>
                                 <th>Diskon (Rp)</th>
                                 <th>PPN 11%</th>
                                 <th>Aksi</th>
@@ -512,6 +513,7 @@
                     <td>
                         <input type="number" name="produk[${id}][jumlah]" class="form-control jumlah-input" data-id="${id}" value="1" min="1">
                     </td>
+                    <td><select name="produk[${id}][purchase_detail_id]" class="form-select origin-batch"><option value="">Asal belum diketahui</option></select></td>
                     <td>
                         <input type="text" name="produk[${id}][diskon]" class="form-control diskon-input" data-id="${id}" value="0" min="0">
                     </td>
@@ -525,6 +527,20 @@
                     </td>
                 `;
                                     selectedTable.appendChild(row);
+                                    if (!String(id).startsWith('bundle')) {
+                                        fetch('<?= base_url('service/purchase-batches') ?>/' + encodeURIComponent(id))
+                                            .then(response => response.ok ? response.json() : [])
+                                            .then(batches => {
+                                                const selector = row.querySelector('.origin-batch');
+                                                batches.forEach(batch => {
+                                                    const option = document.createElement('option');
+                                                    option.value = batch.iddetail_pembelian;
+                                                    option.textContent = (batch.nama_suplier || 'Supplier tidak tercatat') + ' — ' +
+                                                        (batch.no_nota_supplier || 'Nota tanpa nomor') + ' (sisa ' + batch.available_quantity + ')';
+                                                    selector.appendChild(option);
+                                                });
+                                            });
+                                    }
 
                                     // Add event listeners
                                     row.querySelector('.harga-input').addEventListener('input',

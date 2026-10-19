@@ -344,6 +344,10 @@ class Pembelian extends BaseController
                     $inventoryBridge->incomingAmount((int) $produk['id'], (int) $useridunit,
                         'detail_pembelian', (string) $detailId, 'purchase', (int) $produkjumlah, (int) $subtotalSetelahDiskon);
                 }
+                (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                    (int) $produk['id'], (int) $useridunit, 'detail_pembelian', (string) $detailId,
+                    'purchase', (int) $produkjumlah, $detailId
+                );
             } catch (\Throwable $error) {
                 $db->transRollback();
                 log_message('error', 'Ledger pembelian gagal: ' . $error->getMessage());

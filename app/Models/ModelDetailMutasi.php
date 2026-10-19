@@ -18,6 +18,7 @@ class ModelDetailMutasi extends Model
         'satuan',
         'hpp_barang',
         'barang_idbarang',
+        'source_purchase_detail_id',
         'kirim_idunit',
         'terima_idunit',
         'mutasi_idmutasi',
