@@ -138,7 +138,8 @@ class Pegawai extends BaseController
             'PASSWORD'      => password_hash($this->request->getPost('noid'), PASSWORD_DEFAULT, array("cost" => 10)),
             'FOTO_KTP'      => $nama_foto_ktp,
             'FOTO_KK'       => $nama_foto_kk,
-            'JENIS_PEGAWAI' => $this->request->getPost('jenis_pegawai')
+            'JENIS_PEGAWAI' => $this->request->getPost('jenis_pegawai'),
+            'TERIMA_GAJI'   => $this->request->getPost('terima_gaji') ? 1 : 0
         );
 
 
@@ -188,7 +189,8 @@ class Pegawai extends BaseController
             'ID_JABATAN'    => $this->request->getPost('jabatan'),
             'FOTO_KTP'      => $nama_foto_ktp,
             'FOTO_KK'       => $nama_foto_kk,
-            'JENIS_PEGAWAI' => $jenis_pegawai
+            'JENIS_PEGAWAI' => $jenis_pegawai,
+            'TERIMA_GAJI'   => $this->request->getPost('terima_gaji') ? 1 : 0
         );
         $this->AuthModel->update($ID_AKUN, $data);
         $data2 = array(

@@ -164,6 +164,7 @@
                                     data-jabatan="<?= $row->ID_JABATAN ?>"
                                     data-hp="<?= $row->HP ?>"
                                     data-jenis_pegawai="<?= $row->JENIS_PEGAWAI ?>"
+                                    data-terima_gaji="<?= $row->TERIMA_GAJI ?>"
                                     data-jenis="<?= $row->JENIS_KELAMIN ?>"
                                     data-alamat="<?= $row->ALAMAT ?>"
                                     data-roles="<?= $row->ROLES ?>"
@@ -264,6 +265,14 @@
                             <option value="1">-- Pegawai Kontrak --</option>
                             <option value="2">-- Pegawai Probation --</option>
                             <option value="100">-- Resign --</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3 col-md-6">
+                        <label for="terima_gaji" class="form-label">Terima Gaji</label>
+                        <select class="form-control" name="terima_gaji" id="terima_gaji-update">
+                            <option value="1">Ya</option>
+                            <option value="0">Tidak</option>
                         </select>
                     </div>
 
@@ -386,6 +395,14 @@
                             <option value="1">-- Pegawai Kontrak --</option>
                             <option value="2">-- Pegawai Probation --</option>
 
+                        </select>
+                    </div>
+
+                    <div class="mb-3 col-md-6">
+                        <label for="terima_gaji" class="form-label">Terima Gaji</label>
+                        <select class="form-control" name="terima_gaji" id="terima_gaji">
+                            <option value="1">Ya</option>
+                            <option value="0">Tidak</option>
                         </select>
                     </div>
 
@@ -529,6 +546,7 @@
         const foto_ktp_lama = button.data('foto_ktp_lama');
         const foto_kk_lama = button.data('foto_kk_lama');
         const jenis_pegawai = button.data('jenis_pegawai');
+        const terima_gaji = button.data('terima_gaji');
 
         $('#id').val(id);
         $('#noid').val(noid);
@@ -542,6 +560,7 @@
         $('#foto_kk_lama').val(foto_kk_lama);
         $('#foto_ktp_lama').val(foto_ktp_lama);
         $('#jenis_pegawai').val(jenis_pegawai).trigger('change');
+        $('#terima_gaji-update').val(terima_gaji);
 
 
         if (jenis === 'Laki-Laki') {

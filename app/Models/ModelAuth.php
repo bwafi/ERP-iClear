@@ -9,7 +9,7 @@ class ModelAuth extends Model
     protected $table = 'akun';
     protected $primaryKey = 'ID_AKUN';
     protected $returnType = 'object';
-    protected $allowedFields = ['ID_AKUN', 'ID_UNIT', 'ID_PANGKAT', 'ID_JABATAN', 'ID_GEDUNG', 'NOID', 'KTP', 'EMAIL', 'PASSWORD', 'ROLES', 'IS_DOKTER', 'NAMA_AKUN', 'ALAMAT', 'JENIS_KELAMIN', 'TELEPON', 'HP', 'AGAMA', 'STATUS_PEGAWAI', 'FOTO_KTP', 'FOTO_KK', 'JENIS_PEGAWAI'];
+    protected $allowedFields = ['ID_AKUN', 'ID_UNIT', 'ID_PANGKAT', 'ID_JABATAN', 'ID_GEDUNG', 'NOID', 'KTP', 'EMAIL', 'PASSWORD', 'ROLES', 'IS_DOKTER', 'NAMA_AKUN', 'ALAMAT', 'JENIS_KELAMIN', 'TELEPON', 'HP', 'AGAMA', 'STATUS_PEGAWAI', 'FOTO_KTP', 'FOTO_KK', 'JENIS_PEGAWAI', 'TERIMA_GAJI'];
 
     function get_allakun()
     {
