@@ -9,7 +9,7 @@ Metode: baca kode + verifikasi data di database lokal `erp_local`. Audit awal re
 ## Jawaban singkat
 
 1. **Mutasi jadi Hutang/Piutang hanya saat tombol “Terima”** — bukan saat mutasi dibuat. `MutasiStok::terima()` memanggil `ModeKasBank::buatHutangPiutangDariMutasi()`.
-2. **Pelunasan bukan dari modul Hutang/Piutang.** Harus dari **Kas & Bank → Antar Unit** (`/kas_bank/antar-unit`). Satu pembayaran melunasi sisi hutang *dan* sisi piutang sekaligus, atomik, dan bisa di-reversal.
+2. **Pelunasan bisa dimulai dari detail Hutang/Piutang, diposting tetap satu jalur.** Form “Catat Pelunasan Antar Unit” di `/hutangpiutang/detail/<id>` mengirim ke `KasBank::saveAntarUnit()` (`/kas_bank/antar-unit/save`). Satu pembayaran melunasi sisi hutang *dan* sisi piutang sekaligus, atomik, dan bisa di-reversal. Form lama di Kas & Bank tetap ada.
 3. **KPI Finance “Hutang & Piutang” tidak terpengaruh mutasi.** KPI itu hanya membaca tabel `pembelian` dan `piutang`; baris `mutasi_unit` di registry `hutang_piutang` tidak dibaca sama sekali. Tapi dashboard keuangan lain menghitungnya — dan di situ ada inkonsistensi serius.
 
 ---
@@ -130,10 +130,10 @@ Header dan detail tidak dibungkus transaksi; `if ($result & $result2)` memakai b
 **Perbaikan:** `terapkanPembayaranHP()` tidak lagi baca-lalu-tulis. `ModelHutangPiutang::kurangiSisaJikaCukup()` menjalankan `UPDATE ... WHERE sisa >= ? AND deleted = 0`; kalau baris sudah berubah, update 0 baris dan pembayaran gagal. `saveAntarUnit()` kemudian rollback seluruh leg.
 **Test:** `KasBankTest::testTerapkanPembayaranHPMenolakSisaBasi`, `testTerapkanDanRestorePembayaranHP`.
 
-**12. Sisi piutang tidak bisa memulai pelunasan, dan tidak ada tautan ke halaman Antar Unit dari detail H/P. — ✅ DIPERBAIKI (tautan)**
-Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim hanya bisa menunggu.
-**Perbaikan:** detail H/P `mutasi_unit` sisi hutang menampilkan tombol “Lunasi di Kas & Bank → Antar Unit” yang membawa `unit_id` unit penghutang. Sisi piutang menampilkan keterangan bahwa pelunasan dilakukan unit yang berhutang. Otorisasi `saveAntarUnit()` tidak diubah: hanya unit penghutang/role lintas yang bisa membayar.
-**Test:** `HutangPiutangDetailLinkTest`.
+**12. Sisi piutang tidak bisa memulai pelunasan, dan pembayaran hanya bisa dari modul Kas & Bank. — ✅ DIPERBAIKI (form langsung di detail H/P)**
+Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim hanya bisa menunggu, dan user harus pindah ke Kas & Bank → Antar Unit.
+**Perbaikan:** detail H/P `mutasi_unit` (sisi hutang maupun piutang) menampilkan modal “Catat Pelunasan Antar Unit” berisi rekening pengirim/penerima, nominal, bukti, dan token. Form POST ke `KasBank::saveAntarUnit()` yang sudah ada, jadi ledger, guard saldo, atribusi hak unit, dan pengurangan sisa H/P tetap satu jalur — halaman ini tidak menduplikasi logika. `kembali_ke` hanya menerima path `hutangpiutang/detail/<id>` supaya tidak jadi open redirect. Otorisasi `saveAntarUnit()` tidak diubah: hanya unit penghutang/role lintas yang bisa membayar.
+**Test:** `HutangPiutangDetailLinkTest`, `KasBankControllerTest::testAntarUnitSaveDariHalamanHpKembaliKeDetail`, `testAntarUnitKembaliKeLiarTidakJadiOpenRedirect`.
 
 **13. `getPasangan()` tidak memfilter `deleted`. — ✅ DIPERBAIKI**
 `ModelHutangPiutang.php:106`. Jika satu sisi ter-soft-delete, pembayaran bisa menempel ke baris mati.

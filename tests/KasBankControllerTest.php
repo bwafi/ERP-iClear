@@ -50,6 +50,7 @@ class KasBankControllerTest extends CIUnitTestCase
         foreach ([
             'db_transaksi_kas_bank',
             'db_pembayaran_hutang_piutang',
+            'db_kompensasi_hutang_piutang',
             'db_akun_kas_bank',
             'db_alokasi_saldo_kas_bank',
             'db_saldo_awal_kas_bank',
@@ -125,12 +126,21 @@ class KasBankControllerTest extends CIUnitTestCase
                 sisa REAL NULL, status TEXT NULL, keterangan TEXT NULL, unit_id INT NULL,
                 input_by INT NULL, deleted INT DEFAULT 0, created_at TEXT NULL, updated_at TEXT NULL,
                 scope TEXT NULL DEFAULT \'active\', cutoff_closed_at TEXT NULL,
-                cutoff_closed_by INT NULL, cutoff_reason TEXT NULL)');
+                cutoff_closed_by INT NULL, cutoff_reason TEXT NULL,
+                tanggal_settlement_legacy TEXT NULL, legacy_dibatalkan_at TEXT NULL,
+                sisa_legacy_sebelum REAL NULL, legacy_dibatalkan_by INT NULL,
+                legacy_alasan_pembatalan TEXT NULL)');
         $q('CREATE TABLE db_pembayaran_hutang_piutang (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 hutang_piutang_id INT NULL, tanggal_bayar TEXT NULL, jumlah_bayar REAL NULL,
                 bayar_tunai REAL NULL, bayar_bank REAL NULL, bank_idbank TEXT NULL,
                 sumber TEXT NULL, referensi_tipe TEXT NULL, referensi_id INT NULL,
+                keterangan TEXT NULL, input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+        // Dipakai HutangPiutangService::getKompensasi() saat detail H/P dirender.
+        $q('CREATE TABLE db_kompensasi_hutang_piutang (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
+                hutang_piutang_id INT NULL, piutang_piutang_id INT NULL,
+                jumlah REAL NULL, pihak_tipe TEXT NULL, pihak_id INT NULL,
                 keterangan TEXT NULL, input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
         $q('CREATE TABLE db_kas_masuk (
                 idkas_masuk INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -241,6 +251,7 @@ class KasBankControllerTest extends CIUnitTestCase
         foreach ([
             'db_transaksi_kas_bank',
             'db_pembayaran_hutang_piutang',
+            'db_kompensasi_hutang_piutang',
             'db_akun_kas_bank',
             'db_alokasi_saldo_kas_bank',
             'db_saldo_awal_kas_bank',
@@ -343,6 +354,19 @@ class KasBankControllerTest extends CIUnitTestCase
         $m  = new $class($db);
 
         return $m;
+    }
+
+    /**
+     * `saveAntarUnit()` memanggil TutupKasirSourceDefinition yang join
+     * `service s ON s.idservice`. Skema `db_service` di test ini masih memakai
+     * `id_service`; tambahkan `idservice` agar tidak error saat baris sisa
+     * kelas test lain memicu query itu.
+     */
+    private function pastikanIdsServiceAda(): void
+    {
+        if ($this->db->query("SHOW COLUMNS FROM db_service LIKE 'idservice'")->getRow() === null) {
+            $this->db->query('ALTER TABLE db_service ADD COLUMN idservice INT NULL');
+        }
     }
 
     public function testTransferSaveDanDuplicateSubmitDitolak(): void
@@ -475,6 +499,72 @@ class KasBankControllerTest extends CIUnitTestCase
         $this->assertSame(0, $this->model(ModelPembayaranHutangPiutang::class)->countAllResults());
         $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
         $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
+    }
+
+    public function testAntarUnitSaveDariHalamanHpKembaliKeDetail(): void
+    {
+        $tok = 'tok-hp-return';
+        $this->sesiDenganToken($tok);
+        $this->pastikanIdsServiceAda();
+
+        $this->db->query("INSERT INTO db_opening_kas
+            (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan)
+            VALUES (1, 1, '$this->tglCutoff', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
+
+        $r = $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '1',
+            'akun_penerima_id'  => '3',
+            'jumlah'            => '100000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Pelunasan dari detail H/P',
+            'submit_token'      => $tok,
+            'kembali_ke'        => 'hutangpiutang/detail/901',
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertStringContainsString('hutangpiutang/detail/901', (string) $r->getRedirectUrl());
+    }
+
+    public function testAntarUnitKembaliKeLiarTidakJadiOpenRedirect(): void
+    {
+        $tok = 'tok-hp-return-liar';
+        $this->sesiDenganToken($tok);
+        $this->pastikanIdsServiceAda();
+
+        $this->db->query("INSERT INTO db_opening_kas
+            (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan)
+            VALUES (1, 1, '$this->tglCutoff', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
+
+        $r = $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '1',
+            'akun_penerima_id'  => '3',
+            'jumlah'            => '100000',
+            'tanggal'           => $this->tglMulai,
+            'keterangan'        => 'Pelunasan dari detail H/P',
+            'submit_token'      => $tok,
+            'kembali_ke'        => 'https://contoh.test/phishing',
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertStringNotContainsString('contoh.test', (string) $r->getRedirectUrl());
+    }
+
+    public function testDetailHpMutasiUnitMenyediakanFormPelunasanLangsung(): void
+    {
+        $this->sesi();
+        $this->pastikanIdsServiceAda();
+
+        $r = $this->get('hutangpiutang/detail/901');
+        $r->assertStatus(200);
+
+        $html = (string) $r->getBody();
+        $this->assertStringContainsString('kas_bank/antar-unit/save', $html);
+        $this->assertStringContainsString('name="hutang_piutang_id" value="901"', $html);
+        $this->assertStringContainsString('Catat Pelunasan Antar Unit', $html);
+        $this->assertStringContainsString('name="akun_pengirim_id"', $html);
+        $this->assertStringContainsString('name="akun_penerima_id"', $html);
     }
 
     public function testUpdateKasMasukRefreshPostingDalamSatuTransaksi(): void

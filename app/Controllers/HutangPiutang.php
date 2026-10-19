@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Services\Finance\HutangPiutangService;
 use App\Services\Finance\FinanceScopeService;
+use App\Services\Finance\KasBankScopeService;
+use App\Models\ModelHutangPiutang;
 use App\Models\ModelUnit;
 
 /**
@@ -185,7 +187,65 @@ class HutangPiutang extends BaseController
             'lawan_kompensasi' => $this->service->getLawanKompensasi($row),
             'bank' => $this->service->getBankOptions($this->allowedUnitIds()),
             'can_input' => $this->scopeService->canInput(),
+            'antar_unit' => $this->antarUnitPaymentData($row),
         ]);
+    }
+
+    /**
+     * Data form pelunasan antar unit yang bisa dicatat langsung dari halaman
+     * detail H/P.
+     *
+     * Posting tetap lewat KasBank::saveAntarUnit(): form ini hanya menyediakan
+     * rekening pengirim/penerima + token. Logika ledger, guard saldo, atribusi
+     * hak unit, dan sisa H/P tidak diduplikasi supaya tidak dihitung dua kali.
+     */
+    private function antarUnitPaymentData(object $row): ?array
+    {
+        if (! $this->scopeService->canInput()
+            || $row->sumber_tipe !== HutangPiutangService::SUMBER_MUTASI
+            || ($row->scope ?? 'active') === 'legacy'
+            || $row->status === 'lunas'
+            || (float) $row->sisa <= 0) {
+            return null;
+        }
+
+        $hpModel = new ModelHutangPiutang();
+        $hp      = $row->jenis === 'hutang' ? $row : $hpModel->getPasangan($row);
+        $piutang = $row->jenis === 'piutang' ? $row : $hpModel->getPasangan($row);
+
+        if (! $hp || ! $piutang || $hp->jenis !== 'hutang' || $piutang->jenis !== 'piutang'
+            || ($hp->scope ?? 'active') === 'legacy'
+            || ($piutang->scope ?? 'active') === 'legacy') {
+            return null;
+        }
+
+        $scope     = new KasBankScopeService();
+        $userUnits = $this->allowedUnitIds();
+        $role      = (int) session('ID_JABATAN');
+
+        $akunPengirim = array_values(array_filter(
+            $scope->akunTerlihat($userUnits, (int) $hp->unit_id, true),
+            fn ($a) => $scope->canUseAsSource($a, (int) $hp->unit_id, $role)
+        ));
+        $akunPenerima = array_values(array_filter(
+            $scope->akunTerlihat($userUnits, (int) $piutang->unit_id, true),
+            fn ($a) => $scope->canUseAsDestination($a, (int) $piutang->unit_id, $role)
+        ));
+
+        $token = bin2hex(random_bytes(16));
+        session()->set('kb_submit_' . $token, time()); // format sama dengan KasBank::buatSubmitToken()
+
+        return [
+            'hutang'        => $hp,
+            'piutang'       => $piutang,
+            'akun_pengirim' => $akunPengirim,
+            'akun_penerima' => $akunPenerima,
+            'unit_map'      => array_column($this->scopeService->resolveAllowedUnits(), 'NAMA_UNIT', 'idunit'),
+            'batas_jumlah'  => min((float) $hp->sisa, (float) $piutang->sisa),
+            'submit_token'  => $token,
+            'kembali_ke'    => 'hutangpiutang/detail/' . (int) $row->id,
+            'periode_mulai' => FinanceScopeService::kasBankPeriodeMulaiDate(),
+        ];
     }
 
     public function kompensasi()

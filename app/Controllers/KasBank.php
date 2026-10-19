@@ -2827,6 +2827,15 @@ class KasBank extends BaseController
                 ? 'Pembayaran antar unit berhasil disimpan (rekening fisik sama — hak saldo unit digeser tanpa gerakan kas)'
                 : 'Pembayaran antar unit berhasil disimpan'
         );
+
+        // Form bisa dipasang di halaman detail H/P dan tidak ingin dilempar
+        // ke Kas & Bank. Hanya path H/P detail yang diterima, supaya nilai
+        // POST ini tidak bisa dipakai sebagai open redirect.
+        $kembali = trim((string) $this->request->getPost('kembali_ke'));
+        if (preg_match('#^hutangpiutang/detail/\d+$#', $kembali) === 1) {
+            return redirect()->to(base_url($kembali));
+        }
+
         return $this->keAntarUnit((int) $hp->unit_id);
     }
 

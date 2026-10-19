@@ -38,6 +38,17 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
 } elseif ($can_input && ! $settledLegacy && ! $outstanding) {
     $alasanLegacy = 'Hutang ini sudah lunas.';
 }
+
+// Pelunasan antar unit langsung dari halaman ini. Form hanya dirender bila
+// controller sudah menyiapkan rekening pengirim/penerima + token.
+$antarUnit    = $antar_unit ?? null;
+$unitMapAu    = $antarUnit['unit_map'] ?? [];
+$labelAkunAu  = static function ($a) use ($unitMapAu) {
+    $unitId   = (int) ($a->unit_id ?? 0);
+    $unitNama = $unitId > 0 ? ($unitMapAu[$unitId] ?? ('Unit ' . $unitId)) : 'Pusat';
+
+    return $unitNama . ' · ' . ($a->nama_akun ?? '-') . ' (' . ($a->tipe ?? '-') . ')';
+};
 ?>
 
 <div class="row">
@@ -94,8 +105,12 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
 
                 <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="<?= base_url('hutangpiutang/cetak/' . $row->id) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">Cetak Bukti</a>
-                    <?php if ($can_input && $outstanding && $row->sumber_tipe === 'mutasi_unit' && $row->jenis === 'hutang') : ?>
-                        <a href="<?= base_url('kas_bank/antar-unit?unit_id=' . (int) $row->unit_id) ?>" class="btn btn-sm btn-outline-primary">Lunasi di Kas &amp; Bank → Antar Unit</a>
+                    <?php if ($can_input && $outstanding && $row->sumber_tipe === 'mutasi_unit') : ?>
+                        <?php if (!empty($antarUnit)) : ?>
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#antar-unit-modal">Catat Pelunasan Antar Unit</button>
+                        <?php else : ?>
+                            <span class="small text-muted align-self-center">Pelunasan antar unit belum bisa dicatat dari halaman ini — rekening atau posisi tidak memenuhi syarat.</span>
+                        <?php endif; ?>
                     <?php endif; ?>
                     <?php if ($can_input && $authoritative && $row->status !== 'lunas' && $row->sumber_tipe !== 'kasbon') : ?>
                         <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bayar-modal">Catat Pembayaran</button>
@@ -110,7 +125,7 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
                     <?php endif; ?>
                 </div>
                 <?php if ($outstanding && $row->sumber_tipe === 'mutasi_unit' && $row->jenis === 'piutang') : ?>
-                    <div class="small text-muted mt-2 mb-0">Pelunasan dilakukan unit yang berhutang melalui Kas &amp; Bank → Antar Unit.</div>
+                    <div class="small text-muted mt-2 mb-0">Pelunasan dilakukan oleh unit yang berhutang. Form di atas mencatat dana dari unit penghutang ke unit ini.</div>
                 <?php endif; ?>
                 <?php if ($can_input && ! $settledLegacy && ! $bisaLegacy && ! $outstanding) : ?>
                     <div class="small text-muted mt-2 mb-0"><?= esc($alasanLegacy) ?></div>
@@ -190,6 +205,86 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
                 <button type="submit" class="btn btn-primary">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($antarUnit)) : ?>
+<div class="modal fade" id="antar-unit-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content" method="post" action="<?= base_url('kas_bank/antar-unit/save') ?>" enctype="multipart/form-data">
+            <?= csrf_field() ?>
+            <input type="hidden" name="hutang_piutang_id" value="<?= (int) $antarUnit['hutang']->id ?>">
+            <input type="hidden" name="submit_token" value="<?= esc($antarUnit['submit_token']) ?>">
+            <input type="hidden" name="kembali_ke" value="<?= esc($antarUnit['kembali_ke']) ?>">
+            <div class="modal-header">
+                <h5 class="modal-title">Pelunasan Antar Unit — <?= esc($row->kode) ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Hutang <strong><?= esc($antarUnit['hutang']->kode) ?></strong>
+                    (<?= esc($unitMapAu[(int) $antarUnit['hutang']->unit_id] ?? 'Unit ' . (int) $antarUnit['hutang']->unit_id) ?>)
+                    dibayar ke piutang <strong><?= esc($antarUnit['piutang']->kode) ?></strong>
+                    (<?= esc($unitMapAu[(int) $antarUnit['piutang']->unit_id] ?? 'Unit ' . (int) $antarUnit['piutang']->unit_id) ?>).
+                    Sisa maksimal: <strong><?= $rp($antarUnit['batas_jumlah']) ?></strong>.
+                </p>
+
+                <?php if (empty($antarUnit['akun_pengirim']) || empty($antarUnit['akun_penerima'])) : ?>
+                    <div class="alert alert-warning py-2 px-3 small">
+                        Belum ada rekening kas/bank yang bisa dipakai untuk unit ini.
+                        Hubungi Finance untuk melengkapi rekening lalu coba lagi.
+                    </div>
+                <?php endif; ?>
+
+                <div class="mb-3">
+                    <label class="form-label">Tanggal</label>
+                    <input type="date" name="tanggal" class="form-control"
+                           value="<?= date('Y-m-d') ?>" min="<?= esc($antarUnit['periode_mulai']) ?>" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Jumlah</label>
+                    <input type="text" name="jumlah" class="form-control text-end"
+                           value="<?= (int) $antarUnit['batas_jumlah'] ?>" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Rekening pengirim (unit penghutang)</label>
+                    <select name="akun_pengirim_id" class="form-select" required>
+                        <option value="">-- Pilih rekening --</option>
+                        <?php foreach ($antarUnit['akun_pengirim'] as $a) : ?>
+                            <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkunAu($a)) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Rekening penerima (unit berpiutang)</label>
+                    <select name="akun_penerima_id" class="form-select" required>
+                        <option value="">-- Pilih rekening --</option>
+                        <?php foreach ($antarUnit['akun_penerima'] as $a) : ?>
+                            <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($labelAkunAu($a)) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Pilih rekening yang sama bila pelunasan hanya menggeser hak saldo antar unit tanpa memindahkan uang fisik.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Bukti transfer <span class="text-muted">(opsional — JPG/PNG/PDF)</span></label>
+                    <input type="file" name="bukti" class="form-control" accept=".jpg,.jpeg,.png,.pdf,.webp">
+                </div>
+
+                <div class="mb-0">
+                    <label class="form-label">Keterangan</label>
+                    <input type="text" name="keterangan" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary" <?= (empty($antarUnit['akun_pengirim']) || empty($antarUnit['akun_penerima'])) ? 'disabled' : '' ?>>Simpan Pelunasan</button>
             </div>
         </form>
     </div>

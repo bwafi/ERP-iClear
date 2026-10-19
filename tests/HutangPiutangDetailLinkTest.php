@@ -5,30 +5,66 @@ namespace Tests;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
- * #12: detail H/P mutasi antar unit harus mengarahkan sisi penghutang ke
- * Kas & Bank → Antar Unit, tanpa memberi tombol bayar ke sisi piutang.
+ * Pelunasan antar unit dicatat langsung dari halaman detail H/P.
+ *
+ * Form tetap POST ke KasBank::saveAntarUnit() supaya ledger, guard saldo, dan
+ * sisa H/P dihitung sekali. View hanya menyediakan rekening + token; halaman
+ * Kas & Bank tidak lagi menjadi jalur wajib.
  *
  * @internal
  */
 final class HutangPiutangDetailLinkTest extends CIUnitTestCase
 {
-    public function testDetailHutangMutasiMenampilkanTautanLunasiAntarUnit(): void
+    public function testDetailHutangMutasiMenampilkanFormPelunasanLangsung(): void
+    {
+        $html = $this->renderDetail('hutang', $this->antarUnitData());
+
+        $this->assertStringContainsString('kas_bank/antar-unit/save', $html);
+        $this->assertStringContainsString('name="akun_pengirim_id"', $html);
+        $this->assertStringContainsString('name="akun_penerima_id"', $html);
+        $this->assertStringContainsString('name="hutang_piutang_id" value="901"', $html);
+        $this->assertStringContainsString('name="kembali_ke" value="hutangpiutang/detail/10"', $html);
+        $this->assertStringContainsString('Catat Pelunasan Antar Unit', $html);
+        $this->assertStringNotContainsString('Lunasi di Kas', $html);
+    }
+
+    public function testDetailPiutangMutasiJugaBisaCatatPelunasan(): void
+    {
+        $html = $this->renderDetail('piutang', $this->antarUnitData());
+
+        $this->assertStringContainsString('kas_bank/antar-unit/save', $html);
+        // Yang dibayar tetap baris hutang pasangannya, bukan baris piutang.
+        $this->assertStringContainsString('name="hutang_piutang_id" value="901"', $html);
+    }
+
+    public function testDetailTanpaDataAntarUnitTidakMenampilkanForm(): void
     {
         $html = $this->renderDetail('hutang');
 
-        $this->assertStringContainsString('kas_bank/antar-unit?unit_id=1', $html);
-        $this->assertStringContainsString('Lunasi di Kas', $html);
+        $this->assertStringNotContainsString('kas_bank/antar-unit/save', $html);
+        $this->assertStringContainsString('belum bisa dicatat dari halaman ini', $html);
     }
 
-    public function testDetailPiutangMutasiTidakMenampilkanTautanLunasi(): void
+    private function antarUnitData(): array
     {
-        $html = $this->renderDetail('piutang');
-
-        $this->assertStringNotContainsString('kas_bank/antar-unit?unit_id=', $html);
-        $this->assertStringContainsString('Pelunasan dilakukan unit yang berhutang', $html);
+        return [
+            'hutang' => (object) ['id' => 901, 'kode' => 'H-901', 'unit_id' => 1, 'sisa' => 1000],
+            'piutang' => (object) ['id' => 902, 'kode' => 'P-902', 'unit_id' => 2, 'sisa' => 1000],
+            'akun_pengirim' => [
+                (object) ['idakun_kas_bank' => 11, 'nama_akun' => 'Kas Unit A', 'tipe' => 'KAS', 'unit_id' => 1],
+            ],
+            'akun_penerima' => [
+                (object) ['idakun_kas_bank' => 12, 'nama_akun' => 'Kas Unit B', 'tipe' => 'KAS', 'unit_id' => 2],
+            ],
+            'unit_map' => [1 => 'Unit A', 2 => 'Unit B'],
+            'batas_jumlah' => 1000,
+            'submit_token' => 'tok-antar-unit',
+            'kembali_ke' => 'hutangpiutang/detail/10',
+            'periode_mulai' => '2026-10-01',
+        ];
     }
 
-    private function renderDetail(string $jenis): string
+    private function renderDetail(string $jenis, ?array $antarUnit = null): string
     {
         return view('hutangpiutang/detail', [
             'row' => (object) [
@@ -63,6 +99,7 @@ final class HutangPiutangDetailLinkTest extends CIUnitTestCase
             'can_input' => true,
             'lawan_kompensasi' => [],
             'bank' => [],
+            'antar_unit' => $antarUnit,
         ]);
     }
 }
