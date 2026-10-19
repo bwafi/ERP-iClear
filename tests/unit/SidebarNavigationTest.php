@@ -21,11 +21,12 @@ final class SidebarNavigationTest extends TestCase
                         ['id' => 15, 'nama' => 'Riwayat Tugas', 'url' => 'riwayat_tugas', 'icon' => null],
                     ]],
                     ['id' => 16, 'nama' => 'Penjualan', 'url' => 'penjualan', 'sub' => []],
+                    ['id' => 17, 'nama' => 'Detail Garansi Dinamis', 'url' => 'service_by_garansi/(:num)', 'sub' => []],
                 ],
             ],
         ];
 
-        $organized = SidebarNavigation::organize($tree, [1, 11, 12, 13, 14, 15]);
+        $organized = SidebarNavigation::organize($tree, [1, 11, 12, 13, 14, 15, 17]);
 
         self::assertSame(['Produk & Harga', 'Pembelian', 'Persediaan', 'Operasional'], array_column($organized, 'nama'));
         self::assertSame('Master Barang/Jasa', $organized[0]['menu'][0]['sub'][0]['nama']);

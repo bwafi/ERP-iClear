@@ -22,7 +22,6 @@ final class SidebarNavigation
                 'sparepart_keluar' => ['Transaksi', 'Pemakaian Sparepart Service'],
                 'riwayat_service' => ['Laporan', 'Riwayat Service'],
                 'riwayat_service_garansi' => ['Laporan', 'Riwayat Garansi'],
-                'service_by_garansi' => ['Transaksi', 'Proses Garansi'],
                 'kerusakan' => ['Master/Pengaturan', 'Master Kerusakan'],
                 'fee_service' => ['Laporan', 'Fee Service'],
                 'laba_service' => ['Laporan', 'Laba Service'],
@@ -218,6 +217,10 @@ final class SidebarNavigation
 
     private static function moveLink(array $link, string $route, array $roleIds, array &$areas, array &$seenRoutes): bool
     {
+        if (strpos($route, '(:') !== false) {
+            return true;
+        }
+
         $classification = self::classificationFor($route);
         if ($classification === null) {
             return false;
