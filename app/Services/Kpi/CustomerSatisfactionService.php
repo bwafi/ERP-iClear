@@ -55,17 +55,20 @@ class CustomerSatisfactionService
      */
     public function totalCustomers(string $tanggal, int $idUnit): int
     {
+        $penjualan = $this->db->prefixTable('penjualan');
+        $service   = $this->db->prefixTable('service');
+
         $row = $this->db->query(
             "SELECT COUNT(DISTINCT pid) AS total FROM (
                 SELECT id_pelanggan AS pid
-                FROM penjualan
+                FROM {$penjualan}
                 WHERE unit_idunit = ?
                   AND DATE(tanggal) = ?
                   AND id_pelanggan > 0
                   AND kode_invoice LIKE 'SLL%'
                 UNION
                 SELECT pelanggan_id_pelanggan AS pid
-                FROM service
+                FROM {$service}
                 WHERE unit_idunit = ?
                   AND DATE(created_at) = ?
                   AND pelanggan_id_pelanggan > 0
@@ -95,18 +98,20 @@ class CustomerSatisfactionService
             return [];
         }
         $in = implode(',', array_map('intval', $unitIds));
+        $penjualan = $this->db->prefixTable('penjualan');
+        $service   = $this->db->prefixTable('service');
 
         $rows = $this->db->query(
             "SELECT d, u, COUNT(DISTINCT pid) AS total FROM (
                 SELECT DATE(tanggal) AS d, unit_idunit AS u, id_pelanggan AS pid
-                FROM penjualan
+                FROM {$penjualan}
                 WHERE unit_idunit IN ($in)
                   AND DATE(tanggal) BETWEEN ? AND ?
                   AND id_pelanggan > 0
                   AND kode_invoice LIKE 'SLL%'
                 UNION
                 SELECT DATE(created_at) AS d, unit_idunit AS u, pelanggan_id_pelanggan AS pid
-                FROM service
+                FROM {$service}
                 WHERE unit_idunit IN ($in)
                   AND DATE(created_at) BETWEEN ? AND ?
                   AND pelanggan_id_pelanggan > 0

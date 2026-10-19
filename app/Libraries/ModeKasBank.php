@@ -13,6 +13,7 @@ use App\Models\ModelPembayaranPiutang;
 use App\Models\ModelTransaksiKasBank;
 use App\Models\ModelUnit;
 use App\Services\Finance\FinanceScopeService;
+use App\Services\Finance\HutangPiutangService;
 use App\Services\Finance\KasBankScopeService;
 
 /**
@@ -855,13 +856,7 @@ class ModeKasBank
      */
     public function hitungStatus(int $sisa, int $totalDibayar): string
     {
-        if ($sisa <= 0) {
-            return 'lunas';
-        }
-        if ($totalDibayar > 0) {
-            return 'sebagian';
-        }
-        return 'belum_lunas';
+        return HutangPiutangService::statusFromSisa($sisa + $totalDibayar, $sisa, $totalDibayar);
     }
 
     /**

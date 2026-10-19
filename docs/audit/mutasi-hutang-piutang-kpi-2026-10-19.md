@@ -142,7 +142,11 @@ Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim h
 ### Nice to have
 
 - Komentar kolom `mutasi.status` di DB (`0=menunggu,1=kirim,2=terima`) tidak sesuai kode (`1=diterima`).
+  **Perbaikan:** migration `2026-10-19-000300_FixMutasiStatusComment.php` mengubah komentar jadi `0 = menunggu, 1 = diterima` (idempoten; `down()` mengembalikan komentar lama). Belum dijalankan di `erp_local`.
 - `hitungStatus()` di `ModeKasBank` menduplikasi `statusFromSisa()` di service.
+  **Perbaikan:** `statusFromSisa()` dijadikan `static`, `ModeKasBank::hitungStatus()` mendelegasikan ke sana. Perilaku restore pembayaran terverifikasi `KasBankTest::testTerapkanDanRestorePembayaranHP`.
+- `CustomerSatisfactionTest` tidak mandiri; error `db_service`/`db_stok_barang`/`db_penjualan` hanya muncul bila tabel sisa test lain ada.
+  **Perbaikan:** `setUp()` sekarang membangun schema sendiri (tanpa men-drop tabel bersama) dan `CustomerSatisfactionService` memakai `prefixTable()` pada SQL mentahnya. Dua failure yang tersisa sudah ada sejak sebelum audit: role SPV (40) memang tidak masuk `viewRoles`, dan teks “Rekap Bulanan” tidak ada di view.
 - Tidak ada fitur void untuk mutasi `status=0`; 12 mutasi menggantung dan stoknya sudah bergerak.
 
 ---
@@ -157,7 +161,7 @@ KPI `FIN_HUTANG_PIUTANG` memang **tidak terpengaruh** — tetapi itu bukan kabar
 
 ## Yang tidak diperiksa
 
-- Perbaikan #1–#6 dan #9–#13 sudah diuji terarah. Full suite: 708 test; di luar `CustomerSatisfactionTest` (4 error karena tabel `db_service`/`db_stok_barang` tidak dibuat test itu sendiri), daftar error/failure identik dengan baseline #5+#10.
+- Perbaikan #1–#6, #9–#13, dan tiga item "Nice to have" sudah diuji terarah. Full suite: 708 test, 43 error/177 failure — semuanya milik baseline #5+#10. `CustomerSatisfactionTest` tidak lagi menambah error tabel hilang; dua failure-nya adalah ekspektasi lama yang tidak cocok dengan view/role saat ini.
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
 - Migration backfill #3 belum dijalankan di `erp_local`; baru diverifikasi lewat test.
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.

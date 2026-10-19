@@ -106,7 +106,7 @@ class HutangPiutangService
     // Helper status
     // =====================================================================
 
-    public function statusFromSisa(int $total, int $sisa, int $dibayar = 0): string
+    public static function statusFromSisa(int $total, int $sisa, int $dibayar = 0): string
     {
         if ($sisa <= 0) {
             return self::STATUS_LUNAS;
@@ -376,7 +376,7 @@ class HutangPiutangService
             $this->hp->update((int) $row->id, [
                 'total'       => $total,
                 'sisa'        => $sisa,
-                'status'      => $this->statusFromSisa($total, $sisa, (int) $row->total_dibayar),
+                'status'      => self::statusFromSisa($total, $sisa, (int) $row->total_dibayar),
                 'tanggal'     => $tanggal,
                 'metode'      => $metode,
                 'bank_idbank' => $idbank !== '' ? $idbank : null,
@@ -686,7 +686,7 @@ class HutangPiutangService
 
             $sisa = (int) $row->sisa - $jumlah;
             $dibayar = (int) $row->total_dibayar + $jumlah;
-            $status = $this->statusFromSisa((int) $row->total, $sisa, $dibayar);
+            $status = self::statusFromSisa((int) $row->total, $sisa, $dibayar);
 
             $this->hp->update($positionId, [
                 'total_dibayar' => $dibayar,
@@ -937,7 +937,7 @@ class HutangPiutangService
 
             // Status sebelum settlement diturunkan persis dari total_dibayar
             // memakai aturan yang sama dengan statusFromSisa().
-            $status = $this->statusFromSisa((int) $row->total, $sisa, (int) $row->total_dibayar);
+            $status = self::statusFromSisa((int) $row->total, $sisa, (int) $row->total_dibayar);
 
             $alasan = trim((string) ($in['alasan'] ?? ''));
 
@@ -1318,7 +1318,7 @@ class HutangPiutangService
                         'total' => (int) $r->total_bayar,
                         'total_dibayar' => $dibayar,
                         'sisa' => $sisa,
-                        'status' => $this->statusFromSisa((int) $r->total_bayar, $sisa, $dibayar),
+                        'status' => self::statusFromSisa((int) $r->total_bayar, $sisa, $dibayar),
                         'jatuh_tempo' => $r->jatuh_tempo,
                     ]);
             }
@@ -1346,7 +1346,7 @@ class HutangPiutangService
                         'total' => (int) $r->jumlah_hutang,
                         'total_dibayar' => $dibayar,
                         'sisa' => $sisa,
-                        'status' => $this->statusFromSisa((int) $r->jumlah_hutang, $sisa, $dibayar),
+                        'status' => self::statusFromSisa((int) $r->jumlah_hutang, $sisa, $dibayar),
                         'jatuh_tempo' => $r->jatuh_tempo,
                     ]);
             }
@@ -1626,7 +1626,7 @@ class HutangPiutangService
             'total' => (int) $p->total_bayar,
             'total_dibayar' => $dibayar,
             'sisa' => $sisa,
-            'status' => $this->statusFromSisa((int) $p->total_bayar, $sisa, $dibayar),
+            'status' => self::statusFromSisa((int) $p->total_bayar, $sisa, $dibayar),
             'unit_id' => $p->unit_idunit,
             'deleted' => 0,
         ];
@@ -1673,7 +1673,7 @@ class HutangPiutangService
             'total' => $total,
             'total_dibayar' => $total - $sisa,
             'sisa' => $sisa,
-            'status' => $this->statusFromSisa($total, $sisa, $total - $sisa),
+            'status' => self::statusFromSisa($total, $sisa, $total - $sisa),
             'unit_id' => $p->unit_idunit,
             'deleted' => 0,
         ];
@@ -2254,7 +2254,7 @@ class HutangPiutangService
         $this->hp->update((int) $row->id, [
             'total_dibayar' => $dibayar,
             'sisa' => $sisa,
-            'status' => $this->statusFromSisa((int) $row->total, $sisa, $dibayar),
+            'status' => self::statusFromSisa((int) $row->total, $sisa, $dibayar),
         ]);
     }
 
