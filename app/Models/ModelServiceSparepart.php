@@ -24,7 +24,8 @@ class ModelServiceSparepart extends Model
         'barang_idbarang',
         'unit_idunit',
         'jumlah_tambahan_garansi',
-        'hpp_penjualan_garansi'
+        'hpp_penjualan_garansi',
+        'source_purchase_detail_id'
     ];
 
     public function getSerModelServiceSparepart()
@@ -35,9 +36,12 @@ class ModelServiceSparepart extends Model
     public function getSerModelServiceSparepartByServiceId($idservice)
     {
         return $this->db->table('service_sparepart')
-            ->select('service_sparepart.*, barang.kode_barang, barang.nama_barang, service.garansi_hari, stok_barang.stok_akhir')
+            ->select('service_sparepart.*, barang.kode_barang, barang.nama_barang, service.garansi_hari, stok_barang.stok_akhir, purchase.no_nota_supplier AS source_nota_supplier, supplier.nama_suplier AS source_nama_suplier')
             ->join('barang', 'barang.idbarang = service_sparepart.barang_idbarang')
             ->join('service', 'service.idservice = service_sparepart.service_idservice')
+            ->join('detail_pembelian source_detail', 'source_detail.iddetail_pembelian = service_sparepart.source_purchase_detail_id', 'left')
+            ->join('pembelian purchase', 'purchase.idpembelian = source_detail.pembelian_idpembelian', 'left')
+            ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left')
             ->join('stok_barang', 'stok_barang.idbarang = service_sparepart.barang_idbarang AND stok_barang.id_unit = service_sparepart.unit_idunit', 'left')
             ->where('service_sparepart.service_idservice', $idservice)
             ->get()->getResult();

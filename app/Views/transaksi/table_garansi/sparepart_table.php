@@ -109,7 +109,8 @@
 
         oldSpareparts.forEach((sp) => {
             addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
-                parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.diskon_penjualan_garansi), parseInt(sp.jumlah_tambahan_garansi), parseInt(sp.sub_total), parseInt(sp.sub_total_garansi), parseInt(sp.harga_penjualan_garansi));
+                parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.diskon_penjualan_garansi), parseInt(sp.jumlah_tambahan_garansi), parseInt(sp.sub_total), parseInt(sp.sub_total_garansi), parseInt(sp.harga_penjualan_garansi),
+                sp.source_nama_suplier, sp.source_nota_supplier);
 
             console.log({
                 id: sp.idservice_sparepart,
@@ -163,6 +164,8 @@
         sub_total = 0,
         sub_total_garansi = 0,
         harga_penjualan_garansi = 0,
+        sourceSupplier = null,
+        sourceNota = null,
     ) {
 
         const tbody = document.getElementById('sparepart-table-body');
@@ -182,6 +185,7 @@
         row.innerHTML = `
         <td>
             ${nama}
+            <div class="small text-muted source-batch-label"></div>
             <input type="hidden" name="produk[${nextIndex}][id]" value="${id}">
             <input hidden type="number" class="form-control jumlah_acuan" name="produk[${nextIndex}][jumlah_acuan]" value="${jumlahAcuan}" readonly>
         <input hidden type="number" class="form-control sub_total_acuan" name="produk[${nextIndex}][sub_total_acuan]" value="${subTotalAcuan}" readonly>
@@ -209,6 +213,9 @@
         <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>
     `;
         tbody.appendChild(row);
+        row.querySelector('.source-batch-label').textContent = sourceSupplier
+            ? 'Batch dipilih saat service: ' + sourceSupplier + (sourceNota ? ' — ' + sourceNota : '')
+            : 'Asal supplier service belum diketahui';
     }
 
 

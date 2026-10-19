@@ -19,7 +19,8 @@ class ModelDetailPenjualan extends Model
         'hpp_penjualan',
         'satuan_jual',
         'diskon_penjualan',
-        'unit_idunit'
+        'unit_idunit',
+        'source_purchase_detail_id'
     ];
 
     public function getDetail()

@@ -281,6 +281,7 @@
                 <th>Harga</th>
                 <th>Stok Akhir</th>
                 <th>Qty</th>
+                <th>Batch asal</th>
                 <th>Diskon</th>
                 <th>Total</th>
                 <th>Aksi</th>
@@ -460,7 +461,8 @@
         if (oldSpareparts && oldSpareparts.length > 0) {
             oldSpareparts.forEach((sp) => {
                 addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
-                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.stok_akhir || 0));
+                    parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.stok_akhir || 0),
+                    sp.source_purchase_detail_id);
                 const checkbox = document.querySelector(`.sparepart-check[data-id="${sp.barang_idbarang}"]`);
                 if (checkbox) checkbox.checked = true;
             });
@@ -534,7 +536,7 @@
     });
 
     // Tambahkan baris sparepart
-    function addSparepartRow(id, nama, harga, jumlah = 1, diskon = 0, stokAkhir = 0) {
+    function addSparepartRow(id, nama, harga, jumlah = 1, diskon = 0, stokAkhir = 0, originId = null) {
         const tbody = document.getElementById('sparepart-table-body');
 
         // Tentukan index terakhir yang belum terpakai
@@ -551,11 +553,45 @@
             <td><input type="text" class="form-control harga" name="produk[${nextIndex}][harga]" value="Rp ${formatNumber(harga)}"></td>
             <td><input type="text" class="form-control" value="${formatNumber(stokAkhir)}" readonly></td>
             <td><input type="number" class="form-control qty" name="produk[${nextIndex}][jumlah]" value="${jumlah}" min="1"></td>
+            <td><select class="form-select origin-batch" name="produk[${nextIndex}][purchase_detail_id]"><option value="">Asal belum diketahui</option></select><small class="text-muted">Pilih hanya jika batch fisik dapat dipastikan.</small></td>
             <td><input type="text" class="form-control diskon-item" name="produk[${nextIndex}][diskon]" value="Rp ${formatNumber(diskon)}" min="0"></td>
             <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">Hapus</button></td>
         `;
         tbody.appendChild(row);
+        loadPurchaseBatches(row, id, originId);
+    }
+
+    async function loadPurchaseBatches(row, itemId, originId) {
+        const select = row.querySelector('.origin-batch');
+        try {
+            const response = await fetch('<?= base_url('service/purchase-batches') ?>/' + encodeURIComponent(itemId));
+            if (!response.ok) throw new Error('Batch gagal dimuat');
+            const batches = await response.json();
+            batches.forEach(batch => {
+                const option = document.createElement('option');
+                option.value = batch.iddetail_pembelian;
+                option.textContent = (batch.nama_suplier || 'Supplier tidak tercatat') + ' — ' +
+                    (batch.no_nota_supplier || 'Nota tanpa nomor') + ' — ' + batch.tanggal + ' (masuk ' + batch.jumlah + ')';
+                select.appendChild(option);
+            });
+            if (originId && !Array.from(select.options).some(option => option.value === String(originId))) {
+                const option = document.createElement('option');
+                option.value = originId;
+                option.textContent = 'Batch tercatat #' + originId + ' (di luar 100 terbaru)';
+                select.appendChild(option);
+            }
+            select.value = originId || '';
+        } catch (error) {
+            select.innerHTML = '<option value="">Asal belum diketahui (batch gagal dimuat)</option>';
+            if (originId) {
+                const option = document.createElement('option');
+                option.value = originId;
+                option.textContent = 'Pertahankan batch tercatat #' + originId;
+                select.appendChild(option);
+                select.value = originId;
+            }
+        }
     }
 
     // Event: hapus baris

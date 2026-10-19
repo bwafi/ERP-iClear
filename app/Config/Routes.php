@@ -153,6 +153,7 @@ $routes->get('service_kerusakan', 'Service::kerusakan_table', ['filter' => 'auth
 $routes->get('service_sparepart', 'Service::sparepart_table', ['filter' => 'auth']);
 $routes->post('insert/pelanggan_service', 'Service::insert_service', ['filter' => 'auth']);
 $routes->post('service/search_sparepart', 'Service::search_sparepart_ajax', ['filter' => 'auth']);
+$routes->get('service/purchase-batches/(:num)', 'Service::purchase_batches/$1', ['filter' => 'auth']);
 $routes->post('service/search_pelanggan', 'Service::search_pelanggan_ajax', ['filter' => 'auth']);
 $routes->get('service/cancel/(:num)', 'Service::cancel_service/$1', ['filter' => 'auth']);
 $routes->get('service/clear_session', 'Service::clear_session', ['filter' => 'auth']);

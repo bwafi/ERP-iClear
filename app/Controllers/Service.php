@@ -398,6 +398,8 @@ class Service extends BaseController
 
             $submittedIds = [];
             $hppByBarangId = [];
+            $batchByBarangId = [];
+            $batchOrigin = new \App\Services\Inventory\PurchaseBatchOrigin($db);
             foreach ($produkData as &$produk) {
                 $id = (int) ($produk['id'] ?? 0);
                 if ($id <= 0 || in_array($id, $submittedIds, true)) {
@@ -434,6 +436,13 @@ class Service extends BaseController
                     $existingMap[$id] ?? null,
                     $currentHpp
                 );
+                $batchByBarangId[$id] = $batchOrigin->validate(
+                    \App\Services\Inventory\PurchaseBatchOrigin::selection($produk['purchase_detail_id'] ?? ''),
+                    $id,
+                    (int) ($service->unit_idunit ?? session('ID_UNIT')),
+                    $jumlah,
+                    $service->created_at ?? null
+                );
                 $stokAwal = $this->StokAwalModel->getByIdBarang($id);
                 $data = [
                     'jumlah' => $jumlah,
@@ -446,6 +455,7 @@ class Service extends BaseController
                     'service_idservice' => $idservice,
                     'barang_idbarang' => $id,
                     'unit_idunit' => (int) ($service->unit_idunit ?? session('ID_UNIT')),
+                    'source_purchase_detail_id' => $batchByBarangId[$id],
                     'diskon_penjualan_garansi' => 0,
                     'jumlah_tambahan_garansi' => 0,
                     'sub_total_garansi' => 0,
@@ -467,7 +477,7 @@ class Service extends BaseController
                 }
             }
 
-            $this->buatPenjualanDariService($idservice, $produkData, $hppByBarangId);
+            $this->buatPenjualanDariService($idservice, $produkData, $hppByBarangId, $batchByBarangId);
 
             if ($db->transStatus() === false || ! $db->transCommit()) {
                 throw new \RuntimeException('Sinkronisasi sparepart keluar gagal disimpan.');
@@ -481,7 +491,20 @@ class Service extends BaseController
         }
     }
 
-    private function buatPenjualanDariService($idservice, $produkData, $hppByBarangId)
+    public function purchase_batches($itemId)
+    {
+        $unitId = (int) session('ID_UNIT');
+        $itemId = (int) $itemId;
+        if ($itemId <= 0 || $unitId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Barang atau unit tidak valid.']);
+        }
+
+        return $this->response->setJSON(
+            (new \App\Services\Inventory\PurchaseBatchOrigin(Database::connect()))->candidates($itemId, $unitId)
+        );
+    }
+
+    private function buatPenjualanDariService($idservice, $produkData, $hppByBarangId, $batchByBarangId)
     {
         if (empty($produkData)) {
             return;
@@ -543,6 +566,7 @@ class Service extends BaseController
                 'sub_total' => $subtotal,
                 'penjualan_idpenjualan' => $idPenjualan,
                 'hpp_penjualan' => $hppByBarangId[$produkid],
+                'source_purchase_detail_id' => $batchByBarangId[$produkid] ?? null,
                 'unit_idunit' => session('ID_UNIT'),
             ]);
             if ((int) $detailId <= 0) {

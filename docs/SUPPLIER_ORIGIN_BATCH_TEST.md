@@ -1,0 +1,11 @@
+# Asal supplier sparepart service (branch TEST)
+
+Satu ID master tetap mewakili satu jenis barang. Setiap baris `detail_pembelian` adalah kandidat batch: ia membawa nota, supplier melalui `pembelian`, jumlah, dan unit. Harga/HPP moving average tetap terpisah dari asal supplier fisik.
+
+Setelah migrasi `2026-10-19-000300`, formulir sparepart service menampilkan pilihan batch dari pembelian barang pada unit yang sama. Petugas hanya memilih batch bila sparepart fisik yang dipasang benar-benar dapat dicocokkan dengan nota/label batch. Pilihan disimpan pada `service_sparepart.source_purchase_detail_id` dan snapshot `detail_penjualan.source_purchase_detail_id`; halaman penggantian garansi menampilkan supplier/nota dari referensi tersebut. Bila tidak dapat dibuktikan, biarkan kosong; halaman klaim menampilkan **asal belum diketahui**. Data service lama tidak diisi ulang otomatis.
+
+Validasi server menolak batch dari barang/unit lain, supplier kosong, input ID tidak valid, atau jumlah teratribusi yang melebihi jumlah pembelian. Pembatalan invoice service melepas atribusi bersama detail penjualan; simpan ulang service memakai pilihan batch baru dalam transaksi yang sama. Atribusi ini tidak mengubah HPP historis maupun nilai persediaan.
+
+**Batas keandalan:** sistem belum melacak label lot fisik di semua jalur keluar (penjualan langsung, transfer, penyesuaian, penggantian garansi). Karena itu pilihan batch adalah catatan petugas yang harus didukung pemisahan/label fisik; daftar kandidat dan sisa jumlah teratribusi bukan bukti bahwa unit tersebut masih ada di rak. Jangan menebak supplier dari HPP, FIFO, atau nota terakhir, dan jangan memakai atribusi tanpa bukti fisik sebagai dasar retur supplier otomatis. Satu baris service dengan jumlah dari beberapa batch harus dibiarkan tanpa asal tunggal sampai alokasi multi-batch tersedia.
+
+Uji sebelum deploy TEST: dua pembelian ID barang yang sama dari supplier berbeda, pilih masing-masing batch untuk dua service, pastikan klaim menampilkan supplier yang dipilih; ulangi dengan batch kosong dan pastikan status tidak diketahui. Uji penolakan batch unit/barang lain dan jumlah melebihi nota, serta edit/pembatalan service dan data lama. Jalankan migrasi hanya setelah backup TEST; jangan deploy saat versi TEST sedang dipakai untuk pengujian lain.
