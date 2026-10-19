@@ -21,16 +21,24 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
     public function testMigrationAverageAndPhysicalOrigins(): void
     {
         $socket = getenv('ERP_SYNTHETIC_MARIADB_SOCKET');
-        if (! $socket) {
+        $host = getenv('ERP_SYNTHETIC_MARIADB_HOST');
+        if (! $socket && ! $host) {
             $this->markTestSkipped('Socket MariaDB sintetis belum disediakan.');
         }
         $db = Database::connect([
-            'DBDriver' => 'MySQLi', 'hostname' => $socket, 'database' => 'erp_finance_test',
+            'DBDriver' => 'MySQLi', 'hostname' => $socket ?: $host,
+            'port' => $host ? (int) (getenv('ERP_SYNTHETIC_MARIADB_PORT') ?: 3306) : 3306,
+            'database' => 'erp_finance_test',
             'username' => getenv('ERP_SYNTHETIC_MARIADB_USER') ?: get_current_user(),
             'password' => '', 'DBPrefix' => '', 'charset' => 'utf8mb4', 'DBCollat' => 'utf8mb4_unicode_ci',
         ], false);
         $this->assertSame('erp_finance_test', $db->getDatabase());
-        $this->assertSame(1, (int) $db->query('SELECT @@skip_networking AS enabled')->getRow()->enabled);
+        if ($host) {
+            $this->assertSame('mariadb-test', $host, 'TCP fixture host must be the private test container.');
+            $this->assertStringContainsString('MariaDB', $db->query('SELECT VERSION() AS version')->getRow()->version);
+        } else {
+            $this->assertSame(1, (int) $db->query('SELECT @@skip_networking AS enabled')->getRow()->enabled);
+        }
         $this->assertSame(0, (int) $db->query('SELECT COUNT(*) AS total FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()')->getRow()->total);
         foreach ([
             '2026-10-18-000500_LinkDamagedStockToSupplierReturn.php',

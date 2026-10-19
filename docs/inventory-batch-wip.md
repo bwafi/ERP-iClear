@@ -14,6 +14,14 @@ ERP_SYNTHETIC_MARIADB_USER="$USER" \
 php vendor/bin/phpunit tests/integration/InventoryBatchMariaDbTest.php --no-coverage
 ```
 
+Jika Docker Desktop hanya dapat diakses dari Terminal macOS dan socket tidak dapat diakses oleh Codex, jalankan dari root checkout:
+
+```sh
+bash scripts/run-isolated-mariadb-finance-test.sh
+```
+
+Runner membuat network Docker `--internal`, tanpa port yang dipublikasikan ke host, database sementara kosong `erp_finance_test`, dan menghapus container/network/image runner saat selesai. Ia memakai `vendor` lokal atau `../ERP-iClear-official/vendor`; selain itu berhenti sebelum menjalankan tes. Tidak ada koneksi ke TEST bisnis atau production.
+
 Test berhenti bila nama database berbeda, jaringan server aktif, atau database berisi tabel. Test membuat dan menghapus hanya fixture sintetis miliknya. Cakupan: migrasi, satu ID dari dua supplier dengan dua harga, HPP service lama tetap, rata-rata per unit, transfer batch, saldo batch dan view, penyesuaian dan jurnal seimbang, finalisasi/reopen opname berulang, pembatalan idempoten, akun belum dipetakan ditolak atomik, asal lama NULL, serta jasa ditolak.
 
 **Gate TEST:** Finance belum menyetujui akun beban selisih kurang dan pendapatan selisih lebih; `1030100000` hanya akun persediaan. Posting penyesuaian harus tetap gagal atomik sampai akun sah dipetakan, tetapi halaman dan alur lain boleh diuji di TEST setelah backup dan pemeriksaan migrasi. Barang rusak dari klaim lama tanpa bukti asal dapat dicatat sebagai “belum diketahui” dan tidak otomatis masuk retur supplier. Pemilihan item masih dimulai dari daftar pembelian sebagai referensi nama barang, bukan bukti asal; perlu uji browser dan perbaikan UX. Uji controller/browser end-to-end dan rekonsiliasi Neraca harus diberi status terpisah dari hasil fixture lokal.
