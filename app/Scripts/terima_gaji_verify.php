@@ -35,7 +35,12 @@ $db = \Config\Database::connect();
 // allowedFields, jadi exception di sini = field belum diizinkan = FAIL.
 $db->transBegin();
 try {
-    $id = 43;
+    $id = 9900;
+    $db->table('akun')->insert([
+        'ID_AKUN' => $id, 'ID_JABATAN' => 36, 'ID_UNIT' => 1, 'NOID' => "TG$id",
+        'PASSWORD' => 'x', 'NAMA_AKUN' => "TEMP TG $id", 'JENIS_KELAMIN' => 'Laki-Laki',
+        'HP' => '0', 'STATUS_PEGAWAI' => 1, 'TERIMA_GAJI' => 1,
+    ]);
     try {
         (new \App\Models\ModelAuth())->update($id, ['TERIMA_GAJI' => 0]);
         $val = (int) $db->table('akun')->where('ID_AKUN', $id)->get()->getRow()->TERIMA_GAJI;

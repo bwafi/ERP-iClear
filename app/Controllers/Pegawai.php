@@ -139,7 +139,8 @@ class Pegawai extends BaseController
             'FOTO_KTP'      => $nama_foto_ktp,
             'FOTO_KK'       => $nama_foto_kk,
             'JENIS_PEGAWAI' => $this->request->getPost('jenis_pegawai'),
-            'TERIMA_GAJI'   => $this->request->getPost('terima_gaji') ? 1 : 0
+            // Form lama (ter-cache) bisa tak punya field ini; absen = digaji.
+            'TERIMA_GAJI'   => $this->request->getPost('terima_gaji') === '0' ? 0 : 1
         );
 
 
@@ -190,8 +191,12 @@ class Pegawai extends BaseController
             'FOTO_KTP'      => $nama_foto_ktp,
             'FOTO_KK'       => $nama_foto_kk,
             'JENIS_PEGAWAI' => $jenis_pegawai,
-            'TERIMA_GAJI'   => $this->request->getPost('terima_gaji') ? 1 : 0
         );
+        // Field absen (mis. form ter-cache dari versi lama) tidak boleh
+        // diam-diam mematikan gaji seseorang: hanya "Tidak" (0) yang mengubah.
+        if ($this->request->getPost('terima_gaji') !== null) {
+            $data['TERIMA_GAJI'] = $this->request->getPost('terima_gaji') ? 1 : 0;
+        }
         $this->AuthModel->update($ID_AKUN, $data);
         $data2 = array(
             'STATUS_PEGAWAI' => 0

@@ -16,7 +16,7 @@ use Config\Database;
  * Catatan kritis PERBEDAAN dari hitungKPIGaji:
  *   1. Customer query: COUNT(DISTINCT dp.penjualan_idpenjualan) via detail_penjualan + barang + penjualan
  *   2. Hanya current month (date('m')/date('Y') hardcoded) — dipertahankan sama
- *   3. Loop SEMUA employee dalam unit → aggregate totalGajiUnit
+ *   3. Loop employee unit yang TERIMA_GAJI=1 → aggregate totalGajiUnit
  *   4. Insentif memakai engine tunggal KpiCalculationService::computeIncentive()
  *      (sama seperti /gaji, /penilaian_kinerja, /slip_gaji, payroll) — konsisten
  *   5. Total_feed overwritten by feed_mingguan (bukan fallback ke feed_pl)
