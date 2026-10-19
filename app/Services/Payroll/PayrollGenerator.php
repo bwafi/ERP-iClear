@@ -37,8 +37,8 @@ use App\Services\Kpi\KpiCalculationService;
  *     koreksi Finance.
  *   - tidak membuat baris untuk karyawan yang structure gaji-nya kosong;
  *     mereka dilaporkan sebagai dilewati supaya bisa ditangani manual.
- *   - tidak membuat baris untuk jabatan yang dikecualikan dari gaji
- *     (Admin root dan Direktur); lihat self::JABATAN_TANPA_GAJI.
+ *   - tidak membuat baris untuk akun yang tidak menerima gaji
+ *     (kolom akun.TERIMA_GAJI = 0, mis. Admin Root dan Direktur).
  *
  * CATATAN SOAL LEMBUR
  * -------------------
@@ -55,19 +55,6 @@ class PayrollGenerator
     /** Kunci tunjangan pada master salary_components. */
     private const KOMPONEN_KINERJA = 'TUNJANGAN_KINERJA';
     private const KOMPONEN_ABSEN = 'TUNJANGAN_ABSEN';
-
-    /**
-     * Jabatan yang dikecualikan dari gaji, apa pun nominalnya.
-     *
-     * Admin root dan Direktur tidak digaji lewat payroll. Keduanya tetap
-     * karyawan aktif dan tetap punya baris payroll bila Finance membuat
-     * sendiri secara manual (mis.OPE khusus), jadi pengecualian ini hanya
-     * berlaku untuk penyusunan otomatis.
-     */
-    private const JABATAN_TANPA_GAJI = [
-        1 => 'Admin root',
-        2 => 'Direktur',
-    ];
 
     protected $db;
 
@@ -130,18 +117,18 @@ class PayrollGenerator
         foreach ($this->daftarKaryawan($unitIds) as $karyawan) {
             $id = (int) $karyawan['ID_AKUN'];
 
-            // Jabatan yang tidak digaji dilewati lebih dulu, sebelum cek
-            // "sudah ada", supaya alasannya tetap "dikecualikan" dan tidak
-            // tercampur dengan baris yang sudah pernah dibuat.
-            $idJabatan = trim((string) ($karyawan['ID_JABATAN'] ?? ''));
-            if ($idJabatan !== '' && isset(self::JABATAN_TANPA_GAJI[(int) $idJabatan])) {
+            // Akun yang tidak menerima gaji (TERIMA_GAJI = 0, mis. Admin Root &
+            // Direktur) dilewati lebih dulu, sebelum cek "sudah ada", supaya
+            // alasannya tetap "dikecualikan" dan tidak tercampur dengan baris
+            // yang sudah pernah dibuat.
+            if ((int) ($karyawan['TERIMA_GAJI'] ?? 1) === 0) {
                 $hasil['dikecualikan']++;
                 $hasil['rows'][] = [
                     'nama'   => (string) $karyawan['NAMA_AKUN'],
                     'unit'   => (int) $karyawan['ID_UNIT'],
                     'total'  => null,
                     'status' => 'excluded',
-                    'alasan' => 'jabatan ' . self::JABATAN_TANPA_GAJI[(int) $idJabatan] . ' dikecualikan dari gaji',
+                    'alasan' => 'tidak menerima gaji',
                 ];
                 continue;
             }
@@ -327,7 +314,7 @@ class PayrollGenerator
     protected function daftarKaryawan(array $unitIds): array
     {
         $builder = $this->db->table('akun')
-            ->select('ID_AKUN, NAMA_AKUN, ID_UNIT, ID_JABATAN')
+            ->select('ID_AKUN, NAMA_AKUN, ID_UNIT, ID_JABATAN, TERIMA_GAJI')
             ->where('STATUS_PEGAWAI', '1')
             ->groupStart()
             ->where('deleted', null)

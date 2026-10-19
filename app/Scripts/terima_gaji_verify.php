@@ -66,5 +66,23 @@ try {
     $db->transRollback();
 }
 
+// E: PayrollGenerator melewati akun TERIMA_GAJI=0 (bukan hanya jabatan) & melaporkannya.
+$db->transBegin();
+try {
+    // Akun temp jabatan 36 (BUKAN jabatan 1/2) supaya check ini benar-benar
+    // gagal sebelum sumbernya dipindah dari jabatan ke kolom.
+    $db->table('akun')->insert([
+        'ID_AKUN' => 9903, 'ID_JABATAN' => 36, 'ID_UNIT' => 1, 'NOID' => 'TG9903',
+        'PASSWORD' => 'x', 'NAMA_AKUN' => 'TEMP TG 9903', 'JENIS_KELAMIN' => 'Laki-Laki',
+        'HP' => '0', 'STATUS_PEGAWAI' => 1, 'TERIMA_GAJI' => 0,
+    ]);
+    $hasil = (new \App\Services\Payroll\PayrollGenerator())->generate(date('Y-m'), ['unit_ids' => [1]]);
+    $excluded = array_filter($hasil['rows'], fn($r) => $r['status'] === 'excluded');
+    $nama = array_column($excluded, 'nama');
+    check('akun TERIMA_GAJI=0 (jabatan biasa) dilaporkan excluded', in_array('TEMP TG 9903', $nama, true));
+} finally {
+    $db->transRollback();
+}
+
 echo $gagal === 0 ? "\nSEMUA PASS\n" : "\n$gagal GAGAL\n";
 exit($gagal === 0 ? 0 : 1);

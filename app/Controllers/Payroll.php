@@ -375,7 +375,7 @@ class Payroll extends BaseController
             $nama = array_slice(array_column($excluded, 'nama'), 0, 3);
 
             $pesan .= sprintf(
-                ', %d tidak digaji karena jabatannya (%s%s)',
+                ', %d tidak digaji karena tidak menerima gaji (%s%s)',
                 $hasil['dikecualikan'],
                 implode(', ', $nama),
                 count($excluded) > 3 ? ', ...' : ''
