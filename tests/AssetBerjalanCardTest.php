@@ -23,7 +23,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     /**
      * @param int $unit unit terpilih
      */
-    private function render(int $unit, float $omset, float $pengeluaran, float $gaji): string
+    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null): string
     {
         $vars = [
             'boleh_pilih_unit' => true,
@@ -42,6 +42,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
             'omset_bulan'      => $omset,
             'pengeluaran'      => $pengeluaran,
             'totalGajiUnit'    => $gaji,
+            'gaji_detail'      => $gajiDetail,
         ];
 
         $r = service('renderer');
@@ -108,6 +109,71 @@ class AssetBerjalanCardTest extends CIUnitTestCase
 
         foreach (['Undefined array key', 'Undefined variable', 'Warning', 'Notice', 'Fatal error', 'Parse error'] as $pola) {
             $this->assertStringNotContainsString($pola, $html, "unit 5: terdeteksi \"{$pola}\"");
+        }
+    }
+
+    /** Baris rincian gaji contoh; total = 3.000.000 seperti $totalGajiUnit. */
+    private function detailContoh(): array
+    {
+        return [
+            [
+                'nama' => 'Budi Santoso', 'jabatan' => 'Teknisi',
+                'gaji_pokok' => 1500000.0, 'tunjangan_kinerja' => 1000000.0,
+                'tunjangan_absen' => 0.0, 'tunjangan_penempatan' => 350000.0,
+                'insentif' => 150000.0, 'total' => 3000000.0,
+            ],
+        ];
+    }
+
+    public function testRincianGajiMunculBilaDataDikirim(): void
+    {
+        $html = $this->render(1, 100000000, 20000000, 3000000, $this->detailContoh());
+
+        $this->assertStringContainsString('Lihat rincian', $html, 'tombol rincian tidak dirender');
+        $this->assertStringContainsString('id="modalRincianGaji"', $html, 'modal rincian tidak dirender');
+        $this->assertStringContainsString('Budi Santoso', $html, 'nama pegawai tidak muncul');
+        $this->assertStringContainsString('Teknisi', $html, 'jabatan tidak muncul');
+
+        // Setiap komponen muncul dengan nominalnya sendiri.
+        foreach (['1.500.000', '1.000.000', '350.000', '150.000'] as $nominal) {
+            $this->assertStringContainsString($nominal, $html, "komponen {$nominal} tidak muncul");
+        }
+    }
+
+    public function testRincianGajiTidakDirenderTanpaData(): void
+    {
+        $html = $this->render(1, 100000000, 20000000, 3000000);
+
+        $this->assertStringNotContainsString('Lihat rincian', $html, 'tombol rincian bocor ke yang tak berhak');
+        $this->assertStringNotContainsString('modalRincianGaji', $html, 'modal bocor ke yang tak berhak');
+        $this->assertStringNotContainsString('Budi Santoso', $html);
+    }
+
+    public function testTotalRincianSamaDenganAngkaKartu(): void
+    {
+        $html = $this->render(1, 100000000, 20000000, 3000000, $this->detailContoh());
+
+        $pola = '#<td[^>]*rincian-gaji-total[^>]*>\s*Rp\s+([0-9.]+)#';
+        $this->assertMatchesRegularExpression($pola, $html, 'baris total rincian tidak ada');
+        preg_match($pola, $html, $m);
+
+        $this->assertSame($this->kartu($html, 'Total Gaji'), $m[1], 'total rincian harus sama dengan kartu');
+    }
+
+    public function testHanyaAdminRootFinanceManagerYangBolehLihatRincian(): void
+    {
+        foreach ([0, 1, 34] as $jabatan) {
+            $this->assertTrue(
+                \App\Controllers\TutupKasir::bolehLihatRincianGaji($jabatan),
+                "jabatan {$jabatan} seharusnya boleh melihat rincian gaji"
+            );
+        }
+
+        foreach ([2, 35, 36, 40, 41, 43, 44, 46] as $jabatan) {
+            $this->assertFalse(
+                \App\Controllers\TutupKasir::bolehLihatRincianGaji($jabatan),
+                "jabatan {$jabatan} tidak boleh melihat rincian gaji"
+            );
         }
     }
 }

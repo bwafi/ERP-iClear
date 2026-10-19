@@ -800,6 +800,14 @@ class TutupKasir extends BaseController
 
 
         $totalGajiUnit = 0;
+        $gajiDetail = [];
+
+        // Nama jabatan untuk kolom "Jabatan" di rincian.
+        $namaJabatan = array_column(
+            $this->db->table('jabatan')->select('ID_JABATAN, NAMA_JABATAN')->get()->getResultArray(),
+            'NAMA_JABATAN',
+            'ID_JABATAN'
+        );
 
         // ambil semua karyawan dalam unit tertentu
         // TERIMA_GAJI=1: akun yang tidak digaji (mis. pemilik/direktur) tidak
@@ -1650,6 +1658,17 @@ class TutupKasir extends BaseController
                     + $insentif;
         
             $totalGajiUnit += $gaji;
+
+            $gajiDetail[] = [
+                'nama'                 => (string) $karyawan['NAMA_AKUN'],
+                'jabatan'              => $namaJabatan[(int) $jabatan] ?? ('#' . $jabatan),
+                'gaji_pokok'           => $gaji_pokok,
+                'tunjangan_kinerja'    => $tunjangan_kinerja,
+                'tunjangan_absen'      => $tunjangan_absen,
+                'tunjangan_penempatan' => $akun->tunjangan_penempatan,
+                'insentif'             => $insentif,
+                'total'                => $gaji,
+            ];
         }
         
         $pengeluaran = $this->db->table('kas_keluar')
@@ -1680,6 +1699,9 @@ class TutupKasir extends BaseController
             'tahunSebelum'   => $tahunSebelum,
             'pengeluaran'     => $pengeluaran,
             'totalGajiUnit'  => $totalGajiUnit,
+            // Rincian per pegawai hanya untuk yang berhak; null = tidak dikirim
+            // sama sekali, jadi tidak ada datanya di HTML.
+            'gaji_detail'    => self::bolehLihatRincianGaji((int) session('ID_JABATAN')) ? $gajiDetail : null,
             'omset_bulan'       => $omset_bulan,
             'pertumbuhan_omset' => $pertumbuhan_omset,
             'omset_bulan_lalu'  => $omset_bulan_lalu,
@@ -1776,6 +1798,12 @@ class TutupKasir extends BaseController
     private function isAdminRoot(): bool
     {
         return (int) session('ID_JABATAN') === 1;
+    }
+
+    /** Rincian gaji hanya untuk Admin root (1), Finance (0), dan Manager (34). */
+    public static function bolehLihatRincianGaji(int $idJabatan): bool
+    {
+        return in_array($idJabatan, [0, 1, 34], true);
     }
 
     private function cleanClosingDate($value): ?string

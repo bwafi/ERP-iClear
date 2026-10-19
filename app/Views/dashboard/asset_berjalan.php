@@ -207,6 +207,13 @@ if (in_array($selected_unit, [3, 4, 5])) {
                     </div>
                 </div>
                 <small class="text-muted">Beban gaji karyawan cabang</small>
+                <?php if (isset($gaji_detail)): ?>
+                    <button type="button" class="btn btn-sm bg-danger-subtle text-danger fw-semibold mt-2 align-self-start"
+                            data-bs-toggle="modal" data-bs-target="#modalRincianGaji">
+                        <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                        Lihat rincian
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -321,4 +328,60 @@ if (in_array($selected_unit, [3, 4, 5])) {
             </div>
         </div>
     </div>
+<?php endif; ?>
+
+<?php if (isset($gaji_detail)): ?>
+<!-- Rincian Total Gaji: hanya dikirim controller untuk Admin root (1), Finance (0), Manager (34) -->
+<div class="modal fade" id="modalRincianGaji" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rincian Total Gaji</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <?php if ($gaji_detail === []): ?>
+                    <p class="text-muted mb-0">Tidak ada data.</p>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nama</th>
+                                    <th>Jabatan</th>
+                                    <th class="text-end">Gaji Pokok</th>
+                                    <th class="text-end">T. Kinerja</th>
+                                    <th class="text-end">T. Absen</th>
+                                    <th class="text-end">T. Penempatan</th>
+                                    <th class="text-end">Insentif</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($gaji_detail as $d): ?>
+                                    <tr>
+                                        <td><?= esc($d['nama']) ?></td>
+                                        <td><?= esc($d['jabatan']) ?></td>
+                                        <td class="text-end"><?= number_format($d['gaji_pokok'], 0, ',', '.') ?></td>
+                                        <td class="text-end"><?= number_format($d['tunjangan_kinerja'], 0, ',', '.') ?></td>
+                                        <td class="text-end"><?= number_format($d['tunjangan_absen'], 0, ',', '.') ?></td>
+                                        <td class="text-end"><?= number_format($d['tunjangan_penempatan'], 0, ',', '.') ?></td>
+                                        <td class="text-end"><?= number_format($d['insentif'], 0, ',', '.') ?></td>
+                                        <td class="text-end fw-semibold"><?= number_format($d['total'], 0, ',', '.') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-bold table-light">
+                                    <td colspan="7" class="text-end">Total</td>
+                                    <td class="text-end rincian-gaji-total">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
 <?php endif; ?>
