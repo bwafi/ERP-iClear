@@ -331,10 +331,10 @@ class TutupKasirSourceDefinition
             ->where('sd.status', 'aktif')
             ->where(ServiceCashRecognition::recognizedExpression('s'), null, false)
             ->where('s.unit_idunit', $unitId)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') >=', $dari);
+            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') >= ' . $this->db->escape($dari), null, false);
 
         if ($sampai !== null) {
-            $builder->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') <=', $sampai);
+            $builder->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') <= ' . $this->db->escape($sampai), null, false);
         }
 
         if ($this->db->fieldExists('refund_idkas_keluar', 'service_dp')) {
@@ -436,7 +436,7 @@ class TutupKasirSourceDefinition
             ->select('sd.service_idservice, SUM(sd.jumlah) AS jumlah')
             ->join('service s', 's.idservice = sd.service_idservice')
             ->where('sd.status', 'aktif')
-            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ')', $tanggal)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') = ' . $this->db->escape($tanggal), null, false)
             ->where(ServiceCashRecognition::recognizedExpression('s'), null, false)
             ->where('s.unit_idunit', $unitId)
             ->groupBy('sd.service_idservice');
@@ -516,8 +516,8 @@ class TutupKasirSourceDefinition
             ->join('service s', 's.idservice = sd.service_idservice')
             ->where('sd.status', 'aktif')
             ->where(ServiceCashRecognition::recognizedExpression('s'), null, false)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') >=', $dari)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') <=', $sampai)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') >= ' . $this->db->escape($dari), null, false)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression('s') . ') <= ' . $this->db->escape($sampai), null, false)
             ->where('s.unit_idunit', $unitId)
             ->groupBy('d');
 
@@ -681,8 +681,8 @@ class TutupKasirSourceDefinition
     {
         $row = $this->db->table('service')
             ->selectSum('bayar_tunai', 'total')
-            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >=', $dari)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <=', $sampai)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >= ' . $this->db->escape($dari), null, false)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <= ' . $this->db->escape($sampai), null, false)
             ->where(ServiceCashRecognition::recognizedExpression(), null, false)
             ->where('unit_idunit', $unitId)
             ->get()
@@ -702,8 +702,8 @@ class TutupKasirSourceDefinition
     {
         $row = $this->db->table('service')
             ->select('COALESCE(SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)),0) AS total')
-            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >=', $dari)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <=', $sampai)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >= ' . $this->db->escape($dari), null, false)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <= ' . $this->db->escape($sampai), null, false)
             ->where(ServiceCashRecognition::recognizedExpression(), null, false)
             ->where('unit_idunit', $unitId)
             ->get()
@@ -808,8 +808,8 @@ class TutupKasirSourceDefinition
 
         $s = function () use ($unitId, $dari, $sampai) {
             return $this->db->table('service')
-                ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >=', $dari)
-                ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <=', $sampai)
+                ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >= ' . $this->db->escape($dari), null, false)
+                ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <= ' . $this->db->escape($sampai), null, false)
                 ->where(ServiceCashRecognition::recognizedExpression(), null, false)
                 ->where('unit_idunit', $unitId);
         };
@@ -890,8 +890,8 @@ class TutupKasirSourceDefinition
             ->select('DATE(' . ServiceCashRecognition::dateExpression() . ') AS d', false)
             ->select('COALESCE(SUM(bayar_tunai),0) AS cash', false)
             ->select('COALESCE(SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)),0) AS transfer', false)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >=', $dari)
-            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <=', $sampai)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >= ' . $this->db->escape($dari), null, false)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') <= ' . $this->db->escape($sampai), null, false)
             ->where(ServiceCashRecognition::recognizedExpression(), null, false)
             ->where('unit_idunit', $unitId)
             ->groupBy('d')
