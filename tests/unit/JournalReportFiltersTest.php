@@ -51,4 +51,12 @@ final class JournalReportFiltersTest extends TestCase
             'id_referensi' => '0',
         ], JournalReportFilters::forSource(['filterUnit' => '2'], null, 'refund', 0));
     }
+
+    public function testSourceDetailLinksUseOnlyKnownTransactionRoutes(): void
+    {
+        self::assertSame('detail/riwayat_service/4512', JournalReportFilters::sourceDetailPath('service', 4512));
+        self::assertSame('riwayat_penjualan/detail/4513', JournalReportFilters::sourceDetailPath('penjualan', '4513'));
+        self::assertNull(JournalReportFilters::sourceDetailPath('pembelian', 150));
+        self::assertNull(JournalReportFilters::sourceDetailPath('service', '../4512'));
+    }
 }

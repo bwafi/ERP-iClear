@@ -120,10 +120,21 @@
                                 $row->id_referensi
                             );
                             $sourceJournalUrl = base_url('laporan_jurnal') . '?' . http_build_query($sourceFilters);
+                            $sourceDetailPath = \App\Services\Finance\JournalReportFilters::sourceDetailPath(
+                                (string) $row->tabel_referensi,
+                                $row->id_referensi
+                            );
                             ?>
-                            <a href="<?= esc($sourceJournalUrl) ?>" title="Lihat jurnal terkait sumber ini">
-                                <?= esc($row->id_referensi) ?>
-                            </a>
+                            <?php if ($sourceDetailPath !== null): ?>
+                                <a href="<?= esc(base_url($sourceDetailPath)) ?>" title="Buka transaksi sumber">
+                                    <?= esc($row->id_referensi) ?>
+                                </a>
+                                <a class="ms-1 small" href="<?= esc($sourceJournalUrl) ?>" title="Lihat jurnal terkait sumber ini">Jurnal</a>
+                            <?php else: ?>
+                                <a href="<?= esc($sourceJournalUrl) ?>" title="Lihat jurnal terkait sumber ini">
+                                    <?= esc($row->id_referensi) ?>
+                                </a>
+                            <?php endif; ?>
                         <?php else: ?>
                             <?= esc($row->id_referensi ?? '') ?>
                         <?php endif; ?>

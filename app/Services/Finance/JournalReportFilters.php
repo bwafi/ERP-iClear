@@ -40,4 +40,20 @@ final class JournalReportFilters
             static fn ($value): bool => $value !== null && $value !== ''
         );
     }
+
+    public static function sourceDetailPath(string $table, $referenceId): ?string
+    {
+        $table = strtolower(trim($table));
+        $referenceId = (string) $referenceId;
+        if ($referenceId === '' || ! ctype_digit($referenceId)) {
+            return null;
+        }
+
+        $routes = [
+            'service' => 'detail/riwayat_service/',
+            'penjualan' => 'riwayat_penjualan/detail/',
+        ];
+
+        return isset($routes[$table]) ? $routes[$table] . rawurlencode($referenceId) : null;
+    }
 }
