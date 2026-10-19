@@ -15,12 +15,21 @@ namespace {
     require __DIR__ . '/../../app/Services/Finance/WarrantyJournalReconciliation.php';
 
     $databaseName = 'codex_erp_warranty_' . bin2hex(random_bytes(4));
+    $host = getenv('ERP_SYNTHETIC_MARIADB_HOST') ?: 'localhost';
+    if ($host !== 'localhost' && $host !== 'mariadb-test') {
+        throw new \RuntimeException('Host integration hanya boleh localhost atau alias fixture internal mariadb-test.');
+    }
+    $port = (int) (getenv('ERP_SYNTHETIC_MARIADB_PORT') ?: 3306);
     $connection = new \PDO(
-        'mysql:host=localhost;charset=utf8mb4',
+        'mysql:host=' . $host . ';port=' . $port . ';charset=utf8mb4',
         getenv('ERP_SYNTHETIC_MYSQL_USER') ?: 'root',
-        getenv('ERP_SYNTHETIC_MYSQL_PASSWORD') ?: ''
+        getenv('ERP_SYNTHETIC_MYSQL_PASSWORD') ?: (getenv('ERP_SYNTHETIC_MARIADB_PASSWORD') ?: '')
     );
     $connection->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+    $version = (string) $connection->query('SELECT VERSION()')->fetchColumn();
+    if (stripos($version, 'MariaDB') === false) {
+        throw new \RuntimeException('Integration fixture wajib memakai MariaDB; server yang terhubung bukan MariaDB.');
+    }
     $connection->exec("CREATE DATABASE `{$databaseName}`");
 
     try {

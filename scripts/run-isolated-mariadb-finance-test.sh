@@ -58,4 +58,8 @@ docker run --rm --network "$NETWORK" \
     -e ERP_SYNTHETIC_MARIADB_HOST=mariadb-test \
     -e ERP_SYNTHETIC_MARIADB_PORT=3306 \
     -e ERP_SYNTHETIC_MARIADB_USER=root \
-    "$PHP_IMAGE" php vendor/bin/phpunit --no-coverage tests/integration/InventoryBatchMariaDbTest.php
+    "$PHP_IMAGE" sh -euc '
+        php vendor/bin/phpunit --no-coverage tests/integration/InventoryBatchMariaDbTest.php
+        php vendor/bin/phpunit --no-coverage tests/unit --filter="BalanceSheetReconciliationTest|DailyCashFlowServiceTest|FinanceMenuNavigationTest|InventoryLedgerMathTest|InventoryLedgerBridgeTest|JournalReportFiltersTest|SupplierCreditReconciliationTest|WarrantyJournalReconciliationTest|WarrantyServiceAccessTest"
+        php tests/integration/WarrantyStockMySql.php
+    '
