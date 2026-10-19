@@ -47,5 +47,24 @@ try {
     $db->transRollback();
 }
 
+// C: akun TERIMA_GAJI=0 tidak ikut di totalGajiUnit; TERIMA_GAJI=1 ikut.
+$db->transBegin();
+try {
+    foreach ([9901 => 0, 9902 => 1] as $idAkun => $flag) {
+        $db->table('akun')->insert([
+            'ID_AKUN' => $idAkun, 'ID_JABATAN' => 36, 'ID_UNIT' => 2, 'NOID' => "TG$idAkun",
+            'PASSWORD' => 'x', 'NAMA_AKUN' => "TEMP TG $idAkun", 'JENIS_KELAMIN' => 'Laki-Laki',
+            'HP' => '0', 'STATUS_PEGAWAI' => 1, 'TERIMA_GAJI' => $flag,
+        ]);
+    }
+    $svc = new \App\Services\Payroll\UnitSalaryCalculationService();
+    $hasil = $svc->calculateForUnit(1, 2, date('m'), date('Y'));
+    $idAda = array_keys($hasil['employeeData']);
+    check('akun TERIMA_GAJI=0 tidak ikut Total Gaji', ! in_array(9901, $idAda, true));
+    check('akun TERIMA_GAJI=1 tetap ikut Total Gaji', in_array(9902, $idAda, true));
+} finally {
+    $db->transRollback();
+}
+
 echo $gagal === 0 ? "\nSEMUA PASS\n" : "\n$gagal GAGAL\n";
 exit($gagal === 0 ? 0 : 1);

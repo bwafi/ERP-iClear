@@ -75,8 +75,11 @@ class UnitSalaryCalculationService
         $employeeData = [];
 
         // ── LOOP SETIAP KARYAWAN DALAM UNIT ──────────────────────────
+        // TERIMA_GAJI=1: akun yang tidak digaji (mis. pemilik/direktur) tidak
+        // ikut dihitung, lihat docs/superpowers/specs/2026-10-19-akun-terima-gaji-design.md
         $karyawanUnit = $this->db->table('akun')
             ->where('ID_UNIT', $unit)
+            ->where('TERIMA_GAJI', 1)
             ->get()
             ->getResultArray();
 

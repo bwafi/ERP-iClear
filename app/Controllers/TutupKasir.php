@@ -802,8 +802,11 @@ class TutupKasir extends BaseController
         $totalGajiUnit = 0;
 
         // ambil semua karyawan dalam unit tertentu
+        // TERIMA_GAJI=1: akun yang tidak digaji (mis. pemilik/direktur) tidak
+        // ikut masuk Total Gaji unit.
         $karyawanUnit = $this->db->table('akun')
             ->where('ID_UNIT', $unit) // misal unit 1
+            ->where('TERIMA_GAJI', 1)
             ->get()
             ->getResultArray();
 
