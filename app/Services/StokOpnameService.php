@@ -9,6 +9,7 @@ use App\Models\ModelStokOpnamePeriode;
 use App\Models\ModelHppBarang;
 use App\Models\ModelStokAwal;
 use App\Services\Inventory\ProductInventoryScope;
+use App\Services\Inventory\InventoryStockAdjustment;
 
 /**
  * StokOpnameService
@@ -50,11 +51,11 @@ class StokOpnameService
     public function __construct(?ConnectionInterface $db = null)
     {
         $this->db = $db ?? \Config\Database::connect();
-        $this->model = new ModelStokOpnamePeriode();
-        $this->draftModel = new ModelStokOpnameDraft();
-        $this->finalModel = new ModelStokOpname();
-        $this->hppModel = new ModelHppBarang();
-        $this->stokAwalModel = new ModelStokAwal();
+        $this->model = new ModelStokOpnamePeriode($this->db);
+        $this->draftModel = new ModelStokOpnameDraft($this->db);
+        $this->finalModel = new ModelStokOpname($this->db);
+        $this->hppModel = new ModelHppBarang($this->db);
+        $this->stokAwalModel = new ModelStokAwal($this->db);
     }
 
     public function periodeModel(): ModelStokOpnamePeriode
@@ -484,12 +485,10 @@ class StokOpnameService
         try {
             $periodeId = (int)$periode->id;
 
-            // Baris hasil finalisasi sebelumnya pada periode ini (setelah reopen)
-            // tetap disimpan sebagai riwayat, tapi dikeluarkan dari stok aktif.
-            $this->db->query(
-                'UPDATE stok_opname SET is_reverted = 1 WHERE periode_id = ? AND is_reverted = 0',
-                [$periodeId]
-            );
+            if ($this->db->table('stok_opname')->where('periode_id', $periodeId)
+                ->where('is_reverted', 0)->countAllResults() > 0) {
+                throw new \RuntimeException('Hasil opname aktif masih ada; finalisasi ulang ditolak.');
+            }
 
             $this->db->query(
                 'INSERT INTO stok_opname
@@ -500,6 +499,36 @@ class StokOpnameService
                  FROM stok_opname_draft WHERE periode_id = ?',
                 [$periodeId, $periodeId]
             );
+
+            $adjustments = new InventoryStockAdjustment($this->db);
+            $rows = $this->db->table('stok_opname')
+                ->select('idstok_opname, barang_idbarang, unit_idunit, jumlah_real, jumlah_komp, jumlah_selisih, hpp')
+                ->where('periode_id', $periodeId)->where('is_reverted', 0)->get()->getResult();
+            foreach ($rows as $row) {
+                if ($row->jumlah_real === null) {
+                    continue;
+                }
+                $itemId = (int) $row->barang_idbarang;
+                $unitId = (int) $row->unit_idunit;
+                if (! is_numeric($row->jumlah_real) || (float) $row->jumlah_real < 0
+                    || floor((float) $row->jumlah_real) !== (float) $row->jumlah_real) {
+                    throw new \RuntimeException('Jumlah fisik opname harus bilangan bulat non-negatif.');
+                }
+                $stock = $this->db->table('stok_barang')->select('stok_akhir')
+                    ->where('idbarang', $itemId)->where('id_unit', $unitId)->get()->getRow();
+                if ((int) ($stock->stok_akhir ?? 0) !== (int) $row->jumlah_komp) {
+                    throw new \RuntimeException('Stok berubah sejak draft opname; hitung ulang sebelum finalisasi.');
+                }
+                $delta = (int) $row->jumlah_real - (int) $row->jumlah_komp;
+                if ((float) $row->jumlah_selisih !== (float) $delta) {
+                    throw new \RuntimeException('Selisih draft opname tidak cocok dengan jumlah fisik.');
+                }
+                if ($delta !== 0) {
+                    $adjustments->post($itemId, $unitId, $delta, 'stok_opname',
+                        (string) $row->idstok_opname, 'Selisih stok opname periode ' . $periodeId,
+                        $userId, null, (int) $row->hpp);
+                }
+            }
 
             $sum = $this->db->query(
                 'SELECT COALESCE(SUM(jumlah_real),0) AS real_jml,
@@ -567,6 +596,18 @@ class StokOpnameService
 
         try {
             $periodeId = (int)$periode->id;
+
+            $adjustments = new InventoryStockAdjustment($this->db);
+            $rows = $this->db->table('stok_opname')->select('idstok_opname')
+                ->where('periode_id', $periodeId)->where('is_reverted', 0)->get()->getResult();
+            foreach ($rows as $row) {
+                $adjustment = $this->db->table('inventory_stock_adjustments')->select('id')
+                    ->where('source_type', 'stok_opname')
+                    ->where('source_id', (string) $row->idstok_opname)->get()->getRow();
+                if ($adjustment !== null) {
+                    $adjustments->reverse((int) $adjustment->id, $alasan, $userId);
+                }
+            }
 
             $this->db->query(
                 'UPDATE stok_opname

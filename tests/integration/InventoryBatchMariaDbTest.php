@@ -5,11 +5,14 @@ namespace Tests\integration;
 use App\Database\Migrations\CreateInventoryBatchLedger;
 use App\Database\Migrations\CreateInventoryLedger;
 use App\Database\Migrations\CreateInventoryStockAdjustments;
+use App\Database\Migrations\CreateInventoryAdjustmentAccounts;
+use App\Database\Migrations\AllowUnknownDamagedStockOrigin;
 use App\Database\Migrations\LinkWarrantyDamagedStock;
 use App\Services\Inventory\InventoryBatchLedger;
 use App\Services\Inventory\InventoryLedger;
 use App\Services\Inventory\InventoryStockAdjustment;
 use App\Services\Inventory\PurchaseBatchOrigin;
+use App\Services\StokOpnameService;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
 
@@ -36,6 +39,8 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             '2026-10-19-000200_CreateInventoryLedger.php',
             '2026-10-19-000400_CreateInventoryBatchLedger.php',
             '2026-10-19-000500_CreateInventoryStockAdjustments.php',
+            '2026-10-19-000600_CreateInventoryAdjustmentAccounts.php',
+            '2026-10-19-000700_AllowUnknownDamagedStockOrigin.php',
         ] as $migration) {
             require_once APPPATH . 'Database/Migrations/' . $migration;
         }
@@ -53,9 +58,14 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             'mutasi' => 'idmutasi INT PRIMARY KEY, input_by INT',
             'retur_pelanggan' => 'idretur_pelanggan INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, tanggal DATETIME, input_by INT',
             'retur_suplier' => 'idretur_suplier INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, barang_rusak_id INT NULL, tanggal DATETIME, input_by INT',
-            'barang_rusak' => 'idbarang_rusak INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, claim_id INT NULL, tanggal_rusak DATETIME, input_by INT',
-            'stok_opname' => 'barang_idbarang INT, unit_idunit INT, is_reverted INT',
+            'barang_rusak' => 'idbarang_rusak INT PRIMARY KEY, idpembelian INT NOT NULL, no_nota_sup VARCHAR(60) NOT NULL, barang_idbarang INT, unit_idunit INT, jumlah INT, claim_id INT NULL, tanggal_rusak DATETIME, input_by INT',
+            'stok_opname' => 'idstok_opname INT AUTO_INCREMENT PRIMARY KEY, tanggal DATE, hpp DECIMAL(15,2), jumlah_real DECIMAL(15,2), jumlah_komp DECIMAL(15,2), jumlah_selisih DECIMAL(15,2), satuan_terkecil VARCHAR(20), barang_idbarang INT, unit_idunit INT, periode_id INT, is_reverted INT, reverted_by INT NULL, reverted_at DATETIME NULL, revert_alasan VARCHAR(255) NULL',
+            'stok_opname_draft' => 'idstok_opname INT AUTO_INCREMENT PRIMARY KEY, tanggal DATE, hpp DECIMAL(15,2), jumlah_real DECIMAL(15,2), jumlah_komp DECIMAL(15,2), jumlah_selisih DECIMAL(15,2), satuan_terkecil VARCHAR(20), barang_idbarang INT, unit_idunit INT, periode_id INT',
+            'stok_opname_periode' => 'id INT AUTO_INCREMENT PRIMARY KEY, unit_idunit INT, tanggal DATE, status VARCHAR(10), total_barang INT, terisi_barang INT, jumlah_komp DECIMAL(15,2), jumlah_real DECIMAL(15,2), jumlah_selisih DECIMAL(15,2), finalisasi_by INT NULL, tanggal_finalisasi DATETIME NULL, catatan_finalisasi VARCHAR(255) NULL, reopen_by INT NULL, tanggal_reopen DATETIME NULL, alasan_reopen VARCHAR(255) NULL, created_at DATETIME NULL, updated_at DATETIME NULL',
+            'stok_opname_audit' => 'id INT AUTO_INCREMENT PRIMARY KEY, periode_id INT, unit_idunit INT, tanggal DATE, aksi VARCHAR(30), actor_id INT, jumlah_barang INT, jumlah_terisi INT, catatan VARCHAR(255), created_at DATETIME',
             'garansi_sparepart_keluar' => 'id INT AUTO_INCREMENT PRIMARY KEY, barang_id INT, unit_id INT, jumlah INT, claim_id INT, service_id INT, hpp_satuan BIGINT, created_at DATETIME, input_by INT',
+            'no_akun' => 'no_akun VARCHAR(10) PRIMARY KEY, nama_akun VARCHAR(100)',
+            'jurnal' => 'idjurnal INT AUTO_INCREMENT PRIMARY KEY, tanggal DATE, no_akun VARCHAR(10), nama_akun VARCHAR(100), debet BIGINT, kredit BIGINT, keterangan VARCHAR(255), id_referensi INT, tabel_referensi VARCHAR(64), id_unit INT, id_akun INT',
         ];
         try {
             foreach ($schema as $table => $columns) {
@@ -68,6 +78,13 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             (new CreateInventoryLedger($forge))->up();
             (new CreateInventoryBatchLedger($forge))->up();
             (new CreateInventoryStockAdjustments($forge))->up();
+            (new CreateInventoryAdjustmentAccounts($forge))->up();
+            (new AllowUnknownDamagedStockOrigin($forge))->up();
+            $db->query("INSERT INTO barang_rusak (idbarang_rusak, idpembelian, no_nota_sup, barang_idbarang, unit_idunit, jumlah, claim_id) VALUES (51, NULL, NULL, 7, 1, 1, 1)");
+            $this->assertNull($db->table('barang_rusak')->where('idbarang_rusak', 51)->get()->getRow()->idpembelian);
+            $db->table('barang_rusak')->where('idbarang_rusak', 51)->delete();
+            $db->query("INSERT INTO no_akun VALUES ('1030100000', 'Persediaan'), ('6010301000', 'Beban sintetis'), ('4010100000', 'Surplus sintetis')");
+            $db->query("INSERT INTO inventory_adjustment_accounts VALUES (1, '1030100000', '6010301000', '4010100000'), (2, '1030100000', '6010301000', '4010100000')");
             $db->query("INSERT INTO barang (idbarang, kode_barang, nama_barang, jenis_item, deleted) VALUES (7, 'SYN-7', 'Sintetis', 'fisik', '0'), (8, 'SYN-J', 'Jasa', 'jasa', '0'), (9, 'SYN-9', 'Fisik baru', 'fisik', '0')");
             $db->query("INSERT INTO unit VALUES (1, 'Cabang A'), (2, 'Cabang B')");
             $db->query("INSERT INTO suplier VALUES (1, 'Supplier A'), (2, 'Supplier B')");
@@ -121,15 +138,31 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             $this->assertSame(12, (new PurchaseBatchOrigin($db))->validate(12, 7, 2, 1));
             $this->assertSame('Supplier B', (new PurchaseBatchOrigin($db))->candidates(7, 2)[0]['nama_suplier']);
             $adjustments = new InventoryStockAdjustment($db);
+            $db->table('inventory_adjustment_accounts')->where('unit_id', 2)->delete();
+            try {
+                $adjustments->post(7, 2, -1, 'synthetic', 'unmapped', 'Akun tidak ada', 1);
+                $this->fail('Penyesuaian tanpa akun diterima.');
+            } catch (\RuntimeException $error) {
+                $this->assertStringContainsString('Akun selisih', $error->getMessage());
+            }
+            $this->assertSame(0, $db->table('inventory_stock_adjustments')->where('source_id', 'unmapped')->countAllResults());
+            $this->assertSame(1, $batches->total(7, 2));
+            $db->query("INSERT INTO inventory_adjustment_accounts VALUES (2, '1030100000', '6010301000', '4010100000')");
             $adjustment = $adjustments->post(7, 1, -1, 'synthetic', 'count-1', 'Selisih hitung sintetis', 1);
+            $journal = $db->table('jurnal')->where('tabel_referensi', 'inventory_stock_adjustments')->where('id_referensi', $adjustment['id'])->get()->getResultArray();
+            $this->assertCount(2, $journal);
+            $this->assertSame(175, array_sum(array_map('intval', array_column($journal, 'debet'))));
+            $this->assertSame(175, array_sum(array_map('intval', array_column($journal, 'kredit'))));
             $this->assertSame(2, $batches->total(7, 1));
             $this->assertSame(2, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 7 AND id_unit = 1')->getRow()->stok_akhir);
             $this->assertSame(350, (int) $db->table('inventory_ledger_balances')->select('value')->where('item_id', 7)->where('unit_id', 1)->get()->getRow()->value);
             $adjustments->reverse((int) $adjustment['id'], 'Pembatalan hitung sintetis', 1);
+            $this->assertSame(4, $db->table('jurnal')->where('tabel_referensi', 'inventory_stock_adjustments')->countAllResults());
             $this->assertSame(3, $batches->total(7, 1));
             $this->assertSame(525, (int) $db->table('inventory_ledger_balances')->select('value')->where('item_id', 7)->where('unit_id', 1)->get()->getRow()->value);
             $this->assertSame(3, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 7 AND id_unit = 1')->getRow()->stok_akhir);
             $adjustments->reverse((int) $adjustment['id'], 'Pembatalan hitung sintetis', 1);
+            $this->assertSame(4, $db->table('jurnal')->where('tabel_referensi', 'inventory_stock_adjustments')->countAllResults());
             $this->assertSame(3, $batches->total(7, 1));
             try {
                 $adjustments->post(8, 1, 1, 'synthetic', 'jasa-1', 'Tidak boleh stok jasa', 1, null, 100);
@@ -144,11 +177,28 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             $adjustments->reverse((int) $found['id'], 'Koreksi temuan sintetis', 1);
             $this->assertSame(0, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 9 AND id_unit = 1')->getRow()->stok_akhir);
             $this->assertSame(0, $batches->total(9, 1));
+
+            $db->query("INSERT INTO stok_opname_periode (id, unit_idunit, tanggal, status, total_barang, terisi_barang) VALUES (61, 1, '2026-10-19', 'DRAFT', 1, 1)");
+            $db->query("INSERT INTO stok_opname_draft (tanggal, hpp, jumlah_real, jumlah_komp, jumlah_selisih, barang_idbarang, unit_idunit, periode_id) VALUES ('2026-10-19', 175, 2, 3, -1, 7, 1, 61)");
+            $opname = new StokOpnameService($db);
+            $this->assertTrue($opname->finalize(1, '2026-10-19', 1)['success']);
+            $this->assertSame(2, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 7 AND id_unit = 1')->getRow()->stok_akhir);
+            $this->assertSame(2, $batches->total(7, 1));
+            $this->assertSame(350, (int) $db->table('inventory_ledger_balances')->select('value')->where('item_id', 7)->where('unit_id', 1)->get()->getRow()->value);
+            $this->assertTrue($opname->reopen(1, '2026-10-19', 1, 'Hitung ulang sintetis')['success']);
+            $this->assertSame(3, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 7 AND id_unit = 1')->getRow()->stok_akhir);
+            $this->assertSame(3, $batches->total(7, 1));
+            $this->assertSame(525, (int) $db->table('inventory_ledger_balances')->select('value')->where('item_id', 7)->where('unit_id', 1)->get()->getRow()->value);
+            $this->assertFalse($opname->reopen(1, '2026-10-19', 1, 'Hitung ulang sintetis')['success']);
+            $this->assertTrue($opname->finalize(1, '2026-10-19', 1)['success']);
+            $this->assertFalse($opname->finalize(1, '2026-10-19', 1)['success']);
+            $this->assertSame(2, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 7 AND id_unit = 1')->getRow()->stok_akhir);
+            $this->assertSame(2, $batches->total(7, 1));
         } finally {
             $db->query('DROP VIEW IF EXISTS stok_barang');
             $db->query('DROP TRIGGER IF EXISTS inventory_ledger_no_update');
             $db->query('DROP TRIGGER IF EXISTS inventory_ledger_no_delete');
-            foreach (['inventory_stock_adjustments', 'inventory_batch_events', 'inventory_batch_balances', 'inventory_ledger_entries', 'inventory_ledger_balances'] as $table) {
+            foreach (['inventory_adjustment_accounts', 'inventory_stock_adjustments', 'inventory_batch_events', 'inventory_batch_balances', 'inventory_ledger_entries', 'inventory_ledger_balances'] as $table) {
                 $db->query("DROP TABLE IF EXISTS {$table}");
             }
             foreach (array_reverse(array_keys($schema)) as $table) {

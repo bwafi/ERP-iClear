@@ -90,15 +90,18 @@ class BarangRusak extends BaseController
         $dates = $this->request->getPost('tanggal_rusak');
         $notes = $this->request->getPost('keterangan');
         $claimIds = $this->request->getPost('claim_id');
+        $originStatuses = $this->request->getPost('asal_dokumen');
         $unitId = (int) session('ID_UNIT');
         $count = is_array($products) ? count($products) : 0;
         if ($unitId <= 0 || $count === 0 || ! is_array($purchases) || ! is_array($batches)
             || ! is_array($quantities) || ! is_array($dates) || ! is_array($notes)
+            || ! is_array($originStatuses)
             || count($purchases) !== $count || count($batches) !== $count
             || count($quantities) !== $count || count($dates) !== $count || count($notes) !== $count
             || array_keys($products) !== array_keys($purchases) || array_keys($products) !== array_keys($batches)
             || array_keys($products) !== array_keys($quantities) || array_keys($products) !== array_keys($dates)
-            || array_keys($products) !== array_keys($notes)) {
+            || array_keys($products) !== array_keys($notes)
+            || array_keys($products) !== array_keys($originStatuses)) {
             return redirect()->back()->with('gagal', 'Data barang rusak tidak lengkap.');
         }
         if ($claimIds === null) {
@@ -121,12 +124,17 @@ class BarangRusak extends BaseController
                 }
                 $productId = (int) $productId;
                 $purchaseId = (int) $purchases[$index];
+                $originStatus = (string) $originStatuses[$index];
+                if (! in_array($originStatus, ['terverifikasi', 'belum_diketahui'], true)) {
+                    throw new \RuntimeException('Status asal barang rusak tidak valid.');
+                }
+                $unknownOrigin = $originStatus === 'belum_diketahui';
                 $quantity = (int) $quantities[$index];
                 $batch = trim((string) $batches[$index]);
                 $date = (string) $dates[$index];
                 $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
                 $dateErrors = \DateTimeImmutable::getLastErrors();
-                $key = $purchaseId . ':' . $productId . ':' . $batch;
+                $key = ($unknownOrigin ? 'unknown' : $purchaseId . ':' . $batch) . ':' . $productId;
                 if ($purchaseId <= 0 || $productId <= 0 || $quantity <= 0 || $batch === '' || isset($seen[$key])
                     || ! $parsedDate || $parsedDate->format('Y-m-d') !== $date
                     || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))) {
@@ -164,7 +172,7 @@ class BarangRusak extends BaseController
                     ->where('no_nota_sup', $batch)
                     ->where('unit_idunit', $unitId)
                     ->get()->getRow();
-                if ($quantity > (int) ($purchased->jumlah ?? 0) - (int) ($previous->jumlah ?? 0)) {
+                if (! $unknownOrigin && $quantity > (int) ($purchased->jumlah ?? 0) - (int) ($previous->jumlah ?? 0)) {
                     throw new \RuntimeException('Jumlah rusak melebihi pembelian.');
                 }
                 if ($claimId > 0) {
@@ -184,7 +192,14 @@ class BarangRusak extends BaseController
                         ->select('source_purchase_detail_id')
                         ->where('service_idservice', (int) $claim->idservice)
                         ->where('barang_idbarang', $productId)->get()->getRow();
-                    if ($serviceOrigin !== null && $serviceOrigin->source_purchase_detail_id !== null) {
+                    if ($serviceOrigin === null || $serviceOrigin->source_purchase_detail_id === null) {
+                        if (! $unknownOrigin) {
+                            throw new \RuntimeException('Asal sparepart service lama belum diketahui; pilih asal belum diketahui.');
+                        }
+                    } elseif ($unknownOrigin) {
+                        throw new \RuntimeException('Asal service sudah terbukti; gunakan supplier dan nota asal.');
+                    }
+                    if (! $unknownOrigin) {
                         $origin = $db->table('detail_pembelian')
                             ->select('pembelian_idpembelian, no_batch')
                             ->where('iddetail_pembelian', (int) $serviceOrigin->source_purchase_detail_id)
@@ -210,8 +225,8 @@ class BarangRusak extends BaseController
                 }
 
                 if (! $this->BarangRusakModel->insert([
-                    'idpembelian' => $purchaseId,
-                    'no_nota_sup' => $batch,
+                    'idpembelian' => $unknownOrigin ? null : $purchaseId,
+                    'no_nota_sup' => $unknownOrigin ? null : $batch,
                     'barang_idbarang' => $productId,
                     'jumlah' => $quantity,
                     'tanggal_rusak' => $date,

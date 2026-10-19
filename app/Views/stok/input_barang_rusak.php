@@ -260,6 +260,13 @@
 
                         <div class="row g-2 mt-2">
                             <div class="col-md-4">
+                                <label class="form-label">Asal fisik barang</label>
+                                <select class="form-select" name="asal_dokumen[]">
+                                    <option value="terverifikasi">Nota pembelian ini terbukti sebagai asal</option>
+                                    <option value="belum_diketahui">Belum diketahui — jangan kaitkan supplier</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
                                 <label class="form-label">Klaim Garansi Customer (opsional)</label>
                                 <select class="form-select" name="claim_id[]">
                                     <option value="">Bukan barang dari klaim customer</option>

@@ -2,6 +2,7 @@
 
 namespace App\Services\Inventory;
 
+use App\Services\Finance\InventoryAdjustmentJournal;
 use CodeIgniter\Database\BaseConnection;
 
 final class InventoryStockAdjustment
@@ -74,16 +75,18 @@ final class InventoryStockAdjustment
                     && ! $bridge->isFirstIncoming($itemId, $unitId, 'inventory_stock_adjustments', $adjustmentId, $delta)) {
                     throw new \RuntimeException('Saldo awal penyesuaian tidak dapat dibuktikan.');
                 }
-                $bridge->incoming($itemId, $unitId, 'inventory_stock_adjustments',
+                $valuation = $bridge->incoming($itemId, $unitId, 'inventory_stock_adjustments',
                     (string) $adjustmentId, 'adjust', $delta, $unitCost);
             } else {
-                $bridge->outgoing($itemId, $unitId, 'inventory_stock_adjustments',
+                $valuation = $bridge->outgoing($itemId, $unitId, 'inventory_stock_adjustments',
                     (string) $adjustmentId, 'adjust', -$delta);
             }
             (new InventoryBatchLedger($this->db))->post($itemId, $unitId, 'inventory_stock_adjustments',
                 (string) $adjustmentId, 'adjust', $delta, $batchId);
+            $adjustment = $this->db->table('inventory_stock_adjustments')->where('id', $adjustmentId)->get()->getRowArray();
+            (new InventoryAdjustmentJournal($this->db))->post($adjustment, (int) $valuation['value']);
             $this->finish();
-            return $this->db->table('inventory_stock_adjustments')->where('id', $adjustmentId)->get()->getRowArray();
+            return $adjustment;
         } catch (\Throwable $error) {
             $this->db->transRollback();
             throw $error;
@@ -130,12 +133,14 @@ final class InventoryStockAdjustment
             if ($valuationEntry === null || $batchEntry === null) {
                 throw new \RuntimeException('Ledger penyesuaian asal tidak lengkap.');
             }
-            (new InventoryLedger($this->db))->reverse((int) $valuationEntry->id,
+            $valuation = (new InventoryLedger($this->db))->reverse((int) $valuationEntry->id,
                 'inventory_stock_adjustments', (string) $reversalId, 'cancel');
             (new InventoryBatchLedger($this->db))->reverse((int) $batchEntry->id,
                 'inventory_stock_adjustments', (string) $reversalId, 'cancel');
+            $reversal = $this->db->table('inventory_stock_adjustments')->where('id', $reversalId)->get()->getRowArray();
+            (new InventoryAdjustmentJournal($this->db))->reverse($original, $reversal, (int) $valuation['value']);
             $this->finish();
-            return $this->db->table('inventory_stock_adjustments')->where('id', $reversalId)->get()->getRowArray();
+            return $reversal;
         } catch (\Throwable $error) {
             $this->db->transRollback();
             throw $error;

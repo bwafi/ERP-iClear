@@ -115,7 +115,7 @@
                     <?php foreach ($barang_rusak as $row): ?>
                         <tr data-idkategori="">
 
-                            <td><?= esc($row->no_nota_sup) ?></td>
+                            <td><?= $row->no_nota_sup === null ? 'Belum diketahui' : esc($row->no_nota_sup) ?></td>
                             <td><?= esc($row->kode_barang) ?></td>
                             <td><?= esc($row->nama_barang) ?></td>
                             <td><?= !empty($row->imei) ? esc($row->imei) : 'Tidak ada IMEI' ?></td>
