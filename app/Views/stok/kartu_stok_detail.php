@@ -47,5 +47,29 @@ $sourcePaths = [
                 </tbody>
             </table>
         </div>
+        <h5 class="mt-4">Jejak ledger persediaan</h5>
+        <p class="text-muted">Entri pembalikan tetap tercatat di sini; tabel mutasi sumber di atas hanya menampilkan transaksi yang masih aktif. Saldo ledger harus direkonsiliasi sebelum dipakai sebagai nilai persediaan.</p>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle">
+                <thead><tr><th>Waktu</th><th>Peristiwa</th><th>Referensi sumber</th><th>Entri dibalik</th><th class="text-end">Perubahan jumlah</th><th class="text-end">Perubahan nilai</th><th class="text-end">Saldo jumlah</th><th class="text-end">Saldo nilai</th></tr></thead>
+                <tbody>
+                <?php foreach ($ledgerEntries as $entry): ?>
+                    <tr>
+                        <td><?= esc($entry['created_at']) ?></td>
+                        <td><?= esc($entry['source_event']) ?></td>
+                        <td><?= esc($entry['source_type']) ?> #<?= esc($entry['source_id']) ?></td>
+                        <td><?= $entry['reverses_id'] === null ? '-' : (int) $entry['reverses_id'] ?></td>
+                        <td class="text-end"><?= number_format((int) $entry['quantity'], 0, ',', '.') ?></td>
+                        <td class="text-end">Rp <?= number_format((int) $entry['value'], 0, ',', '.') ?></td>
+                        <td class="text-end"><?= number_format((int) $entry['balance_quantity'], 0, ',', '.') ?></td>
+                        <td class="text-end">Rp <?= number_format((int) $entry['balance_value'], 0, ',', '.') ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if ($ledgerEntries === []): ?>
+                    <tr><td colspan="8">Belum ada entri ledger untuk barang dan unit ini.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>

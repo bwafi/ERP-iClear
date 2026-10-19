@@ -61,6 +61,11 @@ class Kartu_Stok extends BaseController
         $valuation = MovingAverageValuation::replay((new StockCardLedger($db))->forItem($itemId, $unitId));
         $movements = $valuation['rows'];
         $calculated = $movements === [] ? 0 : (float) end($movements)['saldo'];
+        $ledgerEntries = $db->tableExists('inventory_ledger_entries')
+            ? $db->table('inventory_ledger_entries')
+                ->where('item_id', $itemId)->where('unit_id', $unitId)
+                ->orderBy('id', 'ASC')->get()->getResultArray()
+            : [];
         return view('template', [
             'akun' => $this->AuthModel->getById(session('ID_AKUN')),
             'body' => 'stok/kartu_stok_detail',
@@ -68,6 +73,7 @@ class Kartu_Stok extends BaseController
             'movements' => $movements,
             'calculated' => $calculated,
             'valuation' => $valuation,
+            'ledgerEntries' => $ledgerEntries,
         ]);
     }
 

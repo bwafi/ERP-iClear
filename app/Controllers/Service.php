@@ -919,6 +919,12 @@ class Service extends BaseController
                 $ok = $db->table('service_dp')->where('service_idservice', $idservice)->delete() && $ok;
             }
 
+            (new ServiceSparepartPenjualanSyncService($db))->hapusTransaksiLama(
+                $idservice,
+                $this->ServiceSparepartModel->getByServiceId($idservice),
+                (int) ($service->unit_idunit ?? session('ID_UNIT'))
+            );
+
             $ok = $this->ServiceModel->delete($idservice) && $ok;
 
             $ok = $this->ServiceKerusakanModel->where('service_idservice', $idservice)->delete() && $ok;

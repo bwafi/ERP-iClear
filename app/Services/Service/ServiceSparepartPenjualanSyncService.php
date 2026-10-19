@@ -38,10 +38,15 @@ final class ServiceSparepartPenjualanSyncService
         }
 
         $linkedRows = $this->db->table('penjualan')
-            ->select('idpenjualan')
+            ->select('idpenjualan, bayar')
             ->where('service_idservice', $serviceId)
             ->get()
             ->getResultArray();
+        foreach ($linkedRows as $linkedRow) {
+            if ((int) $linkedRow['bayar'] > 0) {
+                throw new RuntimeException('Invoice sparepart service sudah dibayar; pembatalan otomatis ditolak.');
+            }
+        }
         $invoiceIds = array_map('intval', array_column($linkedRows, 'idpenjualan'));
 
         if ($invoiceIds === []) {

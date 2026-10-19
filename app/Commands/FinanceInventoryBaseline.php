@@ -32,13 +32,21 @@ final class FinanceInventoryBaseline extends BaseCommand
 
         $stockQuery = $db->table('stok_barang stok')
             ->select('stok.idbarang, stok.id_unit, stok.stok_akhir, hpp.hpp')
+            ->join('barang barang', 'barang.idbarang = stok.idbarang')
             ->join('hpp_barang hpp', 'hpp.idbarang = stok.idbarang', 'left')
+            ->where('barang.jenis_item', 'fisik')
             ->orderBy('stok.id_unit')->orderBy('stok.idbarang');
+        $unclassifiedQuery = $db->table('stok_barang stok')
+            ->select('COUNT(*) AS jumlah', false)
+            ->join('barang barang', 'barang.idbarang = stok.idbarang')
+            ->groupStart()->where('barang.jenis_item IS NULL', null, false)
+                ->orWhereNotIn('barang.jenis_item', ['fisik', 'jasa'])->groupEnd();
         $journalQuery = $db->table('jurnal')
             ->select('no_akun, COALESCE(SUM(debet), 0) AS debet, COALESCE(SUM(kredit), 0) AS kredit', false)
             ->groupBy('no_akun')->orderBy('no_akun');
         if ($unit !== null) {
             $stockQuery->where('stok.id_unit', (int) $unit);
+            $unclassifiedQuery->where('stok.id_unit', (int) $unit);
             $journalQuery->where('id_unit', (int) $unit);
         }
 
@@ -51,6 +59,7 @@ final class FinanceInventoryBaseline extends BaseCommand
         $report['started_at'] = $startedAt;
         $report['finished_at'] = date('c');
         $report['scope'] = 'current_stock_and_cumulative_journal';
+        $report['unclassified_stock_rows_excluded'] = (int) ($unclassifiedQuery->get()->getRow()->jumlah ?? 0);
         $report['journal_accounts'] = $accounts;
 
         echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";

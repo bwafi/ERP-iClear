@@ -48,6 +48,12 @@ final class SparepartKeluarHardDeleteService
             return ['ok' => false, 'penjualan_id' => null, 'invoice_deleted' => false];
         }
 
+        $invoice = $this->db->table('penjualan')->select('bayar')
+            ->where('idpenjualan', (int) $detail->penjualan_idpenjualan)->get()->getRow();
+        if ($invoice === null || (int) $invoice->bayar > 0) {
+            throw new RuntimeException('Invoice sparepart yang sudah dibayar tidak dapat dihapus.');
+        }
+
         $invoiceId = (int) $detail->penjualan_idpenjualan;
         if ($invoiceId <= 0) {
             throw new RuntimeException('Invoice detail sparepart tidak valid.');
