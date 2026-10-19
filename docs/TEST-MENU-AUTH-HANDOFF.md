@@ -59,3 +59,9 @@ absent. They are synthetic and do not replace the real staff account check.
   MySQL CLI (the hosting account's local DB login was denied). The filter uses
   the existing account/job/menu schema and fails closed, but the live role-row
   mapping and actual staff account remain to be confirmed by the handoff above.
+- The TEST homepage currently stops before rendering the application with
+  `PHP 8.2 or newer is required.` cPanel's PHP Selector shows `7.4 (current)`
+  under Account Global Settings, and no MultiPHP Manager is available in the
+  cPanel tool search. Do not change this account-wide version because the same
+  hosting account contains other domains; hosting must provide a TEST-only
+  PHP 8.2+ runtime before browser verification or deployment.
