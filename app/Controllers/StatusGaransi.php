@@ -25,6 +25,7 @@ use App\Models\ModelRiwayatKlaimGaransi;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceHppSnapshot;
 use App\Services\Service\WarrantyClaimEligibility;
+use App\Services\Service\WarrantyServiceAccess;
 use App\Services\Finance\WarrantyExpenseJournal;
 
 
@@ -32,6 +33,8 @@ use App\Services\Finance\WarrantyExpenseJournal;
 class StatusGaransi extends BaseController
 
 {
+
+    private const WARRANTY_MENU_ID = 10151;
 
     protected $AuthModel;
     protected $KerusakanModel;
@@ -72,6 +75,10 @@ class StatusGaransi extends BaseController
 
     public function index()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
@@ -84,6 +91,10 @@ class StatusGaransi extends BaseController
 
     public function garansi_service_ajax()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Akses menu Garansi Service ditolak.']);
+        }
+
         $request = \Config\Services::request();
 
         $draw = $request->getPost('draw');
@@ -119,6 +130,10 @@ class StatusGaransi extends BaseController
 
     public function getRiwayatKlaim($idservice)
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->response->setStatusCode(403)->setJSON(['html' => 'Akses menu Garansi Service ditolak.']);
+        }
+
         $idservice = (int) $idservice;
         $service = $this->ServiceModel->find($idservice);
         if (! $service || ((int) session('ID_JABATAN') !== 1
@@ -175,6 +190,10 @@ class StatusGaransi extends BaseController
 
     public function claim_garansi()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
         $idservice = (int) $this->request->getPost('idservice');
         if ($idservice <= 0) {
             return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service tidak valid.');
@@ -247,6 +266,10 @@ class StatusGaransi extends BaseController
 
     public function service_by_garansi($idservice)
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
         $oldsparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
@@ -273,6 +296,10 @@ class StatusGaransi extends BaseController
 
     public function update_service_pelanggan_garansi()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
         $idservice = $this->request->getPost('idservice');
         $imei = $this->request->getPost('imei');
         // $dp_bayar = $this->rupiahToInt($this->request->getPost('dp_bayar'));
@@ -303,6 +330,10 @@ class StatusGaransi extends BaseController
 
     public function insert_kerusakan_garansi()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
         $fungsiTerpilih = $this->request->getPost('fungsi');
         $keteranganInput = $this->request->getPost('keterangan');
         $idservice = $this->request->getPost('idservice_k');
@@ -355,6 +386,10 @@ class StatusGaransi extends BaseController
 
     public function insert_sparepart_garansi()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
         $produkData = $this->request->getPost('produk');
         $idservice = (int) $this->request->getPost('idservice_s');
         if ($idservice <= 0 || ! is_array($produkData)) {
@@ -545,6 +580,10 @@ class StatusGaransi extends BaseController
 
     public function insert_pembayaran_garansi()
     {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+
 
         //pembayaran
         $idservice = $this->request->getPost('idservice_p');
@@ -657,4 +696,23 @@ class StatusGaransi extends BaseController
 
         return (int) preg_replace('/[^0-9]/', '', $cleaned);
     }
+
+    private function hasWarrantyAccess(): bool
+    {
+        $accountId = (int) session('ID_AKUN');
+        if ($accountId <= 0) {
+            return false;
+        }
+
+        return WarrantyServiceAccess::allows(
+            $this->AuthModel->getByIdWithJabatan($accountId),
+            self::WARRANTY_MENU_ID
+        );
+    }
+
+    private function warrantyAccessDenied()
+    {
+        return $this->response->setStatusCode(403)->setBody('Akses menu Garansi Service ditolak.');
+    }
+
 }
