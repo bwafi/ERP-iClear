@@ -14,6 +14,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelUnit;
+use App\Services\Inventory\ProductTypeReview;
 
 class Produk extends BaseController
 
@@ -48,6 +49,22 @@ class Produk extends BaseController
         return view('template', $data);
     }
 
+    public function reviewTipe()
+    {
+        if ((int) session('ID_JABATAN') !== 1) {
+            return $this->response->setStatusCode(403)->setBody('Hanya administrator yang dapat melihat review tipe item.');
+        }
+        $page = max(1, (int) $this->request->getGet('page'));
+        $review = new ProductTypeReview(Database::connect());
+        return view('template', [
+            'akun' => $this->AuthModel->getById(session('ID_AKUN')),
+            'body' => 'datamaster/review_tipe_item',
+            'items' => $review->rows(($page - 1) * 100),
+            'total' => $review->count(),
+            'page' => $page,
+        ]);
+    }
+
 
     public function insert_produk()
     {
@@ -73,14 +90,20 @@ class Produk extends BaseController
 
         $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
 
-        $kode_barang = $kode_kategori . $formattedNumber;
+        $kode_barang = strtoupper($kode_kategori) . $formattedNumber;
         $status_ppn = $this->request->getPost('status_ppn');
         $warna = $this->request->getPost('warna');
+
+        $jenisItem = $this->request->getPost('jenis_item');
+        if (!in_array($jenisItem, ['fisik', 'jasa'], true)) {
+            return redirect()->to(base_url('/produk'))->with('gagal', 'Pilih tipe barang fisik atau jasa.');
+        }
 
 
         $data = array(
             'kode_barang' => $kode_barang,
             'nama_barang' => $nama_barang,
+            'jenis_item' => $jenisItem,
             'harga' => $harga,
             'harga_beli' => $harga_beli,
             'input' => $input_by,
@@ -117,6 +140,21 @@ class Produk extends BaseController
 
 
         $barangLama = $this->BarangModel->find($idbarang);
+        if (!$barangLama) {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+        }
+        $jenisItem = $this->request->getPost('jenis_item');
+        if ($jenisItem !== null && $jenisItem !== '' && !in_array($jenisItem, ['fisik', 'jasa'], true)) {
+            return redirect()->to(base_url('/produk'))->with('gagal', 'Tipe barang tidak valid.');
+        }
+        if ($jenisItem === 'jasa' && $barangLama->jenis_item !== 'jasa') {
+            $db = Database::connect();
+            foreach (['stok_awal', 'detail_pembelian', 'detail_penjualan', 'service_sparepart', 'barang_rusak', 'retur_suplier'] as $table) {
+                if ($db->table($table)->where('barang_idbarang', $idbarang)->countAllResults() > 0) {
+                    return redirect()->to(base_url('/produk'))->with('gagal', 'Item ini punya riwayat stok/transaksi. Tipe jasa memerlukan review riwayat lebih dulu.');
+                }
+            }
+        }
 
 
         $data_kategori = $this->KategoriModel->getByName($kategori);
@@ -133,7 +171,7 @@ class Produk extends BaseController
             $newNumber = (int) ($lastBarang->max_kode ?? 0) + 1;
 
             $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
-            $kode_barang = $kode_kategori_baru . $formattedNumber;
+            $kode_barang = strtoupper($kode_kategori_baru) . $formattedNumber;
 
 
             $idkategori = $idkategori_baru;
@@ -155,6 +193,10 @@ class Produk extends BaseController
 
             'stok_minimum' => $stok_minimum,
         );
+
+        if ($jenisItem !== null && $jenisItem !== '') {
+            $data['jenis_item'] = $jenisItem;
+        }
 
         $result = $this->BarangModel->update($idbarang, $data);
 
@@ -267,7 +309,7 @@ class Produk extends BaseController
 
             $lastNumbers[$idnyakategori]++;
             $formattedNumber = str_pad($lastNumbers[$idnyakategori], 2, '0', STR_PAD_LEFT);
-            $kode_barang     = $kode_kategori . $formattedNumber;
+            $kode_barang     = strtoupper($kode_kategori) . $formattedNumber;
 
             // QUERY INSERT SUDAH DISESUAIKAN
             $sql = "INSERT INTO barang 

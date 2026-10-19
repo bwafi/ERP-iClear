@@ -172,7 +172,8 @@
                 html += '<tr><td class="text-muted fw-medium py-1 px-2" style="width: 200px;">' + r[0] +
                     '</td><td class="py-1 px-2 text-dark fw-normal">' + r[1] + '</td></tr>';
             });
-            html += '</tbody></table></div>';
+            html += '</tbody></table><a class="btn btn-sm btn-outline-primary mt-2" href="<?= base_url('kartu_stok/detail') ?>/' +
+                encodeURIComponent(d.idbarang) + '/' + encodeURIComponent(d.id_unit) + '">Lihat mutasi bertanggal dan saldo</a></div>';
             return html;
         }
 

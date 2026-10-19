@@ -60,6 +60,7 @@ $routes->post('delete_unit', 'Unit::delete_unit', ['filter' => 'auth']);
 //produk
 $routes->group('produk', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'Produk::index');
+    $routes->get('review-tipe', 'Produk::reviewTipe');
     $routes->get('export/produk', 'Produk::export_produk');
     $routes->post('import/produk', 'Produk::import_produk');
     $routes->post('insert_produk', 'Produk::insert_produk');
@@ -261,6 +262,7 @@ $routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => ['a
 
 //kartu stok
 $routes->get('kartu_stok', 'Kartu_Stok::index', ['filter' => 'auth']);
+$routes->get('kartu_stok/detail/(:num)/(:num)', 'Kartu_Stok::detail/$1/$2', ['filter' => 'auth']);
 $routes->post('export/kartu_stock', 'Kartu_Stok::export', ['filter' => 'auth']);
 $routes->get('kartu_stok/dt', 'Kartu_Stok::dt', ['filter' => 'auth']);
 

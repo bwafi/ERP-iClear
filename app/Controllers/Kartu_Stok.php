@@ -11,6 +11,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelUnit;
+use App\Services\Inventory\StockCardLedger;
 
 class Kartu_Stok extends BaseController
 
@@ -37,6 +38,32 @@ class Kartu_Stok extends BaseController
             'unit' => $this->UnitModel->getUnit()
         );
         return view('template', $data);
+    }
+
+    public function detail(int $itemId, int $unitId)
+    {
+        $db = Database::connect();
+        $item = $db->table('stok_barang sb')
+            ->select('sb.idbarang, sb.id_unit, sb.kode_barang, sb.nama_barang, sb.nama_unit, sb.stok_akhir, barang.jenis_item, hpp_barang.hpp')
+            ->join('barang', 'barang.idbarang = sb.idbarang')
+            ->join('hpp_barang', 'hpp_barang.idbarang = sb.idbarang', 'left')
+            ->where('sb.idbarang', $itemId)
+            ->where('sb.id_unit', $unitId)
+            ->where('barang.deleted', '0')
+            ->get()->getRow();
+        if ($item === null) {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+        }
+
+        $movements = (new StockCardLedger($db))->forItem($itemId, $unitId);
+        $calculated = $movements === [] ? 0 : (float) end($movements)['saldo'];
+        return view('template', [
+            'akun' => $this->AuthModel->getById(session('ID_AKUN')),
+            'body' => 'stok/kartu_stok_detail',
+            'item' => $item,
+            'movements' => $movements,
+            'calculated' => $calculated,
+        ]);
     }
 
     /**

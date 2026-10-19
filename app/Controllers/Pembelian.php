@@ -445,12 +445,8 @@ class Pembelian extends BaseController
         $newNumber = $lastNumber + 1;
         
         $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
-        
-        $kode_barang = $kode_kategori . $formattedNumber;
 
-        $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
-
-        $kode_barang = $kode_kategori . $formattedNumber;
+        $kode_barang = strtoupper($kode_kategori) . $formattedNumber;
         $status_ppn = $this->request->getPost('status_ppn');
 
         $nama_barang = "";
@@ -464,8 +460,8 @@ class Pembelian extends BaseController
         }
 
         $jenisItem = $this->request->getPost('jenis_item');
-        if (!in_array($jenisItem, ['fisik', 'jasa'], true)) {
-            return redirect()->to(base_url('/pembelian'))->with('gagal', 'Pilih jenis item fisik atau jasa.');
+        if ($jenisItem !== 'fisik') {
+            return redirect()->to(base_url('/pembelian'))->with('gagal', 'Pembelian stok hanya menerima barang fisik.');
         }
 
 
