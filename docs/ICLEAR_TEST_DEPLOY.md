@@ -5,7 +5,7 @@ Target dokumen ini **hanya** `testerp.icleargroup.id`. Jangan merge ke `main`, m
 ## Paket rilis dan jalur resmi
 
 - Sumber rilis: PR #16, branch `codex/hpp-garansi-audit-20261018`. Tim IT harus menerima SHA commit penuh dari PR; jangan memakai nama branch saja sebagai bukti versi terpasang. Contoh SHA pada persiapan dokumen ini: `8a4839894bed1197f42a52854a125de267a67d3d`; jika PR bertambah, gunakan SHA terbaru yang disetujui.
-- Paket kode adalah **checkout Git dari SHA tersebut ditambah `composer.lock`**. Jangan mengemas `.env`, `writable/`, dump database, atau `vendor/` dari mesin pengembang. Dependency dipasang di TEST dengan `composer install` dari lock file.
+- Paket kode adalah **checkout Git dari SHA tersebut, termasuk `composer.lock` yang dilacak Git**. Jangan mengemas `.env`, `writable/`, dump database, atau `vendor/` dari mesin pengembang. Dependency dipasang di TEST dengan `composer install` dari lock file. Hentikan deploy bila `composer validate` melaporkan lock tidak sinkron.
 - Di repository ini tidak ada `.github/workflows`, GitLab CI, Jenkinsfile, atau skrip deploy TEST yang terdaftar. Karena itu **push PR bukan deploy**. Tim IT harus memakai jalur deploy TEST miliknya dan mengirim SHA aktual dari checkout yang dilayani web; URL login/HTTP 200 saja bukan bukti SHA.
 - Inventaris perubahan untuk review: `git diff --stat main...<SHA>` dan `git diff --name-only main...<SHA>`. Jangan checkout, merge, atau menjalankan migrasi di `main`/produksi.
 
