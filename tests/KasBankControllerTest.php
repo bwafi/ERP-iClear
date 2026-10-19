@@ -62,6 +62,7 @@ class KasBankControllerTest extends CIUnitTestCase
             'db_spv_units',
             'db_mutasi',
             'db_detail_mutasi',
+            'db_hpp_barang',
             'db_barang',
             // Tabel pendukung BaseController ikut di-drop supaya skema test
             // selalu sama dengan yang ditulis di bawah. Kalau tidak, tabel versi
@@ -193,9 +194,12 @@ class KasBankControllerTest extends CIUnitTestCase
                 batal_oleh INT NULL, batal_at TEXT NULL, batal_alasan TEXT NULL)');
         $q('CREATE TABLE db_detail_mutasi (
                 iddetail_mutasi INTEGER PRIMARY KEY AUTO_INCREMENT,
-                mutasi_idmutasi INT NULL, jumlah_kirim REAL NULL, jumlah_terima REAL NULL,
+                mutasi_idmutasi INT NULL, tanggal_kirim TEXT NULL, tanggal_terima TEXT NULL,
+                jumlah_kirim REAL NULL, jumlah_terima REAL NULL,
                 satuan TEXT NULL, harga_mutasi REAL NULL, hpp_barang REAL NULL, barang_idbarang INT NULL,
-                kirim_idunit INT NULL, terima_idunit INT NULL)');
+                kirim_idunit INT NULL, terima_idunit INT NULL,
+                harga_beli REAL NULL, harga_jual REAL NULL)');
+        $q('CREATE TABLE db_hpp_barang (idbarang INTEGER PRIMARY KEY, hpp REAL NULL)');
         $q('CREATE TABLE db_barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL)');
         // Cash In/Out mirror (KasBankSourceMovement) menjumlahkan penjualan.
         // Tanpa kolom ini test gagal "Unknown column" yang menyesatkan.
@@ -249,6 +253,7 @@ class KasBankControllerTest extends CIUnitTestCase
             'db_spv_units',
             'db_mutasi',
             'db_detail_mutasi',
+            'db_hpp_barang',
             'db_barang',
             'db_opening_kas',
         ] as $tabel) {
@@ -282,6 +287,7 @@ class KasBankControllerTest extends CIUnitTestCase
         $q("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES
             (1, 1, 2, 1000, 800, 1001, 1, 2)");
         $q("INSERT INTO db_barang (idbarang, nama_barang) VALUES (1001, 'Barang X'), (1002, 'Barang Y')");
+        $q("INSERT INTO db_hpp_barang (idbarang, hpp) VALUES (1001, 800), (1002, 700)");
         $q("INSERT INTO db_stok_awal (barang_idbarang, satuan_terkecil) VALUES (1001, 'PCS'), (1002, 'PCS')");
         $q("INSERT INTO db_stok_barang (idbarang, id_unit, stok_akhir) VALUES (1001, 1, 5), (1002, 2, 50)");
     }
@@ -859,6 +865,110 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         ]);
 
         $this->assertNull($error);
+    }
+
+    private function penyimpanMutasi(bool $detailGagal = false): MutasiStok
+    {
+        return new class($detailGagal) extends MutasiStok {
+            private bool $detailGagal;
+
+            public function __construct(bool $detailGagal)
+            {
+                parent::__construct();
+                $this->detailGagal = $detailGagal;
+            }
+
+            public function simpan(int $kirim, int $terima, array $produk, string $tglKirim, string $tglTerima, int $inputBy): array
+            {
+                if ($this->detailGagal) {
+                    $this->DetailMutasiModel = new class extends \App\Models\ModelDetailMutasi {
+                        public function insert_DetailMutasiStok($data)
+                        {
+                            return false;
+                        }
+                    };
+                }
+
+                return $this->simpanMutasi($kirim, $terima, $produk, $tglKirim, $tglTerima, $inputBy);
+            }
+        };
+    }
+
+    public function testSimpanMutasiMenyimpanHeaderDetailDanNomorUnik(): void
+    {
+        $produk = [
+            ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 2, 'jumlah_terima' => 2, 'harga_mutasi' => 1000],
+            ['id' => 1002, 'nama' => 'Barang Y', 'jumlah_kirim' => 1, 'jumlah_terima' => 1, 'harga_mutasi' => 2000],
+        ];
+
+        $hasil = $this->penyimpanMutasi()->simpan(1, 2, $produk, '2026-10-19', '2026-10-20', 43);
+
+        $this->assertTrue($hasil['ok']);
+        $this->assertSame('MTS1' . date('ymd', strtotime('2026-10-19')) . $hasil['id'], $hasil['no_nota']);
+
+        $db = \Config\Database::connect('tests', false);
+        $header = $db->table('mutasi')->where('idmutasi', $hasil['id'])->get()->getRow();
+        $this->assertSame($hasil['no_nota'], $header->no_nota_mutasi);
+        $this->assertSame('0', (string) $header->status);
+        $this->assertSame(43, (int) $header->input_by);
+
+        $detail = $db->table('detail_mutasi')
+            ->where('mutasi_idmutasi', $hasil['id'])
+            ->orderBy('iddetail_mutasi')
+            ->get()->getResult();
+        $this->assertCount(2, $detail);
+        $this->assertSame(2.0, (float) $detail[0]->jumlah_kirim);
+        $this->assertSame(800.0, (float) $detail[0]->hpp_barang);
+        $this->assertSame('PCS', $detail[0]->satuan);
+
+        $hasil2 = $this->penyimpanMutasi()->simpan(1, 2, [$produk[0]], '2026-10-19', '2026-10-20', 43);
+        $this->assertTrue($hasil2['ok']);
+        $this->assertNotSame($hasil['no_nota'], $hasil2['no_nota']);
+        $this->assertSame('MTS1' . date('ymd', strtotime('2026-10-19')) . $hasil2['id'], $hasil2['no_nota']);
+    }
+
+    public function testSimpanMutasiRollbackSaatDetailGagal(): void
+    {
+        $db = \Config\Database::connect('tests', false);
+        $sebelumHeader = (int) $db->table('mutasi')->countAllResults();
+        $sebelumDetail = (int) $db->table('detail_mutasi')->countAllResults();
+
+        $hasil = $this->penyimpanMutasi(true)->simpan(1, 2, [
+            ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 1, 'jumlah_terima' => 1, 'harga_mutasi' => 1000],
+        ], '2026-10-19', '2026-10-20', 43);
+
+        $this->assertFalse($hasil['ok']);
+        $this->assertNotSame('', $hasil['error']);
+        $this->assertSame($sebelumHeader, (int) $db->table('mutasi')->countAllResults());
+        $this->assertSame($sebelumDetail, (int) $db->table('detail_mutasi')->countAllResults());
+    }
+
+    public function testInsertMutasiRedirectSetelahSimpan(): void
+    {
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 35,
+        ]);
+
+        $r = $this->post('insert_mutasi', [
+            'id_unit1_text' => 1,
+            'id_unit2_text' => 2,
+            'tanggal_kirim' => '2026-10-19',
+            'tanggal_terima' => '2026-10-20',
+            'produk' => [
+                1001 => ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 2, 'jumlah_terima' => 2, 'harga_mutasi' => 1000],
+            ],
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame(base_url('/mutasi_stok'), $r->getRedirectUrl());
+
+        $db = \Config\Database::connect('tests', false);
+        $header = $db->table('mutasi')->where('kirim_idunit', 1)->orderBy('idmutasi', 'DESC')->get()->getRow();
+        $this->assertStringEndsWith((string) $header->idmutasi, $header->no_nota_mutasi);
+        $this->assertSame(1, (int) $db->table('detail_mutasi')->where('mutasi_idmutasi', $header->idmutasi)->countAllResults());
     }
 
     public function testCetakBuktiHutangPiutangMutasiMemuatListBarang(): void

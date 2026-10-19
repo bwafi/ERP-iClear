@@ -87,9 +87,11 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 - Dashboard Hutang Piutang menampilkan dua kartu baru: **Total Hutang Antar Unit** dan **Total Piutang Antar Unit**.
 **Test:** `KasBankControllerTest::testRingkasanMemasukkanMutasiAntarUnitSesuaiStatus`, `KasBankControllerTest::testStatusRingkasanHanyaDariSumberYangDihitung`.
 
-**5. Nomor nota mutasi duplikat dan riwayat menggabungkan transaksi berbeda.**
+**5. Nomor nota mutasi duplikat dan riwayat menggabungkan transaksi berbeda. — ✅ DIPERBAIKI (kode; unique index ditunda)**
 `MutasiStok.php:461` memakai `like('DATE(tanggal_kirim)', date('ymd'))` — `'2026-10-19'` tidak pernah cocok dengan `'261019'`, jadi urutan selalu `001`. Selain itu `$lastMutasi['no_nota_mutasi']` mengakses object sebagai array (fatal jika suatu saat query cocok), dan tidak ada unique index. `riwayat_mutasi.php:4` mengelompokkan berdasarkan nomor nota → 30 baris tergabung salah.
-**Fix:** insert header dulu, lalu bentuk nomor dari `insertID()` (`MTS{unit}{ymd}{id}`) dan update; tambahkan unique index.
+**Perbaikan:** `insert()` sekarang memakai `simpanMutasi()`. Header disimpan dengan placeholder unik, lalu nomor final dibentuk dari `insertID()` (`MTS{unit}{ymd}{id}`). Query `DATE LIKE` dan akses object-sebagai-array dihapus. Nota baru tidak lagi memakai urutan `001` yang selalu sama.
+**Test:** `KasBankControllerTest::testSimpanMutasiMenyimpanHeaderDetailDanNomorUnik`, `testSimpanMutasiRollbackSaatDetailGagal`, `testInsertMutasiRedirectSetelahSimpan`.
+**Batas:** 30 baris lama dalam 11 grup duplikat **belum diubah**; unique index belum dipasang karena akan gagal pada data lama. Perlu keputusan renumbering historis sebelum index ditambahkan.
 
 **6. Siapa pun yang login bisa membuat mutasi dari unit mana pun. — ✅ DIPERBAIKI**
 `MutasiStok::insert()` tidak mengecek unit pengirim terhadap scope user; `AuthFilter` hanya memeriksa `logged_in`. Daftar produk juga memakai stok unit sesi, bukan unit pengirim yang dipilih. Tidak ada validasi stok → 8 baris stok negatif.
@@ -116,9 +118,10 @@ View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_m
 `BackfillKasBank.php:154` memilih semua `mutasi` tanpa filter `status=1`. Kalau command dijalankan, 12 mutasi yang belum diterima akan langsung punya utang.
 **Fix:** tambahkan `where('status','1')`.
 
-**10. `insert()` tidak atomik dan pengecekan hasilnya salah.**
+**10. `insert()` tidak atomik dan pengecekan hasilnya salah. — ✅ DIPERBAIKI**
 Header dan detail tidak dibungkus transaksi; `if ($result & $result2)` memakai bitwise AND dan hanya membaca hasil detail terakhir; PDF `exit` membuat flash sukses tak pernah tercapai. Ada 2 header tanpa detail.
-**Fix:** `transStart/transComplete`, periksa setiap insert, redirect setelah simpan.
+**Perbaikan:** header + detail sekarang disimpan lewat `simpanMutasi()` dalam `transBegin/transCommit/transRollback`, dan setiap insert diperiksa. `insert()` redirect ke daftar mutasi setelah simpan; PDF `exit` dihapus. Nota tetap bisa dicetak lewat `cetak/invoice_mutasi/{id}`.
+**Test:** `KasBankControllerTest::testSimpanMutasiRollbackSaatDetailGagal`, `testInsertMutasiRedirectSetelahSimpan`.
 
 **11. Pembayaran antar unit rawan overpay saat concurrent.**
 `saveAntarUnit()` membaca `sisa` tanpa `FOR UPDATE`, dan `terapkanPembayaranHP()` juga tidak mengunci baris. Dua user membayar bersamaan bisa sama-sama lolos cek.
@@ -150,9 +153,8 @@ KPI `FIN_HUTANG_PIUTANG` memang **tidak terpengaruh** — tetapi itu bukan kabar
 
 ## Yang tidak diperiksa
 
-- Perbaikan #1–#4 sudah diuji terarah. Full suite dijalankan: 692 test, 43 error + 176 failure **pre-existing** — jumlahnya sama tanpa perubahan ini (diverifikasi dengan `git stash`), jadi bukan regresi dari perbaikan ini.
+- Perbaikan #1–#6 dan #10 sudah diuji terarah. Full suite: 703 test, 43 error + 178 failure; 176 failure lama, plus 2 failure polusi urutan `KasBankTest` → `KesehatanUangCalculatorTest` yang juga muncul tanpa test baru.
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
 - Migration backfill #3 belum dijalankan di `erp_local`; baru diverifikasi lewat test.
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.
-- Temuan #5–#13 belum diperbaiki.
-- Perbaikan #7 membutuhkan keputusan bisnis: jangan ubah view stok sebelum memastikan apakah “batal terima” berarti barang benar-benar kembali.
+- Temuan #7–#9 dan #11–#13 belum diperbaiki. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.

@@ -484,9 +484,97 @@ class MutasiStok extends BaseController
         return null;
     }
 
+    /**
+     * Simpan header + detail mutasi dalam satu transaksi.
+     *
+     * Nomor nota dibentuk dari insertID(), bukan urutan harian: query lama
+     * membandingkan DATE() dengan 'ymd' sehingga tidak pernah cocok dan semua
+     * nota satu unit/hari menjadi ...001.
+     *
+     * @return array{ok: bool, id: int, no_nota: string, error: string}
+     */
+    protected function simpanMutasi(
+        int $kirim_idunit,
+        int $terima_idunit,
+        array $produkData,
+        string $tanggal_kirim,
+        string $tanggal_terima,
+        int $input_by
+    ): array {
+        date_default_timezone_set('Asia/Jakarta');
+
+        $db = \Config\Database::connect();
+        if (! $db->transBegin()) {
+            return ['ok' => false, 'id' => 0, 'no_nota' => '', 'error' => 'Gagal memulai transaksi mutasi.'];
+        }
+
+        try {
+            $waktu = date('H:i:s');
+            $tanggal_ymd = date('ymd', strtotime($tanggal_kirim));
+
+            // Nomor diisi setelah insertID(); kolomnya nullable dan unique
+            // index nanti tetap mengizinkan banyak NULL.
+            $result = $this->MutasiStokModel->insert_MutasiStok([
+                'no_nota_mutasi' => null,
+                'tanggal_kirim' => $tanggal_kirim . ' ' . $waktu,
+                'tanggal_terima' => $tanggal_terima . ' ' . $waktu,
+                'kirim_idunit' => $kirim_idunit,
+                'terima_idunit' => $terima_idunit,
+                'status' => '0',
+                'input_by' => $input_by,
+                'created_on' => date('Y-m-d H:i:s'),
+                'updated_on' => '',
+            ]);
+
+            $idMutasi = (int) $this->MutasiStokModel->insertID();
+            if (! $result || $idMutasi <= 0) {
+                throw new \RuntimeException('header mutasi gagal disimpan');
+            }
+
+            $no_nota_mutasi = 'MTS' . $kirim_idunit . $tanggal_ymd . $idMutasi;
+            if (! $this->MutasiStokModel->update($idMutasi, ['no_nota_mutasi' => $no_nota_mutasi])) {
+                throw new \RuntimeException('nomor nota gagal disimpan');
+            }
+
+            foreach ($produkData as $produk) {
+                $idbarang = (int) $produk['id'];
+                $stokAwal = $this->StokAwalModel->getByIdBarang($idbarang);
+                $hppRow = $this->HppBarangModel->getById($idbarang);
+
+                $detail = [
+                    'tanggal_kirim' => $tanggal_kirim,
+                    'tanggal_terima' => $tanggal_terima,
+                    'jumlah_kirim' => $produk['jumlah_kirim'],
+                    'jumlah_terima' => $produk['jumlah_terima'],
+                    'satuan' => $stokAwal->satuan_terkecil,
+                    'hpp_barang' => $hppRow->hpp ?? 0,
+                    'barang_idbarang' => $idbarang,
+                    'kirim_idunit' => $kirim_idunit,
+                    'terima_idunit' => $terima_idunit,
+                    'mutasi_idmutasi' => $idMutasi,
+                    'harga_mutasi' => $produk['harga_mutasi'] ?? 0,
+                    'harga_beli' => $produk['harga_beli'] ?? 0,
+                    'harga_jual' => $produk['harga_jual'] ?? 0,
+                ];
+
+                if (! $this->DetailMutasiModel->insert_DetailMutasiStok($detail)) {
+                    throw new \RuntimeException('detail mutasi gagal disimpan');
+                }
+            }
+
+            $db->transCommit();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'MutasiStok: gagal simpan mutasi: ' . $e->getMessage());
+
+            return ['ok' => false, 'id' => 0, 'no_nota' => '', 'error' => 'Gagal menyimpan mutasi. Silakan coba lagi.'];
+        }
+
+        return ['ok' => true, 'id' => $idMutasi, 'no_nota' => $no_nota_mutasi, 'error' => ''];
+    }
+
     public function insert()
     {
-
         $produkData = (array) $this->request->getPost('produk');
         $kirim_idunit = (int) $this->request->getPost('id_unit1_text');
         $terima_idunit = (int) $this->request->getPost('id_unit2_text');
@@ -497,128 +585,22 @@ class MutasiStok extends BaseController
             return redirect()->back();
         }
 
-        $dataunitkirim = $this->UnitModel->getById($kirim_idunit);
-        $dataunitterima = $this->UnitModel->getById($terima_idunit);
-        $kirim_namaunit = $dataunitkirim->NAMA_UNIT;
-        $terima_namaunit = $dataunitterima->NAMA_UNIT;
-
-        date_default_timezone_set('Asia/Jakarta');
-
-        $tanggal_kirim = $this->request->getPost('tanggal_kirim');
-        $tanggal_terima = $this->request->getPost('tanggal_terima');
-
-        $waktu_sekarang = date('H:i:s');
-
-        $tanggal_kirim_datetime = $tanggal_kirim . ' ' . $waktu_sekarang;
-        $tanggal_terima_datetime = $tanggal_terima . ' ' . $waktu_sekarang;
-
-        $namainputer = $this->AuthModel->getById(session('ID_AKUN'));
-        $namanya = $namainputer->NAMA_AKUN;
-
-
-
-
-        $tanggal_kirim_ymd = date('ymd', strtotime($tanggal_kirim));
-
-
-        // nomutasi
-        $lastMutasi = $this->MutasiStokModel
-            ->where('kirim_idunit', $kirim_idunit)
-            ->like('DATE(tanggal_kirim)', $tanggal_kirim_ymd)
-            ->orderBy('no_nota_mutasi', 'DESC')
-            ->first();
-
-        if ($lastMutasi) {
-            $lastKode = substr($lastMutasi['no_nota_mutasi'], -3);
-            $newKode = str_pad((int)$lastKode + 1, 3, '0', STR_PAD_LEFT);
-        } else {
-            $newKode = '001';
-        }
-
-
-        $no_nota_mutasi =  'MTS' . $kirim_idunit . $tanggal_kirim_ymd . $newKode;
-        // nomutasi
-
-        $data = array(
-            'no_nota_mutasi' => $no_nota_mutasi,
-            'tanggal_kirim' => $tanggal_kirim_datetime,
-            'tanggal_terima' => $tanggal_terima_datetime,
-            'kirim_idunit' => $kirim_idunit,
-            'terima_idunit' => $terima_idunit,
-            'status' => '0',
-            'input_by' => session('ID_AKUN'),
-            'created_on' => date('Y-m-d H:i:s'),
-            'updated_on' => ''
+        $hasil = $this->simpanMutasi(
+            $kirim_idunit,
+            $terima_idunit,
+            $produkData,
+            (string) $this->request->getPost('tanggal_kirim'),
+            (string) $this->request->getPost('tanggal_terima'),
+            (int) session('ID_AKUN')
         );
 
-        $result = $this->MutasiStokModel->insert_MutasiStok($data);
-        $idMutasi = $this->MutasiStokModel->insertID();
-
-        foreach ($produkData as $produk) {
-            $datastokawal = $this->StokAwalModel->getByIdBarang($produk['id']);
-            $databarang = $this->BarangModel->getById($produk['id']);
-            $idbarang = $produk['id'];
-
-            $satuan = $datastokawal->satuan_terkecil;
-
-            $produkjumlahKirim = $produk['jumlah_kirim'];
-            $produkjumlahTerima = $produk['jumlah_terima'];
-            $produkharga_beli = $produk['harga_beli'] ?? 0;
-            $produkharga_jual = $produk['harga_jual'] ?? 0;
-            $produkharga_mutasi = $produk['harga_mutasi'] ?? 0;
-
-            $datahpp = $this->HppBarangModel->getById($idbarang);
-            $hpp = $datahpp->hpp ?? 0;
-
-
-
-            $data2 = array(
-                'tanggal_kirim' => $tanggal_kirim,
-                'tanggal_terima' => $tanggal_terima,
-                'jumlah_kirim' => $produkjumlahKirim,
-                'jumlah_terima' => $produkjumlahTerima,
-                'satuan' => $satuan,
-                'hpp_barang' => $hpp,
-                'barang_idbarang' => $idbarang,
-                'kirim_idunit' => $kirim_idunit,
-                'terima_idunit' => $terima_idunit,
-                'mutasi_idmutasi' => $idMutasi,
-                'harga_mutasi' => $produkharga_mutasi,
-                'harga_beli' => $produkharga_beli,
-                'harga_jual' => $produkharga_jual
-
-            );
-            $result2 = $this->DetailMutasiModel->insert_DetailMutasiStok($data2);
+        if (! $hasil['ok']) {
+            session()->setFlashdata('gagal', $hasil['error']);
+            return redirect()->back();
         }
 
-        if ($result & $result2) {
-
-            $notamutasi = array(
-                'tanggal' => $tanggal_kirim,
-                'pengirim' => $kirim_namaunit,
-                'penerima' => $terima_namaunit,
-                'data_produk' => $produkData,
-                'namainputer' => $namanya,
-                'kode_mutasi' => $no_nota_mutasi
-            );
-
-            $html = view('cetak/mutasi_stok', $notamutasi);
-
-            $mpdf = new \Mpdf\Mpdf([
-                'curlAllowUnsafeSslRequests' => true,
-                'curlUserAgent' => 'Mozilla/5.0',
-            ]);
-
-            ob_end_clean();
-            $mpdf->WriteHTML($html);
-            $mpdf->Output('nota_mutasi.pdf', 'I');
-            exit;
-
-
-
-            session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
-            return redirect()->to(base_url('/mutasi_stok'));
-        }
+        session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
+        return redirect()->to(base_url('/mutasi_stok'));
     }
 
     public function cetak_notamutasi($idmutasi)
