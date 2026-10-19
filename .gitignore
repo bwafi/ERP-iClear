@@ -40,7 +40,6 @@ public/error_log
 
 # Composer
 /vendor/
-composer.lock
 
 # IDE specific files
 .idea/
