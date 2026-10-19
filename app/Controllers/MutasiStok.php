@@ -261,6 +261,10 @@ class MutasiStok extends BaseController
 
             $r = $this->KasBankLib->buatHutangPiutangDariMutasi($idmutasi, (int) session('ID_AKUN'));
 
+            if (!in_array($r['status'] ?? '', ['inserted', 'skipped'], true)) {
+                throw new \RuntimeException('Dokumen H/P gagal dibuat: ' . ($r['reason'] ?? 'unknown'));
+            }
+
             $db->transComplete();
         } catch (\Throwable $e) {
             $db->transRollback();

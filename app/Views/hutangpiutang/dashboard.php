@@ -28,9 +28,27 @@ $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
     <div class="col-md-6 col-xl-3">
         <div class="card">
             <div class="card-body">
+                <p class="text-muted mb-1">Total Hutang Antar Unit</p>
+                <h4 class="fw-semibold mb-0"><?= $rp($r['total_hutang_antar_unit'] ?? 0) ?></h4>
+                <small class="text-muted"><?= (int) ($r['jml_hutang_antar_unit'] ?? 0) ?> transaksi</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
                 <p class="text-muted mb-1">Total Piutang Pelanggan</p>
                 <h4 class="fw-semibold mb-0"><?= $rp($r['total_piutang_pelanggan'] ?? 0) ?></h4>
                 <small class="text-muted"><?= (int) ($r['jml_piutang_pelanggan'] ?? 0) ?> transaksi</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <p class="text-muted mb-1">Total Piutang Antar Unit</p>
+                <h4 class="fw-semibold mb-0"><?= $rp($r['total_piutang_antar_unit'] ?? 0) ?></h4>
+                <small class="text-muted"><?= (int) ($r['jml_piutang_antar_unit'] ?? 0) ?> transaksi</small>
             </div>
         </div>
     </div>

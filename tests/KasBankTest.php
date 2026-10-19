@@ -6,6 +6,7 @@ use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelTransaksiKasBank;
 use App\Models\ModelAkunKasBank;
+use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\KasBankScopeService;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
@@ -610,6 +611,109 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         foreach ($rows as $r) {
             $this->assertSame('2026-03-01', $r->jatuh_tempo);
         }
+    }
+
+    public function testBuatHutangPiutangDariMutasiMenghidupkanDokumenYangDibatalkan(): void
+    {
+        $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES (1, 'M-2026-003', '2026-02-05', '2026-02-08 10:00:00', '1', 1, 2, 9)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES (1, 1, 2, 1000, 800, 1, 2)");
+
+        $first = $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
+        $this->assertSame('inserted', $first['status']);
+
+        // Simulasi batal terima: kedua dokumen di-soft-delete.
+        $this->db->query("UPDATE db_hutang_piutang SET deleted = 1 WHERE sumber_tipe = 'mutasi_unit' AND sumber_id = 1");
+
+        $second = $this->kasbank->buatHutangPiutangDariMutasi(1, 9, '2026-03-01');
+        $this->assertSame('inserted', $second['status']);
+
+        $rows = (new ModelHutangPiutang())
+            ->where('sumber_tipe', 'mutasi_unit')
+            ->where('sumber_id', 1)
+            ->findAll();
+        $this->assertCount(2, $rows);
+        foreach ($rows as $r) {
+            $this->assertSame('0', (string) $r->deleted);
+            $this->assertSame('2000', (string) $r->total);
+            $this->assertSame('0', (string) $r->total_dibayar);
+            $this->assertSame('2000', (string) $r->sisa);
+            $this->assertSame('belum_lunas', $r->status);
+            $this->assertSame('2026-03-01', $r->jatuh_tempo);
+            $this->assertSame('legacy', $r->scope);
+            $this->assertSame('LEGACY_CUTOFF', $r->cutoff_reason);
+        }
+    }
+
+    public function testBuatHutangPiutangMutasiMemakaiScopeSesuaiCutoff(): void
+    {
+        $legacy = FinanceScopeService::cutoffDate();
+        $aktif  = FinanceScopeService::periodeMulaiDate();
+
+        $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES
+            (1, 'M-LEGACY', '$legacy', '$legacy 10:00:00', '1', 1, 2, 9),
+            (2, 'M-ACTIVE', '$aktif', '$aktif 10:00:00', '1', 1, 2, 9)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 1000, 800, 1, 2),
+            (2, 2, 2, 1000, 800, 1, 2)");
+
+        $model = new ModelHutangPiutang();
+
+        // Tanggal cut-off (5 Okt) masih legacy; periode mulai (6 Okt) aktif.
+        $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
+        foreach ($model->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 1)->findAll() as $row) {
+            $this->assertSame('legacy', $row->scope);
+            $this->assertSame('LEGACY_CUTOFF', $row->cutoff_reason);
+            $this->assertNotEmpty($row->cutoff_closed_at);
+        }
+
+        $this->kasbank->buatHutangPiutangDariMutasi(2, 9);
+        foreach ($model->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 2)->findAll() as $row) {
+            $this->assertSame('active', $row->scope);
+            $this->assertNull($row->cutoff_reason);
+        }
+    }
+
+    public function testBackfillScopeMutasiUnitMenandaiPreCutoffLegacy(): void
+    {
+        $legacy = FinanceScopeService::cutoffDate();
+        $aktif  = FinanceScopeService::periodeMulaiDate();
+
+        $this->db->query("INSERT INTO db_hutang_piutang
+            (kode, jenis, sumber_tipe, sumber_id, tanggal, scope, deleted, cutoff_closed_at)
+            VALUES
+            ('BF-1', 'hutang', 'mutasi_unit', 1, '$legacy', 'active', 0, NULL),
+            ('BF-2', 'hutang', 'mutasi_unit', 2, '$aktif', 'active', 0, NULL),
+            ('BF-3', 'hutang', 'mutasi_unit', 3, '$legacy', 'active', 1, NULL),
+            ('BF-4', 'hutang', 'kasbon', 4, '$legacy', 'active', 0, NULL),
+            ('BF-5', 'hutang', 'mutasi_unit', 5, '$legacy', 'legacy', 0, '2026-01-01 00:00:00')");
+
+        require_once APPPATH . 'Database/Migrations/2026-10-19-000200_BackfillMutasiUnitScope.php';
+        $migration = new \App\Database\Migrations\BackfillMutasiUnitScope();
+        $migration->up();
+        $migration->up(); // idempotent
+
+        $byKode = array_column(
+            $this->db->table('db_hutang_piutang')->orderBy('kode', 'ASC')->get()->getResultArray(),
+            null,
+            'kode'
+        );
+
+        $this->assertSame('legacy', $byKode['BF-1']['scope']);
+        $this->assertSame('LEGACY_CUTOFF', $byKode['BF-1']['cutoff_reason']);
+        $this->assertSame('0', (string) $byKode['BF-1']['cutoff_closed_by']);
+        $this->assertNotEmpty($byKode['BF-1']['cutoff_closed_at']);
+
+        $this->assertSame('active', $byKode['BF-2']['scope']);
+        $this->assertNull($byKode['BF-2']['cutoff_reason']);
+
+        $this->assertSame('active', $byKode['BF-3']['scope']);
+        $this->assertNull($byKode['BF-3']['cutoff_reason']);
+
+        $this->assertSame('active', $byKode['BF-4']['scope']);
+        $this->assertNull($byKode['BF-4']['cutoff_reason']);
+
+        $this->assertSame('legacy', $byKode['BF-5']['scope']);
+        $this->assertSame('2026-01-01 00:00:00', $byKode['BF-5']['cutoff_closed_at']);
     }
 
     public function testTerapkanDanRestorePembayaranHP(): void

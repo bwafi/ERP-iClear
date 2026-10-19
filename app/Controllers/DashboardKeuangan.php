@@ -9,6 +9,7 @@ use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPiutang;
 use App\Models\ModelUnit;
 use App\Services\Finance\FinanceScopeService;
+use App\Services\Finance\HutangPiutangService;
 use Config\Database;
 
 class DashboardKeuangan extends BaseController
@@ -91,31 +92,12 @@ class DashboardKeuangan extends BaseController
             ->selectSum('kredit')
             ->first()->kredit ?? 0;
 
-        // Total Hutang & Piutang — dibaca dari registry `hutang_piutang`
-        // dengan scope aktif (active + opening). Data legacy (sebelum cut-off,
-        // non-kasbon) tidak dihitung sebagai outstanding.
-        $hutangQuery = $this->db->table('hutang_piutang')
-            ->selectSum('sisa')
-            ->where('deleted', 0)
-            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
-            ->where('jenis', 'hutang');
-
-        if ($unitId) {
-            $hutangQuery->where('unit_id', $unitId);
-        }
-        $totalHutang = $hutangQuery->get()->getRow()->sisa ?? 0;
-
-        $piutangQuery = $this->db->table('hutang_piutang')
-            ->selectSum('sisa')
-            ->where('deleted', 0)
-            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
-            ->where('jenis', 'piutang');
-
-        if ($unitId) {
-            $piutangQuery->where('unit_id', $unitId);
-        }
-
-        $totalPiutang = $piutangQuery->get()->getRow()->sisa ?? 0;
+        // Total Hutang & Piutang — satu definisi dengan Dashboard Hutang Piutang.
+        // Jangan menjumlah registry sendiri di sini: sumber yang dihitung harus
+        // sama dengan getRingkasan(), termasuk mutasi antar unit.
+        $ringkasanHP = (new HutangPiutangService())->getRingkasan($unitId ? [(int) $unitId] : null);
+        $totalHutang = $ringkasanHP['total_hutang'];
+        $totalPiutang = $ringkasanHP['total_piutang'];
 
         // Chart data - Kas Masuk/Keluar per hari
         $kasMasukData = $this->KasMasukModel

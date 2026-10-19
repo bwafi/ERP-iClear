@@ -12,6 +12,7 @@ use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPembayaranPiutang;
 use App\Models\ModelTransaksiKasBank;
 use App\Models\ModelUnit;
+use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\KasBankScopeService;
 
 /**
@@ -684,16 +685,16 @@ class ModeKasBank
             ->where('sumber_id', $idMutasi)
             ->findAll();
 
-        $piutangExists = false;
-        $hutangExists  = false;
+        $existingByJenis = [];
         foreach ($existing as $row) {
-            if ($row->jenis === 'piutang') {
-                $piutangExists = true;
-            }
-            if ($row->jenis === 'hutang') {
-                $hutangExists = true;
-            }
+            $existingByJenis[$row->jenis] = $row;
         }
+
+        // Dokumen yang sudah di-soft-delete (batal terima) tetap punya baris
+        // unik (sumber_tipe,sumber_id,jenis), jadi tidak bisa di-insert ulang.
+        // Baris itu harus dihidupkan kembali, bukan dianggap "sudah ada".
+        $piutangExists = isset($existingByJenis['piutang']) && (int) $existingByJenis['piutang']->deleted === 0;
+        $hutangExists  = isset($existingByJenis['hutang']) && (int) $existingByJenis['hutang']->deleted === 0;
 
         if ($piutangExists && $hutangExists) {
             return ['status' => 'skipped', 'reason' => 'pasangan sudah ada', 'id' => $idMutasi];
@@ -724,6 +725,16 @@ class ModeKasBank
         $kodeP   = 'MUT-' . $kirim . '-' . $idMutasi . '-P';
         $kodeH   = 'MUT-' . $terima . '-' . $idMutasi . '-H';
 
+        // Baris mutasi bertanggal sebelum periode operasional baru adalah
+        // legacy, sama seperti backfill cut-off untuk sumber lain.
+        $legacy = FinanceScopeService::isLegacyTransaction($tanggal);
+        $scopeFields = [
+            'scope'            => $legacy ? FinanceScopeService::SCOPE_LEGACY : FinanceScopeService::SCOPE_ACTIVE,
+            'cutoff_closed_at' => $legacy ? FinanceScopeService::cutoffDate() . ' 23:59:59' : null,
+            'cutoff_closed_by' => $legacy ? 0 : null,
+            'cutoff_reason'    => $legacy ? 'LEGACY_CUTOFF' : null,
+        ];
+
         // Jatuh tempo: default deviasi mutasi (hari H konfirmasi/penerimaan) + 3
         // hari; pemanggil boleh memaksa via parameter $jatuhTempo.
         $dasarJt = $mutasi->tanggal_terima
@@ -735,57 +746,97 @@ class ModeKasBank
         $insertedH = 0;
 
         if (!$piutangExists) {
-            if ($this->HPModel->insert([
-                'kode'           => $kodeP,
-                'jenis'          => 'piutang',
-                'sumber_tipe'    => 'mutasi_unit',
-                'sumber_id'      => (int)$idMutasi,
-                'is_projection'  => 0,
-                'pihak_tipe'     => 'unit',
-                'pihak_id'       => $kirim,
-                'lawan_unit_id'  => $terima,
-                'nama_pihak'     => $namaKirim,
-                'tanggal'        => $tanggal,
-                'jatuh_tempo'    => $jatuhTempo,
-                'uraian'         => $uraian,
-                'total'          => $total,
-                'total_dibayar'  => 0,
-                'sisa'           => $total,
-                'status'         => 'belum_lunas',
-                'unit_id'        => $kirim,
-                'input_by'       => $akunUser,
-                'deleted'        => 0,
-                'created_at'     => date('Y-m-d H:i:s'),
-                'updated_at'     => date('Y-m-d H:i:s'),
-            ])) {
+            $piutangLama = $existingByJenis['piutang'] ?? null;
+
+            if ($piutangLama) {
+                if (!$this->HPModel->update((int) $piutangLama->id, [
+                    'tanggal'       => $tanggal,
+                    'jatuh_tempo'   => $jatuhTempo,
+                    'uraian'        => $uraian,
+                    'total'         => $total,
+                    'total_dibayar' => 0,
+                    'sisa'          => $total,
+                    'status'        => 'belum_lunas',
+                    'keterangan'    => null,
+                    'deleted'       => 0,
+                ] + $scopeFields)) {
+                    return ['status' => 'failed', 'reason' => 'gagal menghidupkan piutang', 'id' => $idMutasi];
+                }
+                $insertedP = (int) $piutangLama->id;
+            } else {
+                if (!$this->HPModel->insert([
+                    'kode'           => $kodeP,
+                    'jenis'          => 'piutang',
+                    'sumber_tipe'    => 'mutasi_unit',
+                    'sumber_id'      => (int)$idMutasi,
+                    'is_projection'  => 0,
+                    'pihak_tipe'     => 'unit',
+                    'pihak_id'       => $kirim,
+                    'lawan_unit_id'  => $terima,
+                    'nama_pihak'     => $namaKirim,
+                    'tanggal'        => $tanggal,
+                    'jatuh_tempo'    => $jatuhTempo,
+                    'uraian'         => $uraian,
+                    'total'          => $total,
+                    'total_dibayar'  => 0,
+                    'sisa'           => $total,
+                    'status'         => 'belum_lunas',
+                    'unit_id'        => $kirim,
+                    'input_by'       => $akunUser,
+                    'deleted'        => 0,
+                    'created_at'     => date('Y-m-d H:i:s'),
+                    'updated_at'     => date('Y-m-d H:i:s'),
+                ] + $scopeFields)) {
+                    return ['status' => 'failed', 'reason' => 'gagal membuat piutang', 'id' => $idMutasi];
+                }
                 $insertedP = (int)$this->HPModel->insertID();
             }
         }
 
         if (!$hutangExists) {
-            if ($this->HPModel->insert([
-                'kode'           => $kodeH,
-                'jenis'          => 'hutang',
-                'sumber_tipe'    => 'mutasi_unit',
-                'sumber_id'      => (int)$idMutasi,
-                'is_projection'  => 0,
-                'pihak_tipe'     => 'unit',
-                'pihak_id'       => $terima,
-                'lawan_unit_id'  => $kirim,
-                'nama_pihak'     => $namaTerima,
-                'tanggal'        => $tanggal,
-                'jatuh_tempo'    => $jatuhTempo,
-                'uraian'         => $uraian,
-                'total'          => $total,
-                'total_dibayar'  => 0,
-                'sisa'           => $total,
-                'status'         => 'belum_lunas',
-                'unit_id'        => $terima,
-                'input_by'       => $akunUser,
-                'deleted'        => 0,
-                'created_at'     => date('Y-m-d H:i:s'),
-                'updated_at'     => date('Y-m-d H:i:s'),
-            ])) {
+            $hutangLama = $existingByJenis['hutang'] ?? null;
+
+            if ($hutangLama) {
+                if (!$this->HPModel->update((int) $hutangLama->id, [
+                    'tanggal'       => $tanggal,
+                    'jatuh_tempo'   => $jatuhTempo,
+                    'uraian'        => $uraian,
+                    'total'         => $total,
+                    'total_dibayar' => 0,
+                    'sisa'          => $total,
+                    'status'        => 'belum_lunas',
+                    'keterangan'    => null,
+                    'deleted'       => 0,
+                ] + $scopeFields)) {
+                    return ['status' => 'failed', 'reason' => 'gagal menghidupkan hutang', 'id' => $idMutasi];
+                }
+                $insertedH = (int) $hutangLama->id;
+            } else {
+                if (!$this->HPModel->insert([
+                    'kode'           => $kodeH,
+                    'jenis'          => 'hutang',
+                    'sumber_tipe'    => 'mutasi_unit',
+                    'sumber_id'      => (int)$idMutasi,
+                    'is_projection'  => 0,
+                    'pihak_tipe'     => 'unit',
+                    'pihak_id'       => $terima,
+                    'lawan_unit_id'  => $kirim,
+                    'nama_pihak'     => $namaTerima,
+                    'tanggal'        => $tanggal,
+                    'jatuh_tempo'    => $jatuhTempo,
+                    'uraian'         => $uraian,
+                    'total'          => $total,
+                    'total_dibayar'  => 0,
+                    'sisa'           => $total,
+                    'status'         => 'belum_lunas',
+                    'unit_id'        => $terima,
+                    'input_by'       => $akunUser,
+                    'deleted'        => 0,
+                    'created_at'     => date('Y-m-d H:i:s'),
+                    'updated_at'     => date('Y-m-d H:i:s'),
+                ] + $scopeFields)) {
+                    return ['status' => 'failed', 'reason' => 'gagal membuat hutang', 'id' => $idMutasi];
+                }
                 $insertedH = (int)$this->HPModel->insertID();
             }
         }

@@ -64,6 +64,23 @@ class HutangPiutangService
         self::SUMBER_RETUR_BARANG,
     ];
 
+    /**
+     * Sumber yang ikut dihitung di total DAN status ringkasan. Daftar ini
+     * harus sama dengan sumber yang dibaca getRingkasan(), supaya angka
+     * "terlambat" tidak menghitung baris yang tidak ada di total.
+     */
+    public const SUMBER_DIHITUNG = [
+        self::SUMBER_PEMBELIAN,
+        self::SUMBER_PIUTANG_PELANGGAN,
+        self::SUMBER_KASBON,
+        self::SUMBER_PIUTANG_LEGACY,
+        self::SUMBER_JASA_TEKNISI,
+        self::SUMBER_KELEBIHAN_TRANSFER,
+        self::SUMBER_RETUR_BARANG,
+        self::SUMBER_MUTASI,
+        self::SUMBER_MANUAL,
+    ];
+
     /** Kategori kas untuk baris kas_keluar pencairan kasbon (khusus, bukan kategori 10). */
     public const KATEGORI_KASBON = 'Kasbon';
 
@@ -1093,10 +1110,39 @@ class HutangPiutangService
         $piutangLegacySisa = (int) ($piutangLegacy->sisa ?? 0);
         $piutangLegacyJml = (int) ($piutangLegacy->jml ?? 0);
 
-        $totalHutang = $hutangSupplierSisa + $authHutangSisa;
-        $totalPiutang = $piutangPelangganSisa + $kasbonSisa + $piutangSupplierSisa + $piutangLainSisa + $piutangLegacySisa;
+        // 4. Mutasi antar unit — dipisah dari "lainnya" supaya posisi antar
+        //    unit tetap terlihat sebagai kategori sendiri.
+        $qm = $this->db->table('hutang_piutang')
+            ->select('jenis, COUNT(*) AS jml, COALESCE(SUM(sisa),0) AS sisa')
+            ->where('deleted', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->where('sumber_tipe', self::SUMBER_MUTASI)
+            ->groupStart()
+                ->where('sisa >', 0)
+                ->orWhere('status !=', self::STATUS_LUNAS)
+            ->groupEnd()
+            ->groupBy('jenis');
+        if ($unitIds) {
+            $qm->whereIn('unit_id', $unitIds);
+        }
+        $mutasiHutangSisa = 0;
+        $mutasiHutangJml = 0;
+        $mutasiPiutangSisa = 0;
+        $mutasiPiutangJml = 0;
+        foreach ($qm->get()->getResult() as $r) {
+            if ($r->jenis === 'hutang') {
+                $mutasiHutangSisa = (int) $r->sisa;
+                $mutasiHutangJml = (int) $r->jml;
+            } else {
+                $mutasiPiutangSisa = (int) $r->sisa;
+                $mutasiPiutangJml = (int) $r->jml;
+            }
+        }
 
-        // 4. Status & jatuh tempo (dari registry authoritative + sumber existing)
+        $totalHutang = $hutangSupplierSisa + $authHutangSisa + $mutasiHutangSisa;
+        $totalPiutang = $piutangPelangganSisa + $kasbonSisa + $piutangSupplierSisa + $piutangLainSisa + $piutangLegacySisa + $mutasiPiutangSisa;
+
+        // 5. Status & jatuh tempo (dari registry authoritative + sumber existing)
         $jatuhTempo = $this->countJatuhTempo($unitIds);
 
         return [
@@ -1109,6 +1155,8 @@ class HutangPiutangService
             'total_piutang_lain' => $piutangLainSisa,
             'total_kasbon' => $kasbonSisa,
             'total_piutang_legacy' => $piutangLegacySisa,
+            'total_hutang_antar_unit' => $mutasiHutangSisa,
+            'total_piutang_antar_unit' => $mutasiPiutangSisa,
             'jml_hutang' => $hutangSupplierJml,
             'jml_hutang_lain' => $authHutangJml,
             'jml_piutang_pelanggan' => $piutangPelangganJml,
@@ -1116,6 +1164,8 @@ class HutangPiutangService
             'jml_piutang_lain' => $piutangLainJml,
             'jml_kasbon' => $kasbonJml,
             'jml_piutang_legacy' => $piutangLegacyJml,
+            'jml_hutang_antar_unit' => $mutasiHutangJml,
+            'jml_piutang_antar_unit' => $mutasiPiutangJml,
             'belum_lunas' => $jatuhTempo['belum_lunas'],
             'sebagian' => $jatuhTempo['sebagian'],
             'lunas' => $jatuhTempo['lunas'],
@@ -1142,7 +1192,8 @@ class HutangPiutangService
         $q = $this->db->table('hutang_piutang')
             ->select('status, sisa, jatuh_tempo')
             ->where('deleted', 0)
-            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY);
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
+            ->whereIn('sumber_tipe', self::SUMBER_DIHITUNG);
         if ($unitIds) {
             $q->whereIn('unit_id', $unitIds);
         }

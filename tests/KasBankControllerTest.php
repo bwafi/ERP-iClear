@@ -183,7 +183,8 @@ class KasBankControllerTest extends CIUnitTestCase
                 idmutasi INTEGER PRIMARY KEY AUTO_INCREMENT,
                 no_nota_mutasi TEXT NULL, tanggal_kirim TEXT NULL, tanggal_terima TEXT NULL,
                 status TEXT NULL, kirim_idunit INT NULL, terima_idunit INT NULL,
-                input_by INT NULL, created_on TEXT NULL, updated_on TEXT NULL)');
+                input_by INT NULL, created_on TEXT NULL, updated_on TEXT NULL,
+                batal_oleh INT NULL, batal_at TEXT NULL, batal_alasan TEXT NULL)');
         $q('CREATE TABLE db_detail_mutasi (
                 iddetail_mutasi INTEGER PRIMARY KEY AUTO_INCREMENT,
                 mutasi_idmutasi INT NULL, jumlah_kirim REAL NULL, jumlah_terima REAL NULL,
@@ -726,6 +727,76 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             ->where('sumber_id', 1)
             ->get()->getResult();
         $this->assertCount(2, $rows2);
+    }
+
+    public function testTerimaUlangSetelahBatalMembuatHutangPiutangAktif(): void
+    {
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 44,
+            'ID_UNIT'    => 2,
+            'ID_JABATAN' => 35,
+        ]);
+        $this->post('mutasi_stok/terima/1')->assertStatus(302);
+
+        // Batalkan sebagai Admin Root (satu-satunya role yang boleh).
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 1,
+        ]);
+        $rBatal = $this->post('mutasi_stok/batal-terima/1', ['alasan_batal' => 'salah klik']);
+        $rBatal->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $setelahBatal = $db->table('mutasi')->where('idmutasi', 1)->get()->getRow();
+        $this->assertSame('0', (string) $setelahBatal->status);
+        $this->assertSame(2, (int) $db->table('hutang_piutang')
+            ->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 1)
+            ->where('deleted', 1)->countAllResults());
+
+        // Terima ulang oleh unit penerima.
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 44,
+            'ID_UNIT'    => 2,
+            'ID_JABATAN' => 35,
+        ]);
+        $this->post('mutasi_stok/terima/1')->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $mutasi = $db->table('mutasi')->where('idmutasi', 1)->get()->getRow();
+        $this->assertSame('1', (string) $mutasi->status);
+
+        $rows = $db->table('hutang_piutang')
+            ->where('sumber_tipe', 'mutasi_unit')
+            ->where('sumber_id', 1)
+            ->where('deleted', 0)
+            ->get()->getResult();
+        $this->assertCount(2, $rows);
+    }
+
+    public function testTerimaMutasiNilaiNolTidakMenandaiDiterima(): void
+    {
+        $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, status, kirim_idunit, terima_idunit, input_by) VALUES (2, 'MTS1000921002', '2026-09-20 09:00:00', '0', 1, 2, 43)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES (2, 2, 1, 0, 0, 1001, 1, 2)");
+
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 44,
+            'ID_UNIT'    => 2,
+            'ID_JABATAN' => 35,
+        ]);
+        $this->post('mutasi_stok/terima/2')->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $mutasi = $db->table('mutasi')->where('idmutasi', 2)->get()->getRow();
+        $this->assertSame('0', (string) $mutasi->status);
+        $this->assertSame(0, $db->table('hutang_piutang')
+            ->where('sumber_tipe', 'mutasi_unit')
+            ->where('sumber_id', 2)
+            ->countAllResults());
     }
 
     public function testCetakBuktiHutangPiutangMutasiMemuatListBarang(): void
@@ -1350,6 +1421,9 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
     public function testRingkasanTidakMenghitungLegacy(): void
     {
+        // Isolasi: seed memuat H/P mutasi_unit; test ini khusus sumber manual.
+        $this->db->table('hutang_piutang')->where('sumber_tipe', 'mutasi_unit')->delete();
+
         // Hutang manual (authoritative) aktif -> terhitung di ringkasan.
         $m = $this->model(ModelHutangPiutang::class);
         $m->insert([
@@ -1379,6 +1453,57 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'scope' => 'legacy', 'cutoff_reason' => 'LEGACY_CUTOFF',
         ]);
         $this->assertSame(0, $svc->getRingkasan([1])['total_hutang']);
+    }
+
+    public function testRingkasanMemasukkanMutasiAntarUnitSesuaiStatus(): void
+    {
+        $this->db->table('hutang_piutang')->where('id >', 0)->delete();
+
+        $m = $this->model(ModelHutangPiutang::class);
+        $m->insert([
+            'kode' => 'M-H-1', 'jenis' => 'hutang', 'sumber_tipe' => 'mutasi_unit',
+            'sumber_id' => 1, 'pihak_tipe' => 'unit', 'pihak_id' => 2, 'lawan_unit_id' => 1,
+            'nama_pihak' => 'Unit B', 'tanggal' => '2026-10-15',
+            'jatuh_tempo' => date('Y-m-d', strtotime('-1 day')),
+            'total' => 500000, 'total_dibayar' => 0, 'sisa' => 500000,
+            'status' => 'belum_lunas', 'unit_id' => 2, 'deleted' => 0, 'scope' => 'active',
+        ]);
+        $m->insert([
+            'kode' => 'M-P-1', 'jenis' => 'piutang', 'sumber_tipe' => 'mutasi_unit',
+            'sumber_id' => 1, 'pihak_tipe' => 'unit', 'pihak_id' => 1, 'lawan_unit_id' => 2,
+            'nama_pihak' => 'Unit A', 'tanggal' => '2026-10-15',
+            'jatuh_tempo' => date('Y-m-d', strtotime('+30 days')),
+            'total' => 500000, 'total_dibayar' => 0, 'sisa' => 500000,
+            'status' => 'belum_lunas', 'unit_id' => 1, 'deleted' => 0, 'scope' => 'active',
+        ]);
+
+        $r = (new HutangPiutangService())->getRingkasan([1, 2]);
+
+        $this->assertSame(500000, $r['total_hutang_antar_unit']);
+        $this->assertSame(500000, $r['total_piutang_antar_unit']);
+        $this->assertSame(500000, $r['total_hutang']);
+        $this->assertSame(500000, $r['total_piutang']);
+        $this->assertSame(1, $r['terlambat'], 'Hanya sisi hutang yang jatuh tempo kemarin');
+        $this->assertSame(0, $r['jatuh_tempo']);
+    }
+
+    public function testStatusRingkasanHanyaDariSumberYangDihitung(): void
+    {
+        $this->db->table('hutang_piutang')->where('id >', 0)->delete();
+
+        // Sumber tak dikenal: tidak masuk total, jadi tidak boleh masuk status.
+        $this->model(ModelHutangPiutang::class)->insert([
+            'kode' => 'X-1', 'jenis' => 'hutang', 'sumber_tipe' => 'sumber_lama',
+            'pihak_tipe' => 'supplier', 'pihak_id' => 1, 'nama_pihak' => 'Lama',
+            'tanggal' => '2026-10-01', 'jatuh_tempo' => date('Y-m-d', strtotime('-10 days')),
+            'total' => 100000, 'total_dibayar' => 0, 'sisa' => 100000,
+            'status' => 'belum_lunas', 'unit_id' => 1, 'deleted' => 0, 'scope' => 'active',
+        ]);
+
+        $r = (new HutangPiutangService())->getRingkasan([1]);
+
+        $this->assertSame(0, $r['total_hutang']);
+        $this->assertSame(0, $r['terlambat']);
     }
 
     public function testKasbonOpeningTetapTerhitung(): void
