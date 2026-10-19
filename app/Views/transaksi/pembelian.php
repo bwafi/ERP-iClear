@@ -125,7 +125,7 @@
 
                 <div class="col-md-6">
                     <label for="frontliner" class="form-label">Frontliner</label>
-                    <select class="form-control" id="frontliner" name="frontliner" required>
+                    <select class="form-control" id="frontliner" name="frontliner">
                         <option value="">-- Pilih Frontliner --</option>
                         <?php foreach ($frontliner as $akun): ?>
                         <option value="<?= esc($akun->ID_AKUN) ?>"><?= esc($akun->NAMA_AKUN) ?></option>
