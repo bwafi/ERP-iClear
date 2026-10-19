@@ -1532,8 +1532,7 @@ class PenilaianKPI extends BaseController
 
         $listBuilder = $this->db->table('akun')
             ->where('STATUS_PEGAWAI', 1)
-            ->where('ID_JABATAN !=', 1)
-            ->where('ID_JABATAN !=', 2);
+            ->where('TERIMA_GAJI', 1);
 
         if ($areaUnits !== null) {
             $listBuilder->whereIn('ID_UNIT', $areaUnits);
@@ -2261,7 +2260,7 @@ class PenilaianKPI extends BaseController
 
         $list_karyawan = $this->db->table('akun')
             ->where('STATUS_PEGAWAI', 1)
-            ->where('ID_JABATAN !=', 1)
+            ->where('TERIMA_GAJI', 1)
             ->get()
             ->getResultArray();
 
