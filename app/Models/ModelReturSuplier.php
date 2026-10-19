@@ -9,7 +9,7 @@ class ModelReturSuplier extends Model
     protected $table = 'retur_suplier';
     protected $primaryKey = 'idretur_suplier';
     protected $returnType = 'object';
-    protected $allowedFields = ['idretur_suplier', 'no_retur_suplier', 'tanggal', 'jumlah', 'satuan', 'barang_idbarang', 'detail_pembelian_iddetail_pembelian', 'input_by', 'unit_idunit'];
+    protected $allowedFields = ['idretur_suplier', 'no_retur_suplier', 'tanggal', 'jumlah', 'satuan', 'barang_idbarang', 'detail_pembelian_iddetail_pembelian', 'barang_rusak_id', 'input_by', 'unit_idunit'];
 
     public function getReturSuplier()
     {

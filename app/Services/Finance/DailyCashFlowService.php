@@ -293,10 +293,10 @@ class DailyCashFlowService
     protected function fetchService(int $unitId, string $tanggal): array
     {
         return $this->db->table('service')
-            ->select('idservice, no_service, tanggal_selesai, harus_dibayar, bayar_tunai')
+            ->select('idservice, no_service, ' . ServiceCashRecognition::dateExpression() . ' AS tanggal_selesai, harus_dibayar, bayar_tunai', false)
             ->where('unit_idunit', $unitId)
-            ->where('DATE(tanggal_selesai)', $tanggal)
-            ->where('status_service', 4)
+            ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') = ' . $this->db->escape($tanggal), null, false)
+            ->where(ServiceCashRecognition::recognizedExpression(), null, false)
             ->orderBy('tanggal_selesai', 'ASC')
             ->get()
             ->getResult();

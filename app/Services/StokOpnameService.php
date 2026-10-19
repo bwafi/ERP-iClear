@@ -8,6 +8,7 @@ use App\Models\ModelStokOpnameDraft;
 use App\Models\ModelStokOpnamePeriode;
 use App\Models\ModelHppBarang;
 use App\Models\ModelStokAwal;
+use App\Services\Inventory\ProductInventoryScope;
 
 /**
  * StokOpnameService
@@ -31,14 +32,13 @@ class StokOpnameService
 
     /**
      * Awalan nama barang yang BUKAN produk (jasa/internal) sehingga tidak
-     * relevan dihitung fisik pada stok opname. PUP, JASA, dan MESIN adalah
-     * penamaan item jasa, bukan barang berstok yang bisa dihitung.
+     * relevan dihitung fisik pada stok opname. Penanda non-produk digunakan
+     * bersama Kartu Stok agar nilai jasa tidak masuk persediaan.
      *
      * Dicocokkan dari AWAL nama (LIKE 'PUP%'); "Kuras Mesin" tetap ikut
      * karena "MESIN" bukan di awal. Samakan mental model dengan penamaan
      * kategori di StokAwal::input_stokawal().
      */
-    private const NON_PRODUK_AWALAN = ['PUP', 'JASA', 'MESIN'];
 
     protected $db;
     protected $model;
@@ -152,8 +152,10 @@ class StokOpnameService
         }
 
         $stocks = $this->db->table('stok_barang')
-            ->where('id_unit', $unit);
-        $this->kecualikanBukanProduk($stocks);
+            ->select('stok_barang.*')
+            ->join('barang', 'barang.idbarang = stok_barang.idbarang')
+            ->where('stok_barang.id_unit', $unit);
+        $this->kecualikanBukanProduk($stocks, 'barang.nama_barang', 'barang.jenis_item');
         $stocks = $stocks->orderBy('kode_barang', 'ASC')
             ->get()
             ->getResultArray();
@@ -221,31 +223,20 @@ class StokOpnameService
 
     /**
      * Terapkan pengecualian barang non-produk (jasa) pada builder:
-     * NOT LIKE 'PUP%' / 'JASA%' / 'MESIN%', dikelompokkan agar aman
-     * disandingkan kondisi lain dengan AND.
+     * Disandingkan kondisi lain dengan AND.
      */
-    private function kecualikanBukanProduk($builder, string $kolomNama = 'nama_barang'): void
+    private function kecualikanBukanProduk($builder, string $kolomNama = 'nama_barang', ?string $kolomJenis = null): void
     {
-        $builder->groupStart();
-        foreach (self::NON_PRODUK_AWALAN as $awalan) {
-            $builder->notLike($kolomNama, $awalan, 'after');
-        }
-        $builder->groupEnd();
+        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama, true, $kolomJenis), null, false);
     }
 
     /**
      * Kebalikan dari kecualikanBukanProduk(): cocokkan HANYA barang non-produk
-     * (LIKE 'PUP%' OR 'JASA%' OR 'MESIN%'). Dipakai saat membuang baris jasa.
+     * Dipakai saat membuang baris jasa.
      */
-    private function saringBukanProduk($builder, string $kolomNama = 'nama_barang'): void
+    private function saringBukanProduk($builder, string $kolomNama = 'nama_barang', ?string $kolomJenis = null): void
     {
-        $builder->groupStart();
-        foreach (self::NON_PRODUK_AWALAN as $i => $awalan) {
-            $i === 0
-                ? $builder->like($kolomNama, $awalan, 'after')
-                : $builder->orLike($kolomNama, $awalan, 'after');
-        }
-        $builder->groupEnd();
+        $builder->where(ProductInventoryScope::sqlPredicate($kolomNama, false, $kolomJenis), null, false);
     }
 
     /**
@@ -278,7 +269,7 @@ class StokOpnameService
             ->select('d.idstok_opname, d.periode_id')
             ->join('barang b', 'b.idbarang = d.barang_idbarang')
             ->whereIn('d.periode_id', $periodeIds);
-        $this->saringBukanProduk($builder, 'b.nama_barang');
+        $this->saringBukanProduk($builder, 'b.nama_barang', 'b.jenis_item');
 
         $rows = $builder->get()->getResultArray();
         if ($rows === []) {

@@ -7,6 +7,7 @@ use Config\Database;
 use App\Models\ModelAuth;
 use App\Models\ModelReturSuplier;
 use App\Models\ModelDetailPembelian;
+use App\Services\Inventory\SupplierReturnQuantity;
 
 class Retur_Suplier extends BaseController
 
@@ -41,66 +42,161 @@ class Retur_Suplier extends BaseController
     public function insert()
     {
         $datauser = $this->AuthModel->getById(session('ID_AKUN'));
-        $useridunit = $datauser->ID_UNIT;
-        $tanggal_retur = $this->request->getPost('tanggal_pengembalian');
-        date_default_timezone_set('Asia/Jakarta');
+        $useridunit = (int) ($datauser->ID_UNIT ?? 0);
+        $tanggalRetur = (string) $this->request->getPost('tanggal_pengembalian');
+        $tanggal = \DateTimeImmutable::createFromFormat('!Y-m-d', $tanggalRetur);
+        $dateErrors = \DateTimeImmutable::getLastErrors();
+        $items = $this->request->getPost('items');
+        $selected = array_values(array_filter(is_array($items) ? $items : [], static function ($item) {
+            return is_array($item) && ($item['selected'] ?? null) === '1';
+        }));
 
-        $tanggal = date('Y-m-d');
-        $waktu = date('H:i:s');
-        $datetime = $tanggal_retur . ' ' . $waktu;
-        $input_by = session('ID_AKUN');
-
-        //noretur
-        $lastRetur = $this->ReturSuplierModel
-            ->where('unit_idunit', $useridunit)
-            ->like('DATE(tanggal)', $tanggal_retur)
-            ->orderBy('no_retur_suplier', 'DESC')
-            ->first();
-
-        if ($lastRetur) {
-            $lastKode = substr($lastRetur->no_retur_suplier, -3);
-            $newKode = str_pad((int)$lastKode + 1, 3, '0', STR_PAD_LEFT);
-        } else {
-            $newKode = '001';
+        if ($useridunit <= 0 || ! $tanggal || $tanggal->format('Y-m-d') !== $tanggalRetur
+            || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))
+            || $selected === []) {
+            return redirect()->to(base_url('/retur_suplier'))->with('gagal', 'Tanggal atau barang retur tidak valid.');
         }
 
-        $ymd = date('Ymd');
-        $no_retur_suplier = 'RTS' . $useridunit . $ymd . $newKode;
-        //noretur
+        $db = Database::connect();
+        $db->transBegin();
 
-        $items = $this->request->getPost('items');
+        try {
+            $unit = $db->query(
+                'SELECT idunit FROM ' . $db->prefixTable('unit') . ' WHERE idunit = ? FOR UPDATE',
+                [$useridunit]
+            )->getRow();
+            if (! $unit) {
+                throw new \RuntimeException('Unit retur tidak ditemukan.');
+            }
 
-        foreach ($items as $item) {
-            if (isset($item['selected']) && $item['selected'] == '1') {
-                $jumlah_retur = (int) $item['jumlah_retur'];
-                $jumlah = (int) $item['jumlah'];
-                $satuan = $item['satuan'];
-                $barang_idbarang = $item['barang_idbarang'];
-                $iddetail_pembelian = (int) $item['iddetail_pembelian'];
-                $unit_idunit = (int) $item['unit_idunit'];
+            $lastRetur = $this->ReturSuplierModel
+                ->where('unit_idunit', $useridunit)
+                ->where('tanggal', $tanggalRetur)
+                ->orderBy('no_retur_suplier', 'DESC')
+                ->first();
+            $nextNumber = $lastRetur ? (int) substr($lastRetur->no_retur_suplier, -3) + 1 : 1;
+            $noRetur = 'RTS' . $useridunit . $tanggal->format('Ymd') . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+            $seen = [];
+            $supplierId = null;
 
+            foreach ($selected as $item) {
+                $rawDetailId = $item['iddetail_pembelian'] ?? null;
+                $rawRequested = $item['jumlah_retur'] ?? null;
+                if (! is_scalar($rawDetailId) || ! ctype_digit((string) $rawDetailId)
+                    || ! is_scalar($rawRequested) || ! ctype_digit((string) $rawRequested)) {
+                    throw new \RuntimeException('Detail atau jumlah retur tidak valid.');
+                }
+                $detailId = (int) $rawDetailId;
+                $requested = (int) $rawRequested;
+                if ($detailId <= 0 || $requested <= 0 || isset($seen[$detailId])) {
+                    throw new \RuntimeException('Detail pembelian retur tidak valid.');
+                }
+                $seen[$detailId] = true;
 
-                if ($jumlah_retur > $jumlah) {
-                    session()->setFlashdata('gagal', 'Jumlah Retur Tidak Boleh Lebih dari Jumlah yang Dibeli');
-                    return redirect()->to(base_url('/retur_suplier'));
+                $purchase = $db->query(
+                    'SELECT detail.jumlah, detail.satuan_beli, detail.barang_idbarang, detail.unit_idunit, '
+                    . 'detail.pembelian_idpembelian, detail.no_batch, '
+                    . 'purchase.suplier_id_suplier FROM ' . $db->prefixTable('detail_pembelian') . ' detail '
+                    . 'JOIN ' . $db->prefixTable('pembelian') . ' purchase '
+                    . 'ON purchase.idpembelian = detail.pembelian_idpembelian '
+                    . 'WHERE detail.iddetail_pembelian = ? FOR UPDATE',
+                    [$detailId]
+                )->getRow();
+                if (! $purchase || (int) $purchase->unit_idunit !== $useridunit
+                    || (int) $purchase->suplier_id_suplier <= 0) {
+                    throw new \RuntimeException('Detail pembelian tidak sesuai unit atau supplier retur.');
+                }
+                if ($supplierId !== null && $supplierId !== (int) $purchase->suplier_id_suplier) {
+                    throw new \RuntimeException('Satu dokumen retur hanya boleh berisi barang dari satu supplier.');
+                }
+                $supplierId = (int) $purchase->suplier_id_suplier;
+
+                $previous = $db->table('retur_suplier')
+                    ->selectSum('jumlah')
+                    ->where('detail_pembelian_iddetail_pembelian', $detailId)
+                    ->get()
+                    ->getRow();
+                if (! SupplierReturnQuantity::allows(
+                    (int) $purchase->jumlah,
+                    (int) ($previous->jumlah ?? 0),
+                    $requested
+                )) {
+                    throw new \RuntimeException('Jumlah retur melebihi sisa pembelian.');
                 }
 
-                $data = array(
-                    'no_retur_suplier' => $no_retur_suplier,
-                    'tanggal' => $tanggal_retur,
-                    'jumlah' => $jumlah_retur,
-                    'satuan' => $satuan,
-                    'barang_idbarang' => $barang_idbarang,
-                    'detail_pembelian_iddetail_pembelian' => $iddetail_pembelian,
-                    'input_by' => $input_by,
-                    'unit_idunit' => $unit_idunit,
-                );
-                $result = $this->ReturSuplierModel->insert_ReturSuplier($data);
+                $legacyReturn = $db->query(
+                    'SELECT COUNT(*) AS total FROM ' . $db->prefixTable('retur_suplier') . ' retur '
+                    . 'JOIN ' . $db->prefixTable('detail_pembelian') . ' detail '
+                    . 'ON detail.iddetail_pembelian = retur.detail_pembelian_iddetail_pembelian '
+                    . 'WHERE detail.pembelian_idpembelian = ? AND detail.no_batch = ? '
+                    . 'AND detail.barang_idbarang = ? AND retur.barang_rusak_id IS NULL',
+                    [$purchase->pembelian_idpembelian, $purchase->no_batch, $purchase->barang_idbarang]
+                )->getRow();
+                if ((int) ($legacyReturn->total ?? 0) > 0) {
+                    throw new \RuntimeException('Retur lama harus direkonsiliasi sebelum retur baru.');
+                }
+
+                $damagedRows = $db->query(
+                    'SELECT idbarang_rusak, jumlah FROM ' . $db->prefixTable('barang_rusak')
+                    . ' WHERE idpembelian = ? AND no_nota_sup = ? AND barang_idbarang = ?'
+                    . ' AND unit_idunit = ? ORDER BY idbarang_rusak FOR UPDATE',
+                    [$purchase->pembelian_idpembelian, $purchase->no_batch,
+                        $purchase->barang_idbarang, $useridunit]
+                )->getResult();
+                $remaining = $requested;
+                foreach ($damagedRows as $damaged) {
+                    $alreadyReturned = $db->table('retur_suplier')
+                        ->selectSum('jumlah')
+                        ->where('barang_rusak_id', $damaged->idbarang_rusak)
+                        ->get()->getRow();
+                    $available = (int) $damaged->jumlah - (int) ($alreadyReturned->jumlah ?? 0);
+                    $allocated = min($remaining, max(0, $available));
+                    if ($allocated === 0) {
+                        continue;
+                    }
+                    if (! $this->ReturSuplierModel->insert_ReturSuplier([
+                        'no_retur_suplier' => $noRetur,
+                        'tanggal' => $tanggalRetur,
+                        'jumlah' => $allocated,
+                        'satuan' => $purchase->satuan_beli,
+                        'barang_idbarang' => $purchase->barang_idbarang,
+                        'detail_pembelian_iddetail_pembelian' => $detailId,
+                        'barang_rusak_id' => $damaged->idbarang_rusak,
+                        'input_by' => session('ID_AKUN'),
+                        'unit_idunit' => $purchase->unit_idunit,
+                    ])) {
+                        throw new \RuntimeException('Retur supplier gagal disimpan.');
+                    }
+                    $remaining -= $allocated;
+                    if ($remaining === 0) {
+                        break;
+                    }
+                }
+                if ($remaining !== 0) {
+                    throw new \RuntimeException('Jumlah retur melebihi barang rusak yang tersedia.');
+                }
             }
-        }
-        if ($result) {
-            session()->setFlashdata('sukses', 'Data Berhasil Disimpan');
-            return redirect()->to(base_url('/retur_suplier'));
+
+            if (! $db->table('kredit_retur_suplier')->insert([
+                'no_retur_suplier' => $noRetur,
+                'suplier_id' => $supplierId,
+                'unit_id' => $useridunit,
+                'status' => 'menunggu',
+                'nominal' => 0,
+                'created_at' => date('Y-m-d H:i:s'),
+            ])) {
+                throw new \RuntimeException('Kredit retur menunggu persetujuan gagal dicatat.');
+            }
+
+            if ($db->transStatus() === false || ! $db->transCommit()) {
+                throw new \RuntimeException('Transaksi retur supplier gagal disimpan.');
+            }
+
+            return redirect()->to(base_url('/retur_suplier'))->with('sukses', 'Data Berhasil Disimpan');
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            log_message('error', 'Retur_Suplier::insert gagal: ' . $error->getMessage());
+            return redirect()->to(base_url('/retur_suplier'))->with('gagal', 'Retur supplier tidak dapat diproses. Periksa jumlah, unit, dan catatan Barang Rusak.');
         }
     }
 }

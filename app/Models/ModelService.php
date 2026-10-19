@@ -458,7 +458,7 @@ class ModelService extends Model
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
             ->groupStart()
             ->where('tanggal_selesai IS NULL')
-            ->orWhere('tanggal_selesai', '0000-00-00')
+            ->orWhere("CAST(tanggal_selesai AS CHAR) = '0000-00-00'", null, false)
             ->orWhere('tanggal_selesai', '1970-01-01')
             ->groupEnd()
             ->where('tanggal_bisa_diambil <', $threeMonthsAgo)
@@ -472,7 +472,7 @@ class ModelService extends Model
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
             ->groupStart()
             ->where('tanggal_bisa_diambil IS NULL', null, false)
-            ->orWhere('tanggal_bisa_diambil', '0000-00-00')
+            ->orWhere("CAST(tanggal_bisa_diambil AS CHAR) = '0000-00-00'", null, false)
             ->orWhere('tanggal_bisa_diambil', '1970-01-01')
             ->groupEnd()
             // gunakan DATE_ADD di SQL: created_at + 1 month < NOW()
@@ -496,7 +496,7 @@ class ModelService extends Model
             ->join('akun', 'akun.ID_AKUN = service.service_by')
             ->groupStart()
             ->where('tanggal_selesai IS NULL')
-            ->orWhere('tanggal_selesai', '0000-00-00')
+            ->orWhere("CAST(tanggal_selesai AS CHAR) = '0000-00-00'", null, false)
             ->orWhere('tanggal_selesai', '1970-01-01')
             ->groupEnd()
             ->where('tanggal_bisa_diambil <', $threeMonthsAgo)
@@ -661,8 +661,8 @@ class ModelService extends Model
     {
         $builder = $this->select('
             service.*,
-            SUM(service_sparepart.hpp_penjualan) AS total_hpp_penjualan,
-            (service.harus_dibayar - SUM(service_sparepart.hpp_penjualan)) AS laba_service,
+            COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0) AS total_hpp_penjualan,
+            (service.harus_dibayar - COALESCE(SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah), 0)) AS laba_service,
             akun.NAMA_AKUN AS nama_teknisi
         ')
             ->join('service_sparepart', 'service_sparepart.service_idservice = service.idservice', 'left')

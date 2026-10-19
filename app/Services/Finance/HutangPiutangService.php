@@ -1073,6 +1073,17 @@ class HutangPiutangService
             }
         }
 
+        $supplierCreditQuery = $this->db->table('kredit_retur_suplier')
+            ->select('COALESCE(SUM(sisa_kredit), 0) AS sisa, COUNT(*) AS jumlah')
+            ->where('status', 'disetujui')
+            ->where('sisa_kredit >', 0);
+        if ($unitIds) {
+            $supplierCreditQuery->whereIn('unit_id', $unitIds);
+        }
+        $supplierCredit = $supplierCreditQuery->get()->getRow();
+        $piutangSupplierSisa += (int) ($supplierCredit->sisa ?? 0);
+        $piutangSupplierJml += (int) ($supplierCredit->jumlah ?? 0);
+
         // 3. Piutang pegawai legacy — dibaca dari registry (projection
         //    `piutang_legacy`), hanya scope aktif.
         $qp = $this->db->table('hutang_piutang')

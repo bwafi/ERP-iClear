@@ -8,6 +8,7 @@ foreach ($detail_pembelian as $row) {
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <h4 class="fw-semibold mb-0">Retur Pembelian</h4>
+        <a class="btn btn-outline-primary" href="<?= base_url('kredit_retur_suplier') ?>">Kredit Supplier</a>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
@@ -98,10 +99,6 @@ foreach ($detail_pembelian as $row) {
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="9" class="text-center">Tidak ada data</td>
-                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -121,6 +118,7 @@ foreach ($detail_pembelian as $row) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                         </div>
                         <div class="modal-body">
+                            <p class="text-muted">Retur hanya dapat dikirim dari barang yang sudah tercatat di menu Barang Rusak. Retur lama pada batch yang sama perlu direkonsiliasi terlebih dahulu.</p>
                             <?php
                             $idUnit = session('ID_UNIT');
                             $tanggalSekarang = date('Y-m-d');

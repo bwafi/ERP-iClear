@@ -125,7 +125,7 @@
 
                 <div class="col-md-6">
                     <label for="frontliner" class="form-label">Frontliner</label>
-                    <select class="form-control" id="frontliner" name="frontliner" required>
+                    <select class="form-control" id="frontliner" name="frontliner">
                         <option value="">-- Pilih Frontliner --</option>
                         <?php foreach ($frontliner as $akun): ?>
                         <option value="<?= esc($akun->ID_AKUN) ?>"><?= esc($akun->NAMA_AKUN) ?></option>
@@ -143,12 +143,12 @@
                     data-bs-target="#pilih-produk-modal" style="display: inline-flex; align-items: center;">
                     <iconify-icon icon="solar:password-minimalistic-input-broken" width="24" height="24"
                         style="margin-right: 8px;"></iconify-icon>
-                    Pilih Produk
+                    Pilih ID Sparepart yang Ada
                 </button>
 
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal"
                     data-bs-target="#input-produk-modal">
-                    Tambah Produk
+                    Buat ID Barang Baru
                 </button>
             </div>
 
@@ -162,6 +162,7 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                         </div>
                         <div class="modal-body">
+                            <p class="text-muted">Gunakan ID barang yang sama meskipun harga beli/HPP pada nota baru berbeda. Jasa tidak masuk pembelian stok.</p>
                             <div class="table-responsive mb-4 px-4">
                                 <table class="table border text-nowrap mb-0 align-middle" id="produk-modal-table">
                                     <thead class="text-dark fs-4">
@@ -195,6 +196,7 @@
                                     </thead>
                                     <tbody>
                                         <?php foreach ($produk as $p): ?>
+                                        <?php if (! \App\Services\Inventory\ProductInventoryScope::isPhysicalProduct((string) $p->nama_barang, $p->jenis_item ?? null)) continue; ?>
                                         <tr>
                                             <td>
                                                 <input type="checkbox" class="produk-checkbox"
@@ -1005,14 +1007,20 @@
             <div class="modal-dialog" role="document">
                 <div class="modal-content">
                     <div class="modal-header d-flex align-items-center">
-                        <h4 class="modal-title" id="inputProdukModalLabel">Input Data Barang</h4>
+                        <h4 class="modal-title" id="inputProdukModalLabel">Buat ID Barang Baru</h4>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <form action="<?= base_url('insert_produk') ?>" enctype="multipart/form-data" method="post">
                         <div class="modal-body">
+                            <p class="text-muted">Cari di daftar ID sparepart lebih dulu. Perubahan HPP pembelian tidak memerlukan ID baru.</p>
                             <div class="mb-3">
                                 <label for="nama_barang" class="form-label">Nama Barang</label>
                                 <input type="text" class="form-control" id="nama_barang" name="nama_barang">
+                            </div>
+                            <div class="mb-3">
+                                <label for="jenis_item" class="form-label">Jenis Item</label>
+                                <input type="text" class="form-control" value="Barang fisik / sparepart" disabled>
+                                <input type="hidden" id="jenis_item" name="jenis_item" value="fisik">
                             </div>
                             <!-- <div class="mb-3">
                                 <label for="">Nama Handphone</label>

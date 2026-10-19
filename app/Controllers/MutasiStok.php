@@ -496,8 +496,15 @@ class MutasiStok extends BaseController
             }
         }
 
+        $db = \Config\Database::connect();
+        $db->transBegin();
+        try {
         $result = $this->MutasiStokModel->insert_MutasiStok($data);
+        if (! $result) {
+            throw new \RuntimeException('Header mutasi gagal disimpan.');
+        }
         $idMutasi = $this->MutasiStokModel->insertID();
+        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
 
         foreach ($produkData as $produk) {
             $datastokawal = $this->StokAwalModel->getByIdBarang($produk['id']);
@@ -513,7 +520,8 @@ class MutasiStok extends BaseController
             $produkharga_mutasi = $produk['harga_mutasi'] ?? 0;
 
             $datahpp = $this->HppBarangModel->getById($idbarang);
-            $hpp = $datahpp->hpp ?? 0;
+            $hpp = $this->HppBarangModel->currentUnitCost((int) $idbarang, (int) $kirim_idunit)
+                ?? ($datahpp->hpp ?? 0);
 
 
 
@@ -534,9 +542,27 @@ class MutasiStok extends BaseController
 
             );
             $result2 = $this->DetailMutasiModel->insert_DetailMutasiStok($data2);
+            if (! $result2) {
+                throw new \RuntimeException('Detail mutasi gagal disimpan.');
+            }
+            if ($inventoryBridge->isTracked((int) $idbarang, (int) $kirim_idunit)) {
+                if ((int) $produkjumlahKirim <= 0 || (int) $produkjumlahKirim !== (int) $produkjumlahTerima) {
+                    throw new \RuntimeException('Mutasi item berledger harus memiliki jumlah kirim dan terima sama.');
+                }
+                $inventoryBridge->transfer((int) $idbarang, (int) $kirim_idunit, (int) $terima_idunit,
+                    (string) $this->DetailMutasiModel->insertID(), (int) $produkjumlahKirim);
+            }
+        }
+        if ($db->transStatus() === false || ! $db->transCommit()) {
+            throw new \RuntimeException('Mutasi stok gagal diselesaikan.');
+        }
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            log_message('error', 'MutasiStok::insert gagal: ' . $error->getMessage());
+            return redirect()->back()->with('gagal', 'Mutasi dibatalkan karena stok atau nilainya tidak cocok.');
         }
 
-        if ($result & $result2) {
+        if ($result && $result2) {
 
             $notamutasi = array(
                 'tanggal' => $tanggal_kirim,

@@ -290,7 +290,9 @@ class Penjualan extends BaseController
         $total_hp_second = 0;
         $total_aksesoris = 0;
         $total_sparepart = 0;
+        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
 
+        try {
         foreach ($produkData as $produk) {
             $produkjumlah = $produk['jumlah'];
             $produkid = $produk['id'];
@@ -319,7 +321,8 @@ class Penjualan extends BaseController
 
                     $datahpp = $this->HppBarangModel->getById($idBarangBundle);
                     $satuan_jual = $datahpp->satuan_terkecil ?? null;
-                    $hpp_penjualan = $datahpp->hpp ?? 0;
+                    $hpp_penjualan = $this->HppBarangModel->currentUnitCost((int) $idBarangBundle, (int) $unit_idunit)
+                        ?? ($datahpp->hpp ?? 0);
 
                     $data2 = array(
                         'jumlah' => $jumlahBundle,
@@ -333,7 +336,13 @@ class Penjualan extends BaseController
                         'unit_idunit' => $unit_idunit,
                         'bundle' => 1
                     );
-                    $this->DetailPenjualanModel->insert_detail($data2);
+                    if (! $this->DetailPenjualanModel->insert_detail($data2)) {
+                        throw new \RuntimeException('Detail bundle gagal disimpan.');
+                    }
+                    if ($inventoryBridge->isTracked((int) $idBarangBundle, (int) $unit_idunit)) {
+                        $inventoryBridge->outgoing((int) $idBarangBundle, (int) $unit_idunit,
+                            'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', (int) $jumlahBundle);
+                    }
                 }
                 if ($datahpp->idkategori == 1 && $datahpp->status_barang == 1) {
                     $total_hp_second += $subtotalAwal;
@@ -350,7 +359,8 @@ class Penjualan extends BaseController
                 // barang biasa
                 $datahpp = $this->HppBarangModel->getById($produkid);
                 $satuan_jual = $datahpp->satuan_terkecil ?? null;
-                $hpp_penjualan = $datahpp->hpp ?? 0;
+                $hpp_penjualan = $this->HppBarangModel->currentUnitCost((int) $produkid, (int) $unit_idunit)
+                    ?? ($datahpp->hpp ?? 0);
 
                 $data2 = array(
                     'jumlah' => $produkjumlah,
@@ -363,7 +373,13 @@ class Penjualan extends BaseController
                     'diskon_penjualan' => $diskon_penjualan,
                     'unit_idunit' => $unit_idunit,
                 );
-                $this->DetailPenjualanModel->insert_detail($data2);
+                if (! $this->DetailPenjualanModel->insert_detail($data2)) {
+                    throw new \RuntimeException('Detail penjualan gagal disimpan.');
+                }
+                if ($inventoryBridge->isTracked((int) $produkid, (int) $unit_idunit)) {
+                    $inventoryBridge->outgoing((int) $produkid, (int) $unit_idunit,
+                        'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', (int) $produkjumlah);
+                }
                 if ($datahpp->idkategori == 1 && $datahpp->status_barang == 1) {
                     $total_hp_second += $subtotalAwal;
                 } elseif ($datahpp->idkategori == 1 && $datahpp->status_ppn == 0) {
@@ -376,6 +392,11 @@ class Penjualan extends BaseController
                     $total_aksesoris += $subtotalAwal;
                 }
             }
+        }
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            log_message('error', 'Penjualan stok gagal: ' . $error->getMessage());
+            return redirect()->to(base_url('/penjualan'))->with('gagal', 'Penjualan dibatalkan karena stok atau HPP tidak cocok.');
         }
 
         //jurnal

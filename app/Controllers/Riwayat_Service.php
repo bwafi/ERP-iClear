@@ -27,6 +27,7 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
+use App\Services\Service\ServiceHppSnapshot;
 use App\Services\Service\SparepartKeluarHardDeleteService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
 use App\Models\ModelServiceDp;
@@ -316,9 +317,18 @@ class Riwayat_Service extends BaseController
         $db->transBegin();
 
         try {
-            $service = $db->table('service')->where('idservice', $idservice)->get()->getRow();
+            $service = $db->query(
+                'SELECT * FROM ' . $db->prefixTable('service') . ' WHERE idservice = ? FOR UPDATE',
+                [$idservice]
+            )->getRow();
             if (! $service) {
                 throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+            $claimed = $db->table('riwayat_claim_garansi')
+                ->where('service_idservice', $idservice)
+                ->countAllResults();
+            if ($claimed > 0) {
+                throw new \RuntimeException('Sparepart service yang sudah diklaim garansi tidak boleh ditulis ulang.');
             }
 
             // Ambil snapshot lama sebelum mengubah service_sparepart. Invoice
@@ -343,24 +353,38 @@ class Riwayat_Service extends BaseController
             }
 
             $submittedIds = [];
+            $hppByBarangId = [];
             foreach ($produkData as $produk) {
                 $id = (int) ($produk['id'] ?? 0);
                 if ($id <= 0) {
                     throw new \RuntimeException('Data sparepart tidak valid.');
                 }
                 $jumlah = (int) ($produk['jumlah'] ?? 0);
+                if ($jumlah <= 0 || in_array($id, $submittedIds, true)) {
+                    throw new \RuntimeException('Jumlah sparepart harus positif dan barang tidak boleh duplikat.');
+                }
                 $harga = $this->rupiahToInt($produk['harga'] ?? '0');
                 $diskonItem = $this->rupiahToInt($produk['diskon'] ?? '0');
                 $total = $this->rupiahToInt($produk['total'] ?? '0');
                 $submittedIds[] = $id;
 
-                $dataHppBarang = $this->HppBarangModel->getById($id);
-                $stokAwal = $this->StokAwalModel->getById($id);
+                $dataHppBarang = array_key_exists($id, $existingMap)
+                    ? null
+                    : $this->HppBarangModel->getById($id);
+                $currentHpp = array_key_exists($id, $existingMap)
+                    ? 0
+                    : ($this->HppBarangModel->currentUnitCost($id, (int) ($service->unit_idunit ?? session('ID_UNIT')))
+                        ?? ($dataHppBarang->hpp ?? 0));
+                $hppByBarangId[$id] = ServiceHppSnapshot::resolve(
+                    $existingMap[$id] ?? null,
+                    $currentHpp
+                );
+                $stokAwal = $this->StokAwalModel->getByIdBarang($id);
                 $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,
                     'sub_total' => $total,
-                    'hpp_penjualan' => $dataHppBarang->hpp ?? 0,
+                    'hpp_penjualan' => $hppByBarangId[$id],
                     'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
                     'diskon_penjualan' => $diskonItem,
                     'service_idservice' => $idservice,
@@ -383,7 +407,7 @@ class Riwayat_Service extends BaseController
                 }
             }
 
-            $this->buatPenjualanDariService($idservice, $produkData);
+            $this->buatPenjualanDariService($idservice, $produkData, $hppByBarangId);
 
             if ($db->transStatus() === false || ! $db->transCommit()) {
                 throw new \RuntimeException('Sinkronisasi sparepart keluar gagal disimpan.');
@@ -397,7 +421,7 @@ class Riwayat_Service extends BaseController
         }
     }
 
-    private function buatPenjualanDariService($idservice, $produkData)
+    private function buatPenjualanDariService($idservice, $produkData, $hppByBarangId)
     {
         if (empty($produkData)) {
             return;
@@ -443,6 +467,7 @@ class Riwayat_Service extends BaseController
         }
 
         // insert detail + potong stok
+        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge(\Config\Database::connect());
         foreach ($produkData as $p) {
             $produkid = $p['id'];
             $qty = (int)$p['jumlah'];
@@ -451,18 +476,20 @@ class Riwayat_Service extends BaseController
 
             $subtotal = ($harga * $qty) - $diskon;
 
-            $hpp = $this->HppBarangModel->getById($produkid);
-
             if (! $this->DetailPenjualanModel->insert_detail([
                 'barang_idbarang' => $produkid,
                 'jumlah' => $qty,
                 'harga_penjualan' => $harga,
                 'sub_total' => $subtotal,
                 'penjualan_idpenjualan' => $idPenjualan,
-                'hpp_penjualan' => $hpp->hpp ?? 0,
+                'hpp_penjualan' => $hppByBarangId[$produkid],
                 'unit_idunit' => session('ID_UNIT'),
             ])) {
                 throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
+            }
+            if ($inventoryBridge->isTracked((int) $produkid, (int) session('ID_UNIT'))) {
+                $inventoryBridge->outgoing((int) $produkid, (int) session('ID_UNIT'),
+                    'detail_penjualan', (string) $this->DetailPenjualanModel->insertID(), 'sale', $qty);
             }
         }
     }

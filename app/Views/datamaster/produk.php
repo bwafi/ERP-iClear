@@ -38,6 +38,9 @@
                     </iconify-icon>
                     Download Format Excell
                 </button></a>
+            <?php if ((int) session('ID_JABATAN') === 1): ?>
+                <a class="btn btn-outline-primary" href="<?= base_url('produk/review-tipe') ?>">Review Tipe Item</a>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -148,6 +151,7 @@
                                     data-kode_barang="<?= esc($row->kode_barang) ?>"
                                     data-nama_barang="<?= esc($row->nama_barang) ?>" data-harga="<?= esc($row->harga) ?>"
                                     data-harga_beli="<?= esc($row->harga_beli) ?>"
+                                    data-jenis_item="<?= esc($row->jenis_item ?? '') ?>"
                                     data-kategori="<?= esc($row->nama_kategori) ?>" data-sub-kategori="<?= esc($row->nama_sub_kategori) ?>" data-ppn="<?= esc($row->status_ppn) ?>"
                                     data-input_by="<?= esc($row->input) ?>"
                                     data-stok_minim="<?= esc($row->stok_minimum) ?>"
@@ -219,6 +223,15 @@
                 <div class="modal-body">
                     <input type="hidden" name="id_barang" id="id_barang">
                     <input type="hidden" class="form-control" id="kode_barang" name="kode_barang">
+
+                    <div class="mb-3">
+                        <label for="edit-jenis-item" class="form-label">Tipe Master</label>
+                        <select class="form-control" id="edit-jenis-item" name="jenis_item">
+                            <option value="">Perlu klasifikasi (jangan ubah)</option>
+                            <option value="fisik">Barang fisik / sparepart</option>
+                            <option value="jasa">Jasa / komisi tanpa stok</option>
+                        </select>
+                    </div>
 
                     <div class="mb-3">
                         <label for="nama_barang" class="form-label">Nama Barang</label>
@@ -303,6 +316,14 @@
             </div>
             <form action="<?= base_url('produk/insert_produk') ?>" method="post">
                 <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="input-jenis-item" class="form-label">Tipe Master</label>
+                        <select class="form-control" id="input-jenis-item" name="jenis_item" required>
+                            <option value="">Pilih tipe</option>
+                            <option value="fisik">Barang fisik / sparepart</option>
+                            <option value="jasa">Jasa / komisi tanpa stok</option>
+                        </select>
+                    </div>
                     <div class="mb-3">
                         <label for="nama_barang" class="form-label">Nama Barang</label>
                         <input type="text" class="form-control" id="nama_barang" name="nama_barang" required>
@@ -509,6 +530,7 @@
 
                 document.getElementById('id_barang').value = id_barang;
                 document.getElementById('kode_barang').value = kode_barang;
+                document.getElementById('edit-jenis-item').value = button.getAttribute('data-jenis_item') || '';
                 document.getElementById('nama_barang').value = nama_barang;
                 document.getElementById('edit-harga').value = parseInt(harga.replace(/[^\d]/g, ''));
                 document.getElementById('edit-harga-beli').value = parseInt(harga_beli.replace(/[^\d]/g, ''));

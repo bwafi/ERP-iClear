@@ -154,7 +154,8 @@ final class ServicePembayaranRouteGuardTest extends CIUnitTestCase
     public function testRouteNetTidakTerdaftarPadaRouteCollection(): void
     {
         $routes = service('routes');
-        $postRoutes = array_keys($routes->getRoutes('post'));
+        $routes->loadRoutes();
+        $postRoutes = array_keys($routes->getRoutes('POST'));
 
         $this->assertNotContains(self::URI_NET, $postRoutes, 'Route NET harus nonaktif (tidak boleh bisa dipanggil).');
         $this->assertContains(self::URI_GROSS, $postRoutes, 'Route GROSS harus tetap terdaftar.');

@@ -100,6 +100,7 @@ class LabaRugi extends BaseController
         // Pendapatan: Penjualan
         $builder_penjualan = $db->table('penjualan');
         $builder_penjualan->selectSum('total_penjualan', 'total');
+        $this->filterRetailSales($builder_penjualan);
         $applyTanggalFilter($builder_penjualan, 'penjualan.tanggal');
         if ($id_unit) {
             $builder_penjualan->where('penjualan.unit_idunit', $id_unit);
@@ -111,6 +112,7 @@ class LabaRugi extends BaseController
             ->select('penjualan.kode_invoice, penjualan.tanggal, penjualan.total_penjualan, unit.NAMA_UNIT as nama_unit, pelanggan.nama as nama_pelanggan')
             ->join('unit', 'unit.idunit = penjualan.unit_idunit', 'left')
             ->join('pelanggan', 'pelanggan.id_pelanggan = penjualan.id_pelanggan', 'left');
+        $this->filterRetailSales($penjualan_detail_builder);
         $applyTanggalFilter($penjualan_detail_builder, 'penjualan.tanggal');
         if ($id_unit) {
             $penjualan_detail_builder->where('penjualan.unit_idunit', $id_unit);
@@ -121,8 +123,8 @@ class LabaRugi extends BaseController
 
         // Pendapatan: Service
         $builder_service = $db->table('service');
-        $builder_service->selectSum('harus_dibayar', 'total')
-            ->where('status_service', 4);
+        $builder_service->selectSum('harus_dibayar', 'total');
+        $this->filterCompletedOrWarrantyService($builder_service, $db);
         $applyTanggalFilter($builder_service, 'service.created_at');
         if ($id_unit) {
             $builder_service->where('service.unit_idunit', $id_unit);
@@ -133,8 +135,8 @@ class LabaRugi extends BaseController
         $service_detail_builder = $db->table('service')
             ->select('service.no_service, service.created_at, service.harus_dibayar, unit.NAMA_UNIT as nama_unit, pelanggan.nama as nama_pelanggan')
             ->join('unit', 'unit.idunit = service.unit_idunit', 'left')
-            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
-            ->where('service.status_service', 4);
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left');
+        $this->filterCompletedOrWarrantyService($service_detail_builder, $db);
         $applyTanggalFilter($service_detail_builder, 'service.created_at');
         if ($id_unit) {
             $service_detail_builder->where('service.unit_idunit', $id_unit);
@@ -191,6 +193,7 @@ class LabaRugi extends BaseController
         $builder_hpp = $db->table('detail_penjualan');
         $builder_hpp->select('SUM(detail_penjualan.hpp_penjualan * detail_penjualan.jumlah) as total', false)
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan');
+        $this->filterRetailSales($builder_hpp);
         $applyTanggalFilter($builder_hpp, 'penjualan.tanggal');
         if ($id_unit) {
             $builder_hpp->where('penjualan.unit_idunit', $id_unit);
@@ -203,6 +206,7 @@ class LabaRugi extends BaseController
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
             ->join('barang', 'barang.idbarang = detail_penjualan.barang_idbarang', 'left')
             ->join('unit', 'unit.idunit = detail_penjualan.unit_idunit', 'left');
+        $this->filterRetailSales($hpp_detail_builder);
         $applyTanggalFilter($hpp_detail_builder, 'penjualan.tanggal');
         if ($id_unit) {
             $hpp_detail_builder->where('penjualan.unit_idunit', $id_unit);
@@ -214,8 +218,8 @@ class LabaRugi extends BaseController
         // Biaya: HPP Service
         $builder_hpp_service = $db->table('service_sparepart');
         $builder_hpp_service->select('SUM(service_sparepart.hpp_penjualan * service_sparepart.jumlah) as total', false)
-            ->join('service', 'service.idservice = service_sparepart.service_idservice')
-            ->where('service.status_service', 4);
+            ->join('service', 'service.idservice = service_sparepart.service_idservice');
+        $this->filterCompletedOrWarrantyService($builder_hpp_service, $db);
         $applyTanggalFilter($builder_hpp_service, 'service.created_at');
         if ($id_unit) {
             $builder_hpp_service->where('service.unit_idunit', $id_unit);
@@ -227,8 +231,8 @@ class LabaRugi extends BaseController
             ->select('service.no_service, service.created_at, barang.nama_barang, service_sparepart.jumlah, service_sparepart.hpp_penjualan, (service_sparepart.hpp_penjualan * service_sparepart.jumlah) as total_hpp, unit.NAMA_UNIT as nama_unit')
             ->join('service', 'service.idservice = service_sparepart.service_idservice')
             ->join('barang', 'barang.idbarang = service_sparepart.barang_idbarang', 'left')
-            ->join('unit', 'unit.idunit = service_sparepart.unit_idunit', 'left')
-            ->where('service.status_service', 4);
+            ->join('unit', 'unit.idunit = service_sparepart.unit_idunit', 'left');
+        $this->filterCompletedOrWarrantyService($hpp_service_detail_builder, $db);
         $applyTanggalFilter($hpp_service_detail_builder, 'service.created_at');
         if ($id_unit) {
             $hpp_service_detail_builder->where('service.unit_idunit', $id_unit);
@@ -237,8 +241,27 @@ class LabaRugi extends BaseController
             ->orderBy('service.created_at', 'DESC')
             ->get()->getResult();
 
+        $builder_hpp_garansi = $db->table('garansi_sparepart_keluar')
+            ->select('SUM(hpp_satuan * jumlah) AS total', false);
+        $applyTanggalFilter($builder_hpp_garansi, 'garansi_sparepart_keluar.created_at');
+        if ($id_unit) {
+            $builder_hpp_garansi->where('unit_id', $id_unit);
+        }
+        $total_hpp_garansi = $builder_hpp_garansi->get()->getRow()->total ?? 0;
+
+        $hpp_garansi_detail_builder = $db->table('garansi_sparepart_keluar')
+            ->select('garansi_sparepart_keluar.created_at, garansi_sparepart_keluar.jumlah, garansi_sparepart_keluar.hpp_satuan AS hpp_penjualan, (garansi_sparepart_keluar.hpp_satuan * garansi_sparepart_keluar.jumlah) AS total_hpp, service.no_service, barang.nama_barang, unit.NAMA_UNIT AS nama_unit', false)
+            ->join('service', 'service.idservice = garansi_sparepart_keluar.service_id')
+            ->join('barang', 'barang.idbarang = garansi_sparepart_keluar.barang_id')
+            ->join('unit', 'unit.idunit = garansi_sparepart_keluar.unit_id');
+        $applyTanggalFilter($hpp_garansi_detail_builder, 'garansi_sparepart_keluar.created_at');
+        if ($id_unit) {
+            $hpp_garansi_detail_builder->where('garansi_sparepart_keluar.unit_id', $id_unit);
+        }
+        $hpp_garansi_detail = $hpp_garansi_detail_builder->orderBy('garansi_sparepart_keluar.created_at', 'DESC')->get()->getResult();
+
         $total_pendapatan = $total_penjualan + $total_service + $total_kas_masuk;
-        $total_biaya = $total_kas_keluar + $total_hpp + $total_hpp_service;
+        $total_biaya = $total_kas_keluar + $total_hpp + $total_hpp_service + $total_hpp_garansi;
         $laba_rugi = $total_pendapatan - $total_biaya;
 
         return [
@@ -252,6 +275,7 @@ class LabaRugi extends BaseController
                 'kas_keluar' => $total_kas_keluar,
                 'hpp_penjualan' => $total_hpp,
                 'hpp_service' => $total_hpp_service,
+                'hpp_garansi' => $total_hpp_garansi,
                 'total' => $total_biaya
             ],
             'detail' => [
@@ -264,10 +288,29 @@ class LabaRugi extends BaseController
                     'kas_keluar' => $kas_keluar_detail,
                     'hpp_penjualan' => $hpp_detail,
                     'hpp_service' => $hpp_service_detail,
+                    'hpp_garansi' => $hpp_garansi_detail,
                 ],
             ],
             'laba_rugi' => $laba_rugi
         ];
+    }
+
+    private function filterRetailSales($builder): void
+    {
+        $builder->where('penjualan.service_idservice IS NULL', null, false)
+            ->notLike('penjualan.kode_invoice', 'SRV', 'after');
+    }
+
+    private function filterCompletedOrWarrantyService($builder, $db): void
+    {
+        $claimsTable = $db->prefixTable('riwayat_claim_garansi');
+        $builder->groupStart()
+            ->where('service.status_service', 4)
+            ->orGroupStart()
+            ->where('service.status_service', 2)
+            ->where("EXISTS (SELECT 1 FROM {$claimsTable} klaim WHERE klaim.service_idservice = service.idservice)", null, false)
+            ->groupEnd()
+            ->groupEnd();
     }
 
     public function laporan_unit()

@@ -9,7 +9,7 @@ class ModelStokAwal extends Model
     protected $table = 'stok_awal';
     protected $primaryKey = 'idstok_awal';
     protected $returnType = 'object';
-    protected $allowedFields = ['idstok_awal', 'tanggal', 'jumlah', 'barang_idbarang', 'harga_beli', 'satuan_terkecil', 'unit_idunit', 'suplier_id_suplier', 'pelanggan_id_pelanggan'];
+    protected $allowedFields = ['idstok_awal', 'tanggal', 'jumlah', 'barang_idbarang', 'harga_beli', 'satuan_terkecil', 'unit_idunit', 'suplier_id_suplier', 'pelanggan_id_pelanggan', 'input_by'];
 
     public function getStok()
     {

@@ -682,7 +682,7 @@
                         <?php
 
                         $kode_barang =
-                            $b->kode_barang;
+                            (string) $b->idbarang;
 
                         $isImeiEmpty =
                             empty($b->imei);
@@ -727,7 +727,7 @@
                                         margin-bottom: 4px;
                                     "
                                 >
-                                    <?= esc($kode_barang) ?>
+                                    <?= esc($b->kode_barang) ?>
                                 </p>
 
                                 <p

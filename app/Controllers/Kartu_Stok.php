@@ -11,6 +11,9 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelUnit;
+use App\Services\Inventory\StockCardLedger;
+use App\Services\Inventory\MovingAverageValuation;
+use App\Services\Inventory\ProductInventoryScope;
 
 class Kartu_Stok extends BaseController
 
@@ -39,6 +42,35 @@ class Kartu_Stok extends BaseController
         return view('template', $data);
     }
 
+    public function detail(int $itemId, int $unitId)
+    {
+        $db = Database::connect();
+        $item = $db->table('barang')
+            ->select('barang.idbarang, unit.idunit AS id_unit, barang.kode_barang, barang.nama_barang, unit.NAMA_UNIT AS nama_unit, COALESCE(sb.stok_akhir, 0) AS stok_akhir, barang.jenis_item, hpp_barang.hpp')
+            ->join('unit', 'unit.idunit = ' . (int) $unitId, 'inner', false)
+            ->join('stok_barang sb', 'sb.idbarang = barang.idbarang AND sb.id_unit = unit.idunit', 'left')
+            ->join('hpp_barang', 'hpp_barang.idbarang = barang.idbarang', 'left')
+            ->where('barang.idbarang', $itemId)
+            ->where('barang.deleted', '0')
+            ->where(ProductInventoryScope::sqlPredicate('barang.nama_barang', true, 'barang.jenis_item'), null, false)
+            ->get()->getRow();
+        if ($item === null) {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+        }
+
+        $valuation = MovingAverageValuation::replay((new StockCardLedger($db))->forItem($itemId, $unitId));
+        $movements = $valuation['rows'];
+        $calculated = $movements === [] ? 0 : (float) end($movements)['saldo'];
+        return view('template', [
+            'akun' => $this->AuthModel->getById(session('ID_AKUN')),
+            'body' => 'stok/kartu_stok_detail',
+            'item' => $item,
+            'movements' => $movements,
+            'calculated' => $calculated,
+            'valuation' => $valuation,
+        ]);
+    }
+
     /**
      * Server-side processing DataTables Kartu Stok.
      */
@@ -60,14 +92,14 @@ class Kartu_Stok extends BaseController
         $orderDir = $this->request->getGet('order') ? $this->request->getGet('order')[0]['dir'] : 'asc';
 
         $columnMap = [
-            0 => 'stok_barang.kode_barang',
-            1 => 'stok_barang.nama_barang',
-            2 => 'stok_barang.nama_unit',
+            0 => 'barang.kode_barang',
+            1 => 'barang.nama_barang',
+            2 => 'unit.NAMA_UNIT',
             3 => 'kategori.nama_kategori',
             4 => 'barang.status_ppn',
             5 => 'stok_barang.stok_akhir',
         ];
-        $orderCol = $columnMap[$orderCol] ?? 'stok_barang.kode_barang';
+        $orderCol = $columnMap[$orderCol] ?? 'barang.kode_barang';
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
 
         $unit = trim((string)$this->request->getGet('unit'));

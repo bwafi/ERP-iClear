@@ -7,6 +7,9 @@ use Config\Database;
 use App\Models\ModelAuth;
 use App\Models\ModelUnit;
 use App\Models\ModelJurnal;
+use App\Services\Finance\BalanceSheetReconciliation;
+use App\Services\Finance\WarrantyJournalReconciliation;
+use App\Services\Finance\SupplierCreditReconciliation;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -38,8 +41,60 @@ class SisiKeuangan extends BaseController
         $tanggal_awal = $this->request->getGet('startDate') ?: null;
         $tanggal_akhir = $this->request->getGet('endDate') ?: null;
         $id_unit = $this->request->getGet('filterUnit') ?: null;
+        $reconciliationDate = $tanggal_akhir ?: date('Y-m-d');
 
         $data_parent = $this->JurnalModel->getSummaryPerParent($tanggal_awal, $tanggal_akhir, $id_unit);
+
+        $journalQuery = Database::connect()->table('jurnal')
+            ->select('no_akun, COALESCE(SUM(debet), 0) AS debet, COALESCE(SUM(kredit), 0) AS kredit', false)
+            ->where('tanggal <=', $reconciliationDate);
+        if ($id_unit !== null) {
+            $journalQuery->where('id_unit', $id_unit);
+        }
+        $reconciliation = BalanceSheetReconciliation::summarize(
+            $journalQuery->groupBy('no_akun')->get()->getResultArray()
+        );
+        $warrantyReconciliation = null;
+        $db = Database::connect();
+        if ($db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
+            $issues = $db->table('garansi_sparepart_keluar')
+                ->select('id, jumlah, hpp_satuan')
+                ->where('created_at <=', $reconciliationDate . ' 23:59:59');
+            $journals = $db->table('jurnal')
+                ->select('id_referensi, debet, kredit')
+                ->where('tabel_referensi', 'garansi_sparepart_keluar')
+                ->where('tanggal <=', $reconciliationDate);
+            if ($id_unit !== null) {
+                $issues->where('unit_id', $id_unit);
+                $journals->where('id_unit', $id_unit);
+            }
+            $warrantyReconciliation = WarrantyJournalReconciliation::summarize(
+                $issues->get()->getResultArray(),
+                $journals->get()->getResultArray()
+            );
+        }
+        $supplierCreditReconciliation = null;
+        if ($db->tableExists($db->getPrefix() . 'kredit_retur_suplier', false)
+            && $db->tableExists($db->getPrefix() . 'alokasi_kredit_retur_suplier', false)) {
+            $credits = $db->table('kredit_retur_suplier')
+                ->select('id, status, nominal, sisa_kredit, akun_debet, akun_piutang, akun_kredit');
+            $allocations = $db->table('alokasi_kredit_retur_suplier alokasi')
+                ->select('alokasi.kredit_id, alokasi.nominal');
+            $creditJournals = $db->table('jurnal')
+                ->select('id_referensi, no_akun, debet, kredit')
+                ->where('tabel_referensi', 'kredit_retur_suplier');
+            if ($id_unit !== null) {
+                $credits->where('unit_id', $id_unit);
+                $allocations->join('kredit_retur_suplier kredit', 'kredit.id = alokasi.kredit_id')
+                    ->where('kredit.unit_id', $id_unit);
+                $creditJournals->where('id_unit', $id_unit);
+            }
+            $supplierCreditReconciliation = SupplierCreditReconciliation::summarize(
+                $credits->get()->getResultArray(),
+                $allocations->get()->getResultArray(),
+                $creditJournals->get()->getResultArray()
+            );
+        }
 
 
         foreach ($data_parent as &$parent) {
@@ -67,6 +122,10 @@ class SisiKeuangan extends BaseController
             'tanggal_awal' => $tanggal_awal,
             'tanggal_akhir' => $tanggal_akhir,
             'id_unit' => $id_unit,
+            'reconciliation' => $reconciliation,
+            'reconciliation_date' => $reconciliationDate,
+            'warranty_reconciliation' => $warrantyReconciliation,
+            'supplier_credit_reconciliation' => $supplierCreditReconciliation,
             'body' => 'jurnal/sisi_keuangan'
         ];
 

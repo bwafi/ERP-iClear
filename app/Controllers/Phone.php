@@ -78,15 +78,8 @@ class Phone extends BaseController
             return redirect()->back()->withInput();
         }
 
-        $lastBarang = $this->BarangModel->getLastBarangByKategori(1);
-        if ($lastBarang) {
-
-            $lastNumber = (int) substr($lastBarang->kode_barang, strlen('HP'));
-            $newNumber = $lastNumber + 1;
-        } else {
-
-            $newNumber = 1;
-        }
+        $lastBarang = $this->BarangModel->getLastBarangByKategori(1, 'HP');
+        $newNumber = (int) ($lastBarang->max_kode ?? 0) + 1;
 
         $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
         $kode_barang = 'HP' . $formattedNumber;
@@ -284,13 +277,8 @@ class Phone extends BaseController
             $input = addslashes($rows[$i][11]);
 
             // Generate kode_barang otomatis
-            $lastBarang = $this->BarangModel->getLastBarangByKategori(1);
-            if ($lastBarang) {
-                $lastNumber = (int) substr($lastBarang->kode_barang, strlen('HP'));
-                $newNumber = $lastNumber + 1;
-            } else {
-                $newNumber = 1;
-            }
+            $lastBarang = $this->BarangModel->getLastBarangByKategori(1, 'HP');
+            $newNumber = (int) ($lastBarang->max_kode ?? 0) + 1;
             $formattedNumber = str_pad($newNumber, 2, '0', STR_PAD_LEFT);
             $kode_barang = 'HP' . $formattedNumber;
 

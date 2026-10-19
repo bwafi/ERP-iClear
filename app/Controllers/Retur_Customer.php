@@ -42,14 +42,24 @@ class Retur_Customer extends BaseController
 
     public function insert()
     {
-        $tanggal = date('Y-m-d');
-        $tanggal_retur =  $this->request->getPost('tanggal_pengembalian');
-        $waktu = date('H:i:s');
-        $datetime = $tanggal_retur . ' ' . $waktu;
+        $tanggal_retur = (string) $this->request->getPost('tanggal_pengembalian');
+        $items = $this->request->getPost('items');
+        $selected = array_values(array_filter(is_array($items) ? $items : [], static function ($item) {
+            return is_array($item) && ($item['selected'] ?? null) === '1';
+        }));
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $tanggal_retur);
+        if ($selected === [] || ! $date || $date->format('Y-m-d') !== $tanggal_retur) {
+            return redirect()->to(base_url('/retur_customer'))->with('gagal', 'Tanggal atau barang retur tidak valid.');
+        }
         $datauser = $this->AuthModel->getById(session('ID_AKUN'));
-        $useridunit = $datauser->ID_UNIT;
+        $useridunit = (int) ($datauser->ID_UNIT ?? 0);
+        $db = Database::connect();
+        $db->transBegin();
+        try {
+            if (! $db->query('SELECT idunit FROM ' . $db->prefixTable('unit') . ' WHERE idunit = ? FOR UPDATE', [$useridunit])->getRow()) {
+                throw new \RuntimeException('Unit retur tidak valid.');
+            }
 
-        // Generate no_retur_pelanggan
         $lastRetur = $this->ReturCustomerModel
             ->where('unit_idunit', $useridunit)
             ->like('DATE(tanggal)', $tanggal_retur)
@@ -63,35 +73,39 @@ class Retur_Customer extends BaseController
             $newKode = '001';
         }
 
-        $ymd = date('Ymd');
+        $ymd = str_replace('-', '', $tanggal_retur);
         $no_retur_pelanggan = 'RTC' . $useridunit . $ymd . $newKode;
 
-        // Begin processing items
-        $items = $this->request->getPost('items');
         $total_harga = 0;
         $total_ppn = 0;
+        $lastDetailId = null;
+        $seen = [];
+        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
 
-        foreach ($items as $item) {
-            if (isset($item['selected']) && $item['selected'] == '1') {
-                $jumlah_retur = (int) $item['jumlah_retur'];
-                $jumlah = (int) $item['jumlah'];
-                $satuan = $item['satuan'];
-                $barang_idbarang = $item['barang_idbarang'];
-                $iddetail_penjualan = (int) $item['iddetail_penjualan'];
-                $unit_idunit = (int) $item['unit_idunit'];
-
-                if ($jumlah_retur > $jumlah) {
-                    session()->setFlashdata('gagal', 'Jumlah Retur Tidak Boleh Lebih dari Jumlah yang Dibeli');
-                    return redirect()->to(base_url('/retur_customer'));
+        foreach ($selected as $item) {
+                $rawQuantity = $item['jumlah_retur'] ?? null;
+                $rawDetailId = $item['iddetail_penjualan'] ?? null;
+                if (! ctype_digit((string) $rawQuantity) || ! ctype_digit((string) $rawDetailId)) {
+                    throw new \RuntimeException('Jumlah atau detail retur tidak valid.');
                 }
-
-                // Get harga & ppn from detail_penjualan
-                $detail = $this->DetailPenjualanModel->getById($iddetail_penjualan);
-                $harga = $detail->harga_penjualan ?? 0;
-                $ppn = $detail->ppn ?? 0;
-
-                $sub_total = $jumlah_retur * $harga;
-                $ppn_total = $jumlah_retur * $ppn;
+                $jumlah_retur = (int) $rawQuantity;
+                $iddetail_penjualan = (int) $rawDetailId;
+                if ($jumlah_retur <= 0 || $iddetail_penjualan <= 0 || isset($seen[$iddetail_penjualan])) {
+                    throw new \RuntimeException('Detail retur duplikat atau jumlah tidak valid.');
+                }
+                $seen[$iddetail_penjualan] = true;
+                $detail = $db->query('SELECT * FROM ' . $db->prefixTable('detail_penjualan')
+                    . ' WHERE iddetail_penjualan = ? FOR UPDATE', [$iddetail_penjualan])->getRow();
+                if (! $detail || (int) $detail->unit_idunit !== $useridunit) {
+                    throw new \RuntimeException('Detail penjualan tidak sesuai unit.');
+                }
+                $returned = $db->table('retur_pelanggan')->selectSum('jumlah')
+                    ->where('detail_penjualan_iddetail_penjualan', $iddetail_penjualan)->get()->getRow();
+                if ($jumlah_retur > (int) $detail->jumlah - (int) ($returned->jumlah ?? 0)) {
+                    throw new \RuntimeException('Jumlah retur melebihi sisa penjualan.');
+                }
+                $sub_total = $jumlah_retur * (int) ($detail->harga_penjualan ?? 0);
+                $ppn_total = $jumlah_retur * (int) ($detail->ppn ?? 0);
 
                 $total_harga += $sub_total;
                 $total_ppn += $ppn_total;
@@ -100,28 +114,42 @@ class Retur_Customer extends BaseController
                     'no_retur_pelanggan' => $no_retur_pelanggan,
                     'tanggal' => $tanggal_retur,
                     'jumlah' => $jumlah_retur,
-                    'satuan' => $satuan,
-                    'barang_idbarang' => $barang_idbarang,
+                    'satuan' => (string) ($detail->satuan_jual ?? 'pcs'),
+                    'barang_idbarang' => (int) $detail->barang_idbarang,
                     'detail_penjualan_iddetail_penjualan' => $iddetail_penjualan,
-                    'unit_idunit' => $unit_idunit,
+                    'unit_idunit' => $useridunit,
                     'input_by' => session('ID_AKUN')
                 ];
-                $this->ReturCustomerModel->insert_ReturCustomer($data);
-            }
+                if (! $this->ReturCustomerModel->insert_ReturCustomer($data)) {
+                    throw new \RuntimeException('Retur pelanggan gagal disimpan.');
+                }
+                $returnId = (int) $this->ReturCustomerModel->insertID();
+                if ($inventoryBridge->isTracked((int) $detail->barang_idbarang, $useridunit)) {
+                    $inventoryBridge->incoming((int) $detail->barang_idbarang, $useridunit,
+                        'retur_pelanggan', (string) $returnId, 'customer_return', $jumlah_retur,
+                        (int) $detail->hpp_penjualan);
+                }
+                $lastDetailId = $iddetail_penjualan;
         }
 
-        // Insert Jurnal (similar to Penjualan)
         $ar_nilai = [$total_harga, $total_ppn];
         $this->JurnalModel->insertJurnal(
             $tanggal_retur,
             'retur_penjualan',
             $ar_nilai,
             "Retur Penjualan",
-            $iddetail_penjualan,
+            $lastDetailId,
             'retur_pelanggan'
         );
+        if ($db->transStatus() === false || ! $db->transCommit()) {
+            throw new \RuntimeException('Retur pelanggan gagal diselesaikan.');
+        }
 
-        session()->setFlashdata('sukses', 'Data Berhasil Disimpan');
-        return redirect()->to(base_url('/retur_customer'));
+            return redirect()->to(base_url('/retur_customer'))->with('sukses', 'Data Berhasil Disimpan');
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            log_message('error', 'Retur_Customer::insert gagal: ' . $error->getMessage());
+            return redirect()->to(base_url('/retur_customer'))->with('gagal', 'Retur dibatalkan karena stok atau data tidak cocok.');
+        }
     }
 }

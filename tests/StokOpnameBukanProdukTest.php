@@ -6,7 +6,7 @@ use App\Services\StokOpnameService;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
- * Barang jasa (nama berawalan PUP/JASA/MESIN) bukan produk sehingga tidak
+ * Barang jasa/komisi (nama berawalan PUP/JASA/MESIN/RESTORE/KOMISI) bukan produk sehingga tidak
  * boleh masuk daftar opname.
  *
  * Menguji lewat service (bukan controller) supaya fokus pada aturan seed dan
@@ -50,7 +50,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
-        $q('CREATE TABLE barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL, kode_barang TEXT NULL, deleted INTEGER DEFAULT 0)');
+        $q('CREATE TABLE barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL, kode_barang TEXT NULL, jenis_item VARCHAR(10) NULL, deleted INTEGER DEFAULT 0)');
 
         // Di produksi `stok_barang` adalah VIEW; di test cukup tabel datar dengan
         // kolom yang dibaca StokOpnameService::createPeriode().
@@ -66,7 +66,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
         $q('CREATE TABLE stok_opname_periode (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT,
                 unit_idunit INTEGER NOT NULL, tanggal TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT \'DRAFT\',
+                status VARCHAR(20) NOT NULL DEFAULT \'DRAFT\',
                 jumlah_komp REAL NOT NULL DEFAULT 0, jumlah_real REAL NULL,
                 jumlah_selisih REAL NULL, total_barang INTEGER NOT NULL DEFAULT 0,
                 terisi_barang INTEGER NOT NULL DEFAULT 0, mulai_by INTEGER NULL,
@@ -89,7 +89,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
 
     /**
      * Barang 101,105,106 adalah produk (106 hanya KEBETULAN memuat kata
-     * "Mesin" di tengah, bukan awalan). 102/103/104 adalah jasa.
+     * "Mesin" di tengah, bukan awalan). 102/103/104/107/108 adalah jasa.
      */
     private function sebarData(): void
     {
@@ -100,6 +100,8 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
             [104, 'MESIN Press LCD', 'MESIN-104', 3],
             [105, 'LCD iPhone 11', 'LCD-105', 4],
             [106, 'Kuras Mesin HP', 'SVC-106', 2],
+            [107, 'RESTORE iPhone', 'RESTORE-107', 1],
+            [108, 'KOMISI Mesin', 'KOMISI-108', 1],
         ];
 
         foreach ($barang as [$id, $nama, $kode, $stok]) {

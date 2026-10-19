@@ -65,7 +65,12 @@
                 </span>
                 <div>
                     <h5 class="fs-5 fw-bold mb-1 text-dark"><?= 'Rp ' . number_format((float)$summary->nilai_stok, 0, ',', '.') ?></h5>
-                    <span class="fs-2 text-muted fw-medium d-block">Nilai Stok (HPP)</span>
+                    <span class="fs-2 text-muted fw-medium d-block">Estimasi legacy (HPP global)</span>
+                    <small class="text-danger d-block">Belum menjadi nilai persediaan per cabang atau saldo jurnal.</small>
+                    <small class="text-muted d-block">Hanya barang fisik; jasa, PUP, mesin, restore, dan komisi tidak dihitung.</small>
+                    <?php if ((int) ($summary->jumlah_tanpa_hpp ?? 0) > 0 || (int) ($summary->jumlah_stok_negatif ?? 0) > 0): ?>
+                        <small class="text-danger">Nilai belum final: <?= (int) ($summary->jumlah_tanpa_hpp ?? 0) ?> baris tanpa HPP, <?= (int) ($summary->jumlah_stok_negatif ?? 0) ?> stok negatif.</small>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -168,7 +173,8 @@
                 html += '<tr><td class="text-muted fw-medium py-1 px-2" style="width: 200px;">' + r[0] +
                     '</td><td class="py-1 px-2 text-dark fw-normal">' + r[1] + '</td></tr>';
             });
-            html += '</tbody></table></div>';
+            html += '</tbody></table><a class="btn btn-sm btn-outline-primary mt-2" href="<?= base_url('kartu_stok/detail') ?>/' +
+                encodeURIComponent(d.idbarang) + '/' + encodeURIComponent(d.id_unit) + '">Lihat mutasi bertanggal dan saldo</a></div>';
             return html;
         }
 

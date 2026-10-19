@@ -434,6 +434,10 @@
                                 <td>HPP Service</td>
                                 <td class="text-end"><?= 'Rp ' . number_format($data_transaksi['biaya']['hpp_service'], 0, ',', '.') ?></td>
                             </tr>
+                            <tr>
+                                <td>HPP Pengganti Garansi</td>
+                                <td class="text-end"><?= 'Rp ' . number_format($data_transaksi['biaya']['hpp_garansi'], 0, ',', '.') ?></td>
+                            </tr>
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
@@ -606,6 +610,11 @@
                                 HPP Service
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="tab-hpp-garansi" data-bs-toggle="tab" data-bs-target="#tab-pane-hpp-garansi" type="button" role="tab">
+                                HPP Garansi
+                            </button>
+                        </li>
                     </ul>
                     <div class="tab-content pt-3">
                         <div class="tab-pane fade show active" id="tab-pane-kas-keluar" role="tabpanel">
@@ -707,6 +716,31 @@
                                 </div>
                             <?php else: ?>
                                 <p class="text-muted mb-0">Belum ada HPP service pada rentang ini.</p>
+                            <?php endif; ?>
+                        </div>
+                        <div class="tab-pane fade" id="tab-pane-hpp-garansi" role="tabpanel">
+                            <?php $detailHppGaransi = $data_transaksi['detail']['biaya']['hpp_garansi'] ?? []; ?>
+                            <?php if (!empty($detailHppGaransi)): ?>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-striped">
+                                        <thead class="table-light"><tr><th>Tanggal</th><th>No Service</th><th>Barang</th><th class="text-end">Qty</th><th class="text-end">HPP</th><th class="text-end">Total HPP</th><th>Unit</th></tr></thead>
+                                        <tbody>
+                                            <?php foreach ($detailHppGaransi as $row): ?>
+                                                <tr>
+                                                    <td><?= esc(date('d/m/Y', strtotime($row->created_at))) ?></td>
+                                                    <td><?= esc($row->no_service ?? '-') ?></td>
+                                                    <td><?= esc($row->nama_barang ?? '-') ?></td>
+                                                    <td class="text-end"><?= number_format($row->jumlah ?? 0, 0, ',', '.') ?></td>
+                                                    <td class="text-end"><?= 'Rp ' . number_format($row->hpp_penjualan ?? 0, 0, ',', '.') ?></td>
+                                                    <td class="text-end"><?= 'Rp ' . number_format($row->total_hpp ?? 0, 0, ',', '.') ?></td>
+                                                    <td><?= esc($row->nama_unit ?? '-') ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php else: ?>
+                                <p class="text-muted mb-0">Belum ada penggantian garansi pada rentang ini.</p>
                             <?php endif; ?>
                         </div>
                     </div>

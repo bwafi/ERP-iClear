@@ -169,6 +169,7 @@
 
 
 <script>
+    const warrantyClaimIds = <?= json_encode($warrantyClaims ?? []) ?>;
     $(document).ready(function() {
 
         // Fungsi untuk cek apakah ada item, lalu tampil/sembunyikan tombol simpan
@@ -199,6 +200,7 @@
                 const jumlah = $(this).data('jumlah');
                 const idbarang = $(this).data('idbarang');
                 const idpembelian = $(this).data('idpembelian');
+                const claimOptions = warrantyClaimIds.map(id => `<option value="${id}">Klaim #${id}</option>`).join('');
 
                 const html = `
                     <div class="card mb-3 p-3 border rounded item-row">
@@ -257,6 +259,13 @@
                         </div>
 
                         <div class="row g-2 mt-2">
+                            <div class="col-md-4">
+                                <label class="form-label">Klaim Garansi Customer (opsional)</label>
+                                <select class="form-select" name="claim_id[]">
+                                    <option value="">Bukan barang dari klaim customer</option>
+                                    ${claimOptions}
+                                </select>
+                            </div>
                             <div class="col-md-12">
                                 <label class="form-label">Keterangan</label>
                                 <textarea class="form-control" name="keterangan[]" style="height:100px;" placeholder="Tulis keterangan barang rusak..."></textarea>

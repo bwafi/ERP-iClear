@@ -60,6 +60,7 @@ $routes->post('delete_unit', 'Unit::delete_unit', ['filter' => 'auth']);
 //produk
 $routes->group('produk', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'Produk::index');
+    $routes->get('review-tipe', 'Produk::reviewTipe');
     $routes->get('export/produk', 'Produk::export_produk');
     $routes->post('import/produk', 'Produk::import_produk');
     $routes->post('insert_produk', 'Produk::insert_produk');
@@ -205,13 +206,15 @@ $routes->get('service_by_garansi/(:num)', 'StatusGaransi::service_by_garansi/$1'
 $routes->post('update/pelanggan_service_garansi', 'StatusGaransi::update_service_pelanggan_garansi', ['filter' => 'auth']);
 $routes->post('update_garansi_service/saveKerusakan', 'StatusGaransi::insert_kerusakan_garansi', ['filter' => 'auth']);
 $routes->post('update_service_garansi/saveSparepart', 'StatusGaransi::insert_sparepart_garansi', ['filter' => 'auth']);
+$routes->get('akun_jurnal_garansi', 'WarrantyJournalSettings::index', ['filter' => 'auth']);
+$routes->post('akun_jurnal_garansi/save', 'WarrantyJournalSettings::save', ['filter' => 'auth']);
 $routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pembayaran_garansi', ['filter' => 'auth']);
 
 //garansiservice
 $routes->get('garansi_service', 'StatusGaransi::index', ['filter' => 'auth']);
 $routes->post('garansi_service/ajax', 'StatusGaransi::garansi_service_ajax', ['filter' => 'auth']);
 $routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => 'auth']);
-$routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1');
+$routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1', ['filter' => 'auth']);
 
 //status service
 $routes->get('status_service/(:num)', 'Status_Service::index/$1');
@@ -259,6 +262,7 @@ $routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => ['a
 
 //kartu stok
 $routes->get('kartu_stok', 'Kartu_Stok::index', ['filter' => 'auth']);
+$routes->get('kartu_stok/detail/(:num)/(:num)', 'Kartu_Stok::detail/$1/$2', ['filter' => 'auth']);
 $routes->post('export/kartu_stock', 'Kartu_Stok::export', ['filter' => 'auth']);
 $routes->get('kartu_stok/dt', 'Kartu_Stok::dt', ['filter' => 'auth']);
 
@@ -308,6 +312,9 @@ $routes->get('cetak/invoice_mutasi/(:num)', 'MutasiStok::cetak_notamutasi/$1', [
 //retur
 $routes->get('retur_suplier', 'Retur_Suplier::index', ['filter' => 'auth']);
 $routes->post('insert_retur_suplier', 'Retur_Suplier::insert', ['filter' => 'auth']);
+$routes->get('kredit_retur_suplier', 'KreditReturSuplier::index', ['filter' => 'auth']);
+$routes->post('kredit_retur_suplier/approve', 'KreditReturSuplier::approve', ['filter' => 'auth']);
+$routes->post('kredit_retur_suplier/apply', 'KreditReturSuplier::applyRemaining', ['filter' => 'auth']);
 
 //retur customer
 $routes->get('retur_customer', 'Retur_Customer::index', ['filter' => 'auth']);
@@ -523,7 +530,6 @@ $routes->get('penilaian/kpi/detail/(:num)', 'PenilaianKPI::kpi_detail/$1', ['fil
 $routes->post('penilaian/kpi/save', 'PenilaianKPI::save_kualitas', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_daily', 'PenilaianKPI::save_manual_daily', ['filter' => 'auth']);
 $routes->post('penilaian/kpi/save_customer_satisfaction', 'PenilaianKPI::save_customer_satisfaction', ['filter' => 'auth']);
-$routes->post('penilaian/kpi/save_manager_manual', 'PenilaianKPI::save_manager_manual', ['filter' => 'auth']);
 
 // Asset Master (Finance/Root/Direktur/Manager: 0,1,2,34)
 $routes->get('penilaian/kpi/aset_master', 'PenilaianKPI::aset_master_index', ['filter' => 'auth']);

@@ -12,6 +12,44 @@
     </div>
 </div>
 
+<?php if ($warranty_reconciliation !== null): ?>
+    <div class="alert <?= $warranty_reconciliation['tanpa_jurnal'] + $warranty_reconciliation['tidak_sesuai'] + $warranty_reconciliation['jurnal_tanpa_mutasi'] === 0 ? 'alert-info' : 'alert-danger' ?> mx-4">
+        <strong>Rekonsiliasi pengganti garansi:</strong>
+        <?= (int) $warranty_reconciliation['jumlah_mutasi'] ?> mutasi,
+        HPP Rp <?= number_format($warranty_reconciliation['hpp_total'], 0, ',', '.') ?>;
+        <?= (int) $warranty_reconciliation['tanpa_jurnal'] ?> tanpa jurnal,
+        <?= (int) $warranty_reconciliation['tidak_sesuai'] ?> jurnal tidak sesuai,
+        <?= (int) $warranty_reconciliation['jurnal_tanpa_mutasi'] ?> jurnal tanpa mutasi.
+    </div>
+<?php endif; ?>
+
+<?php if ($supplier_credit_reconciliation !== null): ?>
+    <div class="alert <?= $supplier_credit_reconciliation['alokasi_tidak_sesuai'] + $supplier_credit_reconciliation['jurnal_tidak_sesuai'] + $supplier_credit_reconciliation['referensi_yatim'] === 0 ? 'alert-info' : 'alert-danger' ?> mx-4">
+        <strong>Rekonsiliasi kredit supplier (posisi kini):</strong>
+        <?= (int) $supplier_credit_reconciliation['jumlah_kredit'] ?> dokumen,
+        sisa kredit Rp <?= number_format($supplier_credit_reconciliation['sisa_kredit'], 0, ',', '.') ?>;
+        <?= (int) $supplier_credit_reconciliation['alokasi_tidak_sesuai'] ?> alokasi tidak sesuai,
+        <?= (int) $supplier_credit_reconciliation['jurnal_tidak_sesuai'] ?> jurnal tidak sesuai,
+        <?= (int) $supplier_credit_reconciliation['referensi_yatim'] ?> referensi yatim.
+    </div>
+<?php endif; ?>
+
+<div class="alert <?= $reconciliation['selisih'] === 0 && $reconciliation['selisih_jurnal'] === 0 && $reconciliation['akun_tidak_terklasifikasi'] === [] && $reconciliation['jumlah_akun'] > 0 ? 'alert-info' : 'alert-warning' ?> mx-4">
+    <strong>Rekonsiliasi Neraca indikatif</strong> (saldo jurnal sampai <?= esc($reconciliation_date) ?>):
+    Aset Rp <?= number_format($reconciliation['aset'], 0, ',', '.') ?>;
+    Kewajiban Rp <?= number_format($reconciliation['kewajiban'], 0, ',', '.') ?>;
+    Ekuitas Rp <?= number_format($reconciliation['ekuitas'], 0, ',', '.') ?>;
+    Laba berjalan Rp <?= number_format($reconciliation['laba_berjalan'], 0, ',', '.') ?>;
+    Selisih Rp <?= number_format($reconciliation['selisih'], 0, ',', '.') ?>.
+    <?php if ($reconciliation['selisih_jurnal'] !== 0): ?>
+        Jurnal tidak seimbang Rp <?= number_format($reconciliation['selisih_jurnal'], 0, ',', '.') ?>.
+    <?php endif; ?>
+    <?php if ($reconciliation['akun_tidak_terklasifikasi'] !== []): ?>
+        Akun belum terklasifikasi: <?= esc(implode(', ', $reconciliation['akun_tidak_terklasifikasi'])) ?>.
+    <?php endif; ?>
+    <strong>Belum final</strong> sampai saldo awal, nilai persediaan, dan transaksi antarcabang diverifikasi.
+</div>
+
 <div class="card w-100 position-relative overflow-hidden">
     <div class="px-4 py-3 border-bottom">
         <h5 class="mb-0">Ringkasan Posisi Keuangan per Parent Akun</h5>
