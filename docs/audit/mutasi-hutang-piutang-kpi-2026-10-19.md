@@ -18,8 +18,8 @@ Metode: baca kode + verifikasi data di database lokal `erp_local`. Audit awal re
 
 | Langkah | Lokasi | Yang terjadi |
 |---|---|---|
-| Buat mutasi | `MutasiStok.php:420` | Header + detail, `status=0`. **Stok sudah bergerak** karena view `stok_barang` menghitung semua `detail_mutasi` tanpa melihat status. |
-| Terima | `MutasiStok.php:229` | Cek unit tujuan, update `status=1` + `tanggal_terima`, lalu buat pasangan H/P. |
+| Buat mutasi | `MutasiStok.php:420` | Header + detail, `status=0`. **Stok belum bergerak**; view `stok_barang` hanya menghitung mutasi `status=1`. |
+| Terima | `MutasiStok.php:229` | Cek unit tujuan, update `status=1` + `tanggal_terima`, lalu buat pasangan H/P. **Stok baru berpindah di sini.** |
 | Buat pasangan | `ModeKasBank.php:672` | Pengirim dapat **piutang**, penerima dapat **hutang**, saling `lawan_unit_id`, `sumber_tipe='mutasi_unit'`. |
 | Nilai | `ModeKasBank.php:654` | `Σ jumlah_kirim × harga_mutasi`; fallback ke `hpp_barang`. |
 | Tanggal & jatuh tempo | `ModeKasBank.php:727` | Tanggal = `tanggal_kirim`; jatuh tempo = `tanggal_terima + 3 hari`. |
@@ -104,9 +104,10 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 **Test:** `KasBankControllerTest::testInsertMutasiMenolakPengirimDiLuarUnitPengguna`, `testInsertMutasiLintasBolehMengirimDariUnitLain`, `testInsertMutasiMenolakStokPengirimKurang`, `testInsertMutasiMengizinkanStokPengirimCukup`.
 **Batas:** cek stok dilakukan sebelum insert, bukan lock; dua request bersamaan masih bisa sama-sama lolos.
 
-**7. Batal terima menghapus utang, tetapi stok tetap di penerima.**
-View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_mutasi` tanpa melihat `mutasi.status`. Jadi 12 mutasi yang belum diterima sudah memindahkan 55 qty; saat penerimaan dibatalkan, stok tetap pindah sementara H/P di-soft-delete. Penerima bisa memegang barang tanpa kewajiban.
-**Fix:** putuskan aturannya — kalau batal adalah pembatalan nyata, stok harus ikut dikembalikan; kalau barang memang sudah dikirim, H/P tidak boleh dihapus. Saat ini keduanya tidak konsisten.
+**7. Batal terima menghapus utang, tetapi stok tetap di penerima. — ✅ DIPERBAIKI**
+View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_mutasi` tanpa melihat `mutasi.status`. Jadi mutasi yang belum diterima sudah memindahkan stok; saat penerimaan dibatalkan, stok tetap pindah sementara H/P di-soft-delete.
+**Perbaikan:** migration `2026-10-19-000400_StokBarangHanyaMutasiDiterima.php` membuat ulang view dengan `JOIN mutasi` dan `WHERE mutasi.status = 1`. Stok kini bergerak saat terima, dan otomatis kembali saat `batalTerima()` mengubah status ke 0. Mutasi lama yang masih `status=0` sengaja dibiarkan; stoknya tidak lagi dihitung.
+**Verifikasi:** uji scratch DB — sebelum migrasi unit 1=85/unit 2=15, sesudah migrasi unit 1=95/unit 2=5; `up()` dua kali aman dan `down()` mengembalikan view lama. Belum dijalankan di `erp_local`.
 
 **8. Nilai tagihan memakai jumlah kirim, stok masuk memakai jumlah terima.**
 `nilaiDetailMutasi()` memakai `jumlah_kirim`; view stok penerima memakai `jumlah_terima`. Form mengizinkan keduanya berbeda, jadi penerima bisa ditagih barang yang tidak diterima. Di data sekarang semuanya sama, tapi risikonya nyata.
@@ -147,7 +148,7 @@ Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim h
   **Perbaikan:** `statusFromSisa()` dijadikan `static`, `ModeKasBank::hitungStatus()` mendelegasikan ke sana. Perilaku restore pembayaran terverifikasi `KasBankTest::testTerapkanDanRestorePembayaranHP`.
 - `CustomerSatisfactionTest` tidak mandiri; error `db_service`/`db_stok_barang`/`db_penjualan` hanya muncul bila tabel sisa test lain ada.
   **Perbaikan:** `setUp()` sekarang membangun schema sendiri (tanpa men-drop tabel bersama) dan `CustomerSatisfactionService` memakai `prefixTable()` pada SQL mentahnya. Dua failure yang tersisa sudah ada sejak sebelum audit: role SPV (40) memang tidak masuk `viewRoles`, dan teks “Rekap Bulanan” tidak ada di view.
-- Tidak ada fitur void untuk mutasi `status=0`; 12 mutasi menggantung dan stoknya sudah bergerak.
+- Tidak ada fitur void untuk mutasi `status=0`; 39 mutasi menggantung, tetapi stoknya tidak lagi dihitung setelah migration view.
 
 ---
 
@@ -165,4 +166,4 @@ KPI `FIN_HUTANG_PIUTANG` memang **tidak terpengaruh** — tetapi itu bukan kabar
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
 - Migration backfill #3 belum dijalankan di `erp_local`; baru diverifikasi lewat test.
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.
-- Temuan #7–#8 belum diperbaiki karena menunggu keputusan bisnis. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.
+- Temuan #8 belum diperbaiki karena menunggu keputusan bisnis. #7 sudah diperbaiki lewat migration view. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.
