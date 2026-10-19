@@ -2,7 +2,7 @@
 
 Tanggal: 2026-10-19
 Ruang lingkup: alur mutasi antar unit, pembentukan hutang/piutang, pelunasan, dan dampaknya ke KPI Finance Hutang & Piutang.
-Metode: baca kode + verifikasi data di database lokal `erp_local`. Tidak ada perubahan kode.
+Metode: baca kode + verifikasi data di database lokal `erp_local`. Audit awal read-only; perbaikan dicatat pada bagian temuan.
 
 ---
 
@@ -91,9 +91,16 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 `MutasiStok.php:461` memakai `like('DATE(tanggal_kirim)', date('ymd'))` — `'2026-10-19'` tidak pernah cocok dengan `'261019'`, jadi urutan selalu `001`. Selain itu `$lastMutasi['no_nota_mutasi']` mengakses object sebagai array (fatal jika suatu saat query cocok), dan tidak ada unique index. `riwayat_mutasi.php:4` mengelompokkan berdasarkan nomor nota → 30 baris tergabung salah.
 **Fix:** insert header dulu, lalu bentuk nomor dari `insertID()` (`MTS{unit}{ymd}{id}`) dan update; tambahkan unique index.
 
-**6. Siapa pun yang login bisa membuat mutasi dari unit mana pun.**
+**6. Siapa pun yang login bisa membuat mutasi dari unit mana pun. — ✅ DIPERBAIKI**
 `MutasiStok::insert()` tidak mengecek unit pengirim terhadap scope user; `AuthFilter` hanya memeriksa `logged_in`. Daftar produk juga memakai stok unit sesi, bukan unit pengirim yang dipilih. Tidak ada validasi stok → 8 baris stok negatif.
-**Fix:** terapkan pengecekan scope yang sama seperti `terima()` dan validasi stok dari unit pengirim.
+**Perbaikan:**
+- `insert()` sekarang memanggil `validasiInsert()` sebelum header disimpan.
+- Unit pengirim dan penerima harus ada dan berbeda.
+- Role non-lintas hanya boleh mengirim dari unit sendiri; role lintas `0,1,2,34` tetap boleh dari unit mana pun, sama seperti `terima()`.
+- `jumlah_kirim` wajib > 0; stok dicek dari `stok_barang` **unit pengirim**, diakumulasi per barang.
+- Daftar produk di form masih memuat semua barang, tetapi tidak lagi menentukan stok/otorisasi — yang menentukan adalah validasi saat submit.
+**Test:** `KasBankControllerTest::testInsertMutasiMenolakPengirimDiLuarUnitPengguna`, `testInsertMutasiLintasBolehMengirimDariUnitLain`, `testInsertMutasiMenolakStokPengirimKurang`, `testInsertMutasiMengizinkanStokPengirimCukup`.
+**Batas:** cek stok dilakukan sebelum insert, bukan lock; dua request bersamaan masih bisa sama-sama lolos.
 
 **7. Batal terima menghapus utang, tetapi stok tetap di penerima.**
 View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_mutasi` tanpa melihat `mutasi.status`. Jadi 12 mutasi yang belum diterima sudah memindahkan 55 qty; saat penerimaan dibatalkan, stok tetap pindah sementara H/P di-soft-delete. Penerima bisa memegang barang tanpa kewajiban.

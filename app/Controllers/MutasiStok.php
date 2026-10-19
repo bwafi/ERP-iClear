@@ -421,24 +421,86 @@ class MutasiStok extends BaseController
         return in_array((int) session('ID_JABATAN'), [1], true);
     }
 
+    /**
+     * Validasi input mutasi sebelum header disimpan.
+     *
+     * Unit pengirim harus berada dalam scope user (kecuali role lintas) dan
+     * stok dicek di unit pengirim, bukan unit sesi.
+     *
+     * @return string|null pesan gagal, atau null bila lolos
+     */
+    protected function validasiInsert(int $kirim_idunit, int $terima_idunit, array $produkData): ?string
+    {
+        if (! $this->UnitModel->getById($kirim_idunit) || ! $this->UnitModel->getById($terima_idunit)) {
+            return 'Unit pengirim atau penerima tidak ditemukan.';
+        }
+
+        if ($kirim_idunit === $terima_idunit) {
+            return 'Tidak dapat memilih unit yang sama';
+        }
+
+        $jabatan = session('ID_JABATAN');
+        $isLintas = $jabatan !== null && $jabatan !== ''
+            && in_array((int) $jabatan, [0, 1, 2, 34], true);
+        if (! $isLintas && $kirim_idunit !== (int) session('ID_UNIT')) {
+            return 'Anda hanya bisa membuat mutasi dari unit Anda.';
+        }
+
+        $diminta = [];
+        foreach ($produkData as $produk) {
+            $idbarang = (int) ($produk['id'] ?? 0);
+            $jumlah = (float) ($produk['jumlah_kirim'] ?? 0);
+            if ($idbarang <= 0 || $jumlah <= 0) {
+                return 'Jumlah kirim harus lebih dari 0.';
+            }
+
+            $stokAwal = $this->StokAwalModel->getByIdBarang($idbarang);
+            if (! $stokAwal || $stokAwal->satuan_terkecil == null) {
+                return 'Barang dengan ID ' . ($produk['nama'] ?? $idbarang) . ' belum memiliki data satuan di stok awal.';
+            }
+
+            $diminta[$idbarang] = ($diminta[$idbarang] ?? 0) + $jumlah;
+        }
+
+        if ($diminta === []) {
+            return 'Pilih minimal satu produk.';
+        }
+
+        // shortcut: cek stok sebelum insert, bukan lock; dua request bersamaan
+        // masih bisa sama-sama lolos. Tambah lock bila volume mutasi naik.
+        foreach ($diminta as $idbarang => $jumlah) {
+            $stok = $this->StokBarangModel
+                ->where('idbarang', $idbarang)
+                ->where('id_unit', $kirim_idunit)
+                ->first();
+            $tersedia = (float) ($stok->stok_akhir ?? 0);
+            if ($jumlah > $tersedia) {
+                $barang = $this->BarangModel->getById($idbarang);
+                $nama = $barang->nama_barang ?? ('ID ' . $idbarang);
+                return 'Stok ' . $nama . ' di unit pengirim tidak cukup (tersedia ' . $tersedia . ', diminta ' . $jumlah . ').';
+            }
+        }
+
+        return null;
+    }
+
     public function insert()
     {
 
-        $produkData = $this->request->getPost('produk');
-        $kirim_idunit = $this->request->getPost('id_unit1_text');
-        $terima_idunit = $this->request->getPost('id_unit2_text');
+        $produkData = (array) $this->request->getPost('produk');
+        $kirim_idunit = (int) $this->request->getPost('id_unit1_text');
+        $terima_idunit = (int) $this->request->getPost('id_unit2_text');
+
+        $error = $this->validasiInsert($kirim_idunit, $terima_idunit, $produkData);
+        if ($error !== null) {
+            session()->setFlashdata('gagal', $error);
+            return redirect()->back();
+        }
 
         $dataunitkirim = $this->UnitModel->getById($kirim_idunit);
         $dataunitterima = $this->UnitModel->getById($terima_idunit);
         $kirim_namaunit = $dataunitkirim->NAMA_UNIT;
         $terima_namaunit = $dataunitterima->NAMA_UNIT;
-
-
-        if ($kirim_idunit == $terima_idunit) {
-            session()->setFlashdata('gagal', 'Tidak dapat memilih unit yang sama');
-            return redirect()->back();
-        }
-
 
         date_default_timezone_set('Asia/Jakarta');
 
@@ -488,17 +550,6 @@ class MutasiStok extends BaseController
             'created_on' => date('Y-m-d H:i:s'),
             'updated_on' => ''
         );
-
-        foreach ($produkData as $produk) {
-            $produkid = $produk['id'];
-            $namaproduk = $produk['nama'];
-            $datastokawal = $this->StokAwalModel->getByIdBarang($produkid);
-
-            if (!$datastokawal || $datastokawal->satuan_terkecil == null) {
-                session()->setFlashdata('gagal', 'Barang dengan ID ' . $namaproduk . ' belum memiliki data satuan di stok awal.');
-                return redirect()->back();
-            }
-        }
 
         $result = $this->MutasiStokModel->insert_MutasiStok($data);
         $idMutasi = $this->MutasiStokModel->insertID();

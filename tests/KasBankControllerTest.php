@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use App\Controllers\MutasiStok;
 use App\Libraries\ModeKasBank;
 use App\Models\ModelHutangPiutang;
 use App\Models\ModelPembayaranHutangPiutang;
@@ -67,6 +68,7 @@ class KasBankControllerTest extends CIUnitTestCase
             // lama dari run sebelumnya bertahan karena dipakai CREATE IF NOT EXISTS
             // dan test gagal dengan "Unknown column" yang menyesatkan.
             'db_stok_barang',
+            'db_stok_awal',
             'db_service',
             'db_penjualan',
             'db_opening_kas',
@@ -143,7 +145,11 @@ class KasBankControllerTest extends CIUnitTestCase
         // Tabel pendukung yang dipakai BaseController.initController (notifikasi stok/service)
         // pada setiap request. Dibuat minimal agar FeatureTest tidak gagal.
         $q('CREATE TABLE IF NOT EXISTS db_stok_barang (
-                idbarang INT PRIMARY KEY, id_unit INT NULL, stok_akhir REAL NULL, stok_minimum REAL NULL)');
+                idbarang INT NOT NULL, id_unit INT NULL, stok_akhir REAL NULL, stok_minimum REAL NULL,
+                PRIMARY KEY (idbarang, id_unit))');
+        $q('CREATE TABLE IF NOT EXISTS db_stok_awal (
+                idstok_awal INTEGER PRIMARY KEY AUTO_INCREMENT,
+                barang_idbarang INT NULL, satuan_terkecil TEXT NULL)');
         // tanggal_selesai / tanggal_bisa_diambil WAJIB ada: BaseController.initController
         // memanggil ServiceModel->getExpiredService() pada setiap request, dan
         // query itu memfilter kedua kolom itu. Tanpa keduanya semua controller
@@ -275,7 +281,9 @@ class KasBankControllerTest extends CIUnitTestCase
             (1, 'MTS1000921001', '2026-09-20 09:00:00', NULL, '0', 1, 2, 43)");
         $q("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES
             (1, 1, 2, 1000, 800, 1001, 1, 2)");
-        $q("INSERT INTO db_barang (idbarang, nama_barang) VALUES (1001, 'Barang X')");
+        $q("INSERT INTO db_barang (idbarang, nama_barang) VALUES (1001, 'Barang X'), (1002, 'Barang Y')");
+        $q("INSERT INTO db_stok_awal (barang_idbarang, satuan_terkecil) VALUES (1001, 'PCS'), (1002, 'PCS')");
+        $q("INSERT INTO db_stok_barang (idbarang, id_unit, stok_akhir) VALUES (1001, 1, 5), (1002, 2, 50)");
     }
 
     private function sesiDenganToken(string $tok): void
@@ -797,6 +805,60 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             ->where('sumber_tipe', 'mutasi_unit')
             ->where('sumber_id', 2)
             ->countAllResults());
+    }
+
+    /**
+     * Validasi insert mutasi harus memakai unit pengirim yang dipilih, bukan
+     * unit sesi, dan stok harus dicek dari unit pengirim itu.
+     */
+    private function validatorMutasi(int $unit, int $jabatan): MutasiStok
+    {
+        $_SESSION['ID_UNIT'] = $unit;
+        $_SESSION['ID_JABATAN'] = $jabatan;
+
+        return new class extends MutasiStok {
+            public function validasi(int $kirim, int $terima, array $produk): ?string
+            {
+                return $this->validasiInsert($kirim, $terima, $produk);
+            }
+        };
+    }
+
+    public function testInsertMutasiMenolakPengirimDiLuarUnitPengguna(): void
+    {
+        $error = $this->validatorMutasi(1, 35)->validasi(2, 1, [
+            ['id' => 1002, 'nama' => 'Barang Y', 'jumlah_kirim' => 1],
+        ]);
+
+        $this->assertSame('Anda hanya bisa membuat mutasi dari unit Anda.', $error);
+    }
+
+    public function testInsertMutasiLintasBolehMengirimDariUnitLain(): void
+    {
+        $error = $this->validatorMutasi(1, 1)->validasi(2, 1, [
+            ['id' => 1002, 'nama' => 'Barang Y', 'jumlah_kirim' => 1],
+        ]);
+
+        $this->assertNull($error);
+    }
+
+    public function testInsertMutasiMenolakStokPengirimKurang(): void
+    {
+        $error = $this->validatorMutasi(1, 35)->validasi(1, 2, [
+            ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 6],
+        ]);
+
+        $this->assertNotNull($error);
+        $this->assertStringContainsString('Stok Barang X di unit pengirim tidak cukup', $error);
+    }
+
+    public function testInsertMutasiMengizinkanStokPengirimCukup(): void
+    {
+        $error = $this->validatorMutasi(1, 35)->validasi(1, 2, [
+            ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 5],
+        ]);
+
+        $this->assertNull($error);
     }
 
     public function testCetakBuktiHutangPiutangMutasiMemuatListBarang(): void
