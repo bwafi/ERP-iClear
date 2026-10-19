@@ -124,9 +124,10 @@ Header dan detail tidak dibungkus transaksi; `if ($result & $result2)` memakai b
 **Perbaikan:** header + detail sekarang disimpan lewat `simpanMutasi()` dalam `transBegin/transCommit/transRollback`, dan setiap insert diperiksa. `insert()` redirect ke daftar mutasi setelah simpan; PDF `exit` dihapus. Nota tetap bisa dicetak lewat `cetak/invoice_mutasi/{id}`.
 **Test:** `KasBankControllerTest::testSimpanMutasiRollbackSaatDetailGagal`, `testInsertMutasiRedirectSetelahSimpan`.
 
-**11. Pembayaran antar unit rawan overpay saat concurrent.**
+**11. Pembayaran antar unit rawan overpay saat concurrent. — ✅ DIPERBAIKI**
 `saveAntarUnit()` membaca `sisa` tanpa `FOR UPDATE`, dan `terapkanPembayaranHP()` juga tidak mengunci baris. Dua user membayar bersamaan bisa sama-sama lolos cek.
-**Fix:** `SELECT ... FOR UPDATE` atau update kondisional `WHERE sisa >= ?`.
+**Perbaikan:** `terapkanPembayaranHP()` tidak lagi baca-lalu-tulis. `ModelHutangPiutang::kurangiSisaJikaCukup()` menjalankan `UPDATE ... WHERE sisa >= ? AND deleted = 0`; kalau baris sudah berubah, update 0 baris dan pembayaran gagal. `saveAntarUnit()` kemudian rollback seluruh leg.
+**Test:** `KasBankTest::testTerapkanPembayaranHPMenolakSisaBasi`, `testTerapkanDanRestorePembayaranHP`.
 
 **12. Sisi piutang tidak bisa memulai pelunasan, dan tidak ada tautan ke halaman Antar Unit dari detail H/P.**
 Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim hanya bisa menunggu.
@@ -155,8 +156,8 @@ KPI `FIN_HUTANG_PIUTANG` memang **tidak terpengaruh** — tetapi itu bukan kabar
 
 ## Yang tidak diperiksa
 
-- Perbaikan #1–#6, #9, #10, dan #13 sudah diuji terarah. Full suite: 705 test; di luar `CustomerSatisfactionTest`, hasilnya 43 error + 175 failure — identik dengan baseline #5+#10. Empat error `CustomerSatisfactionTest` muncul karena tabel `db_service`/`db_stok_barang` tidak ada; test itu bergantung pada sisa schema test lain, bukan regresi perubahan ini.
+- Perbaikan #1–#6, #9–#11, dan #13 sudah diuji terarah. Full suite: 706 test, 43 error + 178 failure; daftar error/failure identik dengan baseline #5+#10. Catatan: `CustomerSatisfactionTest` masih bergantung pada tabel sisa test lain, jadi run dari DB kosong bisa menambah error.
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
 - Migration backfill #3 belum dijalankan di `erp_local`; baru diverifikasi lewat test.
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.
-- Temuan #7–#8 dan #11–#12 belum diperbaiki. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.
+- Temuan #7–#8 dan #12 belum diperbaiki. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.

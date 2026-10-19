@@ -116,4 +116,33 @@ class ModelHutangPiutang extends Model
             ->where('deleted', 0)
             ->first();
     }
+
+    /**
+     * Kurangi sisa secara atomik hanya jika sisa masih cukup.
+     *
+     * Guard WHERE sisa >= ? membuat dua pembayaran bersamaan tidak bisa
+     * sama-sama lolos dari sisa yang sama.
+     */
+    public function kurangiSisaJikaCukup(int $id, int $jumlah): bool
+    {
+        $jumlah = (int) $jumlah;
+
+        $builder = $this->db->table($this->table);
+        $builder->set(
+            'status',
+            "CASE WHEN sisa - {$jumlah} <= 0 THEN 'lunas' "
+            . "WHEN total_dibayar + {$jumlah} > 0 THEN 'sebagian' "
+            . "ELSE 'belum_lunas' END",
+            false
+        )
+            ->set('total_dibayar', "total_dibayar + {$jumlah}", false)
+            ->set('sisa', "sisa - {$jumlah}", false)
+            ->set('updated_at', date('Y-m-d H:i:s'))
+            ->where('id', $id)
+            ->where('deleted', 0)
+            ->where('sisa >=', $jumlah)
+            ->update();
+
+        return $this->db->affectedRows() === 1;
+    }
 }

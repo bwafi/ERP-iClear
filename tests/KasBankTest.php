@@ -799,6 +799,52 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->assertSame('1000', (string)$hp->sisa);
     }
 
+    public function testTerapkanPembayaranHPMenolakSisaBasi(): void
+    {
+        $model = new ModelHutangPiutang();
+        $hpId  = $model->insert([
+            'kode' => 'TST-BASI', 'jenis' => 'piutang', 'sumber_tipe' => 'tes', 'sumber_id' => 1,
+            'pihak_tipe' => 'unit', 'pihak_id' => 1, 'unit_id' => 1, 'is_projection' => 0,
+            'total' => 1000, 'total_dibayar' => 700, 'sisa' => 300, 'status' => 'sebagian', 'deleted' => 0,
+        ]);
+
+        // Simulasikan request kedua yang masih memegang sisa lama (1000)
+        // padahal request pertama sudah mengurangi sisa menjadi 300.
+        $lib = new class extends ModeKasBank {
+            public function pakaiSisaBasi(int $sisaBasi): void
+            {
+                $this->HPModel = new class($sisaBasi) extends ModelHutangPiutang {
+                    private int $sisaBasi;
+
+                    public function __construct(int $sisaBasi)
+                    {
+                        parent::__construct();
+                        $this->sisaBasi = $sisaBasi;
+                    }
+
+                    public function find($id = null)
+                    {
+                        return (object) [
+                            'id' => $id,
+                            'sisa' => $this->sisaBasi,
+                            'total_dibayar' => 0,
+                            'status' => 'belum_lunas',
+                        ];
+                    }
+                };
+            }
+        };
+
+        $lib->pakaiSisaBasi(1000);
+        $hasil = $lib->terapkanPembayaranHP((int) $hpId, 600);
+
+        $this->assertSame('failed', $hasil['status']);
+
+        $hp = $model->find((int) $hpId);
+        $this->assertSame('300', (string) $hp->sisa);
+        $this->assertSame('700', (string) $hp->total_dibayar);
+    }
+
     public function testTerbatasUnitMenyembunyikanRekeningUnitLain(): void
     {
         // Rekening bersama TANPA alokasi: belum ada unit yang punya hak.

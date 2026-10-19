@@ -867,34 +867,31 @@ class ModeKasBank
     /**
      * Terapkan pembayaran (kurangi sisa) pada satu baris hutang_piutang.
      * $jumlah harus <= sisa. Return data baru untuk auditable.
+     *
+     * Pengurangan dilakukan dengan UPDATE kondisional (sisa >= jumlah), bukan
+     * baca-lalu-tulis, supaya dua request bersamaan tidak sama-sama lolos.
      */
     public function terapkanPembayaranHP(int $idHP, int $jumlah): array
     {
-        $hp = $this->HPModel->find($idHP);
-        if (!$hp) {
-            return ['status' => 'failed', 'reason' => 'hutang/piutang tidak ditemukan', 'id' => $idHP];
+        if ($jumlah <= 0) {
+            return ['status' => 'failed', 'reason' => 'jumlah harus lebih dari 0', 'id' => $idHP];
         }
-        if ((int)$hp->sisa < $jumlah) {
+
+        if (! $this->HPModel->kurangiSisaJikaCukup($idHP, $jumlah)) {
             return ['status' => 'failed', 'reason' => 'jumlah melebihi sisa', 'id' => $idHP];
         }
 
-        $totalDibayar = (int)$hp->total_dibayar + $jumlah;
-        $sisa         = (int)$hp->sisa - $jumlah;
-        $status       = $this->hitungStatus($sisa, $totalDibayar);
-
-        $this->HPModel->update($idHP, [
-            'total_dibayar' => $totalDibayar,
-            'sisa'          => $sisa,
-            'status'        => $status,
-            'updated_at'    => date('Y-m-d H:i:s'),
-        ]);
+        $hp = $this->HPModel->find($idHP);
+        if (! $hp) {
+            return ['status' => 'failed', 'reason' => 'hutang/piutang tidak ditemukan', 'id' => $idHP];
+        }
 
         return [
             'status'        => 'ok',
             'id'            => $idHP,
-            'total_dibayar' => $totalDibayar,
-            'sisa'          => $sisa,
-            'status_hp'     => $status,
+            'total_dibayar' => (int) $hp->total_dibayar,
+            'sisa'          => (int) $hp->sisa,
+            'status_hp'     => $hp->status,
         ];
     }
 
