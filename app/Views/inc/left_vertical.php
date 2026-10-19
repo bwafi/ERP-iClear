@@ -6,7 +6,7 @@ if (session()->get('logged_in') !== true) {
 
 use App\Models\ModelUnit;
 use App\Models\Core;
-use App\Services\Finance\FinanceMenuNavigation;
+use App\Services\Sidebar\SidebarNavigation;
 
 $id_unit = session()->get('ID_UNIT');
 $ModelUnit = new ModelUnit();
@@ -16,11 +16,45 @@ $namaUnit  = session()->get('NAMA_UNIT') ?: '';
 
 $MCore = new Core();
 $role = $MCore->get_role();
-$menu_utama = FinanceMenuNavigation::group($MCore->get_menu_show(), $role);
+$menu_utama = SidebarNavigation::organize($MCore->get_menu_show(), $role);
 $currentUri = service('uri');
+$currentPath = $currentUri->getPath();
+$activeRoute = '';
+$activeRouteLength = 0;
+$findActiveRoute = static function (array $nodes) use (&$findActiveRoute, &$activeRoute, &$activeRouteLength, $role, $currentPath): void {
+    foreach ($nodes as $node) {
+        if (in_array($node['id'] ?? null, $role)) {
+            $route = SidebarNavigation::normalizeRoute((string) ($node['url'] ?? ''));
+            if ($route !== '' && $route !== '#' && strlen($route) > $activeRouteLength && SidebarNavigation::isActive($route, $currentPath)) {
+                $activeRoute = $route;
+                $activeRouteLength = strlen($route);
+            }
+        }
+        $findActiveRoute(array_merge($node['menu'] ?? [], $node['sub'] ?? []));
+    }
+};
+$findActiveRoute($menu_utama);
+$nodeIsActive = static function (array $node) use (&$nodeIsActive, $activeRoute): bool {
+    if ($activeRoute !== '' && SidebarNavigation::normalizeRoute((string) ($node['url'] ?? '')) === $activeRoute) {
+        return true;
+    }
+    foreach (array_merge($node['menu'] ?? [], $node['sub'] ?? []) as $child) {
+        if ($nodeIsActive($child)) {
+            return true;
+        }
+    }
+    return false;
+};
 ?>
 
 <aside class="left-sidebar with-vertical shadow-sm">
+    <style>
+        .left-sidebar .sidebar-link { min-width: 0; }
+        .left-sidebar .hide-menu { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+        .left-sidebar .sidebar-nav .first-level,
+        .left-sidebar .sidebar-nav .two-level { padding-right: .25rem; }
+        .left-sidebar .scroll-sidebar { min-height: 0; overflow-x: hidden; }
+    </style>
     <!-- ---------------------------------- -->
     <!-- Brand Logo Section -->
     <!-- ---------------------------------- -->
@@ -52,8 +86,8 @@ $currentUri = service('uri');
                         <?php
                         // Parent yang punya url tetap bisa diklik (mis. "Kas & Bank" -> /kas_bank),
                         // cuma Expand/Collapse lewat script sidebarmenu.js yang tidak preventDefault.
-                        $parentHref  = !empty($mymenu['url']) ? base_url($mymenu['url']) : '#';
-                        $is_active   = (base_url() . $mymenu['url'] == current_url());
+                        $parentHref  = !empty($mymenu['url']) ? base_url(ltrim((string) $mymenu['url'], '/')) : '#';
+                        $is_active   = $nodeIsActive($mymenu);
                         ?>
 
                         <!-- Menu Tanpa Sub-menu -->
@@ -66,7 +100,7 @@ $currentUri = service('uri');
                             <?php else: ?>
                                 <li class="sidebar-item mb-1">
                                     <a class="sidebar-link <?= $is_active ? 'active bg-primary text-white shadow-sm' : 'primary-hover-bg text-dark' ?> rounded-3 px-3 py-2 d-flex align-items-center text-decoration-none transition-all"
-                                        href="<?= base_url() . $mymenu['url'] ?>" aria-expanded="false">
+                                        href="<?= esc(base_url(ltrim((string) ($mymenu['url'] ?? ''), '/'))) ?>" aria-expanded="<?= $is_active ? 'true' : 'false' ?>" <?= $activeRoute !== '' && SidebarNavigation::normalizeRoute((string) ($mymenu['url'] ?? '')) === $activeRoute ? 'aria-current="page"' : '' ?>>
                                         <span class="aside-icon p-2 <?= $is_active ? 'bg-white bg-opacity-25 text-white' : 'bg-primary-subtle text-primary' ?> rounded-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
                                             <?= $mymenu['icon'] ?>
                                         </span>
@@ -89,36 +123,35 @@ $currentUri = service('uri');
                             <?php endif; ?>
 
                             <li class="sidebar-item mb-1">
-                                <a class="sidebar-link has-arrow success-hover-bg <?= $is_active ? 'active' : 'text-dark' ?> rounded-3 px-3 py-2 d-flex align-items-center text-decoration-none"
-                                    href="<?= $parentHref ?>" aria-expanded="false">
+                                    <a class="sidebar-link has-arrow success-hover-bg <?= $is_active ? 'active' : 'text-dark' ?> rounded-3 px-3 py-2 d-flex align-items-center text-decoration-none"
+                                    href="<?= esc($parentHref) ?>" aria-expanded="<?= $is_active ? 'true' : 'false' ?>">
                                     <span class="aside-icon p-2 bg-success-subtle text-success rounded-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
                                         <?= ($mymenu['icon'] != null) ? $mymenu['icon'] : '<iconify-icon icon="solar:smart-speaker-minimalistic-line-duotone" class="fs-6"></iconify-icon>'; ?>
                                     </span>
                                     <span class="hide-menu ps-3 fw-medium flex-grow-1"><?= $mymenu['nama'] ?></span>
                                 </a>
-                                <ul aria-expanded="false" class="collapse first-level list-unstyled ps-3 pt-1">
+                                <ul aria-expanded="<?= $is_active ? 'true' : 'false' ?>" class="collapse first-level list-unstyled ps-3 pt-1 <?= $is_active ? 'show' : '' ?>">
                                     <?php foreach ($mymenu['menu'] as $menu) : ?>
                                         <?php if (in_array($menu['id'], $role)) : ?>
+                                            <?php $menuActive = $nodeIsActive($menu); ?>
                                             <?php if (sizeof($menu['sub']) <= 0) : ?>
                                                 <li class="sidebar-item my-1">
-                                                    <!-- DIPERBAIKI: Menggunakan text-dark dan fw-medium agar lebih terbaca jelas -->
-                                                    <a href="<?= base_url() . $menu['url'] ?>" class="sidebar-link text-dark fw-medium text-decoration-none py-2 px-3 rounded-2 d-block hover-bg-light">
-                                                        <span class="hide-menu"><?= $menu['nama'] ?></span>
+                                                    <a href="<?= esc(base_url(ltrim((string) $menu['url'], '/'))) ?>" class="sidebar-link <?= $menuActive ? 'active bg-primary text-white' : 'text-dark' ?> fw-medium text-decoration-none py-2 px-3 rounded-2 d-block hover-bg-light" <?= $menuActive ? 'aria-current="page"' : '' ?>>
+                                                        <span class="hide-menu"><?= esc($menu['nama']) ?></span>
                                                     </a>
                                                 </li>
                                             <?php else : ?>
                                                 <li class="sidebar-item my-1">
-                                                    <!-- DIPERBAIKI: Menggunakan text-dark dan fw-medium -->
-                                                    <a class="sidebar-link has-arrow text-dark fw-medium text-decoration-none py-2 px-3 rounded-2 d-flex justify-content-between align-items-center" href="#" aria-expanded="false">
+                                                    <a class="sidebar-link has-arrow <?= $menuActive ? 'active text-primary' : 'text-dark' ?> fw-medium text-decoration-none py-2 px-3 rounded-2 d-flex justify-content-between align-items-center" href="#" aria-expanded="<?= $menuActive ? 'true' : 'false' ?>">
                                                         <span class="hide-menu"><?= $menu['nama'] ?></span>
                                                     </a>
-                                                    <ul aria-expanded="false" class="collapse two-level list-unstyled ps-3 pt-1">
+                                                    <ul aria-expanded="<?= $menuActive ? 'true' : 'false' ?>" class="collapse two-level list-unstyled ps-3 pt-1 <?= $menuActive ? 'show' : '' ?>">
                                                         <?php foreach ($menu['sub'] as $sub_menu) : ?>
                                                             <?php if (in_array($sub_menu['id'], $role)) : ?>
+                                                                <?php $subActive = $nodeIsActive($sub_menu); ?>
                                                                 <li class="sidebar-item my-1">
-                                                                    <!-- DIPERBAIKI: Menggunakan text-dark untuk sub menu level 2 -->
-                                                                    <a href="<?= base_url() . $sub_menu['url'] ?>" class="sidebar-link text-dark fw-medium text-decoration-none py-1.5 px-3 rounded-2 d-block">
-                                                                        <span class="hide-menu"><?= $sub_menu['nama'] ?></span>
+                                                                    <a href="<?= base_url() . $sub_menu['url'] ?>" class="sidebar-link <?= $subActive ? 'active bg-primary text-white' : 'text-dark' ?> fw-medium text-decoration-none py-1 px-3 rounded-2 d-block" <?= $subActive ? 'aria-current="page"' : '' ?>>
+                                                                        <span class="hide-menu"><?= esc($sub_menu['nama']) ?></span>
                                                                     </a>
                                                                 </li>
                                                             <?php endif; ?>

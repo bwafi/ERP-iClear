@@ -149,7 +149,7 @@
                 <h4 class="modal-title" id="editKategoriModalLabel">Edit Data Kategori</h4>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="<?= base_url('update_kategori') ?>" method="post">
+            <form action="<?= base_url('kategori/update_kategori') ?>" method="post">
                 <div class="modal-body">
                     <div class="mb-3">
                         <input hidden type="text" class="form-control" id="edit_id" name="idnya" required>
@@ -181,7 +181,7 @@
                 <h4 class="modal-title" id="inputKategoriModalLabel">Input Data Kategori</h4>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="<?= base_url('insert_kategori') ?>" method="post">
+            <form action="<?= base_url('kategori/insert_kategori') ?>" method="post">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="idkategori" class="form-label">ID Kategori</label>
@@ -211,7 +211,7 @@
                 <h4 class="modal-title" id="deleteKategoriModalLabel">Delete Data Kategori</h4>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="<?= base_url('delete_kategori') ?>" method="post">
+            <form action="<?= base_url('kategori/delete_kategori') ?>" method="post">
                 <div class="modal-body">
                     <input hidden id="delete_id" name="idnya">
                     <p style="font-style: italic;">Apa anda yakin ingin menghapus data ini?</p>
