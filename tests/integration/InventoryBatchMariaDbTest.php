@@ -171,6 +171,11 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
                 $this->assertStringContainsString('fisik', $error->getMessage());
             }
             $found = $adjustments->post(9, 1, 2, 'synthetic', 'found-1', 'Temuan sintetis', 1, null, 300);
+            $surplusJournal = $db->table('jurnal')->where('tabel_referensi', 'inventory_stock_adjustments')
+                ->where('id_referensi', $found['id'])->orderBy('idjurnal')->get()->getResultArray();
+            $this->assertSame(['1030100000', '7010500000'], array_column($surplusJournal, 'no_akun'));
+            $this->assertSame([600, 0], array_map('intval', array_column($surplusJournal, 'debet')));
+            $this->assertSame([0, 600], array_map('intval', array_column($surplusJournal, 'kredit')));
             $this->assertSame(2, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 9 AND id_unit = 1')->getRow()->stok_akhir);
             $this->assertSame(600, (int) $db->table('inventory_ledger_balances')->select('value')->where('item_id', 9)->where('unit_id', 1)->get()->getRow()->value);
             $this->assertSame(2, $batches->total(9, 1));

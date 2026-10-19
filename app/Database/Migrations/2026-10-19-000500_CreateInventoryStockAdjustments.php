@@ -2,6 +2,10 @@
 
 namespace App\Database\Migrations;
 
+require_once __DIR__ . '/2026-10-18-000500_LinkDamagedStockToSupplierReturn.php';
+require_once __DIR__ . '/2026-10-18-000700_CreateWarrantyStockIssues.php';
+require_once __DIR__ . '/2026-10-18-000800_LinkWarrantyDamagedStock.php';
+
 class CreateInventoryStockAdjustments extends LinkWarrantyDamagedStock
 {
     public function up()
