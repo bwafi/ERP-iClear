@@ -64,8 +64,8 @@ class Kartu_Stok extends BaseController
             1 => 'stok_barang.nama_barang',
             2 => 'stok_barang.nama_unit',
             3 => 'kategori.nama_kategori',
-            4 => 'barang.status_ppn',
-            5 => 'stok_barang.stok_akhir',
+            5 => 'barang.status_ppn',
+            6 => 'stok_barang.stok_akhir',
         ];
         $orderCol = $columnMap[$orderCol] ?? 'stok_barang.kode_barang';
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
@@ -87,6 +87,7 @@ class Kartu_Stok extends BaseController
                 'imei'                => $row->imei,
                 'nama_unit'           => $row->nama_unit,
                 'nama_kategori'       => $row->nama_kategori ?? '-',
+                'nama_supplier'       => $row->nama_supplier ?? '-',
                 'jenis_hp'            => $row->jenis_hp,
                 'warna'               => $row->warna,
                 'harga'               => (float)$row->harga,

@@ -56,7 +56,24 @@ class ModelKartuStok extends Model
                 barang.jenis_hp,
                 barang.warna,
                 barang.status_ppn,
-                kategori.nama_kategori
+                kategori.nama_kategori,
+                COALESCE(
+                    (SELECT s.nama_suplier
+                     FROM detail_pembelian dp
+                     JOIN pembelian p ON p.idpembelian = dp.pembelian_idpembelian
+                     JOIN suplier s ON s.id_suplier = p.suplier_id_suplier
+                     WHERE dp.barang_idbarang = stok_barang.idbarang
+                       AND dp.unit_idunit = stok_barang.id_unit
+                     ORDER BY dp.tanggal DESC
+                     LIMIT 1),
+                    (SELECT s2.nama_suplier
+                     FROM stok_awal sa
+                     JOIN suplier s2 ON s2.id_suplier = sa.suplier_id_suplier
+                     WHERE sa.barang_idbarang = stok_barang.idbarang
+                       AND sa.unit_idunit = stok_barang.id_unit
+                     ORDER BY sa.tanggal DESC, sa.idstok_awal DESC
+                     LIMIT 1)
+                ) AS nama_supplier
             ')
             ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')

@@ -121,6 +121,7 @@
                         <th>Nama Barang</th>
                         <th>Unit</th>
                         <th>Kategori</th>
+                        <th>Supplier</th>
                         <th>Status PPN</th>
                         <th class="text-end">Stok Akhir</th>
                         <th class="text-center">Detail</th>
@@ -213,6 +214,10 @@
                 },
                 {
                     data: 'nama_kategori'
+                },
+                {
+                    data: 'nama_supplier',
+                    orderable: false
                 },
                 {
                     data: 'status_ppn',
