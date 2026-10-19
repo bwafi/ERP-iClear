@@ -214,9 +214,10 @@ class ModelJurnal extends Model
                 $builder->where('j.id_unit', $unit);
             }
 
-            // Tambah filter tanggal jika ada
-            if ($tanggal_awal !== null && $tanggal_akhir !== null) {
+            if ($tanggal_awal !== null && $tanggal_awal !== '') {
                 $builder->where('j.tanggal >=', $tanggal_awal);
+            }
+            if ($tanggal_akhir !== null && $tanggal_akhir !== '') {
                 $builder->where('j.tanggal <=', $tanggal_akhir);
             }
 
@@ -258,10 +259,14 @@ class ModelJurnal extends Model
             $builder->groupEnd();
         }
 
-        if ($tanggal_awal !== null && $tanggal_akhir !== null) {
+        if (($tanggal_awal !== null && $tanggal_awal !== '') || ($tanggal_akhir !== null && $tanggal_akhir !== '')) {
             $builder->groupStart();
-            $builder->where('j.tanggal >=', $tanggal_awal);
-            $builder->where('j.tanggal <=', $tanggal_akhir);
+            if ($tanggal_awal !== null && $tanggal_awal !== '') {
+                $builder->where('j.tanggal >=', $tanggal_awal);
+            }
+            if ($tanggal_akhir !== null && $tanggal_akhir !== '') {
+                $builder->where('j.tanggal <=', $tanggal_akhir);
+            }
             $builder->orWhere('j.tanggal IS NULL'); // agar akun tetap tampil meski tidak ada transaksi
             $builder->groupEnd();
         }
@@ -288,8 +293,10 @@ class ModelJurnal extends Model
             $builder->where('j.id_unit', $unit);
         }
 
-        if ($tanggal_awal !== null && $tanggal_akhir !== null) {
+        if ($tanggal_awal !== null && $tanggal_awal !== '') {
             $builder->where('j.tanggal >=', $tanggal_awal);
+        }
+        if ($tanggal_akhir !== null && $tanggal_akhir !== '') {
             $builder->where('j.tanggal <=', $tanggal_akhir);
         }
 
