@@ -83,8 +83,8 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             $db->query("INSERT INTO barang_rusak (idbarang_rusak, idpembelian, no_nota_sup, barang_idbarang, unit_idunit, jumlah, claim_id) VALUES (51, NULL, NULL, 7, 1, 1, 1)");
             $this->assertNull($db->table('barang_rusak')->where('idbarang_rusak', 51)->get()->getRow()->idpembelian);
             $db->table('barang_rusak')->where('idbarang_rusak', 51)->delete();
-            $db->query("INSERT INTO no_akun VALUES ('1030100000', 'Persediaan'), ('6010301000', 'Beban sintetis'), ('4010100000', 'Surplus sintetis')");
-            $db->query("INSERT INTO inventory_adjustment_accounts VALUES (1, '1030100000', '6010301000', '4010100000'), (2, '1030100000', '6010301000', '4010100000')");
+            $db->query("INSERT INTO no_akun VALUES ('1030100000', 'Persediaan'), ('7020201000', 'Beban selisih sintetis'), ('7010500000', 'Surplus sintetis')");
+            $db->query("INSERT INTO inventory_adjustment_accounts VALUES (1, '1030100000', '7020201000', '7010500000'), (2, '1030100000', '7020201000', '7010500000')");
             $db->query("INSERT INTO barang (idbarang, kode_barang, nama_barang, jenis_item, deleted) VALUES (7, 'SYN-7', 'Sintetis', 'fisik', '0'), (8, 'SYN-J', 'Jasa', 'jasa', '0'), (9, 'SYN-9', 'Fisik baru', 'fisik', '0')");
             $db->query("INSERT INTO unit VALUES (1, 'Cabang A'), (2, 'Cabang B')");
             $db->query("INSERT INTO suplier VALUES (1, 'Supplier A'), (2, 'Supplier B')");
@@ -147,7 +147,7 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             }
             $this->assertSame(0, $db->table('inventory_stock_adjustments')->where('source_id', 'unmapped')->countAllResults());
             $this->assertSame(1, $batches->total(7, 2));
-            $db->query("INSERT INTO inventory_adjustment_accounts VALUES (2, '1030100000', '6010301000', '4010100000')");
+            $db->query("INSERT INTO inventory_adjustment_accounts VALUES (2, '1030100000', '7020201000', '7010500000')");
             $adjustment = $adjustments->post(7, 1, -1, 'synthetic', 'count-1', 'Selisih hitung sintetis', 1);
             $journal = $db->table('jurnal')->where('tabel_referensi', 'inventory_stock_adjustments')->where('id_referensi', $adjustment['id'])->get()->getResultArray();
             $this->assertCount(2, $journal);

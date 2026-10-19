@@ -27,7 +27,8 @@ final class InventoryAdjustmentJournal
         $inventory = (string) $config['inventory_account'];
         $counterpart = (string) $config[$value < 0 ? 'shortage_account' : 'surplus_account'];
         if ($inventory === $counterpart || ! preg_match('/^1[0-9]{9}$/D', $inventory)
-            || ! preg_match($value < 0 ? '/^[56][0-9]{9}$/D' : '/^4[0-9]{9}$/D', $counterpart)) {
+            || ! preg_match($value < 0 ? '/^(?:[56][0-9]{9}|702[0-9]{7})$/D'
+                : '/^(?:4[0-9]{9}|701[0-9]{7})$/D', $counterpart)) {
             throw new \RuntimeException('Pemetaan akun selisih stok opname tidak valid.');
         }
         $accounts = $this->db->table('no_akun')->select('no_akun, nama_akun')

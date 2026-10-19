@@ -16,6 +16,7 @@ Target dokumen ini **hanya** `testerp.icleargroup.id`. Jangan merge ke `main`, m
 3. Pastikan file checkout tidak memiliki perubahan lokal yang akan tertimpa. Catat daftar perubahan tanpa menyalin rahasia: `git status --short` (sensor nama file sensitif sebelum dibagikan).
 4. Pastikan database TEST terisolasi. Ambil backup konsisten database serta file upload TEST dan catat lokasi/ID snapshot secara internal. Verifikasi backup bisa dibaca; jangan kirim dump melalui chat.
 5. Jalankan `php spark migrate:status` untuk daftar migrasi tertunda. Review migrasi PR yang menyentuh HPP, klaim, barang rusak, retur, kredit, jurnal, dan `barang.jenis_item`; pastikan tabel/kolom target tidak sudah dibuat manual dengan skema berbeda.
+   Untuk paket batch/opname, periksa khusus `2026-10-19-000400` sampai `000700`. Pada TEST yang diperiksa 19 Oktober 2026, `barang_rusak.idpembelian` dan `no_nota_sup` sudah bertipe `VARCHAR(255) NULL`; migrasi `000700` harus melewati perubahan DDL kedua kolom itu. Jangan memaksa rollback migrasi; pulihkan snapshot jika perlu.
 6. Tetapkan jendela uji agar tidak ada transaksi paralel selama backup, migrasi, dan smoke test. Jika satu gate gagal, hentikan sebelum melanjutkan.
 
 ## Prasyarat
@@ -35,6 +36,7 @@ Target dokumen ini **hanya** `testerp.icleargroup.id`. Jangan merge ke `main`, m
 6. Periksa halaman Kartu Stok, Stok Awal, Pembelian, Service, Garansi Service, Barang Rusak, Retur Supplier, Kredit Supplier, dan Posisi Keuangan memakai akun TEST. Catat status HTTP dan error aplikasi; jangan menguji dengan data pelanggan asli.
 7. Gunakan satu rangkaian data sintetis: master sparepart fisik → pembelian/restock dengan ID master sama → service dan snapshot HPP/harga → klaim → sparepart pengganti → barang rusak terkait klaim → retur → nota kredit disetujui → jurnal dan laporan. Periksa jumlah stok hanya berkurang sekali pada setiap pengeluaran, serta jumlah debit sama dengan kredit.
 8. Uji juga jasa/komisi tanpa stok, klaim berulang, kredit supplier parsial, barang tanpa HPP, dan input ganda. Catat expected/actual, commit, waktu, serta unit TEST; hentikan jika ada selisih persediaan atau jurnal.
+9. Akun selisih stok belum disetujui Finance. Jangan isi `inventory_adjustment_accounts` atau buat akun bisnis untuk sekadar meloloskan uji. Uji bahwa finalisasi opname dengan selisih ditolak dengan pesan pemetaan akun, tanpa perubahan stok, batch, nilai ledger, atau jurnal; halaman lain harus tetap berfungsi. Usulan akun ada di `docs/INVENTORY_ADJUSTMENT_COA_PROPOSAL.md`.
 
 ## Bukti browser dan rekonsiliasi (commit dan database TEST yang sama)
 
