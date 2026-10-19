@@ -84,5 +84,23 @@ try {
     $db->transRollback();
 }
 
+// F: distribusi gaji HO tidak memuat akun TERIMA_GAJI=0.
+$db->transBegin();
+try {
+    foreach ([9904 => 0, 9905 => 1] as $idAkun => $flag) {
+        $db->table('akun')->insert([
+            'ID_AKUN' => $idAkun, 'ID_JABATAN' => 36, 'ID_UNIT' => 50, 'NOID' => "TG$idAkun",
+            'PASSWORD' => 'x', 'NAMA_AKUN' => "TEMP TG $idAkun", 'JENIS_KELAMIN' => 'Laki-Laki',
+            'HP' => '0', 'STATUS_PEGAWAI' => 1, 'TERIMA_GAJI' => $flag,
+        ]);
+    }
+    $dist = (new \App\Services\Payroll\HoSalaryDistributionService())->calculateDistribution(date('Y-m'));
+    $idDist = array_map('intval', array_column($dist['employees'], 'id'));
+    check('HO TERIMA_GAJI=0 tidak ikut distribusi', ! in_array(9904, $idDist, true));
+    check('HO TERIMA_GAJI=1 tetap ikut distribusi', in_array(9905, $idDist, true));
+} finally {
+    $db->transRollback();
+}
+
 echo $gagal === 0 ? "\nSEMUA PASS\n" : "\n$gagal GAGAL\n";
 exit($gagal === 0 ? 0 : 1);

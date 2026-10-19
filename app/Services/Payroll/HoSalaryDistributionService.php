@@ -71,11 +71,13 @@ class HoSalaryDistributionService
         $franchiseCount = count($franchiseIds);
         $divisor = $pribadiCount + $franchiseCount;
 
-        // 2. Ambil karyawan HO (unit_id = 50) yang aktif
+        // 2. Ambil karyawan HO (unit_id = 50) yang aktif & menerima gaji
+        // TERIMA_GAJI=1: akun tanpa gaji (mis. Direktur) tidak ikut dibagi.
         $hoEmployees = $this->db->table('akun')
             ->select('ID_AKUN, NAMA_AKUN, ID_JABATAN, ALAMAT')
             ->where('ID_UNIT', 50)
             ->where('STATUS_PEGAWAI', 1)
+            ->where('TERIMA_GAJI', 1)
             ->groupStart()
             ->where('deleted', null)
             ->orWhere('deleted', 0)
