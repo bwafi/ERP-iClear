@@ -716,6 +716,58 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->assertSame('2026-01-01 00:00:00', $byKode['BF-5']['cutoff_closed_at']);
     }
 
+    public function testGetPasanganMengabaikanDokumenTerhapus(): void
+    {
+        $this->db->query("INSERT INTO db_hutang_piutang
+            (id, kode, jenis, sumber_tipe, sumber_id, deleted)
+            VALUES
+            (1, 'H-1', 'hutang', 'mutasi_unit', 1, 0),
+            (2, 'P-1', 'piutang', 'mutasi_unit', 1, 0),
+            (3, 'H-2', 'hutang', 'mutasi_unit', 2, 0),
+            (4, 'P-2', 'piutang', 'mutasi_unit', 2, 1)");
+
+        $model = new ModelHutangPiutang();
+
+        $aktif = $model->getPasangan((object) [
+            'sumber_tipe' => 'mutasi_unit',
+            'sumber_id' => 1,
+            'jenis' => 'hutang',
+        ]);
+        $this->assertNotNull($aktif);
+        $this->assertSame(2, (int) $aktif->id);
+
+        $terhapus = $model->getPasangan((object) [
+            'sumber_tipe' => 'mutasi_unit',
+            'sumber_id' => 2,
+            'jenis' => 'hutang',
+        ]);
+        $this->assertNull($terhapus);
+    }
+
+    public function testBackfillMutasiHanyaMemprosesStatusDiterima(): void
+    {
+        $this->db->query("INSERT INTO db_mutasi (idmutasi, status) VALUES (1, '1'), (2, '0'), (3, '1')");
+
+        $lib = new class extends ModeKasBank {
+            public array $diproses = [];
+
+            public function buatHutangPiutangDariMutasi(int $idMutasi, ?int $akunUser = null, ?string $jatuhTempo = null): array
+            {
+                $this->diproses[] = $idMutasi;
+
+                return ['status' => 'inserted', 'reason' => 'test'];
+            }
+        };
+
+        $cmd = new \App\Commands\BackfillKasBank(\Config\Services::logger(), \Config\Services::commands());
+        $method = new \ReflectionMethod($cmd, 'backfillMutasi');
+        $method->setAccessible(true);
+        $hasil = $method->invoke($cmd, $lib, $this->db);
+
+        $this->assertSame([1, 3], $lib->diproses);
+        $this->assertSame(2, $hasil['total']);
+    }
+
     public function testTerapkanDanRestorePembayaranHP(): void
     {
         $model = new ModelHutangPiutang();

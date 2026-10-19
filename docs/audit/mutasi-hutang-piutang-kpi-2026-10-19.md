@@ -114,9 +114,10 @@ View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_m
 
 ### Sebaiknya diperbaiki
 
-**9. Backfill membuat H/P untuk mutasi yang belum diterima.**
+**9. Backfill membuat H/P untuk mutasi yang belum diterima. — ✅ DIPERBAIKI**
 `BackfillKasBank.php:154` memilih semua `mutasi` tanpa filter `status=1`. Kalau command dijalankan, 12 mutasi yang belum diterima akan langsung punya utang.
-**Fix:** tambahkan `where('status','1')`.
+**Perbaikan:** `backfillMutasi()` sekarang hanya memilih `status='1'`.
+**Test:** `KasBankTest::testBackfillMutasiHanyaMemprosesStatusDiterima`.
 
 **10. `insert()` tidak atomik dan pengecekan hasilnya salah. — ✅ DIPERBAIKI**
 Header dan detail tidak dibungkus transaksi; `if ($result & $result2)` memakai bitwise AND dan hanya membaca hasil detail terakhir; PDF `exit` membuat flash sukses tak pernah tercapai. Ada 2 header tanpa detail.
@@ -131,9 +132,10 @@ Header dan detail tidak dibungkus transaksi; `if ($result & $result2)` memakai b
 Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim hanya bisa menunggu.
 **Fix:** tambahkan tautan “Lunasi di Kas & Bank → Antar Unit” pada detail mutasi.
 
-**13. `getPasangan()` tidak memfilter `deleted`.**
+**13. `getPasangan()` tidak memfilter `deleted`. — ✅ DIPERBAIKI**
 `ModelHutangPiutang.php:106`. Jika satu sisi ter-soft-delete, pembayaran bisa menempel ke baris mati.
-**Fix:** `where('deleted', 0)`.
+**Perbaikan:** `getPasangan()` sekarang menambahkan `where('deleted', 0)`. Pasangan yang sudah dibatalkan menghasilkan `null`, sehingga alur bayar berhenti dengan pesan “Pasangan piutang tidak ditemukan” alih-alih menyentuh baris mati.
+**Test:** `KasBankTest::testGetPasanganMengabaikanDokumenTerhapus`.
 
 ### Nice to have
 
@@ -153,8 +155,8 @@ KPI `FIN_HUTANG_PIUTANG` memang **tidak terpengaruh** — tetapi itu bukan kabar
 
 ## Yang tidak diperiksa
 
-- Perbaikan #1–#6 dan #10 sudah diuji terarah. Full suite: 703 test, 43 error + 178 failure; 176 failure lama, plus 2 failure polusi urutan `KasBankTest` → `KesehatanUangCalculatorTest` yang juga muncul tanpa test baru.
+- Perbaikan #1–#6, #9, #10, dan #13 sudah diuji terarah. Full suite: 705 test; di luar `CustomerSatisfactionTest`, hasilnya 43 error + 175 failure — identik dengan baseline #5+#10. Empat error `CustomerSatisfactionTest` muncul karena tabel `db_service`/`db_stok_barang` tidak ada; test itu bergantung pada sisa schema test lain, bukan regresi perubahan ini.
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
 - Migration backfill #3 belum dijalankan di `erp_local`; baru diverifikasi lewat test.
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.
-- Temuan #7–#9 dan #11–#13 belum diperbaiki. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.
+- Temuan #7–#8 dan #11–#12 belum diperbaiki. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.

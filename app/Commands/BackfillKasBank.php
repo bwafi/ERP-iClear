@@ -151,7 +151,12 @@ class BackfillKasBank extends BaseCommand
 
     private function backfillMutasi(ModeKasBank $lib, $db): array
     {
-        $rows = $db->table('mutasi')->select('idmutasi')->orderBy('idmutasi', 'ASC')->get()->getResult();
+        $rows = $db->table('mutasi')
+            ->select('idmutasi')
+            ->where('status', '1')
+            ->orderBy('idmutasi', 'ASC')
+            ->get()
+            ->getResult();
         $res = ['total' => count($rows), 'inserted' => 0, 'skipped' => 0, 'failed' => 0, 'detail' => []];
 
         foreach ($rows as $row) {

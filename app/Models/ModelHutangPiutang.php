@@ -113,6 +113,7 @@ class ModelHutangPiutang extends Model
             ->where('sumber_tipe', $hp->sumber_tipe)
             ->where('sumber_id', $hp->sumber_id)
             ->where('jenis', $lawan)
+            ->where('deleted', 0)
             ->first();
     }
 }
