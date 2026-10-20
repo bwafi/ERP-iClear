@@ -1,6 +1,23 @@
 (function () {
     'use strict';
 
+    if (window.jQuery && window.jQuery.fn.dataTable) {
+        window.jQuery.extend(true, window.jQuery.fn.dataTable.defaults, {
+            language: {
+                emptyTable: 'Belum ada data.',
+                zeroRecords: 'Tidak ada data yang cocok. Periksa pencarian atau filter.',
+                search: 'Cari:',
+                lengthMenu: 'Tampilkan _MENU_ baris',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+                infoEmpty: 'Belum ada data untuk ditampilkan',
+                infoFiltered: '(disaring dari _MAX_ data)',
+                loadingRecords: 'Memuat data…',
+                processing: 'Sedang memproses…',
+                paginate: { first: 'Awal', last: 'Akhir', next: 'Berikutnya', previous: 'Sebelumnya' }
+            }
+        });
+    }
+
     function prepareTables(root) {
         root.querySelectorAll('table.table').forEach(function (table) {
             if (table.closest('.table-responsive, .iclear-table-scroll, .dataTables_scrollBody, .dataTables_scrollHead, .dataTables_scrollFoot')) {

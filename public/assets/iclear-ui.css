@@ -148,6 +148,7 @@
     .iclear-ui .body-wrapper > .container-fluid { padding-inline: 12px !important; }
     .iclear-ui #iclear-content .card-body { padding: 1rem; }
     .iclear-ui #iclear-content { padding-top: .75rem; }
+    .iclear-ui #iclear-content .card-body.d-flex.justify-content-between { flex-wrap: wrap; gap: .75rem; }
     .iclear-ui :is(.form-control, .form-select) { font-size: 16px; }
     .iclear-ui .modal-dialog { margin: .5rem; max-width: calc(100% - 1rem); }
     .iclear-ui .modal-content { max-height: calc(100dvh - 1rem); }
@@ -158,6 +159,10 @@
     .iclear-ui .dataTables_wrapper .dataTables_filter input { min-width: 0; flex: 1; margin-left: 0; }
     .iclear-ui .dataTables_wrapper .row > * { min-width: 0; }
     .iclear-ui .left-sidebar { max-width: calc(100vw - 36px); }
+    .iclear-ui .kb-filter .kb-field { min-width: 0; max-width: 100%; flex: 1 1 100%; }
+    .iclear-ui .kb-filter .kb-filter-select { width: 100%; min-width: 0; }
+    .iclear-ui .kb-nav-tabs { max-width: 100%; min-width: 0; }
+    .iclear-ui .kb-nav-tab { flex: 0 0 auto; }
 }
 @media print {
     .iclear-ui { background: #fff; color: #000; }

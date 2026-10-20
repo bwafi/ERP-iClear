@@ -330,7 +330,7 @@
         });
 
         // Handle main category edit
-        document.querySelector('#zero_config').addEventListener('click', function(e) {
+        document.querySelector('#ketegori_induk_table').addEventListener('click', function(e) {
             if (e.target.closest('.edit-button')) {
                 const button = e.target.closest('.edit-button');
                 const id = button.getAttribute('data-id');

@@ -730,7 +730,6 @@
     <script src="<?php echo base_url('template/') ?>assets/libs/apexcharts/dist/apexcharts.min.js"></script>
     <script src="<?php echo base_url('template/') ?>assets/js/extra-libs/jvectormap/jquery-jvectormap-us-aea-en.js">
     </script>
-    <script src="<?php echo base_url('template/') ?>assets/js/dashboards/dashboard.js"></script>
 
 
     <!-- js alert -->
