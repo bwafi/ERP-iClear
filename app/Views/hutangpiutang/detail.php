@@ -1,22 +1,89 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Detail <?= esc($row->kode) ?></h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('hutangpiutang/dashboard') ?>">Hutang Piutang</a></li>
-                <li class="breadcrumb-item active">Detail</li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
 <?php
+
 use App\Services\Finance\HutangPiutangService;
 
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
-$authoritative = in_array($row->sumber_tipe, HutangPiutangService::AUTHORITATIVE_SUMBER, true);
-$statusClass = $row->status === 'lunas' ? 'success' : ($row->status === 'sebagian' ? 'warning' : 'secondary');
-$bisaKompensasi = $can_input && $authoritative && $row->status !== 'lunas' && !empty($lawan_kompensasi);
+
+$bulanId = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+$tgl = static function ($value) use ($bulanId): string {
+    $value = trim((string) ($value ?? ''));
+    if ($value === '' || substr($value, 0, 10) === '0000-00-00') {
+        return '—';
+    }
+
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return '—';
+    }
+
+    return date('j', $ts) . ' ' . $bulanId[(int) date('n', $ts)] . ' ' . date('Y', $ts);
+};
+$tglWaktu = static function ($value) use ($bulanId): string {
+    $value = trim((string) ($value ?? ''));
+    if ($value === '' || substr($value, 0, 10) === '0000-00-00') {
+        return '—';
+    }
+
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return '—';
+    }
+
+    return date('j', $ts) . ' ' . $bulanId[(int) date('n', $ts)] . ' ' . date('Y', $ts) . ' · ' . date('H:i', $ts);
+};
+
+$tsHariIni = strtotime(date('Y-m-d'));
+$dueMeta = static function ($value) use ($tgl, $tsHariIni): array {
+    $value = trim((string) ($value ?? ''));
+    if ($value === '' || substr($value, 0, 10) === '0000-00-00') {
+        return ['date' => '—', 'note' => 'Tanpa jatuh tempo', 'class' => ''];
+    }
+
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return ['date' => '—', 'note' => 'Tanggal tidak valid', 'class' => ''];
+    }
+
+    $hari = (int) floor(($ts - $tsHariIni) / 86400);
+    if ($hari < 0) {
+        return ['date' => $tgl($value), 'note' => 'Terlambat ' . abs($hari) . ' hari', 'class' => 'is-overdue'];
+    }
+    if ($hari === 0) {
+        return ['date' => $tgl($value), 'note' => 'Jatuh tempo hari ini', 'class' => 'is-today'];
+    }
+    if ($hari === 1) {
+        return ['date' => $tgl($value), 'note' => 'Besok', 'class' => 'is-soon'];
+    }
+    if ($hari <= 7) {
+        return ['date' => $tgl($value), 'note' => $hari . ' hari lagi', 'class' => 'is-soon'];
+    }
+
+    return ['date' => $tgl($value), 'note' => '', 'class' => ''];
+};
+
+$jenis          = (string) ($row->jenis ?? 'hutang');
+$isPiutang      = $jenis === 'piutang';
+$status         = (string) ($row->status ?? '');
+$statusClass    = $status === HutangPiutangService::STATUS_LUNAS
+    ? 'is-success'
+    : ($status === HutangPiutangService::STATUS_SEBAGIAN ? 'is-warning' : 'is-neutral');
+$statusLabel    = HutangPiutangService::labelStatus($status);
+$sumberLabel    = HutangPiutangService::labelSumber((string) ($row->sumber_tipe ?? ''));
+$scope          = (string) ($row->scope ?? 'active');
+$scopeLabel     = ['legacy' => 'Legacy', 'opening' => 'Opening'][$scope] ?? '';
+$authoritative  = in_array($row->sumber_tipe, HutangPiutangService::AUTHORITATIVE_SUMBER, true);
+$isMutasi       = $row->sumber_tipe === HutangPiutangService::SUMBER_MUTASI;
+$unitName       = trim((string) ($unit->NAMA_UNIT ?? '')) ?: 'Tanpa unit';
+$namaPihak      = trim((string) ($row->nama_pihak ?? '')) ?: 'Tanpa nama';
+$due            = $dueMeta($row->jatuh_tempo ?? null);
+$outstanding    = $status !== HutangPiutangService::STATUS_LUNAS && (float) ($row->sisa ?? 0) > 0;
+$dueNote        = $outstanding ? $due['note'] : '';
+$total          = max(0, (float) ($row->total ?? 0));
+$dibayar        = (float) ($row->total_dibayar ?? 0);
+$sisa           = max(0, (float) ($row->sisa ?? 0));
+$persen         = $total > 0
+    ? min(100, max(0, (int) round($dibayar / $total * 100)))
+    : ($status === HutangPiutangService::STATUS_LUNAS ? 100 : 0);
 
 // Pelunasan legacy: hanya hutang Outstanding bertanggal <= cut-off Finance,
 // dan hanya yang BUKAN proksi (proksi ditimpa sync dari transaksi sumber).
@@ -28,7 +95,6 @@ $hpService     = new HutangPiutangService();
 $settledLegacy = $hpService->settlementLegacyAktif($row);
 $pernahLegacy  = $settledLegacy
     || (! empty($row->tanggal_settlement_legacy) && ! empty($row->legacy_dibatalkan_at));
-$outstanding   = $row->status !== 'lunas' && (float) $row->sisa > 0;
 $bisaLegacy    = $can_input && $outstanding && ! $settledLegacy
     && (int) $row->is_projection === 0
     && \App\Services\Finance\FinanceScopeService::tanggalStr($row->tanggal) <= $cutoffFinance;
@@ -38,6 +104,10 @@ if ($can_input && ! $settledLegacy && (int) $row->is_projection === 1) {
 } elseif ($can_input && ! $settledLegacy && ! $outstanding) {
     $alasanLegacy = 'Hutang ini sudah lunas.';
 }
+
+$bisaBayar     = $can_input && $authoritative && $status !== HutangPiutangService::STATUS_LUNAS
+    && $row->sumber_tipe !== HutangPiutangService::SUMBER_KASBON && $outstanding;
+$bisaKompensasi = $can_input && $authoritative && $status !== HutangPiutangService::STATUS_LUNAS && !empty($lawan_kompensasi);
 
 // Pelunasan antar unit langsung dari halaman ini. Form hanya dirender bila
 // controller sudah menyiapkan rekening pengirim/penerima + token.
@@ -49,121 +119,461 @@ $labelAkunAu  = static function ($a) use ($unitMapAu) {
 
     return $unitNama . ' · ' . ($a->nama_akun ?? '-') . ' (' . ($a->tipe ?? '-') . ')';
 };
+$bisaAntarUnit = $can_input && $isMutasi && $outstanding && !empty($antarUnit);
+$lawanUnitId   = (int) ($row->lawan_unit_id ?? 0);
+$lawanUnit     = $lawanUnitId > 0 ? ($unitMapAu[$lawanUnitId] ?? ('Unit ' . $lawanUnitId)) : null;
+$pasanganHutang  = $antarUnit['hutang'] ?? null;
+$pasanganPiutang = $antarUnit['piutang'] ?? null;
+
+$labelPembayaran = static function ($sumber): string {
+    $sumber = trim((string) ($sumber ?? ''));
+    if ($sumber === '') {
+        return 'Pembayaran';
+    }
+
+    $map = [
+        'antar_unit' => 'Antar unit',
+        'kas_bank'   => 'Kas & Bank',
+        'legacy'     => 'Legacy',
+        'manual'     => 'Manual',
+    ];
+
+    return $map[$sumber] ?? ucwords(str_replace(['_', '-'], ' ', $sumber));
+};
+
+$pembayaranTerakhir = ! empty($pembayaran) ? $pembayaran[array_key_last($pembayaran)] : null;
+$hasUraian          = trim((string) ($row->uraian ?? '')) !== '';
+$hasKeterangan      = trim((string) ($row->keterangan ?? '')) !== '';
+$hasNotes           = $hasUraian || $hasKeterangan || $isMutasi;
+$notesSubtitle      = ($hasUraian || $hasKeterangan)
+    ? 'Uraian dan keterangan yang tersimpan.'
+    : 'Konteks posisi antar unit.';
 ?>
 
-<div class="row">
-    <div class="col-lg-5">
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="badge bg-<?= $row->jenis === 'hutang' ? 'danger' : 'success' ?>"><?= esc(HutangPiutangService::labelSumber($row->sumber_tipe)) ?></span>
-                    <span class="badge bg-<?= $statusClass ?>"><?= esc(\App\Services\Finance\HutangPiutangService::labelStatus($row->status)) ?></span>
-                </div>
-                <table class="table table-sm mb-0">
-                    <tr><td class="text-muted">Kode</td><td class="text-end fw-semibold"><?= esc($row->kode) ?></td></tr>
-                    <tr><td class="text-muted">Pihak</td><td class="text-end"><?= esc($row->nama_pihak) ?></td></tr>
-                    <tr><td class="text-muted">Unit</td><td class="text-end"><?= esc($unit->NAMA_UNIT ?? '-') ?></td></tr>
-                    <tr><td class="text-muted">Tanggal</td><td class="text-end"><?= $row->tanggal ? date('d-m-Y', strtotime($row->tanggal)) : '-' ?></td></tr>
-                    <tr><td class="text-muted">Jatuh Tempo</td><td class="text-end"><?= $row->jatuh_tempo ? date('d-m-Y', strtotime($row->jatuh_tempo)) : '-' ?></td></tr>
-                    <tr><td class="text-muted">Uraian</td><td class="text-end"><?= esc($row->uraian ?: '-') ?></td></tr>
-                    <tr><td class="text-muted">Total</td><td class="text-end fw-semibold"><?= $rp($row->total) ?></td></tr>
-                    <tr><td class="text-muted">Total Dibayar</td><td class="text-end"><?= $rp($row->total_dibayar) ?></td></tr>
-                    <tr><td class="text-muted">Sisa</td><td class="text-end fw-semibold text-danger"><?= $rp($row->sisa) ?></td></tr>
-                    <tr><td class="text-muted">Keterangan</td><td class="text-end"><?= esc($row->keterangan ?: '-') ?></td></tr>
-                </table>
+<?= view('hutangpiutang/_list_theme') ?>
+<?= view('hutangpiutang/_detail_theme') ?>
 
-                <?php if ($settledLegacy || $pernahLegacy) : ?>
-                    <div class="alert alert-<?= $settledLegacy ? 'warning' : 'secondary' ?> mt-3 mb-0">
-                        <h6 class="fw-semibold mb-2"><iconify-icon icon="solar:shield-check-bold" width="18"></iconify-icon>
-                            <?= $settledLegacy ? 'Ditandai Lunas Legacy' : 'Pelunasan Legacy Pernah Dibatalkan' ?>
-                        </h6>
-                        <table class="table table-sm mb-0">
-                            <tr><td class="text-muted">Tanggal settlement</td><td class="text-end fw-semibold"><?= $row->tanggal_settlement_legacy ? date('d-m-Y', strtotime($row->tanggal_settlement_legacy)) : '-' ?></td></tr>
-                            <tr><td class="text-muted">Jenis settlement</td><td class="text-end"><code>legacy</code></td></tr>
-                            <tr><td class="text-muted">Dicatat oleh</td><td class="text-end"><?= esc($row->cutoff_closed_by ? ('#' . $row->cutoff_closed_by) : '-') ?></td></tr>
-                            <tr><td class="text-muted">Waktu pencatatan</td><td class="text-end"><?= $row->cutoff_closed_at ? date('d-m-Y H:i', strtotime($row->cutoff_closed_at)) : '-' ?></td></tr>
-                            <tr><td class="text-muted">Sisa sebelum settlement</td><td class="text-end"><?= $rp($row->sisa_legacy_sebelum) ?></td></tr>
-                        </table>
-                        <?php if (! $settledLegacy) : ?>
-                            <hr class="my-2">
-                            <table class="table table-sm mb-0">
-                                <tr><td class="text-muted">Status</td><td class="text-end"><span class="badge bg-secondary">Sudah dibatalkan — kembali outstanding</span></td></tr>
-                                <tr><td class="text-muted">Waktu pembatalan</td><td class="text-end fw-semibold"><?= $row->legacy_dibatalkan_at ? date('d-m-Y H:i', strtotime($row->legacy_dibatalkan_at)) : '-' ?></td></tr>
-                                <tr><td class="text-muted">Dibatalkan oleh</td><td class="text-end"><?= esc($row->legacy_dibatalkan_by ? ('#' . $row->legacy_dibatalkan_by) : '-') ?></td></tr>
-                                <tr><td class="text-muted">Alasan pembatalan</td><td class="text-end"><?= esc($row->legacy_alasan_pembatalan ?: '-') ?></td></tr>
-                            </table>
+<div class="hp-list hp-detail <?= $isPiutang ? 'hp-list--piutang' : 'hp-list--hutang' ?>">
+    <section class="hp-hero">
+        <div class="hp-hero__main">
+            <nav class="hp-crumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a href="<?= base_url('hutangpiutang/dashboard') ?>">Hutang Piutang</a></li>
+                    <li><a href="<?= base_url('hutangpiutang/' . $jenis) ?>"><?= esc(ucfirst($jenis)) ?></a></li>
+                    <li aria-current="page"><?= esc($row->kode) ?></li>
+                </ol>
+            </nav>
+
+            <div class="hp-hero__title-row">
+                <span class="hp-hero__mark" aria-hidden="true">
+                    <iconify-icon icon="<?= $isPiutang ? 'solar:hand-money-bold-duotone' : 'solar:wallet-money-bold-duotone' ?>"></iconify-icon>
+                </span>
+                <div class="hp-detail__heading">
+                    <h1>Detail <?= $isPiutang ? 'Piutang' : 'Hutang' ?></h1>
+                    <p class="hp-detail__subline">
+                        <span class="hp-detail__code"><?= esc($row->kode) ?></span>
+                        <span><?= esc($namaPihak) ?></span>
+                        <span><?= esc($unitName) ?></span>
+                    </p>
+                    <div class="hp-detail__badges">
+                        <span class="hp-status <?= $statusClass ?>"><?= esc($statusLabel) ?></span>
+                        <span class="hp-tag"><?= esc($sumberLabel) ?></span>
+                        <?php if ($scopeLabel !== '') : ?>
+                            <span class="hp-tag"><?= esc($scopeLabel) ?></span>
                         <?php endif; ?>
-                        <div class="small text-muted mt-2 mb-0">
-                            Penandaan administratif — bukan transaksi pembayaran. Tidak ada jurnal,
-                            tidak ada movement Kas/Bank, dan saldo kas/bank tidak berubah.
-                            <?php if (! $settledLegacy) : ?>
-                                Jejak settlement tetap disimpan sebagai riwayat.
-                            <?php endif; ?>
-                        </div>
+                        <?php if ((int) ($row->is_projection ?? 0) === 1) : ?>
+                            <span class="hp-tag">Proyeksi</span>
+                        <?php endif; ?>
+                        <?php if ($settledLegacy) : ?>
+                            <span class="hp-tag hp-tag--warn">Lunas legacy</span>
+                        <?php elseif ($pernahLegacy) : ?>
+                            <span class="hp-tag">Legacy dibatalkan</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="hp-hero__actions hp-detail__actions">
+            <a class="hp-btn hp-btn--ghost" href="<?= base_url('hutangpiutang/' . $jenis) ?>">
+                <iconify-icon icon="solar:alt-arrow-left-linear" aria-hidden="true"></iconify-icon>
+                Kembali
+            </a>
+            <a class="hp-btn hp-btn--ghost" href="<?= base_url('hutangpiutang/cetak/' . $row->id) ?>" target="_blank" rel="noopener">
+                <iconify-icon icon="solar:printer-bold" aria-hidden="true"></iconify-icon>
+                Cetak
+            </a>
+            <?php if ($bisaBayar) : ?>
+                <button type="button" class="hp-btn hp-btn--primary" data-bs-toggle="modal" data-bs-target="#bayar-modal">
+                    <iconify-icon icon="solar:wallet-money-bold" aria-hidden="true"></iconify-icon>
+                    Catat Pembayaran
+                </button>
+            <?php elseif ($bisaAntarUnit) : ?>
+                <button type="button" class="hp-btn hp-btn--primary" data-bs-toggle="modal" data-bs-target="#antar-unit-modal">
+                    <iconify-icon icon="solar:transfer-horizontal-bold-duotone" aria-hidden="true"></iconify-icon>
+                    Catat Pelunasan Antar Unit
+                </button>
+            <?php endif; ?>
+            <?php if ($bisaKompensasi) : ?>
+                <button type="button" class="hp-btn hp-btn--ghost" data-bs-toggle="modal" data-bs-target="#kompensasi-modal">
+                    <iconify-icon icon="solar:refresh-circle-bold" aria-hidden="true"></iconify-icon>
+                    Kompensasi
+                </button>
+            <?php endif; ?>
+            <?php if ($settledLegacy && $can_input) : ?>
+                <button type="button" class="hp-btn hp-btn--warn" data-bs-toggle="modal" data-bs-target="#batal-legacy-modal">
+                    <iconify-icon icon="solar:undo-left-bold" aria-hidden="true"></iconify-icon>
+                    Batalkan Pelunasan Legacy
+                </button>
+            <?php elseif ($bisaLegacy) : ?>
+                <button type="button" class="hp-btn hp-btn--ghost" data-bs-toggle="modal" data-bs-target="#legacy-modal">
+                    <iconify-icon icon="solar:shield-check-bold" aria-hidden="true"></iconify-icon>
+                    Tandai Lunas Legacy
+                </button>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <section class="hp-detail__balance" aria-label="Ringkasan nilai">
+        <div class="hp-detail__balance-main">
+            <div class="hp-detail__eyebrow"><?= $isPiutang ? 'Sisa piutang' : 'Sisa hutang' ?></div>
+            <div class="hp-detail__balance-value <?= $outstanding ? '' : 'is-clear' ?>"><?= $rp($sisa) ?></div>
+            <div class="hp-detail__balance-sub">
+                <span><?= $outstanding ? ($isPiutang ? 'Belum diterima' : 'Belum dibayar') : 'Tidak ada sisa' ?></span>
+                <span aria-hidden="true">·</span>
+                <span>Total <?= $rp($total) ?></span>
+            </div>
+            <?php if ($settledLegacy && $dibayar <= 0) : ?>
+                <div class="hp-detail__settlement">
+                    <iconify-icon icon="solar:shield-check-bold" aria-hidden="true"></iconify-icon>
+                    <span>Ditutup lewat settlement legacy — bukan pembayaran.</span>
+                </div>
+            <?php else : ?>
+                <div class="hp-detail__progress">
+                    <div class="hp-detail__progress-head">
+                        <span><?= $isPiutang ? 'Diterima' : 'Dibayar' ?> <?= $rp($dibayar) ?></span>
+                        <strong><?= $persen ?>%</strong>
+                    </div>
+                    <div class="hp-detail__bar" role="progressbar" aria-valuenow="<?= $persen ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Progress pembayaran">
+                        <span style="width: <?= $persen ?>%"></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <div class="hp-detail__balance-side">
+            <div class="hp-detail__side-row">
+                <span class="hp-detail__side-label">Status</span>
+                <span class="hp-status <?= $statusClass ?>"><?= esc($statusLabel) ?></span>
+            </div>
+            <div class="hp-detail__side-row">
+                <span class="hp-detail__side-label">Jatuh tempo</span>
+                <div class="hp-due <?= esc($due['class']) ?>">
+                    <span class="hp-due__date"><?= esc($due['date']) ?></span>
+                    <?php if ($dueNote !== '') : ?>
+                        <small><?= esc($dueNote) ?></small>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="hp-detail__side-row">
+                <span class="hp-detail__side-label">Pembayaran terakhir</span>
+                <div class="hp-detail__side-value">
+                    <?php if ($pembayaranTerakhir) : ?>
+                        <strong><?= $rp($pembayaranTerakhir->jumlah_bayar ?? 0) ?></strong>
+                        <small><?= esc($tgl($pembayaranTerakhir->tanggal_bayar ?? null)) ?></small>
+                    <?php else : ?>
+                        <span class="hp-detail__side-value-empty">Belum ada</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <?php if ($can_input && $outstanding && $isMutasi && empty($antarUnit)) : ?>
+        <div class="hp-note hp-note--warn">
+            <iconify-icon icon="solar:danger-triangle-bold" aria-hidden="true"></iconify-icon>
+            <p class="mb-0">Pelunasan antar unit belum bisa dicatat dari halaman ini — rekening atau posisi tidak memenuhi syarat.</p>
+        </div>
+    <?php endif; ?>
+    <?php if ($outstanding && $isMutasi && $isPiutang) : ?>
+        <div class="hp-note">
+            <iconify-icon icon="solar:info-circle-bold-duotone" aria-hidden="true"></iconify-icon>
+            <p class="mb-0">Pelunasan dilakukan oleh unit yang berhutang. Form pelunasan mencatat dana dari unit penghutang ke unit ini.</p>
+        </div>
+    <?php endif; ?>
+    <?php if ($can_input && ! $settledLegacy && ! $bisaLegacy && ! $outstanding) : ?>
+        <div class="hp-note">
+            <iconify-icon icon="solar:info-circle-bold-duotone" aria-hidden="true"></iconify-icon>
+            <p class="mb-0"><?= esc($alasanLegacy) ?></p>
+        </div>
+    <?php endif; ?>
+    <?php if ($row->sumber_tipe === HutangPiutangService::SUMBER_PEMBELIAN && $outstanding) : ?>
+        <div class="hp-note">
+            <iconify-icon icon="solar:info-circle-bold-duotone" aria-hidden="true"></iconify-icon>
+            <p class="mb-0">Pembayaran hutang supplier dicatat lewat <a href="<?= base_url('daftar_tagihan') ?>">Daftar Tagihan Hutang</a>.</p>
+        </div>
+    <?php endif; ?>
+
+    <div class="hp-detail__grid">
+        <section class="hp-panel hp-detail__panel" aria-labelledby="hp-doc-title">
+            <div class="hp-detail__panel-head">
+                <span class="hp-detail__panel-icon" aria-hidden="true">
+                    <iconify-icon icon="solar:document-text-bold"></iconify-icon>
+                </span>
+                <div>
+                    <h2 id="hp-doc-title">Informasi dokumen</h2>
+                    <p>Rincian posisi dan asal transaksi.</p>
+                </div>
+            </div>
+
+            <dl class="hp-detail__facts">
+                <div class="hp-detail__fact">
+                    <dt>Kode</dt>
+                    <dd><?= esc($row->kode) ?></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Pihak</dt>
+                    <dd><?= esc($namaPihak) ?></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Unit</dt>
+                    <dd><?= esc($unitName) ?></dd>
+                </div>
+                <?php if ($isMutasi && $lawanUnit !== null) : ?>
+                    <div class="hp-detail__fact">
+                        <dt>Unit lawan</dt>
+                        <dd><?= esc($lawanUnit) ?></dd>
                     </div>
                 <?php endif; ?>
-
-                <div class="mt-3 d-flex gap-2 flex-wrap">
-                    <a href="<?= base_url('hutangpiutang/cetak/' . $row->id) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">Cetak Bukti</a>
-                    <?php if ($can_input && $outstanding && $row->sumber_tipe === 'mutasi_unit') : ?>
-                        <?php if (!empty($antarUnit)) : ?>
-                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#antar-unit-modal">Catat Pelunasan Antar Unit</button>
-                        <?php else : ?>
-                            <span class="small text-muted align-self-center">Pelunasan antar unit belum bisa dicatat dari halaman ini — rekening atau posisi tidak memenuhi syarat.</span>
+                <div class="hp-detail__fact">
+                    <dt>Tanggal</dt>
+                    <dd><?= esc($tgl($row->tanggal ?? null)) ?></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Jatuh tempo</dt>
+                    <dd>
+                        <?= esc($due['date']) ?>
+                        <?php if ($dueNote !== '') : ?>
+                            <span class="hp-detail__fact-note">(<?= esc($dueNote) ?>)</span>
                         <?php endif; ?>
-                    <?php endif; ?>
-                    <?php if ($can_input && $authoritative && $row->status !== 'lunas' && $row->sumber_tipe !== 'kasbon') : ?>
-                        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bayar-modal">Catat Pembayaran</button>
-                    <?php endif; ?>
-                    <?php if ($bisaKompensasi) : ?>
-                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#kompensasi-modal">Kompensasi</button>
-                    <?php endif; ?>
-                    <?php if ($settledLegacy && $can_input) : ?>
-                        <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#batal-legacy-modal">Batalkan Pelunasan Legacy</button>
-                    <?php elseif ($bisaLegacy) : ?>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#legacy-modal">Tandai Lunas Legacy</button>
-                    <?php endif; ?>
+                    </dd>
                 </div>
-                <?php if ($outstanding && $row->sumber_tipe === 'mutasi_unit' && $row->jenis === 'piutang') : ?>
-                    <div class="small text-muted mt-2 mb-0">Pelunasan dilakukan oleh unit yang berhutang. Form di atas mencatat dana dari unit penghutang ke unit ini.</div>
+                <div class="hp-detail__fact">
+                    <dt>Sumber</dt>
+                    <dd><?= esc($sumberLabel) ?></dd>
+                </div>
+                <?php if ($scopeLabel !== '') : ?>
+                    <div class="hp-detail__fact">
+                        <dt>Scope</dt>
+                        <dd><?= esc($scopeLabel) ?></dd>
+                    </div>
                 <?php endif; ?>
-                <?php if ($can_input && ! $settledLegacy && ! $bisaLegacy && ! $outstanding) : ?>
-                    <div class="small text-muted mt-2 mb-0"><?= esc($alasanLegacy) ?></div>
+                <?php if ($isMutasi && $pasanganHutang && $pasanganPiutang) : ?>
+                    <div class="hp-detail__fact hp-detail__fact--wide">
+                        <dt>Pasangan</dt>
+                        <dd class="hp-detail__pair">
+                            <span class="hp-detail__pair-item">
+                                <span class="hp-detail__pair-label">Hutang</span>
+                                <a href="<?= base_url('hutangpiutang/detail/' . (int) $pasanganHutang->id) ?>"><?= esc($pasanganHutang->kode) ?></a>
+                            </span>
+                            <span class="hp-detail__pair-item">
+                                <span class="hp-detail__pair-label">Piutang</span>
+                                <a href="<?= base_url('hutangpiutang/detail/' . (int) $pasanganPiutang->id) ?>"><?= esc($pasanganPiutang->kode) ?></a>
+                            </span>
+                        </dd>
+                    </div>
                 <?php endif; ?>
+            </dl>
+        </section>
+
+        <div class="hp-detail__stack">
+            <section class="hp-panel hp-detail__panel" aria-labelledby="hp-history-title">
+            <div class="hp-detail__panel-head">
+                <span class="hp-detail__panel-icon" aria-hidden="true">
+                    <iconify-icon icon="solar:history-bold-duotone"></iconify-icon>
+                </span>
+                <div>
+                    <h2 id="hp-history-title">Riwayat pembayaran</h2>
+                    <p><?= count($pembayaran) ?> transaksi tercatat.</p>
+                </div>
             </div>
+
+            <?php if (empty($pembayaran)) : ?>
+                <div class="hp-detail__empty">
+                    <span class="hp-detail__empty-icon" aria-hidden="true">
+                        <iconify-icon icon="solar:bill-list-bold-duotone"></iconify-icon>
+                    </span>
+                    <h3>Belum ada pembayaran</h3>
+                    <p><?= $outstanding ? 'Pembayaran yang dicatat akan muncul di sini.' : 'Posisi ini sudah tidak memiliki sisa.' ?></p>
+                </div>
+            <?php else : ?>
+                <ol class="hp-detail__timeline">
+                    <?php foreach ($pembayaran as $p) :
+                        $tunai = (float) ($p->bayar_tunai ?? 0);
+                        $bank  = (float) ($p->bayar_bank ?? 0);
+                    ?>
+                        <li class="hp-detail__timeline-item">
+                            <span class="hp-detail__timeline-dot" aria-hidden="true"></span>
+                            <div class="hp-detail__timeline-body">
+                                <div class="hp-detail__timeline-head">
+                                    <strong><?= $rp($p->jumlah_bayar ?? 0) ?></strong>
+                                    <span><?= esc($tgl($p->tanggal_bayar ?? null)) ?></span>
+                                </div>
+                                <div class="hp-detail__timeline-meta">
+                                    <?php if ($tunai > 0) : ?>
+                                        <span>Tunai <?= $rp($tunai) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($bank > 0) : ?>
+                                        <span>Bank <?= $rp($bank) ?></span>
+                                    <?php endif; ?>
+                                    <span class="hp-tag"><?= esc($labelPembayaran($p->sumber ?? '')) ?></span>
+                                </div>
+                                <?php if (trim((string) ($p->keterangan ?? '')) !== '') : ?>
+                                    <p class="hp-detail__timeline-note"><?= esc($p->keterangan) ?></p>
+                                <?php endif; ?>
+                            </div>
+                        </li>
+                    <?php endforeach; ?>
+                </ol>
+            <?php endif; ?>
+            </section>
+
+            <?php if (! empty($row->created_at) || ! empty($row->updated_at)) : ?>
+                <section class="hp-panel hp-detail__panel hp-detail__trail" aria-labelledby="hp-trail-title">
+                    <div class="hp-detail__panel-head">
+                        <span class="hp-detail__panel-icon" aria-hidden="true">
+                            <iconify-icon icon="solar:clock-circle-bold"></iconify-icon>
+                        </span>
+                        <div>
+                            <h2 id="hp-trail-title">Jejak dokumen</h2>
+                            <p>Waktu pencatatan sistem.</p>
+                        </div>
+                    </div>
+                    <dl class="hp-detail__facts">
+                        <?php if (! empty($row->created_at)) : ?>
+                            <div class="hp-detail__fact">
+                                <dt>Dibuat</dt>
+                                <dd><?= esc($tglWaktu($row->created_at)) ?></dd>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (! empty($row->updated_at)) : ?>
+                            <div class="hp-detail__fact">
+                                <dt>Diperbarui</dt>
+                                <dd><?= esc($tglWaktu($row->updated_at)) ?></dd>
+                            </div>
+                        <?php endif; ?>
+                    </dl>
+                </section>
+            <?php endif; ?>
         </div>
     </div>
 
-    <div class="col-lg-7">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="fw-semibold mb-3">Riwayat Pembayaran</h5>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle">
-                        <thead>
-                            <tr><th>Tanggal</th><th class="text-end">Tunai</th><th class="text-end">Bank</th><th class="text-end">Jumlah</th><th>Sumber</th><th>Keterangan</th></tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($pembayaran)) : ?>
-                                <tr><td colspan="6" class="text-center text-muted">Belum ada pembayaran.</td></tr>
-                            <?php else : foreach ($pembayaran as $p) : ?>
-                                <tr>
-                                    <td><?= $p->tanggal_bayar ? date('d-m-Y', strtotime($p->tanggal_bayar)) : '-' ?></td>
-                                    <td class="text-end"><?= $rp($p->bayar_tunai) ?></td>
-                                    <td class="text-end"><?= $rp($p->bayar_bank) ?></td>
-                                    <td class="text-end fw-semibold"><?= $rp($p->jumlah_bayar) ?></td>
-                                    <td><span class="badge bg-light text-dark"><?= esc($p->sumber) ?></span></td>
-                                    <td><?= esc($p->keterangan ?: '-') ?></td>
-                                </tr>
-                            <?php endforeach; endif; ?>
-                        </tbody>
-                    </table>
+    <?php if ($hasNotes) : ?>
+        <section class="hp-panel hp-detail__panel hp-detail__notes" aria-labelledby="hp-notes-title">
+            <div class="hp-detail__panel-head">
+                <span class="hp-detail__panel-icon" aria-hidden="true">
+                    <iconify-icon icon="solar:file-text-line-duotone"></iconify-icon>
+                </span>
+                <div>
+                    <h2 id="hp-notes-title">Catatan dokumen</h2>
+                    <p><?= esc($notesSubtitle) ?></p>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
 
+            <?php if ($hasUraian || $hasKeterangan) : ?>
+                <dl class="hp-detail__facts hp-detail__facts--notes">
+                    <?php if ($hasUraian) : ?>
+                        <div class="hp-detail__fact hp-detail__fact--wide">
+                            <dt>Uraian</dt>
+                            <dd class="hp-detail__prose"><?= esc($row->uraian) ?></dd>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($hasKeterangan) : ?>
+                        <div class="hp-detail__fact hp-detail__fact--wide">
+                            <dt>Keterangan</dt>
+                            <dd class="hp-detail__prose"><?= esc($row->keterangan) ?></dd>
+                        </div>
+                    <?php endif; ?>
+                </dl>
+            <?php endif; ?>
+
+            <?php if ($isMutasi) : ?>
+                <div class="hp-detail__context">
+                    <iconify-icon icon="solar:transfer-horizontal-bold-duotone" aria-hidden="true"></iconify-icon>
+                    <p class="mb-0">
+                        <?= $isPiutang
+                            ? 'Sisi piutang dari mutasi antar unit. Pelunasan dicatat oleh unit yang berhutang dan mengurangi sisa pasangannya.'
+                            : 'Sisi hutang dari mutasi antar unit. Pelunasan mengurangi sisa hutang ini sekaligus sisa piutang pasangannya.' ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($settledLegacy || $pernahLegacy) : ?>
+        <section class="hp-panel hp-detail__panel hp-detail__audit <?= $settledLegacy ? 'is-warning' : 'is-neutral' ?>" aria-labelledby="hp-audit-title">
+            <div class="hp-detail__panel-head">
+                <span class="hp-detail__panel-icon" aria-hidden="true">
+                    <iconify-icon icon="<?= $settledLegacy ? 'solar:shield-check-bold' : 'solar:refresh-circle-bold' ?>"></iconify-icon>
+                </span>
+                <div>
+                    <h2 id="hp-audit-title"><?= $settledLegacy ? 'Lunas legacy' : 'Pelunasan legacy dibatalkan' ?></h2>
+                    <p>Penandaan administratif, bukan transaksi pembayaran.</p>
+                </div>
+                <span class="hp-tag <?= $settledLegacy ? 'hp-tag--warn' : '' ?>">
+                    <?= $settledLegacy ? 'Settlement aktif' : 'Dibatalkan' ?>
+                </span>
+            </div>
+
+            <dl class="hp-detail__facts">
+                <div class="hp-detail__fact">
+                    <dt>Tanggal settlement</dt>
+                    <dd><?= esc($tgl($row->tanggal_settlement_legacy ?? null)) ?></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Jenis settlement</dt>
+                    <dd><span class="hp-tag">legacy</span></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Dicatat oleh</dt>
+                    <dd><?= esc($row->cutoff_closed_by ? '#' . $row->cutoff_closed_by : '—') ?></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Waktu pencatatan</dt>
+                    <dd><?= esc($tglWaktu($row->cutoff_closed_at ?? null)) ?></dd>
+                </div>
+                <div class="hp-detail__fact">
+                    <dt>Sisa sebelum settlement</dt>
+                    <dd><?= $rp($row->sisa_legacy_sebelum ?? 0) ?></dd>
+                </div>
+                <?php if (! $settledLegacy) : ?>
+                    <div class="hp-detail__fact">
+                        <dt>Status</dt>
+                        <dd>Sudah dibatalkan — kembali outstanding</dd>
+                    </div>
+                    <div class="hp-detail__fact">
+                        <dt>Waktu pembatalan</dt>
+                        <dd><?= esc($tglWaktu($row->legacy_dibatalkan_at ?? null)) ?></dd>
+                    </div>
+                    <div class="hp-detail__fact">
+                        <dt>Dibatalkan oleh</dt>
+                        <dd><?= esc($row->legacy_dibatalkan_by ? '#' . $row->legacy_dibatalkan_by : '—') ?></dd>
+                    </div>
+                    <div class="hp-detail__fact hp-detail__fact--wide">
+                        <dt>Alasan pembatalan</dt>
+                        <dd class="hp-detail__prose"><?= esc($row->legacy_alasan_pembatalan ?: '—') ?></dd>
+                    </div>
+                <?php endif; ?>
+            </dl>
+
+            <p class="hp-detail__audit-note">
+                Penandaan administratif — bukan transaksi pembayaran. Tidak ada jurnal, tidak ada movement Kas/Bank, dan saldo kas/bank tidak berubah.
+                <?php if (! $settledLegacy) : ?>
+                    Jejak settlement tetap disimpan sebagai riwayat.
+                <?php endif; ?>
+            </p>
+        </section>
+    <?php endif; ?>
 <?php if ($can_input && $authoritative && $row->status !== 'lunas') : ?>
 <div class="modal fade" id="bayar-modal" tabindex="-1">
     <div class="modal-dialog">
@@ -442,3 +852,5 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <?php endif; ?>
+
+</div>

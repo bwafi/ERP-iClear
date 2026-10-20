@@ -46,6 +46,50 @@ final class HutangPiutangDetailLinkTest extends CIUnitTestCase
         $this->assertStringContainsString('belum bisa dicatat dari halaman ini', $html);
     }
 
+    public function testDetailMenampilkanRingkasanDanRiwayatPembayaran(): void
+    {
+        $html = $this->renderDetail('hutang', $this->antarUnitData(), [
+            (object) [
+                'tanggal_bayar' => '2026-10-19',
+                'bayar_tunai' => 400,
+                'bayar_bank' => 600,
+                'jumlah_bayar' => 1000,
+                'sumber' => 'antar_unit',
+                'keterangan' => 'Pelunasan penuh',
+            ],
+        ]);
+
+        $this->assertStringContainsString('hp-detail__balance', $html);
+        $this->assertStringContainsString('Sisa hutang', $html);
+        $this->assertStringContainsString('Informasi dokumen', $html);
+        $this->assertStringContainsString('Riwayat pembayaran', $html);
+        $this->assertStringContainsString('Catatan dokumen', $html);
+        $this->assertStringContainsString('Pelunasan penuh', $html);
+        $this->assertStringContainsString('Tunai Rp 400', $html);
+        $this->assertStringContainsString('Bank Rp 600', $html);
+    }
+
+    public function testDetailLegacyMenampilkanJejakSettlement(): void
+    {
+        $html = $this->renderDetail('hutang', null, [], [
+            'status' => 'lunas',
+            'total' => 500,
+            'sisa' => 0,
+            'scope' => 'legacy',
+            'cutoff_reason' => 'legacy',
+            'tanggal_settlement_legacy' => '2026-10-01',
+            'cutoff_closed_by' => 7,
+            'cutoff_closed_at' => '2026-10-02 10:00:00',
+            'sisa_legacy_sebelum' => 500,
+        ]);
+
+        $this->assertStringContainsString('Ditutup lewat settlement legacy', $html);
+        $this->assertStringContainsString('Lunas legacy', $html);
+        $this->assertStringContainsString('Settlement aktif', $html);
+        $this->assertStringContainsString('Sisa sebelum settlement', $html);
+        $this->assertStringContainsString('Rp 500', $html);
+    }
+
     private function antarUnitData(): array
     {
         return [
@@ -65,10 +109,10 @@ final class HutangPiutangDetailLinkTest extends CIUnitTestCase
         ];
     }
 
-    private function renderDetail(string $jenis, ?array $antarUnit = null): string
+    private function renderDetail(string $jenis, ?array $antarUnit = null, array $pembayaran = [], array $rowOverrides = []): string
     {
         return view('hutangpiutang/detail', [
-            'row' => (object) [
+            'row' => (object) array_merge([
                 'id' => 10,
                 'kode' => 'MUT-1-2',
                 'jenis' => $jenis,
@@ -94,9 +138,9 @@ final class HutangPiutangDetailLinkTest extends CIUnitTestCase
                 'sisa_legacy_sebelum' => null,
                 'legacy_dibatalkan_by' => null,
                 'legacy_alasan_pembatalan' => null,
-            ],
+            ], $rowOverrides),
             'unit' => (object) ['NAMA_UNIT' => 'Unit 1'],
-            'pembayaran' => [],
+            'pembayaran' => $pembayaran,
             'can_input' => true,
             'lawan_kompensasi' => [],
             'bank' => [],
