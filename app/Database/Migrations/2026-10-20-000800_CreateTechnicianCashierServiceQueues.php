@@ -79,10 +79,9 @@ class CreateTechnicianCashierServiceQueues extends Migration
 
     public function down()
     {
+        $hasWorkflowData = false;
         foreach (['service_workflow_event', 'service_workflow'] as $table) {
-            if ($this->db->tableExists($table) && $this->db->table($table)->countAllResults() > 0) {
-                throw new RuntimeException('Rollback ditolak: histori alur service sudah digunakan.');
-            }
+            $hasWorkflowData = $hasWorkflowData || ($this->db->tableExists($table) && $this->db->table($table)->countAllResults() > 0);
         }
         $this->removeGrants(self::TECH_MENU);
         $this->removeGrants(self::CASH_MENU);
@@ -93,8 +92,10 @@ class CreateTechnicianCashierServiceQueues extends Migration
             }
             $this->forge->dropTable('service_workflow_menu_state', true);
         }
-        $this->forge->dropTable('service_workflow_event', true);
-        $this->forge->dropTable('service_workflow', true);
+        if (! $hasWorkflowData) {
+            $this->forge->dropTable('service_workflow_event', true);
+            $this->forge->dropTable('service_workflow', true);
+        }
     }
 
     private function assertMenuIdAvailable(int $id, string $route): void

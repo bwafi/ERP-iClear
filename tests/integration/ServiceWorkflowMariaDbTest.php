@@ -34,8 +34,9 @@ final class ServiceWorkflowMariaDbTest extends CIUnitTestCase
         try {
             $this->createPermissionFixtures($db);
             require_once APPPATH . 'Database/Migrations/2026-10-20-000800_CreateTechnicianCashierServiceQueues.php';
-            (new CreateTechnicianCashierServiceQueues(Database::forge($base)))->up();
-            (new CreateTechnicianCashierServiceQueues(Database::forge($base)))->up();
+            $migration = new CreateTechnicianCashierServiceQueues(Database::forge($base));
+            $migration->up();
+            $migration->up();
 
             self::assertSame(0, (int) $db->table('service_workflow')->where('service_idservice', 7001)->countAllResults(), 'Service lama tidak dipindahkan otomatis ke antrean baru.');
             self::assertSame(0, (int) $db->table('menu')->where('url', 'service')->get()->getRow()->show_menu);
@@ -90,6 +91,17 @@ final class ServiceWorkflowMariaDbTest extends CIUnitTestCase
             $workflow->markDone(8001, 12);
             self::assertSame(ServiceWorkflow::DONE, $this->status($db, 8001));
             self::assertSame(6, (int) $db->table('service_workflow_event')->where('service_idservice', 8001)->countAllResults());
+
+            $migration->down();
+            self::assertTrue($db->tableExists('service_workflow'), 'Rollback mempertahankan data antrean yang sudah tercatat.');
+            self::assertSame(ServiceWorkflow::DONE, $this->status($db, 8001));
+            self::assertSame(1, (int) $db->table('menu')->where('url', 'service')->get()->getRow()->show_menu);
+            self::assertSame(0, (int) $db->table('menu')->whereIn('idmenu', [ServiceWorkflowAccess::TECHNICIAN_MENU, ServiceWorkflowAccess::CASHIER_MENU])->countAllResults());
+            self::assertSame([31], array_map('intval', json_decode($db->table('jabatan')->where('ID_JABATAN', 701)->get()->getRow()->ROLES_JABATAN, true)));
+            $migration->up();
+            self::assertSame(ServiceWorkflow::DONE, $this->status($db, 8001), 'Migrasi ulang reaproveita os dados preservados.');
+            self::assertSame(0, (int) $db->table('menu')->where('url', 'service')->get()->getRow()->show_menu);
+            self::assertSame(1, (int) $db->table('menu')->where('url', 'antrean-kasir')->countAllResults(), 'Pemasangan ulang tidak menggandakan menu.');
         } finally {
             $admin->query('DROP DATABASE ' . $fixtureName);
         }
