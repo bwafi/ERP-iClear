@@ -33,7 +33,7 @@ final class ServiceWorkflowMariaDbTest extends CIUnitTestCase
         $db = Database::connect($base, false);
         try {
             $this->createPermissionFixtures($db);
-            require_once APPPATH . 'Database/Migrations/2026-10-20-000300_CreateTechnicianCashierServiceQueues.php';
+            require_once APPPATH . 'Database/Migrations/2026-10-20-000800_CreateTechnicianCashierServiceQueues.php';
             (new CreateTechnicianCashierServiceQueues(Database::forge($base)))->up();
             (new CreateTechnicianCashierServiceQueues(Database::forge($base)))->up();
 
