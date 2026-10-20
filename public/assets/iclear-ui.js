@@ -2,7 +2,7 @@
     'use strict';
 
     if (window.jQuery && window.jQuery.fn.dataTable) {
-        window.jQuery.extend(true, window.jQuery.fn.dataTable.defaults, {
+        var tableLanguage = {
             language: {
                 emptyTable: 'Belum ada data.',
                 zeroRecords: 'Tidak ada data yang cocok. Periksa pencarian atau filter.',
@@ -13,9 +13,15 @@
                 infoFiltered: '(disaring dari _MAX_ data)',
                 loadingRecords: 'Memuat data…',
                 processing: 'Sedang memproses…',
-                paginate: { first: 'Awal', last: 'Akhir', next: 'Berikutnya', previous: 'Sebelumnya' }
+                paginate: { first: 'Awal', last: 'Akhir', next: 'Berikutnya', previous: 'Sebelumnya' },
+                aria: { sortAscending: ': urutkan naik', sortDescending: ': urutkan turun' }
             }
-        });
+        };
+        window.jQuery.extend(true, window.jQuery.fn.dataTable.defaults, tableLanguage);
+        if (window.iclearEarlyTableDefaults) {
+            window.jQuery.extend(true, window.iclearEarlyTableDefaults, tableLanguage);
+        }
+        delete window.iclearEarlyTableDefaults;
     }
 
     function prepareTables(root) {
