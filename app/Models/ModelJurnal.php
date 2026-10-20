@@ -335,7 +335,6 @@ class ModelJurnal extends Model
         $builder_pendapatan->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_pendapatan->like('na.no_akun', '4', 'after'); // prefix 4 = pendapatan
         $builder_pendapatan->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_pendapatan->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if ($unit !== null) {
             $builder_pendapatan->groupStart();
@@ -370,7 +369,6 @@ class ModelJurnal extends Model
         $builder_beban_pokok->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_beban_pokok->like('na.no_akun', '5', 'after'); // prefix 5 = BEBAN POKOK PENJUALAN
         $builder_beban_pokok->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_beban_pokok->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if ($unit !== null) {
             $builder_beban_pokok->groupStart();
@@ -406,7 +404,6 @@ class ModelJurnal extends Model
         $builder_beban_operasional->like('na.no_akun', '6', 'after'); // prefix 6 = BEBAN OPERASIONAL
         $builder_beban_operasional->groupEnd();
         $builder_beban_operasional->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_beban_operasional->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if ($unit !== null) {
             $builder_beban_operasional->groupStart();
@@ -440,7 +437,6 @@ class ModelJurnal extends Model
         $builder_pendapatan_non_operasional->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_pendapatan_non_operasional->like('na.no_akun', '701', 'after'); // prefix 701 = PENDAPATAN NON OPERASIONAL
         $builder_pendapatan_non_operasional->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_pendapatan_non_operasional->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if ($unit !== null) {
             $builder_pendapatan_non_operasional->groupStart();
@@ -472,7 +468,6 @@ class ModelJurnal extends Model
         $builder_beban_non_operasional->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_beban_non_operasional->like('na.no_akun', '702', 'after'); // prefix 702 = BEBAN NON OPERASIONAL
         $builder_beban_non_operasional->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_beban_non_operasional->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if ($unit !== null) {
             $builder_beban_non_operasional->groupStart();

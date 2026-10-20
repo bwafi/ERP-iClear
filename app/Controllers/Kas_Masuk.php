@@ -168,7 +168,7 @@ class Kas_Masuk extends BaseController
                     'keterangan' => $deskripsi,
                     'id_referensi' => $insertId,
                     'tabel_referensi' => 'kas_masuk',
-                    'id_unit' => session('ID_UNIT'),
+                    'id_unit' => $idunit,
                     'id_akun' => session('ID_AKUN')
                 ];
 

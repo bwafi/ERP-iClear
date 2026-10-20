@@ -564,7 +564,6 @@ class LabaRugi extends BaseController
         $builder_pendapatan->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_pendapatan->like('na.no_akun', '4', 'after');
         $builder_pendapatan->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_pendapatan->where('RIGHT(na.no_akun, 7) !=', '0000000');
         
         if (!empty($id_units)) {
             $builder_pendapatan->whereIn('j.id_unit', $id_units);
@@ -592,7 +591,6 @@ class LabaRugi extends BaseController
         $builder_beban_pokok->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_beban_pokok->like('na.no_akun', '5', 'after');
         $builder_beban_pokok->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_beban_pokok->where('RIGHT(na.no_akun, 7) !=', '0000000');
 
         if (!empty($id_units)) {
             $builder_beban_pokok->whereIn('j.id_unit', $id_units);
@@ -608,7 +606,7 @@ class LabaRugi extends BaseController
         $builder_beban_pokok->orderBy('na.no_akun', 'asc');
         $beban_pokok_penjualan = $builder_beban_pokok->get()->getResult();
 
-        // Beban Operasional (prefix 6 dan 7)
+        // Beban Operasional (prefix 6 dan 7 selain akun non operasional)
         $builder_beban_operasional = $db->table('no_akun na');
         $builder_beban_operasional->select("
             na.no_akun,
@@ -620,8 +618,9 @@ class LabaRugi extends BaseController
             ->like('na.no_akun', '6', 'after')
             ->orLike('na.no_akun', '7', 'after')
             ->groupEnd();
+        $builder_beban_operasional->notLike('na.no_akun', '701', 'after');
+        $builder_beban_operasional->notLike('na.no_akun', '702', 'after');
         $builder_beban_operasional->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_beban_operasional->where('RIGHT(na.no_akun, 7) !=', '0000000');
         
         if (!empty($id_units)) {
             $builder_beban_operasional->whereIn('j.id_unit', $id_units);
@@ -647,7 +646,6 @@ class LabaRugi extends BaseController
         $builder_pendapatan_non_operasional->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_pendapatan_non_operasional->like('na.no_akun', '701', 'after'); // prefix 701 = PENDAPATAN NON OPERASIONAL
         $builder_pendapatan_non_operasional->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_pendapatan_non_operasional->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if (!empty($id_units)) {
             $builder_pendapatan_non_operasional->whereIn('j.id_unit', $id_units);
@@ -673,7 +671,6 @@ class LabaRugi extends BaseController
         $builder_beban_non_operasional->join('jurnal j', 'na.no_akun = j.no_akun', 'left');
         $builder_beban_non_operasional->like('na.no_akun', '702', 'after'); // prefix 702 = BEBAN NON OPERASIONAL
         $builder_beban_non_operasional->where('CHAR_LENGTH(na.no_akun)', 10);
-        $builder_beban_non_operasional->where('RIGHT(na.no_akun, 7) !=', '0000000'); // bukan parent
 
         if (!empty($id_units)) {
             $builder_beban_non_operasional->whereIn('j.id_unit', $id_units);

@@ -330,7 +330,7 @@ class Kas_Keluar extends BaseController
                     'keterangan' => $deskripsi,
                     'id_referensi' => $insertId,
                     'tabel_referensi' => 'kas_keluar',
-                    'id_unit' => session('ID_UNIT'),
+                    'id_unit' => $idunit,
                     'id_akun' => session('ID_AKUN')
                 ];
 

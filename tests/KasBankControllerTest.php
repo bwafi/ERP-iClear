@@ -2492,6 +2492,83 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
     }
 
+    public function testKasMasukLintasUnitMencatatUnitSumberPadaJurnal(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+        $this->seedRekeningResmiUnitTiga();
+
+        $response = $this->post('insert_kas_masuk', [
+            'tanggal' => $this->tglMulai,
+            'deskripsi' => 'Fixture kas masuk unit B',
+            'unit_idunit' => '3',
+            'akun' => [[
+                'no_akun' => '5-1010',
+                'jumlah' => '100000',
+                'posisi_drk' => 'debet',
+                'penerima' => '5',
+                'no_rekening' => '5',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+        $response->assertStatus(302);
+        $this->assertSame('', $this->flashGagal());
+
+        $source = $this->db->query('SELECT idkas_masuk, idunit, jumlah FROM db_kas_masuk')->getRow();
+        $this->assertNotNull($source);
+        $journal = $this->db->table('jurnal')->where('tabel_referensi', 'kas_masuk')
+            ->where('id_referensi', $source->idkas_masuk)->get()->getResult();
+        $this->assertCount(1, $journal);
+        $this->assertSame(3, (int) $source->idunit);
+        $this->assertSame(3, (int) $journal[0]->id_unit);
+        $this->assertSame((int) $source->jumlah, (int) $journal[0]->debet);
+    }
+
+    public function testKasKeluarLintasUnitMencatatUnitSumberPadaJurnal(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+        $this->seedRekeningResmiUnitTiga();
+
+        $response = $this->post('insert_kas_keluar', [
+            'tanggal' => $this->tglMulai,
+            'deskripsi' => 'Fixture kas keluar unit B',
+            'unit_idunit' => '3',
+            'akun' => [[
+                'no_akun' => '5-1010',
+                'jumlah' => '100000',
+                'posisi_drk' => 'debet',
+                'penerima' => '5',
+                'no_rekening' => '5',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+        $response->assertStatus(302);
+        $this->assertSame('', $this->flashGagal());
+
+        $source = $this->db->query('SELECT idkas_keluar, idunit, jumlah FROM db_kas_keluar')->getRow();
+        $this->assertNotNull($source);
+        $journal = $this->db->table('jurnal')->where('tabel_referensi', 'kas_keluar')
+            ->where('id_referensi', $source->idkas_keluar)->get()->getResult();
+        $this->assertCount(1, $journal);
+        $this->assertSame(3, (int) $source->idunit);
+        $this->assertSame(3, (int) $journal[0]->id_unit);
+        $this->assertSame((int) $source->jumlah, (int) $journal[0]->debet);
+    }
+
+    private function seedRekeningResmiUnitTiga(): void
+    {
+        $this->db->query("INSERT INTO db_unit (idunit, NAMA_UNIT) VALUES (3, 'Unit C')");
+        $this->db->query("INSERT INTO db_bank (idbank, nama_bank, atas_nama, norek)
+            VALUES ('5', 'Bank Fixture', 'Unit C', '5003')");
+        $this->db->query("INSERT INTO db_akun_kas_bank
+            (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared)
+            VALUES (7, 3, 'BANK', 'Bank Unit C', '5', '1010202040', 'aktif', 0)");
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank
+            (akun_kas_bank_id, unit_id, nominal, keterangan)
+            VALUES (7, 3, 0, 'Entitlement Unit C')");
+    }
+
     // =================================================================
     // SALDO AWAL & ALOKASI REKENING SHARED TANPA VERIFIKASI STATEMENT
     //

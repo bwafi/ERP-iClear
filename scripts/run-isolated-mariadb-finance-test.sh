@@ -62,6 +62,12 @@ docker run --rm --network "$NETWORK" \
         php vendor/bin/phpunit --no-coverage tests/integration/InventoryBatchMariaDbTest.php
         php vendor/bin/phpunit --no-coverage tests/integration/KartuHargaMigrationMariaDbTest.php
         php vendor/bin/phpunit --no-coverage tests/integration/SupplierReturnAvailabilityMariaDbTest.php
+        php vendor/bin/phpunit --no-coverage tests/integration/LabaRugiParentPostingMariaDbTest.php
         php vendor/bin/phpunit --no-coverage tests/unit --filter="BalanceSheetReconciliationTest|DailyCashFlowServiceTest|FinanceMenuNavigationTest|InventoryLedgerMathTest|InventoryLedgerBridgeTest|JournalReportFiltersTest|KartuHargaWarrantyDefaultTest|SupplierCreditReconciliationTest|SupplierCreditJournalTest|SupplierCreditAllocatorTest|WarrantyJournalReconciliationTest|WarrantyServiceAccessTest|WarrantyTermTest|WarrantyClaimEligibilityTest|WarrantyExpenseJournalTest"
         php tests/integration/WarrantyStockMySql.php
+        env database.tests.hostname=mariadb-test database.tests.database=erp_finance_test \
+            database.tests.username=root database.tests.password= database.tests.DBDriver=MySQLi \
+            database.tests.DBPrefix=db_ database.tests.port=3306 \
+            php vendor/bin/phpunit --no-coverage --no-logging tests/KasBankControllerTest.php \
+            --filter="testKasMasukLintasUnitMencatatUnitSumberPadaJurnal|testKasKeluarLintasUnitMencatatUnitSumberPadaJurnal"
     '

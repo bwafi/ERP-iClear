@@ -45,7 +45,7 @@
         Jurnal tidak seimbang Rp <?= number_format($reconciliation['selisih_jurnal'], 0, ',', '.') ?>.
     <?php endif; ?>
     <?php if ($reconciliation['akun_tidak_terklasifikasi'] !== []): ?>
-        Akun belum terklasifikasi: <?= esc(implode(', ', $reconciliation['akun_tidak_terklasifikasi'])) ?>.
+        Akun belum terklasifikasi: <?= esc(implode(', ', array_map(static fn ($code) => trim((string) $code) === '' ? '(kode kosong)' : $code, $reconciliation['akun_tidak_terklasifikasi']))) ?>.
     <?php endif; ?>
     <strong>Belum Rekonsiliasi</strong> sampai saldo awal, nilai persediaan, dan transaksi antarcabang diverifikasi.
     <p class="mb-0 mt-2">Penjelasan selisih:
@@ -60,7 +60,8 @@
     <strong>Pemeriksaan jurnal sumber:</strong>
     <?= count($source_exceptions['tidak_seimbang']) ?> referensi tidak seimbang;
     <?= (int) $source_exceptions['baris_tanpa_referensi'] ?> baris tanpa referensi;
-    <?= count($invalid_journal_accounts) ?> baris dengan kode akun tidak valid/tidak terdaftar.
+    <?= (int) array_sum(array_column($invalid_journal_accounts, 'jumlah_baris')) ?> baris dalam
+    <?= count($invalid_journal_accounts) ?> kelompok kode akun tidak valid/tidak terdaftar.
     Pemeriksaan ini hanya mencakup jurnal yang tercatat; kelengkapan posting terhadap semua transaksi operasional belum dibuktikan.
 </div>
 
