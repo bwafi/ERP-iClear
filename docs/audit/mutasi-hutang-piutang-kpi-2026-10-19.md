@@ -52,7 +52,7 @@ Bukti dari DB lokal `erp_local`:
 - 48 pasang H/P = 96 baris; **44 pasang (88 baris) legacy** dan **4 pasang (8 baris) aktif** setelah backfill scope.
 - **0 pembayaran** antar unit — belum ada satu pun yang dilunasi.
 - 44 pasang pra-cut-off bertanggal **sebelum 2026-10-06** sudah menjadi `scope='legacy'`; 4 pasang sesudah cut-off tetap `active`.
-- **Update 2026-10-20:** 10 mutasi September yang sudah diterima secara fisik di-backfill dari `status=0` ke `status=1`; 20 baris H/P legacy baru (10 pasang, Rp6.129.161 per sisi). Sisa 3 mutasi `status=0` adalah mutasi Oktober (83 qty). Backup: `mutasi_backup_20261020_060623` dan `hutang_piutang_backup_20261020_060623`.
+- **Update 2026-10-20:** 10 mutasi September yang sudah diterima secara fisik di-backfill dari `status=0` ke `status=1`; 20 baris H/P legacy baru (10 pasang, Rp6.129.161 per sisi). Sisa 3 mutasi `status=0` adalah mutasi Oktober (83 qty). Backup: `mutasi_backup_20261020_060623` dan `hutang_piutang_backup_20261020_060623`. Skrip permanen: `php app/Scripts/backfill_mutasi_legacy.php --month=YYYY-MM [--execute]` (default dry-run).
 - 11 grup nomor nota duplikat (30 baris); **19 baris sudah di-renumber** dan unique index `uniq_mutasi_no_nota` terpasang.
 - 5 baris stok negatif.
 
