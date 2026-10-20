@@ -679,6 +679,12 @@ class TutupKasirSourceDefinition
     /** SUM(bayar_tunai) service selesai dalam rentang. */
     public function cashServiceRange(int $unitId, string $dari, string $sampai): int
     {
+        return ReportCalculationScope::remember(__METHOD__ . ':' . spl_object_id($this->db) . ":$unitId:$dari:$sampai",
+            fn () => $this->calculateCashServiceRange($unitId, $dari, $sampai));
+    }
+
+    private function calculateCashServiceRange(int $unitId, string $dari, string $sampai): int
+    {
         $row = $this->db->table('service')
             ->selectSum('bayar_tunai', 'total')
             ->where('DATE(' . ServiceCashRecognition::dateExpression() . ') >= ' . $this->db->escape($dari), null, false)
@@ -699,6 +705,12 @@ class TutupKasirSourceDefinition
      * jadi nilai negatif harus ikut terhitung agar totalnya sama.
      */
     public function transferServiceRange(int $unitId, string $dari, string $sampai): int
+    {
+        return ReportCalculationScope::remember(__METHOD__ . ':' . spl_object_id($this->db) . ":$unitId:$dari:$sampai",
+            fn () => $this->calculateTransferServiceRange($unitId, $dari, $sampai));
+    }
+
+    private function calculateTransferServiceRange(int $unitId, string $dari, string $sampai): int
     {
         $row = $this->db->table('service')
             ->select('COALESCE(SUM(COALESCE(harus_dibayar,0) - COALESCE(bayar_tunai,0)),0) AS total')
@@ -798,6 +810,12 @@ class TutupKasirSourceDefinition
      */
     public function ringkasanRange(int $unitId, string $dari, string $sampai): array
     {
+        return ReportCalculationScope::remember(__METHOD__ . ':' . spl_object_id($this->db) . ":$unitId:$dari:$sampai",
+            fn () => $this->calculateRingkasanRange($unitId, $dari, $sampai));
+    }
+
+    private function calculateRingkasanRange(int $unitId, string $dari, string $sampai): array
+    {
         $p = function (string $kolom) use ($unitId, $dari, $sampai) {
             return $this->db->table('penjualan')
                 ->where('DATE(tanggal) >=', $dari)
@@ -873,6 +891,12 @@ class TutupKasirSourceDefinition
      * @return array{cash: array<string,int>, transfer: array<string,int>, keluar: array<string,int>}
      */
     public function harianRange(int $unitId, string $dari, string $sampai): array
+    {
+        return ReportCalculationScope::remember(__METHOD__ . ':' . spl_object_id($this->db) . ":$unitId:$dari:$sampai",
+            fn () => $this->calculateHarianRange($unitId, $dari, $sampai));
+    }
+
+    private function calculateHarianRange(int $unitId, string $dari, string $sampai): array
     {
         $rowsPenjualan = $this->db->table('penjualan')
             ->select('DATE(tanggal) AS d', false)

@@ -95,6 +95,13 @@ class KpiCalculationService
      */
     public function calculateForEmployee(int $employeeId, int $unitId, string $month, string $year, string $context = 'default', ?string $date = null)
     {
+        $key = __METHOD__ . ':' . spl_object_id(\Config\Database::connect()) . ':' . json_encode([$employeeId, $unitId, $month, $year, $context, $date]);
+        return \App\Services\Finance\ReportCalculationScope::remember($key,
+            fn () => $this->calculateEmployeeFresh($employeeId, $unitId, $month, $year, $context, $date));
+    }
+
+    protected function calculateEmployeeFresh(int $employeeId, int $unitId, string $month, string $year, string $context = 'default', ?string $date = null)
+    {
         $date = $date ?? sprintf('%04d-%02d-15', (int)$year, (int)$month);
 
         // Target lookup: konteks sudah tunggal ('default') — konteks pemanggil

@@ -730,6 +730,11 @@ class TutupKasir extends BaseController
 
     public function assetberjalan()
     {
+        return \App\Services\Finance\ReportCalculationScope::run(fn () => $this->calculateAssetPage());
+    }
+
+    protected function calculateAssetPage()
+    {
         $scope = $this->resolveUnitScope();
         $list_unit      = $scope['list_unit'];
         $unit           = $scope['unit'];

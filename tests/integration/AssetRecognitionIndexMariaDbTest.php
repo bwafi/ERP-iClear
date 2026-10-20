@@ -22,13 +22,15 @@ final class AssetRecognitionIndexMariaDbTest extends CIUnitTestCase
         ], false);
         self::assertSame('erp_finance_test', $db->getDatabase());
         self::assertStringContainsString('MariaDB', $db->query('SELECT VERSION() AS version')->getRow()->version);
-        $db->query('CREATE TEMPORARY TABLE jurnal (idjurnal INT PRIMARY KEY, tabel_referensi VARCHAR(50), id_referensi INT, tanggal DATE)');
+        $db->query('CREATE TEMPORARY TABLE jurnal (idjurnal INT PRIMARY KEY, tabel_referensi VARCHAR(50), id_referensi VARCHAR(255), tanggal DATE)');
         $db->query('CREATE TEMPORARY TABLE service (idservice INT PRIMARY KEY, status_service INT, tanggal_selesai DATE, unit_idunit INT, bayar_tunai DECIMAL(18,2))');
         $db->query("INSERT INTO service VALUES (1,4,'2026-10-01',1,100),(2,2,NULL,1,200),(3,2,NULL,2,300),(4,1,NULL,1,400)");
-        $db->query("INSERT INTO jurnal VALUES (1,'service',2,'2026-10-02'),(2,'service',2,'2026-10-03'),(3,'service',3,'2026-09-30'),(4,'other',4,'2026-10-01')");
+        $db->query("INSERT INTO jurnal VALUES (1,'service','02','2026-10-02'),(2,'service','2','2026-10-03'),(3,'service','3','2026-09-30'),(4,'other','4','2026-10-01')");
         $sql = 'SELECT idservice, ' . ServiceCashRecognition::dateExpression()
             . ' AS recognized_date FROM service WHERE ' . ServiceCashRecognition::recognizedExpression() . ' ORDER BY idservice';
         $before = $db->query($sql)->getResultArray();
+        $legacy = $db->query("SELECT idservice, COALESCE(service.tanggal_selesai, (SELECT MIN(j.tanggal) FROM jurnal j WHERE j.tabel_referensi='service' AND j.id_referensi=service.idservice)) AS recognized_date FROM service WHERE (status_service=4 OR (status_service=2 AND EXISTS (SELECT 1 FROM jurnal j WHERE j.tabel_referensi='service' AND j.id_referensi=service.idservice))) ORDER BY idservice")->getResultArray();
+        self::assertSame($legacy, $before);
         require_once APPPATH . 'Database/Migrations/2026-10-20-000700_IndexServiceJournalRecognition.php';
         $migration = new IndexServiceJournalRecognition(Database::forge($db));
         $migration->up();
@@ -39,7 +41,7 @@ final class AssetRecognitionIndexMariaDbTest extends CIUnitTestCase
         $index = $db->query("SHOW INDEX FROM jurnal WHERE Key_name='idx_jurnal_source_date'")->getResultArray();
         self::assertCount(3, $index);
         self::assertSame(['tabel_referensi', 'id_referensi', 'tanggal'], array_column($index, 'Column_name'));
-        $plan = $db->query("EXPLAIN SELECT MIN(tanggal) FROM jurnal WHERE tabel_referensi='service' AND id_referensi=2")->getResultArray();
+        $plan = $db->query("EXPLAIN SELECT MIN(tanggal) FROM jurnal WHERE tabel_referensi='service' AND id_referensi='2'")->getResultArray();
         self::assertNotSame('ALL', $plan[0]['type']);
     }
 
