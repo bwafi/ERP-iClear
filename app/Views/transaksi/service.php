@@ -219,6 +219,8 @@
     }
 </style>
 
+<?php $workflowMode = $workflow_mode ?? null; ?>
+
 <div class="card shadow-none position-relative overflow-hidden mb-4 border-0">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <div class="d-flex align-items-center gap-3">
@@ -226,8 +228,8 @@
                 <i class="bi bi-tools fs-5"></i>
             </span>
             <div>
-                <h4 class="fw-semibold mb-0">Service</h4>
-                <p class="text-muted fs-3 mb-0">Input transaksi servis dalam 4 tahap</p>
+                <h4 class="fw-semibold mb-0"><?= $workflowMode === 'technician' ? 'Pekerjaan Teknisi' : ($workflowMode === 'cashier' ? 'Proses Antrean Kasir' : 'Service') ?></h4>
+                <p class="text-muted fs-3 mb-0">Satu transaksi service dengan empat tahap yang sama</p>
             </div>
         </div>
         <nav aria-label="breadcrumb">
@@ -235,7 +237,7 @@
                 <li class="breadcrumb-item">
                     <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Transaksi</a>
                 </li>
-                <li class="breadcrumb-item active" aria-current="page">Service</li>
+                <li class="breadcrumb-item active" aria-current="page"><?= $workflowMode === 'technician' ? 'Pekerjaan Teknisi' : ($workflowMode === 'cashier' ? 'Antrean Kasir' : 'Service') ?></li>
             </ol>
         </nav>
     </div>
@@ -289,7 +291,7 @@
                 <p class="text-muted fs-3 mb-3">Selesaikan langkah berurutan, langkah selesai bisa diklik untuk dikoreksi.</p>
 
                 <div class="service-rail" id="service-rail" role="tablist">
-                    <div class="service-rail-item is-active" data-step="pelanggan">
+                    <div class="service-rail-item is-active <?= $workflowMode === 'cashier' ? 'd-none' : '' ?>" data-step="pelanggan">
                         <a class="service-rail-link" id="pelanggan-tab" data-bs-toggle="tab" href="#pelanggan" role="tab"
                             aria-controls="pelanggan" aria-selected="true">
                             <span class="service-rail-node" id="node-pelanggan">1</span>
@@ -299,7 +301,7 @@
                             </span>
                         </a>
                     </div>
-                    <div class="service-rail-item <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="kerusakan">
+                    <div class="service-rail-item <?= $workflowMode === 'cashier' ? 'd-none' : '' ?> <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="kerusakan">
                         <a class="service-rail-link" id="kerusakan-tab" data-bs-toggle="tab" href="#kerusakan" role="tab"
                             aria-controls="kerusakan" aria-selected="false">
                             <span class="service-rail-node" id="node-kerusakan">2</span>
@@ -309,7 +311,7 @@
                             </span>
                         </a>
                     </div>
-                    <div class="service-rail-item <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="sparepart">
+                    <div class="service-rail-item <?= $workflowMode === 'technician' ? 'd-none' : '' ?> <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="sparepart">
                         <a class="service-rail-link" id="sparepart-tab" data-bs-toggle="tab" href="#sparepart" role="tab"
                             aria-controls="sparepart" aria-selected="false">
                             <span class="service-rail-node" id="node-sparepart">3</span>
@@ -319,7 +321,7 @@
                             </span>
                         </a>
                     </div>
-                    <div class="service-rail-item <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="pembayaran">
+                    <div class="service-rail-item <?= $workflowMode === 'technician' ? 'd-none' : '' ?> <?= empty($idservice) ? 'disabled-tab is-locked' : '' ?>" data-step="pembayaran">
                         <a class="service-rail-link" id="pembayaran-tab" data-bs-toggle="tab" href="#pembayaran" role="tab"
                             aria-controls="pembayaran" aria-selected="false">
                             <span class="service-rail-node" id="node-pembayaran">4</span>
@@ -339,16 +341,23 @@
         <div class="card w-100 position-relative overflow-hidden h-100">
             <div class="card-body">
                 <div class="tab-content mt-0">
-                    <div class="tab-pane fade show active" id="pelanggan" role="tabpanel" aria-labelledby="pelanggan-tab">
+                    <?php if ($workflowMode === 'cashier'): ?>
+                        <div class="alert alert-info"><strong>Data teknisi (hanya baca)</strong><div class="mt-2">Keluhan: <?= esc($old_service_pelanggan->keluhan ?? '—') ?></div><div>Hasil pemeriksaan: <?= esc($old_service_pelanggan->keterangan ?? '—') ?></div>
+                            <?php if (!empty($workflow_diagnosis)): ?><ul class="mt-2 mb-2"><?php foreach ($workflow_diagnosis as $diagnosis): ?><li><strong><?= esc($diagnosis->nama_fungsi ?? 'Pemeriksaan') ?>:</strong> <?= esc($diagnosis->keterangan ?? '—') ?></li><?php endforeach ?></ul><?php endif ?>
+                            <div>Rekomendasi: <?= esc($workflow->recommendation ?? '—') ?></div><small>Teknisi: <?= esc($workflow->technician_name ?? '—') ?> · Dikirim: <?= esc($workflow->submitted_at ?? '—') ?></small>
+                            <form method="post" action="<?= base_url('antrean-kasir/' . $idservice . '/kembalikan') ?>" class="mt-3 d-flex flex-wrap gap-2"><?= csrf_field() ?><input name="reason" class="form-control" style="max-width:420px" placeholder="Alasan perlu koreksi teknisi" required><button class="btn btn-outline-secondary">Kembalikan ke Teknisi</button></form>
+                        </div>
+                    <?php endif ?>
+                    <div class="tab-pane fade show active <?= $workflowMode === 'cashier' ? 'd-none' : '' ?>" id="pelanggan" role="tabpanel" aria-labelledby="pelanggan-tab">
                         <?= view('transaksi/table/pelanggan_table') ?>
                     </div>
-                    <div class="tab-pane fade" id="kerusakan" role="tabpanel" aria-labelledby="kerusakan-tab">
+                    <div class="tab-pane fade <?= $workflowMode === 'cashier' ? 'd-none' : '' ?>" id="kerusakan" role="tabpanel" aria-labelledby="kerusakan-tab">
                         <?= view('transaksi/table/kerusakan_table') ?>
                     </div>
-                    <div class="tab-pane fade" id="sparepart" role="tabpanel" aria-labelledby="sparepart-tab">
+                    <div class="tab-pane fade <?= $workflowMode === 'technician' ? 'd-none' : '' ?>" id="sparepart" role="tabpanel" aria-labelledby="sparepart-tab">
                         <?= view('transaksi/table/sparepart_table') ?>
                     </div>
-                    <div class="tab-pane fade" id="pembayaran" role="tabpanel" aria-labelledby="pembayaran-tab">
+                    <div class="tab-pane fade <?= $workflowMode === 'technician' ? 'd-none' : '' ?>" id="pembayaran" role="tabpanel" aria-labelledby="pembayaran-tab">
                         <?= view('transaksi/table/pembayaran_table') ?>
                     </div>
                 </div>
@@ -360,10 +369,7 @@
 <script>
     document.addEventListener("DOMContentLoaded", function () {
 
-        // Tidak ada lagi penguncian langkah 3-4 berdasarkan jabatan: teknisi
-        // (36) dan admin/kasir cabang (35) dua-duanya boleh menyelesaikan
-        // seluruh 1-4 di /service. Yang mengunci hanya "belum ada ticket"
-        // (kelas is-locked di rail di atas), bukan jabatan.
+        // Backend tetap menjadi sumber otorisasi untuk seluruh tahap.
 
         const STEPS = ['pelanggan', 'kerusakan', 'sparepart', 'pembayaran'];
 
@@ -474,7 +480,8 @@
         if (tabParam) {
             localStorage.setItem('activeTab', '#' + tabParam);
         }
-        const lastTab = localStorage.getItem('activeTab');
+        const workflowMode = <?= json_encode($workflowMode) ?>;
+        const lastTab = workflowMode === 'cashier' ? '#sparepart' : (workflowMode === 'technician' ? (tabParam ? '#' + tabParam : '#pelanggan') : localStorage.getItem('activeTab'));
         if (lastTab && lastTab.indexOf('#') === 0) {
             const trigger = document.querySelector('#service-rail a[href="' + lastTab + '"]');
             if (trigger && !trigger.closest('.is-locked') && !trigger.closest('.disabled-tab')) {

@@ -152,6 +152,18 @@ $routes->get('penjualan/search_by_hp', 'Penjualan::search_by_hp', ['filter' => '
 
 //service
 $routes->get('service', 'Service::index', ['filter' => 'auth']);
+$routes->get('pekerjaan-teknisi', 'ServiceWorkflowController::technicianQueue', ['filter' => 'auth']);
+$routes->get('pekerjaan-teknisi/data', 'ServiceWorkflowController::queueData', ['filter' => 'auth']);
+$routes->get('pekerjaan-teknisi/baru', 'ServiceWorkflowController::newTechnicianService', ['filter' => 'auth']);
+$routes->get('pekerjaan-teknisi/(:num)', 'ServiceWorkflowController::technicianEditor/$1', ['filter' => 'auth']);
+$routes->post('pekerjaan-teknisi/(:num)/kirim', 'ServiceWorkflowController::sendToCashier/$1', ['filter' => 'auth']);
+$routes->get('antrean-kasir', 'ServiceWorkflowController::cashierQueue', ['filter' => 'auth']);
+$routes->get('antrean-kasir/data', 'ServiceWorkflowController::queueData', ['filter' => 'auth']);
+$routes->get('antrean-kasir/(:num)', 'ServiceWorkflowController::cashierEditor/$1', ['filter' => 'auth']);
+$routes->post('antrean-kasir/(:num)/open', 'ServiceWorkflowController::openCashier/$1', ['filter' => 'auth']);
+$routes->post('antrean-kasir/(:num)/ambil', 'ServiceWorkflowController::claimCashier/$1', ['filter' => 'auth']);
+$routes->post('antrean-kasir/(:num)/kembalikan', 'ServiceWorkflowController::returnToTechnician/$1', ['filter' => 'auth']);
+$routes->get('service/workflow/badge', 'ServiceWorkflowController::badge', ['filter' => 'auth']);
 $routes->get('service_kerusakan', 'Service::kerusakan_table', ['filter' => 'auth']);
 $routes->get('service_sparepart', 'Service::sparepart_table', ['filter' => 'auth']);
 $routes->post('insert/pelanggan_service', 'Service::insert_service', ['filter' => 'auth']);

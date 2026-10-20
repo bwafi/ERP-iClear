@@ -27,6 +27,8 @@ use App\Services\Service\ServicePriceSnapshot;
 use App\Services\Service\KartuHargaWarrantyDefault;
 use App\Services\Service\WarrantyTerm;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
+use App\Services\Service\ServiceWorkflow;
+use App\Services\Service\ServiceWorkflowAccess;
 use App\Services\Inventory\ProductInventoryScope;
 
 class Service extends BaseController
@@ -78,6 +80,10 @@ class Service extends BaseController
 
     public function index()
     {
+        $workflowMode = $this->request->getGet('workflow') === 'technician' ? 'technician' : null;
+        if ($workflowMode !== null && ! (new ServiceWorkflowAccess())->canTechnician()) {
+            return $this->response->setStatusCode(403)->setBody('Akses teknisi ditolak.');
+        }
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $teknisi = $this->AuthModel->getdataakun();
         $idservice = session('idservice') ?? null;
@@ -98,6 +104,7 @@ class Service extends BaseController
             'oldsparepart' => $oldsparepart,
             'unit' => $this->UnitModel->getUnit(),
             'provinsi' => $this->RegionModel->getProvinces(),
+            'workflow_mode' => $workflowMode,
             'body'  => 'transaksi/service'
         );
         return view('template', $data);
@@ -131,6 +138,9 @@ class Service extends BaseController
 
     public function insert_service()
     {
+        if (! (new ServiceWorkflowAccess())->canTechnician()) {
+            return $this->response->setStatusCode(403)->setBody('Akses teknisi ditolak.');
+        }
         $idservice = $this->request->getPost('idservice');
 
         if (!empty($idservice)) {
@@ -164,6 +174,10 @@ class Service extends BaseController
             return redirect()->back();
         }
         $dp_bayar = $this->rupiahToInt($dp_raw);
+        if ($dp_bayar > 0) {
+            session()->setFlashdata('gagal', 'Teknisi tidak mencatat pembayaran. Simpan service tanpa DP dan serahkan transaksi ke Kasir.');
+            return redirect()->back();
+        }
         $tipe_hp = $this->request->getPost('tipe_hp');
         $passcode = $this->request->getPost('passcode');
         $email_icloud = $this->request->getPost('email_icloud');
@@ -254,6 +268,21 @@ class Service extends BaseController
                 throw new \RuntimeException('ID service tidak valid setelah penyimpanan.');
             }
 
+            $db->table('service_workflow')->insert([
+                'service_idservice' => $idservice,
+                'queue_status' => ServiceWorkflow::DRAFT,
+                'technician_idakun' => $idakun,
+                'created_at' => $created_at,
+                'updated_at' => $created_at,
+            ]);
+            $db->table('service_workflow_event')->insert([
+                'service_idservice' => $idservice,
+                'event_type' => 'service_created_by_technician',
+                'actor_idakun' => $idakun,
+                'occurred_at' => $created_at,
+                'detail' => null,
+            ]);
+
             if (!empty($idpelanggan)) {
                 $this->PelangganModel->update($idpelanggan, [
                     'provinsi' => $domisili_provinsi,
@@ -300,7 +329,7 @@ class Service extends BaseController
 
         session()->set('idservice', $idservice);
         session()->setFlashdata('sukses', 'Berhasil Menambahkan Data');
-        return redirect()->to('/service?tab=kerusakan')->with('sukses', 'Data kerusakan berhasil diperbarui.');
+        return redirect()->to('/pekerjaan-teknisi/' . $idservice . '?tab=kerusakan')->with('sukses', 'Service tersimpan. Lanjutkan pemeriksaan teknis.');
     }
 
 
@@ -309,6 +338,12 @@ class Service extends BaseController
         $fungsiTerpilih = $this->request->getPost('fungsi');
         $keteranganInput = $this->request->getPost('keterangan');
         $idservice = $this->request->getPost('idservice_k');
+
+        $workflowRow = $this->workflowRow((int) $idservice);
+        if (! (new ServiceWorkflowAccess())->canTechnician()
+            || ! $this->technicianMayEdit((int) $idservice, $workflowRow)) {
+            return $this->response->setStatusCode(403)->setBody('Tahap pemeriksaan hanya dapat diubah oleh teknisi pemilik service yang belum dikirim ke kasir.');
+        }
 
         if (empty($fungsiTerpilih)) {
             return redirect()->to('/service?tab=kerusakan')->with('gagal', 'Pilih minimal satu jenis kerusakan sebelum melanjutkan.');
@@ -352,8 +387,28 @@ class Service extends BaseController
             $this->ServiceKerusakanModel->deleteByServiceAndFungsi($idservice, $idfungsi);
         }
 
-        return redirect()->to(base_url('cetak/invoice_service/' . $idservice))
-            ->with('sukses', 'Data kerusakan berhasil disimpan.');
+        $recommendation = trim((string) $this->request->getPost('recommendation'));
+        if ($workflowRow && $this->request->getPost('send_to_cashier') === '1') {
+            try {
+                (new ServiceWorkflow(Database::connect()))->sendToCashier((int) $idservice, (int) session('ID_AKUN'), $recommendation);
+            } catch (\Throwable $e) {
+                return redirect()->back()->with('gagal', $e->getMessage());
+            }
+            return redirect()->to(base_url('antrean-kasir'))->with('sukses', 'Service berhasil dikirim ke antrean kasir.');
+        }
+        if ($workflowRow) {
+            Database::connect()->table('service_workflow')->where('service_idservice', (int) $idservice)
+                ->update(['recommendation' => $recommendation, 'updated_at' => date('Y-m-d H:i:s')]);
+            Database::connect()->table('service_workflow_event')->insert([
+                'service_idservice' => (int) $idservice,
+                'event_type' => 'diagnosis_saved',
+                'actor_idakun' => (int) session('ID_AKUN'),
+                'occurred_at' => date('Y-m-d H:i:s'),
+                'detail' => null,
+            ]);
+        }
+        $destination = $workflowRow ? 'pekerjaan-teknisi/' . (int) $idservice . '?tab=kerusakan' : 'cetak/invoice_service/' . $idservice;
+        return redirect()->to(base_url($destination))->with('sukses', 'Data pemeriksaan berhasil disimpan.');
     }
 
 
@@ -368,13 +423,28 @@ class Service extends BaseController
             return redirect()->to('/service?tab=sparepart')->with('gagal', 'ID service tidak valid. Sparepart tidak disimpan.');
         }
 
+        $workflowRow = $this->workflowRow($idservice);
+        if (! (new ServiceWorkflowAccess())->canCashier() || ! $this->cashierMayProcess($idservice, $workflowRow)) {
+            return $this->response->setStatusCode(403)->setBody('Tahap sparepart hanya dapat diproses Kasir yang berwenang untuk cabang ini.');
+        }
+
         $db = Database::connect();
         $db->transBegin();
 
         try {
-            $service = $db->table('service')->where('idservice', $idservice)->get()->getRow();
+            $serviceSql = $db->table('service')->where('idservice', $idservice)->getCompiledSelect();
+            if (strtolower((string) $db->DBDriver) === 'mysqli') {
+                $serviceSql .= ' FOR UPDATE';
+            }
+            $service = $db->query($serviceSql)->getRow();
             if (! $service) {
                 throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+            if ($workflowRow) {
+                $freshWorkflow = $this->workflowRow($idservice);
+                if (! $this->cashierMayProcess($idservice, $freshWorkflow)) {
+                    throw new \RuntimeException('Antrean service sudah selesai atau berpindah ke kasir lain.');
+                }
             }
 
             $warrantySubmitted = $garansi !== null && $garansi !== '' && $garansi !== '---Pilih Garansi---';
@@ -515,11 +585,13 @@ class Service extends BaseController
                 throw new \RuntimeException('Sinkronisasi sparepart keluar gagal disimpan.');
             }
 
-            return redirect()->to('/service?tab=pembayaran')->with('sukses', 'Sparepart service dan sparepart keluar berhasil disinkronkan.');
+            $destination = $workflowRow ? 'antrean-kasir/' . $idservice . '?tab=pembayaran' : 'service?tab=pembayaran';
+            return redirect()->to(base_url($destination))->with('sukses', 'Sparepart service dan sparepart keluar berhasil disinkronkan.');
         } catch (\Throwable $e) {
             $db->transRollback();
             log_message('error', 'Service::insert_sparepart gagal untuk service ' . $idservice . ': ' . $e->getMessage());
-            return redirect()->to('/service?tab=sparepart')->with('gagal', 'Sparepart tidak tersimpan: ' . $e->getMessage());
+            $destination = $workflowRow ? 'antrean-kasir/' . $idservice . '?tab=sparepart' : 'service?tab=sparepart';
+            return redirect()->to(base_url($destination))->with('gagal', 'Sparepart tidak tersimpan: ' . $e->getMessage());
         }
     }
 
@@ -636,6 +708,11 @@ class Service extends BaseController
         $idservice = (int) $this->request->getPost('idservice_p');
         $no_service = (string) ($this->request->getPost('no_service_pembayaran') ?? '');
 
+        $workflowRow = $idservice > 0 ? $this->workflowRow($idservice) : null;
+        if (! (new ServiceWorkflowAccess())->canCashier() || ! $this->cashierMayProcess($idservice, $workflowRow)) {
+            return $this->response->setStatusCode(403)->setBody('Pembayaran hanya dapat dicatat Kasir pemilik proses pada cabang ini.');
+        }
+
         // DP (dipindah dari tahap pelanggan ke tahap pembayaran)
         $dp_bayar = $this->rupiahToInt((string) ($this->request->getPost('dp_bayar_pembayaran') ?? '0'));
         $metode_dp = strtolower(trim((string) ($this->request->getPost('dp_metode_bayar') ?? '')));
@@ -686,6 +763,13 @@ class Service extends BaseController
             $db->transRollback();
             session()->setFlashdata('gagal', 'Data service tidak ditemukan; pembayaran tidak disimpan.');
             return redirect()->back();
+        }
+        if ($workflowRow) {
+            $workflowRow = $this->workflowRow($idservice);
+            if (! $this->cashierMayProcess($idservice, $workflowRow)) {
+                $db->transRollback();
+                return $this->response->setStatusCode(409)->setBody('Antrean service sudah selesai atau diproses kasir lain.');
+            }
         }
 
         // Total di DB berasal dari sparepart yang telah disimpan pada langkah
@@ -831,6 +915,35 @@ class Service extends BaseController
         );
         $this->ServiceModel->updateService($idservice, $datap);
 
+        $totalBayarBaru = $modeKoreksi
+            ? ($bayar_pembayaran + $totalBayarBank)
+            : ($bayarTersimpan + $bayar_pembayaran + $totalBayarBank);
+        $dpBaruUntukLunas = $modeKoreksi ? 0 : $dp_bayar;
+        $akanLunas = $totalTagihan > 0 && ($dpTersimpan + $dpBaruUntukLunas + $totalBayarBaru) >= $totalTagihan;
+        if ($workflowRow && ($bayar_pembayaran + $totalBayarBank + ($dp_bayar > 0 ? $dp_bayar : 0)) > 0) {
+            $db->table('service_workflow_event')->insert([
+                'service_idservice' => $idservice,
+                'event_type' => 'payment_saved',
+                'actor_idakun' => (int) session('ID_AKUN'),
+                'occurred_at' => date('Y-m-d H:i:s'),
+                'detail' => 'Nominal pembayaran baru Rp ' . number_format($bayar_pembayaran + $totalBayarBank + $dp_bayar, 0, ',', '.') . '.',
+            ]);
+        }
+        if ($workflowRow && $akanLunas) {
+            $now = date('Y-m-d H:i:s');
+            $db->table('service_workflow')->where('service_idservice', $idservice)->where('queue_status', ServiceWorkflow::PROCESSING)
+                ->where('cashier_idakun', (int) session('ID_AKUN'))
+                ->update(['queue_status' => ServiceWorkflow::DONE, 'updated_at' => $now]);
+            if ($db->affectedRows() > 0) {
+                $db->table('service_workflow_event')->insert([
+                    'service_idservice' => $idservice,
+                    'event_type' => 'cashier_completed',
+                    'actor_idakun' => (int) session('ID_AKUN'),
+                    'occurred_at' => $now,
+                    'detail' => 'Pelunasan service tercatat.',
+                ]);
+            }
+        }
         if (! $db->transComplete()) {
             $db->transRollback();
             session()->setFlashdata('gagal', 'Transaksi pembayaran gagal diselesaikan.');
@@ -838,7 +951,48 @@ class Service extends BaseController
         }
         session()->remove('idservice');
         session()->setFlashdata('sukses', 'Berhasil Menambahkan Data Service');
-        return redirect()->to(base_url('/proses_service'));
+        return redirect()->to(base_url($workflowRow ? 'antrean-kasir' : 'proses_service'));
+    }
+
+    private function workflowRow(int $serviceId): ?object
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('service_workflow')) {
+            return null;
+        }
+        return $db->table('service_workflow')->where('service_idservice', $serviceId)->get()->getRow();
+    }
+
+    private function technicianMayEdit(int $serviceId, ?object $workflow): bool
+    {
+        if ($serviceId <= 0) {
+            return false;
+        }
+        $service = $this->ServiceModel->find($serviceId);
+        if (! $service || (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            return false;
+        }
+        if (! $workflow) {
+            return true;
+        }
+        return in_array($workflow->queue_status, [ServiceWorkflow::DRAFT, ServiceWorkflow::RETURNED], true)
+            && (int) $workflow->technician_idakun === (int) session('ID_AKUN');
+    }
+
+    private function cashierMayProcess(int $serviceId, ?object $workflow): bool
+    {
+        if ($serviceId <= 0) {
+            return false;
+        }
+        $service = $this->ServiceModel->find($serviceId);
+        if (! $service || (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            return false;
+        }
+        if (! $workflow) {
+            return true;
+        }
+        return $workflow->queue_status === ServiceWorkflow::PROCESSING
+            && (int) $workflow->cashier_idakun === (int) session('ID_AKUN');
     }
 
 
@@ -933,7 +1087,14 @@ class Service extends BaseController
 
     public function cancel_service($idservice)
     {
+        if (! (new ServiceWorkflowAccess())->canCashier()) {
+            return $this->response->setStatusCode(403)->setBody('Pembatalan service hanya dapat dilakukan oleh pengguna dengan izin Kasir.');
+        }
         $service = $this->ServiceModel->find($idservice);
+
+        if (! $service || (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            return $this->response->setStatusCode(404)->setBody('Service tidak ditemukan pada cabang ini.');
+        }
         
         if (!$service) {
             session()->setFlashdata('gagal', 'Service tidak ditemukan');

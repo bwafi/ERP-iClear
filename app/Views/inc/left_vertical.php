@@ -138,6 +138,7 @@ $nodeIsActive = static function (array $node) use (&$nodeIsActive, $activeRoute)
                                                 <li class="sidebar-item my-1">
                                                     <a href="<?= esc(base_url(ltrim((string) $menu['url'], '/'))) ?>" class="sidebar-link <?= $menuActive ? 'active bg-primary text-white' : 'text-dark' ?> fw-medium text-decoration-none py-2 px-3 rounded-2 d-block hover-bg-light" <?= $menuActive ? 'aria-current="page"' : '' ?>>
                                                         <span class="hide-menu"><?= esc($menu['nama']) ?></span>
+                                                        <?php if ((int) $menu['id'] === \App\Services\Service\ServiceWorkflowAccess::CASHIER_MENU): ?><span class="badge text-bg-danger ms-2" id="cashier-queue-count" aria-label="Jumlah service dalam antrean">0</span><?php endif ?>
                                                     </a>
                                                 </li>
                                             <?php else : ?>
@@ -195,3 +196,22 @@ $nodeIsActive = static function (array $node) use (&$nodeIsActive, $activeRoute)
         </div>
     </div>
 </aside>
+<?php if (in_array(\App\Services\Service\ServiceWorkflowAccess::CASHIER_MENU, array_map('intval', $role), true)): ?>
+<script>
+(function () {
+    const badge = document.getElementById('cashier-queue-count');
+    if (!badge) return;
+    const refresh = async function () {
+        try {
+            const response = await fetch('<?= base_url('service/workflow/badge') ?>', {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+            if (!response.ok) return;
+            const data = await response.json();
+            badge.textContent = data.cashier > 99 ? '99+' : String(data.cashier || 0);
+            badge.classList.toggle('d-none', !data.cashier);
+        } catch (_) {}
+    };
+    refresh();
+    window.setInterval(refresh, 30000);
+})();
+</script>
+<?php endif ?>

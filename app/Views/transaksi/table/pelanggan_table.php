@@ -143,7 +143,7 @@ $formAction = empty($idservice)
     <div class="row g-3">
 
         <input hidden type="text" name="idservice" value="<?php echo @$idservice ?>">
-        <input hidden type="text" name="return_to" value="service">
+    <input hidden type="text" name="return_to" value="<?= ($workflow_mode ?? null) === 'technician' ? 'technician_workflow' : 'service' ?>">
         <input hidden type="text" id="created_at" value="<?php echo @$old_service_pelanggan->created_at ?>">
         <input type="hidden" name="selectedidpelanggan" id="idpela" value="<?php echo @$old_service_pelanggan->id_pelanggan ?>">
 

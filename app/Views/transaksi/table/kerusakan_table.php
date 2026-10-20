@@ -3,7 +3,7 @@
     Centang bagian yang rusak, lalu tulis keterangan singkat (opsional).
 </div>
 
-<form id="service-kerusakan-form" action="<?php echo base_url('service/saveKerusakan') ?>" enctype="multipart/form-data" method="post" target="_blank">
+<form id="service-kerusakan-form" action="<?php echo base_url('service/saveKerusakan') ?>" enctype="multipart/form-data" method="post" <?= ($workflow_mode ?? null) === 'technician' ? '' : 'target="_blank"' ?>>
     <?php
     $kerusakan_terpilih = [];
     foreach ($oldkerusakan as $item) {
@@ -61,11 +61,23 @@
             </button>
         </div>
         <div class="d-flex align-items-center gap-3">
-            <span class="text-muted fs-3 d-none d-sm-inline">Data disimpan, lalu invoice service dibuka.</span>
             <input hidden type="text" name="idservice_k" value="<?php echo @$idservice ?>">
-            <button type="submit" id="btnnextnya" class="btn btn-primary" aria-live="polite">
-                Simpan &amp; Cetak Invoice <i class="bi bi-printer ms-1"></i>
-            </button>
+            <?php if (($workflow_mode ?? null) === 'technician'): ?>
+                <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-end">
+                    <label class="form-label mb-0 flex-grow-1">Rekomendasi untuk Kasir
+                        <textarea class="form-control mt-1" name="recommendation" rows="2" placeholder="Contoh: ganti baterai; jelaskan alasan singkat."><?= esc($workflow->recommendation ?? '') ?></textarea>
+                    </label>
+                    <button type="submit" name="send_to_cashier" value="1" id="btnnextnya" class="btn btn-success" aria-live="polite">
+                        Kirim ke Kasir <i class="bi bi-send ms-1"></i>
+                    </button>
+                    <button type="submit" class="btn btn-outline-primary">Simpan Pemeriksaan</button>
+                </div>
+            <?php else: ?>
+                <span class="text-muted fs-3 d-none d-sm-inline">Data disimpan, lalu invoice service dibuka.</span>
+                <button type="submit" id="btnnextnya" class="btn btn-primary" aria-live="polite">
+                    Simpan &amp; Cetak Invoice <i class="bi bi-printer ms-1"></i>
+                </button>
+            <?php endif ?>
         </div>
     </div>
 
@@ -94,9 +106,11 @@
                 }
 
                 isSubmitting = true;
-                nextButton.disabled = true;
-                nextButton.setAttribute('aria-busy', 'true');
-                nextButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Menyimpan &amp; membuka invoice...';
+                const submitter = event.submitter || nextButton;
+                submitter.disabled = true;
+                submitter.setAttribute('aria-busy', 'true');
+                submitter.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>'
+                    + (submitter.name === 'send_to_cashier' ? 'Mengirim ke Kasir...' : 'Menyimpan pemeriksaan...');
             });
         }
     });
