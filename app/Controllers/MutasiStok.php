@@ -64,6 +64,12 @@ class MutasiStok extends BaseController
     public function index()
     {
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
+        $unit = (int) session('ID_UNIT');
+        // Scope data stok/suplier: user cabang hanya boleh melihat unitnya
+        // sendiri. Hanya Admin Root (jabatan 1) yang boleh membuat mutasi dari
+        // unit lain, jadi hanya dia yang perlu peta semua unit.
+        $bolehPilihUnit = (int) session('ID_JABATAN') === 1;
+        $lihatUnit = $bolehPilihUnit ? null : $unit;
         $data =  array(
             'akun' => $akun,
             'stok' => $this->KartuStokModel->getKartuStokWithKategori(),
@@ -71,6 +77,8 @@ class MutasiStok extends BaseController
             'kategori' => $this->KategoriModel->getKategori(),
             'suplier' => $this->SuplierModel->getSuplier(),
             'unit' => $this->UnitModel->getUnit(),
+            'stok_unit' => $this->BarangModel->getStokPerUnit($lihatUnit),
+            'suplier_unit' => $this->BarangModel->getSuplierPerUnit($lihatUnit),
             'body'  => 'stok/mutasi_stok'
         );
         return view('template', $data);
@@ -439,10 +447,10 @@ class MutasiStok extends BaseController
             return 'Tidak dapat memilih unit yang sama';
         }
 
+        // Unit pengirim terkunci ke unit user, kecuali Admin Root (jabatan 1).
         $jabatan = session('ID_JABATAN');
-        $isLintas = $jabatan !== null && $jabatan !== ''
-            && in_array((int) $jabatan, [0, 1, 2, 34], true);
-        if (! $isLintas && $kirim_idunit !== (int) session('ID_UNIT')) {
+        $isAdminRoot = $jabatan !== null && $jabatan !== '' && (int) $jabatan === 1;
+        if (! $isAdminRoot && $kirim_idunit !== (int) session('ID_UNIT')) {
             return 'Anda hanya bisa membuat mutasi dari unit Anda.';
         }
 
@@ -498,7 +506,6 @@ class MutasiStok extends BaseController
         int $terima_idunit,
         array $produkData,
         string $tanggal_kirim,
-        string $tanggal_terima,
         int $input_by
     ): array {
         date_default_timezone_set('Asia/Jakarta');
@@ -517,7 +524,8 @@ class MutasiStok extends BaseController
             $result = $this->MutasiStokModel->insert_MutasiStok([
                 'no_nota_mutasi' => null,
                 'tanggal_kirim' => $tanggal_kirim . ' ' . $waktu,
-                'tanggal_terima' => $tanggal_terima . ' ' . $waktu,
+                // Diisi saat unit penerima menekan Terima di /mutasi_stok/masuk.
+                'tanggal_terima' => null,
                 'kirim_idunit' => $kirim_idunit,
                 'terima_idunit' => $terima_idunit,
                 'status' => '0',
@@ -543,15 +551,17 @@ class MutasiStok extends BaseController
 
                 $detail = [
                     'tanggal_kirim' => $tanggal_kirim,
-                    'tanggal_terima' => $tanggal_terima,
+                    'tanggal_terima' => null,
                     'jumlah_kirim' => $produk['jumlah_kirim'],
-                    'jumlah_terima' => $produk['jumlah_terima'],
+                    // Penerimaan selalu penuh; form tidak lagi meminta jumlah terima.
+                    'jumlah_terima' => $produk['jumlah_kirim'],
                     'satuan' => $stokAwal->satuan_terkecil,
                     'hpp_barang' => $hppRow->hpp ?? 0,
                     'barang_idbarang' => $idbarang,
                     'kirim_idunit' => $kirim_idunit,
                     'terima_idunit' => $terima_idunit,
                     'mutasi_idmutasi' => $idMutasi,
+                    // Terisi otomatis dari harga beli di form, tapi tetap bisa diubah.
                     'harga_mutasi' => $produk['harga_mutasi'] ?? 0,
                     'harga_beli' => $produk['harga_beli'] ?? 0,
                     'harga_jual' => $produk['harga_jual'] ?? 0,
@@ -590,7 +600,6 @@ class MutasiStok extends BaseController
             $terima_idunit,
             $produkData,
             (string) $this->request->getPost('tanggal_kirim'),
-            (string) $this->request->getPost('tanggal_terima'),
             (int) session('ID_AKUN')
         );
 

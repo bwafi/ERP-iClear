@@ -72,6 +72,20 @@
 - **Table:** six columns (Dokumen, Pihak, Jatuh tempo, Nilai, Status, Aksi); money and dates use `tabular-nums`; at `767.98px` the table becomes stacked cards with `data-label` captions.
 - **Rules:** no gradients, no colored left borders, no page-level font changes; muted text stays ≥4.5:1 in both themes; hover motion is limited to background/button state and disabled under `prefers-reduced-motion`.
 
+### Mutasi Stok (`.ms-*`)
+- **Scope:** `app/Views/stok/_mutasi_theme.php`; every selector lives under `.mutasi-stok` and derives from `--ms-*` tokens tied to the app theme.
+- **Layout:** page head (breadcrumb, title, active-unit chip) → route panel (sender → receiver, send date) → items panel (empty state → line table → summary action). The receive date is not entered here; it is recorded when the receiving unit confirms on `/mutasi_stok/masuk`.
+- **Product picker:** modal with custom search, stock chip (≤5 warning, else neutral), supplier, last buy price, and category. Hanya produk dengan stok > 0 untuk unit pengirim yang ditampilkan; stok dan supplier mengikuti unit pengirim, dan pilihan lintas halaman tetap terbawa saat dikonfirmasi. Maps dibatasi ke unit pengguna kecuali peran lintas unit.
+- **Line table:** product with code/category/IMEI, buy and sell price, mutation price, send and receive quantity; becomes stacked cards at `767.98px` with `data-label` captions. Money and counts use `tabular-nums`.
+- **Rules:** one accent for primary action and focus, no gradients, no colored left borders; dates are locked for non-admin; the only motion is the new-row tint and control state transitions, disabled under `prefers-reduced-motion`.
+
+### Mutasi Masuk / Konfirmasi Terima (`.mutasi-masuk`)
+- **Scope:** `app/Views/stok/_mutasi_masuk_theme.php`; reuses the `.ms-*` tokens and components of `app/Views/stok/_mutasi_theme.php` under the same `.mutasi-stok` wrapper, and adds only queue-specific parts (`.mm-*`).
+- **Layout:** page head (breadcrumb, title, active-unit chip) → filter panel (search, unit for cross-unit roles, send-date range, apply/reset; status chips auto-submit) → results panel (count pill → antrean table → range/footer pagination). Flash success/failure renders as slim `.mm-flash` banners.
+- **Queue table:** nota + id, local date, route (`dari → ke` with visually hidden words), value, status pill with the received date, actions (Terima / Batal terima for Admin Root / Detail). Detail opens as a sub-row with a line table; table becomes stacked cards at `767.98px` and its line table drops the unit-price column below `576px` (the Terima modal still shows it).
+- **Modals:** Terima (receipt block, line table, total, H/P due-date notice, `Terima & buat H/P`) and Batal (stacked receipt, danger callout, required reason). `asal` keeps filter+page on the redirect; the JS escapes product names before injecting detail rows.
+- **Rules:** same accent/no-gradient rules, no color-only states, focus visible, motion limited to control transitions and the detail caret.
+
 
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.

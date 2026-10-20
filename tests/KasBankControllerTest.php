@@ -933,6 +933,15 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame('Anda hanya bisa membuat mutasi dari unit Anda.', $error);
     }
 
+    public function testInsertMutasiNonRootTetapTerkunciKeUnitSendiri(): void
+    {
+        $error = $this->validatorMutasi(1, 0)->validasi(2, 1, [
+            ['id' => 1002, 'nama' => 'Barang Y', 'jumlah_kirim' => 1],
+        ]);
+
+        $this->assertSame('Anda hanya bisa membuat mutasi dari unit Anda.', $error);
+    }
+
     public function testInsertMutasiLintasBolehMengirimDariUnitLain(): void
     {
         $error = $this->validatorMutasi(1, 1)->validasi(2, 1, [
@@ -972,7 +981,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
                 $this->detailGagal = $detailGagal;
             }
 
-            public function simpan(int $kirim, int $terima, array $produk, string $tglKirim, string $tglTerima, int $inputBy): array
+            public function simpan(int $kirim, int $terima, array $produk, string $tglKirim, int $inputBy): array
             {
                 if ($this->detailGagal) {
                     $this->DetailMutasiModel = new class extends \App\Models\ModelDetailMutasi {
@@ -983,7 +992,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
                     };
                 }
 
-                return $this->simpanMutasi($kirim, $terima, $produk, $tglKirim, $tglTerima, $inputBy);
+                return $this->simpanMutasi($kirim, $terima, $produk, $tglKirim, $inputBy);
             }
         };
     }
@@ -991,11 +1000,11 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     public function testSimpanMutasiMenyimpanHeaderDetailDanNomorUnik(): void
     {
         $produk = [
-            ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 2, 'jumlah_terima' => 2, 'harga_mutasi' => 1000],
-            ['id' => 1002, 'nama' => 'Barang Y', 'jumlah_kirim' => 1, 'jumlah_terima' => 1, 'harga_mutasi' => 2000],
+            ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 2, 'harga_beli' => 1500, 'harga_mutasi' => 1000],
+            ['id' => 1002, 'nama' => 'Barang Y', 'jumlah_kirim' => 1, 'harga_beli' => 2500, 'harga_mutasi' => 2000],
         ];
 
-        $hasil = $this->penyimpanMutasi()->simpan(1, 2, $produk, '2026-10-19', '2026-10-20', 43);
+        $hasil = $this->penyimpanMutasi()->simpan(1, 2, $produk, '2026-10-19', 43);
 
         $this->assertTrue($hasil['ok']);
         $this->assertSame('MTS1' . date('ymd', strtotime('2026-10-19')) . $hasil['id'], $hasil['no_nota']);
@@ -1012,10 +1021,17 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             ->get()->getResult();
         $this->assertCount(2, $detail);
         $this->assertSame(2.0, (float) $detail[0]->jumlah_kirim);
+        // Penerimaan penuh: jumlah terima mengikuti jumlah kirim.
+        $this->assertSame(2.0, (float) $detail[0]->jumlah_terima);
+        // Harga mutasi terisi dari harga beli di form, tapi nilai yang dikirim tetap dipakai.
+        $this->assertSame(1000.0, (float) $detail[0]->harga_mutasi);
         $this->assertSame(800.0, (float) $detail[0]->hpp_barang);
         $this->assertSame('PCS', $detail[0]->satuan);
+        // Tanggal terima baru diisi saat unit penerima mengonfirmasi.
+        $this->assertNull($header->tanggal_terima);
+        $this->assertNull($detail[0]->tanggal_terima);
 
-        $hasil2 = $this->penyimpanMutasi()->simpan(1, 2, [$produk[0]], '2026-10-19', '2026-10-20', 43);
+        $hasil2 = $this->penyimpanMutasi()->simpan(1, 2, [$produk[0]], '2026-10-19', 43);
         $this->assertTrue($hasil2['ok']);
         $this->assertNotSame($hasil['no_nota'], $hasil2['no_nota']);
         $this->assertSame('MTS1' . date('ymd', strtotime('2026-10-19')) . $hasil2['id'], $hasil2['no_nota']);
@@ -1029,7 +1045,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $hasil = $this->penyimpanMutasi(true)->simpan(1, 2, [
             ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 1, 'jumlah_terima' => 1, 'harga_mutasi' => 1000],
-        ], '2026-10-19', '2026-10-20', 43);
+        ], '2026-10-19', 43);
 
         $this->assertFalse($hasil['ok']);
         $this->assertNotSame('', $hasil['error']);
@@ -1050,7 +1066,6 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'id_unit1_text' => 1,
             'id_unit2_text' => 2,
             'tanggal_kirim' => '2026-10-19',
-            'tanggal_terima' => '2026-10-20',
             'produk' => [
                 1001 => ['id' => 1001, 'nama' => 'Barang X', 'jumlah_kirim' => 2, 'jumlah_terima' => 2, 'harga_mutasi' => 1000],
             ],
@@ -1062,6 +1077,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $db = \Config\Database::connect('tests', false);
         $header = $db->table('mutasi')->where('kirim_idunit', 1)->orderBy('idmutasi', 'DESC')->get()->getRow();
         $this->assertStringEndsWith((string) $header->idmutasi, $header->no_nota_mutasi);
+        $this->assertNull($header->tanggal_terima);
         $this->assertSame(1, (int) $db->table('detail_mutasi')->where('mutasi_idmutasi', $header->idmutasi)->countAllResults());
     }
 

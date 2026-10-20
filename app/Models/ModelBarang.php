@@ -40,6 +40,63 @@ class ModelBarang extends Model
             ->findAll();
     }
 
+    /**
+     * Stok akhir semua barang per unit: [id_unit => [idbarang => stok]].
+     *
+     * Dipakai halaman mutasi untuk menampilkan stok unit pengirim yang
+     * sedang dipilih, bukan hanya unit user yang login.
+     */
+    public function getStokPerUnit(?int $idUnit = null): array
+    {
+        $builder = $this->db->table('stok_barang')
+            ->select('idbarang, id_unit, stok_akhir');
+        if ($idUnit !== null) {
+            $builder->where('id_unit', $idUnit);
+        }
+
+        $rows = $builder->get()->getResult();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r->id_unit][(int) $r->idbarang] = (float) $r->stok_akhir;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Suplier terakhir per barang per unit: [id_unit => [idbarang => nama]].
+     *
+     * Barang tidak menyimpan suplier; sumbernya baris stok awal terbaru.
+     * Satu query agregat, bukan satu query per baris produk.
+     */
+    public function getSuplierPerUnit(?int $idUnit = null): array
+    {
+        $sql = "SELECT sa.unit_idunit, sa.barang_idbarang, s.nama_suplier
+             FROM stok_awal sa
+             JOIN (
+                 SELECT unit_idunit, barang_idbarang, MAX(idstok_awal) AS idstok_awal
+                 FROM stok_awal
+                 WHERE suplier_id_suplier IS NOT NULL AND suplier_id_suplier <> ''
+                 GROUP BY unit_idunit, barang_idbarang
+             ) terakhir ON terakhir.idstok_awal = sa.idstok_awal
+             LEFT JOIN suplier s ON s.id_suplier = sa.suplier_id_suplier";
+        $params = [];
+        if ($idUnit !== null) {
+            $sql .= ' WHERE sa.unit_idunit = ?';
+            $params[] = $idUnit;
+        }
+
+        $rows = $this->db->query($sql, $params)->getResult();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r->unit_idunit][(int) $r->barang_idbarang] = (string) ($r->nama_suplier ?? '');
+        }
+
+        return $map;
+    }
+
     //gor push ulang
 
     public function getAllBarang2()

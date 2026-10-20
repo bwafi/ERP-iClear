@@ -1,19 +1,66 @@
+<?= $this->include('stok/_mutasi_theme') ?>
+<?= $this->include('stok/_mutasi_masuk_theme') ?>
+
 <?php
-$rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
-$unitMap = [];
-foreach (($unit ?? []) as $u) {
-    $unitMap[(int) $u->idunit] = $u->NAMA_UNIT;
-}
-// Nilai dari controller dipakai utuh; session hanya fallback supaya view ini
-// masih bisa dirender sendiri (mis. dari script smoke test). Dua-duanya dulu
-// dihitung di sini dan di controller, yang berarti satu bisa berubah tanpa
-// yang lain — dan kontrol unit ikut hilang atau bocor.
-$isLintas = $isLintas ?? in_array((int) session('ID_JABATAN'), [0, 1, 2, 34], true);
+$rp = static fn($n): string => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
+
+// Nilai dari controller dipakai utuh; fallback ini hanya untuk render view
+// secara terpisah (mis. smoke test).
+$isLintas    = $isLintas ?? in_array((int) session('ID_JABATAN'), [0, 1, 2, 34], true);
 $filter      = $filter      ?? ['search' => '', 'status' => '', 'dari' => '', 'sampai' => '', 'unit' => 0];
 $currentPage = $currentPage ?? 1;
 $perPage     = $perPage     ?? 25;
 $total       = $total       ?? 0;
 $totalPages  = $totalPages  ?? 1;
+$items       = $items       ?? [];
+$unit        = $unit        ?? [];
+
+$namaUnit  = trim((string) session('NAMA_UNIT'));
+$unitAktif = (int) session('ID_UNIT');
+
+$bulan = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+$tgl = static function (?string $value) use ($bulan): string {
+    if ($value === null || $value === '') {
+        return '—';
+    }
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return '—';
+    }
+
+    return date('d', $ts) . ' ' . $bulan[(int) date('n', $ts)] . ' ' . date('Y', $ts);
+};
+
+// Ditulis eksplisit, bukan `||` biasa: status '0' itu falsy, jadi menyaring
+// "Belum Diterima" akan terbaca sebagai "tidak ada filter".
+$adaFilter = $filter['search'] !== '' || $filter['status'] !== ''
+    || $filter['dari'] !== '' || $filter['sampai'] !== '' || (int) $filter['unit'] > 0;
+
+$statusOptions = [
+    ['', 'Semua'],
+    ['0', 'Belum diterima'],
+    ['1', 'Sudah diterima'],
+];
+
+$dariTampil   = $total > 0 ? (($currentPage - 1) * $perPage) + 1 : 0;
+$sampaiTampil = min($currentPage * $perPage, $total);
+$hpDue        = $tgl(date('Y-m-d', strtotime('+3 days')));
+
+$jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+$detailJson = static function ($m) use ($jsonFlags): string {
+    $rows = [];
+    foreach (($m->detail ?? []) as $d) {
+        $rows[] = [
+            'nama'   => (string) ($d->nama_barang ?? ''),
+            'jumlah' => (float) ($d->jumlah_terima ?? 0),
+            'harga'  => (float) ($d->harga_mutasi ?? 0),
+            'nilai'  => (float) ($d->nilai ?? 0),
+        ];
+    }
+    $json = json_encode($rows, $jsonFlags);
+
+    return $json === false ? '[]' : $json;
+};
 
 /**
  * Bangun query string yang mempertahankan filter + halaman yang sedang aktif.
@@ -25,391 +72,513 @@ $totalPages  = $totalPages  ?? 1;
 $qs = static function (array $overrides = []) use ($filter, $currentPage): string {
     // Perbandingan harus !== '' , bukan ?: . Di PHP, string '0' itu falsy,
     // jadi `?:` akan membuang status='0' — dan "Belum Diterima" justru
-    // filter paling sering dipakai di halaman ini. Efeknya: user menyaring
-    // status 0, klik halaman 2, dan filternya hilang diam-diam.
+    // filter paling sering dipakai di halaman ini.
     $q = [
         'search' => $filter['search'] !== '' ? $filter['search'] : null,
         'status' => $filter['status'] !== '' ? $filter['status'] : null,
         'dari'   => $filter['dari'] !== '' ? $filter['dari'] : null,
-        'sampai'=> $filter['sampai'] !== '' ? $filter['sampai'] : null,
+        'sampai' => $filter['sampai'] !== '' ? $filter['sampai'] : null,
         'unit'   => $filter['unit'] ? (int) $filter['unit'] : null,
         'page'   => $currentPage,
     ];
     foreach ($overrides as $k => $v) {
-        if ($v === null || $v === '') { unset($q[$k]); } else { $q[$k] = $v; }
+        if ($v === null || $v === '') {
+            unset($q[$k]);
+        } else {
+            $q[$k] = $v;
+        }
     }
 
     return http_build_query(array_filter($q, static fn ($v) => $v !== null && $v !== ''));
 };
-$urlMasuk = static fn(array $o = []) => base_url('mutasi_stok/masuk') . ($qs($o) ? '?' . $qs($o) : '');
+$urlMasuk = static function (array $o = []) use ($qs): string {
+    $query = $qs($o);
+
+    return base_url('mutasi_stok/masuk') . ($query !== '' ? '?' . $query : '');
+};
+
+// Controller membaca `asal` sebagai URL query dan butuh tanda "?" di depan.
+$asal = $qs() !== '' ? '?' . $qs() : '';
+
 // Batal terima jauh lebih sempit daripada terima: hanya Admin Root. Menerima
 // menambah satu dokumen keuangan, membatalkan menghapusnya, jadi yang boleh
 // membatalkan tidak boleh sama longgarnya dengan yang boleh membuat.
 $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
 ?>
 
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Konfirmasi Terima Mutasi</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('mutasi_stok') ?>">Mutasi Stok</a>
-                </li>
-                <li class="breadcrumb-item active">Konfirmasi Terima</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<div class="mutasi-stok mutasi-masuk">
 
-<?php if (session('sukses')) : ?>
-    <div class="alert alert-success py-2"><?= esc(session('sukses')) ?></div>
-<?php endif; ?>
-<?php if (session('gagal')) : ?>
-    <div class="alert alert-danger py-2"><?= esc(session('gagal')) ?></div>
-<?php endif; ?>
+    <header class="ms-head">
+        <div>
+            <nav class="ms-crumb" aria-label="Breadcrumb">
+                <a href="<?= base_url('mutasi_stok') ?>">Mutasi Stok</a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Konfirmasi Terima</span>
+            </nav>
+            <h1>Konfirmasi Terima</h1>
+            <p>Periksa mutasi yang masuk ke unit Anda, lalu konfirmasi penerimaannya.</p>
+        </div>
 
-<div class="card shadow-none border">
-    <div class="card-header bg-transparent">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h5 class="mb-0"><?= $isLintas ? 'Semua Mutasi Masuk' : 'Mutasi Masuk Untuk Unit Saya' ?></h5>
+        <div class="ms-context">
+            <iconify-icon icon="solar:buildings-2-line-duotone" aria-hidden="true"></iconify-icon>
+            <span>
+                <small>Unit aktif</small>
+                <strong><?= esc($namaUnit !== '' ? $namaUnit : 'Unit #' . $unitAktif) ?></strong>
+            </span>
+        </div>
+    </header>
 
-            <form method="GET" action="<?= base_url('mutasi_stok/masuk') ?>"
-                class="d-flex flex-wrap align-items-center gap-2">
-                <input type="text" name="search" value="<?= esc($filter['search']) ?>"
-                    class="form-control form-control-sm" style="width: 220px;"
-                    placeholder="Cari no. nota mutasi...">
+    <?php if (session('sukses')) : ?>
+        <div class="mm-flash mm-flash--ok" role="status">
+            <iconify-icon icon="solar:check-circle-bold" aria-hidden="true"></iconify-icon>
+            <span><?= esc(session('sukses')) ?></span>
+        </div>
+    <?php endif; ?>
+    <?php if (session('gagal')) : ?>
+        <div class="mm-flash mm-flash--danger" role="alert">
+            <iconify-icon icon="solar:danger-triangle-bold" aria-hidden="true"></iconify-icon>
+            <span><?= esc(session('gagal')) ?></span>
+        </div>
+    <?php endif; ?>
 
-                <select name="status" class="form-select form-select-sm" style="width: 160px;">
-                    <option value="">Semua status</option>
-                    <option value="0" <?= $filter['status'] === '0' ? 'selected' : '' ?>>Belum diterima</option>
-                    <option value="1" <?= $filter['status'] === '1' ? 'selected' : '' ?>>Sudah diterima</option>
-                </select>
-
-                <?php if ($isLintas) : ?>
-                    <select name="unit" class="form-select form-select-sm" style="width: 180px;">
-                        <option value="">Semua unit</option>
-                        <?php foreach (($unit ?? []) as $u) : ?>
-                            <option value="<?= (int) $u->idunit ?>" <?= (int) $filter['unit'] === (int) $u->idunit ? 'selected' : '' ?>>
-                                <?= esc($u->NAMA_UNIT) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                <?php endif; ?>
-
-                <div class="input-group input-group-sm" style="width: 190px;">
-                    <span class="input-group-text">Kirim</span>
-                    <input type="date" name="dari" value="<?= esc($filter['dari']) ?>" class="form-control"
-                        aria-label="Tanggal kirim dari">
-                    <span class="input-group-text">s/d</span>
-                    <input type="date" name="sampai" value="<?= esc($filter['sampai']) ?>" class="form-control"
-                        aria-label="Tanggal kirim sampai">
+    <section class="ms-panel mm-filter" aria-label="Filter mutasi masuk">
+        <form method="get" action="<?= base_url('mutasi_stok/masuk') ?>">
+            <div class="mm-filter__top">
+                <div class="mm-field mm-field--search">
+                    <label class="ms-label" for="mm-search">Cari</label>
+                    <div class="mm-input-icon">
+                        <iconify-icon icon="solar:magnifer-linear" aria-hidden="true"></iconify-icon>
+                        <input type="search" id="mm-search" name="search" class="form-control ms-control"
+                            value="<?= esc($filter['search']) ?>"
+                            placeholder="No. nota mutasi..." autocomplete="off">
+                    </div>
                 </div>
 
-                <button type="submit" class="btn btn-sm btn-secondary">
-                    <i class="ti ti-search"></i> Terapkan
-                </button>
-                <?php if ($filter['search'] !== '' || $filter['status'] !== '' || $filter['dari'] !== ''
-                    || $filter['sampai'] !== '' || (int) $filter['unit'] > 0) : ?>
-                    <a href="<?= base_url('mutasi_stok/masuk') ?>" class="btn btn-sm btn-outline-secondary">Reset</a>
+                <?php if ($isLintas) : ?>
+                    <div class="mm-field mm-field--unit">
+                        <label class="ms-label" for="mm-unit">Unit</label>
+                        <select id="mm-unit" name="unit" class="form-select ms-control">
+                            <option value="">Semua unit</option>
+                            <?php foreach ($unit as $u) : ?>
+                                <option value="<?= (int) $u->idunit ?>" <?= (int) $filter['unit'] === (int) $u->idunit ? 'selected' : '' ?>>
+                                    <?= esc($u->NAMA_UNIT) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 <?php endif; ?>
-            </form>
-        </div>
-    </div>
-    <div class="card-body table-responsive">
-        <?php if (empty($items)) : ?>
-            <?php
-            // Ditulis eksplisit, bukan `||` biasa: status '0' itu falsy, jadi
-            // menyaring "Belum Diterima" akan terbaca sebagai "tidak ada
-            // filter" lalu muncul pesan "belum ada mutasi masuk" yang bohong.
-            $adaFilter = $filter['search'] !== '' || $filter['status'] !== ''
-                || $filter['dari'] !== '' || $filter['sampai'] !== '' || (int) $filter['unit'] > 0;
-            ?>
-            <div class="text-center py-5">
-                <i class="ti ti-mood-empty fs-2 d-block mb-2 text-secondary"></i>
-                <p class="text-muted mb-2">
+
+                <div class="mm-field mm-field--dates">
+                    <span class="ms-label">Tanggal kirim</span>
+                    <div class="mm-daterange">
+                        <input type="date" name="dari" class="form-control ms-control"
+                            value="<?= esc($filter['dari']) ?>" aria-label="Tanggal kirim dari">
+                        <span class="mm-daterange__sep" aria-hidden="true">–</span>
+                        <input type="date" name="sampai" class="form-control ms-control"
+                            value="<?= esc($filter['sampai']) ?>" aria-label="Tanggal kirim sampai">
+                    </div>
+                </div>
+
+                <div class="mm-field mm-field--actions">
+                    <button type="submit" class="ms-btn ms-btn--primary">
+                        <iconify-icon icon="solar:filter-bold" aria-hidden="true"></iconify-icon>
+                        Terapkan
+                    </button>
                     <?php if ($adaFilter) : ?>
-                        Tidak ada mutasi yang cocok dengan filter ini.
-                    <?php else : ?>
-                        Belum ada mutasi masuk.
+                        <a href="<?= base_url('mutasi_stok/masuk') ?>" class="ms-btn ms-btn--ghost">
+                            <iconify-icon icon="solar:refresh-linear" aria-hidden="true"></iconify-icon>
+                            Reset
+                        </a>
                     <?php endif; ?>
-                </p>
+                </div>
+            </div>
+
+            <div class="mm-filter__bottom">
+                <div class="mm-chips" role="group" aria-label="Filter status">
+                    <?php foreach ($statusOptions as [$value, $label]) :
+                        $id = 'mm-status-' . ($value === '' ? 'semua' : ($value === '0' ? 'belum' : 'sudah'));
+                    ?>
+                        <input class="mm-chip-input" type="radio" name="status" id="<?= $id ?>"
+                            value="<?= esc($value, 'attr') ?>" <?= (string) $filter['status'] === $value ? 'checked' : '' ?>>
+                        <label class="mm-chip" for="<?= $id ?>"><?= esc($label) ?></label>
+                    <?php endforeach; ?>
+                </div>
+                <p class="mm-filter__hint">Status langsung diterapkan.</p>
+            </div>
+        </form>
+    </section>
+
+    <section class="ms-panel" aria-labelledby="mm-results-title">
+        <div class="ms-panel__head">
+            <div class="ms-panel__title">
+                <span class="ms-icon" aria-hidden="true">
+                    <iconify-icon icon="solar:inbox-line-bold"></iconify-icon>
+                </span>
+                <div>
+                    <h2 id="mm-results-title">Daftar mutasi masuk</h2>
+                    <p>
+                        <?php if ($adaFilter) : ?>
+                            Hasil filter mutasi masuk.
+                        <?php elseif ($isLintas) : ?>
+                            Seluruh mutasi masuk, terbaru lebih dulu.
+                        <?php else : ?>
+                            Mutasi yang ditujukan ke unit Anda, terbaru lebih dulu.
+                        <?php endif; ?>
+                    </p>
+                </div>
+            </div>
+            <span class="mm-count"><strong><?= number_format($total, 0, ',', '.') ?></strong> mutasi</span>
+        </div>
+
+        <?php if (empty($items)) : ?>
+            <div class="ms-empty">
+                <span class="ms-empty__icon" aria-hidden="true">
+                    <iconify-icon icon="solar:inbox-line-bold"></iconify-icon>
+                </span>
                 <?php if ($adaFilter) : ?>
-                    <a href="<?= base_url('mutasi_stok/masuk') ?>" class="btn btn-sm btn-outline-secondary">
-                        <i class="ti ti-filter-off"></i> Reset filter
+                    <h3>Tidak ada mutasi yang cocok</h3>
+                    <p>Coba longgarkan filter atau reset untuk melihat semua mutasi masuk.</p>
+                    <a href="<?= base_url('mutasi_stok/masuk') ?>" class="ms-btn ms-btn--ghost">
+                        <iconify-icon icon="solar:refresh-linear" aria-hidden="true"></iconify-icon>
+                        Reset filter
+                    </a>
+                <?php else : ?>
+                    <h3>Belum ada mutasi masuk</h3>
+                    <p>Mutasi yang dikirim ke unit Anda akan muncul di sini setelah dikirim dari unit lain.</p>
+                    <a href="<?= base_url('mutasi_stok') ?>" class="ms-btn ms-btn--ghost">
+                        <iconify-icon icon="solar:routing-2-line-duotone" aria-hidden="true"></iconify-icon>
+                        Buat mutasi
                     </a>
                 <?php endif; ?>
             </div>
         <?php else : ?>
-            <table class="table table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>No. Nota</th>
-                        <th>Tgl Kirim</th>
-                        <th>Pengirim</th>
-                        <th>Penerima</th>
-                        <th class="text-end">Nilai</th>
-                        <th>Status</th>
-                        <th class="text-end">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($items as $m) : ?>
+            <div class="ms-table-wrap">
+                <table class="ms-table mm-table">
+                    <thead>
                         <tr>
-                            <td class="fw-semibold"><?= esc($m->no_nota_mutasi) ?><br>
-                                <small class="text-muted">#<?= $m->idmutasi ?></small>
-                            </td>
-                            <td><?= esc($m->tanggal_kirim) ?></td>
-                            <td><?= esc($m->nama_unit_kirim) ?></td>
-                            <td><?= esc($m->nama_unit_terima) ?></td>
-                            <td class="text-end fw-semibold"><?= $rp($m->total) ?></td>
-                            <td>
-                                <?php if ($m->status === '1') : ?>
-                                    <span class="badge bg-success-subtle text-success">Diterima</span>
-                                    <small class="d-block text-muted"><?= esc($m->tanggal_terima ?: '-') ?></small>
-                                <?php else : ?>
-                                    <span class="badge bg-warning-subtle text-warning">Belum diterima</span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="text-end">
-                                <?php if ($m->status === '1' && $bisaBatal) : ?>
-                                    <button type="button"
-                                        class="btn btn-sm btn-outline-danger btn-batal-terima"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#modalBatalTerima"
-                                        data-id="<?= $m->idmutasi ?>"
-                                        data-nota="<?= esc($m->no_nota_mutasi) ?>"
-                                        data-terima="<?= esc($m->nama_unit_terima) ?>"
-                                        data-kirim="<?= esc($m->nama_unit_kirim) ?>"
-                                        data-total="<?= (int) $m->total ?>"
-                                        data-tanggal-terima="<?= esc($m->tanggal_terima ?: '') ?>">Batal Terima</button>
-                                <?php endif; ?>
-                                <?php if ($m->status !== '1') : ?>
-                                    <button type="button"
-                                        class="btn btn-sm btn-success btn-terima"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#modalTerimaMutasi"
-                                        data-id="<?= $m->idmutasi ?>"
-                                        data-nota="<?= esc($m->no_nota_mutasi) ?>"
-                                        data-kirim="<?= esc($m->nama_unit_kirim) ?>"
-                                        data-terima="<?= esc($m->nama_unit_terima) ?>"
-                                        data-tanggal="<?= esc($m->tanggal_kirim) ?>"
-                                        data-total="<?= (int) $m->total ?>"
-                                        data-detail="<?= esc(json_encode(array_map(fn($d) => [
-                                            'nama'   => $d->nama_barang,
-                                            'jumlah' => (float) $d->jumlah_terima,
-                                            'harga'  => (float) $d->harga_mutasi,
-                                            'nilai'  => (float) ($d->nilai ?? 0),
-                                        ], $m->detail))) ?>">Terima</button>
-                                <?php endif; ?>
-                                <button type="button" class="btn btn-sm btn-light"
-                                    data-bs-toggle="collapse" data-bs-target="#detail-<?= $m->idmutasi ?>">Detail</button>
-                            </td>
+                            <th scope="col">No. Nota</th>
+                            <th scope="col">Tgl Kirim</th>
+                            <th scope="col">Rute</th>
+                            <th scope="col" class="ms-money">Nilai</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="text-end">Aksi</th>
                         </tr>
-                        <tr class="collapse" id="detail-<?= $m->idmutasi ?>">
-                            <td colspan="7" class="ps-4 py-1">
-                                <table class="table table-sm table-striped align-middle mb-1 w-50">
-                                    <thead>
-                                        <tr><th>Barang</th><th class="text-end">Jml Terima</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($m->detail as $d) : ?>
-                                            <tr>
-                                                <td><?= esc($d->nama_barang) ?></td>
-                                                <td class="text-end"><?= (int) $d->jumlah_terima ?></td>
-                                                <td class="text-end"><?= $rp($d->harga_mutasi) ?></td>
-                                                <td class="text-end"><?= $rp($d->nilai ?? 0) ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                                <small class="text-muted">Total: <strong><?= $rp($m->total) ?></strong></small>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php endif; ?>
-    </div>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($items as $m) : ?>
+                            <tr class="mm-main">
+                                <td data-label="Nota">
+                                    <span class="mm-note"><?= esc($m->no_nota_mutasi) ?></span>
+                                    <span class="mm-note-id">#<?= (int) $m->idmutasi ?></span>
+                                </td>
+                                <td data-label="Tanggal">
+                                    <time class="mm-date" datetime="<?= esc($m->tanggal_kirim) ?>"><?= esc($tgl($m->tanggal_kirim)) ?></time>
+                                </td>
+                                <td data-label="Rute">
+                                    <span class="mm-route">
+                                        <span class="visually-hidden">Dari </span>
+                                        <span class="mm-route__from"><?= esc($m->nama_unit_kirim) ?></span>
+                                        <iconify-icon class="mm-route__arrow" icon="solar:arrow-right-linear" aria-hidden="true"></iconify-icon>
+                                        <span class="visually-hidden"> ke </span>
+                                        <span class="mm-route__to"><?= esc($m->nama_unit_terima) ?></span>
+                                    </span>
+                                </td>
+                                <td class="ms-money" data-label="Nilai">
+                                    <span class="mm-value"><?= $rp($m->total) ?></span>
+                                </td>
+                                <td data-label="Status">
+                                    <?php if ($m->status === '1') : ?>
+                                        <span class="mm-status mm-status--done">Diterima</span>
+                                        <span class="mm-status-date"><?= esc($tgl($m->tanggal_terima)) ?></span>
+                                    <?php else : ?>
+                                        <span class="mm-status mm-status--pending">Belum diterima</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td data-label="Aksi">
+                                    <div class="mm-actions">
+                                        <?php if ($m->status === '1' && $bisaBatal) : ?>
+                                            <button type="button" class="ms-btn ms-btn--danger-ghost btn-batal-terima"
+                                                data-bs-toggle="modal" data-bs-target="#modalBatalTerima"
+                                                data-id="<?= (int) $m->idmutasi ?>"
+                                                data-nota="<?= esc($m->no_nota_mutasi, 'attr') ?>"
+                                                data-terima="<?= esc($m->nama_unit_terima, 'attr') ?>"
+                                                data-kirim="<?= esc($m->nama_unit_kirim, 'attr') ?>"
+                                                data-total="<?= (int) $m->total ?>"
+                                                data-tanggal-terima="<?= esc($m->tanggal_terima ? $tgl($m->tanggal_terima) : '', 'attr') ?>">
+                                                <iconify-icon icon="solar:undo-left-bold" aria-hidden="true"></iconify-icon>
+                                                Batal terima
+                                            </button>
+                                        <?php endif; ?>
 
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 px-4 py-3 border-top">
-        <span class="text-muted small">
-            Menampilkan
-            <?= $total > 0 ? ($currentPage - 1) * $perPage + 1 : 0 ?>
-            - <?= min($currentPage * $perPage, $total) ?>
-            dari <?= $total ?> mutasi
-        </span>
+                                        <?php if ($m->status !== '1') : ?>
+                                            <button type="button" class="ms-btn ms-btn--primary btn-terima"
+                                                data-bs-toggle="modal" data-bs-target="#modalTerimaMutasi"
+                                                data-id="<?= (int) $m->idmutasi ?>"
+                                                data-nota="<?= esc($m->no_nota_mutasi, 'attr') ?>"
+                                                data-kirim="<?= esc($m->nama_unit_kirim, 'attr') ?>"
+                                                data-terima="<?= esc($m->nama_unit_terima, 'attr') ?>"
+                                                data-tanggal="<?= esc($tgl($m->tanggal_kirim), 'attr') ?>"
+                                                data-total="<?= (int) $m->total ?>"
+                                                data-detail="<?= esc($detailJson($m), 'attr') ?>">
+                                                <iconify-icon icon="solar:check-circle-bold" aria-hidden="true"></iconify-icon>
+                                                Terima
+                                            </button>
+                                        <?php endif; ?>
 
-        <nav aria-label="Navigasi halaman">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
-                    <a class="page-link" href="<?= $urlMasuk(['page' => $currentPage - 1]) ?>"
-                        tabindex="-1" aria-label="Halaman sebelumnya">
-                        <iconify-icon icon="solar:arrow-left-broken" width="18" height="18"></iconify-icon>
-                    </a>
-                </li>
-                <?php
-                $window   = 2;
-                $start    = max(1, $currentPage - $window);
-                $end      = min($totalPages, $currentPage + $window);
-                $showHead = $start > 1;
-                $showTail = $end < $totalPages;
-                ?>
-                <?php if ($showHead) : ?>
-                    <li class="page-item"><a class="page-link" href="<?= $urlMasuk(['page' => 1]) ?>">1</a></li>
-                    <li class="page-item disabled"><span class="page-link">...</span></li>
-                <?php endif; ?>
-                <?php for ($i = $start; $i <= $end; $i++) : ?>
-                    <li class="page-item <?= $i === $currentPage ? 'active' : '' ?>">
-                        <a class="page-link" href="<?= $urlMasuk(['page' => $i]) ?>"><?= $i ?></a>
-                    </li>
-                <?php endfor; ?>
-                <?php if ($showTail) : ?>
-                    <li class="page-item disabled"><span class="page-link">...</span></li>
-                    <li class="page-item"><a class="page-link" href="<?= $urlMasuk(['page' => $totalPages]) ?>"><?= $totalPages ?></a></li>
-                <?php endif; ?>
-                <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
-                    <a class="page-link" href="<?= $urlMasuk(['page' => $currentPage + 1]) ?>"
-                        aria-label="Halaman berikutnya">
-                        <iconify-icon icon="solar:arrow-right-broken" width="18" height="18"></iconify-icon>
-                    </a>
-                </li>
-            </ul>
-        </nav>
-    </div>
-</div>
-
-<div class="modal fade" id="modalTerimaMutasi" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <form id="formTerimaMutasi" method="post" class="modal-content">
-            <input type="hidden" name="asal" value="<?= esc($qs()) ?>">
-            <div class="modal-header">
-                <h5 class="modal-title">Konfirmasi Terima Mutasi</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <div class="bg-light p-3 rounded-2 h-100">
-                            <small class="text-muted d-block">No. Nota Mutasi</small>
-                            <span class="fw-semibold" id="cm-nota">-</span>
-                            <small class="text-muted d-block mt-2">Tanggal Kirim</small>
-                            <span class="fw-semibold" id="cm-tanggal">-</span>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="bg-light p-3 rounded-2 h-100">
-                            <small class="text-muted d-block"><i class="ti ti-corner-up-left"></i> Pengirim</small>
-                            <span class="fw-semibold" id="cm-kirim">-</span>
-                            <small class="text-muted d-block mt-2"><i class="ti ti-corner-down-right"></i> Penerima</small>
-                            <span class="fw-semibold" id="cm-terima">-</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped align-middle mb-1">
-                        <thead>
-                            <tr>
-                                <th>Barang</th>
-                                <th class="text-end">Jml Terima</th>
-                                <th class="text-end">Harga</th>
-                                <th class="text-end">Subtotal</th>
+                                        <button type="button" class="ms-btn ms-btn--ghost mm-detail-toggle"
+                                            data-bs-toggle="collapse" data-bs-target="#detail-<?= (int) $m->idmutasi ?>"
+                                            aria-expanded="false" aria-controls="detail-<?= (int) $m->idmutasi ?>">
+                                            <iconify-icon icon="solar:eye-linear" aria-hidden="true"></iconify-icon>
+                                            Detail
+                                            <iconify-icon class="mm-caret" icon="solar:alt-arrow-down-linear" aria-hidden="true"></iconify-icon>
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody id="cm-detail"></tbody>
-                    </table>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded-2 mb-3">
-                    <span class="fw-semibold">Total Nilai Mutasi</span>
-                    <span class="fs-5 fw-bold text-primary" id="cm-total">-</span>
-                </div>
-
-                <div class="alert alert-info py-2 mb-0">
-                    <i class="ti ti-info-circle"></i> Dengan menekan <strong>Terima &amp; Buat H/P</strong>,
-                    mutasi ditandai <strong>Diterima</strong> dan sistem otomatis membuat
-                    <strong>Hutang/Piutang antar unit</strong> (pengirim berpiutang, penerima berhutang)
-                    dengan <strong>jatuh tempo <?= date('Y-m-d', strtotime('+3 days')) ?></strong>
-                    (+3 hari dari hari ini). Verifikasi harga &amp; jumlah di atas sebelum mengonfirmasi.
-                </div>
+                            <tr class="collapse mm-detail-row" id="detail-<?= (int) $m->idmutasi ?>">
+                                <td colspan="6">
+                                    <div class="mm-detail">
+                                        <div class="mm-detail__head">
+                                            <span>Rincian barang</span>
+                                            <span><?= count($m->detail ?? []) ?> item</span>
+                                        </div>
+                                        <div class="mm-detail__scroll">
+                                            <table class="mm-lines" aria-label="Rincian barang <?= esc($m->no_nota_mutasi, 'attr') ?>">
+                                                <thead>
+                                                    <tr>
+                                                        <th scope="col">Barang</th>
+                                                        <th scope="col" class="mm-money">Jml</th>
+                                                        <th scope="col" class="mm-money">Harga</th>
+                                                        <th scope="col" class="mm-money">Subtotal</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php if (empty($m->detail)) : ?>
+                                                        <tr>
+                                                            <td colspan="4" class="mm-lines-empty">Tidak ada detail barang.</td>
+                                                        </tr>
+                                                    <?php else : ?>
+                                                        <?php foreach ($m->detail as $d) : ?>
+                                                            <tr>
+                                                                <td><?= esc($d->nama_barang) ?></td>
+                                                                <td class="mm-money"><?= (int) $d->jumlah_terima ?></td>
+                                                                <td class="mm-money"><?= $rp($d->harga_mutasi) ?></td>
+                                                                <td class="mm-money"><?= $rp($d->nilai ?? 0) ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    <?php endif; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="mm-detail__total">
+                                            <span>Total</span>
+                                            <strong><?= $rp($m->total) ?></strong>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                <button type="submit" class="btn btn-success">
-                    <i class="ti ti-check"></i> Terima &amp; Buat H/P
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
 
-</div>
+            <div class="mm-foot">
+                <span class="mm-foot__text">
+                    Menampilkan <strong><?= $dariTampil ?>–<?= $sampaiTampil ?></strong>
+                    dari <strong><?= number_format($total, 0, ',', '.') ?></strong> mutasi
+                </span>
 
-<?php if ($bisaBatal) : ?>
-<div class="modal fade" id="modalBatalTerima" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <form id="formBatalTerima" method="post" class="modal-content" novalidate>
-            <input type="hidden" name="asal" value="<?= esc($qs()) ?>">
-            <div class="modal-header">
-                <h5 class="modal-title">Batalkan Penerimaan Mutasi</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                <nav aria-label="Navigasi halaman">
+                    <ul class="mm-pagination">
+                        <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= $urlMasuk(['page' => $currentPage - 1]) ?>"
+                                tabindex="-1" aria-label="Halaman sebelumnya">
+                                <iconify-icon icon="solar:alt-arrow-left-linear" aria-hidden="true"></iconify-icon>
+                            </a>
+                        </li>
+                        <?php
+                        $window   = 2;
+                        $start    = max(1, $currentPage - $window);
+                        $end      = min($totalPages, $currentPage + $window);
+                        $showHead = $start > 1;
+                        $showTail = $end < $totalPages;
+                        ?>
+                        <?php if ($showHead) : ?>
+                            <li class="page-item"><a class="page-link" href="<?= $urlMasuk(['page' => 1]) ?>">1</a></li>
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        <?php endif; ?>
+                        <?php for ($i = $start; $i <= $end; $i++) : ?>
+                            <li class="page-item <?= $i === $currentPage ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= $urlMasuk(['page' => $i]) ?>" <?= $i === $currentPage ? 'aria-current="page"' : '' ?>><?= $i ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <?php if ($showTail) : ?>
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                            <li class="page-item"><a class="page-link" href="<?= $urlMasuk(['page' => $totalPages]) ?>"><?= $totalPages ?></a></li>
+                        <?php endif; ?>
+                        <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= $urlMasuk(['page' => $currentPage + 1]) ?>"
+                                aria-label="Halaman berikutnya">
+                                <iconify-icon icon="solar:alt-arrow-right-linear" aria-hidden="true"></iconify-icon>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
             </div>
-            <div class="modal-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <div class="bg-light p-3 rounded-2 h-100">
-                            <small class="text-muted d-block">No. Nota Mutasi</small>
-                            <span class="fw-semibold" id="bcb-nota">-</span>
-                            <small class="text-muted d-block mt-2">Diterima pada</small>
-                            <span class="fw-semibold" id="bcb-tanggal">-</span>
+        <?php endif; ?>
+    </section>
+
+    <div class="modal fade" id="modalTerimaMutasi" tabindex="-1"
+        aria-labelledby="modalTerimaLabel" aria-describedby="modalTerimaDesc" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <form id="formTerimaMutasi" method="post" class="modal-content ms-modal">
+                <input type="hidden" name="asal" value="<?= esc($asal, 'attr') ?>">
+                <div class="modal-header">
+                    <div>
+                        <h2 class="modal-title" id="modalTerimaLabel">Terima mutasi</h2>
+                        <p id="modalTerimaDesc">Periksa rincian sebelum mengonfirmasi penerimaan.</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body mm-modal-body">
+                    <div class="mm-receipt">
+                        <div class="mm-receipt__cell">
+                            <span class="mm-kicker">Dokumen</span>
+                            <strong id="cm-nota">-</strong>
+                            <span class="mm-receipt__meta">Dikirim <span id="cm-tanggal">-</span></span>
+                        </div>
+                        <div class="mm-receipt__cell">
+                            <span class="mm-kicker">Rute</span>
+                            <div class="mm-receipt__route">
+                                <span>
+                                    <small>Dari</small>
+                                    <strong id="cm-kirim">-</strong>
+                                </span>
+                                <iconify-icon icon="solar:arrow-right-linear" aria-hidden="true"></iconify-icon>
+                                <span>
+                                    <small>Ke</small>
+                                    <strong id="cm-terima">-</strong>
+                                </span>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="bg-light p-3 rounded-2 h-100">
-                            <small class="text-muted d-block"><i class="ti ti-corner-up-left"></i> Pengirim</small>
-                            <span class="fw-semibold" id="bcb-kirim">-</span>
-                            <small class="text-muted d-block mt-2"><i class="ti ti-corner-down-right"></i> Penerima</small>
-                            <span class="fw-semibold" id="bcb-terima">-</span>
+
+                    <div class="mm-lines-wrap">
+                        <table class="ms-table mm-lines-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Barang</th>
+                                    <th scope="col" class="ms-money">Jml terima</th>
+                                    <th scope="col" class="ms-money">Harga</th>
+                                    <th scope="col" class="ms-money">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cm-detail"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="mm-total-row">
+                        <span>Total nilai mutasi</span>
+                        <strong id="cm-total">-</strong>
+                    </div>
+
+                    <div class="mm-callout mm-callout--info">
+                        <iconify-icon icon="solar:info-circle-bold" aria-hidden="true"></iconify-icon>
+                        <p>
+                            Dengan menekan <strong>Terima &amp; buat H/P</strong>, mutasi ditandai
+                            <strong>Diterima</strong> dan sistem otomatis membuat
+                            <strong>Hutang/Piutang antar unit</strong> (pengirim berpiutang, penerima berhutang)
+                            dengan <strong>jatuh tempo <?= esc($hpDue) ?></strong> (+3 hari dari hari ini).
+                            Verifikasi harga &amp; jumlah di atas sebelum mengonfirmasi.
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="ms-btn ms-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="ms-btn ms-btn--primary">
+                        <iconify-icon icon="solar:check-circle-bold" aria-hidden="true"></iconify-icon>
+                        Terima &amp; buat H/P
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <?php if ($bisaBatal) : ?>
+        <div class="modal fade" id="modalBatalTerima" tabindex="-1"
+            aria-labelledby="modalBatalLabel" aria-describedby="modalBatalDesc" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <form id="formBatalTerima" method="post" class="modal-content ms-modal" novalidate>
+                    <input type="hidden" name="asal" value="<?= esc($asal, 'attr') ?>">
+                    <div class="modal-header">
+                        <div>
+                            <h2 class="modal-title" id="modalBatalLabel">Batalkan penerimaan</h2>
+                            <p id="modalBatalDesc">Mutasi kembali ke status belum diterima dan H/P dibatalkan.</p>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body mm-modal-body">
+                        <div class="mm-receipt mm-receipt--stack">
+                            <div class="mm-receipt__cell">
+                                <span class="mm-kicker">Dokumen</span>
+                                <strong id="bcb-nota">-</strong>
+                                <span class="mm-receipt__meta">Diterima pada <span id="bcb-tanggal">-</span></span>
+                            </div>
+                            <div class="mm-receipt__cell">
+                                <span class="mm-kicker">Rute</span>
+                                <div class="mm-receipt__route">
+                                    <span>
+                                        <small>Dari</small>
+                                        <strong id="bcb-kirim">-</strong>
+                                    </span>
+                                    <iconify-icon icon="solar:arrow-right-linear" aria-hidden="true"></iconify-icon>
+                                    <span>
+                                        <small>Ke</small>
+                                        <strong id="bcb-terima">-</strong>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mm-total-row mm-total-row--danger">
+                            <span>Nilai dokumen dibatalkan</span>
+                            <strong id="bcb-total">-</strong>
+                        </div>
+
+                        <div class="mm-callout mm-callout--danger">
+                            <iconify-icon icon="solar:danger-triangle-bold" aria-hidden="true"></iconify-icon>
+                            <p>
+                                Menekan <strong>Batalkan penerimaan</strong> akan mengembalikan mutasi ke status
+                                <strong>Belum diterima</strong> dan membatalkan <strong>Hutang/Piutang antar unit</strong>
+                                yang dibuat saat penerimaan (nilai <span class="fw-semibold" id="bcb-total-inline">-</span>).
+                                Dokumennya tidak dihapus fisik, tapi ditandai batal dan alasannya disimpan.
+                            </p>
+                        </div>
+
+                        <div class="mm-reason">
+                            <label for="alasan_batal" class="ms-label">
+                                Alasan pembatalan <span aria-hidden="true">*</span>
+                            </label>
+                            <textarea class="form-control ms-control" id="alasan_batal" name="alasan_batal" rows="3"
+                                maxlength="255" required
+                                placeholder="Contoh: salah klik tombol Terima pada nota ini."></textarea>
+                            <div class="ms-help" id="alasanBatalHelp">
+                                Wajib diisi. Alasan ini tersimpan pada mutasi dan pada dokumen H/P yang dibatalkan.
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded-2 mb-3">
-                    <span class="fw-semibold">Nilai Dokumen Dibatalkan</span>
-                    <span class="fs-5 fw-bold text-danger" id="bcb-total">-</span>
-                </div>
-
-                <div class="alert alert-danger py-2 mb-3">
-                    <i class="ti ti-alert-triangle"></i> Menekan <strong>Batalkan Penerimaan</strong> akan
-                    mengembalikan mutasi ke status <strong>Belum Diterima</strong> dan membatalkan
-                    <strong>Hutang/Piutang antar unit</strong> yang dibuat saat penerimaan
-                    (nilai <span class="fw-semibold" id="bcb-total-inline">-</span>). Dokumennya tidak dihapus
-                    fisik, tapi ditandai batal dan alasannya disimpan.
-                </div>
-
-                <div class="mb-2">
-                    <label for="alasan_batal" class="form-label fw-semibold">
-                        Alasan pembatalan <span class="text-danger">*</span>
-                    </label>
-                    <textarea class="form-control" id="alasan_batal" name="alasan_batal" rows="3"
-                        maxlength="255" required
-                        placeholder="Contoh: salah klik tombol Terima pada nota ini."></textarea>
-                    <div class="form-text" id="alasanBatalHelp">
-                        Wajib diisi. Alasan ini tersimpan pada mutasi dan pada dokumen H/P yang dibatalkan.
+                    <div class="modal-footer">
+                        <button type="button" class="ms-btn ms-btn--ghost" data-bs-dismiss="modal">Kembali</button>
+                        <button type="submit" class="ms-btn ms-btn--danger">
+                            <iconify-icon icon="solar:undo-left-bold" aria-hidden="true"></iconify-icon>
+                            Batalkan penerimaan
+                        </button>
                     </div>
-                </div>
+                </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Kembali</button>
-                <button type="submit" class="btn btn-danger">
-                    <i class="ti ti-arrow-back-up"></i> Batalkan Penerimaan
-                </button>
-            </div>
-        </form>
-    </div>
+        </div>
+    <?php endif; ?>
 </div>
-<?php endif; ?>
 
 <script>
 (function () {
@@ -417,29 +586,48 @@ $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
         n = Number(n || 0);
         return 'Rp ' + n.toLocaleString('id-ID');
     };
+    var escapeHtml = function (value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+    };
+    var parseDetail = function (raw) {
+        try {
+            return JSON.parse(raw || '[]');
+        } catch (e) {
+            return [];
+        }
+    };
+    var setText = function (id, value) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.textContent = value == null || value === '' ? '-' : value;
+        }
+    };
+
     document.querySelectorAll('.btn-terima').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var id = btn.dataset.id;
-            var detail = JSON.parse(btn.dataset.detail || '[]');
+            var detail = parseDetail(btn.dataset.detail);
 
-            document.getElementById('cm-nota').textContent = btn.dataset.nota;
-            document.getElementById('cm-tanggal').textContent = btn.dataset.tanggal;
-            document.getElementById('cm-kirim').textContent = btn.dataset.kirim;
-            document.getElementById('cm-terima').textContent = btn.dataset.terima;
-            document.getElementById('cm-total').textContent = rp(btn.dataset.total);
+            setText('cm-nota', btn.dataset.nota);
+            setText('cm-tanggal', btn.dataset.tanggal);
+            setText('cm-kirim', btn.dataset.kirim);
+            setText('cm-terima', btn.dataset.terima);
+            setText('cm-total', rp(btn.dataset.total));
 
             var tbody = document.getElementById('cm-detail');
             tbody.innerHTML = '';
             if (!detail.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Tidak ada detail barang.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="mm-lines-empty">Tidak ada detail barang.</td></tr>';
             } else {
                 detail.forEach(function (d) {
                     var tr = document.createElement('tr');
                     tr.innerHTML =
-                        '<td>' + d.nama + '</td>' +
-                        '<td class="text-end">' + Number(d.jumlah) + '</td>' +
-                        '<td class="text-end">' + rp(d.harga) + '</td>' +
-                        '<td class="text-end">' + rp(d.nilai) + '</td>';
+                        '<td>' + escapeHtml(d.nama) + '</td>' +
+                        '<td class="ms-money">' + Number(d.jumlah || 0) + '</td>' +
+                        '<td class="ms-money">' + rp(d.harga) + '</td>' +
+                        '<td class="ms-money">' + rp(d.nilai) + '</td>';
                     tbody.appendChild(tr);
                 });
             }
@@ -460,12 +648,12 @@ $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
             btn.addEventListener('click', function () {
                 var total = rp(btn.dataset.total);
 
-                document.getElementById('bcb-nota').textContent = btn.dataset.nota;
-                document.getElementById('bcb-kirim').textContent = btn.dataset.kirim;
-                document.getElementById('bcb-terima').textContent = btn.dataset.terima;
-                document.getElementById('bcb-tanggal').textContent = btn.dataset.tanggalTerima || '-';
-                document.getElementById('bcb-total').textContent = total;
-                document.getElementById('bcb-total-inline').textContent = total;
+                setText('bcb-nota', btn.dataset.nota);
+                setText('bcb-kirim', btn.dataset.kirim);
+                setText('bcb-terima', btn.dataset.terima);
+                setText('bcb-tanggal', btn.dataset.tanggalTerima);
+                setText('bcb-total', total);
+                setText('bcb-total-inline', total);
 
                 // Dibuka berulang tidak boleh menyisakan alasan lama:
                 // membatalkan mutasi berbeda butuh alasan yang berbeda.
@@ -490,5 +678,17 @@ $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
             alasan.focus();
         });
     }
+
+    // Chip status langsung menyaring; kolom lain menunggu tombol Terapkan.
+    document.querySelectorAll('.mm-chip-input').forEach(function (input) {
+        input.addEventListener('change', function () {
+            if (!input.form) { return; }
+            if (typeof input.form.requestSubmit === 'function') {
+                input.form.requestSubmit();
+            } else {
+                input.form.submit();
+            }
+        });
+    });
 })();
 </script>

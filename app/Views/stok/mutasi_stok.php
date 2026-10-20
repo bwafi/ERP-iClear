@@ -1,426 +1,680 @@
-<script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
+<?= $this->include('stok/_mutasi_theme') ?>
 
-<!-- Page Header -->
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Mutasi Stok</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Stok</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">Mutasi Stok</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<?php
+$stokUnit    = $stok_unit ?? [];
+$suplierUnit = $suplier_unit ?? [];
+$unitAktif   = (int) session('ID_UNIT');
+$namaUnit    = trim((string) session('NAMA_UNIT'));
+$isAdmin     = $unitAktif === 1;
+$today       = date('Y-m-d');
 
-<!-- Form & Main Content -->
-<div class="card w-100 position-relative overflow-hidden">
-    <div class="px-4 py-3 border-bottom"></div>
+$jabatan  = (int) session('ID_JABATAN');
+// Hanya Admin Root (jabatan 1) yang boleh memilih unit pengirim lain.
+$bolehPilihUnit = $jabatan === 1;
 
-    <div class="card-body px-4 pt-4 pb-2">
-        <form action="<?= base_url('insert_mutasi') ?>" method="post" enctype="multipart/form-data">
-            <div class="row g-3">
+// Unit cabang hanya boleh mengirim dari unitnya sendiri (validasi server
+// memaksa hal yang sama), jadi pilihannya dipersempit: menampilkan semua unit
+// hanya akan membuat stok terlihat 0 untuk unit yang tidak ia punya.
+$pilihanKirim = [];
+foreach ($unit as $b) {
+    if ($bolehPilihUnit || (int) $b->idunit === $unitAktif) {
+        $pilihanKirim[] = $b;
+    }
+}
+if ($pilihanKirim === []) {
+    $pilihanKirim[] = (object) ['idunit' => $unitAktif, 'NAMA_UNIT' => 'Unit #' . $unitAktif];
+}
 
-                <div class="col-md-6">
-                    <label for="nama_unit1" class="form-label">Unit Pengirim</label>
-                    <select class="form-select" id="unit1" name="unit1" required
-                        onchange="tampilkanIdUnit1()">
-                        <option value="" selected>Pilih Unit</option>
-                        <?php foreach ($unit as $b): ?>
-                            <option value="<?= $b->idunit; ?>"><?= $b->NAMA_UNIT; ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <input hidden name="id_unit1_text" type="hidden" id="id_unit1_text"
-                        class="text-muted d-block mt-2"></input>
-                </div>
+$rp = static fn($n): string => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
 
-                <div class="col-md-6">
-                    <label for="nama_unit2" class="form-label">Unit Penerima</label>
-                    <select class="form-select" id="unit2" name="unit2" required
-                        onchange="tampilkanIdUnit2()">
-                        <option value="" selected>Pilih Unit</option>
-                        <?php foreach ($unit as $b): ?>
-                            <option value="<?= $b->idunit; ?>"><?= $b->NAMA_UNIT; ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <input name="id_unit2_text" type="hidden" id="id_unit2_text"
-                        class="text-muted d-block mt-2"></input>
-                </div>
+// Stok & suplier awal mengikuti unit aktif. JS akan menggantinya begitu
+// unit pengirim dipilih, memakai peta yang sama untuk semua unit.
+$stokUntuk = static function ($p, int $idUnit) use ($stokUnit): float {
+    $id = (int) $p->idbarang;
+    if (isset($stokUnit[$idUnit][$id])) {
+        return (float) $stokUnit[$idUnit][$id];
+    }
 
+    return (float) ($p->stok_akhir ?? 0);
+};
+$suplierUntuk = static function ($p, int $idUnit) use ($suplierUnit): string {
+    return trim((string) ($suplierUnit[$idUnit][(int) $p->idbarang] ?? ''));
+};
+$chipStok = static function (float $stok): string {
+    $kelas = $stok <= 0 ? ' is-empty' : ($stok <= 5 ? ' is-low' : '');
 
-                <?php
-                $isAdmin = session('ID_UNIT') == 1;
-                $today   = date('Y-m-d');
-                ?>
+    return '<span class="ms-stock' . $kelas . '">' . number_format($stok, 0, ',', '.') . '</span>';
+};
 
-                <div class="col-md-3">
-                    <label for="tanggal_kirim" class="form-label">Tanggal Kirim</label>
-                    <input
-                        type="date"
-                        class="form-control"
-                        id="tanggal_kirim"
-                        name="tanggal_kirim"
-                        value="<?= $today ?>"
-                        <?= $isAdmin ? '' : 'readonly' ?>
-                        required>
-                </div>
+$jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_FORCE_OBJECT;
+$jsonStok = json_encode(empty($stokUnit) ? new stdClass() : $stokUnit, $jsonFlags) ?: '{}';
+$jsonSuplier = json_encode(empty($suplierUnit) ? new stdClass() : $suplierUnit, $jsonFlags) ?: '{}';
+?>
 
-                <div class="col-md-3">
-                    <label for="tanggal_terima" class="form-label">Tanggal Terima</label>
-                    <input
-                        type="date"
-                        class="form-control"
-                        id="tanggal_terima"
-                        name="tanggal_terima"
-                        value="<?= $today ?>"
-                        <?= $isAdmin ? '' : 'readonly' ?>
-                        required>
-                </div>
+<div class="mutasi-stok">
 
-            </div>
+    <header class="ms-head">
+        <div>
+            <nav class="ms-crumb" aria-label="breadcrumb">
+                <a href="<?= base_url('/') ?>">Stok</a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Mutasi Stok</span>
+            </nav>
+            <h1>Mutasi Stok</h1>
+            <p>Catat perpindahan barang antar unit. Stok dan suplier mengikuti unit pengirim yang dipilih.</p>
+        </div>
 
-            <!-- Button Trigger Modal -->
-            <div class="mt-4">
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal"
-                    data-bs-target="#pilih-produk-modal" style="display: inline-flex; align-items: center;">
-                    <iconify-icon icon="solar:password-minimalistic-input-broken" width="24" height="24"
-                        style="margin-right: 8px;"></iconify-icon>
-                    Pilih Produk
-                </button>
-            </div>
+        <div class="ms-context">
+            <iconify-icon icon="solar:buildings-2-line-duotone" aria-hidden="true"></iconify-icon>
+            <span>
+                <small>Unit aktif</small>
+                <strong><?= esc($namaUnit !== '' ? $namaUnit : 'Unit #' . $unitAktif) ?></strong>
+            </span>
+        </div>
+    </header>
 
-            <!-- Modal Pilih Produk -->
-            <div class="modal fade" id="pilih-produk-modal" tabindex="-1" aria-labelledby="produkModalLabel"
-                aria-hidden="true">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Pilih Produk</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="table-responsive mb-4 px-4">
-                                <table class="table border text-nowrap mb-0 align-middle" id="produk-modal-table">
-                                    <thead class="text-dark fs-4">
-                                        <tr>
-                                            <th><input type="checkbox" id="select-all-produk"></th>
-                                            <th>
-                                                <h6 class="fs-4 fw-semibold mb-0">Kode Barang</h6>
-                                            </th>
-                                            <th>
-                                                <h6 class="fs-4 fw-semibold mb-0">Nama Barang</h6>
-                                            </th>
-
-                                            <th>
-                                                <h6 class="fs-4 fw-semibold mb-0">Imei</h6>
-                                            </th>
-
-                                            <th>
-                                                <h6 class="fs-4 fw-semibold mb-0">Harga</h6>
-                                            </th>
-
-                                            <th>
-                                                <h6 class="fs-4 fw-semibold mb-0">Kategori</h6>
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($produk as $p): ?>
-                                            <tr>
-                                                <td>
-                                                    <input type="checkbox" class="produk-checkbox"
-                                                        data-id="<?= $p->idbarang ?>" data-kode="<?= $p->kode_barang ?>"
-                                                        data-nama="<?= $p->nama_barang ?>" data-harga="<?= $p->harga ?>"
-                                                        data-harga_beli="<?= $p->harga_beli ?>"
-                                                        data-harga_jual="<?= $p->harga ?>"
-                                                        data-kategori="<?= $p->nama_kategori ?>"
-                                                        data-input="<?= $p->input ?>"
-                                                        data-imei="<?= $p->imei ?>">
-                                                </td>
-                                                <td><?= $p->kode_barang ?></td>
-                                                <td><?= $p->nama_barang ?></td>
-                                                <td><?= !empty($p->imei) ? esc($p->imei) : 'Tidak ada IMEI' ?></td>
-                                                <td><?= 'Rp ' . number_format($p->harga_beli, 0, ',', '.') ?></td>
-                                                <td><?= $p->nama_kategori ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" id="confirm-produk-btn" class="btn btn-primary">Pilih</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                        </div>
+    <form id="formMutasi" action="<?= base_url('insert_mutasi') ?>" method="post">
+        <section class="ms-panel" aria-labelledby="ms-route-title">
+            <div class="ms-panel__head">
+                <div class="ms-panel__title">
+                    <span class="ms-icon" aria-hidden="true">
+                        <iconify-icon icon="solar:routing-2-line-duotone"></iconify-icon>
+                    </span>
+                    <div>
+                        <h2 id="ms-route-title">Rute pengiriman</h2>
+                        <p>Tentukan unit asal dan tujuan sebelum menyusun barang.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Selected Produk Table -->
-            <div class="table-responsive mt-3 mb-4">
-                <table class="table table-bordered align-middle">
-                    <thead class="table-light">
+            <div class="ms-route">
+                <div>
+                    <label class="ms-label" for="unit1">Unit pengirim</label>
+                    <select class="form-select ms-control" id="unit1" name="unit1" required>
+                        <?php if ($bolehPilihUnit) : ?>
+                            <option value="" selected>Pilih unit asal</option>
+                        <?php endif; ?>
+                        <?php foreach ($pilihanKirim as $b) : ?>
+                            <option value="<?= (int) $b->idunit ?>"
+                                <?= ! $bolehPilihUnit || count($pilihanKirim) === 1 ? 'selected' : '' ?>>
+                                <?= esc($b->NAMA_UNIT) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="hidden" name="id_unit1_text" id="id_unit1_text">
+                </div>
+
+                <div class="ms-route__arrow" aria-hidden="true">
+                    <iconify-icon icon="solar:arrow-right-line-duotone"></iconify-icon>
+                </div>
+
+                <div>
+                    <label class="ms-label" for="unit2">Unit penerima</label>
+                    <select class="form-select ms-control" id="unit2" name="unit2" required>
+                        <option value="" selected>Pilih unit tujuan</option>
+                        <?php foreach ($unit as $b) : ?>
+                            <option value="<?= (int) $b->idunit ?>"><?= esc($b->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="hidden" name="id_unit2_text" id="id_unit2_text">
+                </div>
+            </div>
+
+            <?php if (! $bolehPilihUnit) : ?>
+                <p class="ms-lock-note ms-route__note">
+                    <iconify-icon icon="solar:lock-keyhole-minimalistic-line-duotone" aria-hidden="true"></iconify-icon>
+                    Anda hanya bisa mengirim dari unit Anda.
+                </p>
+            <?php endif; ?>
+
+            <div class="ms-dates">
+                <div>
+                    <label class="ms-label" for="tanggal_kirim">Tanggal kirim</label>
+                    <input type="date" class="form-control ms-control" id="tanggal_kirim" name="tanggal_kirim"
+                        value="<?= $today ?>" <?= $isAdmin ? '' : 'readonly' ?> required>
+                    <small class="ms-help">
+                        Barang keluar dari unit pengirim. Tanggal terima dicatat otomatis saat unit penerima
+                        mengonfirmasi di Mutasi Masuk.
+                    </small>
+                </div>
+
+                <?php if (! $isAdmin) : ?>
+                    <p class="ms-lock-note">
+                        <iconify-icon icon="solar:lock-keyhole-minimalistic-line-duotone" aria-hidden="true"></iconify-icon>
+                        Tanggal dikunci untuk unit Anda.
+                    </p>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <section class="ms-panel" aria-labelledby="ms-items-title">
+            <div class="ms-panel__head">
+                <div class="ms-panel__title">
+                    <span class="ms-icon" aria-hidden="true">
+                        <iconify-icon icon="solar:box-minimalistic-line-duotone"></iconify-icon>
+                    </span>
+                    <div>
+                        <h2 id="ms-items-title">Barang yang dikirim</h2>
+                        <p>Pilih produk, lalu isi jumlah kirim. Harga mutasi terisi dari harga beli dan bisa diubah.</p>
+                    </div>
+                </div>
+
+                <button type="button" class="ms-btn ms-btn--primary d-none" id="ms-open-picker"
+                    data-bs-toggle="modal" data-bs-target="#pilih-produk-modal">
+                    <iconify-icon icon="solar:add-circle-line-duotone" aria-hidden="true"></iconify-icon>
+                    Pilih produk
+                </button>
+            </div>
+
+            <div class="ms-empty" id="ms-empty">
+                <span class="ms-empty__icon" aria-hidden="true">
+                    <iconify-icon icon="solar:box-minimalistic-line-duotone"></iconify-icon>
+                </span>
+                <h3>Belum ada barang</h3>
+                <p>Tambahkan produk dari stok unit pengirim untuk mulai menyusun mutasi ini.</p>
+                <button type="button" class="ms-btn ms-btn--primary" data-bs-toggle="modal"
+                    data-bs-target="#pilih-produk-modal">
+                    <iconify-icon icon="solar:add-circle-line-duotone" aria-hidden="true"></iconify-icon>
+                    Pilih produk
+                </button>
+            </div>
+
+            <div class="ms-table-wrap d-none" id="ms-table-wrap">
+                <table class="ms-table ms-table--items">
+                    <thead>
                         <tr>
-                            <th>Kode Barang</th>
-                            <th>Nama Barang</th>
-                            <th>Kategori</th>
-                            <th>Imei</th>
-                            <th>Harga Beli</th>
-                            <th>Harga Jual</th>
-                            <th>Harga Mutasi</th>
-                            <th>Jumlah Kirim</th>
-                            <th>Jumlah Terima</th>
-                            <th>Aksi</th>
+                            <th>Barang</th>
+                            <th class="ms-money">Harga beli</th>
+                            <th class="ms-money">Harga jual</th>
+                            <th>Harga mutasi</th>
+                            <th>Jumlah kirim</th>
+                            <th class="ms-money">Total</th>
+                            <th class="text-end">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="selected-produk-table">
-                        <!-- Rows will be dynamically added -->
+                        <!-- Baris ditambahkan dari modal Pilih Produk -->
                     </tbody>
-                    <tfoot>
-
-                    </tfoot>
                 </table>
-
-                <button style="height: fit-content;" class="btn btn-success mt-3" type="submit">Simpan</button>
-
-
-
-
             </div>
 
-            <script>
-                function formatToRupiah(angka) {
-                    const cleaned = angka.replace(/[^\d]/g, '');
-                    const number = parseInt(cleaned) || 0;
-                    return 'Rp ' + number.toLocaleString('id-ID');
-                }
+            <div class="ms-summary d-none" id="ms-summary" aria-live="polite">
+                <p class="ms-summary__count mb-0">
+                    <strong id="ms-item-count">0</strong> produk ·
+                    <strong id="ms-qty-total">0</strong> unit dikirim
+                </p>
+                <button type="submit" class="ms-btn ms-btn--primary ms-btn--lg">
+                    <iconify-icon icon="solar:diskette-line-duotone" aria-hidden="true"></iconify-icon>
+                    Simpan mutasi
+                </button>
+            </div>
+        </section>
 
-                function unformatRupiah(rupiah) {
-                    return parseInt(rupiah.replace(/[^\d]/g, '')) || 0;
-                }
+        <!-- Modal Pilih Produk -->
+        <div class="modal fade" id="pilih-produk-modal" tabindex="-1" aria-labelledby="produkModalLabel"
+            aria-describedby="produkModalDesc" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content ms-modal">
+                    <div class="modal-header">
+                        <div>
+                            <h2 class="modal-title" id="produkModalLabel">Pilih produk</h2>
+                            <p id="produkModalDesc">Stok dan suplier mengikuti unit pengirim. Hanya produk dengan stok tersedia yang ditampilkan.</p>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
 
-                document.addEventListener('DOMContentLoaded', function() {
-                    const selectedTable = document.getElementById('selected-produk-table');
-                    const confirmBtn = document.getElementById('confirm-produk-btn');
-                    const selectAll = document.getElementById('select-all-produk');
-                    const modalEl = document.getElementById('pilih-produk-modal');
-                    const modalInstance = new bootstrap.Modal(modalEl);
-                    const bayarInput = document.getElementById('bayar');
+                    <div class="ms-modal__toolbar">
+                        <label class="ms-search">
+                            <span class="visually-hidden">Cari produk</span>
+                            <iconify-icon icon="solar:magnifer-line-duotone" aria-hidden="true"></iconify-icon>
+                            <input type="search" id="produk-search" placeholder="Cari kode, nama, atau suplier…"
+                                autocomplete="off">
+                        </label>
+                        <span class="ms-pick-count"><strong id="ms-pick-count">0</strong> dipilih</span>
+                    </div>
 
-                    selectAll.addEventListener('change', function() {
-                        document.querySelectorAll('.produk-checkbox').forEach(cb => cb.checked = this.checked);
-                    });
+                    <div class="modal-body">
+                        <div class="ms-table-wrap">
+                            <table class="ms-table ms-table--picker" id="produk-modal-table">
+                                <thead>
+                                    <tr>
+                                        <th class="ms-check">
+                                            <input type="checkbox" class="form-check-input" id="select-all-produk"
+                                                aria-label="Pilih semua produk yang tampil">
+                                        </th>
+                                        <th>Barang</th>
+                                        <th>Stok</th>
+                                        <th>Suplier</th>
+                                        <th class="ms-money">Harga beli</th>
+                                        <th>Kategori</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($produk as $p) : ?>
+                                        <?php
+                                        $stok = $stokUntuk($p, $unitAktif);
+                                        $namaSuplier = $suplierUntuk($p, $unitAktif);
+                                        ?>
+                                        <tr>
+                                            <td>
+                                                <input type="checkbox" class="produk-checkbox form-check-input"
+                                                    data-id="<?= (int) $p->idbarang ?>"
+                                                    data-kode="<?= esc($p->kode_barang, 'attr') ?>"
+                                                    data-nama="<?= esc($p->nama_barang, 'attr') ?>"
+                                                    data-harga_beli="<?= (float) ($p->harga_beli ?? 0) ?>"
+                                                    data-harga_jual="<?= (float) ($p->harga ?? 0) ?>"
+                                                    data-kategori="<?= esc($p->nama_kategori, 'attr') ?>"
+                                                    data-imei="<?= esc($p->imei, 'attr') ?>"
+                                                    data-stok="<?= (int) $stok ?>"
+                                                    data-suplier="<?= esc($namaSuplier, 'attr') ?>"
+                                                    aria-label="Pilih <?= esc($p->nama_barang, 'attr') ?>">
+                                            </td>
+                                            <td>
+                                                <span class="ms-prod-name"><?= esc($p->nama_barang) ?></span>
+                                                <span class="ms-prod-meta">
+                                                    <?= esc($p->kode_barang) ?><?php if (! empty($p->imei)) : ?> · IMEI <?= esc($p->imei) ?><?php endif; ?>
+                                                </span>
+                                            </td>
+                                            <td data-stock-cell><?= $chipStok($stok) ?></td>
+                                            <td data-suplier-cell>
+                                                <?= $namaSuplier !== '' ? esc($namaSuplier) : '<span class="text-muted">—</span>' ?>
+                                            </td>
+                                            <td class="ms-money"><?= $rp($p->harga_beli) ?></td>
+                                            <td><span class="ms-tag"><?= esc($p->nama_kategori) ?></span></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
-                    confirmBtn.addEventListener('click', function() {
-                        const dataTable = $('#produk-modal-table').DataTable();
-                        const allCheckboxes = dataTable.rows({
-                                search: 'applied'
-                            })
-                            .nodes().to$().find('.produk-checkbox:checked');
+                    <div class="modal-footer">
+                        <span class="ms-modal__foot-note">Harga mutasi diisi setelah produk ditambahkan.</span>
+                        <button type="button" class="ms-btn ms-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="ms-btn ms-btn--primary" id="confirm-produk-btn" disabled>
+                            Tambahkan <span id="ms-pick-count-btn">0</span> produk
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
 
-                        allCheckboxes.each(function() {
-                            const cb = this;
-                            const id = cb.getAttribute('data-id');
-                            const kode = cb.getAttribute('data-kode');
-                            const nama = cb.getAttribute('data-nama');
-                            const harga_beli = cb.getAttribute('data-harga_beli');
-                            const kategori = cb.getAttribute('data-kategori');
-                            const imei = cb.getAttribute('data-imei');
-                            const harga_jual = cb.getAttribute('data-harga_jual');
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
 
-                            if (!document.getElementById('produk-row-' + id)) {
-                                const row = document.createElement('tr');
-                                row.id = 'produk-row-' + id;
-                                row.innerHTML = `
-                    <td>${kode}<input type="hidden" name="produk[${id}][id]" value="${id}">
-                        <input type="hidden" name="produk[${id}][kode]" value="${kode}"></td>
-                    <td>${nama}<input type="hidden" name="produk[${id}][nama]" value="${nama}"></td>
-                    <td>${kategori}<input type="hidden" name="produk[${id}][kategori]" value="${kategori}"></td>
-                    <td>${imei ? imei : '<span class="text-danger">Tidak ada IMEI</span>'}
-                        <input type="hidden" name="produk[${id}][imei]" value="${imei}"></td>
-                    <td>${formatToRupiah(harga_beli)}
-                        <input type="hidden" name="produk[${id}][harga_beli]" value="${harga_beli}"></td>
-                    <td>${formatToRupiah(harga_jual)}
-                        <input type="hidden" name="produk[${id}][harga_jual]" value="${harga_jual}"></td>
-                    <td>
-                        <input required type="text" class="form-control harga-mutasi" placeholder="Rp 0">
-                        <input type="hidden" name="produk[${id}][harga_mutasi]" class="harga-mutasi-hidden">
-                    </td>
-                    <td><input required type="number" name="produk[${id}][jumlah_kirim]" class="form-control jumlah-input" data-id="${id}" min="1"></td>
-                    <td><input required type="number" name="produk[${id}][jumlah_terima]" class="form-control jumlah-input" data-id="${id}" min="1"></td>
-                    <td><button type="button" class="btn btn-sm btn-danger" onclick="hapusProduk('${id}')">
-                        <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="20" height="20"></iconify-icon></button></td>
-                `;
-                                selectedTable.appendChild(row);
+    const stokUnit    = <?= $jsonStok ?>;
+    const suplierUnit = <?= $jsonSuplier ?>;
+    const unitAktif   = <?= $unitAktif ?>;
 
-                                // ✅ Validasi harga mutasi agar ≤ harga jual tanpa alert pop-up
-                                const hargaMutasiInput = row.querySelector('.harga-mutasi');
-                                const hargaMutasiHidden = row.querySelector('.harga-mutasi-hidden');
-                                const hargaJual = parseInt(harga_jual);
+    const selected    = document.getElementById('selected-produk-table');
+    const emptyState  = document.getElementById('ms-empty');
+    const tableWrap   = document.getElementById('ms-table-wrap');
+    const summary     = document.getElementById('ms-summary');
+    const openPicker  = document.getElementById('ms-open-picker');
+    const itemCount   = document.getElementById('ms-item-count');
+    const qtyTotal    = document.getElementById('ms-qty-total');
+    const unit1       = document.getElementById('unit1');
+    const unit2       = document.getElementById('unit2');
+    const pickCount   = document.getElementById('ms-pick-count');
+    const pickCountBtn = document.getElementById('ms-pick-count-btn');
+    const confirmBtn  = document.getElementById('confirm-produk-btn');
+    const selectAll   = document.getElementById('select-all-produk');
+    const searchInput = document.getElementById('produk-search');
+    const modalEl     = document.getElementById('pilih-produk-modal');
+    const modal       = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-                                hargaMutasiInput.addEventListener('input', function() {
-                                    let cleaned = this.value.replace(/[^\d]/g, '');
-                                    let numeric = parseInt(cleaned) || 0;
+    const angka = (n) => Number(n || 0).toLocaleString('id-ID');
 
-                                    if (numeric > hargaJual) {
-                                        numeric = hargaJual;
-                                        this.classList.add("is-invalid"); // Tambah efek merah
-                                    } else {
-                                        this.classList.remove("is-invalid");
-                                    }
+    function formatToRupiah(value) {
+        const number = parseInt(String(value).replace(/[^\d]/g, ''), 10) || 0;
+        return 'Rp ' + number.toLocaleString('id-ID');
+    }
 
-                                    hargaMutasiHidden.value = numeric;
-                                    this.value = numeric ? formatToRupiah(numeric.toString()) : '';
-                                    this.setSelectionRange(this.value.length, this.value.length);
-                                });
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+    }
 
-                                row.querySelectorAll('.jumlah-input').forEach(input => input.addEventListener('input', updateTotals));
-                            }
-                        });
+    function chipStok(stok) {
+        const kelas = stok <= 0 ? ' is-empty' : (stok <= 5 ? ' is-low' : '');
+        return '<span class="ms-stock' + kelas + '">' + angka(stok) + '</span>';
+    }
 
-                        modalInstance.hide();
-                        setTimeout(() => {
-                            document.body.classList.remove('modal-open');
-                            document.body.style.removeProperty('padding-right');
-                            document.body.style.removeProperty('overflow');
-                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                        }, 500);
+    // Produk tanpa stok untuk unit pengirim tidak perlu muncul di picker.
+    // Filter membaca data-stok yang diperbarui segarkanStok(), jadi ikut
+    // berubah saat unit pengirim diganti.
+    $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+        if (settings.nTable.id !== 'produk-modal-table') {
+            return true;
+        }
+        const row = settings.aoData[dataIndex].nTr;
+        const cb = row ? row.querySelector('.produk-checkbox') : null;
+        return cb ? Number(cb.dataset.stok || 0) > 0 : true;
+    });
 
-                        dataTable.rows().nodes().to$().find('.produk-checkbox').prop('checked', false);
-                        selectAll.checked = false;
+    const pickerTable = $('#produk-modal-table').DataTable({
+        pageLength: 10,
+        lengthChange: false,
+        order: [[1, 'asc']],
+        dom: 't<"ms-dt-foot"ip>',
+        columnDefs: [{ orderable: false, targets: [0, 5] }],
+        language: {
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ produk',
+            infoEmpty: 'Tidak ada produk',
+            infoFiltered: '',
+            zeroRecords: 'Tidak ada produk dengan stok tersedia.',
+            emptyTable: 'Belum ada produk.',
+            paginate: { previous: '‹', next: '›' }
+        }
+    });
 
-                        updateTotals();
-                    });
+    function unitDipilih() {
+        return String(unit1.value || unitAktif);
+    }
 
-                    bayarInput.addEventListener('input', function() {
-                        const numeric = this.value.replace(/[^\d]/g, '');
-                        this.value = formatToRupiah(numeric);
-                        updateHutang();
-                    });
-                });
+    // Stok & suplier mengikuti unit pengirim, bukan unit yang login: admin
+    // pusat bisa membuat mutasi dari unit lain dan tetap melihat angka benar.
+    function segarkanStok() {
+        const unit = unitDipilih();
+        const stokMap = stokUnit[unit] || {};
+        const suplierMap = suplierUnit[unit] || {};
 
-                function hapusProduk(id) {
-                    const row = document.getElementById('produk-row-' + id);
-                    if (row) row.remove();
-                    updateTotals();
-                }
+        // DataTables hanya menaruh halaman aktif di DOM; ambil semua node baris
+        // lewat API agar halaman lain ikut memakai stok unit yang dipilih.
+        pickerTable.rows().nodes().toArray().forEach(function (row) {
+            const cb = row.querySelector('.produk-checkbox');
+            if (!cb) {
+                return;
+            }
 
-                function updateTotals() {
-                    let total = 0;
-                    let totalDiskon = 0;
-                    let totalPPN = 0;
+            const id = cb.dataset.id;
+            const stok = Number(stokMap[id] || 0);
+            const suplier = suplierMap[id] || '';
 
-                    document.querySelectorAll('#selected-produk-table tr').forEach(row => {
-                        const hargaInput = row.querySelector('input[name$="[harga]"]');
-                        const jumlahInput = row.querySelector('input[name$="[jumlah_terima]"]');
-                        const diskonInput = row.querySelector('.diskon-input');
-                        const ppnCheckbox = row.querySelector('.ppn-checkbox');
+            if (stok <= 0 && cb.checked) {
+                cb.checked = false;
+                row.classList.remove('is-selected');
+            }
 
-                        if (hargaInput && jumlahInput && diskonInput) {
-                            const harga = parseInt(hargaInput.value) || 0;
-                            const jumlah = parseInt(jumlahInput.value) || 0;
-                            const diskon = parseFloat(diskonInput.value) || 0;
-                            const isPpn = ppnCheckbox?.checked;
+            cb.dataset.stok = String(stok);
+            cb.dataset.suplier = suplier;
 
-                            let subtotal = harga * jumlah;
-                            let setelahDiskon = subtotal - diskon;
-                            let ppnAmount = isPpn ? setelahDiskon * 0.11 : 0;
+            const stokCell = row.querySelector('[data-stock-cell]');
+            const suplierCell = row.querySelector('[data-suplier-cell]');
+            if (stokCell) {
+                stokCell.innerHTML = chipStok(stok);
+            }
+            if (suplierCell) {
+                suplierCell.textContent = suplier || '—';
+            }
+        });
 
-                            totalDiskon += diskon;
-                            totalPPN += ppnAmount;
-                            total += setelahDiskon + ppnAmount;
-                        }
-                    });
+        pickerTable.draw();
+        updatePickCount();
 
-                    const totalDiskonInput = document.getElementById('total-diskon');
-                    totalDiskonInput.min = totalDiskon;
+        document.querySelectorAll('#selected-produk-table tr').forEach(function (row) {
+            const id = row.dataset.id;
+            const stok = Number(stokMap[id] || 0);
+            const suplier = suplierMap[id] || '';
+            const note = row.querySelector('.js-stock-note');
+            const meta = row.querySelector('.js-item-stock');
+            if (note) {
+                note.textContent = 'Stok ' + angka(stok);
+            }
+            if (meta) {
+                meta.innerHTML = 'Stok unit pengirim: <strong>' + angka(stok) + '</strong>' +
+                    (suplier ? ' · ' + escapeHtml(suplier) : '');
+                meta.classList.toggle('is-empty-stock', stok <= 0);
+            }
+        });
+    }
 
-                    let manualDiskon = parseFloat(totalDiskonInput.value);
-                    if (isNaN(manualDiskon) || manualDiskon < totalDiskon) {
-                        manualDiskon = totalDiskon;
-                        totalDiskonInput.value = totalDiskon;
-                    }
+    function updateSummary() {
+        const rows = selected.querySelectorAll('tr');
+        let qty = 0;
 
-                    const totalHargaFinal = (total - (manualDiskon - totalDiskon));
-                    document.getElementById('total-ppn').value = 'Rp ' + totalPPN.toLocaleString('id-ID');
-                    document.getElementById('total-harga').value = 'Rp ' + totalHargaFinal.toLocaleString('id-ID');
+        rows.forEach(function (row) {
+            const input = row.querySelector('input[name$="[jumlah_kirim]"]');
+            qty += parseInt(input ? input.value : 0, 10) || 0;
+        });
 
-                    updateHutang();
-                }
+        itemCount.textContent = angka(rows.length);
+        qtyTotal.textContent = angka(qty);
 
-                document.getElementById('total-diskon').addEventListener('input', () => {
-                    updateTotals(true);
-                });
+        const ada = rows.length > 0;
+        emptyState.classList.toggle('d-none', ada);
+        tableWrap.classList.toggle('d-none', !ada);
+        summary.classList.toggle('d-none', !ada);
+        openPicker.classList.toggle('d-none', !ada);
+    }
 
-                function updateHutang() {
-                    const totalStr = document.getElementById('total-harga').value.replace(/[^\d]/g, '') || "0";
-                    const bayarStr = document.getElementById('bayar').value || "Rp 0";
-                    const bayar = unformatRupiah(bayarStr);
-                    const total = parseInt(totalStr);
-                    const hutang = Math.max(total - bayar, 0);
+    // Checkbox di halaman lain tetap hidup di node DataTables, bukan DOM aktif.
+    function checkboxPicker() {
+        return pickerTable.rows().nodes().toArray()
+            .map(function (row) { return row.querySelector('.produk-checkbox'); })
+            .filter(Boolean);
+    }
 
-                    document.getElementById('hutang').value = 'Rp ' + hutang.toLocaleString('id-ID');
-                }
-            </script>
+    function updatePickCount() {
+        const semua = checkboxPicker();
+        const checked = semua.filter(function (cb) { return cb.checked; });
+        pickCount.textContent = angka(checked.length);
+        pickCountBtn.textContent = angka(checked.length);
+        confirmBtn.disabled = checked.length === 0;
 
+        const tampil = pickerTable.rows({ search: 'applied' }).nodes().toArray()
+            .map(function (row) { return row.querySelector('.produk-checkbox'); })
+            .filter(Boolean);
+        const dipilih = tampil.filter(function (cb) { return cb.checked; }).length;
+        selectAll.checked = tampil.length > 0 && dipilih === tampil.length;
+        selectAll.indeterminate = dipilih > 0 && dipilih < tampil.length;
+    }
 
+    function tambahBaris(cb) {
+        const id = parseInt(cb.dataset.id, 10);
+        if (!id || document.getElementById('produk-row-' + id)) {
+            return;
+        }
 
-            <script>
-                $(document).ready(function() {
-                    var table = $('#produk-modal-table').DataTable();
+        const nama = cb.dataset.nama || '';
+        const kode = cb.dataset.kode || '';
+        const kategori = cb.dataset.kategori || '';
+        const imei = cb.dataset.imei || '';
+        const suplier = cb.dataset.suplier || '';
+        const stok = parseInt(cb.dataset.stok, 10) || 0;
+        const hargaBeli = parseInt(cb.dataset.harga_beli, 10) || 0;
+        const hargaJual = parseInt(cb.dataset.harga_jual, 10) || 0;
 
+        const row = document.createElement('tr');
+        row.id = 'produk-row-' + id;
+        row.dataset.id = String(id);
+        row.className = 'is-new';
+        row.innerHTML = `
+            <td data-label="Barang">
+                <span class="ms-item-name">${escapeHtml(nama)}</span>
+                <span class="ms-item-meta">${escapeHtml(kode)}${kategori ? ' · ' + escapeHtml(kategori) : ''}${imei ? ' · IMEI ' + escapeHtml(imei) : ''}</span>
+                <span class="ms-item-meta js-item-stock${stok <= 0 ? ' is-empty-stock' : ''}">Stok unit pengirim: <strong>${angka(stok)}</strong>${suplier ? ' · ' + escapeHtml(suplier) : ''}</span>
+                <input type="hidden" name="produk[${id}][id]" value="${id}">
+                <input type="hidden" name="produk[${id}][kode]" value="${escapeHtml(kode)}">
+                <input type="hidden" name="produk[${id}][nama]" value="${escapeHtml(nama)}">
+                <input type="hidden" name="produk[${id}][kategori]" value="${escapeHtml(kategori)}">
+                <input type="hidden" name="produk[${id}][imei]" value="${escapeHtml(imei)}">
+            </td>
+            <td data-label="Harga beli" class="ms-money">
+                ${formatToRupiah(hargaBeli)}
+                <input type="hidden" name="produk[${id}][harga_beli]" value="${hargaBeli}">
+            </td>
+            <td data-label="Harga jual" class="ms-money">
+                ${formatToRupiah(hargaJual)}
+                <input type="hidden" name="produk[${id}][harga_jual]" value="${hargaJual}">
+            </td>
+            <td data-label="Harga mutasi">
+                <input required type="text" inputmode="numeric" placeholder="Rp 0"
+                    class="form-control ms-control harga-mutasi" value="${formatToRupiah(hargaBeli)}"
+                    title="Maks. ${formatToRupiah(hargaJual)}"
+                    aria-label="Harga mutasi ${escapeHtml(nama)}, maksimal ${formatToRupiah(hargaJual)}">
+                <input type="hidden" name="produk[${id}][harga_mutasi]" class="harga-mutasi-hidden" value="${hargaBeli}">
+            </td>
+            <td data-label="Jumlah kirim">
+                <input required type="number" min="1" step="1" inputmode="numeric"
+                    name="produk[${id}][jumlah_kirim]"
+                    class="form-control ms-control jumlah-input"
+                    aria-label="Jumlah kirim ${escapeHtml(nama)}">
+                <small class="ms-help js-stock-note">Stok ${angka(stok)}</small>
+            </td>
+            <td data-label="Total" class="ms-money js-total-mutasi">${formatToRupiah(0)}</td>
+            <td data-label="Aksi">
+                <button type="button" class="ms-icon-btn" data-remove="${id}"
+                    aria-label="Hapus ${escapeHtml(nama)}" title="Hapus">
+                    <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="18" height="18"></iconify-icon>
+                </button>
+            </td>`;
 
-                });
-            </script>
+        selected.appendChild(row);
 
+        const hargaInput = row.querySelector('.harga-mutasi');
+        const hargaHidden = row.querySelector('.harga-mutasi-hidden');
+        const jumlahInput = row.querySelector('.jumlah-input');
+        const totalCell = row.querySelector('.js-total-mutasi');
 
-            <script>
-                document.getElementById('notaFileInput').addEventListener('change', function(event) {
-                    const file = event.target.files[0];
-                    const preview = document.getElementById('previewNota');
+        function segarkanTotal() {
+            const harga = parseInt(hargaHidden.value, 10) || 0;
+            const qty = parseInt(jumlahInput.value, 10) || 0;
+            totalCell.textContent = formatToRupiah(harga * qty);
+        }
 
-                    if (file && file.type.startsWith('image/')) {
-                        const reader = new FileReader();
+        hargaInput.addEventListener('input', function () {
+            let numeric = parseInt(this.value.replace(/[^\d]/g, ''), 10) || 0;
 
-                        reader.onload = function(e) {
-                            preview.src = e.target.result;
-                            preview.style.display = 'block';
-                        };
+            if (numeric > hargaJual) {
+                numeric = hargaJual;
+                this.classList.add('is-invalid');
+                this.setAttribute('aria-invalid', 'true');
+            } else {
+                this.classList.remove('is-invalid');
+                this.removeAttribute('aria-invalid');
+            }
 
-                        reader.readAsDataURL(file);
-                    } else {
-                        preview.src = '#';
-                        preview.style.display = 'none';
-                    }
-                });
-            </script>
+            hargaHidden.value = numeric;
+            this.value = numeric ? formatToRupiah(numeric) : '';
+            this.setSelectionRange(this.value.length, this.value.length);
+            segarkanTotal();
+        });
 
-            <script>
-                function tampilkanIdUnit1() {
-                    const select = document.getElementById('unit1');
-                    const idUnit1Input = document.getElementById('id_unit1_text');
-                    const selectedValue = select.value;
-                    idUnit1Input.value = selectedValue;
-                }
+        jumlahInput.addEventListener('input', function () {
+            segarkanTotal();
+            updateSummary();
+        });
+    }
 
-                function tampilkanIdUnit2() {
-                    const select = document.getElementById('unit2');
-                    const idUnit2Input = document.getElementById('id_unit2_text');
-                    const selectedValue = select.value;
-                    idUnit2Input.value = selectedValue;
-                }
-            </script>
+    unit1.addEventListener('change', function () {
+        document.getElementById('id_unit1_text').value = this.value;
+        segarkanStok();
+    });
 
-            <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    const selectAllPPN = document.getElementById('select-all-ppn');
+    // Produk baru hanya bisa dipilih setelah unit penerima diisi. Unit
+    // pengirim sudah otomatis terisi sesuai unit user (atau pilihan Admin Root).
+    function segarkanTombolProduk() {
+        const siap = unit2.value !== '';
+        document.querySelectorAll('[data-bs-target="#pilih-produk-modal"]').forEach(function (btn) {
+            btn.disabled = !siap;
+            btn.title = siap ? '' : 'Pilih unit penerima dulu.';
+        });
+    }
 
-                    selectAllPPN.addEventListener('change', function() {
-                        const checkboxes = document.querySelectorAll('.ppn-checkbox');
-                        checkboxes.forEach(cb => cb.checked = selectAllPPN.checked);
-                        updateTotals();
-                    });
-                });
-            </script>
+    unit2.addEventListener('change', function () {
+        document.getElementById('id_unit2_text').value = this.value;
+        segarkanTombolProduk();
+    });
+
+    searchInput.addEventListener('input', function () {
+        pickerTable.search(this.value).draw();
+    });
+
+    // Enter di kolom cari tidak boleh mengirim form mutasi di belakang modal.
+    searchInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
+
+    selectAll.addEventListener('change', function () {
+        pickerTable.rows({ search: 'applied' }).nodes().to$()
+            .find('.produk-checkbox')
+            .prop('checked', this.checked)
+            .trigger('change');
+        updatePickCount();
+    });
+
+    $('#produk-modal-table').on('change', '.produk-checkbox', function () {
+        $(this).closest('tr').toggleClass('is-selected', this.checked);
+        updatePickCount();
+    });
+
+    // Klik di mana pun pada baris = pilih/batalkan produk. Klik langsung pada
+    // checkbox dilewati supaya tidak ter-toggle dua kali.
+    $('#produk-modal-table tbody').on('click', 'tr', function (event) {
+        if ($(event.target).is('.produk-checkbox')) {
+            return;
+        }
+        const cb = this.querySelector('.produk-checkbox');
+        if (!cb) {
+            return;
+        }
+        cb.checked = !cb.checked;
+        $(cb).trigger('change');
+    });
+
+    confirmBtn.addEventListener('click', function () {
+        checkboxPicker().forEach(function (cb) {
+            if (cb.checked) {
+                tambahBaris(cb);
+            }
+        });
+
+        pickerTable.rows().nodes().to$().find('.produk-checkbox')
+            .prop('checked', false)
+            .closest('tr').removeClass('is-selected');
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        pickerTable.search('').draw();
+        searchInput.value = '';
+        updatePickCount();
+        updateSummary();
+        modal.hide();
+    });
+
+    selected.addEventListener('click', function (event) {
+        const tombol = event.target.closest('[data-remove]');
+        if (!tombol) {
+            return;
+        }
+        const row = tombol.closest('tr');
+        if (row) {
+            row.remove();
+            updateSummary();
+        }
+    });
+
+    modalEl.addEventListener('show.bs.modal', function () {
+        searchInput.value = '';
+        pickerTable.search('').draw();
+    });
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+        pickerTable.columns.adjust();
+        searchInput.focus();
+    });
+
+    document.getElementById('id_unit1_text').value = unit1.value;
+    document.getElementById('id_unit2_text').value = unit2.value;
+    segarkanTombolProduk();
+    segarkanStok();
+    updateSummary();
+    updatePickCount();
+});
+</script>
