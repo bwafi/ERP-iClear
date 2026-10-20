@@ -21,34 +21,30 @@ document
     link.closest("ul").parentElement.classList.add("selected");
   });
 
-document.querySelectorAll("#sidebarnav a").forEach(function (link) {
-  link.addEventListener("click", function (e) {
-    const isActive = this.classList.contains("active");
-    const parentUl = this.closest("ul");
+document.querySelectorAll("#sidebarnav a.has-arrow").forEach(function (link) {
+  const submenu = link.nextElementSibling;
+  if (!submenu || !submenu.classList.contains("collapse")) {
+    return;
+  }
 
-    if (!isActive) {
-      // hide any open menus and remove all other classes
-      parentUl.querySelectorAll("ul").forEach(function (submenu) {
-        submenu.classList.remove("in");
-      });
-      parentUl.querySelectorAll("a").forEach(function (navLink) {
-        navLink.classList.remove("active");
-      });
+  submenu.addEventListener("shown.bs.collapse", function () {
+    link.setAttribute("aria-expanded", "true");
+  });
+  submenu.addEventListener("hidden.bs.collapse", function () {
+    link.setAttribute("aria-expanded", "false");
+  });
 
-      // open our new menu and add the open class
-      const submenu = this.nextElementSibling;
-      if (submenu) {
-        submenu.classList.add("in");
-      }
+  link.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
 
-      this.classList.add("active");
-    } else {
-      this.classList.remove("active");
-      parentUl.classList.remove("active");
-      const submenu = this.nextElementSibling;
-      if (submenu) {
-        submenu.classList.remove("in");
-      }
+    if (window.bootstrap && window.bootstrap.Collapse) {
+      window.bootstrap.Collapse.getOrCreateInstance(submenu, { toggle: false }).toggle();
+      return;
     }
+
+    const isExpanded = submenu.classList.contains("show");
+    submenu.classList.toggle("show", !isExpanded);
+    link.setAttribute("aria-expanded", isExpanded ? "false" : "true");
   });
 });
