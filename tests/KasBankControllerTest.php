@@ -136,6 +136,10 @@ class KasBankControllerTest extends CIUnitTestCase
                 bayar_tunai REAL NULL, bayar_bank REAL NULL, bank_idbank TEXT NULL,
                 sumber TEXT NULL, referensi_tipe TEXT NULL, referensi_id INT NULL,
                 keterangan TEXT NULL, input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+        // Referensi yang sama dipakai DUA posisi (hutang + piutang pasangan),
+        // jadi uniqueness harus per posisi — sama dengan migration produksi.
+        $q('CREATE UNIQUE INDEX uniq_php_referensi ON db_pembayaran_hutang_piutang
+                (sumber, referensi_tipe, referensi_id, hutang_piutang_id)');
         // Dipakai HutangPiutangService::getKompensasi() saat detail H/P dirender.
         $q('CREATE TABLE db_kompensasi_hutang_piutang (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
@@ -166,7 +170,7 @@ class KasBankControllerTest extends CIUnitTestCase
         // query itu memfilter kedua kolom itu. Tanpa keduanya semua controller
         // test gagal dengan "Unknown column".
         $q('CREATE TABLE IF NOT EXISTS db_service (
-                id_service INT PRIMARY KEY, no_service TEXT NULL, status_service INT NULL,
+                id_service INT PRIMARY KEY, idservice INT NULL, no_service TEXT NULL, status_service INT NULL,
                 pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL,
                 tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
                 created_at TEXT NULL)');
