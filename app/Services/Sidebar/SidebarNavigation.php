@@ -162,7 +162,8 @@ final class SidebarNavigation
         }
 
         $grouped = [];
-        foreach (self::AREAS as $areaName => $definition) {
+        foreach (['Service', 'Produk & Harga', 'Persediaan', 'Pembelian', 'Penjualan', 'Keuangan', 'Administrasi'] as $areaName) {
+            $definition = self::AREAS[$areaName];
             if (empty($areas[$areaName])) {
                 continue;
             }
@@ -198,7 +199,17 @@ final class SidebarNavigation
             ];
         }
 
-        return array_merge($grouped, $remaining);
+        $dashboards = [];
+        $otherMenus = [];
+        foreach ($remaining as $category) {
+            if (strtolower(trim((string) ($category['nama'] ?? ''))) === 'dashboard') {
+                $category['nama'] = 'Dashboard';
+                $dashboards[] = $category;
+            } else {
+                $otherMenus[] = $category;
+            }
+        }
+        return array_merge($dashboards, $grouped, $otherMenus);
     }
 
     public static function normalizeRoute(string $url): string

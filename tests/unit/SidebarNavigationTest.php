@@ -7,6 +7,20 @@ use PHPUnit\Framework\TestCase;
 
 final class SidebarNavigationTest extends TestCase
 {
+    public function testDashboardRemainsFirstWithoutCreatingOrGrantingAnyLinks(): void
+    {
+        $tree = [
+            ['id' => 9, 'nama' => 'Supplier', 'url' => 'supplier', 'menu' => []],
+            ['id' => 2, 'nama' => 'DASHBOARD', 'url' => '', 'menu' => [
+                ['id' => 3, 'nama' => 'Omset', 'url' => 'omset_bulanan', 'sub' => []],
+            ]],
+        ];
+        $organized = SidebarNavigation::organize($tree, [2, 3, 9]);
+        self::assertSame(['Dashboard', 'Pembelian'], array_column($organized, 'nama'));
+        self::assertSame(['omset_bulanan', 'supplier'], $this->allUrls($organized));
+        self::assertNotContains('supplier', $this->allUrls(SidebarNavigation::organize($tree, [2, 3])));
+    }
+
     public function testGroupsOnlyExistingAuthorizedMenuLinksAndKeepsUnmappedOperations(): void
     {
         $tree = [
@@ -28,10 +42,10 @@ final class SidebarNavigationTest extends TestCase
 
         $organized = SidebarNavigation::organize($tree, [1, 11, 12, 13, 14, 15, 17]);
 
-        self::assertSame(['Produk & Harga', 'Pembelian', 'Persediaan', 'Operasional'], array_column($organized, 'nama'));
+        self::assertSame(['Produk & Harga', 'Persediaan', 'Pembelian', 'Operasional'], array_column($organized, 'nama'));
         self::assertSame('Master Barang/Jasa', $organized[0]['menu'][0]['sub'][0]['nama']);
-        self::assertSame('Pembelian', $organized[1]['menu'][0]['sub'][0]['nama']);
-        self::assertSame('Kartu Stok', $organized[2]['menu'][0]['sub'][0]['nama']);
+        self::assertSame('Kartu Stok', $organized[1]['menu'][0]['sub'][0]['nama']);
+        self::assertSame('Pembelian', $organized[2]['menu'][0]['sub'][0]['nama']);
         self::assertSame('Riwayat Tugas', $organized[3]['menu'][0]['sub'][0]['nama']);
         self::assertNotContains('Penjualan', array_column($organized, 'nama'));
         self::assertNotContains('https://example.test/pricelist', $this->allUrls($organized));
@@ -67,7 +81,7 @@ final class SidebarNavigationTest extends TestCase
 
         $organized = SidebarNavigation::organize($tree, [9, 51, 71, 76, 112, 210]);
 
-        self::assertSame(['Service', 'Pembelian', 'Persediaan', 'Keuangan', 'Presensi'], array_column($organized, 'nama'));
+        self::assertSame(['Service', 'Persediaan', 'Pembelian', 'Keuangan', 'Presensi'], array_column($organized, 'nama'));
         self::assertContains('garansi_service', $this->allUrls($organized));
         self::assertContains('supplier', $this->allUrls($organized));
         self::assertContains('kartu_stok', $this->allUrls($organized));

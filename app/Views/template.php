@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr" data-bs-theme="light" data-color-theme="Blue_Theme" data-layout="vertical"
+<html lang="id" dir="ltr" data-bs-theme="light" data-color-theme="Blue_Theme" data-layout="vertical"
     data-boxed-layout="full" data-card="shadow">
 
 <head>
@@ -45,6 +45,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="<?= base_url('assets/iclear-ui.css') ?>?v=<?= filemtime(ROOTPATH . 'public/assets/iclear-ui.css') ?>">
 
 
 
@@ -52,7 +53,8 @@
 
 </head>
 
-<body>
+<body class="iclear-ui">
+    <a class="iclear-skip-link" href="#iclear-content">Lewati menu, ke isi halaman</a>
     <!-- Preloader -->
     <div class="preloader">
         <img src="<?php echo base_url('template/') ?>assets/images/logos/loader.svg" alt="loader"
@@ -413,6 +415,7 @@
                     </script>
 
 
+                    <main id="iclear-content" tabindex="-1">
                     <?php
                     $viewName = $body ?? '';
                     $isDigitalMarketingSurface = is_string($viewName) && (
@@ -427,6 +430,7 @@
                         echo '</div>';
                     }
                     ?>
+                    </main>
 
                 </div>
             </div>
@@ -674,7 +678,7 @@
     <script src="<?php echo base_url('template/') ?>assets/js/theme/app.dark.init.js"></script>
     <script src="<?php echo base_url('template/') ?>assets/js/theme/theme.js"></script>
     <script src="<?php echo base_url('template/') ?>assets/js/theme/app.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/js/theme/sidebarmenu.js"></script>
+    <script src="<?= base_url('assets/iclear-sidebar.js') ?>?v=<?= filemtime(ROOTPATH . 'public/assets/iclear-sidebar.js') ?>"></script>
     <script src="<?php echo base_url('template/') ?>assets/js/theme/feather.min.js"></script>
     <script>
     (function() {
@@ -813,5 +817,6 @@
 <script src="<?php echo base_url('template/assets/libs/select2/dist/js/select2.min.js') ?>"></script>
 <script src="<?php echo base_url('template/assets/js/forms/select2.init.js') ?>"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cleave.js/1.6.0/cleave.min.js"></script>
+<script src="<?= base_url('assets/iclear-ui.js') ?>?v=<?= filemtime(ROOTPATH . 'public/assets/iclear-ui.js') ?>"></script>
 
 </html>
