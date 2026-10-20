@@ -536,12 +536,30 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
 
     public function testNilaiDetailMutasiGunakanHargaMutasi(): void
     {
-        $this->assertSame(2000, $this->kasbank->nilaiDetailMutasi(['jumlah_kirim' => 2, 'harga_mutasi' => 1000, 'hpp_barang' => 999]));
+        $this->assertSame(2000, $this->kasbank->nilaiDetailMutasi([
+            'jumlah_kirim' => 2, 'jumlah_terima' => 2, 'harga_mutasi' => 1000, 'hpp_barang' => 999,
+        ]));
     }
 
     public function testNilaiDetailMutasiFallbackKeHpp(): void
     {
-        $this->assertSame(1500, $this->kasbank->nilaiDetailMutasi(['jumlah_kirim' => 3, 'harga_mutasi' => 0, 'hpp_barang' => 500]));
+        $this->assertSame(1500, $this->kasbank->nilaiDetailMutasi([
+            'jumlah_kirim' => 3, 'jumlah_terima' => 3, 'harga_mutasi' => 0, 'hpp_barang' => 500,
+        ]));
+    }
+
+    public function testNilaiDetailMutasiMemakaiJumlahTerima(): void
+    {
+        $this->assertSame(3000, $this->kasbank->nilaiDetailMutasi([
+            'jumlah_kirim' => 5, 'jumlah_terima' => 3, 'harga_mutasi' => 1000,
+        ]));
+    }
+
+    public function testNilaiDetailMutasiTanpaJumlahTerimaBernilaiNol(): void
+    {
+        $this->assertSame(0, $this->kasbank->nilaiDetailMutasi([
+            'jumlah_kirim' => 5, 'harga_mutasi' => 1000,
+        ]));
     }
 
     public function testNilaiDetailMutasiFallbackKeHppSaatHargaKosong(): void
@@ -552,9 +570,9 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
     public function testBuatHutangPiutangDariMutasi(): void
     {
         $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, status, kirim_idunit, terima_idunit, input_by) VALUES (1, 'M-2026-001', '2026-02-05', 'terima', 1, 2, 9)");
-        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
-            (1, 1, 2, 1000, 800, 1, 2),
-            (2, 1, 3, 0, 500, 1, 2)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 2, 1000, 800, 1, 2),
+            (2, 1, 3, 3, 0, 500, 1, 2)");
 
         $r = $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
         $this->assertSame('inserted', $r['status']);
@@ -588,8 +606,8 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
     {
         // tanggal_terima diketahui -> default jatuh tempo = tanggal_terima + 3 hari.
         $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES (1, 'M-2026-002', '2026-02-05', '2026-02-08 10:00:00', '1', 1, 2, 9)");
-        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
-            (1, 1, 2, 1000, 800, 1, 2)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 2, 1000, 800, 1, 2)");
 
         $model = new ModelHutangPiutang();
         $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
@@ -616,7 +634,7 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
     public function testBuatHutangPiutangDariMutasiMenghidupkanDokumenYangDibatalkan(): void
     {
         $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES (1, 'M-2026-003', '2026-02-05', '2026-02-08 10:00:00', '1', 1, 2, 9)");
-        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES (1, 1, 2, 1000, 800, 1, 2)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES (1, 1, 2, 2, 1000, 800, 1, 2)");
 
         $first = $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
         $this->assertSame('inserted', $first['status']);
@@ -652,9 +670,9 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES
             (1, 'M-LEGACY', '$legacy', '$legacy 10:00:00', '1', 1, 2, 9),
             (2, 'M-ACTIVE', '$aktif', '$aktif 10:00:00', '1', 1, 2, 9)");
-        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
-            (1, 1, 2, 1000, 800, 1, 2),
-            (2, 2, 2, 1000, 800, 1, 2)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 2, 1000, 800, 1, 2),
+            (2, 2, 2, 2, 1000, 800, 1, 2)");
 
         $model = new ModelHutangPiutang();
 

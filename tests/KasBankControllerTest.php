@@ -295,8 +295,8 @@ class KasBankControllerTest extends CIUnitTestCase
 
         $q("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, tanggal_terima, status, kirim_idunit, terima_idunit, input_by) VALUES
             (1, 'MTS1000921001', '2026-09-20 09:00:00', NULL, '0', 1, 2, 43)");
-        $q("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES
-            (1, 1, 2, 1000, 800, 1001, 1, 2)");
+        $q("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 2, 2, 1000, 800, 1001, 1, 2)");
         $q("INSERT INTO db_barang (idbarang, nama_barang) VALUES (1001, 'Barang X'), (1002, 'Barang Y')");
         $q("INSERT INTO db_hpp_barang (idbarang, hpp) VALUES (1001, 800), (1002, 700)");
         $q("INSERT INTO db_stok_awal (barang_idbarang, satuan_terkecil) VALUES (1001, 'PCS'), (1002, 'PCS')");
@@ -884,7 +884,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     public function testTerimaMutasiNilaiNolTidakMenandaiDiterima(): void
     {
         $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, status, kirim_idunit, terima_idunit, input_by) VALUES (2, 'MTS1000921002', '2026-09-20 09:00:00', '0', 1, 2, 43)");
-        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES (2, 2, 1, 0, 0, 1001, 1, 2)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, barang_idbarang, kirim_idunit, terima_idunit) VALUES (2, 2, 1, 1, 0, 0, 1001, 1, 2)");
 
         $this->withSession([
             'logged_in'  => true,

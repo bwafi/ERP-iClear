@@ -653,12 +653,12 @@ class ModeKasBank
     }
 
     /**
-     * Nilai mutasi per detail: harga_mutasi × jumlah_kirim,
+     * Nilai mutasi per detail: harga_mutasi × jumlah_terima,
      * fallback per-item ke hpp_barang bila harga_mutasi kosong/0.
      */
     public function nilaiDetailMutasi(array $detail): int
     {
-        $satuan = (int)($detail['jumlah_kirim'] ?? max((int)($detail['jumlah_terima'] ?? 0), 1));
+        $satuan = (int)($detail['jumlah_terima'] ?? 0);
         $harga = (int)($detail['harga_mutasi'] ?? 0);
         if ($harga <= 0) {
             $harga = (int)($detail['hpp_barang'] ?? 0);
