@@ -115,7 +115,7 @@ class KpiCalculationService
         int $employeeId,
         int $unitId,
         int $month,
-        int $year,
+        int $year
     ) {
         $key = \App\Libraries\ReadCache::kunci(
             "calc",
@@ -152,7 +152,7 @@ class KpiCalculationService
         string $month,
         string $year,
         string $context = "default",
-        ?string $date = null,
+        ?string $date = null
     ) {
         $date = $date ?? sprintf("%04d-%02d-15", (int) $year, (int) $month);
 
@@ -254,7 +254,7 @@ class KpiCalculationService
                 $achievement = $managerData["achievement"];
                 // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
             } elseif ($component->code === "CLOSING_RATE") {
-                $achievement = new \App\Services\Kpi\Calculators\ClosingRateCalculator()->calculate(
+                $achievement = (new \App\Services\Kpi\Calculators\ClosingRateCalculator())->calculate(
                     $employeeId,
                     $unitId,
                     (int) $month,
@@ -781,7 +781,7 @@ class KpiCalculationService
     protected function resolveOmsetUnitId(
         ?int $positionId,
         string $componentCode,
-        int $unitId,
+        int $unitId
     ): int {
         if (
             $positionId === self::CS_POSITION_ID &&
@@ -806,7 +806,7 @@ class KpiCalculationService
         int $employeeId,
         int $unitId,
         int $month,
-        int $year,
+        int $year
     ): float {
         $customerCalc = $this->calculators["customer_count"];
 
@@ -839,7 +839,7 @@ class KpiCalculationService
     protected function customerTarget(
         int $positionId,
         int $unitId,
-        float $targetValue,
+        float $targetValue
     ): float {
         if (
             $positionId === 41 &&
@@ -906,7 +906,7 @@ class KpiCalculationService
     public function getWeightsByPosition(
         $positionId,
         $date = null,
-        $group = null,
+        $group = null
     ) {
         return $this->weightModel->getByPosition($positionId, $date, $group);
     }
@@ -938,7 +938,7 @@ class KpiCalculationService
         string $year,
         string $context = "gaji",
         ?string $date = null,
-        ?string $periodeDate = null,
+        ?string $periodeDate = null
     ): array {
         $date = $date ?? sprintf("%04d-%02d-15", (int) $year, (int) $month);
         $periodeDate =
@@ -1119,9 +1119,9 @@ class KpiCalculationService
     protected function kontrolAsetScore(
         int $unitId,
         int $bulan,
-        int $tahun,
+        int $tahun
     ): ?float {
-        return new \App\Services\Kpi\AsetKpiService()->kpiScore(
+        return (new \App\Services\Kpi\AsetKpiService())->kpiScore(
             $unitId,
             $bulan,
             $tahun,
@@ -1144,7 +1144,7 @@ class KpiCalculationService
         int $unit,
         string $month,
         string $year,
-        string $date,
+        string $date
     ): float {
         $memberModel = new \App\Models\ModelIncentiveMember();
         $groupModel = new \App\Models\ModelIncentiveGroup();
@@ -1263,7 +1263,7 @@ class KpiCalculationService
         int $employeeId,
         int $unitId,
         string $month,
-        string $year,
+        string $year
     ): float {
         $db = \Config\Database::connect();
 
@@ -1346,7 +1346,7 @@ class KpiCalculationService
         int $positionId,
         int $unit,
         string $context,
-        string $date,
+        string $date
     ): float {
         $salaryService = new \App\Services\Payroll\SalaryCalculationService();
         $structure = $salaryService->getSalaryStructure(
@@ -1366,7 +1366,7 @@ class KpiCalculationService
     public function getWeightValidationResult(
         $positionId,
         $date = null,
-        $group = "kpi",
+        $group = "kpi"
     ) {
         $weights = $this->weightModel->getByPosition(
             $positionId,
