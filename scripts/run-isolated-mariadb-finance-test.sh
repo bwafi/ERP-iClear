@@ -60,6 +60,7 @@ docker run --rm --network "$NETWORK" \
     -e ERP_SYNTHETIC_MARIADB_USER=root \
     "$PHP_IMAGE" sh -euc '
         php vendor/bin/phpunit --no-coverage tests/integration/InventoryBatchMariaDbTest.php
-        php vendor/bin/phpunit --no-coverage tests/unit --filter="BalanceSheetReconciliationTest|DailyCashFlowServiceTest|FinanceMenuNavigationTest|InventoryLedgerMathTest|InventoryLedgerBridgeTest|JournalReportFiltersTest|SupplierCreditReconciliationTest|WarrantyJournalReconciliationTest|WarrantyServiceAccessTest"
+        php vendor/bin/phpunit --no-coverage tests/integration/KartuHargaMigrationMariaDbTest.php
+        php vendor/bin/phpunit --no-coverage tests/unit --filter="BalanceSheetReconciliationTest|DailyCashFlowServiceTest|FinanceMenuNavigationTest|InventoryLedgerMathTest|InventoryLedgerBridgeTest|JournalReportFiltersTest|KartuHargaWarrantyDefaultTest|SupplierCreditReconciliationTest|WarrantyJournalReconciliationTest|WarrantyServiceAccessTest"
         php tests/integration/WarrantyStockMySql.php
     '

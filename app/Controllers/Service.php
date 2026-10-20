@@ -24,6 +24,7 @@ use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
 use App\Services\Service\ServiceHppSnapshot;
 use App\Services\Service\ServicePriceSnapshot;
+use App\Services\Service\KartuHargaWarrantyDefault;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
 use App\Services\Inventory\ProductInventoryScope;
 
@@ -378,6 +379,31 @@ class Service extends BaseController
                 throw new \RuntimeException('Data service tidak ditemukan.');
             }
 
+            $warrantySubmitted = $garansi !== null && $garansi !== '' && $garansi !== '---Pilih Garansi---';
+            if ($garansi === 'default') {
+                $selectedIds = array_values(array_unique(array_map(
+                    static fn ($item): int => (int) ($item['id'] ?? 0),
+                    $produkData
+                )));
+                if ($selectedIds === [] || in_array(0, $selectedIds, true)) {
+                    throw new \RuntimeException('Pilih sparepart sebelum menggunakan garansi default Kartu Harga.');
+                }
+                $defaults = $db->table('barang')->select('idbarang, garansi_hari_default')
+                    ->whereIn('idbarang', $selectedIds)->where('deleted', 0)->get()->getResult();
+                if (count($defaults) !== count($selectedIds)) {
+                    throw new \RuntimeException('Item sparepart tidak ditemukan untuk pengaturan garansi Kartu Harga.');
+                }
+                $garansi = (string) KartuHargaWarrantyDefault::resolve(array_map(static fn ($item) => $item->garansi_hari_default, $defaults));
+                $warrantySubmitted = true;
+            }
+            if ($warrantySubmitted && (! ctype_digit((string) $garansi) || (int) $garansi > 9999)) {
+                throw new \RuntimeException('Ketentuan garansi tidak valid.');
+            }
+            $warrantyDays = $warrantySubmitted ? (int) $garansi : (int) ($service->garansi_hari ?? 0);
+            if ((int) ($service->status_service ?? 0) >= 4 && $warrantyDays !== (int) ($service->garansi_hari ?? 0)) {
+                throw new \RuntimeException('Snapshot garansi service yang sudah selesai tidak dapat diubah.');
+            }
+
             $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
             (new ServiceSparepartPenjualanSyncService($db))->hapusTransaksiLama(
                 $idservice,
@@ -386,7 +412,7 @@ class Service extends BaseController
             );
 
             if (! $this->ServiceModel->updateService($idservice, [
-                'garansi_hari' => (int) $garansi,
+                'garansi_hari' => $warrantyDays,
             ])) {
                 throw new \RuntimeException('Gagal memperbarui garansi service.');
             }
@@ -845,7 +871,7 @@ class Service extends BaseController
               AND sa.suplier_id_suplier != 0) AS nama_suplier";
 
         $builder = $db->table('stok_barang sb')
-            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT, {$namaSuplier}")
+            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.garansi_hari_default, b.warna, b.imei, u.NAMA_UNIT, {$namaSuplier}")
             ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
             ->join('unit u', 'u.idunit = sb.id_unit', 'left');
         

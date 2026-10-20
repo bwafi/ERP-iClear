@@ -41,6 +41,7 @@
             <?php if ((int) session('ID_JABATAN') === 1): ?>
                 <a class="btn btn-outline-primary" href="<?= base_url('produk/review-tipe') ?>">Review Tipe Item</a>
             <?php endif; ?>
+            <a class="btn btn-outline-primary" href="<?= base_url('produk/kartu-harga') ?>">Kartu Harga</a>
         </div>
     </div>
 

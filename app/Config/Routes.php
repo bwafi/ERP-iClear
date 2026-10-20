@@ -61,6 +61,8 @@ $routes->post('delete_unit', 'Unit::delete_unit', ['filter' => 'auth']);
 $routes->group('produk', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'Produk::index');
     $routes->get('review-tipe', 'Produk::reviewTipe');
+    $routes->get('kartu-harga', 'Produk::kartuHarga');
+    $routes->post('kartu-harga/simpan', 'Produk::simpanHarga');
     $routes->get('export/produk', 'Produk::export_produk');
     $routes->post('import/produk', 'Produk::import_produk');
     $routes->post('insert_produk', 'Produk::insert_produk');

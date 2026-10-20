@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelUnit;
 use App\Services\Inventory\ProductTypeReview;
+use App\Services\Inventory\ProductPriceCatalog;
 
 class Produk extends BaseController
 
@@ -63,6 +64,84 @@ class Produk extends BaseController
             'total' => $review->count(),
             'page' => $page,
         ]);
+    }
+
+    public function kartuHarga()
+    {
+        if (! $this->hasKartuHargaPermission()) {
+            return $this->response->setStatusCode(403)->setBody('Akses Kartu Harga tidak diizinkan.');
+        }
+
+        $db = Database::connect();
+        if (! $db->fieldExists('garansi_hari_default', 'barang') || ! $db->tableExists('barang_harga_history')) {
+            return $this->response->setStatusCode(503)->setBody('Kartu Harga belum siap: migrasi skema belum diterapkan.');
+        }
+        $search = trim((string) $this->request->getGet('q'));
+        $page = max(1, (int) $this->request->getGet('page'));
+        $unitId = (int) session('ID_UNIT');
+        $builder = $db->table('barang b')
+            ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.jenis_item, b.garansi_hari_default, COALESCE(sb.stok_akhir, 0) AS stok_akhir')
+            ->join('stok_barang sb', 'sb.idbarang = b.idbarang AND sb.id_unit = ' . $unitId, 'left')
+            ->where('b.deleted', '0');
+        if ($search !== '') {
+            $builder->groupStart()->like('b.kode_barang', $search)->orLike('b.nama_barang', $search)->groupEnd();
+        }
+        $total = (clone $builder)->countAllResults();
+        $items = $builder->orderBy('b.nama_barang', 'ASC')->limit(50, ($page - 1) * 50)->get()->getResult();
+        $history = $db->table('barang_harga_history h')
+            ->select('h.created_at, h.harga_sebelum, h.harga_sesudah, h.garansi_sebelum, h.garansi_sesudah, b.kode_barang, b.nama_barang, a.NAMA_AKUN')
+            ->join('barang b', 'b.idbarang = h.barang_idbarang')
+            ->join('akun a', 'a.ID_AKUN = h.petugas_idakun', 'left')
+            ->orderBy('h.id', 'DESC')->limit(10)->get()->getResult();
+
+        return view('template', [
+            'akun' => $this->AuthModel->getById(session('ID_AKUN')),
+            'body' => 'datamaster/kartu_harga',
+            'items' => $items,
+            'history' => $history,
+            'search' => $search,
+            'page' => $page,
+            'totalPages' => max(1, (int) ceil($total / 50)),
+        ]);
+    }
+
+    public function simpanHarga()
+    {
+        if (! $this->hasKartuHargaPermission()) {
+            return $this->response->setStatusCode(403)->setBody('Akses perubahan Kartu Harga tidak diizinkan.');
+        }
+        $itemId = (int) $this->request->getPost('idbarang');
+        $rawPrice = preg_replace('/[^0-9]/', '', (string) $this->request->getPost('harga'));
+        $rawWarranty = trim((string) $this->request->getPost('garansi_hari_default'));
+        if ($itemId <= 0 || $rawPrice === '' || strlen($rawPrice) > 15 || ($rawWarranty !== '' && (! ctype_digit($rawWarranty) || (int) $rawWarranty > 9999))) {
+            return redirect()->back()->with('gagal', 'Harga atau garansi tidak valid. Garansi kosong berarti belum diatur; 0 berarti tanpa garansi.');
+        }
+
+        $db = Database::connect();
+        try {
+            $changed = (new ProductPriceCatalog($db))->update(
+                $itemId,
+                (int) $rawPrice,
+                $rawWarranty === '' ? null : (int) $rawWarranty,
+                (int) session('ID_AKUN')
+            );
+        } catch (\Throwable $error) {
+            log_message('error', 'Kartu Harga gagal disimpan untuk item ID ' . $itemId . ': ' . $error->getMessage());
+            return redirect()->back()->with('gagal', $error->getMessage());
+        }
+
+        if (! $changed) {
+            return redirect()->back()->with('info', 'Tidak ada perubahan; histori tidak ditambahkan.');
+        }
+        return redirect()->to(base_url('produk/kartu-harga'))->with('sukses', 'Harga untuk transaksi baru berhasil diperbarui; HPP dan transaksi lama tidak diubah.');
+    }
+
+    private function hasKartuHargaPermission(): bool
+    {
+        $jabatan = Database::connect()->table('jabatan')
+            ->select('ROLES_JABATAN')->where('ID_JABATAN', (int) session('ID_JABATAN'))->get()->getRow();
+        $roles = json_decode((string) ($jabatan->ROLES_JABATAN ?? ''), true);
+        return is_array($roles) && in_array(10152, array_map('intval', $roles), true);
     }
 
 

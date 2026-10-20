@@ -31,6 +31,7 @@ final class SidebarNavigation
             'icon' => 'solar:box-bold-duotone',
             'routes' => [
                 'produk' => ['Master/Pengaturan', 'Master Barang/Jasa'],
+                'produk/kartu-harga' => ['Master/Pengaturan', 'Kartu Harga'],
                 'kategori' => ['Master/Pengaturan', 'Kategori'],
                 'produk/review-tipe' => ['Master/Pengaturan', 'Review Tipe Item'],
             ],

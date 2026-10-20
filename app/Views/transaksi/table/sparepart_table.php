@@ -305,6 +305,7 @@
         <select class="form-select" name="garansi" id="garansiSelect" onchange="cekGaransi(this)">
             <option selected disabled>---Pilih Garansi---</option>
             <option value="0">Tidak Ada</option>
+            <option value="default">Gunakan default Kartu Harga item terpilih</option>
             <option value="7">1 Minggu</option>
             <option value="30">1 Bulan</option>
             <option value="60">2 Bulan</option>
@@ -379,6 +380,7 @@
         const harga = Number(item.harga) || 0;
         const hpp = Number(item.harga_beli) || 0;
         const stok = Number(item.stok_akhir) || 0;
+        const garansi = item.garansi_hari_default === null || item.garansi_hari_default === undefined ? '' : Number(item.garansi_hari_default);
         const isChecked = document.getElementById('row-' + id) ? ' checked' : '';
 
         let meta = '<span class="service-sp-code">' + escapeSparepart(kode || '-') + '</span>';
@@ -401,6 +403,7 @@
             ' data-kode="' + escapeSparepart(kode) + '"' +
             ' data-nama="' + escapeSparepart(nama) + '"' +
             ' data-harga="' + harga + '"' +
+            ' data-garansi-default="' + escapeSparepart(garansi) + '"' +
             ' data-stok="' + stok + '"' + isChecked + '>' +
             '<span class="service-sp-item__box">' +
             '<span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>' +
@@ -430,6 +433,16 @@
 
     document.addEventListener('change', function(event) {
         if (event.target && event.target.classList && event.target.classList.contains('sparepart-check')) {
+            const warrantySelect = document.getElementById('garansiSelect');
+            const selected = Array.from(document.querySelectorAll('#sparepart-modal-body .sparepart-check:checked'));
+            if (warrantySelect && selected.length > 0) {
+                const defaults = selected.map((input) => input.getAttribute('data-garansi-default'));
+                if (defaults.every((value) => value !== '') && new Set(defaults).size === 1) {
+                    warrantySelect.value = 'default';
+                } else if (warrantySelect.value === 'default') {
+                    warrantySelect.value = '';
+                }
+            }
             updateSparepartSelection();
         }
     });
