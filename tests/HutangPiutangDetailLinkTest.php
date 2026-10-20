@@ -25,6 +25,7 @@ final class HutangPiutangDetailLinkTest extends CIUnitTestCase
         $this->assertStringContainsString('name="hutang_piutang_id" value="901"', $html);
         $this->assertStringContainsString('name="kembali_ke" value="hutangpiutang/detail/10"', $html);
         $this->assertStringContainsString('Catat Pelunasan Antar Unit', $html);
+        $this->assertStringContainsString("get('bayar')", $html);
         $this->assertStringNotContainsString('Lunasi di Kas', $html);
     }
 

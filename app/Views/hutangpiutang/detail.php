@@ -428,3 +428,17 @@ $labelAkunAu  = static function ($a) use ($unitMapAu) {
     </div>
 </div>
 <?php endif; ?>
+
+<?php if (!empty($antarUnit)) : ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (new URLSearchParams(window.location.search).get('bayar') !== '1') {
+        return;
+    }
+    var el = document.getElementById('antar-unit-modal');
+    if (el && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(el).show();
+    }
+});
+</script>
+<?php endif; ?>
