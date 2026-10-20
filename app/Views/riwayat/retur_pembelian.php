@@ -92,6 +92,9 @@ foreach ($returpembelian as $row) {
                             <h6 class="fs-4 fw-semibold mb-0">Nama Barang</h6>
                         </th>
                         <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Nama Supplier</h6>
+                        </th>
+                        <th>
                             <h6 class="fs-4 fw-semibold mb-0">Nama Unit</h6>
                         </th>
                         <th>
@@ -109,6 +112,7 @@ foreach ($returpembelian as $row) {
 
                                 <td><?= esc(date('d-m-Y', strtotime($row->tanggal))) ?></td>
                                 <td><?= esc($row->nama_barang) ?></td>
+                                <td><?= esc($row->nama_suplier ?? 'Tidak tercatat') ?></td>
                                 <td><?= esc($row->NAMA_UNIT) ?></td>
                                 <td>
                                     <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"

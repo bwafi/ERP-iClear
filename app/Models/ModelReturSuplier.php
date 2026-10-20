@@ -33,9 +33,11 @@ class ModelReturSuplier extends Model
                 retur_suplier.*, 
                 detail_pembelian.*,
                 barang.nama_barang,
+                suplier.nama_suplier,
                 unit.NAMA_UNIT')
             ->join('detail_pembelian', 'detail_pembelian.iddetail_pembelian = retur_suplier.detail_pembelian_iddetail_pembelian')
             ->join('pembelian', 'pembelian.idpembelian = detail_pembelian.pembelian_idpembelian')
+            ->join('suplier', 'suplier.id_suplier = pembelian.suplier_id_suplier', 'left')
             ->join('barang', 'barang.idbarang = detail_pembelian.barang_idbarang')
             ->join('unit', 'unit.idunit = retur_suplier.unit_idunit')
             ->get()
@@ -49,9 +51,11 @@ class ModelReturSuplier extends Model
             retur_suplier.*, 
             detail_pembelian.*,
             barang.nama_barang,
+            suplier.nama_suplier,
             unit.NAMA_UNIT')
             ->join('detail_pembelian', 'detail_pembelian.iddetail_pembelian = retur_suplier.detail_pembelian_iddetail_pembelian')
             ->join('pembelian', 'pembelian.idpembelian = detail_pembelian.pembelian_idpembelian')
+            ->join('suplier', 'suplier.id_suplier = pembelian.suplier_id_suplier', 'left')
             ->join('barang', 'barang.idbarang = detail_pembelian.barang_idbarang')
             ->join('unit', 'unit.idunit = retur_suplier.unit_idunit');
 

@@ -75,10 +75,12 @@ class ModelDetailPembelian extends Model
                 pembelian.suplier_id_suplier,
                 pembelian.pelanggan_id_pelanggan,
                 suplier.nama_suplier,
+                pelanggan.nama AS nama_pelanggan,
                 unit.NAMA_UNIT')
             ->join('pembelian', 'pembelian.idpembelian = detail_pembelian.pembelian_idpembelian')
             ->join('barang', 'barang.idbarang = detail_pembelian.barang_idbarang')
             ->join('suplier', 'suplier.id_suplier =  pembelian.suplier_id_suplier', 'left')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = pembelian.pelanggan_id_pelanggan', 'left')
             ->join('unit', 'unit.idunit = detail_pembelian.unit_idunit')
             ->orderBy('detail_pembelian.tanggal', 'DESC')
             ->get()
@@ -104,10 +106,16 @@ class ModelDetailPembelian extends Model
             ->select('
             detail_pembelian.*,
             detail_pembelian.tanggal,
+            pembelian.suplier_id_suplier,
+            pembelian.pelanggan_id_pelanggan,
             barang.nama_barang,
+            suplier.nama_suplier,
+            pelanggan.nama AS nama_pelanggan,
             unit.NAMA_UNIT')
             ->join('pembelian', 'pembelian.idpembelian = detail_pembelian.pembelian_idpembelian')
             ->join('barang', 'barang.idbarang = detail_pembelian.barang_idbarang')
+            ->join('suplier', 'suplier.id_suplier = pembelian.suplier_id_suplier', 'left')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = pembelian.pelanggan_id_pelanggan', 'left')
             ->join('unit', 'unit.idunit = detail_pembelian.unit_idunit');
 
 

@@ -65,6 +65,7 @@ class Riwayat_pembelian extends BaseController
             'F1' => 'Diskon',
             'G1' => 'PPN',
             'H1' => 'Total Harga',
+            'I1' => 'Supplier/Pelanggan',
         ];
 
         foreach ($headers as $cell => $value) {
@@ -96,16 +97,17 @@ class Riwayat_pembelian extends BaseController
             $sheet->setCellValue('F' . $row, $item->diskon);
             $sheet->setCellValue('G' . $row, $item->ppn);
             $sheet->setCellValue('H' . $row, $item->total_harga);
+            $sheet->setCellValue('I' . $row, empty($item->suplier_id_suplier) ? ($item->nama_pelanggan ?? 'Tidak tercatat') : ($item->nama_suplier ?? 'Tidak tercatat'));
             $row++;
         }
 
         // Auto Width
-        foreach (range('A', 'H') as $col) {
+        foreach (range('A', 'I') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         // Border
-        $sheet->getStyle('A1:H' . ($row - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle('A1:I' . ($row - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         // Freeze header row
         $sheet->freezePane('A2');

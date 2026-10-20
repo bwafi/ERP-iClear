@@ -106,6 +106,9 @@ foreach ($detail_pembelian as $row) {
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Sumber</h6>
                         </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Nama Supplier/Pelanggan</h6>
+                        </th>
 
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Total Harga</h6>
@@ -126,11 +129,8 @@ foreach ($detail_pembelian as $row) {
                                 <td><?= esc(date('d-m-Y', strtotime($row->tanggal))) ?></td>
                                 <td><?= esc($row->nama_barang) ?></td>
                                 <td><?= esc($row->NAMA_UNIT) ?></td>
-                                <?php if ($row->suplier_id_suplier == null || $row->suplier_id_suplier == 0) : ?>
-                                    <td>Pelanggan</td>
-                                <?php else: ?>
-                                    <td>Suplier</td>
-                                <?php endif ?>
+                                <td><?= empty($row->suplier_id_suplier) ? 'Pelanggan' : 'Supplier' ?></td>
+                                <td><?= esc(empty($row->suplier_id_suplier) ? ($row->nama_pelanggan ?? 'Tidak tercatat') : ($row->nama_suplier ?? 'Tidak tercatat')) ?></td>
                                 <td><?= esc(number_format($row->total_harga, 0, ',', '.')) ?></td>
                                 <td>
                                     <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
@@ -145,7 +145,7 @@ foreach ($detail_pembelian as $row) {
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="9" class="text-center">Tidak ada data</td>
+                            <td colspan="8" class="text-center">Tidak ada data</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>
