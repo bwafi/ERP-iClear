@@ -54,6 +54,27 @@ final class SidebarNavigationTest extends TestCase
         self::assertSame(20, $organized[0]['id']);
     }
 
+    public function testGroupsFlatRootRoutesAndKeepsUnmappedRootOperations(): void
+    {
+        $tree = [
+            ['id' => 76, 'nama' => 'Garansi Service', 'url' => 'garansi_service', 'menu' => []],
+            ['id' => 9, 'nama' => 'Supplier', 'url' => 'supplier', 'menu' => []],
+            ['id' => 71, 'nama' => 'Proses Service', 'url' => 'proses_service', 'menu' => []],
+            ['id' => 51, 'nama' => 'Stok Produk', 'url' => 'kartu_stok', 'menu' => []],
+            ['id' => 210, 'nama' => 'Piutang Pegawai', 'url' => 'piutang', 'menu' => []],
+            ['id' => 112, 'nama' => 'Presensi', 'url' => 'absensi', 'menu' => []],
+        ];
+
+        $organized = SidebarNavigation::organize($tree, [9, 51, 71, 76, 112, 210]);
+
+        self::assertSame(['Service', 'Pembelian', 'Persediaan', 'Keuangan', 'Presensi'], array_column($organized, 'nama'));
+        self::assertContains('garansi_service', $this->allUrls($organized));
+        self::assertContains('supplier', $this->allUrls($organized));
+        self::assertContains('kartu_stok', $this->allUrls($organized));
+        self::assertContains('piutang', $this->allUrls($organized));
+        self::assertContains('absensi', $this->allUrls($organized));
+    }
+
     public function testKeepsOnlyAuthorizedLinksAndDoesNotDuplicateAliasesByExactRoute(): void
     {
         $tree = [[

@@ -122,6 +122,7 @@ final class SidebarNavigation
         foreach ($categories as $category) {
             $remainingCategory = $category;
             $remainingMenus = [];
+            $categoryHasMenus = !empty($category['menu']);
             foreach ($category['menu'] ?? [] as $menu) {
                 $menuUrl = (string) ($menu['url'] ?? '');
                 $menuRoute = self::normalizeRoute($menuUrl);
@@ -147,7 +148,14 @@ final class SidebarNavigation
             }
 
             $remainingCategory['menu'] = $remainingMenus;
-            if ($remainingMenus !== []) {
+            if (!$categoryHasMenus && !empty($category['url'])) {
+                $categoryRoute = self::normalizeRoute((string) $category['url']);
+                if (self::moveLink($category, $categoryRoute, $roleIds, $areas, $seenRoutes)) {
+                    continue;
+                }
+                $remainingCategory['menu'] = [];
+                $remaining[] = $remainingCategory;
+            } elseif ($remainingMenus !== []) {
                 $remaining[] = $remainingCategory;
             }
         }
