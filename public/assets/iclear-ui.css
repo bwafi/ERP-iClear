@@ -152,6 +152,11 @@
 .iclear-ui .iclear-table-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem; padding-block: .8rem; }
 .iclear-ui .iclear-table-tools label { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
 .iclear-ui .iclear-table-tools .dataTables_filter { margin-left: 0; text-align: left; }
+.iclear-ui .iclear-table-footer .dataTables_paginate { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.iclear-ui .iclear-table-footer .dataTables_paginate > span { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.iclear-ui .iclear-table-footer .paginate_button { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 36px; padding: .4rem .55rem; border: 1px solid var(--iclear-border); border-radius: 6px; cursor: pointer; }
+.iclear-ui .iclear-table-footer .paginate_button.current { background: var(--iclear-brand); color: white; }
+.iclear-ui .iclear-table-footer .paginate_button.disabled { opacity: .5; cursor: default; }
 .iclear-ui .iclear-filter-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: 1rem 1.25rem; }
 .iclear-ui .iclear-filter-toolbar label { margin: 0 !important; }
 .iclear-ui .iclear-filter-toolbar :is(input, select) { width: auto; max-width: 100%; min-width: 150px; }
