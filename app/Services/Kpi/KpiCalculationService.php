@@ -51,7 +51,7 @@ class KpiCalculationService
      * HO tidak bertransaksi penjualan sehingga omsetnya 0; memaksakan HO
      * masuk daftar cabang akan menambah baris kosong pada ringkasan omset.
      */
-    public const HO_UNIT_NAME = 'Head Office';
+    public const HO_UNIT_NAME = "Head Office";
 
     protected $componentModel;
     protected $targetModel;
@@ -66,8 +66,8 @@ class KpiCalculationService
     public function __construct()
     {
         $this->componentModel = new ModelKpiComponent();
-        $this->targetModel    = new ModelKpiTarget();
-        $this->weightModel    = new ModelKpiWeight();
+        $this->targetModel = new ModelKpiTarget();
+        $this->weightModel = new ModelKpiWeight();
         $this->attendanceAggregationService = new AttendanceAggregationService();
 
         $this->registerCalculators();
@@ -75,13 +75,15 @@ class KpiCalculationService
 
     protected function registerCalculators()
     {
-        $this->calculators['omset_toko']     = new OmsetTokoCalculator();
-        $this->calculators['customer_count'] = new CustomerCalculator();
-        $this->calculators['omset_cabang']   = new OmsetCabangCalculator();
-        $this->calculators['omset_teknisi']  = new OmsetTeknisiCalculator();
-        $this->calculators['tutup_kasir']    = new TutupKasirCalculator();
-        $this->calculators['stok_opname']    = new StokOpnameCalculator();
-        $this->calculators['produktivitas_team'] = new ProduktivitasTeamCalculator();
+        $this->calculators["omset_toko"] = new OmsetTokoCalculator();
+        $this->calculators["customer_count"] = new CustomerCalculator();
+        $this->calculators["omset_cabang"] = new OmsetCabangCalculator();
+        $this->calculators["omset_teknisi"] = new OmsetTeknisiCalculator();
+        $this->calculators["tutup_kasir"] = new TutupKasirCalculator();
+        $this->calculators["stok_opname"] = new StokOpnameCalculator();
+        $this->calculators[
+            "produktivitas_team"
+        ] = new ProduktivitasTeamCalculator();
     }
 
     /**
@@ -93,9 +95,11 @@ class KpiCalculationService
 
     protected function componentById(int $componentId)
     {
-        $key = \App\Libraries\ReadCache::kunci('component', $componentId);
-        if (! isset(self::$memo[$key])) {
-            self::$memo[$key] = $this->componentModel->where('id', $componentId)->first();
+        $key = \App\Libraries\ReadCache::kunci("component", $componentId);
+        if (!isset(self::$memo[$key])) {
+            self::$memo[$key] = $this->componentModel
+                ->where("id", $componentId)
+                ->first();
         }
 
         return self::$memo[$key];
@@ -106,11 +110,28 @@ class KpiCalculationService
      * Formula kalkulator hanya bergantung pada argumen ini (bukan urutan
      * pemanggilan), dan tabel penjualan/service tidak ditulis selama request.
      */
-    protected function calculatorValue(string $strategy, int $employeeId, int $unitId, int $month, int $year)
-    {
-        $key = \App\Libraries\ReadCache::kunci('calc', $strategy, $employeeId, $unitId, $month, $year);
-        if (! array_key_exists($key, self::$memo)) {
-            self::$memo[$key] = $this->calculators[$strategy]->calculate($employeeId, $unitId, $month, $year);
+    protected function calculatorValue(
+        string $strategy,
+        int $employeeId,
+        int $unitId,
+        int $month,
+        int $year,
+    ) {
+        $key = \App\Libraries\ReadCache::kunci(
+            "calc",
+            $strategy,
+            $employeeId,
+            $unitId,
+            $month,
+            $year,
+        );
+        if (!array_key_exists($key, self::$memo)) {
+            self::$memo[$key] = $this->calculators[$strategy]->calculate(
+                $employeeId,
+                $unitId,
+                $month,
+                $year,
+            );
         }
 
         return self::$memo[$key];
@@ -125,16 +146,22 @@ class KpiCalculationService
      * @param string $year   'YYYY'
      * @param string $context 'gaji'|'penilaian_kinerja'|'slip_gaji'
      */
-    public function calculateForEmployee(int $employeeId, int $unitId, string $month, string $year, string $context = 'default', ?string $date = null)
-    {
-        $date = $date ?? sprintf('%04d-%02d-15', (int)$year, (int)$month);
+    public function calculateForEmployee(
+        int $employeeId,
+        int $unitId,
+        string $month,
+        string $year,
+        string $context = "default",
+        ?string $date = null,
+    ) {
+        $date = $date ?? sprintf("%04d-%02d-15", (int) $year, (int) $month);
 
         // Target lookup: konteks sudah tunggal ('default') — konteks pemanggil
         // tidak lagi menentukan baris target (semua baris sama).
 
         $positionId = $this->getPositionOfEmployee($employeeId);
 
-        $weights = $this->weightModel->getByPosition($positionId, $date, 'kpi');
+        $weights = $this->weightModel->getByPosition($positionId, $date, "kpi");
 
         $items = [];
         $omzetInfo = null; // cache ringkasan omzet SPV (target/actual per cabang) utk display
@@ -143,139 +170,227 @@ class KpiCalculationService
         $managerData = null; // cache data target/actual KPI Manager (jabatan 34)
         foreach ($weights as $w) {
             $component = $this->componentById((int) $w->kpi_component_id);
-            if (!$component || !(int)$component->is_active) {
+            if (!$component || !(int) $component->is_active) {
                 continue;
             }
 
             // ==== SUPERVISOR / SPV (jabatan 40): 7 komponen area (dihitung di SupervisorKpiService) ====
-            if ($positionId === 40 && in_array($component->code, SupervisorKpiService::CODES, true)) {
+            if (
+                $positionId === 40 &&
+                in_array($component->code, SupervisorKpiService::CODES, true)
+            ) {
                 $achievement = $this->supervisorService()->achievement(
                     $component->code,
                     $employeeId,
                     $unitId,
-                    (int)$month,
-                    (int)$year,
+                    (int) $month,
+                    (int) $year,
                     $context,
                     $context,
-                    $date
+                    $date,
                 );
-            // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): 7 KPI Digital Marketing
-            // (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/CAMPAIGN_PERFORMANCE/REPORTING/IMPROVEMENT) ====
-            } elseif ($positionId === 43 && in_array($component->code, DigitalMarketingKpiService::CODES, true)) {
+                // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): 7 KPI Digital Marketing
+                // (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/CAMPAIGN_PERFORMANCE/REPORTING/IMPROVEMENT) ====
+            } elseif (
+                $positionId === 43 &&
+                in_array(
+                    $component->code,
+                    DigitalMarketingKpiService::CODES,
+                    true,
+                )
+            ) {
                 $digitalData = $this->digitalMarketingService()->componentData(
                     $component->code,
-                    (int)$employeeId,
-                    (int)$unitId,
-                    (int)$month,
-                    (int)$year,
+                    (int) $employeeId,
+                    (int) $unitId,
+                    (int) $month,
+                    (int) $year,
                     $context,
-                    $date
+                    $date,
                 );
-                $achievement = $digitalData['achievement'];
-            // ==== MULTIMEDIA / CREATIVE (jabatan 44): 6 KPI Owner (MultimediaKpiService) ====
-            } elseif ($positionId === 44 && in_array($component->code, MultimediaKpiService::CODES, true)) {
+                $achievement = $digitalData["achievement"];
+                // ==== MULTIMEDIA / CREATIVE (jabatan 44): 6 KPI Owner (MultimediaKpiService) ====
+            } elseif (
+                $positionId === 44 &&
+                in_array($component->code, MultimediaKpiService::CODES, true)
+            ) {
                 $achievement = $this->multimediaService()->achievement(
                     $component->code,
                     $employeeId,
                     $unitId,
-                    (int)$month,
-                    (int)$year
+                    (int) $month,
+                    (int) $year,
                 );
-            // ==== FINANCE (jabatan 0): 7 KPI Finance (rata-rata antar-cabang) ====
-            // Nilai tiap KPI = rata-rata skor cabang dari scorecard Dashboard
-            // Finance. Bobot mengikuti kpi_weights posisi 0 (Config\Finance).
-            } elseif ($positionId === 0 && in_array($component->code, FinanceKpiService::CODES, true)) {
+                // ==== FINANCE (jabatan 0): 7 KPI Finance (rata-rata antar-cabang) ====
+                // Nilai tiap KPI = rata-rata skor cabang dari scorecard Dashboard
+                // Finance. Bobot mengikuti kpi_weights posisi 0 (Config\Finance).
+            } elseif (
+                $positionId === 0 &&
+                in_array($component->code, FinanceKpiService::CODES, true)
+            ) {
                 $financeData = $this->financeKpiService()->componentData(
                     $component->code,
-                    (int)$month,
-                    (int)$year
+                    (int) $month,
+                    (int) $year,
                 );
-                $achievement = $financeData['achievement'];
-            // ==== MANAGER (jabatan 34): 7 komponen perusahaan (ManagerKpiService) ====
-            // Omzet Global (rumus sama Kadiv), Profit & Kesehatan (Finance),
-            // Pencapaian Cabang (semua cabang), Efektivitas Organisasi (KPI SPV),
-            // SDM & Leadership (KPI bawahan langsung), dan 2 komponen manual.
-            } elseif ($positionId === 34 && in_array($component->code, ManagerKpiService::CODES, true)) {
+                $achievement = $financeData["achievement"];
+                // ==== MANAGER (jabatan 34): 7 komponen perusahaan (ManagerKpiService) ====
+                // Omzet Global (rumus sama Kadiv), Profit & Kesehatan (Finance),
+                // Pencapaian Cabang (semua cabang), Efektivitas Organisasi (KPI SPV),
+                // SDM & Leadership (KPI bawahan langsung), dan 2 komponen manual.
+            } elseif (
+                $positionId === 34 &&
+                in_array($component->code, ManagerKpiService::CODES, true)
+            ) {
                 $managerData = $this->managerService()->componentData(
                     $component->code,
-                    (int)$employeeId,
-                    (int)$unitId,
-                    (int)$month,
-                    (int)$year,
+                    (int) $employeeId,
+                    (int) $unitId,
+                    (int) $month,
+                    (int) $year,
                     $context,
-                    $date
+                    $date,
                 );
-                $achievement = $managerData['achievement'];
-            // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
-            } elseif ($component->code === 'CLOSING_RATE') {
-                $achievement = (new \App\Services\Kpi\Calculators\ClosingRateCalculator())
-                    ->calculate($employeeId, $unitId, (int)$month, (int)$year);
-            } elseif ($component->type === 'automatic' && $component->calculation_strategy) {
-                $calculator = $this->calculators[$component->calculation_strategy] ?? null;
+                $achievement = $managerData["achievement"];
+                // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
+            } elseif ($component->code === "CLOSING_RATE") {
+                $achievement = new \App\Services\Kpi\Calculators\ClosingRateCalculator()->calculate(
+                    $employeeId,
+                    $unitId,
+                    (int) $month,
+                    (int) $year,
+                );
+            } elseif (
+                $component->type === "automatic" &&
+                $component->calculation_strategy
+            ) {
+                $calculator =
+                    $this->calculators[$component->calculation_strategy] ??
+                    null;
                 if ($calculator === null) {
                     continue; // strategy belum terdaftar
                 }
                 // Unit sumber omset: default unit penempatan, kecuali CS (unit 1).
-                $omsetUnitId = $this->resolveOmsetUnitId($positionId, $component->code, (int)$unitId);
-                $actualValue = $this->calculatorValue($component->calculation_strategy, (int) $employeeId, $omsetUnitId, (int) $month, (int) $year);
-                $target = $this->targetModel->getTargetByKpiAndUnit($component->id, $omsetUnitId, $context, $date);
+                $omsetUnitId = $this->resolveOmsetUnitId(
+                    $positionId,
+                    $component->code,
+                    (int) $unitId,
+                );
+                $actualValue = $this->calculatorValue(
+                    $component->calculation_strategy,
+                    (int) $employeeId,
+                    $omsetUnitId,
+                    (int) $month,
+                    (int) $year,
+                );
+                $target = $this->targetModel->getTargetByKpiAndUnit(
+                    $component->id,
+                    $omsetUnitId,
+                    $context,
+                    $date,
+                );
                 if (!$target) {
                     continue; // belum ada target utk KPI ini
                 }
-                
+
                 // OMSET (Toko/Cabang): threshold tanpa tier — actual < target → 0; actual ≥ target → 100 (cap).
-                if (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG'])) {
+                if (
+                    in_array($component->code, ["OMSET_TOKO", "OMSET_CABANG"])
+                ) {
                     $targetValue = (float) $target->target_value;
-                    $achievement = ($actualValue >= $targetValue)
-                        ? $this->scoreService()->achievementScore($actualValue, $targetValue)
-                        : 0.0;
-                } elseif ($component->code === 'OMSET_TEKNISI') {
+                    $achievement =
+                        $actualValue >= $targetValue
+                            ? $this->scoreService()->achievementScore(
+                                $actualValue,
+                                $targetValue,
+                            )
+                            : 0.0;
+                } elseif ($component->code === "OMSET_TEKNISI") {
                     // OMSET TEKNISI: realisasi HANYA omzet service yg dikerjakan teknisi
                     // (OmsetTeknisiCalculator: service.service_by, status selesai, bulan tsb).
                     // Threshold tanpa tier: actual < target → 0; actual ≥ target → 100 (cap).
                     $targetValue = (float) $target->target_value;
-                    $achievement = ($actualValue >= $targetValue)
-                        ? $this->scoreService()->achievementScore($actualValue, $targetValue)
-                        : 0.0;
-                } elseif ($component->code === 'CUSTOMER_COUNT') {
+                    $achievement =
+                        $actualValue >= $targetValue
+                            ? $this->scoreService()->achievementScore(
+                                $actualValue,
+                                $targetValue,
+                            )
+                            : 0.0;
+                } elseif ($component->code === "CUSTOMER_COUNT") {
                     // target_value DB = target pelanggan UNIT (full): BWI 220 / JBR 180 /
                     // BWI 350 / Pandaan 250. Target per pegawai = target_value ÷ 2
                     // (dibagi di kode, bukan di DB) utk teknisi & kepala toko.
                     // KECUALI Kepala Toko unit 1: realisasi = akumulasi teknisi unit
                     // (skala unit), jadi target memakai nilai PENUH (lihat customerTarget).
                     // Nilai KPI 0 jika aktual < target; jika tercapai → min(ratio, 100).
-                    $effectiveTarget = $this->customerTarget($positionId, (int)$unitId, (float) $target->target_value);
+                    $effectiveTarget = $this->customerTarget(
+                        $positionId,
+                        (int) $unitId,
+                        (float) $target->target_value,
+                    );
 
                     if (in_array($positionId, [36, 41], true)) {
                         // TEKNISI & KEPALA TOKO: aktual = service yg ditangani.
                         // Khusus Kepala Toko unit 1: akumulasi service para teknisi
                         // unit tsb (lihat customerHandledActual) — TIDAK menghitung
                         // seluruh pelanggan unit.
-                        $handled     = $this->customerHandledActual($positionId, $employeeId, (int)$unitId, (int)$month, (int)$year);
-                        $achievement = ($effectiveTarget > 0 && $handled >= $effectiveTarget)
-                            ? min(($handled / $effectiveTarget) * 100.0, 100.0)
-                            : 0.0;
+                        $handled = $this->customerHandledActual(
+                            $positionId,
+                            $employeeId,
+                            (int) $unitId,
+                            (int) $month,
+                            (int) $year,
+                        );
+                        $achievement =
+                            $effectiveTarget > 0 && $handled >= $effectiveTarget
+                                ? min(
+                                    ($handled / $effectiveTarget) * 100.0,
+                                    100.0,
+                                )
+                                : 0.0;
                     } else {
                         // Lainnya: capped ratio terhadap target efektif,
                         // tanpa threshold. 0 jika belum mencapai target.
-                        $achievement = ($effectiveTarget > 0 && $actualValue >= $effectiveTarget)
-                            ? $this->scoreService()->achievementScore($actualValue, $effectiveTarget)
-                            : 0.0;
+                        $achievement =
+                            $effectiveTarget > 0 &&
+                            $actualValue >= $effectiveTarget
+                                ? $this->scoreService()->achievementScore(
+                                    $actualValue,
+                                    $effectiveTarget,
+                                )
+                                : 0.0;
                     }
                 } else {
                     // Other automatic: capped ratio
-                    $achievement = $this->scoreService()->achievementScore($actualValue, (float)$target->target_value);
+                    $achievement = $this->scoreService()->achievementScore(
+                        $actualValue,
+                        (float) $target->target_value,
+                    );
                 }
             } else {
                 // ==== MANUAL KPI ====
                 $achievement = 0.0;
-                $attendanceCodes = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
-                
+                $attendanceCodes = [
+                    "KEHADIRAN",
+                    "KEBERSIHAN",
+                    "SERAGAM",
+                    "KEPATUHAN_SOP",
+                ];
+
                 if (in_array($component->code, $attendanceCodes)) {
-                    if ($positionId === 35 && $component->code === 'KEHADIRAN') {
+                    if (
+                        $positionId === 35 &&
+                        $component->code === "KEHADIRAN"
+                    ) {
                         // ADMIN/KASIR: KPI "Kehadiran" = kelengkapan input absen harian
                         // untuk dirinya, Teknisi, Kepala Toko, & CS (satu unit).
-                        $achievement = $this->adminAttendanceInputCoverage($employeeId, $unitId, $month, $year);
+                        $achievement = $this->adminAttendanceInputCoverage(
+                            $employeeId,
+                            $unitId,
+                            $month,
+                            $year,
+                        );
                     } else {
                         // Attendance: dari kpi_evaluations via AttendanceAggregationService
                         $attendanceResult = $this->attendanceAggregationService->calculateMonthlyAttendance(
@@ -283,14 +398,26 @@ class KpiCalculationService
                             $unitId,
                             $month,
                             $year,
-                            $context
+                            $context,
                         );
 
-                        if (isset($attendanceResult['components'][$component->code])) {
-                            $achievement = $attendanceResult['components'][$component->code]['normalized'];
+                        if (
+                            isset(
+                                $attendanceResult["components"][
+                                    $component->code
+                                ],
+                            )
+                        ) {
+                            $achievement =
+                                $attendanceResult["components"][
+                                    $component->code
+                                ]["normalized"];
                         }
                     }
-                } elseif ($component->code === 'OPERASIONAL' && $positionId === 40) {
+                } elseif (
+                    $component->code === "OPERASIONAL" &&
+                    $positionId === 40
+                ) {
                     // OPERASIONAL: SPV uses cabang-aman logic (count units meeting threshold)
                     $operasionalCalc = new \App\Services\Kpi\Calculators\OperasionalCalculator();
                     $achievement = $operasionalCalc->calculate(
@@ -299,174 +426,239 @@ class KpiCalculationService
                         $unitId,
                         $month,
                         $year,
-                        $date
+                        $date,
                     );
-                } elseif ($component->code === 'KONTROL_ASET') {
+                } elseif ($component->code === "KONTROL_ASET") {
                     // Kontrol Aset = hasil audit bulanan SPV FINAL + lengkap (AsetKpiService).
                     // null = Belum Diaudit (belum final atau belum lengkap, tanpa fallback).
-                    $achievement = $this->kontrolAsetScore((int)$unitId, (int)$month, (int)$year);
+                    $achievement = $this->kontrolAsetScore(
+                        (int) $unitId,
+                        (int) $month,
+                        (int) $year,
+                    );
                 } else {
                     // Manual non-attendance: gunakan ManualKpiScorer
                     $scorer = new ManualKpiScorer();
                     $scorerCtx = [
-                        'employee_id' => $employeeId,
-                        'unit'        => $unitId,
-                        'month'       => $month,
-                        'year'        => $year,
-                        'context'     => $context,
-                        'date'        => $date,
+                        "employee_id" => $employeeId,
+                        "unit" => $unitId,
+                        "month" => $month,
+                        "year" => $year,
+                        "context" => $context,
+                        "date" => $date,
                     ];
-                    $achievement = $scorer->achievement($component->code, $scorerCtx);
+                    $achievement = $scorer->achievement(
+                        $component->code,
+                        $scorerCtx,
+                    );
                 }
             }
 
-            $achievementVal = ($achievement === null) ? null : round($achievement, 4);
-            $weightedVal    = ($achievement === null) ? null : round(($achievement / 100) * (float)$w->weight, 4);
+            $achievementVal =
+                $achievement === null ? null : round($achievement, 4);
+            $weightedVal =
+                $achievement === null
+                    ? null
+                    : round(($achievement / 100) * (float) $w->weight, 4);
 
             // Info target/realisasi utk tampilan (read-only, tidak mempengaruhi nilai).
             $targetInfo = null;
-            if ($positionId === 40 && in_array($component->code, ['OMZET_WILAYAH', 'TARGET_CABANG'], true)) {
+            if (
+                $positionId === 40 &&
+                in_array(
+                    $component->code,
+                    ["OMZET_WILAYAH", "TARGET_CABANG"],
+                    true,
+                )
+            ) {
                 if ($omzetInfo === null) {
                     $omzetInfo = $this->supervisorService()->omzetDetail(
-                        $employeeId, $unitId, (int)$month, (int)$year, $context, $date
+                        $employeeId,
+                        $unitId,
+                        (int) $month,
+                        (int) $year,
+                        $context,
+                        $date,
                     );
                 }
                 if ($omzetInfo) {
-                    if ($component->code === 'TARGET_CABANG') {
+                    if ($component->code === "TARGET_CABANG") {
                         // Hanya cabang yang punya target yang dihitung, sama
                         // seperti SupervisorKpiService::targetCabang(). Cabang
                         // tanpa target (mis. Unit 5 yang belum punya
                         // kpi_targets) tidak boleh tampil sebagai "kurang",
                         // karena nilainya memang tidak pernah masuk skor.
-                        $terhitung = array_values(array_filter(
-                            $omzetInfo['cabang'],
-                            static fn ($cb) => $cb['target_ho'] !== null
-                        ));
+                        $terhitung = array_values(
+                            array_filter(
+                                $omzetInfo["cabang"],
+                                static fn($cb) => $cb["target_ho"] !== null,
+                            ),
+                        );
                         $n = count($terhitung);
                         $reached = 0;
                         foreach ($terhitung as $cb) {
-                            if (!empty($cb['reached'])) {
+                            if (!empty($cb["reached"])) {
                                 $reached++;
                             }
                         }
                         $targetInfo = [
-                            'unit_count' => $n,
-                            'reached'    => $reached,
-                            'shortfall'  => max($n - $reached, 0),
-                            'ho'         => true,
-                            'cabang'     => $terhitung,
+                            "unit_count" => $n,
+                            "reached" => $reached,
+                            "shortfall" => max($n - $reached, 0),
+                            "ho" => true,
+                            "cabang" => $terhitung,
                         ];
                     } else {
                         $targetInfo = [
-                            'target'    => $omzetInfo['target_ho_total'],
-                            'actual'    => $omzetInfo['actual_total'],
-                            'shortfall' => $omzetInfo['shortfall_ho'],
-                            'ho'        => true,
-                            'cabang'    => $omzetInfo['cabang'],
+                            "target" => $omzetInfo["target_ho_total"],
+                            "actual" => $omzetInfo["actual_total"],
+                            "shortfall" => $omzetInfo["shortfall_ho"],
+                            "ho" => true,
+                            "cabang" => $omzetInfo["cabang"],
                         ];
                     }
                 }
-            } elseif ($component->code === 'CUSTOMER_COUNT' && isset($actualValue) && isset($target)) {
+            } elseif (
+                $component->code === "CUSTOMER_COUNT" &&
+                isset($actualValue) &&
+                isset($target)
+            ) {
                 // CUSTOMER_COUNT: target per pegawai = target_value(unit, full) ÷ 2,
                 // kecuali Kepala Toko unit 1 (target penuh — lihat customerTarget).
                 // Aktual teknisi & kepala toko = service yg ditangani (service_by);
                 // aktual lainnya = TotalCustomer (service + penjualan ber-id pelanggan).
-                $effectiveTarget = $this->customerTarget($positionId, (int)$unitId, (float) $target->target_value);
+                $effectiveTarget = $this->customerTarget(
+                    $positionId,
+                    (int) $unitId,
+                    (float) $target->target_value,
+                );
                 if (in_array($positionId, [36, 41], true)) {
-                    $handled = $this->customerHandledActual($positionId, $employeeId, (int)$unitId, (int)$month, (int)$year);
+                    $handled = $this->customerHandledActual(
+                        $positionId,
+                        $employeeId,
+                        (int) $unitId,
+                        (int) $month,
+                        (int) $year,
+                    );
                     $targetInfo = [
-                        'target'    => round($effectiveTarget, 2),
-                        'actual'    => $handled,
-                        'shortfall' => max($effectiveTarget - $handled, 0.0),
-                        'ho'        => false,
-                        'cabang'    => null,
+                        "target" => round($effectiveTarget, 2),
+                        "actual" => $handled,
+                        "shortfall" => max($effectiveTarget - $handled, 0.0),
+                        "ho" => false,
+                        "cabang" => null,
                     ];
                 } else {
                     $targetInfo = [
-                        'target'    => round($effectiveTarget, 2),
-                        'actual'    => (float)$actualValue,
-                        'shortfall' => max($effectiveTarget - (float)$actualValue, 0.0),
-                        'ho'        => false,
-                        'cabang'    => null,
+                        "target" => round($effectiveTarget, 2),
+                        "actual" => (float) $actualValue,
+                        "shortfall" => max(
+                            $effectiveTarget - (float) $actualValue,
+                            0.0,
+                        ),
+                        "ho" => false,
+                        "cabang" => null,
                     ];
                 }
-            } elseif (in_array($component->code, ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI'], true) && isset($actualValue) && isset($target)) {
+            } elseif (
+                in_array(
+                    $component->code,
+                    ["OMSET_TOKO", "OMSET_CABANG", "OMSET_TEKNISI"],
+                    true,
+                ) &&
+                isset($actualValue) &&
+                isset($target)
+            ) {
                 // Non-SPV: target biasa dari kpi_targets (non HO).
                 $targetInfo = [
-                    'target'    => (float)$target->target_value,
-                    'actual'    => (float)$actualValue,
-                    'shortfall' => max((float)$target->target_value - (float)$actualValue, 0.0),
-                    'ho'        => false,
-                    'cabang'    => null,
+                    "target" => (float) $target->target_value,
+                    "actual" => (float) $actualValue,
+                    "shortfall" => max(
+                        (float) $target->target_value - (float) $actualValue,
+                        0.0,
+                    ),
+                    "ho" => false,
+                    "cabang" => null,
                 ];
             } elseif ($digitalData !== null) {
                 // KPI Digital Marketing (jabatan 43): target/actual dari
                 // DigitalMarketingKpiService::componentData (divisi/HO scope).
                 $targetInfo = [
-                    'target'    => $digitalData['target'],
-                    'actual'    => $digitalData['actual'],
-                    'shortfall' => $digitalData['shortfall'],
-                    'ho'        => true,
-                    'cabang'    => null,
+                    "target" => $digitalData["target"],
+                    "actual" => $digitalData["actual"],
+                    "shortfall" => $digitalData["shortfall"],
+                    "ho" => true,
+                    "cabang" => null,
                 ];
             } elseif ($financeData !== null) {
                 // KPI Finance (jabatan 0): target = skor 100, realisasi =
                 // rata-rata skor antar-cabang (FinanceKpiService::componentData).
                 $targetInfo = [
-                    'target'    => $financeData['target'],
-                    'actual'    => $financeData['actual'],
-                    'shortfall' => $financeData['shortfall'],
-                    'ho'        => true,
-                    'cabang'    => null,
+                    "target" => $financeData["target"],
+                    "actual" => $financeData["actual"],
+                    "shortfall" => $financeData["shortfall"],
+                    "ho" => true,
+                    "cabang" => null,
                 ];
 
                 // Kesehatan Uang ditampilkan per cabang (pola sama seperti
                 // Omset Wilayah/Target Cabang milik SPV): rasio + skor tiap
                 // cabang, supaya Finance tahu cabang mana yang menahan nilai.
-                if ($component->code === 'FIN_KESEHATAN_UANG') {
-                    $targetInfo['cabang'] = $this->financeKpiService()
-                        ->kesehatanUangBreakdown((int) $month, (int) $year);
-                } elseif ($component->code === 'FIN_AKURASI') {
+                if ($component->code === "FIN_KESEHATAN_UANG") {
+                    $targetInfo[
+                        "cabang"
+                    ] = $this->financeKpiService()->kesehatanUangBreakdown(
+                        (int) $month,
+                        (int) $year,
+                    );
+                } elseif ($component->code === "FIN_AKURASI") {
                     // Akurasi Laporan Keuangan: jumlah hari rekonsiliasi
                     // terverifikasi tanpa selisih per cabang.
-                    $targetInfo['cabang'] = $this->financeKpiService()
-                        ->akurasiBreakdown((int) $month, (int) $year);
-                } elseif ($component->code === 'FIN_CASH_FLOW') {
+                    $targetInfo[
+                        "cabang"
+                    ] = $this->financeKpiService()->akurasiBreakdown(
+                        (int) $month,
+                        (int) $year,
+                    );
+                } elseif ($component->code === "FIN_CASH_FLOW") {
                     // Net Cash Flow: NCF% tiap cabang vs target 20% + skornya,
                     // supaya target bisnis terlihat (bukan hanya skor 0–100).
-                    $targetInfo['cabang'] = $this->financeKpiService()
-                        ->cashflowBreakdown((int) $month, (int) $year);
+                    $targetInfo[
+                        "cabang"
+                    ] = $this->financeKpiService()->cashflowBreakdown(
+                        (int) $month,
+                        (int) $year,
+                    );
                 }
             } elseif ($managerData !== null) {
                 // KPI Manager (jabatan 34): target/realisasi dari ManagerKpiService.
                 // TARGET_CABANG membawa rincian per-cabang (unit_count/reached/cabang).
                 $targetInfo = [
-                    'target'     => $managerData['target'] ?? null,
-                    'actual'     => $managerData['actual'] ?? null,
-                    'shortfall'  => $managerData['shortfall'] ?? null,
-                    'unit_count' => $managerData['unit_count'] ?? null,
-                    'reached'    => $managerData['reached'] ?? null,
-                    'ho'         => true,
-                    'cabang'     => $managerData['cabang'] ?? null,
+                    "target" => $managerData["target"] ?? null,
+                    "actual" => $managerData["actual"] ?? null,
+                    "shortfall" => $managerData["shortfall"] ?? null,
+                    "unit_count" => $managerData["unit_count"] ?? null,
+                    "reached" => $managerData["reached"] ?? null,
+                    "ho" => true,
+                    "cabang" => $managerData["cabang"] ?? null,
                 ];
             }
 
             $items[] = [
-                'kpi_component_id'    => $component->id,
-                'code'                => $component->code,
-                'name'                => $component->name,
-                'type'                => $component->type,
-                'calculation_strategy' => $component->calculation_strategy,
-                'weight'              => (float)$w->weight,
-                'achievement'         => $achievementVal,
-                'weighted_score'      => $weightedVal,
-                'target'              => $targetInfo['target'] ?? null,
-                'actual'              => $targetInfo['actual'] ?? null,
-                'shortfall'           => $targetInfo['shortfall'] ?? null,
-                'unit_count'          => $targetInfo['unit_count'] ?? null,
-                'reached'             => $targetInfo['reached'] ?? null,
-                'ho'                  => $targetInfo['ho'] ?? null,
-                'cabang'              => $targetInfo['cabang'] ?? null,
+                "kpi_component_id" => $component->id,
+                "code" => $component->code,
+                "name" => $component->name,
+                "type" => $component->type,
+                "calculation_strategy" => $component->calculation_strategy,
+                "weight" => (float) $w->weight,
+                "achievement" => $achievementVal,
+                "weighted_score" => $weightedVal,
+                "target" => $targetInfo["target"] ?? null,
+                "actual" => $targetInfo["actual"] ?? null,
+                "shortfall" => $targetInfo["shortfall"] ?? null,
+                "unit_count" => $targetInfo["unit_count"] ?? null,
+                "reached" => $targetInfo["reached"] ?? null,
+                "ho" => $targetInfo["ho"] ?? null,
+                "cabang" => $targetInfo["cabang"] ?? null,
             ];
         }
 
@@ -480,25 +672,34 @@ class KpiCalculationService
             $unitId,
             $month,
             $year,
-            $context
+            $context,
         );
-        $skorTotal2 = $attendance['attendance_score'];
+        $skorTotal2 = $attendance["attendance_score"];
 
         return [
-            'employee_id'  => $employeeId,
-            'unit_id'      => $unitId,
-            'position_id'  => $positionId,
-            'context'      => $context,
-            'period'       => sprintf('%04d-%02d', (int)$year, (int)$month),
-            'items'        => $items,
-            'total_score'  => round($scoreService->totalWeightedScore(
-                array_map(fn($i) => ['nilai' => $i['achievement'], 'bobot' => $i['weight']], $items)
-            ), 4),
-            'skor_total2'  => round($skorTotal2, 4),
-            'attendance'   => $attendance,
-            'detail_absen' => $attendance['components'] ?? [],
-            'weight_valid' => $scoreService->validateWeights(
-                array_map(fn($i) => ['bobot' => $i['weight']], $items)
+            "employee_id" => $employeeId,
+            "unit_id" => $unitId,
+            "position_id" => $positionId,
+            "context" => $context,
+            "period" => sprintf("%04d-%02d", (int) $year, (int) $month),
+            "items" => $items,
+            "total_score" => round(
+                $scoreService->totalWeightedScore(
+                    array_map(
+                        fn($i) => [
+                            "nilai" => $i["achievement"],
+                            "bobot" => $i["weight"],
+                        ],
+                        $items,
+                    ),
+                ),
+                4,
+            ),
+            "skor_total2" => round($skorTotal2, 4),
+            "attendance" => $attendance,
+            "detail_absen" => $attendance["components"] ?? [],
+            "weight_valid" => $scoreService->validateWeights(
+                array_map(fn($i) => ["bobot" => $i["weight"]], $items),
             ),
         ];
     }
@@ -557,11 +758,11 @@ class KpiCalculationService
 
     protected function getPositionOfEmployee(int $employeeId): ?int
     {
-        $key = \App\Libraries\ReadCache::kunci('pos', $employeeId);
-        if (! array_key_exists($key, self::$memo)) {
+        $key = \App\Libraries\ReadCache::kunci("pos", $employeeId);
+        if (!array_key_exists($key, self::$memo)) {
             $model = new \App\Models\ModelAuth();
-            $emp = $model->where('ID_AKUN', $employeeId)->first();
-            self::$memo[$key] = $emp ? (int)$emp->ID_JABATAN : null;
+            $emp = $model->where("ID_AKUN", $employeeId)->first();
+            self::$memo[$key] = $emp ? (int) $emp->ID_JABATAN : null;
         }
 
         return self::$memo[$key];
@@ -577,9 +778,15 @@ class KpiCalculationService
      * Dipakai untuk BOTH actual dan target supaya pembandingnya konsisten:
      * actual omset unit 1 harus dibandingkan dengan target unit 1.
      */
-    protected function resolveOmsetUnitId(?int $positionId, string $componentCode, int $unitId): int
-    {
-        if ($positionId === self::CS_POSITION_ID && $componentCode === 'OMSET_TOKO') {
+    protected function resolveOmsetUnitId(
+        ?int $positionId,
+        string $componentCode,
+        int $unitId,
+    ): int {
+        if (
+            $positionId === self::CS_POSITION_ID &&
+            $componentCode === "OMSET_TOKO"
+        ) {
             return self::CS_OMSET_UNIT_ID;
         }
 
@@ -594,15 +801,32 @@ class KpiCalculationService
      * akumulasi service para teknisi unit tsb; teknisi dan Kepala Toko unit lain
      * tetap memakai service yang ditangani sendiri.
      */
-    protected function customerHandledActual(int $positionId, int $employeeId, int $unitId, int $month, int $year): float
-    {
-        $customerCalc = $this->calculators['customer_count'];
+    protected function customerHandledActual(
+        int $positionId,
+        int $employeeId,
+        int $unitId,
+        int $month,
+        int $year,
+    ): float {
+        $customerCalc = $this->calculators["customer_count"];
 
-        if ($positionId === 41 && $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID) {
-            return (float) $customerCalc->handledByUnitTeknisi($unitId, $month, $year);
+        if (
+            $positionId === 41 &&
+            $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID
+        ) {
+            return (float) $customerCalc->handledByUnitTeknisi(
+                $unitId,
+                $month,
+                $year,
+            );
         }
 
-        return (float) $customerCalc->handledByTeknisi($employeeId, $unitId, $month, $year);
+        return (float) $customerCalc->handledByTeknisi(
+            $employeeId,
+            $unitId,
+            $month,
+            $year,
+        );
     }
 
     /**
@@ -612,9 +836,15 @@ class KpiCalculationService
      * teknisi & kepala toko. Khusus Kepala Toko unit 1 — realisasi-nya akumulasi
      * teknisi se-unit (skala unit) — target memakai nilai PENUH (tidak dibagi 2).
      */
-    protected function customerTarget(int $positionId, int $unitId, float $targetValue): float
-    {
-        if ($positionId === 41 && $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID) {
+    protected function customerTarget(
+        int $positionId,
+        int $unitId,
+        float $targetValue,
+    ): float {
+        if (
+            $positionId === 41 &&
+            $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID
+        ) {
             return $targetValue;
         }
 
@@ -640,19 +870,19 @@ class KpiCalculationService
         }
 
         $rows = \Config\Database::connect()
-            ->table('unit')
-            ->select('idunit, NAMA_UNIT')
-            ->where('NAMA_UNIT !=', self::HO_UNIT_NAME)
-            ->where('idunit >', 0)
-            ->orderBy('idunit', 'ASC')
+            ->table("unit")
+            ->select("idunit, NAMA_UNIT")
+            ->where("NAMA_UNIT !=", self::HO_UNIT_NAME)
+            ->where("idunit >", 0)
+            ->orderBy("idunit", "ASC")
             ->get()
             ->getResultArray();
 
         $cache = [];
         foreach ($rows as $row) {
             $cache[] = [
-                'unit' => (int) $row['idunit'],
-                'nama' => (string) $row['NAMA_UNIT'],
+                "unit" => (int) $row["idunit"],
+                "nama" => (string) $row["NAMA_UNIT"],
             ];
         }
 
@@ -661,17 +891,23 @@ class KpiCalculationService
 
     public function calculateAchievement($actualValue, $targetValue)
     {
-        return $this->scoreService()->achievementScore((float)$actualValue, (float)$targetValue);
+        return $this->scoreService()->achievementScore(
+            (float) $actualValue,
+            (float) $targetValue,
+        );
     }
 
     public function validatePositionWeights($positionId, $date = null)
     {
         $result = $this->weightModel->validateAllGroups($positionId, $date);
-        return $result['kpi']['is_valid'] ?? false;
+        return $result["kpi"]["is_valid"] ?? false;
     }
 
-    public function getWeightsByPosition($positionId, $date = null, $group = null)
-    {
+    public function getWeightsByPosition(
+        $positionId,
+        $date = null,
+        $group = null,
+    ) {
         return $this->weightModel->getByPosition($positionId, $date, $group);
     }
 
@@ -700,53 +936,75 @@ class KpiCalculationService
         int $employeeId,
         string $month,
         string $year,
-        string $context = 'gaji',
+        string $context = "gaji",
         ?string $date = null,
-        ?string $periodeDate = null
+        ?string $periodeDate = null,
     ): array {
-        $date      = $date ?? sprintf('%04d-%02d-15', (int)$year, (int)$month);
-        $periodeDate = $periodeDate ?? sprintf('%04d-%02d-15', (int)$year, (int)$month);
-        $bulan     = (int)$month;
-        $tahun     = (int)$year;
+        $date = $date ?? sprintf("%04d-%02d-15", (int) $year, (int) $month);
+        $periodeDate =
+            $periodeDate ?? sprintf("%04d-%02d-15", (int) $year, (int) $month);
+        $bulan = (int) $month;
+        $tahun = (int) $year;
 
         // ── Employee & Position ────────────────────────────────
-        $authModel  = new \App\Models\ModelAuth();
-        $karyawanObj = $authModel->where('ID_AKUN', $employeeId)->first();
-        $karyawan   = $karyawanObj ? (array) $karyawanObj : [];
-        $positionId = $karyawanObj ? (int)$karyawanObj->ID_JABATAN : null;
-        $unit       = $karyawanObj ? (int)$karyawanObj->ID_UNIT    : 0;
+        $authModel = new \App\Models\ModelAuth();
+        $karyawanObj = $authModel->where("ID_AKUN", $employeeId)->first();
+        $karyawan = $karyawanObj ? (array) $karyawanObj : [];
+        $positionId = $karyawanObj ? (int) $karyawanObj->ID_JABATAN : null;
+        $unit = $karyawanObj ? (int) $karyawanObj->ID_UNIT : 0;
 
         // ── Penempatan (location allowance) ────────────────────
         $akun = $this->queryAkun($employeeId);
-        $akun->tunjangan_penempatan = ($akun->penempatan == 0) ? 350000 : 0;
+        $akun->tunjangan_penempatan = $akun->penempatan == 0 ? 350000 : 0;
 
         // ── KPI items (group kpi) ──────────────────────────────
-        $kpiResult = $this->calculateForEmployee($employeeId, $unit, $month, $year, $context, $date);
+        $kpiResult = $this->calculateForEmployee(
+            $employeeId,
+            $unit,
+            $month,
+            $year,
+            $context,
+            $date,
+        );
 
-        $skorTotal  = min($kpiResult['total_score'], 100.0);
-        $skorTotal2 = $kpiResult['skor_total2'];
+        $skorTotal = min($kpiResult["total_score"], 100.0);
+        $skorTotal2 = $kpiResult["skor_total2"];
 
         // Build detail_kpi for views: array of ['nama','bobot','nilai', 'target', 'actual', ...]
         $detailKpi = [];
-        foreach ($kpiResult['items'] as $item) {
+        foreach ($kpiResult["items"] as $item) {
             $detailKpi[] = [
-                'nama'       => $item['name'],
-                'bobot'      => $item['weight'],
-                'nilai'      => $item['achievement'],
-                'target'     => $item['target'] ?? null,
-                'actual'     => $item['actual'] ?? null,
-                'shortfall'  => $item['shortfall'] ?? null,
-                'unit_count' => $item['unit_count'] ?? null,
-                'reached'    => $item['reached'] ?? null,
-                'ho'         => $item['ho'] ?? null,
-                'cabang'     => $item['cabang'] ?? null,
-                'format'     => $item['code'] === 'FIN_KESEHATAN_UANG'
-                    ? 'health'
-                    : ($item['code'] === 'FIN_AKURASI'
-                        ? 'accuracy'
-                        : ($item['code'] === 'FIN_CASH_FLOW'
-                            ? 'cashflow'
-                            : (in_array($item['code'], ['OMSET_TOKO', 'OMSET_CABANG', 'OMSET_TEKNISI', 'OPERASIONAL', 'OMZET_WILAYAH', 'TARGET_CABANG'], true) ? 'currency' : 'number'))),
+                "nama" => $item["name"],
+                "bobot" => $item["weight"],
+                "nilai" => $item["achievement"],
+                "target" => $item["target"] ?? null,
+                "actual" => $item["actual"] ?? null,
+                "shortfall" => $item["shortfall"] ?? null,
+                "unit_count" => $item["unit_count"] ?? null,
+                "reached" => $item["reached"] ?? null,
+                "ho" => $item["ho"] ?? null,
+                "cabang" => $item["cabang"] ?? null,
+                "format" =>
+                    $item["code"] === "FIN_KESEHATAN_UANG"
+                        ? "health"
+                        : ($item["code"] === "FIN_AKURASI"
+                            ? "accuracy"
+                            : ($item["code"] === "FIN_CASH_FLOW"
+                                ? "cashflow"
+                                : (in_array(
+                                    $item["code"],
+                                    [
+                                        "OMSET_TOKO",
+                                        "OMSET_CABANG",
+                                        "OMSET_TEKNISI",
+                                        "OPERASIONAL",
+                                        "OMZET_WILAYAH",
+                                        "TARGET_CABANG",
+                                    ],
+                                    true,
+                                )
+                                    ? "currency"
+                                    : "number"))),
             ];
         }
 
@@ -755,53 +1013,71 @@ class KpiCalculationService
         // AttendanceAggregationService (bobot 40/20/20/20) — TIDAK lagi
         // membaca kpi_weights, supaya pegawai tanpa mapping bobot absen
         // (mis. jabatan Finance/0) tetap menampilkan rincian.
-        $detailAbsen = AttendanceAggregationService::detailRows($kpiResult['attendance'] ?? []);
+        $detailAbsen = AttendanceAggregationService::detailRows(
+            $kpiResult["attendance"] ?? [],
+        );
 
         // ── Omset per unit (for views) ────────────────────────
         // Daftar cabang diambil dari master `unit` (kecuali Head Office),
         // bukan daftar id hardcoded, supaya cabang baru — misalnya Unit 5
         // ICLEAR Genteng — langsung ikut terhitung tanpa ubah kode.
-        $omsetCalc   = new OmsetTokoCalculator();
+        $omsetCalc = new OmsetTokoCalculator();
         $aktualOmset = [];
         $omsetCabang = [];
         foreach ($this->branchUnits() as $branch) {
-            $branchUnit  = $branch['unit'];
-            $branchOmset = $omsetCalc->calculate($employeeId, $branchUnit, $month, $year);
+            $branchUnit = $branch["unit"];
+            $branchOmset = $omsetCalc->calculate(
+                $employeeId,
+                $branchUnit,
+                $month,
+                $year,
+            );
             $aktualOmset[$branchUnit] = $branchOmset;
             $omsetCabang[] = [
-                'unit'  => $branchUnit,
-                'nama'  => $branch['nama'],
-                'omset' => $branchOmset,
+                "unit" => $branchUnit,
+                "nama" => $branch["nama"],
+                "omset" => $branchOmset,
             ];
         }
 
         // ── Incentive via IncentiveCalculationService ──────────
-        $insentif = $this->computeIncentive($employeeId, $unit, $month, $year, $date);
+        $insentif = $this->computeIncentive(
+            $employeeId,
+            $unit,
+            $month,
+            $year,
+            $date,
+        );
 
         // ── Gaji pokok from salary_structures ──────────────────
-        $gajiPokok = $this->getGajiPokok($positionId, $unit, $context, $periodeDate);
+        $gajiPokok = $this->getGajiPokok(
+            $positionId,
+            $unit,
+            $context,
+            $periodeDate,
+        );
 
         // ── Placeholder; computed by SalaryCalculationService ──
         $tunjanganKinerja = 0.0;
-        $tunjanganAbsen   = 0.0;
-        $gaji             = 0.0;
+        $tunjanganAbsen = 0.0;
+        $gaji = 0.0;
 
         return [
-            'karyawan'          => $karyawan,
-            'akun'              => $akun,
-            'jabatan'           => $positionId,
-            'unit'              => $unit,
-            'aktual_omset_unit' => $aktualOmset,
-            'omset_cabang'      => $omsetCabang,
-            'detail_kpi'        => $detailKpi,
-            'detail_absen'      => $detailAbsen,
-            'skor_total'        => round($skorTotal, 2),
-            'skor_total2'       => round($skorTotal2, 2),
-            'tunjangan_kinerja' => $tunjanganKinerja,
-            'tunjangan_absen'   => $tunjanganAbsen,
-            'insentif'          => round($insentif, 2),
-            'gaji_pokok'        => $gajiPokok,
-            'gaji'              => $gaji,
+            "karyawan" => $karyawan,
+            "akun" => $akun,
+            "jabatan" => $positionId,
+            "unit" => $unit,
+            "aktual_omset_unit" => $aktualOmset,
+            "omset_cabang" => $omsetCabang,
+            "detail_kpi" => $detailKpi,
+            "detail_absen" => $detailAbsen,
+            "skor_total" => round($skorTotal, 2),
+            "skor_total2" => round($skorTotal2, 2),
+            "tunjangan_kinerja" => $tunjanganKinerja,
+            "tunjangan_absen" => $tunjanganAbsen,
+            "insentif" => round($insentif, 2),
+            "gaji_pokok" => $gajiPokok,
+            "gaji" => $gaji,
         ];
     }
 
@@ -809,9 +1085,10 @@ class KpiCalculationService
     protected function queryAkun(int $employeeId)
     {
         $db = \Config\Database::connect();
-        $akun = $db->table('akun')
-            ->select('NAMA_AKUN, ALAMAT, ID_UNIT')
-            ->where('ID_AKUN', $employeeId)
+        $akun = $db
+            ->table("akun")
+            ->select("NAMA_AKUN, ALAMAT, ID_UNIT")
+            ->where("ID_AKUN", $employeeId)
             ->get()
             ->getRow();
 
@@ -819,7 +1096,10 @@ class KpiCalculationService
             return null;
         }
 
-        $akun->penempatan = \App\Services\Payroll\PenempatanService::penempatan($akun->ALAMAT, $akun->ID_UNIT);
+        $akun->penempatan = \App\Services\Payroll\PenempatanService::penempatan(
+            $akun->ALAMAT,
+            $akun->ID_UNIT,
+        );
 
         return $akun;
     }
@@ -836,9 +1116,16 @@ class KpiCalculationService
      * Skor KONTROL_ASET dari audit bulanan SPV FINAL (AsetKpiService).
      * null = Belum Diaudit (belum final/lengkap, tanpa fallback).
      */
-    protected function kontrolAsetScore(int $unitId, int $bulan, int $tahun): ?float
-    {
-        return (new \App\Services\Kpi\AsetKpiService())->kpiScore($unitId, $bulan, $tahun);
+    protected function kontrolAsetScore(
+        int $unitId,
+        int $bulan,
+        int $tahun,
+    ): ?float {
+        return new \App\Services\Kpi\AsetKpiService()->kpiScore(
+            $unitId,
+            $bulan,
+            $tahun,
+        );
     }
 
     /**
@@ -857,29 +1144,33 @@ class KpiCalculationService
         int $unit,
         string $month,
         string $year,
-        string $date
+        string $date,
     ): float {
         $memberModel = new \App\Models\ModelIncentiveMember();
-        $groupModel  = new \App\Models\ModelIncentiveGroup();
-        $ruleModel   = new \App\Models\ModelIncentiveRule();
-        $omsetCalc   = new OmsetTokoCalculator();
+        $groupModel = new \App\Models\ModelIncentiveGroup();
+        $ruleModel = new \App\Models\ModelIncentiveRule();
+        $omsetCalc = new OmsetTokoCalculator();
 
-        $member = $memberModel->where('employee_id', $employeeId)->where('is_active', 1)->first();
+        $member = $memberModel
+            ->where("employee_id", $employeeId)
+            ->where("is_active", 1)
+            ->first();
         if (!$member) {
             return 0.0;
         }
 
-        $group = $groupModel->where('id', $member->incentive_group_id)->first();
-        if (!$group || !(int)$group->is_active) {
+        $group = $groupModel->where("id", $member->incentive_group_id)->first();
+        if (!$group || !(int) $group->is_active) {
             return 0.0;
         }
 
-        $date = $date ?? date('Y-m-d');
-        $rule = $ruleModel->where('incentive_group_id', $group->id)
-            ->where('effective_from <=', $date)
+        $date = $date ?? date("Y-m-d");
+        $rule = $ruleModel
+            ->where("incentive_group_id", $group->id)
+            ->where("effective_from <=", $date)
             ->groupStart()
-                ->where('effective_to >=', $date)
-                ->orWhere('effective_to IS NULL')
+            ->where("effective_to >=", $date)
+            ->orWhere("effective_to IS NULL")
             ->groupEnd()
             ->first();
         if (!$rule) {
@@ -889,7 +1180,7 @@ class KpiCalculationService
         // =========================================================
         // SPECIAL: SPV (0.5% per branch meeting target)
         // =========================================================
-        if ($group->code === 'SPV') {
+        if ($group->code === "SPV") {
             $db = \Config\Database::connect();
             $totalIncentive = 0.0;
             // Scope SPV (jabatan 40) = unit dari spv_units per supervisor,
@@ -898,10 +1189,16 @@ class KpiCalculationService
 
             foreach ($units as $uId) {
                 $actualOmset = $omsetCalc->calculate(0, $uId, $month, $year);
-                $target = $this->targetModel->getTargetByKpiAndUnit($rule->kpi_component_id, $uId, 'default', $date);
-                
-                if ($target && $actualOmset >= (float)$target->target_value) {
-                    $totalIncentive += $actualOmset * ((float)$rule->base_value / 100.0);
+                $target = $this->targetModel->getTargetByKpiAndUnit(
+                    $rule->kpi_component_id,
+                    $uId,
+                    "default",
+                    $date,
+                );
+
+                if ($target && $actualOmset >= (float) $target->target_value) {
+                    $totalIncentive +=
+                        $actualOmset * ((float) $rule->base_value / 100.0);
                 }
             }
             return $totalIncentive;
@@ -911,15 +1208,20 @@ class KpiCalculationService
         // DEFAULT: Group Pool (KT, Digital, etc.)
         // Wajib mencapai minimal capaian target (minimum_achievement).
         // =========================================================
-        $omsetToko   = $omsetCalc->calculate($employeeId, $unit, $month, $year);
-        $minAch      = (float)($rule->minimum_achievement ?? 0);
+        $omsetToko = $omsetCalc->calculate($employeeId, $unit, $month, $year);
+        $minAch = (float) ($rule->minimum_achievement ?? 0);
 
         if ($minAch > 0) {
-            $target = $this->targetModel->getTargetByKpiAndUnit((int)$rule->kpi_component_id, $unit, 'default', $date);
-            if (!$target || (float)$target->target_value <= 0) {
+            $target = $this->targetModel->getTargetByKpiAndUnit(
+                (int) $rule->kpi_component_id,
+                $unit,
+                "default",
+                $date,
+            );
+            if (!$target || (float) $target->target_value <= 0) {
                 return 0.0;
             }
-            $achievement = ($omsetToko / (float)$target->target_value) * 100;
+            $achievement = ($omsetToko / (float) $target->target_value) * 100;
             if ($achievement < $minAch) {
                 return 0.0;
             }
@@ -927,17 +1229,21 @@ class KpiCalculationService
             return 0.0;
         }
 
-        $memberCount = $memberModel->countActiveMembers((int)$group->id, $unit, $date);
+        $memberCount = $memberModel->countActiveMembers(
+            (int) $group->id,
+            $unit,
+            $date,
+        );
 
         if ($memberCount <= 0) {
             return 0.0;
         }
 
-        $rate = (float)$rule->base_value / 100.0;
+        $rate = (float) $rule->base_value / 100.0;
 
         // NEW RULE (KEPALA_TOKO, division_method = 'per_member'):
         // setiap anggota menerima rate% × omset, TIDAK dibagi jumlah anggota.
-        if (($rule->division_method ?? '') === 'per_member') {
+        if (($rule->division_method ?? "") === "per_member") {
             return $rate * $omsetToko;
         }
 
@@ -953,62 +1259,78 @@ class KpiCalculationService
      * Coverage = jumlah pasangan (pegawai, tanggal) yang SUDAH di-input admin
      * dibagi jumlah hari penuh bulan × jumlah pegawai tanggungan, lalu ×100.
      */
-    protected function adminAttendanceInputCoverage(int $employeeId, int $unitId, string $month, string $year): float
-    {
+    protected function adminAttendanceInputCoverage(
+        int $employeeId,
+        int $unitId,
+        string $month,
+        string $year,
+    ): float {
         $db = \Config\Database::connect();
 
-        $allowed = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans(35);
+        $allowed = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans(
+            35,
+        );
         if (empty($allowed)) {
             return 100.0;
         }
 
-        $responsible = $db->table('akun')
-            ->select('ID_AKUN')
-            ->where('STATUS_PEGAWAI', 1)
-            ->where('ID_UNIT', $unitId)
-            ->whereIn('ID_JABATAN', $allowed)
+        $responsible = $db
+            ->table("akun")
+            ->select("ID_AKUN")
+            ->where("STATUS_PEGAWAI", 1)
+            ->where("ID_UNIT", $unitId)
+            ->whereIn("ID_JABATAN", $allowed)
             ->get()
             ->getResultArray();
-        $responsibleIds = array_column($responsible, 'ID_AKUN');
+        $responsibleIds = array_column($responsible, "ID_AKUN");
         if (empty($responsibleIds)) {
             return 100.0;
         }
 
-        $daysInMonth = (int)date('t', strtotime(sprintf('%04d-%02d-01', (int)$year, (int)$month)));
-        $expected    = $daysInMonth * count($responsibleIds);
+        $daysInMonth = (int) date(
+            "t",
+            strtotime(sprintf("%04d-%02d-01", (int) $year, (int) $month)),
+        );
+        $expected = $daysInMonth * count($responsibleIds);
 
-        $kehadiran = $this->componentModel->where('code', 'KEHADIRAN')->first();
-        $kiid      = $kehadiran ? (int)$kehadiran->id : -1;
+        $kehadiran = $this->componentModel->where("code", "KEHADIRAN")->first();
+        $kiid = $kehadiran ? (int) $kehadiran->id : -1;
 
         $covered = [];
 
         // Input nyata (raw_score) yang tercatat atas nama admin sebagai evaluator.
-        $evals = $db->table('kpi_evaluations')
-            ->select('employee_id, evaluation_date')
+        $evals = $db
+            ->table("kpi_evaluations")
+            ->select("employee_id, evaluation_date")
             ->distinct()
-            ->where('evaluator_id', $employeeId)
-            ->whereIn('employee_id', $responsibleIds)
-            ->where('kpi_component_id', $kiid)
-            ->where('period_year', (int)$year)
-            ->where('period_month', (int)$month)
+            ->where("evaluator_id", $employeeId)
+            ->whereIn("employee_id", $responsibleIds)
+            ->where("kpi_component_id", $kiid)
+            ->where("period_year", (int) $year)
+            ->where("period_month", (int) $month)
             ->get()
             ->getResultArray();
         foreach ($evals as $r) {
-            $covered[(int)$r['employee_id'] . '|' . $r['evaluation_date']] = true;
+            $covered[
+                (int) $r["employee_id"] . "|" . $r["evaluation_date"]
+            ] = true;
         }
 
         // Hari yang ditandai OFF oleh admin (input lengkap tanpa nilai harian).
-        $offs = $db->table('kpi_attendance_off')
-            ->select('employee_id, evaluation_date')
+        $offs = $db
+            ->table("kpi_attendance_off")
+            ->select("employee_id, evaluation_date")
             ->distinct()
-            ->where('evaluator_id', $employeeId)
-            ->whereIn('employee_id', $responsibleIds)
-            ->where('period_year', (int)$year)
-            ->where('period_month', (int)$month)
+            ->where("evaluator_id", $employeeId)
+            ->whereIn("employee_id", $responsibleIds)
+            ->where("period_year", (int) $year)
+            ->where("period_month", (int) $month)
             ->get()
             ->getResultArray();
         foreach ($offs as $r) {
-            $covered[(int)$r['employee_id'] . '|' . $r['evaluation_date']] = true;
+            $covered[
+                (int) $r["employee_id"] . "|" . $r["evaluation_date"]
+            ] = true;
         }
 
         $actual = count($covered);
@@ -1016,32 +1338,52 @@ class KpiCalculationService
             return 100.0;
         }
 
-        return min(round($actual / $expected * 100, 2), 100.0);
+        return min(round(($actual / $expected) * 100, 2), 100.0);
     }
 
     /** GAJI_POKOK from salary_structures. */
-    protected function getGajiPokok(int $positionId, int $unit, string $context, string $date): float
-    {
+    protected function getGajiPokok(
+        int $positionId,
+        int $unit,
+        string $context,
+        string $date,
+    ): float {
         $salaryService = new \App\Services\Payroll\SalaryCalculationService();
-        $structure = $salaryService->getSalaryStructure($positionId, $unit, $context, $date);
+        $structure = $salaryService->getSalaryStructure(
+            $positionId,
+            $unit,
+            $context,
+            $date,
+        );
         foreach ($structure as $struct) {
-            if ($struct->code === 'GAJI_POKOK') {
-                return (float)$struct->base_value;
+            if ($struct->code === "GAJI_POKOK") {
+                return (float) $struct->base_value;
             }
         }
         return 1500000.0;
     }
 
-    public function getWeightValidationResult($positionId, $date = null, $group = 'kpi')
-    {
-        $weights = $this->weightModel->getByPosition($positionId, $date, $group);
-        $total = array_reduce($weights, fn($sum, $w) => $sum + (float)$w->weight, 0.0);
+    public function getWeightValidationResult(
+        $positionId,
+        $date = null,
+        $group = "kpi",
+    ) {
+        $weights = $this->weightModel->getByPosition(
+            $positionId,
+            $date,
+            $group,
+        );
+        $total = array_reduce(
+            $weights,
+            fn($sum, $w) => $sum + (float) $w->weight,
+            0.0,
+        );
 
         return [
-            'weights'      => $weights,
-            'total_weight' => $total,
-            'is_valid'     => abs($total - 100) < 0.01,
-            'difference'   => abs($total - 100),
+            "weights" => $weights,
+            "total_weight" => $total,
+            "is_valid" => abs($total - 100) < 0.01,
+            "difference" => abs($total - 100),
         ];
     }
 }
