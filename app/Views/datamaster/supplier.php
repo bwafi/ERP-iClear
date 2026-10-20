@@ -85,11 +85,13 @@
                     <td>
                         <button type="button" class="btn btn-warning edit-button" data-bs-toggle="modal"
                             data-bs-target="#edit-produk-modal" data-id_suplier="<?= esc($row->id_suplier) ?>"
-                            data-nama_suplier="<?= esc($row->nama_suplier) ?>">
+                            data-nama_suplier="<?= esc($row->nama_suplier) ?>"
+                            data-alamat="<?= esc($row->alamat, 'attr') ?>"
+                            data-no-hp="<?= esc($row->no_hp, 'attr') ?>" aria-label="Edit supplier">
                             <iconify-icon icon="solar:clapperboard-edit-broken" width="24" height="24"></iconify-icon>
                         </button>
                         <button type="button" class="btn btn-danger delete-button" data-bs-toggle="modal"
-                            data-bs-target="#delete-produk-modal" data-id_suplier="<?= esc($row->id_suplier) ?>">
+                            data-bs-target="#delete-produk-modal" data-id_suplier="<?= esc($row->id_suplier) ?>" aria-label="Hapus supplier">
                             <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="24" height="24">
                             </iconify-icon>
                         </button>
@@ -225,9 +227,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelector('#zero_config').addEventListener('click', function(e) {
         if (e.target.closest('.edit-button')) {
             const button = e.target.closest('.edit-button');
-            document.getElementById('edit_id_suplier').value = button.getAttribute('data-id_suplier');
-            document.getElementById('edit_nama_suplier').value = button.getAttribute(
-                'data-nama_suplier');
+            const modal = document.getElementById('edit-produk-modal');
+            modal.querySelector('#edit_id_suplier').value = button.getAttribute('data-id_suplier');
+            modal.querySelector('[name="nama_suplier"]').value = button.getAttribute('data-nama_suplier');
+            modal.querySelector('[name="alamat"]').value = button.getAttribute('data-alamat') || '';
+            modal.querySelector('[name="no_hp"]').value = button.getAttribute('data-no-hp') || '';
         }
         if (e.target.closest('.delete-button')) {
             const button = e.target.closest('.delete-button');
