@@ -52,6 +52,7 @@ Bukti dari DB lokal `erp_local`:
 - 48 pasang H/P = 96 baris; **44 pasang (88 baris) legacy** dan **4 pasang (8 baris) aktif** setelah backfill scope.
 - **0 pembayaran** antar unit — belum ada satu pun yang dilunasi.
 - 44 pasang pra-cut-off bertanggal **sebelum 2026-10-06** sudah menjadi `scope='legacy'`; 4 pasang sesudah cut-off tetap `active`.
+- **Update 2026-10-20:** 10 mutasi September yang sudah diterima secara fisik di-backfill dari `status=0` ke `status=1`; 20 baris H/P legacy baru (10 pasang, Rp6.129.161 per sisi). Sisa 3 mutasi `status=0` adalah mutasi Oktober (83 qty). Backup: `mutasi_backup_20261020_060623` dan `hutang_piutang_backup_20261020_060623`.
 - 11 grup nomor nota duplikat (30 baris); **19 baris sudah di-renumber** dan unique index `uniq_mutasi_no_nota` terpasang.
 - 5 baris stok negatif.
 
@@ -106,7 +107,7 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 
 **7. Batal terima menghapus utang, tetapi stok tetap di penerima. — ✅ DIPERBAIKI**
 View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_mutasi` tanpa melihat `mutasi.status`. Jadi mutasi yang belum diterima sudah memindahkan stok; saat penerimaan dibatalkan, stok tetap pindah sementara H/P di-soft-delete.
-**Perbaikan:** migration `2026-10-19-000400_StokBarangHanyaMutasiDiterima.php` membuat ulang view dengan `JOIN mutasi` dan `WHERE mutasi.status = 1`. Stok kini bergerak saat terima, dan otomatis kembali saat `batalTerima()` mengubah status ke 0. Mutasi lama yang masih `status=0` sengaja dibiarkan; stoknya tidak lagi dihitung.
+**Perbaikan:** migration `2026-10-19-000400_StokBarangHanyaMutasiDiterima.php` membuat ulang view dengan `JOIN mutasi` dan `WHERE mutasi.status = 1`. Stok kini bergerak saat terima, dan otomatis kembali saat `batalTerima()` mengubah status ke 0. Pada 20 Okt 2026, 10 mutasi September yang sudah diterima secara fisik di-backfill ke `status=1`; sisa 3 mutasi Oktober masih `status=0` dan stoknya belum dihitung.
 **Test:** `StokBarangHanyaMutasiDiterimaTest::testStokHanyaDihitungSetelahDiterima` dan `testBatalTerimaMengembalikanStok` — sebelum filter unit 1=85/unit 2=15, sesudah filter 95/5, lalu saat status diubah 1 → 85/15 dan saat dibatalkan 0 → 95/5. Migration sudah dijalankan di `erp_local` pada batch 41; definisi view terverifikasi memakai `mutasi.status = 1`.
 
 **8. Nilai tagihan memakai jumlah kirim, stok masuk memakai jumlah terima. — ✅ DIPERBAIKI**
@@ -149,7 +150,7 @@ Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim h
   **Perbaikan:** `statusFromSisa()` dijadikan `static`, `ModeKasBank::hitungStatus()` mendelegasikan ke sana. Perilaku restore pembayaran terverifikasi `KasBankTest::testTerapkanDanRestorePembayaranHP`.
 - `CustomerSatisfactionTest` tidak mandiri; error `db_service`/`db_stok_barang`/`db_penjualan` hanya muncul bila tabel sisa test lain ada.
   **Perbaikan:** `setUp()` sekarang membangun schema sendiri (tanpa men-drop tabel bersama) dan `CustomerSatisfactionService` memakai `prefixTable()` pada SQL mentahnya. Dua failure yang tersisa sudah ada sejak sebelum audit: role SPV (40) memang tidak masuk `viewRoles`, dan teks “Rekap Bulanan” tidak ada di view.
-- Tidak ada fitur void untuk mutasi `status=0`; 12 mutasi (55 qty kirim) masih menggantung, tetapi stoknya tidak lagi dihitung setelah migration view.
+- Tidak ada fitur void untuk mutasi `status=0`; 3 mutasi Oktober (83 qty kirim) masih menggantung, tetapi stoknya tidak lagi dihitung setelah migration view. 10 mutasi September sudah di-backfill ke `status=1` pada 20 Okt 2026.
 
 ---
 
@@ -165,6 +166,6 @@ KPI `FIN_HUTANG_PIUTANG` sekarang **mencakup utang antar unit**. Skor akhirnya a
 
 - Perbaikan #1–#6, #8–#13, dan tiga item "Nice to have" sudah diuji terarah. Full suite belum dijalankan ulang setelah perubahan ini; baseline failure lama (`s.idservice`, data test persisten, dan dua ekspektasi `CustomerSatisfactionTest`) masih ada dan tidak berasal dari perubahan ini.
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
-- Migration backfill #3 dan view #7 sudah dijalankan di `erp_local` batch 41; hasilnya diverifikasi lewat query data (88 baris legacy, 8 baris aktif).
+- Migration backfill #3 dan view #7 sudah dijalankan di `erp_local` batch 41; saat audit hasilnya diverifikasi lewat query data (88 baris legacy, 8 baris aktif), lalu 10 pasang mutasi September di-backfill pada 20 Okt 2026.
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.
 - Temuan #8 sudah diperbaiki memakai `jumlah_terima`. #5 sudah lengkap: kode, renumbering 19 baris, dan unique index. #7 sudah diperbaiki lewat migration view.
