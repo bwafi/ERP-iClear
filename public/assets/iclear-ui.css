@@ -119,6 +119,52 @@
     overscroll-behavior-inline: contain;
 }
 .iclear-table-scroll > table { min-width: 600px; }
+.iclear-ui .iclear-table-host,
+.iclear-ui .iclear-table-host .dataTables_wrapper { min-width: 0; width: 100%; max-width: 100%; }
+.iclear-ui .iclear-table-host .iclear-table-scroll { width: 100%; min-width: 0; }
+.iclear-ui .iclear-data-table { width: max-content !important; min-width: 100%; table-layout: auto; }
+.iclear-ui .iclear-data-table :is(th, td),
+.iclear-ui #iclear-content .iclear-data-table :is(th, td) :is(h6, .btn, .badge) {
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+}
+.iclear-ui .iclear-data-table th { min-width: 110px; display: table-cell !important; }
+.iclear-ui .iclear-data-table th:first-child { min-width: 190px; }
+.iclear-ui #iclear-content .iclear-data-table th h6 { font-size: .875rem; margin: 0; }
+.iclear-ui .iclear-data-table td .btn { padding: .45rem .65rem; font-size: .875rem; }
+.iclear-ui .iclear-cell-detail {
+    display: inline-block;
+    max-width: 230px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+    padding: .3rem 0;
+    border: 0;
+    background: transparent;
+    color: var(--iclear-brand);
+    text-align: left;
+    text-decoration: underline dotted;
+    cursor: pointer;
+}
+.iclear-ui .iclear-table-tools,
+.iclear-ui .iclear-table-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem; padding-block: .8rem; }
+.iclear-ui .iclear-table-tools label { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.iclear-ui .iclear-table-tools .dataTables_filter { margin-left: 0; text-align: left; }
+.iclear-ui .iclear-filter-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: 1rem 1.25rem; }
+.iclear-ui .iclear-filter-toolbar label { margin: 0 !important; }
+.iclear-ui .iclear-filter-toolbar :is(input, select) { width: auto; max-width: 100%; min-width: 150px; }
+.iclear-cell-dialog { width: min(540px, calc(100vw - 32px)); max-height: 85vh; overflow-y: auto; border: 1px solid var(--iclear-border); border-radius: 12px; padding: 1.25rem; }
+.iclear-cell-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.iclear-detail-text { white-space: pre-wrap; overflow-wrap: anywhere; margin-block: 1rem; }
+.iclear-ui:has(.iclear-data-table) .customizer-btn { position: static !important; margin: 1rem 1.25rem 1rem auto; }
+@media (max-width: 767px) {
+    .iclear-ui .iclear-table-host { padding-inline: .5rem !important; }
+    .iclear-ui .iclear-filter-toolbar :is(input, select) { flex: 1 1 140px; }
+    .iclear-ui .iclear-table-tools > * { max-width: 100%; }
+    .iclear-ui .iclear-data-table td .btn { min-height: 44px; }
+}
 .iclear-ui .iclear-scroll-help { margin: .3rem 0; color: var(--iclear-muted); font-size: .8125rem; }
 .iclear-ui .dataTables_wrapper :is(.dataTables_length, .dataTables_filter) { margin-bottom: .8rem; }
 .iclear-ui .dataTables_wrapper :is(input, select) { border: 1px solid var(--iclear-border); border-radius: 6px; padding: .35rem .5rem; }

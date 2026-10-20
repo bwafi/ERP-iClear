@@ -12,7 +12,7 @@
     </div>
 </div>
 
-<div class="card w-100 position-relative overflow-hidden">
+<div class="card w-100 position-relative">
     <div class="card-body">
         <div class="row g-3 mb-3">
             <div class="col-lg-2 col-md-6">
@@ -34,11 +34,11 @@
                 </select>
             </div>
             <div class="col-lg-3 col-md-6">
-                <label class="form-label fw-semibold mb-2">Search</label>
+                <label class="form-label fw-semibold mb-2">Cari</label>
                 <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP...">
             </div>
             <div class="col-lg-2 col-md-3">
-                <label class="form-label fw-semibold mb-2">Show</label>
+                <label class="form-label fw-semibold mb-2">Jumlah Baris</label>
                 <select id="pageLength" class="form-select">
                     <option value="10">10</option>
                     <option value="25">25</option>
@@ -62,13 +62,13 @@
                 <input type="hidden" name="tanggal_akhir" id="exportEndDate">
                 <button type="submit" class="btn btn-danger">
                     <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
-                    Export
+                    Ekspor
                 </button>
             </form>
         </div>
 
-        <div class="table-responsive">
-            <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
+        <div class="iclear-table-host">
+            <table class="table border text-nowrap mb-0 align-middle iclear-data-table" data-compact-columns="2,3,4" id="zero_config">
                 <thead class="text-dark fs-4">
                     <tr>
                         <th>
@@ -87,7 +87,7 @@
                             <h6 class="fs-4 fw-semibold mb-0">Keterangan</h6>
                         </th>
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">No. HP</h6>
                         </th>
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
@@ -96,7 +96,7 @@
                             <h6 class="fs-4 fw-semibold mb-0">Status</h6>
                         </th>
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Action</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">Aksi</h6>
                         </th>
                     </tr>
                 </thead>
@@ -228,6 +228,8 @@
 
         startDateInput.value = toDateInputValue(thirtyDaysAgo);
         endDateInput.value = toDateInputValue(today);
+        document.getElementById('exportStartDate').value = startDateInput.value;
+        document.getElementById('exportEndDate').value = endDateInput.value;
 
         if ($.fn.DataTable.isDataTable('#zero_config')) {
             $('#zero_config').DataTable().destroy();
@@ -267,9 +269,7 @@
         dataTable = $('#zero_config').DataTable({
             serverSide: true,
             processing: true,
-            scrollY: '50vh',
-            scrollX: true,
-            scrollCollapse: true,
+            autoWidth: false,
             searching: false,
             lengthChange: false,
             pageLength: 10,
@@ -313,13 +313,16 @@
                     }
                 },
                 {
-                    data: 'nama_pelanggan'
+                    data: 'nama_pelanggan',
+                    render: $.fn.dataTable.render.text()
                 },
                 {
-                    data: 'tipe_hp'
+                    data: 'tipe_hp',
+                    render: $.fn.dataTable.render.text()
                 },
                 {
-                    data: 'keterangan'
+                    data: 'keterangan',
+                    render: $.fn.dataTable.render.text()
                 },
                 {
                     data: 'no_hp'

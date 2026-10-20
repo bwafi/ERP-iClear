@@ -12,7 +12,7 @@
     </div>
 </div>
 
-<div class="card w-100 position-relative overflow-hidden">
+<div class="card w-100 position-relative">
     <div class="card-body">
         <div class="row g-3 mb-3">
             <div class="col-lg-2 col-md-6">
@@ -24,11 +24,11 @@
                 <input type="date" id="endDate" class="form-control">
             </div>
             <div class="col-lg-4 col-md-6">
-                <label class="form-label fw-semibold mb-2">Search</label>
+                <label class="form-label fw-semibold mb-2">Cari</label>
                 <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, atau no HP...">
             </div>
             <div class="col-lg-2 col-md-3">
-                <label class="form-label fw-semibold mb-2">Show</label>
+                <label class="form-label fw-semibold mb-2">Jumlah Baris</label>
                 <select id="pageLength" class="form-select">
                     <option value="10">10</option>
                     <option value="25">25</option>
@@ -50,15 +50,16 @@
             <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
                 <input type="hidden" name="tanggal_awal" id="exportStartDate">
                 <input type="hidden" name="tanggal_akhir" id="exportEndDate">
+                <input type="hidden" name="service_status" value="4">
                 <button type="submit" class="btn btn-danger">
                     <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
-                    Export
+                    Ekspor
                 </button>
             </form>
         </div>
 
-        <div class="table-responsive">
-            <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
+        <div class="iclear-table-host">
+            <table class="table border text-nowrap mb-0 align-middle iclear-data-table" data-compact-columns="3" id="zero_config">
 
                 <thead class="text-dark fs-4">
                     <tr>
@@ -66,7 +67,7 @@
                             <h6 class="fs-4 fw-semibold mb-0">No Service</h6>
                         </th>
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Tanggal Service Masuk</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">Tanggal Service</h6>
                         </th>
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Tanggal Diambil</h6>
@@ -75,10 +76,10 @@
                             <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
                         </th>
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">No. HP</h6>
                         </th>
 
-                        <th style="display: flex; justify-content: center;">
+                        <th>
                             <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
                         </th>
 
@@ -87,11 +88,11 @@
                         </th>
 
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Status garansi</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">Garansi</h6>
                         </th>
 
-                        <th style="display: flex; justify-content: center;">
-                            <h6 class="fs-4 fw-semibold mb-0">Action</h6>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Aksi</h6>
                         </th>
                     </tr>
                 </thead>
@@ -126,6 +127,8 @@
 
         startDateInput.value = toDateInputValue(fifteenDaysAgo);
         endDateInput.value = toDateInputValue(today);
+        document.getElementById('exportStartDate').value = startDateInput.value;
+        document.getElementById('exportEndDate').value = endDateInput.value;
 
         if ($.fn.DataTable.isDataTable('#zero_config')) {
             $('#zero_config').DataTable().destroy();
@@ -134,9 +137,7 @@
         dataTable = $('#zero_config').DataTable({
             serverSide: true,
             processing: true,
-            scrollY: '50vh',
-            scrollX: true,
-            scrollCollapse: true,
+            autoWidth: false,
             searching: false,
             lengthChange: false,
             pageLength: 10,
@@ -190,7 +191,8 @@
                     }
                 },
                 {
-                    data: 'nama_pelanggan'
+                    data: 'nama_pelanggan',
+                    render: $.fn.dataTable.render.text()
                 },
                 {
                     data: 'no_hp'
@@ -209,7 +211,10 @@
                     render: function(data, type, row) {
                         const start = row.garansi_mulai_tampil || 'Belum dimulai';
                         const end = row.garansi_akhir_tampil || (row.garansi_opsi_snapshot === 'selamanya' ? 'Tanpa kedaluwarsa' : '-');
-                        return `${data || 'Belum Diatur'}<br><small>Mulai: ${start} · Berakhir: ${end} · ${row.garansi_status || 'Belum Diatur'}</small>`;
+                        const label = data || 'Belum Diatur';
+                        const status = row.garansi_status || 'Belum Diatur';
+                        const full = `${label}\nMulai: ${start}\nBerakhir: ${end}\nStatus: ${status}`;
+                        return type === 'display' ? window.IclearTables.detail(full, `${label} · ${status}`) : full;
                     }
                 },
                 {

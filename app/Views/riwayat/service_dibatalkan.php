@@ -12,7 +12,7 @@
     </div>
 </div>
 
-<div class="card w-100 position-relative overflow-hidden">
+<div class="card w-100 position-relative">
     <div class="px-4 py-3 border-bottom">
     </div>
 
@@ -22,11 +22,10 @@
             <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;"></iconify-icon>
             Export
         </button> -->
-        <br><br>
 
 
         <!-- Filter Tanggal & Unit -->
-        <div class="mb-3 px-4">
+        <div class="iclear-filter-toolbar">
 
             <label class="ms-3 me-2">Tanggal Awal:</label>
             <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
@@ -52,8 +51,8 @@
 
 
 
-    <div class="table-responsive mb-4 px-4">
-        <table class="table border text-nowrap mb-0 align-middle" <?= empty($service) ? '' : 'id="zero_config"' ?>>
+    <div class="iclear-table-host mb-4 px-4">
+        <table class="table border text-nowrap mb-0 align-middle iclear-data-table" data-compact-columns="2,4" id="zero_config">
 
             <thead class="text-dark fs-4">
                 <tr>
@@ -61,7 +60,7 @@
                         <h6 class="fs-4 fw-semibold mb-0">No Service</h6>
                     </th>
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Service Masuk</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Service</h6>
                     </th>
 
 
@@ -70,10 +69,10 @@
                         <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
                     </th>
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">No. HP</h6>
                     </th>
 
-                    <th style="display: flex; justify-content: center;">
+                    <th>
                         <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
                     </th>
 
@@ -82,21 +81,21 @@
                     </th>
 
                     <th>
-                        <h6 style="display: flex; justify-content: center;" class="fs-4 fw-semibold mb-0">Status Service</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Jenis Service</h6>
                     </th>
 
 
 
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Detail Service</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Status Pengambilan</h6>
                     </th>
 
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Ubah Status</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Aksi</h6>
                     </th>
 
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Action</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Kontak</h6>
                     </th>
 
 
@@ -273,10 +272,6 @@
 
 
                     <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="3" class="text-center">Tidak ada data</td>
-                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -338,58 +333,11 @@
 
 <script>
     window.onload = function() {
-        const endDateInput = document.getElementById('endDate');
-        const startDateInput = document.getElementById('startDate');
-
-        const today = new Date();
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(today.getDate() - 15);
-
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        startDateInput.value = toDateInputValue(fifteenDaysAgo);
-        endDateInput.value = toDateInputValue(today);
-
         filterData();
     };
 
     function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-        const selectedStatus = document.getElementById('statusFilter').value;
-
-        const rows = document.querySelectorAll('#zero_config tbody tr');
-        rows.forEach(row => {
-            const dateCell = row.children[1];
-            if (!dateCell) return;
-
-            // Ambil tanggal dari kolom
-            const dateText = dateCell.textContent.trim();
-            const parts = dateText.split('-');
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-
-            const startDate = start ? new Date(start) : null;
-            const endDate = end ? new Date(end) : null;
-
-            let dateMatch = true;
-            if (startDate && rowDate < startDate) dateMatch = false;
-            if (endDate && rowDate > endDate) dateMatch = false;
-
-            // ✅ Ambil status dari data-status
-            const rowStatus = row.getAttribute('data-status');
-            let statusMatch = true;
-            if (selectedStatus && rowStatus !== selectedStatus) {
-                statusMatch = false;
-            }
-
-            // ✅ Tampilkan / sembunyikan sesuai filter
-            row.style.display = (dateMatch && statusMatch) ? '' : 'none';
-        });
+        window.IclearTables.filter('zero_config', 1, 'statusFilter');
     }
 
     function resetFilter() {

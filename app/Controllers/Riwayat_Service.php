@@ -710,7 +710,8 @@ class Riwayat_Service extends BaseController
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
 
         // Ambil data dari model
-        $dataservice = $this->ServiceModel->filterexport($tanggal_awal, $tanggal_akhir);
+        $exportStatus = (string) $this->request->getPost('service_status') === '4' ? 4 : null;
+        $dataservice = $this->ServiceModel->filterexport($tanggal_awal, $tanggal_akhir, $exportStatus);
 
         // Header kolom
         $headers = [
@@ -769,6 +770,7 @@ class Riwayat_Service extends BaseController
         $sheet->freezePane('A2');
 
         // Nama file
+        \App\Services\Service\ServiceExportDetails::append($sheet, $dataservice, 9);
         $filename = 'Riwayat_Service_' . date('Ymd_His') . '.xlsx';
 
         // Header untuk response browser
@@ -855,6 +857,7 @@ class Riwayat_Service extends BaseController
         $sheet->freezePane('A2');
 
         // Nama file
+        \App\Services\Service\ServiceExportDetails::append($sheet, $dataservice, 10);
         $filename = 'Riwayat_Service_Garansi' . date('Ymd_His') . '.xlsx';
 
         // Header untuk response browser

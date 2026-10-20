@@ -1,18 +1,18 @@
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Riwayat Service</h4>
+        <h4 class="fw-semibold mb-0">Riwayat Garansi</h4>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
                     <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Riwayat</a>
                 </li>
-                <li class="breadcrumb-item active" aria-current="page">Service</li>
+                <li class="breadcrumb-item active" aria-current="page">Riwayat Garansi</li>
             </ol>
         </nav>
     </div>
 </div>
 
-<div class="card w-100 position-relative overflow-hidden">
+<div class="card w-100 position-relative">
     <div class="px-4 py-3 border-bottom">
     </div>
 
@@ -20,13 +20,12 @@
         <button type="submit" class="btn btn-danger"
             style="margin-left: 20px; display: inline-flex; align-items: center;">
             <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;"></iconify-icon>
-            Export
+            Ekspor
         </button>
-        <br><br>
 
 
         <!-- Filter Tanggal & Unit -->
-        <div class="mb-3 px-4">
+        <div class="iclear-filter-toolbar">
 
             <label class="ms-3 me-2">Tanggal Awal:</label>
             <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
@@ -40,8 +39,8 @@
         </div>
     </form>
 
-    <div class="table-responsive mb-4 px-4">
-        <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
+    <div class="iclear-table-host mb-4 px-4">
+        <table class="table border text-nowrap mb-0 align-middle iclear-data-table" data-compact-columns="3,5" id="zero_config">
             <thead class="text-dark fs-4">
                 <tr>
                     <th>
@@ -52,14 +51,14 @@
                     </th>
 
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Claim Garansi</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Tanggal Klaim</h6>
                     </th>
 
                     <th>
                         <h6 class="fs-4 fw-semibold mb-0">Nama Pelanggan</h6>
                     </th>
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">No. HP</h6>
                     </th>
                     <th>
                         <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
@@ -68,7 +67,7 @@
                         <h6 class="fs-4 fw-semibold mb-0">Status</h6>
                     </th>
                     <th>
-                        <h6 class="fs-4 fw-semibold mb-0">Action</h6>
+                        <h6 class="fs-4 fw-semibold mb-0">Aksi</h6>
                     </th>
                 </tr>
             </thead>
@@ -121,10 +120,6 @@
                             </td>
                         </tr>
                     <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="3" class="text-center">Tidak ada data</td>
-                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -157,28 +152,7 @@
     };
 
     function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-
-
-        const rows = document.querySelectorAll('#zero_config tbody tr');
-        rows.forEach(row => {
-            const dateCell = row.children[2];
-            if (!dateCell) return;
-
-            const dateText = dateCell.textContent.trim();
-            const parts = dateText.split('-');
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-
-            const startDate = start ? new Date(start) : null;
-            const endDate = end ? new Date(end) : null;
-
-            let dateMatch = true;
-            if (startDate && rowDate < startDate) dateMatch = false;
-            if (endDate && rowDate > endDate) dateMatch = false;
-
-            row.style.display = (dateMatch) ? '' : 'none';
-        });
+        window.IclearTables.filter('zero_config', 2);
     }
 
     function resetFilter() {

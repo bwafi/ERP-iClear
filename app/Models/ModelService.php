@@ -618,7 +618,7 @@ class ModelService extends Model
 
 
 
-    public function filterexport($tanggal_awal = null, $tanggal_akhir = null)
+    public function filterexport($tanggal_awal = null, $tanggal_akhir = null, ?int $status = null)
     {
         $builder = $this->db->table('service')
             ->select('
@@ -630,6 +630,10 @@ class ModelService extends Model
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left');
 
 
+
+        if ($status === 4) {
+            $builder->where('service.status_service', 4);
+        }
 
         if ($tanggal_awal && $tanggal_akhir) {
 
@@ -651,7 +655,10 @@ class ModelService extends Model
             pelanggan.nama AS nama_pelanggan
         ')
             ->join('akun', 'akun.ID_AKUN = service.service_by_garansi', 'left')
-            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left');
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
+            ->where('service.tanggal_claim_garansi IS NOT NULL')
+            ->where('service.tanggal_claim_garansi !=', '0000-00-00')
+            ->where('service.tanggal_claim_garansi !=', '1970-01-01');
 
         if ($tanggal_awal && $tanggal_akhir) {
             $tanggal_akhir .= ' 23:59:59';
