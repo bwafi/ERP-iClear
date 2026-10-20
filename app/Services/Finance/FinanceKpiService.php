@@ -109,6 +109,47 @@ class FinanceKpiService
     }
 
     /**
+     * Gabungkan skor Hutang (supplier), Piutang (pelanggan), dan Mutasi
+     * Antar Unit. Skor null tidak diikutkan; Piutang null tetap ditandai
+     * GAP agar UI tahu angkanya sementara.
+     *
+     * @return array{score:?float,status:string,notes:string}
+     */
+    public static function gabungSkorHutangPiutang(?float $hutang, ?float $piutang, ?float $mutasi): array
+    {
+        $scores = [];
+        foreach ([$hutang, $piutang, $mutasi] as $score) {
+            if ($score !== null) {
+                $scores[] = (float) $score;
+            }
+        }
+
+        if ($scores === []) {
+            return [
+                'score' => null,
+                'status' => 'data_kosong',
+                'notes' => 'Tidak ada pembelian, piutang, atau mutasi antar unit yang jatuh tempo pada periode ini.',
+            ];
+        }
+
+        $score = round(array_sum($scores) / count($scores), 2);
+
+        if ($piutang === null && $hutang !== null) {
+            return [
+                'score' => $score,
+                'status' => 'gap_piutang',
+                'notes' => 'Skor sementara dari Hutang/Mutasi. Piutang belum dapat dinilai karena pembayaran_piutang tidak memiliki tanggal bayar (GAP).',
+            ];
+        }
+
+        return [
+            'score' => $score,
+            'status' => 'ok',
+            'notes' => 'Skor gabungan rata-rata Hutang, Piutang, dan Mutasi Antar Unit.',
+        ];
+    }
+
+    /**
      * Daftar unit operasional (cabang) dari master `unit`, bukan HO.
      *
      * @return int[]

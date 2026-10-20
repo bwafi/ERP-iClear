@@ -143,4 +143,39 @@ final class FinanceKpiTest extends CIUnitTestCase
     {
         $this->assertNotContains('compliance', (new Finance())->manualKpiCodes);
     }
+
+    // ── Gabungan skor Hutang + Piutang + Mutasi Antar Unit ─────────
+
+    public function testGabungSkorHutangPiutangMemakaiSemuaSumber(): void
+    {
+        $r = FinanceKpiService::gabungSkorHutangPiutang(100.0, 80.0, 60.0);
+
+        $this->assertSame(80.0, $r['score']);
+        $this->assertSame('ok', $r['status']);
+    }
+
+    public function testGabungSkorTetapJalanTanpaPiutang(): void
+    {
+        $r = FinanceKpiService::gabungSkorHutangPiutang(100.0, null, 60.0);
+
+        $this->assertSame(80.0, $r['score']);
+        $this->assertSame('gap_piutang', $r['status']);
+        $this->assertStringContainsString('GAP', $r['notes']);
+    }
+
+    public function testGabungSkorHanyaMutasi(): void
+    {
+        $r = FinanceKpiService::gabungSkorHutangPiutang(null, null, 70.0);
+
+        $this->assertSame(70.0, $r['score']);
+        $this->assertSame('ok', $r['status']);
+    }
+
+    public function testGabungSkorTanpaData(): void
+    {
+        $r = FinanceKpiService::gabungSkorHutangPiutang(null, null, null);
+
+        $this->assertNull($r['score']);
+        $this->assertSame('data_kosong', $r['status']);
+    }
 }

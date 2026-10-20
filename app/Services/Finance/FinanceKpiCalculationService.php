@@ -29,6 +29,7 @@ class FinanceKpiCalculationService
     protected $omset;
     protected $hutang;
     protected $piutang;
+    protected $mutasi;
     protected $payroll;
     protected $rekon;
     protected $kesehatan;
@@ -44,6 +45,7 @@ class FinanceKpiCalculationService
         $this->omset = new OmsetDailyCalculator();
         $this->hutang = new HutangTimelinessCalculator();
         $this->piutang = new PiutangTimelinessCalculator();
+        $this->mutasi = new MutasiTimelinessCalculator();
         $this->payroll = new PayrollTimelinessCalculator();
         $this->rekon = new RekonDailyCalculator();
         $this->kesehatan = new KesehatanUangCalculator();
@@ -59,7 +61,7 @@ class FinanceKpiCalculationService
      *   period: string, unit_id: int, rows: array,
      *   total_score: float, counted: int, weights: array, labels: array,
      *   akurasi_detail: array, cashflow_monthly: array, cashflow_daily: array,
-     *   hutang_detail: array, piutang_detail: array, payroll_detail: array,
+     *   hutang_detail: array, piutang_detail: array, mutasi_detail: array, payroll_detail: array,
      *   rekon_detail: array, akurasi_rekon_detail: array,
      *   manual_records: array, manual_options: array
      * }
@@ -111,6 +113,7 @@ class FinanceKpiCalculationService
             'cashflow_daily' => $this->cashFlow->daily($unitId, $month, $year),
             'hutang_detail' => $this->hutang->calculate($unitId, $month, $year),
             'piutang_detail' => $this->piutang->calculate($unitId, $month, $year),
+            'mutasi_detail' => $this->mutasi->calculate($unitId, $month, $year),
             'payroll_detail' => $this->payroll->calculate($unitId, $month, $year),
             'rekon_detail' => $this->rekon->calculate($unitId, $month, $year),
             'akurasi_rekon_detail' => $this->akurasi->calculate($unitId, $month, $year),
@@ -162,24 +165,14 @@ class FinanceKpiCalculationService
             case 'hutang_piutang':
                 $hutang = $this->hutang->calculate($unitId, $month, $year);
                 $piutang = $this->piutang->calculate($unitId, $month, $year);
-                $h = $hutang['score'];
-                $p = $piutang['score'];
+                $mutasi = $this->mutasi->calculate($unitId, $month, $year);
+                $hasil = FinanceKpiService::gabungSkorHutangPiutang(
+                    $hutang['score'],
+                    $piutang['score'],
+                    $mutasi['score']
+                );
 
-                if ($h !== null && $p !== null) {
-                    $scoreRow = round(($h + $p) / 2, 2);
-                    $statusRow = 'ok';
-                    $notesRow = 'Skor gabungan interim (pembobotan Hutang:Piutang = pending).';
-                } elseif ($h !== null) {
-                    $scoreRow = $h;
-                    $statusRow = $piutang['status'] === 'gap_no_payment_date' ? 'gap_piutang' : 'ok';
-                    $notesRow = 'Skor sementara dari Hutang. Piutang belum dapat dinilai karena pembayaran_piutang tidak memiliki tanggal bayar (GAP).';
-                } else {
-                    $scoreRow = null;
-                    $statusRow = 'data_kosong';
-                    $notesRow = 'Tidak ada pembelian jatuh tempo pada periode ini.';
-                }
-
-                return $this->buildRow($code, $weight, 'auto', $scoreRow, $notesRow, $statusRow);
+                return $this->buildRow($code, $weight, 'auto', $hasil['score'], $hasil['notes'], $hasil['status']);
 
             case 'payroll':
                 $payroll = $this->payroll->calculate($unitId, $month, $year);
