@@ -134,7 +134,7 @@ class FinanceKpiService
 
         $score = round(array_sum($scores) / count($scores), 2);
 
-        if ($piutang === null && $hutang !== null) {
+        if ($piutang === null) {
             return [
                 'score' => $score,
                 'status' => 'gap_piutang',

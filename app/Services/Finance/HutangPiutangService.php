@@ -1803,7 +1803,9 @@ class HutangPiutangService
             ->orderBy('iddetail_mutasi', 'ASC')
             ->get()->getResult();
         foreach ($rows as $d) {
-            $qty = (float) $d->jumlah_kirim;
+            // Nilai tagihan H/P memakai jumlah_terima; item cetak harus sama
+            // supaya subtotal tidak berbeda dengan total tagihan.
+            $qty = (float) ($d->jumlah_terima ?? 0);
             $harga = (float) ($d->harga_mutasi ?: $d->hpp_barang);
             $items[] = [
                 'nama' => $d->nama_barang ?: 'Barang #' . $d->barang_idbarang,

@@ -87,7 +87,7 @@ final class MutasiTimelinessCalculatorTest extends CIUnitTestCase
             'jumlah_bayar' => 100,
         ]);
 
-        $result = (new MutasiTimelinessCalculator())->calculate(1, 10, 2026);
+        $result = (new MutasiTimelinessCalculator())->calculate(1, 10, 2026, '2026-10-20');
 
         $this->assertSame(50.0, $result['score']);
         $this->assertSame('ok', $result['status']);
@@ -98,9 +98,39 @@ final class MutasiTimelinessCalculatorTest extends CIUnitTestCase
         $this->assertSame(2, $result['detail']['dinilai']);
     }
 
+    public function testPembayaranPadaHariJatuhTempoTepatWaktu(): void
+    {
+        $this->db->table('hutang_piutang')->insert([
+            'id' => 1,
+            'kode' => 'H-10',
+            'jenis' => 'hutang',
+            'sumber_tipe' => 'mutasi_unit',
+            'tanggal' => '2026-10-06',
+            'jatuh_tempo' => '2026-10-09',
+            'total' => 100,
+            'total_dibayar' => 100,
+            'sisa' => 0,
+            'status' => 'lunas',
+            'unit_id' => 1,
+            'deleted' => 0,
+            'scope' => 'active',
+        ]);
+        $this->db->table('pembayaran_hutang_piutang')->insert([
+            'hutang_piutang_id' => 1,
+            'tanggal_bayar' => '2026-10-09',
+            'jumlah_bayar' => 100,
+        ]);
+
+        $result = (new MutasiTimelinessCalculator())->calculate(1, 10, 2026, '2026-10-20');
+
+        $this->assertSame(100.0, $result['score']);
+        $this->assertSame(1, $result['detail']['tepat']);
+        $this->assertSame(0, $result['detail']['terlambat']);
+    }
+
     public function testTanpaMutasiJatuhTempoMenghasilkanNull(): void
     {
-        $result = (new MutasiTimelinessCalculator())->calculate(1, 10, 2026);
+        $result = (new MutasiTimelinessCalculator())->calculate(1, 10, 2026, '2026-10-20');
 
         $this->assertNull($result['score']);
         $this->assertSame('data_kosong', $result['status']);

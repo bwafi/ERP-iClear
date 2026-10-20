@@ -475,10 +475,19 @@
                 <div class="tab-pane fade" id="tab-hutang">
                     <?php $hd = $hutang_detail ?? []; ?>
                     <?php $pd = $piutang_detail ?? []; ?>
+                    <?php $md = $mutasi_detail ?? []; ?>
+                    <?php
+                    $semuaKosong = ($hd['status'] ?? '') === 'data_kosong'
+                        && in_array(($pd['status'] ?? ''), ['data_kosong', 'gap_no_payment_date'], true)
+                        && ($md['status'] ?? '') === 'data_kosong'
+                        && empty($hd['detail']['items'] ?? [])
+                        && empty($pd['detail']['items'] ?? [])
+                        && empty($md['detail']['items'] ?? []);
+                    ?>
 
-                    <?php if (($hd['status'] ?? '') === 'data_kosong' && ($pd['status'] ?? '') === 'gap_no_payment_date'): ?>
+                    <?php if ($semuaKosong): ?>
                         <div class="alert alert-info mb-0">
-                            Tidak ada transaksi pembelian/piutang jatuh tempo pada periode ini.
+                            Tidak ada transaksi pembelian, piutang, atau mutasi antar unit yang jatuh tempo pada periode ini.
                         </div>
                     <?php else: ?>
                         <div class="row mb-3 g-3">
@@ -611,6 +620,91 @@
                                         </table>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-3">
+                                <div class="card text-bg-success h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-white-50 mb-2">Mutasi Tepat Waktu</h6>
+                                        <h4 class="text-white mb-0"><?= (int) ($md['detail']['tepat'] ?? 0) ?></h4>
+                                        <small class="text-white-50">dari <?= (int) ($md['detail']['dinilai'] ?? 0) ?> dinilai</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-bg-danger h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-white-50 mb-2">Mutasi Terlambat</h6>
+                                        <h4 class="text-white mb-0"><?= (int) ($md['detail']['terlambat'] ?? 0) ?></h4>
+                                        <small class="text-white-50"><?= (int) ($md['detail']['open'] ?? 0) ?> open</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-bg-primary h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-white-50 mb-2">Skor Mutasi</h6>
+                                        <h4 class="text-white mb-0">
+                                            <?= isset($md['score']) && $md['score'] !== null ? number_format($md['score'], 2, ',', '.') . '%' : '—' ?>
+                                        </h4>
+                                        <small class="text-white-50">Tepat / (Tepat + Terlambat)</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-bg-secondary h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-white-50 mb-2">Open / Tanpa Bukti</h6>
+                                        <h4 class="text-white mb-0"><?= (int) ($md['detail']['open'] ?? 0) + (int) ($md['detail']['tanpa_bukti'] ?? 0) ?></h4>
+                                        <small class="text-white-50">tidak masuk penyebut</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header bg-white fw-semibold small">Rincian Mutasi Antar Unit (jatuh tempo <?= esc($md['detail']['start_date'] ?? '—') ?> s/d <?= esc($md['detail']['end_date'] ?? '—') ?>)</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>No. Nota</th>
+                                            <th>Jatuh Tempo</th>
+                                            <th class="text-end">Total (Rp)</th>
+                                            <th class="text-end">Sisa (Rp)</th>
+                                            <th>Pembayaran Terakhir</th>
+                                            <th>Klasifikasi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (empty($md['detail']['items'] ?? [])): ?>
+                                            <tr>
+                                                <td colspan="6" class="text-center text-muted">Tidak ada mutasi antar unit jatuh tempo pada periode ini.</td>
+                                            </tr>
+                                        <?php endif; ?>
+                                        <?php foreach ($md['detail']['items'] ?? [] as $it): ?>
+                                            <tr>
+                                                <td><?= esc($it['no_nota'] ?? '—') ?></td>
+                                                <td><?= esc($it['jatuh_tempo'] ?? '—') ?></td>
+                                                <td class="text-end"><?= number_format((float) ($it['total'] ?? 0), 0, ',', '.') ?></td>
+                                                <td class="text-end"><?= number_format((float) ($it['sisa'] ?? 0), 0, ',', '.') ?></td>
+                                                <td><?= esc($it['last_pay'] ?? '—') ?></td>
+                                                <td>
+                                                    <?php
+                                                    $mutasiBadge = 'bg-warning text-dark';
+                                                    if (($it['klasifikasi'] ?? '') === 'Tepat Waktu') {
+                                                        $mutasiBadge = 'bg-success';
+                                                    } elseif (strpos((string) ($it['klasifikasi'] ?? ''), 'Terlambat') !== false) {
+                                                        $mutasiBadge = 'bg-danger';
+                                                    }
+                                                    ?>
+                                                    <span class="badge <?= $mutasiBadge ?>"><?= esc($it['klasifikasi'] ?? '—') ?></span>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     <?php endif; ?>

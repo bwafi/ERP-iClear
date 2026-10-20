@@ -163,12 +163,13 @@ final class FinanceKpiTest extends CIUnitTestCase
         $this->assertStringContainsString('GAP', $r['notes']);
     }
 
-    public function testGabungSkorHanyaMutasi(): void
+    public function testGabungSkorHanyaMutasiTetapMenandaiGapPiutang(): void
     {
         $r = FinanceKpiService::gabungSkorHutangPiutang(null, null, 70.0);
 
         $this->assertSame(70.0, $r['score']);
-        $this->assertSame('ok', $r['status']);
+        $this->assertSame('gap_piutang', $r['status']);
+        $this->assertStringContainsString('GAP', $r['notes']);
     }
 
     public function testGabungSkorTanpaData(): void

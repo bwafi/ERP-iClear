@@ -276,7 +276,7 @@
                                     this.setSelectionRange(this.value.length, this.value.length);
                                 });
 
-                                row.querySelector('.jumlah-input').addEventListener('input', updateTotals);
+                                row.querySelectorAll('.jumlah-input').forEach(input => input.addEventListener('input', updateTotals));
                             }
                         });
 
@@ -314,7 +314,7 @@
 
                     document.querySelectorAll('#selected-produk-table tr').forEach(row => {
                         const hargaInput = row.querySelector('input[name$="[harga]"]');
-                        const jumlahInput = row.querySelector('.jumlah-input');
+                        const jumlahInput = row.querySelector('input[name$="[jumlah_terima]"]');
                         const diskonInput = row.querySelector('.diskon-input');
                         const ppnCheckbox = row.querySelector('.ppn-checkbox');
 

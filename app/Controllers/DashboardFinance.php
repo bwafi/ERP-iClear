@@ -109,6 +109,7 @@ class DashboardFinance extends BaseController
             'cashflow_daily' => $scorecard['cashflow_daily'],
             'hutang_detail' => $scorecard['hutang_detail'],
             'piutang_detail' => $scorecard['piutang_detail'],
+            'mutasi_detail' => $scorecard['mutasi_detail'],
             'payroll_detail' => $scorecard['payroll_detail'],
             'kesehatan_uang_detail' => $scorecard['kesehatan_uang_detail'],
             'manual_records' => $scorecard['manual_records'],

@@ -197,7 +197,7 @@ $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
                                         data-total="<?= (int) $m->total ?>"
                                         data-detail="<?= esc(json_encode(array_map(fn($d) => [
                                             'nama'   => $d->nama_barang,
-                                            'jumlah' => (float) $d->jumlah_kirim,
+                                            'jumlah' => (float) $d->jumlah_terima,
                                             'harga'  => (float) $d->harga_mutasi,
                                             'nilai'  => (float) ($d->nilai ?? 0),
                                         ], $m->detail))) ?>">Terima</button>
@@ -210,13 +210,13 @@ $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
                             <td colspan="7" class="ps-4 py-1">
                                 <table class="table table-sm table-striped align-middle mb-1 w-50">
                                     <thead>
-                                        <tr><th>Barang</th><th class="text-end">Jml Kirim</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
+                                        <tr><th>Barang</th><th class="text-end">Jml Terima</th><th class="text-end">Harga</th><th class="text-end">Subtotal</th></tr>
                                     </thead>
                                     <tbody>
                                         <?php foreach ($m->detail as $d) : ?>
                                             <tr>
                                                 <td><?= esc($d->nama_barang) ?></td>
-                                                <td class="text-end"><?= (int) $d->jumlah_kirim ?></td>
+                                                <td class="text-end"><?= (int) $d->jumlah_terima ?></td>
                                                 <td class="text-end"><?= $rp($d->harga_mutasi) ?></td>
                                                 <td class="text-end"><?= $rp($d->nilai ?? 0) ?></td>
                                             </tr>
@@ -312,7 +312,7 @@ $bisaBatal = in_array((int) session('ID_JABATAN'), [1], true);
                         <thead>
                             <tr>
                                 <th>Barang</th>
-                                <th class="text-end">Jml Kirim</th>
+                                <th class="text-end">Jml Terima</th>
                                 <th class="text-end">Harga</th>
                                 <th class="text-end">Subtotal</th>
                             </tr>

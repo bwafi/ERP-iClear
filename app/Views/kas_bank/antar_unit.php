@@ -545,7 +545,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                             <thead class="table-light">
                                 <tr>
                                     <th>Barang</th>
-                                    <th class="text-end">Qty</th>
+                                    <th class="text-end">Qty Terima</th>
                                     <th class="text-end">Harga</th>
                                     <th class="text-end">Subtotal</th>
                                 </tr>
@@ -635,7 +635,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                             <thead class="table-light">
                                                 <tr>
                                                     <th>Barang</th>
-                                                    <th class="text-end">Qty</th>
+                                                    <th class="text-end">Qty Terima</th>
                                                     <th class="text-end">Harga</th>
                                                     <th class="text-end">Subtotal</th>
                                                 </tr>
@@ -644,7 +644,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                                 <?php foreach (($bukti['items'] ?? []) as $d): ?>
                                                     <tr>
                                                         <td><?= esc($d->nama_barang ?? '') ?></td>
-                                                        <td class="text-end kb-num"><?= (float)($d->jumlah_kirim ?? 0) ?></td>
+                                                        <td class="text-end kb-num"><?= (float)($d->jumlah_terima ?? 0) ?></td>
                                                         <td class="text-end kb-num"><?= $rp($d->harga_mutasi ?? 0) ?></td>
                                                         <td class="text-end kb-num fw-semibold"><?= $rp($d->nilai ?? 0) ?></td>
                                                     </tr>
@@ -704,7 +704,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                             <thead class="table-light">
                                                 <tr>
                                                     <th>Barang</th>
-                                                    <th class="text-end">Qty</th>
+                                                    <th class="text-end">Qty Terima</th>
                                                     <th class="text-end">Harga</th>
                                                     <th class="text-end">Subtotal</th>
                                                 </tr>
@@ -713,7 +713,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                                 <?php foreach (($bukti['items'] ?? []) as $d): ?>
                                                     <tr>
                                                         <td><?= esc($d->nama_barang ?? '') ?></td>
-                                                        <td class="text-end kb-num"><?= (float)($d->jumlah_kirim ?? 0) ?></td>
+                                                        <td class="text-end kb-num"><?= (float)($d->jumlah_terima ?? 0) ?></td>
                                                         <td class="text-end kb-num"><?= $rp($d->harga_mutasi ?? 0) ?></td>
                                                         <td class="text-end kb-num fw-semibold"><?= $rp($d->nilai ?? 0) ?></td>
                                                     </tr>
@@ -986,8 +986,8 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                 pvItemsTotal.textContent = 'Total barang: ' + rp(det.total || 0);
                 det.items.forEach(d => {
                     const tr = document.createElement('tr');
-                    const nilai = d.nilai ?? ((parseFloat(d.jumlah_kirim || 0) * parseInt(d.harga_mutasi || 0)));
-                    tr.innerHTML = '<td>' + (d.nama_barang || '') + '</td><td class="text-end kb-num">' + (parseFloat(d.jumlah_kirim || 0)) + '</td><td class="text-end kb-num">' + rp(d.harga_mutasi || 0) + '</td><td class="text-end kb-num fw-semibold">' + rp(nilai) + '</td>';
+                    const nilai = d.nilai ?? ((parseFloat(d.jumlah_terima || 0) * parseInt(d.harga_mutasi || 0)));
+                    tr.innerHTML = '<td>' + (d.nama_barang || '') + '</td><td class="text-end kb-num">' + (parseFloat(d.jumlah_terima || 0)) + '</td><td class="text-end kb-num">' + rp(d.harga_mutasi || 0) + '</td><td class="text-end kb-num fw-semibold">' + rp(nilai) + '</td>';
                     pvItems.appendChild(tr);
                 });
             } else {

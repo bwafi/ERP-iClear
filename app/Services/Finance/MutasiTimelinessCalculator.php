@@ -28,11 +28,11 @@ class MutasiTimelinessCalculator implements FinanceCalculatorInterface
         $this->db = Database::connect();
     }
 
-    public function calculate(int $unitId, int $month, int $year): array
+    public function calculate(int $unitId, int $month, int $year, ?string $today = null): array
     {
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate   = date('Y-m-t', strtotime($startDate));
-        $today     = date('Y-m-d');
+        $today     = $today ?? date('Y-m-d');
         $cutoff    = FinanceScopeService::periodeMulaiDate();
 
         $lastPayment = $this->lastPaymentMap();

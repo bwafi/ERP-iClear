@@ -91,7 +91,7 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 **Perbaikan:** `insert()` sekarang memakai `simpanMutasi()`. Header disimpan dengan placeholder unik, lalu nomor final dibentuk dari `insertID()` (`MTS{unit}{ymd}{id}`). Query `DATE LIKE` dan akses object-sebagai-array dihapus. Nota baru tidak lagi memakai urutan `001` yang selalu sama.
 **Test:** `KasBankControllerTest::testSimpanMutasiMenyimpanHeaderDetailDanNomorUnik`, `testSimpanMutasiRollbackSaatDetailGagal`, `testInsertMutasiRedirectSetelahSimpan`.
 **Data lama:** migration `2026-10-20-000100_RenumberDanUnikkanNoNotaMutasi` mempertahankan nomor pertama tiap grup dan memberi suffix `-R2`, `-R3`, dst. pada 19 baris lainnya; 11 nomor asli tetap. Unique index `uniq_mutasi_no_nota` sudah terpasang setelah backup `mutasi_backup_20261020` (62 baris). Verifikasi: total 62, duplikat 0, suffix 19.
-**Test migration:** `MutasiNoNotaUniqueTest::testRenumberDanPasangUniqueIndex`, `testNomorDuplikatDitolakSetelahIndex`.
+**Test migration:** `MutasiNoNotaUniqueTest::testRenumberDanPasangUniqueIndex`, `testNomorDuplikatDitolakSetelahIndex`, `testRenumberMenganggapBedaHurufDanSpasiSebagaiDuplikat`, `testSuffixBertabrakanDenganNomorYangSudahAda`, `testStringKosongMenjadiNull`, `testSuffixTerlaluPanjangDitolakTanpaMengubahData`. Preflight menolak suffix >45 karakter sebelum menulis, dan string kosong dinormalisasi menjadi NULL agar unique index tidak gagal.
 
 **6. Siapa pun yang login bisa membuat mutasi dari unit mana pun. — ✅ DIPERBAIKI**
 `MutasiStok::insert()` tidak mengecek unit pengirim terhadap scope user; `AuthFilter` hanya memeriksa `logged_in`. Daftar produk juga memakai stok unit sesi, bukan unit pengirim yang dipilih. Tidak ada validasi stok → 8 baris stok negatif.
@@ -111,8 +111,8 @@ View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_m
 
 **8. Nilai tagihan memakai jumlah kirim, stok masuk memakai jumlah terima. — ✅ DIPERBAIKI**
 `nilaiDetailMutasi()` memakai `jumlah_kirim`; view stok penerima memakai `jumlah_terima`. Form mengizinkan keduanya berbeda, jadi penerima bisa ditagih barang yang tidak diterima. Di data sekarang semuanya sama, tapi risikonya nyata.
-**Perbaikan:** `nilaiDetailMutasi()` sekarang memakai `jumlah_terima` (0 bila tidak ada), dengan harga `harga_mutasi` dan fallback `hpp_barang`. Data lokal: 220 detail, 0 `jumlah_terima` null, 0 selisih dengan `jumlah_kirim` — jadi tidak ada nilai historis yang berubah.
-**Test:** `KasBankTest::testNilaiDetailMutasiMemakaiJumlahTerima`, `testNilaiDetailMutasiTanpaJumlahTerimaBernilaiNol`; fixture `BuatHutangPiutangDariMutasi` di `KasBankTest` dan `KasBankControllerTest` ikut diisi `jumlah_terima`.
+**Perbaikan:** `nilaiDetailMutasi()` sekarang memakai `jumlah_terima` (0 bila tidak ada), dengan harga `harga_mutasi` dan fallback `hpp_barang`. Item bukti cetak, rincian di Kas & Bank, modal terima, dan total form mutasi juga memakai `jumlah_terima` agar subtotal cocok dengan tagihan. Data lokal: 220 detail, 0 `jumlah_terima` null, 0 selisih dengan `jumlah_kirim` — jadi tidak ada nilai historis yang berubah.
+**Test:** `KasBankTest::testNilaiDetailMutasiMemakaiJumlahTerima`, `testNilaiDetailMutasiTanpaJumlahTerimaBernilaiNol`; `KasBankControllerTest::testCetakBuktiHutangPiutangMutasiMemuatListBarang` sekarang memakai kirim 5/terima 2 dan memastikan total serta item cetak tetap 2. Fixture `BuatHutangPiutangDariMutasi` di `KasBankTest` dan `KasBankControllerTest` ikut diisi `jumlah_terima`.
 
 ### Sebaiknya diperbaiki
 
@@ -157,7 +157,7 @@ Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim h
 
 Jalur happy-path **mutasi → terima → H/P → bayar antar unit → reversal** sudah rapi dan atomik. Masalah utamanya bukan di pembuatan pasangan, melainkan di **pembatalan/terima ulang**, **cut-off**, **konsistensi laporan**, dan **otorisasi pembuatan mutasi**.
 
-KPI `FIN_HUTANG_PIUTANG` sekarang **mencakup utang antar unit**. Skor akhirnya adalah rata-rata dari tiga komponen yang tersedia: Hutang supplier, Piutang pelanggan, dan Mutasi Antar Unit. Sisi piutang mutasi tidak dihitung terpisah karena merupakan cermin transaksi yang sama; hanya sisi hutang (unit yang berutang) yang dinilai. Bobot antar tiga komponen masih sama (belum ada pembobotan bisnis terpisah).
+KPI `FIN_HUTANG_PIUTANG` sekarang **mencakup utang antar unit**. Skor akhirnya adalah rata-rata dari tiga komponen yang tersedia: Hutang supplier, Piutang pelanggan, dan Mutasi Antar Unit. Sisi piutang mutasi tidak dihitung terpisah karena merupakan cermin transaksi yang sama; hanya sisi hutang (unit yang berutang) yang dinilai. Bobot antar tiga komponen masih sama (belum ada pembobotan bisnis terpisah). Tab **Hutang & Piutang** di Dashboard Finance juga menampilkan kartu dan rincian Mutasi Antar Unit agar angkanya tidak tersembunyi di balik skor gabungan.
 
 ---
 

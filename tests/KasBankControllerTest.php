@@ -1070,6 +1070,10 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'ID_JABATAN' => 35,
         ]);
 
+        // Barang dikirim 5 tetapi diterima 2. Tagihan dan item cetak harus
+        // memakai jumlah terima, bukan jumlah kirim.
+        $this->db->query('UPDATE db_detail_mutasi SET jumlah_kirim = 5 WHERE iddetail_mutasi = 1');
+
         $r = $this->post('mutasi_stok/terima/1');
         $r->assertStatus(302);
 
@@ -1085,6 +1089,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
             $this->assertSame('Mutasi Stok Antar Unit', $detail['sumber_label']);
             $this->assertSame('MTS1000921001', $detail['referensi']);
+            $this->assertSame(2000.0, (float) $hp->total);
             $this->assertNotEmpty($detail['items']);
 
             $it = $detail['items'][0];

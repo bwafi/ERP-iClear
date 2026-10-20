@@ -285,7 +285,7 @@ function item(int $id = 1, string $nota = 'MTS10001'): object
         'nama_unit_kirim'  => 'Unit A',
         'nama_unit_terima' => 'Unit B',
         'total'            => 1500000,
-        'detail'           => [(object) ['nama_barang' => 'Barang X', 'jumlah_kirim' => 2, 'harga_mutasi' => 750000, 'nilai' => 1500000]],
+        'detail'           => [(object) ['nama_barang' => 'Barang X', 'jumlah_kirim' => 2, 'jumlah_terima' => 2, 'harga_mutasi' => 750000, 'nilai' => 1500000]],
     ];
 }
 
