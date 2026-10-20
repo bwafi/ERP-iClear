@@ -11,6 +11,9 @@
         .price-card__fields button { grid-column: 1 / -1; width: 100%; }
         .price-history-wrap { overflow-x: auto; }
     }
+    @media (max-width: 400px) {
+        .price-card__fields { grid-template-columns: minmax(0, 1fr); }
+    }
     @media (min-width: 768px) { .price-card-list { display: none; } }
 </style>
 
@@ -33,7 +36,7 @@
         <div class="col-auto align-self-center text-muted"><?= number_format(count($items), 0, ',', '.') ?> item pada halaman ini</div>
     </form>
 
-    <div class="alert alert-light border small">
+    <div class="alert alert-light border small text-dark">
         Harga yang tersimpan tetap menjadi snapshot transaksi lama. Perubahan berlaku mulai waktu simpan untuk transaksi baru. Garansi kosong berarti <strong>Belum diatur</strong>; angka 0 berarti tanpa garansi. Garansi transaksi dipilih eksplisit saat proses service.
     </div>
 
