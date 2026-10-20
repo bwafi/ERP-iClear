@@ -4,16 +4,19 @@
  * Hanya jalankan --execute setelah kecocokan fisik per nota diverifikasi.
  *
  * Dry-run:
- *   php app/Scripts/backfill_mutasi_legacy.php --month=2026-09
+ *   php74 app/Scripts/backfill_mutasi_legacy.php --month=2026-09
  *
  * Eksekusi:
- *   php app/Scripts/backfill_mutasi_legacy.php --month=2026-09 --execute
+ *   php74 app/Scripts/backfill_mutasi_legacy.php --month=2026-09 --execute
  *
  * Yang dilakukan saat --execute:
  *  - backup tabel mutasi + hutang_piutang
  *  - status=1, tanggal_terima memakai tanggal_terima lama / tanggal_kirim
- *  - buat pasangan H/P legacy lewat ModeKasBank::buatHutangPiutangDariMutasi()
+ *  - buat pasangan H/P sesuai cutoff (legacy/active) lewat ModeKasBank::buatHutangPiutangDariMutasi()
  *  - verifikasi jumlah status dan pasangan H/P
+ *
+ * Hanya untuk periode legacy sebelum FinanceScopeService::periodeMulaiDate().
+ * Periode aktif harus lewat alur terima normal.
  */
 
 require_once __DIR__ . '/../../vendor/autoload.php';
@@ -41,12 +44,18 @@ foreach (array_slice($argv, 1) as $arg) {
 }
 
 if (!is_string($month) || !preg_match('/^\d{4}-\d{2}$/', $month)) {
-    fwrite(STDERR, "Usage: php app/Scripts/backfill_mutasi_legacy.php --month=YYYY-MM [--execute]\n");
+    fwrite(STDERR, "Usage: php74 app/Scripts/backfill_mutasi_legacy.php --month=YYYY-MM [--execute]\n");
     exit(1);
 }
 
 $mulai = $month . '-01 00:00:00';
 $selesai = date('Y-m-01 00:00:00', strtotime($mulai . ' +1 month'));
+$periodeAktif = App\Services\Finance\FinanceScopeService::periodeMulaiDate();
+if ($selesai > $periodeAktif . ' 00:00:00') {
+    fwrite(STDERR, "Backfill legacy hanya untuk periode sebelum {$periodeAktif}. Periode aktif gunakan alur terima normal.\n");
+    exit(1);
+}
+
 $db = Config\Database::connect();
 $db->transStrict(false);
 
