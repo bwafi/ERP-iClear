@@ -49,12 +49,11 @@ Yang **tidak bisa**: bayar dari `/hutangpiutang/bayar`. Service menolak `mutasi_
 Bukti dari DB lokal `erp_local`:
 
 - 62 mutasi: 50 diterima, 12 belum.
-- 48 pasang H/P = 96 baris, semuanya `belum_lunas`; masing-masing sisi **Rp 87.600.080**.
+- 48 pasang H/P = 96 baris; **44 pasang (88 baris) legacy** dan **4 pasang (8 baris) aktif** setelah backfill scope.
 - **0 pembayaran** antar unit — belum ada satu pun yang dilunasi.
-- 96 baris **terlambat**, tetapi dashboard H/P menampilkan total hutang **Rp 0** dan “Terlambat **96**”.
-- 44 baris hutang (22 pasang) bertanggal **sebelum cut-off 2026-10-05** tetapi `scope='active'` — Rp **86.920.080** seharusnya `legacy` menurut kebijakan cut-off.
+- 44 pasang pra-cut-off bertanggal **sebelum 2026-10-06** sudah menjadi `scope='legacy'`; 4 pasang sesudah cut-off tetap `active`.
 - 11 grup nomor nota duplikat, melibatkan **30 baris**.
-- 8 baris stok negatif.
+- 5 baris stok negatif.
 
 ---
 
@@ -76,7 +75,7 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 `ModeKasBank.php:737-791` insert tanpa kolom `scope`, sehingga default DB `active` — termasuk untuk mutasi bertanggal sebelum cut-off. Migrasi `ApplyFinanceCutoffBackfill` hanya menandai data yang sudah ada saat itu; baris mutasi dibuat setelahnya. Dampak: Rp86,9 juta utang antar unit lama dihitung sebagai utang aktif/terlambat.
 **Perbaikan:** jalur insert/revive sekarang memakai `FinanceScopeService::isLegacyTransaction()` — tanggal sebelum periode mulai (`< 2026-10-06`, termasuk 5 Okt) → `scope='legacy'` + meta `LEGACY_CUTOFF`; tanggal periode baru → `active`. Migration idempotent `2026-10-19-000200_BackfillMutasiUnitScope` menandai baris lama yang masih `active`.
 **Test:** `KasBankTest::testBuatHutangPiutangMutasiMemakaiScopeSesuaiCutoff`, `KasBankTest::testBackfillScopeMutasiUnitMenandaiPreCutoffLegacy`.
-**Dampak data lokal:** migration akan mengubah **44 baris hutang + 44 baris piutang** (22 pasang, Rp86.920.080 per sisi) dari `active` → `legacy`. Jalankan `php spark migrate` saat deploy.
+**Dampak data lokal:** migration mengubah **44 baris hutang + 44 baris piutang** (44 pasang, Rp86.920.080 per sisi) dari `active` → `legacy`. Sudah dijalankan di `erp_local` pada batch 41.
 
 **4. Dua dashboard memakai definisi “Total Hutang/Piutang” yang berbeda. — ✅ DIPERBAIKI**
 `HutangPiutangService::getRingkasan()` (`:998`) tidak memasukkan `mutasi_unit`, sedangkan `countJatuhTempo()` (`:1132`) menghitung semua baris; `DashboardKeuangan.php:94-122` menghitung semua. Hasilnya angka total dan angka status saling bertentangan.
@@ -107,7 +106,7 @@ Jika total mutasi 0 (harga dan HPP kosong) atau insert gagal, `buatHutangPiutang
 **7. Batal terima menghapus utang, tetapi stok tetap di penerima. — ✅ DIPERBAIKI**
 View `stok_barang` (`2026-10-07-000001`, baris 71-77) menghitung semua `detail_mutasi` tanpa melihat `mutasi.status`. Jadi mutasi yang belum diterima sudah memindahkan stok; saat penerimaan dibatalkan, stok tetap pindah sementara H/P di-soft-delete.
 **Perbaikan:** migration `2026-10-19-000400_StokBarangHanyaMutasiDiterima.php` membuat ulang view dengan `JOIN mutasi` dan `WHERE mutasi.status = 1`. Stok kini bergerak saat terima, dan otomatis kembali saat `batalTerima()` mengubah status ke 0. Mutasi lama yang masih `status=0` sengaja dibiarkan; stoknya tidak lagi dihitung.
-**Test:** `StokBarangHanyaMutasiDiterimaTest::testStokHanyaDihitungSetelahDiterima` dan `testBatalTerimaMengembalikanStok` — sebelum filter unit 1=85/unit 2=15, sesudah filter 95/5, lalu saat status diubah 1 → 85/15 dan saat dibatalkan 0 → 95/5. Migration belum dijalankan di `erp_local`.
+**Test:** `StokBarangHanyaMutasiDiterimaTest::testStokHanyaDihitungSetelahDiterima` dan `testBatalTerimaMengembalikanStok` — sebelum filter unit 1=85/unit 2=15, sesudah filter 95/5, lalu saat status diubah 1 → 85/15 dan saat dibatalkan 0 → 95/5. Migration sudah dijalankan di `erp_local` pada batch 41; definisi view terverifikasi memakai `mutasi.status = 1`.
 
 **8. Nilai tagihan memakai jumlah kirim, stok masuk memakai jumlah terima.**
 `nilaiDetailMutasi()` memakai `jumlah_kirim`; view stok penerima memakai `jumlah_terima`. Form mengizinkan keduanya berbeda, jadi penerima bisa ditagih barang yang tidak diterima. Di data sekarang semuanya sama, tapi risikonya nyata.
@@ -143,12 +142,12 @@ Hanya unit yang berhutang (atau role lintas) yang bisa membayar. Unit pengirim h
 ### Nice to have
 
 - Komentar kolom `mutasi.status` di DB (`0=menunggu,1=kirim,2=terima`) tidak sesuai kode (`1=diterima`).
-  **Perbaikan:** migration `2026-10-19-000300_FixMutasiStatusComment.php` mengubah komentar jadi `0 = menunggu, 1 = diterima` (idempoten; `down()` mengembalikan komentar lama). Belum dijalankan di `erp_local`.
+  **Perbaikan:** migration `2026-10-19-000300_FixMutasiStatusComment.php` mengubah komentar jadi `0 = menunggu, 1 = diterima` (idempoten; `down()` mengembalikan komentar lama). Sudah dijalankan di `erp_local` pada batch 41.
 - `hitungStatus()` di `ModeKasBank` menduplikasi `statusFromSisa()` di service.
   **Perbaikan:** `statusFromSisa()` dijadikan `static`, `ModeKasBank::hitungStatus()` mendelegasikan ke sana. Perilaku restore pembayaran terverifikasi `KasBankTest::testTerapkanDanRestorePembayaranHP`.
 - `CustomerSatisfactionTest` tidak mandiri; error `db_service`/`db_stok_barang`/`db_penjualan` hanya muncul bila tabel sisa test lain ada.
   **Perbaikan:** `setUp()` sekarang membangun schema sendiri (tanpa men-drop tabel bersama) dan `CustomerSatisfactionService` memakai `prefixTable()` pada SQL mentahnya. Dua failure yang tersisa sudah ada sejak sebelum audit: role SPV (40) memang tidak masuk `viewRoles`, dan teks “Rekap Bulanan” tidak ada di view.
-- Tidak ada fitur void untuk mutasi `status=0`; 39 mutasi menggantung, tetapi stoknya tidak lagi dihitung setelah migration view.
+- Tidak ada fitur void untuk mutasi `status=0`; 12 mutasi (55 qty kirim) masih menggantung, tetapi stoknya tidak lagi dihitung setelah migration view.
 
 ---
 
@@ -164,6 +163,6 @@ KPI `FIN_HUTANG_PIUTANG` memang **tidak terpengaruh** — tetapi itu bukan kabar
 
 - Perbaikan #1–#6, #9–#13, dan tiga item "Nice to have" sudah diuji terarah. Full suite: 708 test, 43 error/177 failure — semuanya milik baseline #5+#10. `CustomerSatisfactionTest` tidak lagi menambah error tabel hilang; dua failure-nya adalah ekspektasi lama yang tidak cocok dengan view/role saat ini.
 - Data produksi tidak diperiksa; angka diambil dari database lokal `erp_local` per 2026-10-19.
-- Migration backfill #3 belum dijalankan di `erp_local`; baru diverifikasi lewat test.
+- Migration backfill #3 dan view #7 sudah dijalankan di `erp_local` batch 41; hasilnya diverifikasi lewat query data (88 baris legacy, 8 baris aktif).
 - Cetak PDF, tampilan mobile, dan seluruh matriks role di luar route yang disebut belum diperiksa.
 - Temuan #8 belum diperbaiki karena menunggu keputusan bisnis. #7 sudah diperbaiki lewat migration view. #5 sudah diperbaiki di kode, tetapi renumbering data lama dan unique index masih ditunda.
