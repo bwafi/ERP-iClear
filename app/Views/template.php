@@ -43,6 +43,7 @@
     <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script>window.iclearEarlyTableDefaults = window.jQuery && window.jQuery.fn.dataTable ? window.jQuery.fn.dataTable.defaults : null;</script>
+    <script src="<?= base_url('template/assets/libs/apexcharts/dist/apexcharts.min.js') ?>"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
@@ -728,7 +729,6 @@
     <!-- solar icons -->
     <script src="https://cdn.jsdelivr.net/npm/iconify-icon@1.0.8/dist/iconify-icon.min.js"></script>
     <script src="<?php echo base_url('template/') ?>assets/libs/jvectormap/jquery-jvectormap.min.js"></script>
-    <script src="<?php echo base_url('template/') ?>assets/libs/apexcharts/dist/apexcharts.min.js"></script>
     <script src="<?php echo base_url('template/') ?>assets/js/extra-libs/jvectormap/jquery-jvectormap-us-aea-en.js">
     </script>
 
