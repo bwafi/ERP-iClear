@@ -809,6 +809,7 @@
     })();
 </script>
 <script src="<?php echo base_url('template/assets/libs/datatables.net/js/jquery.dataTables.min.js') ?>"></script>
+<script src="<?= base_url('assets/iclear-ui.js') ?>?v=<?= filemtime(ROOTPATH . 'public/assets/iclear-ui.js') ?>"></script>
 <script src="<?php echo base_url('template/assets/js/datatable/datatable-basic.init.js') ?>"></script>
 <link rel="stylesheet"
     href="<?php echo base_url('template/assets/libs/datatables.net-bs5/css/dataTables.bootstrap5.min.css') ?>" />
@@ -817,6 +818,5 @@
 <script src="<?php echo base_url('template/assets/libs/select2/dist/js/select2.min.js') ?>"></script>
 <script src="<?php echo base_url('template/assets/js/forms/select2.init.js') ?>"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cleave.js/1.6.0/cleave.min.js"></script>
-<script src="<?= base_url('assets/iclear-ui.js') ?>?v=<?= filemtime(ROOTPATH . 'public/assets/iclear-ui.js') ?>"></script>
 
 </html>
