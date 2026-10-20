@@ -199,8 +199,11 @@ class HoSalaryDistributionService
      */
     public function getUnitShares(string $bulan, ?string $tahun = null): array
     {
-        $dist = $this->calculateDistribution($bulan, $tahun);
+        return self::sharesFromDistribution($this->calculateDistribution($bulan, $tahun));
+    }
 
+    public static function sharesFromDistribution(array $dist): array
+    {
         $shares = [];
         foreach ($dist['unit_detail'] as $u) {
             if ($u['is_counted']) {

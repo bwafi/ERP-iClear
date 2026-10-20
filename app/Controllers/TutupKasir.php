@@ -762,8 +762,7 @@ class TutupKasir extends BaseController
         // ============================
         $hoDistribution = (new \App\Services\Payroll\HoSalaryDistributionService())
             ->calculateDistribution($bulanStr, (string)$tahun);
-        $hoUnitShares = (new \App\Services\Payroll\HoSalaryDistributionService())
-            ->getUnitShares($bulanStr, (string)$tahun);
+        $hoUnitShares = \App\Services\Payroll\HoSalaryDistributionService::sharesFromDistribution($hoDistribution);
 
         // ==========================
         // TOTAL OMSET BULAN INI
