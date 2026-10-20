@@ -20,6 +20,8 @@ final class BalanceSheetReconciliation
             'selisih_jurnal' => 0,
             'akun_tidak_terklasifikasi' => [],
             'jumlah_akun' => 0,
+            'saldo_akun_tidak_terklasifikasi' => 0,
+            'laba_sebelum_tahun_berjalan' => 0,
         ];
 
         foreach ($allAccounts as $account) {
@@ -34,6 +36,10 @@ final class BalanceSheetReconciliation
                 || (! in_array($code[0], ['1', '2', '3', '4', '5', '6'], true)
                     && ! in_array(substr($code, 0, 3), ['701', '702'], true))) {
                 $result['akun_tidak_terklasifikasi'][] = $code;
+                $result['saldo_akun_tidak_terklasifikasi'] += $debit - $credit;
+            } elseif (in_array($code[0], ['4', '5', '6'], true)
+                || in_array(substr($code, 0, 3), ['701', '702'], true)) {
+                $result['laba_sebelum_tahun_berjalan'] += $credit - $debit;
             }
         }
 
@@ -71,6 +77,7 @@ final class BalanceSheetReconciliation
 
         $result['selisih'] = $result['aset'] - $result['kewajiban']
             - $result['ekuitas'] - $result['laba_berjalan'];
+        $result['laba_sebelum_tahun_berjalan'] -= $result['laba_berjalan'];
 
         return $result;
     }

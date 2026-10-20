@@ -1,3 +1,4 @@
+<?php $garansiInfo = \App\Services\Service\WarrantyTerm::describe($service); ?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -91,19 +92,9 @@
         Tipe : <?= @$service->tipe_hp ?>
     </div>
 
-    <div>
-         Garansi : <?= @$service->garansi_hari . " hari"?>
-    </div>
-    
-    <div>
-         <?php
-            $tanggal_awal = @$service->created_at;
-            $garansi = (int) @$service->garansi_hari;
-
-            // hitung tanggal berakhir
-            $tanggal_berakhir = date('d-m-Y', strtotime($tanggal_awal . " +$garansi days"));
-            ?>(Berakhir dalam <?= $tanggal_berakhir ?>)
-    </div>
+    <div>Garansi: <?= esc($garansiInfo['label']) ?></div>
+    <div>Mulai: <?= esc($garansiInfo['start_date'] ? date('d-m-Y', strtotime($garansiInfo['start_date'])) : 'Belum dimulai') ?></div>
+    <div>Berakhir: <?= esc($garansiInfo['end_date'] ? date('d-m-Y', strtotime($garansiInfo['end_date'])) : ($service->garansi_opsi_snapshot === 'selamanya' ? 'Tanpa kedaluwarsa' : '-')) ?> · Status: <?= esc($garansiInfo['status']) ?></div>
     
     <td colspan="2">
         <div class="line"></div>

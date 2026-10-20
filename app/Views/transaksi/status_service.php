@@ -77,6 +77,7 @@
 
 <body>
     <div class="container">
+        <?php $garansiInfo = \App\Services\Service\WarrantyTerm::describe($service); ?>
         <h2>Lacak Servis iPhone</h2>
         <div class="info">
             <div class="label">Nomor Servis</div>
@@ -87,6 +88,8 @@
             <div class="value"><?= $service->keluhan ?></div>
             <div class="label">Tanggal Service</div>
             <div class="value"><?= $service->created_at ?></div>
+            <div class="label">Garansi</div>
+            <div class="value"><?= esc($garansiInfo['label']) ?> · Mulai <?= esc($garansiInfo['start_date'] ?: 'belum dimulai') ?> · Berakhir <?= esc($garansiInfo['end_date'] ?: ($service->garansi_opsi_snapshot === 'selamanya' ? 'tanpa kedaluwarsa' : '-')) ?> · <?= esc($garansiInfo['status']) ?></div>
         </div>
         <div class="status">
             <div class="label">Status</div>

@@ -1,3 +1,4 @@
+<?php $garansiInfo = \App\Services\Service\WarrantyTerm::describe($service); ?>
 <style>
     body {
         margin: 0;
@@ -77,6 +78,9 @@
                 <td colspan="6">
                     <hr style="border: 1px solid black;">
                 </td>
+            </tr>
+            <tr>
+                <td colspan="6"><strong>Garansi sparepart:</strong> <?= esc($garansiInfo['label']) ?> · Mulai: <?= esc($garansiInfo['start_date'] ? date('d-m-Y', strtotime($garansiInfo['start_date'])) : 'Belum dimulai') ?> · Berakhir: <?= esc($garansiInfo['end_date'] ? date('d-m-Y', strtotime($garansiInfo['end_date'])) : ($service->garansi_opsi_snapshot === 'selamanya' ? 'Tanpa kedaluwarsa' : '-')) ?> · Status: <?= esc($garansiInfo['status']) ?></td>
             </tr>
             <tr>
                 <td style="text-align:left; width:5px;" colspan="1">Tipe : <?= @$service->tipe_hp ?></td>

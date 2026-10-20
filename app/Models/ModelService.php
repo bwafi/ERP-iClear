@@ -34,6 +34,9 @@ class ModelService extends Model
         'estimasi_biaya',
         'bayar',
         'garansi_hari',
+        'garansi_opsi_snapshot',
+        'garansi_mulai',
+        'garansi_akhir',
         'pelanggan_id_pelanggan',
         'unit_idunit',
         'service_by',
@@ -401,6 +404,10 @@ class ModelService extends Model
                 service.no_hp,
                 service.alamat,
                 service.garansi_hari,
+                service.garansi_opsi_snapshot,
+                service.garansi_mulai,
+                service.garansi_akhir,
+                service.status_service,
                 service.tanggal_claim_garansi,
                 pelanggan.nama as nama_pelanggan
             FROM service
@@ -414,7 +421,6 @@ class ModelService extends Model
 
         $query = $this->db->query($sql, $params);
         $data = $query->getResult();
-
         $countSql = "SELECT COUNT(*) as total
             FROM service
             JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
@@ -963,6 +969,10 @@ class ModelService extends Model
                 service.unit_idunit,
                 unit.NAMA_UNIT as nama_unit,
                 service.garansi_hari,
+                service.garansi_opsi_snapshot,
+                service.garansi_mulai,
+                service.garansi_akhir,
+                service.status_service,
                 DATEDIFF(NOW(), service.tanggal_selesai) as lama_service_days
             ')
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
@@ -1000,6 +1010,11 @@ class ModelService extends Model
             } else {
                 $row->lama_service = 'Tanggal tidak tersedia';
             }
+            $row->garansi = \App\Services\Service\WarrantyTerm::describe($row);
+            $row->garansi_label = $row->garansi['label'];
+            $row->garansi_mulai_tampil = $row->garansi['start_date'];
+            $row->garansi_akhir_tampil = $row->garansi['end_date'];
+            $row->garansi_status = $row->garansi['status'];
         }
 
         return [

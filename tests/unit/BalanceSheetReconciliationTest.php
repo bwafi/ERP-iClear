@@ -84,4 +84,29 @@ final class BalanceSheetReconciliationTest extends TestCase
         $this->assertCount(3, $invalid);
         $this->assertSame(['ABC', '1099999999', null], array_column($invalid, 'no_akun'));
     }
+
+    public function testGapBridgeExplainsLegacyProfitAndUnclassifiedDebitWithoutAdjustingBooks(): void
+    {
+        $summary = BalanceSheetReconciliation::summarizeAsOf([
+            ['no_akun' => '1010100000', 'debet' => 1208409817, 'kredit' => 0],
+            ['no_akun' => '2010100000', 'debet' => 0, 'kredit' => 9007903],
+            ['no_akun' => '3010100000', 'debet' => 1000000, 'kredit' => 0],
+        ], [
+            ['no_akun' => '6010100000', 'debet' => 871389450, 'kredit' => 0],
+        ], [
+            ['no_akun' => '1010100000', 'debet' => 1208409817, 'kredit' => 0],
+            ['no_akun' => '2010100000', 'debet' => 0, 'kredit' => 9007903],
+            ['no_akun' => '3010100000', 'debet' => 1000000, 'kredit' => 0],
+            ['no_akun' => '6010100000', 'debet' => 871389450, 'kredit' => 0],
+            ['no_akun' => '4010100000', 'debet' => 0, 'kredit' => 95722000],
+            ['no_akun' => '', 'debet' => 23500, 'kredit' => 0],
+        ]);
+        $this->assertSame(1976092864, $summary['selisih_jurnal']);
+        $this->assertSame(23500, $summary['saldo_akun_tidak_terklasifikasi']);
+        $this->assertSame(95722000, $summary['laba_sebelum_tahun_berjalan']);
+        $this->assertSame(2071791364, $summary['selisih']);
+        $this->assertSame(-1000000, $summary['ekuitas']);
+        $this->assertSame($summary['selisih'], $summary['selisih_jurnal']
+            - $summary['saldo_akun_tidak_terklasifikasi'] + $summary['laba_sebelum_tahun_berjalan']);
+    }
 }

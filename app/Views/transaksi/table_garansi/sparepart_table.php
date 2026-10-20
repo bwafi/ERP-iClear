@@ -1,4 +1,12 @@
+<?= view('transaksi/purchase_batch_picker') ?>
+<?php if (! $sparepart): ?>
+    <div class="alert alert-warning">Belum ada pengganti bertipe Fisik dengan stok di cabang ini.
+        Ada <?= count($pendingReplacementTypes) ?> ID berstok yang tipenya belum ditetapkan. Administrator perlu meninjau tipe item; jangan buat ID/stok baru untuk melewati pemeriksaan.
+        <?php if ((int) session('ID_JABATAN') === 1): ?><a href="<?= base_url('produk/review-tipe') ?>">Buka Review Tipe Item</a><?php endif; ?>
+    </div>
+<?php endif; ?>
 <form action="<?php echo base_url('update_service_garansi/saveSparepart') ?>" enctype="multipart/form-data" method="post">
+    <?= csrf_field() ?>
     <div class="mt-3">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal">
             Tambah Sparepart
@@ -20,6 +28,8 @@
                                 <th></th>
                                 <th>Nama Sparepart</th>
                                 <th>Harga</th>
+                                <th>Stok Cabang</th>
+                                <th>Supplier / Nota Asal Pengganti</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -31,6 +41,8 @@
                                     </td>
                                     <td><?= esc($s->nama_barang) ?></td>
                                     <td><?= 'Rp ' . number_format($s->harga, 0, ',', '.') ?></td>
+                                    <td><?= (int) $s->stok_akhir ?></td>
+                                    <td><select class="form-select origin-choice" aria-label="Supplier / nota asal pengganti"><option value="">Centang barang dahulu</option></select></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -110,7 +122,8 @@
         oldSpareparts.forEach((sp) => {
             addSparepartRow(sp.barang_idbarang, sp.nama_barang, parseFloat(sp.harga_penjualan),
                 parseInt(sp.jumlah), parseFloat(sp.diskon_penjualan), parseFloat(sp.diskon_penjualan_garansi), parseInt(sp.jumlah_tambahan_garansi), parseInt(sp.sub_total), parseInt(sp.sub_total_garansi), parseInt(sp.harga_penjualan_garansi),
-                sp.source_nama_suplier, sp.source_nota_supplier);
+                sp.source_nama_suplier, sp.source_nota_supplier, sp.replacement_purchase_detail_id,
+                sp.replacement_issued === true, sp.replacement_origin_label);
 
             console.log({
                 id: sp.idservice_sparepart,
@@ -140,7 +153,7 @@
 
             // Cek apakah sparepart sudah ada di tabel
             if (!document.getElementById(`row-${id}`)) {
-                addSparepartRow(id, nama, harga, 1, 0);
+                addSparepartRow(id, nama, harga, 1, 0, 0, 0, 0, 0, 0, null, null, checkbox.dataset.purchaseDetailId || null);
             }
         });
 
@@ -166,6 +179,9 @@
         harga_penjualan_garansi = 0,
         sourceSupplier = null,
         sourceNota = null,
+        replacementOriginId = null,
+        replacementIssued = false,
+        replacementOriginLabel = null,
     ) {
 
         const tbody = document.getElementById('sparepart-table-body');
@@ -214,6 +230,16 @@
         <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>
     `;
         tbody.appendChild(row);
+        if (replacementIssued) {
+            const selector = row.querySelector('.replacement-batch');
+            selector.replaceChildren(new Option(replacementOriginLabel || 'Asal pengganti belum diketahui', replacementOriginId || ''));
+            selector.disabled = true;
+            row.querySelector('.qty-tambahan').readOnly = true;
+            const note = document.createElement('small');
+            note.textContent = 'Pengganti sudah tercatat. Jumlah dan asal tidak diubah/dikeluarkan ulang.';
+            selector.after(note);
+        }
+        if (!replacementIssued) {
         fetch('<?= base_url('service/purchase-batches') ?>/' + encodeURIComponent(id))
             .then(response => response.ok ? response.json() : [])
             .then(batches => {
@@ -225,7 +251,9 @@
                         (batch.no_nota_supplier || 'Nota tanpa nomor') + ' (sisa ' + batch.available_quantity + ')';
                     selector.appendChild(option);
                 });
+                if (replacementOriginId) selector.value = String(replacementOriginId);
             });
+        }
         row.querySelector('.source-batch-label').textContent = sourceSupplier
             ? 'Batch dipilih saat service: ' + sourceSupplier + (sourceNota ? ' — ' + sourceNota : '')
             : 'Asal supplier service belum diketahui';

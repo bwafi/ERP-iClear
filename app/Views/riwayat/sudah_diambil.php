@@ -205,28 +205,11 @@
                     data: 'lama_service'
                 },
                 {
-                    data: null,
+                    data: 'garansi_label',
                     render: function(data, type, row) {
-                        if (row.garansi_hari > 0 && row.tanggal_selesai) {
-                            const tanggalSelesai = new Date(row.tanggal_selesai);
-                            const tanggalAkhir = new Date(tanggalSelesai);
-                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
-                            const today = new Date();
-
-                            const formatDate = (date) => {
-                                const day = String(date.getDate()).padStart(2, '0');
-                                const month = String(date.getMonth() + 1).padStart(2, '0');
-                                const year = date.getFullYear();
-                                return `${day}-${month}-${year}`;
-                            };
-
-                            if (today > tanggalAkhir) {
-                                return 'Kadaluarsa pada ' + formatDate(tanggalAkhir);
-                            } else {
-                                return row.garansi_hari + ' hari (aktif sampai ' + formatDate(tanggalAkhir) + ')';
-                            }
-                        }
-                        return 'Tidak ada garansi';
+                        const start = row.garansi_mulai_tampil || 'Belum dimulai';
+                        const end = row.garansi_akhir_tampil || (row.garansi_opsi_snapshot === 'selamanya' ? 'Tanpa kedaluwarsa' : '-');
+                        return `${data || 'Belum Diatur'}<br><small>Mulai: ${start} · Berakhir: ${end} · ${row.garansi_status || 'Belum Diatur'}</small>`;
                     }
                 },
                 {

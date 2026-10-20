@@ -61,6 +61,7 @@ docker run --rm --network "$NETWORK" \
     "$PHP_IMAGE" sh -euc '
         php vendor/bin/phpunit --no-coverage tests/integration/InventoryBatchMariaDbTest.php
         php vendor/bin/phpunit --no-coverage tests/integration/KartuHargaMigrationMariaDbTest.php
-        php vendor/bin/phpunit --no-coverage tests/unit --filter="BalanceSheetReconciliationTest|DailyCashFlowServiceTest|FinanceMenuNavigationTest|InventoryLedgerMathTest|InventoryLedgerBridgeTest|JournalReportFiltersTest|KartuHargaWarrantyDefaultTest|SupplierCreditReconciliationTest|WarrantyJournalReconciliationTest|WarrantyServiceAccessTest"
+        php vendor/bin/phpunit --no-coverage tests/integration/SupplierReturnAvailabilityMariaDbTest.php
+        php vendor/bin/phpunit --no-coverage tests/unit --filter="BalanceSheetReconciliationTest|DailyCashFlowServiceTest|FinanceMenuNavigationTest|InventoryLedgerMathTest|InventoryLedgerBridgeTest|JournalReportFiltersTest|KartuHargaWarrantyDefaultTest|SupplierCreditReconciliationTest|SupplierCreditJournalTest|SupplierCreditAllocatorTest|WarrantyJournalReconciliationTest|WarrantyServiceAccessTest|WarrantyTermTest|WarrantyClaimEligibilityTest|WarrantyExpenseJournalTest"
         php tests/integration/WarrantyStockMySql.php
     '

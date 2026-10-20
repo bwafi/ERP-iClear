@@ -16,8 +16,11 @@ use App\Services\StokOpnameService;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
 
+require_once __DIR__ . '/WarrantyClaimIntakeScenario.php';
+
 final class InventoryBatchMariaDbTest extends CIUnitTestCase
 {
+    use WarrantyClaimIntakeScenario;
     public function testMigrationAverageAndPhysicalOrigins(): void
     {
         $socket = getenv('ERP_SYNTHETIC_MARIADB_SOCKET');
@@ -57,7 +60,7 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             'barang' => 'idbarang INT PRIMARY KEY, kode_barang VARCHAR(40), nama_barang VARCHAR(100), jenis_item VARCHAR(10), harga BIGINT, harga_beli BIGINT, idkategori INT, imei VARCHAR(30), jenis_hp VARCHAR(40), internal VARCHAR(40), warna VARCHAR(40), status VARCHAR(20), status_ppn VARCHAR(2), status_barang VARCHAR(20), stok_minimum INT, deleted VARCHAR(2), input VARCHAR(20), nama_barang_id VARCHAR(100)',
             'unit' => 'idunit INT PRIMARY KEY, NAMA_UNIT VARCHAR(50)',
             'detail_pembelian' => 'iddetail_pembelian INT PRIMARY KEY, pembelian_idpembelian INT, barang_idbarang INT, unit_idunit INT, jumlah INT, tanggal DATETIME, no_batch VARCHAR(60), hitung_hpp BIGINT',
-            'pembelian' => 'idpembelian INT PRIMARY KEY, suplier_id_suplier INT, no_nota_supplier VARCHAR(60), input_by INT',
+            'pembelian' => 'idpembelian INT PRIMARY KEY, suplier_id_suplier INT, no_nota_supplier VARCHAR(60), input_by INT, unit_idunit INT DEFAULT 1',
             'suplier' => 'id_suplier INT PRIMARY KEY, nama_suplier VARCHAR(100)',
             'stok_awal' => 'idstok_awal INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, tanggal DATETIME, harga_beli BIGINT, input_by INT',
             'detail_penjualan' => 'iddetail_penjualan INT PRIMARY KEY, penjualan_idpenjualan INT, barang_idbarang INT, unit_idunit INT, jumlah INT, hpp_penjualan BIGINT, source_purchase_detail_id INT NULL',
@@ -66,12 +69,18 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             'mutasi' => 'idmutasi INT PRIMARY KEY, input_by INT',
             'retur_pelanggan' => 'idretur_pelanggan INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, tanggal DATETIME, input_by INT',
             'retur_suplier' => 'idretur_suplier INT PRIMARY KEY, barang_idbarang INT, unit_idunit INT, jumlah INT, barang_rusak_id INT NULL, tanggal DATETIME, input_by INT',
-            'barang_rusak' => 'idbarang_rusak INT PRIMARY KEY, idpembelian INT NOT NULL, no_nota_sup VARCHAR(60) NOT NULL, barang_idbarang INT, unit_idunit INT, jumlah INT, claim_id INT NULL, tanggal_rusak DATETIME, input_by INT',
+            'barang_rusak' => 'idbarang_rusak INT AUTO_INCREMENT PRIMARY KEY, idpembelian INT NOT NULL, no_nota_sup VARCHAR(60) NOT NULL, barang_idbarang INT, unit_idunit INT, jumlah INT, claim_id INT NULL, tanggal_rusak DATETIME, input_by INT, keterangan TEXT',
             'stok_opname' => 'idstok_opname INT AUTO_INCREMENT PRIMARY KEY, tanggal DATE, hpp DECIMAL(15,2), jumlah_real DECIMAL(15,2), jumlah_komp DECIMAL(15,2), jumlah_selisih DECIMAL(15,2), satuan_terkecil VARCHAR(20), barang_idbarang INT, unit_idunit INT, periode_id INT, is_reverted INT, reverted_by INT NULL, reverted_at DATETIME NULL, revert_alasan VARCHAR(255) NULL',
             'stok_opname_draft' => 'idstok_opname INT AUTO_INCREMENT PRIMARY KEY, tanggal DATE, hpp DECIMAL(15,2), jumlah_real DECIMAL(15,2), jumlah_komp DECIMAL(15,2), jumlah_selisih DECIMAL(15,2), satuan_terkecil VARCHAR(20), barang_idbarang INT, unit_idunit INT, periode_id INT',
             'stok_opname_periode' => 'id INT AUTO_INCREMENT PRIMARY KEY, unit_idunit INT, tanggal DATE, status VARCHAR(10), total_barang INT, terisi_barang INT, jumlah_komp DECIMAL(15,2), jumlah_real DECIMAL(15,2), jumlah_selisih DECIMAL(15,2), finalisasi_by INT NULL, tanggal_finalisasi DATETIME NULL, catatan_finalisasi VARCHAR(255) NULL, reopen_by INT NULL, tanggal_reopen DATETIME NULL, alasan_reopen VARCHAR(255) NULL, created_at DATETIME NULL, updated_at DATETIME NULL',
             'stok_opname_audit' => 'id INT AUTO_INCREMENT PRIMARY KEY, periode_id INT, unit_idunit INT, tanggal DATE, aksi VARCHAR(30), actor_id INT, jumlah_barang INT, jumlah_terisi INT, catatan VARCHAR(255), created_at DATETIME',
             'garansi_sparepart_keluar' => 'id INT AUTO_INCREMENT PRIMARY KEY, barang_id INT, unit_id INT, jumlah INT, claim_id INT, service_id INT, hpp_satuan BIGINT, created_at DATETIME, input_by INT',
+            'service' => 'idservice INT PRIMARY KEY, no_service VARCHAR(50), unit_idunit INT, status_service INT, status_proses INT, garansi_hari INT, garansi_opsi_snapshot VARCHAR(32), garansi_mulai DATE, garansi_akhir DATE, tanggal_selesai DATETIME, tanggal_bisa_diambil DATETIME, tanggal_claim_garansi DATETIME, biaya_tambahan_garansi BIGINT',
+            'service_sparepart' => 'idservice_sparepart INT AUTO_INCREMENT PRIMARY KEY, service_idservice INT, barang_idbarang INT, unit_idunit INT, jumlah INT, source_purchase_detail_id INT NULL, hpp_penjualan BIGINT, harga_penjualan BIGINT, jumlah_tambahan_garansi INT DEFAULT 0, hpp_penjualan_garansi BIGINT DEFAULT 0, harga_penjualan_garansi BIGINT DEFAULT 0, sub_total_garansi BIGINT DEFAULT 0, diskon_penjualan_garansi BIGINT DEFAULT 0, satuan_jual VARCHAR(20)',
+            'riwayat_claim_garansi' => 'idriwayat_claim_garansi INT AUTO_INCREMENT PRIMARY KEY, service_idservice INT, tanggal_claim DATETIME',
+            'proses_service' => 'idproses_service INT PRIMARY KEY, service_idservice INT, status_statusproses INT',
+            'hpp_barang' => 'idbarang INT PRIMARY KEY, hpp BIGINT',
+            'template_jurnal' => 'id INT AUTO_INCREMENT PRIMARY KEY, kode_template VARCHAR(50), no_akun VARCHAR(10), debet_kredit VARCHAR(10)',
             'no_akun' => 'no_akun VARCHAR(10) PRIMARY KEY, nama_akun VARCHAR(100)',
             'jurnal' => 'idjurnal INT AUTO_INCREMENT PRIMARY KEY, tanggal DATE, no_akun VARCHAR(10), nama_akun VARCHAR(100), debet BIGINT, kredit BIGINT, keterangan VARCHAR(255), id_referensi INT, tabel_referensi VARCHAR(64), id_unit INT, id_akun INT',
         ];
@@ -79,6 +88,21 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             foreach ($schema as $table => $columns) {
                 $db->query("CREATE TABLE {$table} ({$columns})");
             }
+            require_once APPPATH . 'Database/Migrations/2026-10-20-000600_UseTransactionalStockSources.php';
+            $db->query('ALTER TABLE detail_mutasi ENGINE=MyISAM');
+            $db->transBegin();
+            $db->query('INSERT INTO detail_mutasi (iddetail_mutasi) VALUES (9999)');
+            $db->transRollback();
+            self::assertSame(1, $db->table('detail_mutasi')->where('iddetail_mutasi', 9999)->countAllResults());
+            $db->table('detail_mutasi')->where('iddetail_mutasi', 9999)->delete();
+            $engineMigration = new \App\Database\Migrations\UseTransactionalStockSources(Database::forge($db));
+            $engineMigration->up();
+            $engineMigration->up();
+            self::assertSame('InnoDB', $db->query("SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='detail_mutasi'")->getRow()->ENGINE);
+            $db->transBegin();
+            $db->query('INSERT INTO detail_mutasi (iddetail_mutasi) VALUES (9999)');
+            $db->transRollback();
+            self::assertSame(0, $db->table('detail_mutasi')->where('iddetail_mutasi', 9999)->countAllResults());
             $forge = Database::forge($db);
             $view = new LinkWarrantyDamagedStock($forge);
             $method = new \ReflectionMethod($view, 'warrantyDamagedStockView');
@@ -207,6 +231,7 @@ final class InventoryBatchMariaDbTest extends CIUnitTestCase
             $this->assertFalse($opname->finalize(1, '2026-10-19', 1)['success']);
             $this->assertSame(2, (int) $db->query('SELECT stok_akhir FROM stok_barang WHERE idbarang = 7 AND id_unit = 1')->getRow()->stok_akhir);
             $this->assertSame(2, $batches->total(7, 1));
+            $this->assertWarrantyClaimIntake($db);
         } finally {
             $db->query('DROP VIEW IF EXISTS stok_barang');
             $db->query('DROP TRIGGER IF EXISTS inventory_ledger_no_update');

@@ -11,9 +11,10 @@ final class ProductPriceCatalog
     {
     }
 
-    public function update(int $itemId, int $sellingPrice, ?int $warrantyDays, int $actorId): bool
+    public function update(int $itemId, int $sellingPrice, ?string $warrantyOption, int $actorId, bool $preserveLegacy = false, bool $clearLegacy = false): bool
     {
-        if ($itemId <= 0 || $sellingPrice < 0 || $warrantyDays !== null && ($warrantyDays < 0 || $warrantyDays > 9999) || $actorId <= 0) {
+        if ($itemId <= 0 || $sellingPrice < 0 || $actorId <= 0
+            || (! $preserveLegacy && ! $clearLegacy && $warrantyOption !== null && ! \App\Services\Service\WarrantyTerm::isValid($warrantyOption))) {
             throw new RuntimeException('Harga, garansi, petugas, atau ID master tidak valid.');
         }
 
@@ -21,7 +22,7 @@ final class ProductPriceCatalog
         try {
             $table = $this->db->prefixTable('barang');
             $item = $this->db->query(
-                "SELECT idbarang, harga, garansi_hari_default FROM {$table} WHERE idbarang = ? AND deleted = '0' FOR UPDATE",
+                "SELECT idbarang, harga, garansi_hari_default, garansi_opsi_default FROM {$table} WHERE idbarang = ? AND deleted = '0' FOR UPDATE",
                 [$itemId]
             )->getRow();
             if (! $item) {
@@ -30,7 +31,12 @@ final class ProductPriceCatalog
 
             $oldPrice = (int) $item->harga;
             $oldWarranty = $item->garansi_hari_default === null ? null : (int) $item->garansi_hari_default;
-            if ($sellingPrice === $oldPrice && $warrantyDays === $oldWarranty) {
+            $oldOption = $item->garansi_opsi_default === null ? null : (string) $item->garansi_opsi_default;
+            $newOption = $preserveLegacy ? $oldOption : $warrantyOption;
+            $newLegacyDays = $clearLegacy || ! $preserveLegacy && $warrantyOption !== null
+                ? null
+                : $oldWarranty;
+            if ($sellingPrice === $oldPrice && $newOption === $oldOption && $newLegacyDays === $oldWarranty) {
                 $this->db->transRollback();
                 return false;
             }
@@ -41,15 +47,19 @@ final class ProductPriceCatalog
                 'harga_sebelum' => $oldPrice,
                 'harga_sesudah' => $sellingPrice,
                 'garansi_sebelum' => $oldWarranty,
-                'garansi_sesudah' => $warrantyDays,
+                'garansi_sesudah' => $newLegacyDays,
+                'garansi_opsi_sebelum' => $oldOption,
+                'garansi_opsi_sesudah' => $newOption,
                 'petugas_idakun' => $actorId,
                 'berlaku_mulai' => $now,
                 'created_at' => $now,
             ]);
-            $this->db->table('barang')->where('idbarang', $itemId)->update([
-                'harga' => $sellingPrice,
-                'garansi_hari_default' => $warrantyDays,
-            ]);
+            $update = ['harga' => $sellingPrice];
+            if (! $preserveLegacy) {
+                $update['garansi_opsi_default'] = $newOption;
+                $update['garansi_hari_default'] = $newLegacyDays;
+            }
+            $this->db->table('barang')->where('idbarang', $itemId)->update($update);
             if (! $this->db->transStatus()) {
                 throw new RuntimeException('Gagal menyimpan perubahan Kartu Harga.');
             }

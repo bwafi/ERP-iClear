@@ -100,28 +100,6 @@
     </div>
 </div>
 
-<!-- Modal Konfirmasi Claim Garansi (dipakai bersama semua baris) -->
-<div class="modal fade" id="ClaimGaransiModal" tabindex="-1" aria-labelledby="ClaimGaransiModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header d-flex align-items-center">
-                <h4 class="modal-title" id="ClaimGaransiModalLabel">Konfirmasi Klaim Garansi</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-            </div>
-            <form action="<?= base_url('claim_garansi') ?>" method="post">
-                <div class="modal-body">
-                    <input type="hidden" name="idservice" id="modal-claim-idservice">
-                    <p>Apakah Anda yakin service Akan klaim garansi?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-success">Konfirmasi</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <!-- Modal Global Riwayat Klaim -->
 <div class="modal fade" id="modalRiwayatKlaim" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -240,29 +218,11 @@
                     data: 'alamat'
                 },
                 {
-                    data: 'garansi_hari',
+                    data: 'garansi_label',
                     render: function(data, type, row) {
-                        if (row.garansi_hari > 0 && row.tanggal_selesai) {
-                            const tanggalSelesai = new Date(row.tanggal_selesai);
-                            const tanggalAkhir = new Date(tanggalSelesai);
-                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
-                            const today = new Date();
-
-                            const claimDate = row.tanggal_claim_garansi;
-                            const isClaimed = claimDate && claimDate > '1971-01-01 00:00:00';
-
-                            if (isClaimed) {
-                                return 'Di klaim pada ' + formatDate(new Date(claimDate));
-                            }
-
-                            if (today > tanggalAkhir) {
-                                return 'Tidak Claim (kadaluarsa pada ' + formatDate(tanggalAkhir) + ')';
-                            }
-
-                            return row.garansi_hari + ' hari (aktif sampai ' + formatDate(tanggalAkhir) + ')';
-                        }
-
-                        return 'Tidak ada garansi';
+                        const start = row.garansi_mulai_tampil || 'Belum dimulai';
+                        const end = row.garansi_akhir_tampil || (row.garansi_opsi_snapshot === 'selamanya' ? 'Tanpa kedaluwarsa' : '-');
+                        return `${data || 'Belum Diatur'}<br><small>Mulai: ${start} · Berakhir: ${end} · ${row.garansi_status || 'Belum Diatur'}</small>`;
                     }
                 },
                 {
@@ -278,24 +238,12 @@
                     data: null,
                     orderable: false,
                     render: function(data, type, row) {
-                        const adaGaransi = parseInt(row.garansi_hari) > 0 && !!row.tanggal_selesai;
-                        let masihDalamGaransi = false;
-
-                        if (adaGaransi) {
-                            const tanggalAkhir = new Date(row.tanggal_selesai);
-                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
-                            tanggalAkhir.setHours(0, 0, 0, 0);
-
-                            const hariIni = new Date();
-                            hariIni.setHours(0, 0, 0, 0);
-
-                            masihDalamGaransi = hariIni <= tanggalAkhir;
-                        }
+                        const masihDalamGaransi = row.claim_eligible === true || row.claim_eligible === 1;
 
                         let buttons = '';
 
                         // Tombol Claim Garansi
-                        if (adaGaransi && masihDalamGaransi) {
+                        if (masihDalamGaransi) {
                             buttons += `<button type="button" class="btn btn-sm btn-danger btn-claim-garansi me-1" style="display: inline-flex; align-items: center;" data-idservice="${row.idservice}">
                                 <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
                                 Claim Garansi
@@ -347,8 +295,7 @@
 
         // Buka modal konfirmasi claim untuk baris yang dipilih
         $(document).on('click', '.btn-claim-garansi', function() {
-            $('#modal-claim-idservice').val($(this).data('idservice'));
-            $('#ClaimGaransiModal').modal('show');
+            window.location.href = '<?= base_url('garansi_service/klaim') ?>/' + Number($(this).data('idservice'));
         });
 
         // WhatsApp button (delegated agar tetap jalan untuk baris dari server)

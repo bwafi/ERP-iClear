@@ -21,6 +21,10 @@ foreach ($detail_pembelian as $row) {
 </div>
 
 <div class="card w-100 position-relative overflow-hidden">
+    <div class="alert alert-info m-4 mb-0">
+        Catat barang di <a href="<?= base_url('barang_rusak') ?>">Barang Rusak</a> terlebih dahulu dengan supplier dan nota asal yang sesuai.
+        Jumlah siap retur adalah sisa Barang Rusak yang belum pernah diretur. Pengiriman retur tidak mengurangi stok jual lagi.
+    </div>
     <div class="px-4 py-3 border-bottom"></div>
 
     <div class="card-body px-4 pt-4 pb-2 d-flex justify-content-between align-items-start mb-1">
@@ -71,6 +75,7 @@ foreach ($detail_pembelian as $row) {
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Nama Unit</h6>
                         </th>
+                        <th>Supplier</th>
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Total Harga</h6>
                         </th>
@@ -88,6 +93,7 @@ foreach ($detail_pembelian as $row) {
                                 <td><?= esc(date('d-m-Y', strtotime($row->tanggal))) ?></td>
                                 <td><?= esc($row->nama_barang) ?>, ...</td>
                                 <td><?= esc($row->NAMA_UNIT) ?></td>
+                                <td><?= esc($row->nama_suplier ?: 'Supplier belum tercatat') ?></td>
                                 <td><?= esc(number_format($row->total_harga, 0, ',', '.')) ?></td>
                                 <td>
                                     <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
@@ -111,6 +117,7 @@ foreach ($detail_pembelian as $row) {
             <div class="modal-dialog modal-xl">
                 <div class="modal-content">
                     <form action="<?= base_url('insert_retur_suplier') ?>" method="post">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="no_batch" value="<?= esc($no_batch) ?>">
 
                         <div class="modal-header">
@@ -118,7 +125,8 @@ foreach ($detail_pembelian as $row) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                         </div>
                         <div class="modal-body">
-                            <p class="text-muted">Retur hanya dapat dikirim dari barang yang sudah tercatat di menu Barang Rusak. Retur lama pada batch yang sama perlu direkonsiliasi terlebih dahulu.</p>
+                            <p><strong>Supplier:</strong> <?= esc($items[0]->nama_suplier ?: 'Supplier belum tercatat') ?></p>
+                            <p class="text-muted">Pilih hanya barang yang siap diretur. Retur lama pada batch yang sama perlu direkonsiliasi terlebih dahulu.</p>
                             <?php
                             $idUnit = session('ID_UNIT');
                             $tanggalSekarang = date('Y-m-d');
@@ -148,6 +156,7 @@ foreach ($detail_pembelian as $row) {
                                             <th>Pilih</th>
                                             <th>Nama Barang</th>
                                             <th>Jumlah</th>
+                                            <th>Siap Retur</th>
                                             <th>Harga Beli</th>
                                             <th>Diskon</th>
                                             <th>SubTotal</th>
@@ -157,11 +166,13 @@ foreach ($detail_pembelian as $row) {
                                     </thead>
                                     <tbody>
                                         <?php foreach ($items as $index => $item): ?>
+                                            <?php $capacity = $return_availability[(int) $item->iddetail_pembelian] ?? ['returnable' => 0, 'reason' => 'Retur hanya dapat dicatat dari unit akun yang sama dengan pembelian.']; ?>
                                             <tr>
                                                 <td>
                                                     <input type="checkbox"
                                                         class="form-check-input pilih-retur"
                                                         name="items[<?= $index ?>][selected]"
+                                                        <?= $capacity['returnable'] > 0 ? '' : 'disabled' ?>
                                                         value="1">
 
                                                     <input type="hidden" name="items[<?= $index ?>][iddetail_pembelian]"
@@ -169,6 +180,10 @@ foreach ($detail_pembelian as $row) {
                                                 </td>
                                                 <td><?= esc($item->nama_barang) ?></td>
                                                 <td><?= esc($item->jumlah) ?></td>
+                                                <td>
+                                                    <strong><?= (int) $capacity['returnable'] ?> unit</strong>
+                                                    <?php if ($capacity['reason'] !== ''): ?><div class="small text-muted text-wrap" style="min-width:200px"><?= esc($capacity['reason']) ?></div><?php endif; ?>
+                                                </td>
                                                 <td><?= esc(number_format($item->hrg_beli, 0, ',', '.')) ?></td>
                                                 <td><?= esc(number_format($item->diskon, 0, ',', '.')) ?></td>
                                                 <td><?= esc(number_format($item->total_harga, 0, ',', '.')) ?></td>
@@ -177,7 +192,7 @@ foreach ($detail_pembelian as $row) {
                                                         class="form-control jumlah-retur"
                                                         name="items[<?= $index ?>][jumlah_retur]"
                                                         min="1"
-                                                        max="<?= esc($item->jumlah) ?>"
+                                                        max="<?= (int) $capacity['returnable'] ?>"
                                                         disabled>
                                                 </td>
 
@@ -196,7 +211,8 @@ foreach ($detail_pembelian as $row) {
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="submit" class="btn btn-success">Simpan Retur</button>
+                            <?php $hasReturnable = count(array_filter($items, static fn ($detail) => ($return_availability[(int) $detail->iddetail_pembelian]['returnable'] ?? 0) > 0)) > 0; ?>
+                            <button type="submit" class="btn btn-success" <?= $hasReturnable ? '' : 'disabled' ?>><?= $hasReturnable ? 'Simpan Retur' : 'Belum Ada Barang Siap Retur' ?></button>
                         </div>
                     </form>
                 </div>
@@ -254,6 +270,7 @@ foreach ($detail_pembelian as $row) {
         $.fn.dataTable.ext.search = []; // reset filter lama
 
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+            if (settings.nTable.id !== 'zero_config') return true;
             // Ambil data dari kolom (sesuaikan index kolommu!)
             const dateText = data[1]; // kolom tanggal
             const unitName = data[3].toLowerCase(); // kolom unit

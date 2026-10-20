@@ -1,3 +1,4 @@
+<?= view('transaksi/purchase_batch_picker') ?>
 <style>
     /* Pemilih sparepart — daftar pilih, bukan tabel padat */
     .service-sp-search {
@@ -281,7 +282,7 @@
                 <th>Harga</th>
                 <th>Stok Akhir</th>
                 <th>Qty</th>
-                <th>Batch asal</th>
+                <th>Supplier / Nota Asal</th>
                 <th>Diskon</th>
                 <th>Total</th>
                 <th>Aksi</th>
@@ -303,19 +304,12 @@
     <div class="mb-3">
         <label class="form-label">Garansi</label>
         <select class="form-select" name="garansi" id="garansiSelect" onchange="cekGaransi(this)">
-            <option selected disabled>---Pilih Garansi---</option>
-            <option value="0">Tidak Ada</option>
-            <option value="7">1 Minggu</option>
-            <option value="30">1 Bulan</option>
-            <option value="60">2 Bulan</option>
-            <option value="180">6 Bulan</option>
-            <option value="360">1 Tahun</option>
-            <option value="720">2 Tahun</option>
-            <option value="999">Selamanya</option>
+            <option value="default">Gunakan default Kartu Harga item terpilih</option>
+            <option value="">---Pilih Garansi---</option>
+            <?php foreach (\App\Services\Service\WarrantyTerm::OPTIONS as $code => $label): ?>
+                <option value="<?= esc($code, 'attr') ?>"><?= esc($label) ?></option>
+            <?php endforeach; ?>
         </select>
-
-        <!-- Input manual akan muncul kalau pilih 'manual' -->
-        <input type="text" class="form-control mt-2 d-none" name="garansi_manual" id="garansiManual" placeholder="Masukkan garansi dalam hari (contoh: 45 )">
     </div>
 
     <div class="mb-3">
@@ -379,6 +373,7 @@
         const harga = Number(item.harga) || 0;
         const hpp = Number(item.harga_beli) || 0;
         const stok = Number(item.stok_akhir) || 0;
+        const warranty = item.garansi_opsi_default || '';
         const isChecked = document.getElementById('row-' + id) ? ' checked' : '';
 
         let meta = '<span class="service-sp-code">' + escapeSparepart(kode || '-') + '</span>';
@@ -395,12 +390,13 @@
             meta += '<span class="service-sp-meta-item"><i class="bi bi-tag"></i>HPP Rp ' + sparepartFormatter.format(hpp) + '</span>';
         }
 
-        return '<label class="service-sp-item">' +
+        return '<div class="service-sp-choice"><label class="service-sp-item">' +
             '<input type="checkbox" class="service-sp-item__input sparepart-check"' +
             ' data-id="' + escapeSparepart(id) + '"' +
             ' data-kode="' + escapeSparepart(kode) + '"' +
             ' data-nama="' + escapeSparepart(nama) + '"' +
             ' data-harga="' + harga + '"' +
+            ' data-garansi-default="' + escapeSparepart(warranty) + '"' +
             ' data-stok="' + stok + '"' + isChecked + '>' +
             '<span class="service-sp-item__box">' +
             '<span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>' +
@@ -413,7 +409,7 @@
             '<span class="service-sp-stock' + (stok <= 2 ? ' is-low' : '') + '">Stok ' + sparepartFormatter.format(stok) + '</span>' +
             '</span>' +
             '</span>' +
-            '</label>';
+            '</label><div class="service-origin-panel border rounded p-3 mb-3" hidden><label class="form-label">Supplier / nota asal barang yang dipakai</label><select class="form-select origin-choice" aria-label="Supplier / nota asal barang yang dipakai"><option value="">Centang barang untuk melihat supplier</option></select><small>Pilih sesuai label barang/nota. Pilihan ini untuk pelacakan asal; HPP tetap rata-rata.</small></div></div>';
     }
 
     function updateSparepartSelection() {
@@ -430,6 +426,16 @@
 
     document.addEventListener('change', function(event) {
         if (event.target && event.target.classList && event.target.classList.contains('sparepart-check')) {
+            const warrantySelect = document.getElementById('garansiSelect');
+            const selected = Array.from(document.querySelectorAll('#sparepart-modal-body .sparepart-check:checked'));
+            if (warrantySelect && selected.length > 0) {
+                const defaults = selected.map((input) => input.getAttribute('data-garansi-default'));
+                if (defaults.every((value) => value !== '') && new Set(defaults).size === 1) {
+                    warrantySelect.value = 'default';
+                } else if (warrantySelect.value === 'default') {
+                    warrantySelect.value = '';
+                }
+            }
             updateSparepartSelection();
         }
     });
@@ -528,7 +534,7 @@
 
             // Cek apakah sparepart sudah ada di tabel
             if (!document.getElementById(`row-${id}`)) {
-                addSparepartRow(id, nama, harga, 1, 0, stokAkhir);
+                addSparepartRow(id, nama, harga, 1, 0, stokAkhir, checkbox.dataset.purchaseDetailId || null);
             }
         });
 
@@ -553,7 +559,7 @@
             <td><input type="text" class="form-control harga" name="produk[${nextIndex}][harga]" value="Rp ${formatNumber(harga)}"></td>
             <td><input type="text" class="form-control" value="${formatNumber(stokAkhir)}" readonly></td>
             <td><input type="number" class="form-control qty" name="produk[${nextIndex}][jumlah]" value="${jumlah}" min="1"></td>
-            <td><select class="form-select origin-batch" name="produk[${nextIndex}][purchase_detail_id]"><option value="">Asal belum diketahui</option></select><small class="text-muted">Pilih hanya jika batch fisik dapat dipastikan.</small></td>
+            <td><select class="form-select origin-batch" aria-label="Supplier dan nota asal" name="produk[${nextIndex}][purchase_detail_id]"><option value="">Belum diketahui — supplier tidak terlacak</option></select><small class="text-muted">Pilih supplier/nota sesuai barang fisik untuk penelusuran garansi. HPP tetap rata-rata; pilihan kosong dicatat sebagai asal belum diketahui.</small></td>
             <td><input type="text" class="form-control diskon-item" name="produk[${nextIndex}][diskon]" value="Rp ${formatNumber(diskon)}" min="0"></td>
             <td><input type="text" class="form-control total" name="produk[${nextIndex}][total]" readonly></td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">Hapus</button></td>
@@ -572,7 +578,7 @@
                 const option = document.createElement('option');
                 option.value = batch.iddetail_pembelian;
                 option.textContent = (batch.nama_suplier || 'Supplier tidak tercatat') + ' — ' +
-                    (batch.no_nota_supplier || 'Nota tanpa nomor') + ' — ' + batch.tanggal + ' (masuk ' + batch.jumlah + ')';
+                    (batch.no_nota_supplier || batch.no_batch || 'Nota tanpa nomor') + ' — ' + batch.tanggal + ' (sisa ' + (batch.available_quantity ?? batch.jumlah) + ')';
                 select.appendChild(option);
             });
             if (originId && !Array.from(select.options).some(option => option.value === String(originId))) {
@@ -722,13 +728,6 @@
 
 <script>
     function cekGaransi(select) {
-        const manualInput = document.getElementById('garansiManual');
-        if (select.value === 'manual') {
-            manualInput.classList.remove('d-none');
-            manualInput.setAttribute("required", "required");
-        } else {
-            manualInput.classList.add('d-none');
-            manualInput.removeAttribute("required");
-        }
+        return select.value;
     }
 </script>

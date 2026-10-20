@@ -10,13 +10,13 @@ final class KartuHargaWarrantyDefaultTest extends TestCase
 {
     public function testUniformWarrantyDefaultsCanBeApplied(): void
     {
-        self::assertSame(30, KartuHargaWarrantyDefault::resolve([30, '30', 30]));
-        self::assertSame(0, KartuHargaWarrantyDefault::resolve([0, '0']));
+        self::assertSame('bulan_1', KartuHargaWarrantyDefault::resolve(['bulan_1', 'bulan_1']));
+        self::assertSame('non_garansi', KartuHargaWarrantyDefault::resolve(['non_garansi']));
     }
 
     public function testEmptyMissingAndMixedDefaultsAreRejected(): void
     {
-        foreach ([[], [null], [30, null], [7, 30]] as $values) {
+        foreach ([[], [null], ['bulan_1', null], ['hari_7', 'bulan_1']] as $values) {
             try {
                 KartuHargaWarrantyDefault::resolve($values);
                 self::fail('Expected an invalid default to be rejected.');
@@ -26,9 +26,9 @@ final class KartuHargaWarrantyDefaultTest extends TestCase
         }
     }
 
-    public function testOutOfRangeWarrantyIsRejected(): void
+    public function testUnknownWarrantyIsRejected(): void
     {
         $this->expectException(RuntimeException::class);
-        KartuHargaWarrantyDefault::resolve([10000]);
+        KartuHargaWarrantyDefault::resolve(['9999']);
     }
 }

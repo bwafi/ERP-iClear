@@ -13,7 +13,7 @@ final class ProductTypeReview
         $this->db = $db;
     }
 
-    public function rows(int $offset = 0, int $limit = 100): array
+    public function rows(int $offset = 0, int $limit = 100, int $itemId = 0): array
     {
         $sql = <<<'SQL'
 SELECT b.idbarang, b.kode_barang, b.nama_barang, b.jenis_item, k.nama_kategori,
@@ -29,18 +29,22 @@ LEFT JOIN (SELECT barang_idbarang, SUM(jumlah) AS jumlah FROM service_sparepart 
     ON s.barang_idbarang = b.idbarang
 LEFT JOIN (SELECT barang_idbarang, SUM(jumlah) AS jumlah FROM detail_penjualan GROUP BY barang_idbarang) j
     ON j.barang_idbarang = b.idbarang
-WHERE b.deleted = '0' ORDER BY b.idbarang LIMIT ? OFFSET ?
+WHERE b.deleted = '0' AND (? = 0 OR b.idbarang = ?) ORDER BY b.idbarang LIMIT ? OFFSET ?
 SQL;
-        $rows = $this->db->query($sql, [$limit, $offset])->getResultArray();
+        $rows = $this->db->query($sql, [$itemId, $itemId, $limit, $offset])->getResultArray();
         foreach ($rows as &$row) {
             [$row['usulan'], $row['alasan'], $row['ambigu']] = self::suggest($row);
         }
         return $rows;
     }
 
-    public function count(): int
+    public function count(int $itemId = 0): int
     {
-        return $this->db->table('barang')->where('deleted', '0')->countAllResults();
+        $builder = $this->db->table('barang')->where('deleted', '0');
+        if ($itemId > 0) {
+            $builder->where('idbarang', $itemId);
+        }
+        return $builder->countAllResults();
     }
 
     public static function suggest(array $row): array

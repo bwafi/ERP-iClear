@@ -60,8 +60,18 @@ class BarangRusak extends BaseController
 
     public function input()
     {
+        $claimId = (int) $this->request->getGet('claim_id');
+        if ($claimId > 0) {
+            try {
+                $origin = (new \App\Services\Inventory\ClaimDamagedOrigin(Database::connect()))
+                    ->get($claimId, (int) session('ID_UNIT'));
+                return view('template', ['body' => 'stok/input_barang_rusak_klaim', 'origin' => $origin]);
+            } catch (\DomainException $error) {
+                return redirect()->to(base_url('/input_barang_rusak'))->with('gagal', $error->getMessage());
+            }
+        }
         $claims = Database::connect()->table('riwayat_claim_garansi claim')
-            ->select('claim.idriwayat_claim_garansi')
+            ->select('claim.idriwayat_claim_garansi, service.no_service')
             ->join('service', 'service.idservice = claim.service_idservice')
             ->where('service.unit_idunit', (int) session('ID_UNIT'))
             ->orderBy('claim.idriwayat_claim_garansi', 'DESC')
@@ -71,6 +81,7 @@ class BarangRusak extends BaseController
             'body' => 'stok/input_barang_rusak',
             'detail_pembelian' => $this->DetailPembelianModel->getDetailAll(),
             'unit' => $this->UnitModel->getUnit(),
+            'claimChoices' => $claims,
             'warrantyClaims' => array_map(static function ($claim) {
                 return (int) $claim->idriwayat_claim_garansi;
             }, $claims)
@@ -135,7 +146,7 @@ class BarangRusak extends BaseController
                 $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
                 $dateErrors = \DateTimeImmutable::getLastErrors();
                 $key = ($unknownOrigin ? 'unknown' : $purchaseId . ':' . $batch) . ':' . $productId;
-                if ($purchaseId <= 0 || $productId <= 0 || $quantity <= 0 || $batch === '' || isset($seen[$key])
+                if ((! $unknownOrigin && ($purchaseId <= 0 || $batch === '')) || $productId <= 0 || $quantity <= 0 || isset($seen[$key])
                     || ! $parsedDate || $parsedDate->format('Y-m-d') !== $date
                     || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))) {
                     throw new \RuntimeException('Baris barang rusak tidak valid.');
@@ -150,6 +161,10 @@ class BarangRusak extends BaseController
                     throw new \RuntimeException('ID klaim tidak valid.');
                 }
 
+                if ($unknownOrigin && $claimId <= 0) {
+                    throw new \DomainException('Stok rusak biasa memerlukan sumber pembelian yang terbukti. Barang customer dicatat melalui pilihan klaim.');
+                }
+                if (! $unknownOrigin) {
                 $purchase = $db->query(
                     'SELECT unit_idunit FROM ' . $db->prefixTable('pembelian') . ' WHERE idpembelian = ? FOR UPDATE',
                     [$purchaseId]
@@ -175,20 +190,26 @@ class BarangRusak extends BaseController
                 if (! $unknownOrigin && $quantity > (int) ($purchased->jumlah ?? 0) - (int) ($previous->jumlah ?? 0)) {
                     throw new \RuntimeException('Jumlah rusak melebihi pembelian.');
                 }
+                }
                 if ($claimId > 0) {
                     $claim = $db->query(
-                        'SELECT service.idservice, service.unit_idunit, detail.jumlah FROM '
+                        'SELECT service.idservice, service.unit_idunit, COALESCE(claim.original_quantity, detail.jumlah) AS jumlah, '
+                        . 'claim.original_service_sparepart_id, claim.original_purchase_detail_id FROM '
                         . $db->prefixTable('riwayat_claim_garansi') . ' claim '
                         . 'JOIN ' . $db->prefixTable('service') . ' service ON service.idservice = claim.service_idservice '
                         . 'JOIN ' . $db->prefixTable('service_sparepart') . ' detail '
-                        . 'ON detail.service_idservice = service.idservice AND detail.barang_idbarang = ? '
+                        . 'ON detail.service_idservice = service.idservice AND ('
+                        . '(claim.original_service_sparepart_id IS NOT NULL AND detail.idservice_sparepart = claim.original_service_sparepart_id AND claim.original_barang_id = ?) '
+                        . 'OR (claim.original_service_sparepart_id IS NULL AND detail.barang_idbarang = ?)) '
                         . 'WHERE claim.idriwayat_claim_garansi = ? FOR UPDATE',
-                        [$productId, $claimId]
+                        [$productId, $productId, $claimId]
                     )->getRow();
                     if (! $claim || (int) $claim->unit_idunit !== $unitId) {
                         throw new \RuntimeException('Klaim tidak sesuai barang atau unit.');
                     }
-                    $serviceOrigin = $db->table('service_sparepart')
+                    $serviceOrigin = $claim->original_service_sparepart_id !== null
+                        ? (object) ['source_purchase_detail_id' => $claim->original_purchase_detail_id]
+                        : $db->table('service_sparepart')
                         ->select('source_purchase_detail_id')
                         ->where('service_idservice', (int) $claim->idservice)
                         ->where('barang_idbarang', $productId)->get()->getRow();
@@ -215,7 +236,8 @@ class BarangRusak extends BaseController
                         ->where('barang_id', $productId)
                         ->where('claim_id <', $claimId)
                         ->orderBy('claim_id', 'DESC')->get()->getRow();
-                    $maxReturned = (int) ($priorIssue->jumlah ?? $claim->jumlah);
+                    $maxReturned = $claim->original_service_sparepart_id !== null
+                        ? (int) $claim->jumlah : (int) ($priorIssue->jumlah ?? $claim->jumlah);
                     $damaged = $db->table('barang_rusak')->selectSum('jumlah')
                         ->where('claim_id', $claimId)
                         ->where('barang_idbarang', $productId)->get()->getRow();
@@ -257,7 +279,9 @@ class BarangRusak extends BaseController
         } catch (\Throwable $error) {
             $db->transRollback();
             log_message('error', 'BarangRusak::insert_barang_rusak gagal: ' . $error->getMessage());
-            return redirect()->back()->with('gagal', 'Barang rusak tidak dapat disimpan. Periksa jumlah, nota, dan unit.');
+            $message = $error instanceof \DomainException ? $error->getMessage()
+                : 'Barang rusak tidak dapat disimpan. Periksa jumlah tersisa, nota asal, dan unit; jangan ulangi dengan supplier lain.';
+            return redirect()->back()->with('gagal', $message);
         }
     }
 }

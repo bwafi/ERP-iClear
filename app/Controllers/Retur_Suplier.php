@@ -8,6 +8,7 @@ use App\Models\ModelAuth;
 use App\Models\ModelReturSuplier;
 use App\Models\ModelDetailPembelian;
 use App\Services\Inventory\SupplierReturnQuantity;
+use App\Services\Inventory\SupplierReturnAvailability;
 
 class Retur_Suplier extends BaseController
 
@@ -33,6 +34,7 @@ class Retur_Suplier extends BaseController
             'kategori' => $this->KategoriModel->getKategori(),
             'detail_pembelian' => $this->DetailPembelianModel->getDetailAll(),
             'retur_suplier' => $this->ReturSuplierModel->getReturPembelian(),
+            'return_availability' => (new SupplierReturnAvailability(Database::connect()))->forUnit((int) ($akun->ID_UNIT ?? 0)),
             'body'  => 'retur/retur_suplier'
         );
         return view('template', $data);
@@ -66,7 +68,7 @@ class Retur_Suplier extends BaseController
                 [$useridunit]
             )->getRow();
             if (! $unit) {
-                throw new \RuntimeException('Unit retur tidak ditemukan.');
+                    throw new \DomainException('Unit retur tidak ditemukan.');
             }
 
             $lastRetur = $this->ReturSuplierModel
@@ -84,12 +86,12 @@ class Retur_Suplier extends BaseController
                 $rawRequested = $item['jumlah_retur'] ?? null;
                 if (! is_scalar($rawDetailId) || ! ctype_digit((string) $rawDetailId)
                     || ! is_scalar($rawRequested) || ! ctype_digit((string) $rawRequested)) {
-                    throw new \RuntimeException('Detail atau jumlah retur tidak valid.');
+                    throw new \DomainException('Detail atau jumlah retur tidak valid.');
                 }
                 $detailId = (int) $rawDetailId;
                 $requested = (int) $rawRequested;
                 if ($detailId <= 0 || $requested <= 0 || isset($seen[$detailId])) {
-                    throw new \RuntimeException('Detail pembelian retur tidak valid.');
+                    throw new \DomainException('Detail pembelian retur tidak valid.');
                 }
                 $seen[$detailId] = true;
 
@@ -104,10 +106,10 @@ class Retur_Suplier extends BaseController
                 )->getRow();
                 if (! $purchase || (int) $purchase->unit_idunit !== $useridunit
                     || (int) $purchase->suplier_id_suplier <= 0) {
-                    throw new \RuntimeException('Detail pembelian tidak sesuai unit atau supplier retur.');
+                    throw new \DomainException('Pembelian harus berasal dari unit akun yang sama dan memiliki supplier tercatat.');
                 }
                 if ($supplierId !== null && $supplierId !== (int) $purchase->suplier_id_suplier) {
-                    throw new \RuntimeException('Satu dokumen retur hanya boleh berisi barang dari satu supplier.');
+                    throw new \DomainException('Satu dokumen retur hanya boleh berisi barang dari satu supplier.');
                 }
                 $supplierId = (int) $purchase->suplier_id_suplier;
 
@@ -121,7 +123,7 @@ class Retur_Suplier extends BaseController
                     (int) ($previous->jumlah ?? 0),
                     $requested
                 )) {
-                    throw new \RuntimeException('Jumlah retur melebihi sisa pembelian.');
+                    throw new \DomainException('Jumlah retur melebihi sisa pembelian.');
                 }
 
                 $legacyReturn = $db->query(
@@ -133,7 +135,7 @@ class Retur_Suplier extends BaseController
                     [$purchase->pembelian_idpembelian, $purchase->no_batch, $purchase->barang_idbarang]
                 )->getRow();
                 if ((int) ($legacyReturn->total ?? 0) > 0) {
-                    throw new \RuntimeException('Retur lama harus direkonsiliasi sebelum retur baru.');
+                    throw new \DomainException('Retur lama harus direkonsiliasi sebelum retur baru.');
                 }
 
                 $damagedRows = $db->query(
@@ -173,7 +175,7 @@ class Retur_Suplier extends BaseController
                     }
                 }
                 if ($remaining !== 0) {
-                    throw new \RuntimeException('Jumlah retur melebihi barang rusak yang tersedia.');
+                    throw new \DomainException('Barang Rusak dari supplier/nota ini yang siap diretur: ' . ($requested - $remaining) . ' unit; jumlah diminta: ' . $requested . ' unit. Catat Barang Rusak terlebih dahulu atau pilih nota asal yang sesuai.');
                 }
             }
 
@@ -196,7 +198,10 @@ class Retur_Suplier extends BaseController
         } catch (\Throwable $error) {
             $db->transRollback();
             log_message('error', 'Retur_Suplier::insert gagal: ' . $error->getMessage());
-            return redirect()->to(base_url('/retur_suplier'))->with('gagal', 'Retur supplier tidak dapat diproses. Periksa jumlah, unit, dan catatan Barang Rusak.');
+            $message = $error instanceof \DomainException
+                ? $error->getMessage()
+                : 'Retur supplier gagal disimpan. Hubungi administrator dengan waktu kejadian untuk pemeriksaan log.';
+            return redirect()->to(base_url('/retur_suplier'))->with('gagal', $message);
         }
     }
 }

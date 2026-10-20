@@ -26,6 +26,10 @@
     $serviceSisaRingkasan = max(0, $serviceTagihanRingkasan - $serviceTerkumpulRingkasan);
     $serviceLebihRingkasan = max(0, $serviceTerkumpulRingkasan - $serviceTagihanRingkasan);
 ?>
+<?php $garansiInfo = \App\Services\Service\WarrantyTerm::describe($old_service_pelanggan ?? (object) []); ?>
+<div class="alert alert-info py-2 mb-3">
+    Garansi customer: <strong><?= esc($garansiInfo['label']) ?></strong> · Mulai: <?= esc($garansiInfo['start_date'] ?: 'Belum dimulai') ?> · Berakhir: <?= esc($garansiInfo['end_date'] ?: (($old_service_pelanggan->garansi_opsi_snapshot ?? null) === 'selamanya' ? 'Tanpa kedaluwarsa' : '-')) ?> · Status: <?= esc($garansiInfo['status']) ?>
+</div>
 <style>
     /* Vertical journey rail for service intake */
     .service-rail {

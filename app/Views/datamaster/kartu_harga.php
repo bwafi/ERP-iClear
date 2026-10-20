@@ -18,6 +18,15 @@
 </style>
 
 <div class="container-fluid">
+    <?php
+    $warrantySelection = static function ($item): string {
+        if (! empty($item->garansi_opsi_default)) {
+            return (string) $item->garansi_opsi_default;
+        }
+        return $item->garansi_hari_default === null ? '__unset__' : '__legacy__';
+    };
+    $warrantyOptions = $warrantyOptions ?? \App\Services\Service\WarrantyTerm::OPTIONS;
+    ?>
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
         <div>
             <h4 class="mb-1">Kartu Harga</h4>
@@ -37,7 +46,7 @@
     </form>
 
     <div class="alert alert-light border small text-dark">
-        Harga yang tersimpan tetap menjadi snapshot transaksi lama. Perubahan berlaku mulai waktu simpan untuk transaksi baru. Garansi kosong berarti <strong>Belum diatur</strong>; angka 0 berarti tanpa garansi. Garansi transaksi dipilih eksplisit saat proses service.
+        Perubahan harga dan garansi hanya berlaku untuk transaksi baru. <strong>Belum Diatur</strong>, <strong>Non Garansi</strong>, dan <strong>Selamanya</strong> memiliki arti berbeda. Nilai garansi lama tidak diubah otomatis; pilih opsi baru secara eksplisit bila ingin menggantinya.
     </div>
 
     <div class="price-table-wrap table-responsive">
@@ -59,8 +68,13 @@
                         </form>
                     </td>
                     <td>
-                        <label class="visually-hidden" for="warranty-<?= (int) $item->idbarang ?>">Garansi default dalam hari</label>
-                        <input class="form-control" form="<?= esc($formId) ?>" style="min-width:130px" id="warranty-<?= (int) $item->idbarang ?>" name="garansi_hari_default" type="number" min="0" max="9999" value="<?= $item->garansi_hari_default === null ? '' : (int) $item->garansi_hari_default ?>" placeholder="Belum diatur" aria-label="Garansi default dalam hari <?= esc($item->kode_barang) ?>">
+                        <label class="visually-hidden" for="warranty-<?= (int) $item->idbarang ?>">Ketentuan garansi</label>
+                        <select class="form-select" form="<?= esc($formId) ?>" style="min-width:190px" id="warranty-<?= (int) $item->idbarang ?>" name="garansi_opsi_default" aria-label="Ketentuan garansi <?= esc($item->kode_barang) ?>">
+                            <?php $selectedWarranty = $warrantySelection($item); ?>
+                            <?php if ($selectedWarranty === '__legacy__'): ?><option value="__legacy__" selected>Nilai lama: <?= (int) $item->garansi_hari_default ?> hari (pertahankan)</option><?php endif; ?>
+                            <option value="__unset__" <?= $selectedWarranty === '__unset__' ? 'selected' : '' ?>>Belum Diatur</option>
+                            <?php foreach ($warrantyOptions as $code => $label): ?><option value="<?= esc($code) ?>" <?= $selectedWarranty === $code ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?>
+                        </select>
                     </td>
                     <td><button form="<?= esc($formId) ?>" class="btn btn-outline-primary" type="submit">Simpan</button></td>
                 </tr>
@@ -78,7 +92,14 @@
                 <form class="price-card__fields" method="post" action="<?= base_url('produk/kartu-harga/simpan') ?>">
                     <?= csrf_field() ?><input type="hidden" name="idbarang" value="<?= (int) $item->idbarang ?>">
                     <div><label for="mobile-price-<?= (int) $item->idbarang ?>">Harga jual (Rp)</label><input class="form-control" id="mobile-price-<?= (int) $item->idbarang ?>" name="harga" inputmode="numeric" pattern="[0-9., ]+" value="<?= (int) $item->harga ?>" required></div>
-                    <div><label for="mobile-warranty-<?= (int) $item->idbarang ?>">Garansi default (hari)</label><input class="form-control" id="mobile-warranty-<?= (int) $item->idbarang ?>" name="garansi_hari_default" type="number" min="0" max="9999" value="<?= $item->garansi_hari_default === null ? '' : (int) $item->garansi_hari_default ?>" placeholder="Belum diatur"></div>
+                    <div><label for="mobile-warranty-<?= (int) $item->idbarang ?>">Ketentuan garansi</label>
+                        <?php $selectedWarranty = $warrantySelection($item); ?>
+                        <select class="form-select" id="mobile-warranty-<?= (int) $item->idbarang ?>" name="garansi_opsi_default">
+                            <?php if ($selectedWarranty === '__legacy__'): ?><option value="__legacy__" selected>Nilai lama: <?= (int) $item->garansi_hari_default ?> hari (pertahankan)</option><?php endif; ?>
+                            <option value="__unset__" <?= $selectedWarranty === '__unset__' ? 'selected' : '' ?>>Belum Diatur</option>
+                            <?php foreach ($warrantyOptions as $code => $label): ?><option value="<?= esc($code) ?>" <?= $selectedWarranty === $code ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?>
+                        </select>
+                    </div>
                     <button class="btn btn-outline-primary" type="submit">Simpan perubahan</button>
                 </form>
             </article>
@@ -99,7 +120,7 @@
                 <thead><tr><th>Waktu</th><th>ID / Nama</th><th>Harga sebelumnya → baru</th><th>Garansi sebelumnya → baru</th><th>Petugas</th></tr></thead>
                 <tbody>
                 <?php foreach ($history as $entry): ?>
-                    <tr><td><?= esc($entry->created_at) ?></td><td><?= esc($entry->kode_barang . ' · ' . $entry->nama_barang) ?></td><td>Rp <?= number_format((int) $entry->harga_sebelum, 0, ',', '.') ?> → Rp <?= number_format((int) $entry->harga_sesudah, 0, ',', '.') ?></td><td><?= $entry->garansi_sebelum === null ? 'Belum diatur' : (int) $entry->garansi_sebelum . ' hari' ?> → <?= $entry->garansi_sesudah === null ? 'Belum diatur' : (int) $entry->garansi_sesudah . ' hari' ?></td><td><?= esc($entry->NAMA_AKUN ?? 'Akun tidak diketahui') ?></td></tr>
+                    <tr><td><?= esc($entry->created_at) ?></td><td><?= esc($entry->kode_barang . ' · ' . $entry->nama_barang) ?></td><td>Rp <?= number_format((int) $entry->harga_sebelum, 0, ',', '.') ?> → Rp <?= number_format((int) $entry->harga_sesudah, 0, ',', '.') ?></td><td><?= esc(\App\Services\Service\WarrantyTerm::label($entry->garansi_opsi_sebelum ?? null, $entry->garansi_sebelum)) ?> → <?= esc(\App\Services\Service\WarrantyTerm::label($entry->garansi_opsi_sesudah ?? null, $entry->garansi_sesudah)) ?></td><td><?= esc($entry->NAMA_AKUN ?? 'Akun tidak diketahui') ?></td></tr>
                 <?php endforeach; ?>
                 <?php if ($history === []): ?><tr><td colspan="5" class="text-center text-muted">Belum ada perubahan harga/garansi.</td></tr><?php endif; ?>
                 </tbody>

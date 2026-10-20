@@ -73,6 +73,8 @@
                         <th>Unit</th>
                         <th>HPP</th>
                         <th>Sub Total</th>
+                        <th>Jumlah Keluar</th>
+                        <th>Supplier / Nota Asal</th>
                         <th width="180">Action</th>
                     </tr>
                 </thead>
@@ -91,6 +93,19 @@
 
     function rupiah(num) {
         return 'Rp ' + Number(num).toLocaleString('id-ID');
+    }
+
+    function escapeOrigin(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
+    }
+
+    function originDescription(row) {
+        if (!row.source_purchase_detail_id) {
+            return 'Belum diketahui — batch asal belum tercatat saat pemakaian.';
+        }
+        return (row.source_nama_suplier || 'Supplier belum tercatat') + ' · ' +
+            (row.source_nota_supplier || row.source_batch || 'Nomor nota belum tercatat') +
+            ' · Batch #' + row.source_purchase_detail_id;
     }
 
     function fmtDate(data) {
@@ -168,6 +183,17 @@
                     }
                 },
                 {
+                    data: 'jumlah',
+                    render: function(d) { return Number(d).toLocaleString('id-ID') + ' unit'; }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(d, t, row) {
+                        return '<span class="d-inline-block text-wrap" style="min-width:220px">' + escapeOrigin(originDescription(row)) + '</span>';
+                    }
+                },
+                {
                     data: null,
                     orderable: false,
                     render: function(d, t, r, m) {
@@ -234,6 +260,8 @@
             h += '<p><strong>Nama Sparepart:</strong> ' + r.nama_barang + '</p>';
             h += '<p><strong>Unit:</strong> ' + r.NAMA_UNIT + '</p>';
             h += '<p><strong>Jumlah:</strong> ' + r.jumlah + ' unit</p>';
+            h += '<p><strong>Supplier / Nota Asal:</strong> ' + escapeOrigin(originDescription(r)) + '</p>';
+            h += '<p class="small text-muted">Asal batch melacak barang fisik. HPP tetap rata-rata per barang dan cabang.</p>';
             h += '<p><strong>HPP:</strong> ' + rupiah(r.hpp_penjualan) + '</p>';
             h += '<p><strong>Sub Total:</strong> ' + rupiah(r.sub_total) + '</p>';
             h += '</div></div></div></div>';

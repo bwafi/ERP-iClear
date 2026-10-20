@@ -1,7 +1,21 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<div class="card"><div class="card-body">
+    <h4>Barang dari Klaim Garansi Customer</h4>
+    <p>Pilih nomor service dan klaim. Barang serta nota asal ditarik dari klaim; stok jual tidak berkurang lagi.</p>
+    <form method="get" action="<?= base_url('input_barang_rusak') ?>">
+        <label class="form-label" for="damage-claim">Service / Klaim</label>
+        <select class="form-select mb-3" id="damage-claim" name="claim_id" required>
+            <option value="">Pilih klaim customer</option>
+            <?php foreach ($claimChoices ?? [] as $claim): ?>
+                <option value="<?= (int) $claim->idriwayat_claim_garansi ?>"><?= esc($claim->no_service) ?> — Klaim #<?= (int) $claim->idriwayat_claim_garansi ?></option>
+            <?php endforeach ?>
+        </select>
+        <button class="btn btn-primary">Buka Barang dari Klaim</button>
+    </form>
+</div></div>
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Barang Rusak</h4>
+        <h4 class="fw-semibold mb-0">Kerusakan Stok Biasa</h4>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item">
@@ -169,7 +183,6 @@
 
 
 <script>
-    const warrantyClaimIds = <?= json_encode($warrantyClaims ?? []) ?>;
     $(document).ready(function() {
 
         // Fungsi untuk cek apakah ada item, lalu tampil/sembunyikan tombol simpan
@@ -200,7 +213,6 @@
                 const jumlah = $(this).data('jumlah');
                 const idbarang = $(this).data('idbarang');
                 const idpembelian = $(this).data('idpembelian');
-                const claimOptions = warrantyClaimIds.map(id => `<option value="${id}">Klaim #${id}</option>`).join('');
 
                 const html = `
                     <div class="card mb-3 p-3 border rounded item-row">
@@ -263,15 +275,11 @@
                                 <label class="form-label">Asal fisik barang</label>
                                 <select class="form-select" name="asal_dokumen[]">
                                     <option value="terverifikasi">Nota pembelian ini terbukti sebagai asal</option>
-                                    <option value="belum_diketahui">Belum diketahui — jangan kaitkan supplier</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Klaim Garansi Customer (opsional)</label>
-                                <select class="form-select" name="claim_id[]">
-                                    <option value="">Bukan barang dari klaim customer</option>
-                                    ${claimOptions}
-                                </select>
+                                <input type="hidden" name="claim_id[]" value="">
+                                <p>Untuk stok rusak di toko. Barang yang diterima dari customer dicatat lewat pilihan klaim di bagian atas.</p>
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label">Keterangan</label>

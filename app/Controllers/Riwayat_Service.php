@@ -30,6 +30,8 @@ use App\Services\Service\ServiceDpService;
 use App\Services\Service\ServiceHppSnapshot;
 use App\Services\Service\SparepartKeluarHardDeleteService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
+use App\Services\Service\WarrantyTerm;
+use App\Services\Service\KartuHargaWarrantyDefault;
 use App\Models\ModelServiceDp;
 
 class Riwayat_Service extends BaseController
@@ -304,9 +306,6 @@ class Riwayat_Service extends BaseController
         $produkData = $this->request->getPost('produk');
         $produkData = is_array($produkData) ? $produkData : [];
         $garansi = $this->request->getPost('garansi');
-        if ($garansi === 'manual') {
-            $garansi = $this->request->getPost('garansi_manual');
-        }
 
         $urlKembali = base_url('detail/riwayat_service/' . $idservice . '?tab=sparepart');
         if ($idservice <= 0) {
@@ -323,6 +322,31 @@ class Riwayat_Service extends BaseController
             )->getRow();
             if (! $service) {
                 throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+            $warrantySubmitted = $garansi !== null && $garansi !== '';
+            if ($garansi === 'default') {
+                $selectedIds = array_values(array_unique(array_map(static fn ($item): int => (int) ($item['id'] ?? 0), $produkData)));
+                if ($selectedIds === [] || in_array(0, $selectedIds, true)) {
+                    throw new \RuntimeException('Pilih sparepart sebelum menggunakan garansi default Kartu Harga.');
+                }
+                $defaults = $db->table('barang')->select('idbarang, garansi_opsi_default')
+                    ->whereIn('idbarang', $selectedIds)->where('deleted', 0)->get()->getResult();
+                if (count($defaults) !== count($selectedIds)) {
+                    throw new \RuntimeException('Item sparepart tidak ditemukan untuk pengaturan garansi Kartu Harga.');
+                }
+                $garansi = KartuHargaWarrantyDefault::resolve(array_map(static fn ($item) => $item->garansi_opsi_default, $defaults));
+                $warrantySubmitted = true;
+            }
+            if ($warrantySubmitted && ! WarrantyTerm::isValid((string) $garansi)) {
+                throw new \RuntimeException('Ketentuan garansi tidak valid.');
+            }
+            $warrantyOption = $warrantySubmitted
+                ? (string) $garansi
+                : (($service->garansi_opsi_snapshot ?? null) ?: WarrantyTerm::UNSET);
+            $warrantyDays = $warrantySubmitted ? WarrantyTerm::compatibilityDays($warrantyOption) : (int) ($service->garansi_hari ?? 0);
+            if ((int) ($service->status_service ?? 0) >= 4 && ($warrantyDays !== (int) ($service->garansi_hari ?? 0)
+                || $warrantyOption !== ($service->garansi_opsi_snapshot ?? null))) {
+                throw new \RuntimeException('Snapshot garansi service yang sudah selesai tidak dapat diubah.');
             }
             $claimed = $db->table('riwayat_claim_garansi')
                 ->where('service_idservice', $idservice)
@@ -342,7 +366,10 @@ class Riwayat_Service extends BaseController
             );
 
             if (! $this->ServiceModel->updateService($idservice, [
-                'garansi_hari' => (int) $garansi,
+                'garansi_hari' => $warrantyDays,
+                'garansi_opsi_snapshot' => $warrantyOption,
+                'garansi_mulai' => (int) ($service->status_service ?? 0) >= 4 ? $service->garansi_mulai : null,
+                'garansi_akhir' => (int) ($service->status_service ?? 0) >= 4 ? $service->garansi_akhir : null,
             ])) {
                 throw new \RuntimeException('Gagal memperbarui garansi service.');
             }
@@ -382,7 +409,8 @@ class Riwayat_Service extends BaseController
                     $currentHpp
                 );
                 $batchByBarangId[$id] = $batchOrigin->validate(
-                    \App\Services\Inventory\PurchaseBatchOrigin::selection($produk['purchase_detail_id'] ?? ''),
+                    $batchOrigin->serviceSelection($produk['purchase_detail_id'] ?? '', $existingMap[$id] ?? null,
+                        $id, (int) ($service->unit_idunit ?? session('ID_UNIT'))),
                     $id,
                     (int) ($service->unit_idunit ?? session('ID_UNIT')),
                     $jumlah,
@@ -1209,6 +1237,15 @@ class Riwayat_Service extends BaseController
 
         // Tanggal pengakuan: tanggal pengambilan (WIB), bukan tanggal intake.
         $tanggal = $wibTime->format('Y-m-d');
+        $startDate = $dataservice->garansi_mulai ?: $tanggal;
+        $warrantyEnd = null;
+        $warrantyCode = isset($dataservice->garansi_opsi_snapshot) ? (string) $dataservice->garansi_opsi_snapshot : '';
+        if (WarrantyTerm::isValid($warrantyCode)) {
+            $warrantyEnd = WarrantyTerm::endDate($startDate, $warrantyCode);
+        } elseif ($warrantyCode === '' && (int) ($dataservice->garansi_hari ?? 0) > 0) {
+            $warrantyEnd = (new \DateTimeImmutable($startDate, new \DateTimeZone('Asia/Jakarta')))
+                ->modify('+' . (int) $dataservice->garansi_hari . ' days')->format('Y-m-d');
+        }
 
         $db->transBegin();
 
@@ -1216,6 +1253,8 @@ class Riwayat_Service extends BaseController
             $this->ServiceModel->updateService($idservice, [
                 'status_service'  => 4,
                 'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
+                'garansi_mulai' => $startDate,
+                'garansi_akhir' => $warrantyEnd,
             ]);
 
             // Idempotensi berbasis jurnal: bila jurnal pengambilan (tabel_referensi
@@ -1387,7 +1426,7 @@ class Riwayat_Service extends BaseController
     {
         $db = \Config\Database::connect();
 
-        $selected_unit = $this->request->getGet('unit') ?? 1;
+        $selected_unit = $this->request->getGet('unit') ?? session('ID_UNIT');
         $selected_day  = $this->request->getGet('day');
 
         $list_unit = $db->table('unit')
@@ -1417,7 +1456,7 @@ class Riwayat_Service extends BaseController
         $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 1;
         $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
         
-        $selected_unit = $request->getPost('unit') ?? 1;
+        $selected_unit = $request->getPost('unit') ?? session('ID_UNIT');
         $selected_day = $request->getPost('day') ?? '';
         $year = date('Y');
 
@@ -1436,7 +1475,9 @@ class Riwayat_Service extends BaseController
             2 => 'b.nama_barang',
             3 => 'u.NAMA_UNIT',
             4 => 'dp.hpp_penjualan',
-            5 => 'dp.sub_total'
+            5 => 'dp.sub_total',
+            6 => 'dp.jumlah',
+            7 => 'supplier.nama_suplier'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
@@ -1472,6 +1513,10 @@ class Riwayat_Service extends BaseController
                 dp.sub_total,
                 dp.hpp_penjualan,
                 dp.barang_idbarang,
+                dp.source_purchase_detail_id,
+                source_detail.no_batch AS source_batch,
+                purchase.no_nota_supplier AS source_nota_supplier,
+                supplier.nama_suplier AS source_nama_suplier,
                 b.nama_barang,
                 p.tanggal,
                 u.NAMA_UNIT
@@ -1479,6 +1524,9 @@ class Riwayat_Service extends BaseController
             JOIN barang b ON b.idbarang = dp.barang_idbarang
             JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
             JOIN unit u ON u.idunit = p.unit_idunit
+            LEFT JOIN detail_pembelian source_detail ON source_detail.iddetail_pembelian = dp.source_purchase_detail_id
+            LEFT JOIN pembelian purchase ON purchase.idpembelian = source_detail.pembelian_idpembelian
+            LEFT JOIN suplier supplier ON supplier.id_suplier = purchase.suplier_id_suplier
             WHERE {$whereClause}
             ORDER BY {$orderColumnName} {$orderDir}
             LIMIT ? OFFSET ?";

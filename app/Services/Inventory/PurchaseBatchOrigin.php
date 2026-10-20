@@ -32,7 +32,7 @@ final class PurchaseBatchOrigin
 
         $hasBalances = $this->db->tableExists('inventory_batch_balances');
         $builder = $this->db->table('detail_pembelian detail')
-            ->select('detail.iddetail_pembelian, detail.jumlah, detail.tanggal, purchase.no_nota_supplier, supplier.nama_suplier')
+            ->select('detail.iddetail_pembelian, detail.no_batch, detail.jumlah, detail.tanggal, purchase.no_nota_supplier, supplier.nama_suplier')
             ->join('pembelian purchase', 'purchase.idpembelian = detail.pembelian_idpembelian')
             ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left');
         if ($hasBalances) {
@@ -48,6 +48,22 @@ final class PurchaseBatchOrigin
             ->orderBy('detail.iddetail_pembelian', 'DESC')
             ->limit(100)
             ->get()->getResultArray();
+    }
+
+    public function serviceSelection($input, ?object $existing, int $itemId, int $unitId): ?int
+    {
+        $selected = self::selection($input);
+        if ($existing !== null) {
+            $recorded = self::selection($existing->source_purchase_detail_id ?? null);
+            if ($selected !== null && $selected !== $recorded) {
+                throw new \DomainException('Asal sparepart yang sudah tercatat tidak boleh diganti tanpa review bukti historis.');
+            }
+            return $recorded;
+        }
+        if ($selected === null && $this->candidates($itemId, $unitId)) {
+            throw new \DomainException('Ada batch pembelian untuk barang ini. Pilih supplier / nota asal saat menambahkan sparepart.');
+        }
+        return $selected;
     }
 
     public function validate(?int $purchaseDetailId, int $itemId, int $unitId, int $quantity, ?string $serviceAt = null): ?int

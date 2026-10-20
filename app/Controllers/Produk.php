@@ -16,6 +16,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Models\ModelUnit;
 use App\Services\Inventory\ProductTypeReview;
 use App\Services\Inventory\ProductPriceCatalog;
+use App\Services\Service\WarrantyTerm;
 
 class Produk extends BaseController
 
@@ -56,14 +57,39 @@ class Produk extends BaseController
             return $this->response->setStatusCode(403)->setBody('Hanya administrator yang dapat melihat review tipe item.');
         }
         $page = max(1, (int) $this->request->getGet('page'));
+        $itemId = max(0, (int) $this->request->getGet('item_id'));
         $review = new ProductTypeReview(Database::connect());
         return view('template', [
             'akun' => $this->AuthModel->getById(session('ID_AKUN')),
             'body' => 'datamaster/review_tipe_item',
-            'items' => $review->rows(($page - 1) * 100),
-            'total' => $review->count(),
+            'items' => $review->rows(($page - 1) * 100, 100, $itemId),
+            'total' => $review->count($itemId),
+            'itemId' => $itemId,
+            'returnServiceId' => max(0, (int) $this->request->getGet('service_id')),
             'page' => $page,
         ]);
+    }
+
+    public function approveTipe()
+    {
+        if ((int) session('ID_AKUN') <= 0 || (int) session('ID_JABATAN') !== 1) {
+            return $this->response->setStatusCode(403)->setBody('Hanya administrator yang dapat menyetujui tipe item.');
+        }
+        $itemId = (int) $this->request->getPost('item_id');
+        $serviceId = max(0, (int) $this->request->getPost('service_id'));
+        $returnUrl = 'produk/review-tipe?item_id=' . $itemId . '&service_id=' . $serviceId;
+        try {
+            if ($this->request->getPost('confirm_type') !== 'yes') {
+                throw new \DomainException('Konfirmasikan pemeriksaan barang terlebih dahulu.');
+            }
+            (new \App\Services\Inventory\ProductTypeApproval(Database::connect()))->approve(
+                $itemId, (string) $this->request->getPost('jenis_item'), (int) session('ID_AKUN'),
+                (string) $this->request->getPost('alasan'));
+            return redirect()->to(base_url($returnUrl))->with('sukses', 'Tipe item disetujui. ID, harga, HPP historis, dan saldo tidak diubah.');
+        } catch (\Throwable $error) {
+            $message = $error instanceof \DomainException ? $error->getMessage() : 'Persetujuan tipe gagal disimpan.';
+            return redirect()->to(base_url($returnUrl))->with('gagal', $message);
+        }
     }
 
     public function kartuHarga()
@@ -73,14 +99,14 @@ class Produk extends BaseController
         }
 
         $db = Database::connect();
-        if (! $db->fieldExists('garansi_hari_default', 'barang') || ! $db->tableExists('barang_harga_history')) {
+        if (! $db->fieldExists('garansi_opsi_default', 'barang') || ! $db->tableExists('barang_harga_history')) {
             return $this->response->setStatusCode(503)->setBody('Kartu Harga belum siap: migrasi skema belum diterapkan.');
         }
         $search = trim((string) $this->request->getGet('q'));
         $page = max(1, (int) $this->request->getGet('page'));
         $unitId = (int) session('ID_UNIT');
         $builder = $db->table('barang b')
-            ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.jenis_item, b.garansi_hari_default, COALESCE(sb.stok_akhir, 0) AS stok_akhir')
+            ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.jenis_item, b.garansi_hari_default, b.garansi_opsi_default, COALESCE(sb.stok_akhir, 0) AS stok_akhir')
             ->join('stok_barang sb', 'sb.idbarang = b.idbarang AND sb.id_unit = ' . $unitId, 'left')
             ->where('b.deleted', '0');
         if ($search !== '') {
@@ -89,7 +115,7 @@ class Produk extends BaseController
         $total = (clone $builder)->countAllResults();
         $items = $builder->orderBy('b.nama_barang', 'ASC')->limit(50, ($page - 1) * 50)->get()->getResult();
         $history = $db->table('barang_harga_history h')
-            ->select('h.created_at, h.harga_sebelum, h.harga_sesudah, h.garansi_sebelum, h.garansi_sesudah, b.kode_barang, b.nama_barang, a.NAMA_AKUN')
+            ->select('h.created_at, h.harga_sebelum, h.harga_sesudah, h.garansi_sebelum, h.garansi_sesudah, h.garansi_opsi_sebelum, h.garansi_opsi_sesudah, b.kode_barang, b.nama_barang, a.NAMA_AKUN')
             ->join('barang b', 'b.idbarang = h.barang_idbarang')
             ->join('akun a', 'a.ID_AKUN = h.petugas_idakun', 'left')
             ->orderBy('h.id', 'DESC')->limit(10)->get()->getResult();
@@ -102,6 +128,7 @@ class Produk extends BaseController
             'search' => $search,
             'page' => $page,
             'totalPages' => max(1, (int) ceil($total / 50)),
+            'warrantyOptions' => WarrantyTerm::OPTIONS,
         ]);
     }
 
@@ -112,9 +139,13 @@ class Produk extends BaseController
         }
         $itemId = (int) $this->request->getPost('idbarang');
         $rawPrice = preg_replace('/[^0-9]/', '', (string) $this->request->getPost('harga'));
-        $rawWarranty = trim((string) $this->request->getPost('garansi_hari_default'));
-        if ($itemId <= 0 || $rawPrice === '' || strlen($rawPrice) > 15 || ($rawWarranty !== '' && (! ctype_digit($rawWarranty) || (int) $rawWarranty > 9999))) {
-            return redirect()->back()->with('gagal', 'Harga atau garansi tidak valid. Garansi kosong berarti belum diatur; 0 berarti tanpa garansi.');
+        $rawWarranty = trim((string) $this->request->getPost('garansi_opsi_default'));
+        $preserveLegacy = $rawWarranty === '__legacy__';
+        $clearLegacy = $rawWarranty === '__unset__';
+        $warrantyOption = $preserveLegacy || $clearLegacy ? null : $rawWarranty;
+        if ($itemId <= 0 || $rawPrice === '' || strlen($rawPrice) > 15
+            || (! $preserveLegacy && ! $clearLegacy && ! WarrantyTerm::isValid($warrantyOption))) {
+            return redirect()->back()->with('gagal', 'Harga atau pilihan garansi tidak valid. Nilai lama harus dipertahankan atau diubah secara eksplisit.');
         }
 
         $db = Database::connect();
@@ -122,8 +153,10 @@ class Produk extends BaseController
             $changed = (new ProductPriceCatalog($db))->update(
                 $itemId,
                 (int) $rawPrice,
-                $rawWarranty === '' ? null : (int) $rawWarranty,
-                (int) session('ID_AKUN')
+                $warrantyOption,
+                (int) session('ID_AKUN'),
+                $preserveLegacy,
+                $clearLegacy
             );
         } catch (\Throwable $error) {
             log_message('error', 'Kartu Harga gagal disimpan untuk item ID ' . $itemId . ': ' . $error->getMessage());

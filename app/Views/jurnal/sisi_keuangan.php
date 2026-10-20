@@ -47,7 +47,13 @@
     <?php if ($reconciliation['akun_tidak_terklasifikasi'] !== []): ?>
         Akun belum terklasifikasi: <?= esc(implode(', ', $reconciliation['akun_tidak_terklasifikasi'])) ?>.
     <?php endif; ?>
-    <strong>Belum final</strong> sampai saldo awal, nilai persediaan, dan transaksi antarcabang diverifikasi.
+    <strong>Belum Rekonsiliasi</strong> sampai saldo awal, nilai persediaan, dan transaksi antarcabang diverifikasi.
+    <p class="mb-0 mt-2">Penjelasan selisih:
+        selisih jurnal Rp <?= number_format($reconciliation['selisih_jurnal'], 0, ',', '.') ?>
+        − saldo akun belum terklasifikasi Rp <?= number_format($reconciliation['saldo_akun_tidak_terklasifikasi'], 0, ',', '.') ?>
+        + saldo laba/rugi sebelum tahun berjalan Rp <?= number_format($reconciliation['laba_sebelum_tahun_berjalan'], 0, ',', '.') ?>.
+        Saldo laba tahun sebelumnya perlu ditelusuri ke jurnal penutupan/ekuitas; angka ini belum menjadi koreksi yang disetujui.
+    </p>
 </div>
 
 <div class="alert <?= $source_exceptions['tidak_seimbang'] === [] && $source_exceptions['baris_tanpa_referensi'] === 0 && $invalid_journal_accounts === [] ? 'alert-info' : 'alert-warning' ?> mx-4">
@@ -57,6 +63,31 @@
     <?= count($invalid_journal_accounts) ?> baris dengan kode akun tidak valid/tidak terdaftar.
     Pemeriksaan ini hanya mencakup jurnal yang tercatat; kelengkapan posting terhadap semua transaksi operasional belum dibuktikan.
 </div>
+
+<?php
+$rankedSources = $source_exceptions['tidak_seimbang'];
+usort($rankedSources, static fn ($left, $right) => abs($right['selisih']) <=> abs($left['selisih']));
+?>
+<details class="card mx-4 mb-4">
+    <summary class="p-3">Rincian 50 sumber selisih terbesar dari <?= count($rankedSources) ?> referensi</summary>
+    <div class="table-responsive p-3"><table class="table table-sm">
+        <thead><tr><th>Cabang ID</th><th>Sumber</th><th>Referensi</th><th>Debit</th><th>Kredit</th><th>Selisih</th><th>Bukti</th></tr></thead>
+        <tbody>
+        <?php foreach (array_slice($rankedSources, 0, 50) as $source): ?>
+            <?php $sourceUrl = base_url('laporan_jurnal') . '?' . http_build_query([
+                'endDate' => $reconciliation_date, 'filterUnit' => $source['id_unit'],
+                'tabel_referensi' => $source['tabel_referensi'], 'id_referensi' => $source['id_referensi'],
+            ]); ?>
+            <tr><td><?= (int) $source['id_unit'] ?></td><td><?= esc($source['tabel_referensi']) ?></td>
+                <td><?= esc($source['id_referensi']) ?></td>
+                <td><?= number_format($source['debet'], 0, ',', '.') ?></td>
+                <td><?= number_format($source['kredit'], 0, ',', '.') ?></td>
+                <td><?= number_format($source['selisih'], 0, ',', '.') ?></td>
+                <td><a href="<?= esc($sourceUrl, 'attr') ?>">Lihat jurnal sumber</a></td></tr>
+        <?php endforeach ?>
+        </tbody>
+    </table></div>
+</details>
 
 <div class="card w-100 position-relative overflow-hidden mb-4">
     <div class="px-4 py-3 border-bottom">

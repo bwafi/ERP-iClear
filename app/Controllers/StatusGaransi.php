@@ -25,6 +25,8 @@ use App\Models\ModelRiwayatKlaimGaransi;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceHppSnapshot;
 use App\Services\Service\WarrantyClaimEligibility;
+use App\Services\Service\WarrantyTerm;
+use App\Services\Service\WarrantyClaimIntake;
 use App\Services\Service\WarrantyServiceAccess;
 use App\Services\Finance\WarrantyExpenseJournal;
 
@@ -117,6 +119,16 @@ class StatusGaransi extends BaseController
             $endDate
         );
 
+        $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
+        foreach ($result['data'] as $row) {
+            $term = WarrantyTerm::describe($row, $today);
+            $row->garansi_label = $term['label'];
+            $row->garansi_mulai_tampil = $term['start_date'];
+            $row->garansi_akhir_tampil = $term['end_date'];
+            $row->garansi_status = $term['status'];
+            $row->claim_eligible = WarrantyClaimEligibility::allows($row, $today);
+        }
+
         $recordsTotal = $this->ServiceModel->getRiwayatServiceTotal();
 
         return $this->response->setJSON([
@@ -150,11 +162,25 @@ class StatusGaransi extends BaseController
 
         $db = Database::connect();
         $canSeeHpp = (int) session('ID_JABATAN') === 1;
+        $originalMap = [];
+        $originals = $db->table('riwayat_claim_garansi claim')
+            ->select('claim.idriwayat_claim_garansi, barang.nama_barang, detail.no_batch, purchase.no_nota_supplier, supplier.nama_suplier')
+            ->join('barang', 'barang.idbarang = claim.original_barang_id', 'left')
+            ->join('detail_pembelian detail', 'detail.iddetail_pembelian = claim.original_purchase_detail_id', 'left')
+            ->join('pembelian purchase', 'purchase.idpembelian = detail.pembelian_idpembelian', 'left')
+            ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left')
+            ->where('claim.service_idservice', $idservice)->get()->getResultArray();
+        foreach ($originals as $original) {
+            $originalMap[(int) $original['idriwayat_claim_garansi']] = $original;
+        }
         $issuesByClaim = [];
         if ($db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
             $issues = $db->table('garansi_sparepart_keluar issue')
-                ->select('issue.claim_id, issue.jumlah, issue.hpp_satuan, barang.nama_barang')
+                ->select('issue.claim_id, issue.jumlah, issue.hpp_satuan, barang.nama_barang, source_detail.no_batch, purchase.no_nota_supplier, supplier.nama_suplier')
                 ->join('barang', 'barang.idbarang = issue.barang_id')
+                ->join('detail_pembelian source_detail', 'source_detail.iddetail_pembelian = issue.source_purchase_detail_id', 'left')
+                ->join('pembelian purchase', 'purchase.idpembelian = source_detail.pembelian_idpembelian', 'left')
+                ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left')
                 ->where('issue.service_id', $idservice)
                 ->orderBy('issue.id')->get()->getResult();
             foreach ($issues as $issue) {
@@ -163,7 +189,7 @@ class StatusGaransi extends BaseController
         }
 
         $html = '<table class="table table-sm table-bordered">
-                <thead><tr><th>#</th><th>ID Klaim</th><th>Tanggal Klaim</th><th>Sparepart Pengganti</th></tr></thead><tbody>';
+                <thead><tr><th>#</th><th>ID Klaim</th><th>Tanggal Klaim</th><th>Barang Diklaim / Asal</th><th>Sparepart Pengganti / Asal</th></tr></thead><tbody>';
 
         foreach ($riwayat as $i => $row) {
             $html .= '<tr>
@@ -171,8 +197,16 @@ class StatusGaransi extends BaseController
                     <td>' . (int) $row->idriwayat_claim_garansi . '</td>
                     <td>' . date('d-m-Y', strtotime($row->tanggal_claim)) . '</td>
                     <td>';
+            $original = $originalMap[(int) $row->idriwayat_claim_garansi] ?? null;
+            $html .= $original && $original['nama_barang'] ? esc($original['nama_barang']) . ' × ' . (int) $row->original_quantity
+                . '<br>' . esc($original['nama_suplier'] ?: 'Belum diketahui') . ' / '
+                . esc($original['no_nota_supplier'] ?: ($original['no_batch'] ?: 'Belum diketahui'))
+                : 'Klaim lama: rincian asal belum tercatat';
+            $html .= '<br>' . esc($row->claim_reason ?? '') . '</td><td>';
             foreach ($issuesByClaim[(int) $row->idriwayat_claim_garansi] ?? [] as $issue) {
                 $html .= esc($issue->nama_barang) . ' × ' . (int) $issue->jumlah;
+                $html .= '<br>' . esc($issue->nama_suplier ?: 'Belum diketahui') . ' / '
+                    . esc($issue->no_nota_supplier ?: ($issue->no_batch ?: 'Belum diketahui'));
                 if ($canSeeHpp) {
                     $html .= ' — HPP Rp ' . number_format((int) $issue->hpp_satuan, 0, ',', '.');
                 }
@@ -187,6 +221,26 @@ class StatusGaransi extends BaseController
         return $this->response->setJSON(['html' => $html]);
     }
 
+
+    public function prepare_claim($idservice)
+    {
+        if (! $this->hasWarrantyAccess()) {
+            return $this->warrantyAccessDenied();
+        }
+        $service = $this->ServiceModel->find((int) $idservice);
+        if (! $service || (int) session('ID_UNIT') <= 0
+            || (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            return $this->response->setStatusCode(403)->setBody('Service tidak sesuai unit akun.');
+        }
+        if (! WarrantyClaimEligibility::allows($service, new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta')))) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service tidak memenuhi syarat klaim garansi.');
+        }
+        $db = Database::connect();
+        $catalog = (new \App\Services\Inventory\WarrantyReplacementCatalog($db))->forUnit((int) $service->unit_idunit);
+        return view('template', ['body' => 'riwayat/klaim_garansi', 'claimService' => $service,
+            'claimOriginals' => (new WarrantyClaimIntake($db))->originals((int) $idservice),
+            'claimReplacements' => $catalog['ready'], 'pendingReplacementTypes' => $catalog['pending']]);
+    }
 
     public function claim_garansi()
     {
@@ -205,7 +259,7 @@ class StatusGaransi extends BaseController
         try {
             $serviceTable = $db->prefixTable('service');
             $service = $db->query(
-                "SELECT unit_idunit, status_service, garansi_hari, tanggal_selesai FROM {$serviceTable} WHERE idservice = ? FOR UPDATE",
+                "SELECT unit_idunit, status_service, garansi_hari, garansi_opsi_snapshot, garansi_mulai, garansi_akhir, tanggal_selesai FROM {$serviceTable} WHERE idservice = ? FOR UPDATE",
                 [$idservice]
             )->getRow();
             $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
@@ -225,12 +279,17 @@ class StatusGaransi extends BaseController
                 throw new \RuntimeException('HPP garansi lama belum memiliki histori mutasi; rekonsiliasi dahulu.');
             }
 
+            $submission = (new WarrantyClaimIntake($db))->validate(
+                $idservice, (int) $service->unit_idunit, (array) $this->request->getPost());
+
             $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
             $data = array(
                 'status_service' => 2,
                 'tanggal_bisa_diambil' => null,
                 'tanggal_selesai' => null,
                 'status_proses' => 1,
+                'garansi_mulai' => WarrantyTerm::startDate($service),
+                'garansi_akhir' => WarrantyTerm::expiryDate($service),
                 'tanggal_claim_garansi' => $wibTime->format('Y-m-d H:i:s'),
             );
             if (! $this->ServiceModel->updateService($idservice, $data)
@@ -249,18 +308,41 @@ class StatusGaransi extends BaseController
                 'service_idservice' => $idservice,
                 'tanggal_claim' => $wibTime->format('Y-m-d H:i:s'),
             );
-            if (! $this->RiwayatKlaimGaransiModel->insertRiwayat($data2)
-                || $db->transStatus() === false
-                || ! $db->transCommit()) {
+            if (! $this->RiwayatKlaimGaransiModel->insertRiwayat($data2)) {
                 throw new \RuntimeException('Riwayat klaim garansi gagal disimpan.');
             }
 
-            session()->setFlashData('sukses', 'Berhasil claim garansi service');
-            return redirect()->to(base_url('garansi_service'));
+            $claimId = (int) $db->insertID();
+            if (! $db->table('riwayat_claim_garansi')->where('idriwayat_claim_garansi', $claimId)->update([
+                'original_service_sparepart_id' => $submission['original_id'],
+                'original_barang_id' => $submission['original_item_id'],
+                'original_purchase_detail_id' => $submission['original_batch_id'],
+                'original_quantity' => $submission['quantity'], 'claim_reason' => $submission['reason'],
+            ])) {
+                throw new \RuntimeException('Rincian asal klaim gagal disimpan.');
+            }
+            if ($submission['replacement'] !== null) {
+                $products = [];
+                foreach ($this->ServiceSparepartModel->getByServiceId($idservice) as $originalPart) {
+                    $products[(int) $originalPart->barang_idbarang] = ['id' => (int) $originalPart->barang_idbarang, 'qty_tambahan' => 0];
+                }
+                $products[$submission['replacement']['id']] = $submission['replacement'];
+                $this->saveWarrantyReplacements($db, $idservice, array_values($products), 0);
+            }
+            if ($db->transStatus() === false || ! $db->transCommit()) {
+                throw new \RuntimeException('Klaim dan sparepart pengganti gagal disimpan.');
+            }
+
+            return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=sparepart'))
+                ->with('sukses', $submission['replacement'] === null
+                    ? 'Klaim jasa dicatat untuk pengerjaan ulang tanpa mutasi stok. Pengerjaan belum selesai.'
+                    : 'Klaim dicatat untuk dikerjakan. Sparepart pengganti dan jurnal tersimpan; pengerjaan belum dinyatakan selesai.');
         } catch (\Throwable $error) {
             $db->transRollback();
             log_message('error', 'StatusGaransi::claim_garansi gagal untuk service ' . $idservice . ': ' . $error->getMessage());
-            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Klaim garansi tidak dapat diproses. Periksa status dan masa garansi service.');
+            $message = $error instanceof \DomainException || $error instanceof \InvalidArgumentException
+                ? $error->getMessage() : 'Klaim tidak tersimpan. Periksa kelayakan, stok pengganti, batch, dan pemetaan jurnal garansi.';
+            return redirect()->to(base_url('garansi_service/klaim/' . $idservice))->with('gagal', $message);
         }
     }
 
@@ -270,10 +352,36 @@ class StatusGaransi extends BaseController
             return $this->warrantyAccessDenied();
         }
 
+        $ownedService = $this->ServiceModel->find((int) $idservice);
+        if (! $ownedService || (int) session('ID_UNIT') <= 0
+            || (int) $ownedService->unit_idunit !== (int) session('ID_UNIT')) {
+            return $this->response->setStatusCode(403)->setBody('Service tidak sesuai unit akun.');
+        }
+
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
         $oldsparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
+        $db = Database::connect();
+        $latestClaim = $db->table('riwayat_claim_garansi')->where('service_idservice', (int) $idservice)
+            ->orderBy('idriwayat_claim_garansi', 'DESC')->get()->getRow();
+        $issued = $latestClaim ? $db->table('garansi_sparepart_keluar issue')
+            ->select('issue.barang_id, issue.source_purchase_detail_id, detail.no_batch, purchase.no_nota_supplier, supplier.nama_suplier')
+            ->join('detail_pembelian detail', 'detail.iddetail_pembelian = issue.source_purchase_detail_id', 'left')
+            ->join('pembelian purchase', 'purchase.idpembelian = detail.pembelian_idpembelian', 'left')
+            ->join('suplier supplier', 'supplier.id_suplier = purchase.suplier_id_suplier', 'left')
+            ->where('issue.claim_id', (int) $latestClaim->idriwayat_claim_garansi)->get()->getResult() : [];
+        foreach ($oldsparepart as $part) {
+            foreach ($issued as $issue) {
+                if ((int) $part->barang_idbarang === (int) $issue->barang_id) {
+                    $part->replacement_issued = true;
+                    $part->replacement_purchase_detail_id = $issue->source_purchase_detail_id;
+                    $part->replacement_origin_label = ($issue->nama_suplier ?: 'Belum diketahui') . ' / '
+                        . ($issue->no_nota_supplier ?: ($issue->no_batch ?: 'Belum diketahui'));
+                }
+            }
+        }
         $lama_garansi = $this->ServiceSparepartModel->getGaransiHariByServiceId($idservice);
+        $catalog = (new \App\Services\Inventory\WarrantyReplacementCatalog(Database::connect()))->forUnit((int) $ownedService->unit_idunit);
         $teknisi = $this->AuthModel->getdataakun();
         $data =  array(
             'akun' => $akun,
@@ -287,7 +395,8 @@ class StatusGaransi extends BaseController
             'bank' => $this->BankModel->getBank(),
             'lama_garansi' => $lama_garansi ? (int)$lama_garansi->garansi_hari : null,
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'sparepart' => $this->StokBarangModel->getSparepart(),
+            'sparepart' => array_map(static fn ($row) => (object) $row, $catalog['ready']),
+            'pendingReplacementTypes' => $catalog['pending'],
             'provinsi' => $this->RegionModel->getProvinces(),
             'body'  => 'transaksi/table_garansi/service'
         );
@@ -389,191 +498,200 @@ class StatusGaransi extends BaseController
         if (! $this->hasWarrantyAccess()) {
             return $this->warrantyAccessDenied();
         }
-
-        $produkData = $this->request->getPost('produk');
         $idservice = (int) $this->request->getPost('idservice_s');
-        if ($idservice <= 0 || ! is_array($produkData)) {
+        $products = $this->request->getPost('produk');
+        if ($idservice <= 0 || ! is_array($products)) {
             return redirect()->back()->with('gagal', 'Data sparepart garansi tidak valid.');
         }
-
         $db = Database::connect();
         $db->transBegin();
-
         try {
-            $service = $db->query(
-                'SELECT unit_idunit, status_service FROM ' . $db->prefixTable('service') . ' WHERE idservice = ? FOR UPDATE',
-                [$idservice]
-            )->getRow();
-            if (! $service || (int) session('ID_UNIT') <= 0
-                || (int) $service->unit_idunit !== (int) session('ID_UNIT')
-                || (int) $service->status_service !== 2) {
-                throw new \RuntimeException('Service tidak sesuai unit.');
-            }
-            $claim = $db->query(
-                'SELECT idriwayat_claim_garansi FROM ' . $db->prefixTable('riwayat_claim_garansi')
-                . ' WHERE service_idservice = ? ORDER BY idriwayat_claim_garansi DESC LIMIT 1 FOR UPDATE',
-                [$idservice]
-            )->getRow();
-            if (! $claim || ! $db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
-                throw new \RuntimeException('Riwayat klaim atau migrasi stok garansi belum tersedia.');
-            }
-
-            $existingMap = [];
-            foreach ($this->ServiceSparepartModel->getByServiceId($idservice) as $item) {
-                $existingMap[(int) $item->barang_idbarang] = $item;
-            }
-
-            $submittedIds = [];
-            foreach ($produkData as $produk) {
-                $id = (int) ($produk['id'] ?? 0);
-                $quantity = (int) ($produk['qty_tambahan'] ?? -1);
-                if ($id <= 0 || $quantity < 0 || isset($submittedIds[$id])) {
-                    throw new \RuntimeException('Sparepart garansi atau jumlahnya tidak valid.');
-                }
-                $submittedIds[$id] = true;
-
-                $existingItem = $existingMap[$id] ?? null;
-                $previousIssue = $db->table('garansi_sparepart_keluar')
-                    ->where('claim_id', (int) $claim->idriwayat_claim_garansi)
-                    ->where('barang_id', $id)
-                    ->get()->getRow();
-                $hppBarang = $previousIssue || $quantity === 0 ? null : $this->HppBarangModel->getById($id);
-                $hpp = ServiceHppSnapshot::resolveWarrantyClaimIssue(
-                    $previousIssue, $quantity,
-                    $previousIssue || $quantity === 0 ? 0 : (
-                        $this->HppBarangModel->currentUnitCost($id, (int) $service->unit_idunit)
-                            ?? ($hppBarang->hpp ?? 0)
-                    )
-                );
-                if ($quantity > 0) {
-                    if ($previousIssue) {
-                        $journal = $db->table('jurnal')
-                            ->select('COUNT(*) AS jumlah, SUM(debet) AS debet, SUM(kredit) AS kredit', false)
-                            ->where('tabel_referensi', 'garansi_sparepart_keluar')
-                            ->where('id_referensi', (int) $previousIssue->id)
-                            ->get()->getRow();
-                        if ((int) ($journal->jumlah ?? 0) !== 2
-                            || (int) ($journal->debet ?? 0) !== $quantity * (int) $hpp
-                            || (int) ($journal->kredit ?? 0) !== $quantity * (int) $hpp) {
-                            throw new \RuntimeException('Mutasi lama belum memiliki jurnal seimbang; perlu rekonsiliasi.');
-                        }
-                    } else {
-                        $replacementBatchId = \App\Services\Inventory\PurchaseBatchOrigin::selection(
-                            $produk['purchase_detail_id'] ?? null);
-                        if ($replacementBatchId !== null) {
-                            (new \App\Services\Inventory\PurchaseBatchOrigin($db))->validate(
-                                $replacementBatchId, $id, (int) $service->unit_idunit, $quantity);
-                        }
-                        if ((int) ($existingItem->jumlah_tambahan_garansi ?? 0) > 0 || ! $hppBarang) {
-                            throw new \RuntimeException('HPP atau histori stok pengganti belum tersedia.');
-                        }
-                        $product = $db->query(
-                            'SELECT idbarang FROM ' . $db->prefixTable('barang') . ' WHERE idbarang = ? FOR UPDATE',
-                            [$id]
-                        )->getRow();
-                        $stock = $db->table('stok_barang')
-                            ->select('stok_akhir')
-                            ->where('idbarang', $id)
-                            ->where('id_unit', (int) $service->unit_idunit)
-                            ->get()->getRow();
-                        if (! $product || (int) ($stock->stok_akhir ?? 0) < $quantity) {
-                            throw new \RuntimeException('Stok sparepart pengganti tidak mencukupi.');
-                        }
-                        if (! $db->table('garansi_sparepart_keluar')->insert([
-                            'claim_id' => (int) $claim->idriwayat_claim_garansi,
-                            'service_id' => $idservice,
-                            'barang_id' => $id,
-                            'unit_id' => (int) $service->unit_idunit,
-                            'jumlah' => $quantity,
-                            'hpp_satuan' => (int) $hpp,
-                            'created_at' => date('Y-m-d H:i:s'),
-                            'input_by' => (int) session('ID_AKUN'),
-                            'source_purchase_detail_id' => $replacementBatchId,
-                        ])) {
-                            throw new \RuntimeException('Mutasi stok garansi gagal disimpan.');
-                        }
-                        $issueId = (int) $db->insertID();
-                        $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
-                        if ($inventoryBridge->isTracked($id, (int) $service->unit_idunit)) {
-                            $inventoryBridge->outgoing($id, (int) $service->unit_idunit,
-                                'garansi_sparepart_keluar', (string) $issueId, 'warranty', $quantity);
-                            (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
-                                $id, (int) $service->unit_idunit, 'garansi_sparepart_keluar',
-                                (string) $issueId, 'warranty', -$quantity, $replacementBatchId);
-                        }
-                        $template = $db->table('template_jurnal')
-                            ->select('no_akun, debet_kredit')
-                            ->where('kode_template', 'garansi_sparepart_keluar')
-                            ->get()->getResultArray();
-                        $lines = WarrantyExpenseJournal::lines($template, $quantity * (int) $hpp);
-                        $accounts = $db->table('no_akun')
-                            ->select('no_akun, nama_akun')
-                            ->whereIn('no_akun', array_column($lines, 0))
-                            ->get()->getResult();
-                        $names = [];
-                        foreach ($accounts as $account) {
-                            $names[$account->no_akun] = $account->nama_akun;
-                        }
-                        $inventoryAccount = $lines[0][2] > 0 ? $lines[0][0] : $lines[1][0];
-                        if ($issueId <= 0 || count($names) !== 2
-                            || ! preg_match('/persediaan|stok|inventory/i', $names[$inventoryAccount])) {
-                            throw new \RuntimeException('Akun atau referensi jurnal garansi tidak valid.');
-                        }
-                        foreach ($lines as $line) {
-                            if (! $db->table('jurnal')->insert([
-                                'tanggal' => date('Y-m-d'),
-                                'no_akun' => $line[0],
-                                'nama_akun' => $names[$line[0]],
-                                'debet' => $line[1],
-                                'kredit' => $line[2],
-                                'keterangan' => 'HPP pengganti garansi service ' . $idservice,
-                                'id_referensi' => $issueId,
-                                'tabel_referensi' => 'garansi_sparepart_keluar',
-                                'id_unit' => (int) $service->unit_idunit,
-                                'id_akun' => (int) session('ID_AKUN'),
-                            ])) {
-                                throw new \RuntimeException('Jurnal beban garansi gagal disimpan.');
-                            }
-                        }
-                    }
-                }
-                $stokAwal = $this->StokAwalModel->getByIdBarang($id);
-                $data = [
-                    'jumlah_tambahan_garansi' => $quantity,
-                    'harga_penjualan_garansi' => $this->rupiahToInt($produk['harga'] ?? '0'),
-                    'sub_total_garansi' => $this->rupiahToInt($produk['total'] ?? '0'),
-                    'hpp_penjualan_garansi' => $hpp,
-                    'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
-                    'diskon_penjualan_garansi' => $this->rupiahToInt($produk['diskon_penjualan_garansi'] ?? '0'),
-                    'service_idservice' => $idservice,
-                    'barang_idbarang' => $id,
-                    'unit_idunit' => (int) $service->unit_idunit,
-                ];
-
-                $saved = $existingItem
-                    ? $this->ServiceSparepartModel->updateByServiceAndBarang($idservice, $id, $data)
-                    : $this->ServiceSparepartModel->insert_SerModelServiceSparepart($data);
-                if (! $saved) {
-                    throw new \RuntimeException('Sparepart garansi gagal disimpan.');
-                }
-            }
-
-            if (array_diff_key($existingMap, $submittedIds)) {
-                throw new \RuntimeException('Sparepart service awal tidak boleh dihapus dari garansi.');
-            }
-
-            if (! $this->ServiceModel->updateService($idservice, [
-                'biaya_tambahan_garansi' => $this->rupiahToInt($this->request->getPost('biaya_garansi')),
-            ]) || $db->transStatus() === false || ! $db->transCommit()) {
+            $this->saveWarrantyReplacements($db, $idservice, $products,
+                $this->rupiahToInt($this->request->getPost('biaya_garansi')));
+            if ($db->transStatus() === false || ! $db->transCommit()) {
                 throw new \RuntimeException('Data garansi gagal disimpan.');
             }
-
             return redirect()->to(base_url('service_by_garansi/' . $idservice . '?tab=pembayaran'))
                 ->with('sukses', 'Data sparepart garansi berhasil disimpan.');
         } catch (\Throwable $error) {
             $db->transRollback();
             log_message('error', 'StatusGaransi::insert_sparepart_garansi gagal: ' . $error->getMessage());
-            return redirect()->back()->with('gagal', 'Sparepart garansi tidak dapat disimpan. Periksa kelengkapan dan jumlah pengganti.');
+            return redirect()->back()->with('gagal', $error instanceof \DomainException || $error instanceof \InvalidArgumentException
+                ? $error->getMessage() : 'Sparepart garansi tidak dapat disimpan. Periksa kelengkapan dan jumlah pengganti.');
+        }
+    }
+
+    private function saveWarrantyReplacements($db, int $idservice, array $produkData, int $fee): void
+    {
+        $service = $db->query(
+            'SELECT unit_idunit, status_service FROM ' . $db->prefixTable('service') . ' WHERE idservice = ? FOR UPDATE',
+            [$idservice]
+        )->getRow();
+        if (! $service || (int) session('ID_UNIT') <= 0
+            || (int) $service->unit_idunit !== (int) session('ID_UNIT')
+            || (int) $service->status_service !== 2) {
+            throw new \RuntimeException('Service tidak sesuai unit.');
+        }
+        $claim = $db->query(
+            'SELECT idriwayat_claim_garansi FROM ' . $db->prefixTable('riwayat_claim_garansi')
+            . ' WHERE service_idservice = ? ORDER BY idriwayat_claim_garansi DESC LIMIT 1 FOR UPDATE',
+            [$idservice]
+        )->getRow();
+        if (! $claim || ! $db->tableExists($db->getPrefix() . 'garansi_sparepart_keluar', false)) {
+            throw new \RuntimeException('Riwayat klaim atau migrasi stok garansi belum tersedia.');
+        }
+
+        $existingMap = [];
+        foreach ($this->ServiceSparepartModel->getByServiceId($idservice) as $item) {
+            $existingMap[(int) $item->barang_idbarang] = $item;
+        }
+
+        $submittedIds = [];
+        foreach ($produkData as $produk) {
+            $id = (int) ($produk['id'] ?? 0);
+            $quantity = (int) ($produk['qty_tambahan'] ?? -1);
+            if ($id <= 0 || $quantity < 0 || isset($submittedIds[$id])) {
+                throw new \RuntimeException('Sparepart garansi atau jumlahnya tidak valid.');
+            }
+            $submittedIds[$id] = true;
+
+            $existingItem = $existingMap[$id] ?? null;
+            $previousIssue = $db->table('garansi_sparepart_keluar')
+                ->where('claim_id', (int) $claim->idriwayat_claim_garansi)
+                ->where('barang_id', $id)
+                ->get()->getRow();
+            $hppBarang = $previousIssue || $quantity === 0 ? null : $this->HppBarangModel->getById($id);
+            $hpp = ServiceHppSnapshot::resolveWarrantyClaimIssue(
+                $previousIssue, $quantity,
+                $previousIssue || $quantity === 0 ? 0 : (
+                    $this->HppBarangModel->currentUnitCost($id, (int) $service->unit_idunit)
+                        ?? ($hppBarang->hpp ?? 0)
+                )
+            );
+            if ($quantity > 0) {
+                if ($previousIssue) {
+                    $journal = $db->table('jurnal')
+                        ->select('COUNT(*) AS jumlah, SUM(debet) AS debet, SUM(kredit) AS kredit', false)
+                        ->where('tabel_referensi', 'garansi_sparepart_keluar')
+                        ->where('id_referensi', (int) $previousIssue->id)
+                        ->get()->getRow();
+                    if ((int) ($journal->jumlah ?? 0) !== 2
+                        || (int) ($journal->debet ?? 0) !== $quantity * (int) $hpp
+                        || (int) ($journal->kredit ?? 0) !== $quantity * (int) $hpp) {
+                        throw new \RuntimeException('Mutasi lama belum memiliki jurnal seimbang; perlu rekonsiliasi.');
+                    }
+                } else {
+                    $replacementBatchId = \App\Services\Inventory\PurchaseBatchOrigin::selection(
+                        $produk['purchase_detail_id'] ?? null);
+                    if ($replacementBatchId !== null) {
+                        (new \App\Services\Inventory\PurchaseBatchOrigin($db))->validate(
+                            $replacementBatchId, $id, (int) $service->unit_idunit, $quantity);
+                    } else {
+                        throw new \DomainException('Pilih supplier / nota asal sparepart pengganti.');
+                    }
+                    if ((int) ($existingItem->jumlah_tambahan_garansi ?? 0) > 0 || ! $hppBarang) {
+                        throw new \RuntimeException('HPP atau histori stok pengganti belum tersedia.');
+                    }
+                    $product = $db->query(
+                        'SELECT idbarang, jenis_item FROM ' . $db->prefixTable('barang') . ' WHERE idbarang = ? FOR UPDATE',
+                        [$id]
+                    )->getRow();
+                    $stock = $db->table('stok_barang')
+                        ->select('stok_akhir')
+                        ->where('idbarang', $id)
+                        ->where('id_unit', (int) $service->unit_idunit)
+                        ->get()->getRow();
+                    if (! $product || $product->jenis_item !== 'fisik') {
+                        throw new \DomainException('Tipe pengganti belum disetujui sebagai Barang Fisik. Minta Administrator melakukan review tipe item.');
+                    }
+                    if ((int) ($stock->stok_akhir ?? 0) < $quantity) {
+                        throw new \RuntimeException('Stok sparepart pengganti tidak mencukupi.');
+                    }
+                    if (! $db->table('garansi_sparepart_keluar')->insert([
+                        'claim_id' => (int) $claim->idriwayat_claim_garansi,
+                        'service_id' => $idservice,
+                        'barang_id' => $id,
+                        'unit_id' => (int) $service->unit_idunit,
+                        'jumlah' => $quantity,
+                        'hpp_satuan' => (int) $hpp,
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'input_by' => (int) session('ID_AKUN'),
+                        'source_purchase_detail_id' => $replacementBatchId,
+                    ])) {
+                        throw new \RuntimeException('Mutasi stok garansi gagal disimpan.');
+                    }
+                    $issueId = (int) $db->insertID();
+                    $inventoryBridge = new \App\Services\Inventory\InventoryLedgerBridge($db);
+                    if ($inventoryBridge->isTracked($id, (int) $service->unit_idunit)) {
+                        $inventoryBridge->outgoing($id, (int) $service->unit_idunit,
+                            'garansi_sparepart_keluar', (string) $issueId, 'warranty', $quantity);
+                        (new \App\Services\Inventory\InventoryBatchLedger($db))->post(
+                            $id, (int) $service->unit_idunit, 'garansi_sparepart_keluar',
+                            (string) $issueId, 'warranty', -$quantity, $replacementBatchId);
+                    }
+                    $template = $db->table('template_jurnal')
+                        ->select('no_akun, debet_kredit')
+                        ->where('kode_template', 'garansi_sparepart_keluar')
+                        ->get()->getResultArray();
+                    $lines = WarrantyExpenseJournal::lines($template, $quantity * (int) $hpp);
+                    $accounts = $db->table('no_akun')
+                        ->select('no_akun, nama_akun')
+                        ->whereIn('no_akun', array_column($lines, 0))
+                        ->get()->getResult();
+                    $names = [];
+                    foreach ($accounts as $account) {
+                        $names[$account->no_akun] = $account->nama_akun;
+                    }
+                    $inventoryAccount = $lines[0][2] > 0 ? $lines[0][0] : $lines[1][0];
+                    if ($issueId <= 0 || count($names) !== 2
+                        || ! preg_match('/persediaan|stok|inventory/i', $names[$inventoryAccount])) {
+                        throw new \RuntimeException('Akun atau referensi jurnal garansi tidak valid.');
+                    }
+                    foreach ($lines as $line) {
+                        if (! $db->table('jurnal')->insert([
+                            'tanggal' => date('Y-m-d'),
+                            'no_akun' => $line[0],
+                            'nama_akun' => $names[$line[0]],
+                            'debet' => $line[1],
+                            'kredit' => $line[2],
+                            'keterangan' => 'HPP pengganti garansi service ' . $idservice,
+                            'id_referensi' => $issueId,
+                            'tabel_referensi' => 'garansi_sparepart_keluar',
+                            'id_unit' => (int) $service->unit_idunit,
+                            'id_akun' => (int) session('ID_AKUN'),
+                        ])) {
+                            throw new \RuntimeException('Jurnal beban garansi gagal disimpan.');
+                        }
+                    }
+                }
+            }
+            $stokAwal = $this->StokAwalModel->getByIdBarang($id);
+            $data = [
+                'jumlah_tambahan_garansi' => $quantity,
+                'harga_penjualan_garansi' => $this->rupiahToInt($produk['harga'] ?? '0'),
+                'sub_total_garansi' => $this->rupiahToInt($produk['total'] ?? '0'),
+                'hpp_penjualan_garansi' => $hpp,
+                'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
+                'diskon_penjualan_garansi' => $this->rupiahToInt($produk['diskon_penjualan_garansi'] ?? '0'),
+                'service_idservice' => $idservice,
+                'barang_idbarang' => $id,
+                'unit_idunit' => (int) $service->unit_idunit,
+            ];
+
+            $saved = $existingItem
+                ? $this->ServiceSparepartModel->updateByServiceAndBarang($idservice, $id, $data)
+                : $this->ServiceSparepartModel->insert_SerModelServiceSparepart($data);
+            if (! $saved) {
+                throw new \RuntimeException('Sparepart garansi gagal disimpan.');
+            }
+        }
+
+        if (array_diff_key($existingMap, $submittedIds)) {
+            throw new \RuntimeException('Sparepart service awal tidak boleh dihapus dari garansi.');
+        }
+
+        if (! $this->ServiceModel->updateService($idservice, ['biaya_tambahan_garansi' => $fee])) {
+            throw new \RuntimeException('Data garansi gagal disimpan.');
         }
     }
 
