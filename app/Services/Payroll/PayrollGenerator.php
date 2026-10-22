@@ -217,6 +217,10 @@ class PayrollGenerator
             ];
         }
 
+        if ($hasil['created'] > 0) {
+            HoSalaryDistributionService::invalidateCache($bulan);
+        }
+
         return $hasil;
     }
 

@@ -20,15 +20,11 @@ use Config\Database;
  */
 class HoSalaryDistributionService
 {
+    /** Umur cache lintas request (detik). */
+    private const TTL = 300;
+
     protected $db;
     protected $salaryService;
-
-    /**
-     * Cache per-request. calculateDistribution() sangat mahal (menghitung KPI
-     * tiap pegawai HO) dan getUnitShares() memakai hasil yang sama; tanpa
-     * cache, /asset_berjalan menjalankan seluruhnya dua kali.
-     */
-    private static $memo = [];
 
     public function __construct()
     {
@@ -53,11 +49,12 @@ class HoSalaryDistributionService
      */
     public function calculateDistribution(string $bulan, ?string $tahun = null): array
     {
-        [$tahun, $bln] = $this->parseBulan($bulan, $tahun);
+        [$tahun, $bln] = self::parseBulan($bulan, $tahun);
 
-        $key = \App\Libraries\ReadCache::kunci('dist', $tahun, $bln);
-        if (array_key_exists($key, self::$memo)) {
-            return self::$memo[$key];
+        $cacheKey = self::cacheKey($bulan);
+        $tersimpan = cache()->get($cacheKey);
+        if (is_array($tersimpan)) {
+            return $tersimpan;
         }
 
         // 1. Ambil unit pribadi & franchise (non-trial, non-HO)
@@ -195,7 +192,7 @@ class HoSalaryDistributionService
             ];
         }
 
-        return self::$memo[$key] = [
+        $hasil = [
             'divisor'           => $divisor,
             'pribadi_count'     => $pribadiCount,
             'franchise_count'   => $franchiseCount,
@@ -206,6 +203,10 @@ class HoSalaryDistributionService
             'per_employee_share'=> $divisor > 0 ? round($totalPerkiraan / $divisor, 2) : 0,
             'per_employee_actual'=> $divisor > 0 ? round($totalDipotong / $divisor, 2) : 0,
         ];
+
+        cache()->save($cacheKey, $hasil, self::TTL);
+
+        return $hasil;
     }
 
     /**
@@ -243,7 +244,27 @@ class HoSalaryDistributionService
         return $shares;
     }
 
-    private function parseBulan(string $bulan, ?string $tahun): array
+    /**
+     * Kunci cache lintas request untuk satu periode.
+     *
+     * Nama database ikut jadi bagian kunci karena `erp_local` dan `erp_test`
+     * (dipakai PHPUnit) berbagi `writable/cache`.
+     */
+    public static function cacheKey(string $bulan, ?string $tahun = null): string
+    {
+        [$thn, $bln] = self::parseBulan($bulan, $tahun);
+
+        return 'ho_dist_' . \Config\Database::connect()->database
+            . sprintf('_%04d-%02d', $thn, $bln);
+    }
+
+    /** Hapus cache periode ini; dipanggil saat payroll/KPI periode itu berubah. */
+    public static function invalidateCache(string $bulan, ?string $tahun = null): void
+    {
+        cache()->delete(self::cacheKey($bulan, $tahun));
+    }
+
+    private static function parseBulan(string $bulan, ?string $tahun): array
     {
         if (preg_match('/^(\d{4})-(\d{2})$/', $bulan, $m)) {
             return [(int)$m[1], (int)$m[2]];

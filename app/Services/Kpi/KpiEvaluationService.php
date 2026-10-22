@@ -92,6 +92,12 @@ class KpiEvaluationService
 
         $result = $this->evaluationModel->upsertEvaluation($evaluationData);
 
+        if ($result) {
+            \App\Services\Payroll\HoSalaryDistributionService::invalidateCache(
+                sprintf('%04d-%02d', $periodYear, $periodMonth)
+            );
+        }
+
         return [
             'success' => (bool) $result,
             'evaluation' => $evaluationData,
