@@ -293,6 +293,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const pickerTable = $('#produk-modal-table').DataTable({
         serverSide: true,
         processing: true,
+        // Modal tersembunyi saat init; autoWidth DataTables menghitung lebar
+        // tabel dari container yang masih 0 lalu mengunci lebar piksel (~separuh
+        // modal). Biarkan CSS .ms-table (width:100%) yang mengatur lebar.
+        autoWidth: false,
         pageLength: 10,
         lengthChange: false,
         order: [[1, 'asc']],
