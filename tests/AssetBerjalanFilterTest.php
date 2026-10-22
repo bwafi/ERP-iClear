@@ -185,6 +185,11 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         // Omset Agustus besar supaya realisasi kategori A di bawah batas 6%.
         $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (3,'SLL-3','2026-08-15 10:00:00',3)");
         $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (3,NULL,70000000,10000000)");
+
+        // Juli 2026 unit 1: omset 10.000.000 -> batas 600.000; realisasi 550.000 (91,7%).
+        $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (4,'SLL-4','2026-07-15 10:00:00',1)");
+        $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (4,NULL,12000000,2000000)");
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-07-10',1,550000,1)");
     }
 
     private function sesi(int $akun, int $unit, int $jabatan): void
@@ -290,8 +295,8 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertSame('2.507.580', $this->kartu($html, 'Biaya Terkontrol (Maks 6%)'));
     }
 
-    /** Peringatan hanya muncul kalau realisasi kategori A melebihi 6% omset. */
-    public function testPeringatanBatasEnamPersenHanyaSaatMelebihi(): void
+    /** Status rasio: melebihi, hampir mencapai, atau aman. */
+    public function testStatusBatasEnamPersen(): void
     {
         $this->sesi(44, 50, 0);
 
@@ -301,7 +306,12 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         // Agustus: omset 60.000.000 -> batas 3.600.000; realisasi 1.234.567.
         $aman = $this->halaman('?unit=3&bulan=8&tahun=2026');
+        $this->assertStringContainsString('dari batas — Aman', $aman);
         $this->assertStringNotContainsString('Melebihi batas 6%', $aman);
+
+        // Juli unit 1: batas 600.000, realisasi 550.000 -> 91,7%.
+        $hampir = $this->halaman('?unit=1&bulan=7&tahun=2026');
+        $this->assertStringContainsString('91,7% dari batas — Hampir mencapai batas', $hampir);
     }
 
     /** Kartu di luar 6% = seluruh kas keluar dikurangi biaya terkontrol, termasuk HPP. */
@@ -311,6 +321,6 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
 
         // Total 4.707.580 - biaya terkontrol 2.507.580 = 2.200.000 (kategori 6, 11, HPP).
-        $this->assertSame('2.200.000', $this->kartu($html, 'Pengeluaran di Luar 6%'));
+        $this->assertSame('2.200.000', $this->kartu($html, 'Biaya Kebutuhan (Di Luar 6%)'));
     }
 }
