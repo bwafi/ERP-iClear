@@ -809,8 +809,9 @@ class TutupKasir extends BaseController
             'ID_JABATAN'
         );
 
-        // Satu mesin dengan payroll (KPI + salary_structures + lembur),
-        // supaya Total Gaji di laporan = yang benar-benar dibayar.
+        // Mesin yang sama dengan payroll (KPI + salary_structures + lembur),
+        // bukan rumus legacy. Catatan: angka dihitung dari data saat ini,
+        // jadi bisa beda dengan baris finance_payroll yang dibuat lebih dulu.
         $gajiUnit = (new \App\Services\Payroll\PayrollGenerator())
             ->hitungGajiUnit($bulanStr, (int) $unit);
 
@@ -825,6 +826,7 @@ class TutupKasir extends BaseController
                 'tunjangan_absen'      => $row['tunjangan_absen'],
                 'tunjangan_penempatan' => $row['tunjangan_penempatan'],
                 'insentif'             => $row['insentif'],
+                'lembur'               => $row['lembur'],
                 'total'                => $row['total'],
             ];
         }

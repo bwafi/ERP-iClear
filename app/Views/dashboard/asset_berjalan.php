@@ -354,6 +354,7 @@ if (in_array($selected_unit, [3, 4, 5])) {
                                     <th class="text-end">T. Absen</th>
                                     <th class="text-end">T. Penempatan</th>
                                     <th class="text-end">Insentif</th>
+                                    <th class="text-end">Lembur</th>
                                     <th class="text-end">Total</th>
                                 </tr>
                             </thead>
@@ -367,13 +368,14 @@ if (in_array($selected_unit, [3, 4, 5])) {
                                         <td class="text-end"><?= number_format($d['tunjangan_absen'], 0, ',', '.') ?></td>
                                         <td class="text-end"><?= number_format($d['tunjangan_penempatan'], 0, ',', '.') ?></td>
                                         <td class="text-end"><?= number_format($d['insentif'], 0, ',', '.') ?></td>
+                                        <td class="text-end"><?= number_format($d['lembur'] ?? 0, 0, ',', '.') ?></td>
                                         <td class="text-end fw-semibold"><?= number_format($d['total'], 0, ',', '.') ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                             <tfoot>
                                 <tr class="fw-bold table-light">
-                                    <td colspan="7" class="text-end">Total</td>
+                                    <td colspan="8" class="text-end">Total</td>
                                     <td class="text-end rincian-gaji-total">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></td>
                                 </tr>
                             </tfoot>

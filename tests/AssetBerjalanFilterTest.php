@@ -237,5 +237,10 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         // 2.000.000 pokok + 350.000 penempatan + 100.000 lembur.
         // Karyawan 101 (STATUS_PEGAWAI=0) tidak ikut.
         $this->assertSame('2.450.000', $this->kartu($html, 'Total Gaji'));
+
+        // Rincian harus memuat lembur, kalau tidak kolom-kolomnya tidak
+        // menjumlah ke Total dan Finance membacanya sebagai selisih.
+        $this->assertStringContainsString('<th class="text-end">Lembur</th>', $html);
+        $this->assertStringContainsString('>100.000<', $html);
     }
 }
