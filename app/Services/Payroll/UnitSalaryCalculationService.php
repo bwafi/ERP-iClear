@@ -19,7 +19,7 @@ use Config\Database;
  *   3. Loop employee unit yang TERIMA_GAJI=1 → aggregate totalGajiUnit
  *   4. Insentif memakai engine tunggal KpiCalculationService::computeIncentive()
  *      (sama seperti /gaji, /penilaian_kinerja, /slip_gaji, payroll) — konsisten
- *   5. Total_feed overwritten by feed_mingguan (bukan fallback ke feed_pl)
+ *   5. Total_feed memakai feed mingguan ?: feed pl (aturan mesin final, issue #27)
  *   6. Tidak ada case jabatan 46 (PIC)
  *
  * Service ini BUKAN final. Tidak dipakai untuk pembayaran real.
@@ -212,9 +212,10 @@ class UnitSalaryCalculationService
             $totalSop        = $sumAspek('kepatuhan sop');
 
             // ── NILAI ASPEK ────────────────────────────────────────
-            // total_feed: overwritten by feed_mingguan (last write wins — VERBATIM from controller)
-            $total_feed = $total_feed_pl;
-            $total_feed = $total_feed_mingguan;
+            // Aturan mesin final (ManualKpiScorer/LegacyKpiCalculationService):
+            // feed mingguan ?: feed pl — Feed PL tidak boleh hilang saat
+            // Feed Mingguan kosong (issue #27).
+            $total_feed = $total_feed_mingguan ?: $total_feed_pl;
 
             $batas1 = $batas_awal[$unit];
             $batas2 = $batas_kedua[$unit];
