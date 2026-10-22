@@ -33,9 +33,12 @@ class TutupKasir extends BaseController
      *
      * Daftar unit pada dasarnya tidak menampilkan Head Office (idunit 50).
      *
+     * @param int[] $roleTambahan Role yang boleh memilih unit lintas cabang
+     *                            khusus untuk halaman pemanggil.
+     *
      * @return array{list_unit: array, unit: int, id_jabatan: int, boleh_pilih_unit: bool}
      */
-    private function resolveUnitScope(): array
+    private function resolveUnitScope(array $roleTambahan = []): array
     {
         $id_jabatan = (int) session()->get('ID_JABATAN');
         $id_akun    = (int) session()->get('ID_AKUN');
@@ -51,7 +54,7 @@ class TutupKasir extends BaseController
                 ->notLike('NAMA_UNIT', 'Head Office');
         };
 
-        $bolehPilihUnit = in_array($id_jabatan, [0, 1, 2, 34, 40], true);
+        $bolehPilihUnit = in_array($id_jabatan, array_merge([0, 1, 2, 34, 40], $roleTambahan), true);
 
         if ($bolehPilihUnit && $id_jabatan === 2 && $direkturUnits !== null) {
             // Direktur terbatas: daftar unit + validasi ?unit= terhadap daftarnya.
@@ -307,7 +310,8 @@ class TutupKasir extends BaseController
 
     public function omsetbulanan()
     {
-        $scope = $this->resolveUnitScope();
+        // Kepala Divisi (43) boleh memilih unit lintas cabang khusus di sini.
+        $scope = $this->resolveUnitScope([43]);
         $list_unit      = $scope['list_unit'];
         $unit           = $scope['unit'];
         $id_jabatan     = $scope['id_jabatan'];

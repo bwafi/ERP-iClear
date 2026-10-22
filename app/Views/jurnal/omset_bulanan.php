@@ -52,7 +52,7 @@
 </div>
 
 <!-- Filter Toolbar (For Authorized Roles) -->
-<?php if (!empty($boleh_pilih_unit) || in_array($id_jabatan, [43], true)): ?>
+<?php if (!empty($boleh_pilih_unit)): ?>
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-4">
             <form method="GET" class="row align-items-end g-3">

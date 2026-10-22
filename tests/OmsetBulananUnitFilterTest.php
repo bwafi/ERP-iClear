@@ -109,12 +109,13 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
             (5, 'ICLEAR Genteng', 'logo.png'),
             (50, 'Head Office', 'logo.png')");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES
-            (0, 'Finance', '[]'), (2, 'Direktur', '[]'), (35, 'ADMIN / KASIR', '[]')");
+            (0, 'Finance', '[]'), (2, 'Direktur', '[]'), (35, 'ADMIN / KASIR', '[]'), (43, 'Kepala Divisi', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN) VALUES
             (44, 50, 0, 'Ira Kurniawati'),
             (46, 3, 2, 'Wahid Alfarizki'),
             (70, 4, 2, 'Guruh Dwi Prasetyo'),
             (99, 3, 2, 'Direktur Tanpa Mapping'),
+            (55, 50, 43, 'Kepala Divisi'),
             (43, 2, 35, 'Kasir Jember')");
     }
 
@@ -187,6 +188,25 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $html = $this->halaman('?unit=1');
 
         $this->assertSame(2, $this->marker($html), 'Kasir harus tetap terkunci ke unit sesinya');
+    }
+
+    // ── Kepala Divisi (43): lintas unit, tetapi hanya untuk halaman ini. ──
+
+    public function testKepalaDivisiBisaMemfilterUnitPandaan(): void
+    {
+        $this->sesi(55, 50, 43);
+
+        $html = $this->halaman('?unit=4');
+
+        $this->assertSame(4, $this->marker($html), 'Kepala Divisi harus bisa melihat unit yang dipilih');
+    }
+
+    public function testKepalaDivisiTanpaFilterJatuhKeUnitPertama(): void
+    {
+        $this->sesi(55, 50, 43);
+
+        // ID_UNIT 50 (Head Office) tidak ada di list_unit -> default unit pertama.
+        $this->assertSame(1, $this->marker($this->halaman('')));
     }
 
     // ── Direktur (jabatan 2): boleh memilih unit seperti Admin root, tetapi
