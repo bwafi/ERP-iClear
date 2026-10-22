@@ -46,6 +46,9 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             'kas_keluar', 'kategori_kas',
             'penilaian', 'tutup_kasir', 'stok_opname_periode',
             'incentive_members', 'finance_payroll',
+            'salary_components', 'salary_structures',
+            'kpi_weights', 'kpi_components', 'kpi_targets', 'kpi_evaluations',
+            'kpi_attendance_detail', 'kpi_attendance_off',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -101,6 +104,38 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $q('CREATE TABLE stok_opname_periode (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT, unit_idunit INT NULL, tanggal TEXT NULL,
                 status TEXT NULL, terisi_barang INT NULL, total_barang INT NULL)');
+
+        // Mesin gaji payroll (KpiCalculationService + SalaryCalculationService).
+        // Kosong = skor KPI 0, jadi angka gaji murni dari salary_structures + lembur.
+        $q('CREATE TABLE salary_components (
+                id INT PRIMARY KEY, code TEXT NULL, name TEXT NULL,
+                type TEXT NULL, is_active INT NULL)');
+        $q('CREATE TABLE salary_structures (
+                id INT PRIMARY KEY AUTO_INCREMENT, position_id INT NULL,
+                salary_component_id INT NULL, unit_id INT NULL, context TEXT NULL,
+                base_value REAL NULL, calculation_type TEXT NULL, multiplier REAL NULL,
+                effective_from TEXT NULL, effective_to TEXT NULL)');
+        $q('CREATE TABLE kpi_components (
+                id INT PRIMARY KEY, code TEXT NULL, name TEXT NULL,
+                type TEXT NULL, is_active INT NULL)');
+        $q('CREATE TABLE kpi_weights (
+                id INT PRIMARY KEY AUTO_INCREMENT, kpi_component_id INT NULL,
+                position_id INT NULL, weight REAL NULL, weight_group TEXT NULL,
+                effective_from TEXT NULL, effective_to TEXT NULL)');
+        $q('CREATE TABLE kpi_targets (
+                id INT PRIMARY KEY AUTO_INCREMENT, kpi_component_id INT NULL,
+                unit_id INT NULL, position_id INT NULL, context TEXT NULL,
+                target_value REAL NULL, effective_from TEXT NULL, effective_to TEXT NULL)');
+        $q('CREATE TABLE kpi_evaluations (
+                id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
+                kpi_component_id INT NULL, evaluator_id INT NULL,
+                evaluation_date TEXT NULL, raw_score REAL NULL,
+                period_year INT NULL, period_month INT NULL)');
+        $q('CREATE TABLE kpi_attendance_detail (id INT PRIMARY KEY AUTO_INCREMENT, evaluation_id INT NULL)');
+        $q('CREATE TABLE kpi_attendance_off (
+                id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
+                evaluation_date TEXT NULL, period_month INT NULL,
+                period_year INT NULL, evaluator_id INT NULL)');
     }
 
     private function sebarData(): void
@@ -115,7 +150,18 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             (0, 'Finance', '[]'), (41, 'Kepala Toko', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ALAMAT, TERIMA_GAJI, STATUS_PEGAWAI, deleted) VALUES
             (44, 50, 0, 'Ira Kurniawati', 'Jalan Test', 0, 1, NULL),
-            (100, 3, 41, 'Kepala Toko', 'Jalan Test', 1, 1, NULL)");
+            (100, 3, 41, 'Kepala Toko', 'Jalan Test', 1, 1, NULL),
+            (101, 3, 41, 'Sudah Resign', 'Jalan Test', 1, 0, NULL)");
+        // Struktur sengaja beda dari hardcode legacy (1.500.000) supaya test
+        // bisa membedakan mesin gaji payroll dari blok lama.
+        $q("INSERT INTO salary_components (id, code, name, type, is_active) VALUES
+            (1, 'GAJI_POKOK', 'Gaji Pokok', 'base', 1),
+            (2, 'TUNJANGAN_KINERJA', 'Tunjangan Kinerja', 'allowance', 1),
+            (3, 'TUNJANGAN_ABSEN', 'Tunjangan Absen', 'allowance', 1)");
+        $q("INSERT INTO salary_structures (position_id, salary_component_id, unit_id, base_value, calculation_type, multiplier, effective_from, effective_to) VALUES
+            (41, 1, NULL, 2000000, 'fixed', NULL, '2026-01-01', NULL),
+            (41, 2, NULL, 850000, 'percent_of_kpi', NULL, '2026-01-01', NULL),
+            (41, 3, NULL, 250000, 'percent_of_kpi', NULL, '2026-01-01', NULL)");
         $q("INSERT INTO kategori_kas (idkategori_kas, nama_kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(11,'Lainnya'),(18,'Transport')");
         $q("INSERT INTO menu (idmenu, urutan, nama_menu, roles, url, show_menu) VALUES (1,1,'Dashboard','[]','dashboard',1)");
 
@@ -125,6 +171,8 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-09-10',1,3496682,3)");
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-10',1,2207580,3)");
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-08-10',1,1234567,3)");
+        // Lembur kategori 10: masuk Total Gaji, tidak masuk Pengeluaran.
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, penerima, idunit) VALUES ('2026-09-20',10,'Lembur closing',100000,'100',3)");
 
         // October 2026 data
         $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (2,'SLL-2','2026-10-15 10:00:00',3)");
@@ -175,5 +223,19 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $html = $this->halaman('?unit=3&bulan=8&tahun=2026');
 
         $this->assertSame('1.234.567', $this->kartu($html, 'Pengeluaran Bulan Ini'));
+    }
+
+    /**
+     * Total Gaji harus datang dari mesin payroll (salary_structures + KPI +
+     * lembur), bukan blok legacy yang selalu memakai gaji pokok 1.500.000.
+     */
+    public function testTotalGajiMemakaiMesinPayroll(): void
+    {
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
+
+        // 2.000.000 pokok + 350.000 penempatan + 100.000 lembur.
+        // Karyawan 101 (STATUS_PEGAWAI=0) tidak ikut.
+        $this->assertSame('2.450.000', $this->kartu($html, 'Total Gaji'));
     }
 }
