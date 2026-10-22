@@ -25,27 +25,6 @@ if ($pilihanKirim === []) {
     $pilihanKirim[] = (object) ['idunit' => $unitAktif, 'NAMA_UNIT' => 'Unit #' . $unitAktif];
 }
 
-$rp = static fn($n): string => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
-
-// Stok & suplier awal mengikuti unit aktif. JS akan menggantinya begitu
-// unit pengirim dipilih, memakai peta yang sama untuk semua unit.
-$stokUntuk = static function ($p, int $idUnit) use ($stokUnit): float {
-    $id = (int) $p->idbarang;
-    if (isset($stokUnit[$idUnit][$id])) {
-        return (float) $stokUnit[$idUnit][$id];
-    }
-
-    return (float) ($p->stok_akhir ?? 0);
-};
-$suplierUntuk = static function ($p, int $idUnit) use ($suplierUnit): string {
-    return trim((string) ($suplierUnit[$idUnit][(int) $p->idbarang] ?? ''));
-};
-$chipStok = static function (float $stok): string {
-    $kelas = $stok <= 0 ? ' is-empty' : ($stok <= 5 ? ' is-low' : '');
-
-    return '<span class="ms-stock' . $kelas . '">' . number_format($stok, 0, ',', '.') . '</span>';
-};
-
 $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_FORCE_OBJECT;
 $jsonStok = json_encode(empty($stokUnit) ? new stdClass() : $stokUnit, $jsonFlags) ?: '{}';
 $jsonSuplier = json_encode(empty($suplierUnit) ? new stdClass() : $suplierUnit, $jsonFlags) ?: '{}';
@@ -250,39 +229,7 @@ $jsonSuplier = json_encode(empty($suplierUnit) ? new stdClass() : $suplierUnit, 
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($produk as $p) : ?>
-                                        <?php
-                                        $stok = $stokUntuk($p, $unitAktif);
-                                        $namaSuplier = $suplierUntuk($p, $unitAktif);
-                                        ?>
-                                        <tr>
-                                            <td>
-                                                <input type="checkbox" class="produk-checkbox form-check-input"
-                                                    data-id="<?= (int) $p->idbarang ?>"
-                                                    data-kode="<?= esc($p->kode_barang, 'attr') ?>"
-                                                    data-nama="<?= esc($p->nama_barang, 'attr') ?>"
-                                                    data-harga_beli="<?= (float) ($p->harga_beli ?? 0) ?>"
-                                                    data-harga_jual="<?= (float) ($p->harga ?? 0) ?>"
-                                                    data-kategori="<?= esc($p->nama_kategori, 'attr') ?>"
-                                                    data-imei="<?= esc($p->imei, 'attr') ?>"
-                                                    data-stok="<?= (int) $stok ?>"
-                                                    data-suplier="<?= esc($namaSuplier, 'attr') ?>"
-                                                    aria-label="Pilih <?= esc($p->nama_barang, 'attr') ?>">
-                                            </td>
-                                            <td>
-                                                <span class="ms-prod-name"><?= esc($p->nama_barang) ?></span>
-                                                <span class="ms-prod-meta">
-                                                    <?= esc($p->kode_barang) ?><?php if (! empty($p->imei)) : ?> · IMEI <?= esc($p->imei) ?><?php endif; ?>
-                                                </span>
-                                            </td>
-                                            <td data-stock-cell><?= $chipStok($stok) ?></td>
-                                            <td data-suplier-cell>
-                                                <?= $namaSuplier !== '' ? esc($namaSuplier) : '<span class="text-muted">—</span>' ?>
-                                            </td>
-                                            <td class="ms-money"><?= $rp($p->harga_beli) ?></td>
-                                            <td><span class="ms-tag"><?= esc($p->nama_kategori) ?></span></td>
-                                        </tr>
-                                    <?php endforeach; ?>
+                                    <!-- Diisi DataTables server-side dari /mutasi_stok/produk -->
                                 </tbody>
                             </table>
                         </div>
@@ -339,29 +286,38 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function chipStok(stok) {
-        const kelas = stok <= 0 ? ' is-empty' : (stok <= 5 ? ' is-low' : '');
-        return '<span class="ms-stock' + kelas + '">' + angka(stok) + '</span>';
-    }
-
-    // Produk tanpa stok untuk unit pengirim tidak perlu muncul di picker.
-    // Filter membaca data-stok yang diperbarui segarkanStok(), jadi ikut
-    // berubah saat unit pengirim diganti.
-    $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-        if (settings.nTable.id !== 'produk-modal-table') {
-            return true;
-        }
-        const row = settings.aoData[dataIndex].nTr;
-        const cb = row ? row.querySelector('.produk-checkbox') : null;
-        return cb ? Number(cb.dataset.stok || 0) > 0 : true;
-    });
+    // Pilihan disimpan di Map supaya tidak hilang saat pindah halaman/search
+    // (DataTables server-side hanya menyimpan baris halaman aktif di DOM).
+    const picked = new Map();
 
     const pickerTable = $('#produk-modal-table').DataTable({
+        serverSide: true,
+        processing: true,
         pageLength: 10,
         lengthChange: false,
         order: [[1, 'asc']],
-        dom: 't<"ms-dt-foot"ip>',
+        dom: 'rt<"ms-dt-foot"ip>',
         columnDefs: [{ orderable: false, targets: [0, 5] }],
+        ajax: {
+            url: '<?= base_url('mutasi_stok/produk') ?>',
+            data: function (d) {
+                d.unit = unitDipilih();
+            }
+        },
+        columns: [
+            { data: 0 }, { data: 1 }, { data: 2 },
+            { data: 3 }, { data: 4 }, { data: 5 }
+        ],
+        drawCallback: function () {
+            $('#produk-modal-table tbody tr').each(function () {
+                const cb = this.querySelector('.produk-checkbox');
+                if (cb && picked.has(parseInt(cb.dataset.id, 10))) {
+                    cb.checked = true;
+                    this.classList.add('is-selected');
+                }
+            });
+            updatePickCount();
+        },
         language: {
             info: 'Menampilkan _START_–_END_ dari _TOTAL_ produk',
             infoEmpty: 'Tidak ada produk',
@@ -378,42 +334,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Stok & suplier mengikuti unit pengirim, bukan unit yang login: admin
     // pusat bisa membuat mutasi dari unit lain dan tetap melihat angka benar.
-    function segarkanStok() {
+    function segarkanStok(reloadPicker) {
         const unit = unitDipilih();
         const stokMap = stokUnit[unit] || {};
         const suplierMap = suplierUnit[unit] || {};
 
-        // DataTables hanya menaruh halaman aktif di DOM; ambil semua node baris
-        // lewat API agar halaman lain ikut memakai stok unit yang dipilih.
-        pickerTable.rows().nodes().toArray().forEach(function (row) {
-            const cb = row.querySelector('.produk-checkbox');
-            if (!cb) {
-                return;
-            }
-
-            const id = cb.dataset.id;
+        // Produk yang dicentang tapi stoknya habis di unit baru dilepas;
+        // yang masih ada ikut memakai stok/suplier unit baru.
+        for (const [id, data] of Array.from(picked.entries())) {
             const stok = Number(stokMap[id] || 0);
-            const suplier = suplierMap[id] || '';
-
-            if (stok <= 0 && cb.checked) {
-                cb.checked = false;
-                row.classList.remove('is-selected');
+            if (stok <= 0) {
+                picked.delete(id);
+            } else {
+                data.stok = stok;
+                data.suplier = suplierMap[id] || '';
             }
+        }
 
-            cb.dataset.stok = String(stok);
-            cb.dataset.suplier = suplier;
-
-            const stokCell = row.querySelector('[data-stock-cell]');
-            const suplierCell = row.querySelector('[data-suplier-cell]');
-            if (stokCell) {
-                stokCell.innerHTML = chipStok(stok);
-            }
-            if (suplierCell) {
-                suplierCell.textContent = suplier || '—';
-            }
-        });
-
-        pickerTable.draw();
+        if (reloadPicker) {
+            pickerTable.ajax.reload(null, false);
+        }
         updatePickCount();
 
         document.querySelectorAll('#selected-produk-table tr').forEach(function (row) {
@@ -452,42 +392,50 @@ document.addEventListener('DOMContentLoaded', function () {
         openPicker.classList.toggle('d-none', !ada);
     }
 
-    // Checkbox di halaman lain tetap hidup di node DataTables, bukan DOM aktif.
-    function checkboxPicker() {
-        return pickerTable.rows().nodes().toArray()
-            .map(function (row) { return row.querySelector('.produk-checkbox'); })
-            .filter(Boolean);
-    }
-
     function updatePickCount() {
-        const semua = checkboxPicker();
-        const checked = semua.filter(function (cb) { return cb.checked; });
-        pickCount.textContent = angka(checked.length);
-        pickCountBtn.textContent = angka(checked.length);
-        confirmBtn.disabled = checked.length === 0;
+        const jumlah = picked.size;
+        pickCount.textContent = angka(jumlah);
+        pickCountBtn.textContent = angka(jumlah);
+        confirmBtn.disabled = jumlah === 0;
 
-        const tampil = pickerTable.rows({ search: 'applied' }).nodes().toArray()
+        const tampil = pickerTable.rows({ page: 'current' }).nodes().toArray()
             .map(function (row) { return row.querySelector('.produk-checkbox'); })
             .filter(Boolean);
-        const dipilih = tampil.filter(function (cb) { return cb.checked; }).length;
+        const dipilih = tampil.filter(function (cb) {
+            return picked.has(parseInt(cb.dataset.id, 10));
+        }).length;
         selectAll.checked = tampil.length > 0 && dipilih === tampil.length;
         selectAll.indeterminate = dipilih > 0 && dipilih < tampil.length;
     }
 
-    function tambahBaris(cb) {
-        const id = parseInt(cb.dataset.id, 10);
+    function dataProduk(cb) {
+        return {
+            id: parseInt(cb.dataset.id, 10) || 0,
+            nama: cb.dataset.nama || '',
+            kode: cb.dataset.kode || '',
+            kategori: cb.dataset.kategori || '',
+            imei: cb.dataset.imei || '',
+            suplier: cb.dataset.suplier || '',
+            stok: parseInt(cb.dataset.stok, 10) || 0,
+            hargaBeli: parseInt(cb.dataset.harga_beli, 10) || 0,
+            hargaJual: parseInt(cb.dataset.harga_jual, 10) || 0,
+        };
+    }
+
+    function tambahBaris(data) {
+        const id = data.id;
         if (!id || document.getElementById('produk-row-' + id)) {
             return;
         }
 
-        const nama = cb.dataset.nama || '';
-        const kode = cb.dataset.kode || '';
-        const kategori = cb.dataset.kategori || '';
-        const imei = cb.dataset.imei || '';
-        const suplier = cb.dataset.suplier || '';
-        const stok = parseInt(cb.dataset.stok, 10) || 0;
-        const hargaBeli = parseInt(cb.dataset.harga_beli, 10) || 0;
-        const hargaJual = parseInt(cb.dataset.harga_jual, 10) || 0;
+        const nama = data.nama;
+        const kode = data.kode;
+        const kategori = data.kategori;
+        const imei = data.imei;
+        const suplier = data.suplier;
+        const stok = data.stok;
+        const hargaBeli = data.hargaBeli;
+        const hargaJual = data.hargaJual;
 
         const row = document.createElement('tr');
         row.id = 'produk-row-' + id;
@@ -573,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     unit1.addEventListener('change', function () {
         document.getElementById('id_unit1_text').value = this.value;
-        segarkanStok();
+        segarkanStok(true);
     });
 
     // Produk baru hanya bisa dipilih setelah unit penerima diisi. Unit
@@ -603,14 +551,27 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     selectAll.addEventListener('change', function () {
-        pickerTable.rows({ search: 'applied' }).nodes().to$()
-            .find('.produk-checkbox')
-            .prop('checked', this.checked)
-            .trigger('change');
+        const checked = this.checked;
+        pickerTable.rows({ page: 'current' }).nodes().toArray().forEach(function (row) {
+            const cb = row.querySelector('.produk-checkbox');
+            if (!cb) {
+                return;
+            }
+            cb.checked = checked;
+            $(cb).trigger('change');
+        });
         updatePickCount();
     });
 
     $('#produk-modal-table').on('change', '.produk-checkbox', function () {
+        const id = parseInt(this.dataset.id, 10) || 0;
+        if (id) {
+            if (this.checked) {
+                picked.set(id, dataProduk(this));
+            } else {
+                picked.delete(id);
+            }
+        }
         $(this).closest('tr').toggleClass('is-selected', this.checked);
         updatePickCount();
     });
@@ -630,13 +591,12 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     confirmBtn.addEventListener('click', function () {
-        checkboxPicker().forEach(function (cb) {
-            if (cb.checked) {
-                tambahBaris(cb);
-            }
+        picked.forEach(function (data) {
+            tambahBaris(data);
         });
 
-        pickerTable.rows().nodes().to$().find('.produk-checkbox')
+        picked.clear();
+        pickerTable.rows({ page: 'current' }).nodes().to$().find('.produk-checkbox')
             .prop('checked', false)
             .closest('tr').removeClass('is-selected');
         selectAll.checked = false;
@@ -673,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('id_unit1_text').value = unit1.value;
     document.getElementById('id_unit2_text').value = unit2.value;
     segarkanTombolProduk();
-    segarkanStok();
+    segarkanStok(false);
     updateSummary();
     updatePickCount();
 });

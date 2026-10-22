@@ -4,15 +4,12 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Models\ModelAuth;
-use App\Models\ModelKartuStok;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use App\Models\ModelBarang;
-use App\Models\ModelKategori;
 use App\Models\ModelPembelian;
 use App\Models\ModelStokAwal;
 use App\Models\ModelDetailPembelian;
-use App\Models\ModelSuplier;
 use App\Models\ModelMutasiStok;
 use App\Models\ModelUnit;
 use App\Models\ModelHppBarang;
@@ -28,10 +25,7 @@ class MutasiStok extends BaseController
 {
 
     protected $AuthModel;
-    protected $KartuStokModel;
     protected $BarangModel;
-    protected $KategoriModel;
-    protected $SuplierModel;
     protected $PembelianModel;
     protected $StokAwalModel;
     protected $DetailPembelianModel;
@@ -46,10 +40,7 @@ class MutasiStok extends BaseController
     public function __construct()
     {
         $this->AuthModel = new ModelAuth();
-        $this->KartuStokModel = new ModelKartuStok();
         $this->BarangModel = new ModelBarang();
-        $this->KategoriModel = new ModelKategori();
-        $this->SuplierModel = new ModelSuplier();
         $this->PembelianModel = new ModelPembelian();
         $this->StokAwalModel = new ModelStokAwal();
         $this->DetailPembelianModel = new ModelDetailPembelian();
@@ -72,16 +63,85 @@ class MutasiStok extends BaseController
         $lihatUnit = $bolehPilihUnit ? null : $unit;
         $data =  array(
             'akun' => $akun,
-            'stok' => $this->KartuStokModel->getKartuStokWithKategori(),
-            'produk' => $this->BarangModel->getAllBarang(),
-            'kategori' => $this->KategoriModel->getKategori(),
-            'suplier' => $this->SuplierModel->getSuplier(),
             'unit' => $this->UnitModel->getUnit(),
             'stok_unit' => $this->BarangModel->getStokPerUnit($lihatUnit),
             'suplier_unit' => $this->BarangModel->getSuplierPerUnit($lihatUnit),
             'body'  => 'stok/mutasi_stok'
         );
         return view('template', $data);
+    }
+
+    /**
+     * Data picker produk untuk DataTables server-side di /mutasi_stok.
+     *
+     * Halaman index tidak lagi mengirim seluruh katalog; endpoint ini hanya
+     * mengirim 10 baris + total, sehingga HTML tidak membengkak.
+     */
+    public function produk()
+    {
+        $jabatan  = (int) session('ID_JABATAN');
+        $unitSesi = (int) session('ID_UNIT');
+
+        // Role cabang tidak boleh membaca stok unit lain lewat ?unit=.
+        $unit = $jabatan === 1 ? (int) $this->request->getGet('unit') : $unitSesi;
+        if ($unit <= 0 || ! $this->UnitModel->getById($unit)) {
+            $unit = $unitSesi;
+        }
+
+        $draw   = (int) ($this->request->getGet('draw') ?? 0);
+        $start  = max(0, (int) ($this->request->getGet('start') ?? 0));
+        $length = (int) ($this->request->getGet('length') ?? 10);
+        $length = ($length > 0 && $length <= 100) ? $length : 10;
+
+        $search = $this->request->getGet('search');
+        $search = is_array($search) ? trim((string) ($search['value'] ?? '')) : '';
+
+        $order = $this->request->getGet('order');
+        $order = is_array($order) ? ($order[0] ?? []) : [];
+
+        $sortMap = [1 => 'nama', 2 => 'stok', 3 => 'suplier', 4 => 'harga_beli'];
+        $sortKey = $sortMap[(int) ($order['column'] ?? 1)] ?? 'nama';
+        $dir     = strtoupper((string) ($order['dir'] ?? 'asc')) === 'DESC' ? 'DESC' : 'ASC';
+
+        $total    = $this->BarangModel->countProdukPicker($unit, '');
+        $filtered = $search === '' ? $total : $this->BarangModel->countProdukPicker($unit, $search);
+        $rows     = $this->BarangModel->getProdukPicker($unit, $search, $sortKey, $dir, $length, $start);
+
+        $data = [];
+        foreach ($rows as $r) {
+            $stok    = (float) ($r->stok_akhir ?? 0);
+            $suplier = trim((string) ($r->nama_suplier ?? ''));
+            $kelas   = $stok <= 0 ? ' is-empty' : ($stok <= 5 ? ' is-low' : '');
+
+            $data[] = [
+                '<input type="checkbox" class="produk-checkbox form-check-input"'
+                    . ' data-id="' . (int) $r->idbarang . '"'
+                    . ' data-kode="' . esc((string) $r->kode_barang, 'attr') . '"'
+                    . ' data-nama="' . esc((string) $r->nama_barang, 'attr') . '"'
+                    . ' data-harga_beli="' . (float) ($r->harga_beli ?? 0) . '"'
+                    . ' data-harga_jual="' . (float) ($r->harga ?? 0) . '"'
+                    . ' data-kategori="' . esc((string) $r->nama_kategori, 'attr') . '"'
+                    . ' data-imei="' . esc((string) ($r->imei ?? ''), 'attr') . '"'
+                    . ' data-stok="' . (int) $stok . '"'
+                    . ' data-suplier="' . esc($suplier, 'attr') . '"'
+                    . ' aria-label="Pilih ' . esc((string) $r->nama_barang, 'attr') . '">',
+                '<span class="ms-prod-name">' . esc((string) $r->nama_barang) . '</span>'
+                    . '<span class="ms-prod-meta">' . esc((string) $r->kode_barang)
+                    . (! empty($r->imei) ? ' · IMEI ' . esc((string) $r->imei) : '')
+                    . '</span>',
+                '<span class="ms-stock' . $kelas . '">' . number_format($stok, 0, ',', '.') . '</span>',
+                $suplier !== '' ? esc($suplier) : '<span class="text-muted">—</span>',
+                'Rp ' . number_format((float) ($r->harga_beli ?? 0), 0, ',', '.'),
+                '<span class="ms-tag">' . esc((string) $r->nama_kategori) . '</span>',
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $filtered,
+            'data'            => $data,
+        ]);
     }
 
     /**

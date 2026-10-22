@@ -97,6 +97,82 @@ class ModelBarang extends Model
         return $map;
     }
 
+    /**
+     * Data picker produk server-side untuk /mutasi_stok.
+     *
+     * Stok diambil dari stok_barang unit pengirim, suplier dari stok_awal
+     * terbaru unit yang sama. Filter stok > 0 dilakukan di SQL supaya produk
+     * tanpa stok tidak pernah dikirim ke browser.
+     *
+     * @return object[]
+     */
+    public function getProdukPicker(int $idUnit, string $search, string $orderBy, string $dir, int $limit, int $offset): array
+    {
+        [$from, $params] = $this->pickerFrom($idUnit, $search);
+
+        $sortMap = [
+            'nama'       => 'sb.nama_barang',
+            'stok'       => 'sb.stok_akhir',
+            'suplier'    => 's.nama_suplier',
+            'harga_beli' => 'sb.harga_beli',
+        ];
+        $orderBy = $sortMap[$orderBy] ?? 'sb.nama_barang';
+        $dir     = strtoupper($dir) === 'DESC' ? 'DESC' : 'ASC';
+        $limit   = max(1, min($limit, 100));
+        $offset  = max(0, $offset);
+
+        $sql = "SELECT sb.idbarang, sb.kode_barang, sb.nama_barang, sb.imei,
+                       sb.harga_beli, sb.harga, k.nama_kategori,
+                       sb.stok_akhir, s.nama_suplier
+                {$from}
+                ORDER BY {$orderBy} {$dir}, sb.idbarang ASC
+                LIMIT {$limit} OFFSET {$offset}";
+
+        return $this->db->query($sql, $params)->getResult();
+    }
+
+    public function countProdukPicker(int $idUnit, string $search): int
+    {
+        [$from, $params] = $this->pickerFrom($idUnit, $search);
+
+        $row = $this->db->query("SELECT COUNT(*) AS total {$from}", $params)->getRow();
+
+        return (int) ($row->total ?? 0);
+    }
+
+    /**
+     * @return array{0: string, 1: array}
+     */
+    private function pickerFrom(int $idUnit, string $search): array
+    {
+        $from = "FROM stok_barang sb
+            JOIN kategori k ON k.id = sb.idkategori
+            LEFT JOIN (
+                SELECT sa.barang_idbarang, MAX(sa.idstok_awal) AS idstok_awal
+                FROM stok_awal sa
+                WHERE sa.unit_idunit = ?
+                  AND sa.suplier_id_suplier IS NOT NULL
+                  AND sa.suplier_id_suplier <> ''
+                GROUP BY sa.barang_idbarang
+            ) t ON t.barang_idbarang = sb.idbarang
+            LEFT JOIN stok_awal sa2 ON sa2.idstok_awal = t.idstok_awal
+            LEFT JOIN suplier s ON s.id_suplier = sa2.suplier_id_suplier
+            WHERE sb.id_unit = ?
+              AND sb.stok_akhir > 0
+              AND sb.deleted = '0'
+              AND k.`delete` = '0'";
+        $params = [$idUnit, $idUnit];
+
+        if ($search !== '') {
+            $from .= ' AND (sb.kode_barang LIKE ? OR sb.nama_barang LIKE ? OR sb.imei LIKE ?'
+                . ' OR s.nama_suplier LIKE ? OR k.nama_kategori LIKE ?)';
+            $like = '%' . $search . '%';
+            array_push($params, $like, $like, $like, $like, $like);
+        }
+
+        return [$from, $params];
+    }
+
     //gor push ulang
 
     public function getAllBarang2()
