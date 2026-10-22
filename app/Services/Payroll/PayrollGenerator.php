@@ -221,6 +221,64 @@ class PayrollGenerator
     }
 
     /**
+     * Gaji per karyawan satu unit untuk satu bulan, TANPA menulis payroll.
+     * Dipakai laporan /asset_berjalan supaya angkanya sama dengan payroll.
+     *
+     * @return array<int, array{
+     *   id_akun:int, nama:string, jabatan_id:int,
+     *   gaji_pokok:float, tunjangan_kinerja:float, tunjangan_absen:float,
+     *   tunjangan_penempatan:float, insentif:float, lembur:float, total:float
+     * }>
+     */
+    public function hitungGajiUnit(string $bulan, int $unitId): array
+    {
+        if (! preg_match('/^\d{4}-\d{2}$/', $bulan)) {
+            throw new \InvalidArgumentException('Format bulan harus YYYY-MM.');
+        }
+
+        $tahun = (int) substr($bulan, 0, 4);
+        $bln   = (int) substr($bulan, 5, 2);
+        $from  = $bulan . '-01';
+        $to    = date('Y-m-t', strtotime($from));
+        $lembur = $this->daftarLembur($from, $to);
+
+        $hasil = [];
+
+        foreach ($this->daftarKaryawan([$unitId]) as $karyawan) {
+            if ((int) ($karyawan['TERIMA_GAJI'] ?? 1) === 0) {
+                continue;
+            }
+
+            $id = (int) $karyawan['ID_AKUN'];
+
+            try {
+                $gaji = $this->hitungGaji($id, $karyawan, $bln, (string) $tahun, $lembur[$id] ?? 0.0);
+            } catch (\Throwable $e) {
+                log_message('error', 'PayrollGenerator: hitung gaji #' . $id . ' gagal: ' . $e->getMessage());
+                continue;
+            }
+
+            // amount per component_code; kode yang tidak ada dianggap 0.
+            $komponen = array_column($gaji['components'], 'amount', 'component_code');
+
+            $hasil[] = [
+                'id_akun'              => $id,
+                'nama'                 => (string) $karyawan['NAMA_AKUN'],
+                'jabatan_id'           => (int) ($karyawan['ID_JABATAN'] ?? 0),
+                'gaji_pokok'           => (float) ($komponen['GAJI_POKOK'] ?? 0),
+                'tunjangan_kinerja'    => (float) ($komponen[self::KOMPONEN_KINERJA] ?? 0),
+                'tunjangan_absen'      => (float) ($komponen[self::KOMPONEN_ABSEN] ?? 0),
+                'tunjangan_penempatan' => (float) $gaji['placement_allowance'],
+                'insentif'             => (float) $gaji['incentive'],
+                'lembur'               => (float) $gaji['lembur'],
+                'total'                => (float) $gaji['total_gaji'],
+            ];
+        }
+
+        return $hasil;
+    }
+
+    /**
      * Hitung gaji satu karyawan untuk satu bulan.
      *
      * Wiring-nya sama persis dengan slip gaji (PenilaianKPI::slip_gaji()):
