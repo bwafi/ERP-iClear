@@ -74,6 +74,139 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         font-variant-numeric: tabular-nums;
         letter-spacing: -0.02em;
     }
+
+    /* Detail pengeluaran: hero, ringkasan, dan ledger yang lebih rapi. */
+    #modalDetailPengeluaran .detail-hero {
+        background: var(--bs-warning-bg-subtle);
+        border-bottom: 1px solid var(--bs-warning-border-subtle);
+        padding: 1rem 1.25rem;
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] .detail-hero {
+        background: var(--bs-secondary-bg-subtle);
+        border-bottom-color: var(--bs-secondary-border-subtle);
+    }
+    #modalDetailPengeluaran .detail-hero-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: var(--bs-warning);
+        color: #fff;
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] .detail-hero-icon {
+        background: var(--bs-secondary);
+    }
+    #modalDetailPengeluaran .detail-summary {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 1fr;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    #modalDetailPengeluaran .detail-summary > div {
+        padding: .85rem 1rem;
+        min-width: 0;
+    }
+    #modalDetailPengeluaran .detail-summary > div + div {
+        border-left: 1px solid var(--bs-border-color);
+    }
+    #modalDetailPengeluaran .modal-body {
+        padding-top: 0;
+    }
+    #modalDetailPengeluaran .detail-summary-label,
+    #modalDetailPengeluaran .detail-section-label {
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+    #modalDetailPengeluaran .detail-summary-value {
+        font-size: clamp(.95rem, 2.2vw, 1.25rem);
+        font-weight: 700;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+    #modalDetailPengeluaran .detail-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .32rem .65rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 999px;
+        background: var(--bs-body-bg);
+        font-size: .78rem;
+        color: var(--bs-body-color);
+    }
+    #modalDetailPengeluaran .detail-chip strong {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+    }
+    #modalDetailPengeluaran .detail-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+        background: var(--bs-tertiary-bg);
+        border-bottom: 1px solid var(--bs-border-color);
+        padding-top: .6rem;
+        padding-bottom: .6rem;
+    }
+    #modalDetailPengeluaran .detail-table tbody td {
+        border-color: var(--bs-border-color-translucent);
+        vertical-align: middle;
+    }
+    #modalDetailPengeluaran .detail-empty-icon {
+        width: 48px;
+        height: 48px;
+        margin-left: auto;
+        margin-right: auto;
+        color: var(--bs-secondary-color);
+        opacity: .55;
+    }
+    @media (max-width: 767.98px) {
+        /* Di layar sempit, kategori sudah terwakili chip; penerima bisa dibuka di desktop. */
+        #modalDetailPengeluaran .detail-table th:nth-child(2),
+        #modalDetailPengeluaran .detail-table td:nth-child(2),
+        #modalDetailPengeluaran .detail-table th:nth-child(4),
+        #modalDetailPengeluaran .detail-table td:nth-child(4) {
+            display: none;
+        }
+        #modalDetailPengeluaran .detail-table th,
+        #modalDetailPengeluaran .detail-table td {
+            padding-left: .4rem;
+            padding-right: .4rem;
+        }
+        #modalDetailPengeluaran .detail-table {
+            table-layout: fixed;
+        }
+        #modalDetailPengeluaran .detail-table th:first-child {
+            width: 96px;
+        }
+        #modalDetailPengeluaran .detail-table th:last-child {
+            width: 116px;
+        }
+        #modalDetailPengeluaran .detail-table td {
+            word-break: break-word;
+        }
+    }
+    @media (max-width: 575.98px) {
+        #modalDetailPengeluaran .detail-summary {
+            grid-template-columns: 1fr 1fr;
+        }
+        #modalDetailPengeluaran .detail-summary > div:first-child {
+            grid-column: 1 / -1;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        #modalDetailPengeluaran .detail-summary > div:nth-child(2) {
+            border-left: 0;
+        }
+    }
 </style>
 
 <!-- Page Toolbar -->
@@ -228,7 +361,8 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <button type="button"
                     class="btn btn-sm btn-outline-warning fw-semibold mt-3 align-self-start d-inline-flex align-items-center gap-1"
                     data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
-                    data-kelompok="terkontrol" data-judul="Biaya Terkontrol (Maks 6%)">
+                    data-kelompok="terkontrol" data-judul="Biaya Terkontrol (Maks 6%)"
+                    data-warna="warning" data-icon="solar:card-send-bold-duotone">
                     <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
                     Detail
                 </button>
@@ -253,7 +387,8 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <button type="button"
                     class="btn btn-sm btn-outline-secondary fw-semibold mt-3 align-self-start d-inline-flex align-items-center gap-1"
                     data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
-                    data-kelompok="kebutuhan" data-judul="Biaya Kebutuhan (Di Luar 6%)">
+                    data-kelompok="kebutuhan" data-judul="Biaya Kebutuhan (Di Luar 6%)"
+                    data-warna="secondary" data-icon="solar:wallet-money-bold-duotone">
                     <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
                     Detail
                 </button>
@@ -416,46 +551,72 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     data-bulan="<?= (int) $bulan ?>"
     data-tahun="<?= (int) $tahun ?>">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header align-items-start">
-                <div>
-                    <h5 class="modal-title mb-0" id="detailPengeluaranTitle">Detail Pengeluaran</h5>
+        <div class="modal-content border-0 shadow-lg overflow-hidden">
+            <div class="modal-header detail-hero align-items-start gap-3">
+                <div class="detail-hero-icon">
+                    <iconify-icon id="detailPengeluaranIcon" icon="solar:card-send-bold-duotone" width="24" height="24"></iconify-icon>
+                </div>
+                <div class="flex-grow-1">
+                    <h5 class="modal-title mb-1" id="detailPengeluaranTitle">Detail Pengeluaran</h5>
                     <small class="text-muted">
                         <?= esc($namaUnitAktif ?: ('Unit ' . $selected_unit)) ?> &middot; <?= esc($periodeLabelId) ?>
                     </small>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
+
+            <div class="detail-summary" id="detailPengeluaranSummary">
+                <div>
+                    <div class="detail-summary-label">Total pengeluaran</div>
+                    <div class="detail-summary-value metric-figure" id="detailPengeluaranTotal">Rp 0</div>
+                </div>
+                <div>
+                    <div class="detail-summary-label">Transaksi</div>
+                    <div class="detail-summary-value metric-figure" id="detailPengeluaranCount">0</div>
+                </div>
+                <div>
+                    <div class="detail-summary-label">Kategori</div>
+                    <div class="detail-summary-value metric-figure" id="detailPengeluaranKategoriCount">0</div>
+                </div>
+            </div>
+
             <div class="modal-body">
                 <div id="detailPengeluaranLoading" class="text-center text-muted py-5">
                     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                     Memuat detail pengeluaran…
                 </div>
-                <div id="detailPengeluaranError" class="alert alert-danger d-none mb-0" role="alert">
+                <div id="detailPengeluaranError" class="alert alert-danger d-none mb-0 mt-3" role="alert">
                     <span id="detailPengeluaranErrorText">Gagal memuat detail.</span>
                     <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="detailPengeluaranRetry">Coba lagi</button>
                 </div>
                 <div id="detailPengeluaranEmpty" class="text-center text-muted py-5 d-none">
-                    Tidak ada pengeluaran pada periode ini.
+                    <iconify-icon icon="solar:wallet-money-bold-duotone" width="48" height="48" class="detail-empty-icon d-block mx-auto mb-2"></iconify-icon>
+                    <div class="fw-semibold text-dark mb-1">Tidak ada pengeluaran</div>
+                    <small>Tidak ada transaksi pada unit dan periode ini.</small>
                 </div>
-                <div id="detailPengeluaranTableWrap" class="table-responsive d-none">
-                    <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th>Tanggal</th>
-                                <th>Kategori</th>
-                                <th>Deskripsi</th>
-                                <th>Penerima</th>
-                                <th class="text-end text-nowrap">Jumlah</th>
-                            </tr>
-                        </thead>
-                        <tbody id="detailPengeluaranRows"></tbody>
-                    </table>
+                <div id="detailPengeluaranTableWrap" class="d-none">
+                    <div class="detail-section-label mb-2 mt-3">Rincian kategori</div>
+                    <div id="detailPengeluaranKategori" class="d-flex flex-wrap gap-2 mb-3"></div>
+                    <div>
+                        <table class="table table-hover align-middle mb-0 detail-table">
+                            <thead>
+                                <tr>
+                                    <th>Tanggal</th>
+                                    <th>Kategori</th>
+                                    <th>Deskripsi</th>
+                                    <th>Penerima</th>
+                                    <th class="text-end">Jumlah</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detailPengeluaranRows"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+
             <div class="modal-footer justify-content-between">
-                <span class="text-muted fs-2" id="detailPengeluaranCount"></span>
-                <span class="fw-semibold">Total <span class="ms-1 metric-figure" id="detailPengeluaranTotal">Rp 0</span></span>
+                <span class="text-muted fs-2">Sumber: Kas Keluar</span>
+                <button type="button" class="btn btn-light border btn-sm px-3" data-bs-dismiss="modal">Tutup</button>
             </div>
         </div>
     </div>
@@ -482,8 +643,10 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     const empty = el('detailPengeluaranEmpty');
     const wrap = el('detailPengeluaranTableWrap');
     const tbody = el('detailPengeluaranRows');
+    const kategoriWrap = el('detailPengeluaranKategori');
     const totalEl = el('detailPengeluaranTotal');
     const countEl = el('detailPengeluaranCount');
+    const kategoriCountEl = el('detailPengeluaranKategoriCount');
     const rupiah = new Intl.NumberFormat('id-ID');
 
     const tampil = (state) => {
@@ -493,12 +656,25 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         wrap.classList.toggle('d-none', state !== 'table');
     };
 
+    const resetRingkasan = (teks) => {
+        totalEl.textContent = teks;
+        countEl.textContent = teks;
+        kategoriCountEl.textContent = teks;
+        kategoriWrap.textContent = '';
+    };
+
     const tanggal = (v) => {
         const s = String(v || '').slice(0, 10).split('-');
         return s.length === 3 ? s[2] + '/' + s[1] + '/' + s[0] : (v || '-');
     };
 
     const render = (data) => {
+        const perKategori = new Map();
+        data.rows.forEach((row) => {
+            const nama = row.nama_kategori || 'Tanpa kategori';
+            perKategori.set(nama, (perKategori.get(nama) || 0) + (Number(row.jumlah) || 0));
+        });
+
         tbody.textContent = '';
         data.rows.forEach((row) => {
             const tr = document.createElement('tr');
@@ -511,21 +687,45 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             ];
             isi.forEach((text, i) => {
                 const td = document.createElement('td');
-                td.textContent = text;
-                if (i === 1) td.className = 'text-nowrap';
+                if (i === 1) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge rounded-pill bg-light text-dark border fw-medium';
+                    badge.textContent = text;
+                    td.appendChild(badge);
+                } else {
+                    td.textContent = text;
+                }
+                if (i === 0) td.className = 'text-nowrap text-secondary';
+                if (i === 3) td.className = 'text-muted';
                 if (i === 4) td.className = 'text-end fw-semibold metric-figure text-nowrap';
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
         });
 
+        kategoriWrap.textContent = '';
+        [...perKategori.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .forEach(([nama, jumlah]) => {
+                const chip = document.createElement('span');
+                chip.className = 'detail-chip';
+                const label = document.createElement('span');
+                label.textContent = nama;
+                const value = document.createElement('strong');
+                value.textContent = 'Rp ' + rupiah.format(jumlah);
+                chip.append(label, value);
+                kategoriWrap.appendChild(chip);
+            });
+
         totalEl.textContent = 'Rp ' + rupiah.format(data.total || 0);
-        countEl.textContent = data.rows.length + ' transaksi';
+        countEl.textContent = data.rows.length;
+        kategoriCountEl.textContent = perKategori.size;
         tampil(data.rows.length ? 'table' : 'empty');
     };
 
     const muat = async (kelompok) => {
         aktif = kelompok;
+        resetRingkasan('…');
         tampil('loading');
 
         const qs = new URLSearchParams({ ...params, kelompok });
@@ -546,7 +746,10 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             if (aktif === kelompok) render(data);
         } catch (e) {
             if (aktif !== kelompok) return;
-            errorText.textContent = e.message || 'Gagal memuat detail.';
+            resetRingkasan('—');
+            errorText.textContent = e.message === 'Failed to fetch'
+                ? 'Gagal memuat detail. Periksa koneksi lalu coba lagi.'
+                : (e.message || 'Gagal memuat detail.');
             tampil('error');
         }
     };
@@ -556,6 +759,8 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         if (!btn || !btn.dataset.kelompok) return;
 
         el('detailPengeluaranTitle').textContent = btn.dataset.judul || 'Detail Pengeluaran';
+        modal.dataset.warna = btn.dataset.warna || 'warning';
+        el('detailPengeluaranIcon').setAttribute('icon', btn.dataset.icon || 'solar:list-bold-duotone');
 
         if (cache.has(btn.dataset.kelompok)) {
             render(cache.get(btn.dataset.kelompok));

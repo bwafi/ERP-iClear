@@ -385,6 +385,8 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('data-kelompok="terkontrol"', $html);
         $this->assertStringContainsString('data-kelompok="kebutuhan"', $html);
         $this->assertStringContainsString('id="modalDetailPengeluaran"', $html);
+        $this->assertStringContainsString('id="detailPengeluaranSummary"', $html);
+        $this->assertStringContainsString('id="detailPengeluaranKategori"', $html);
         $this->assertMatchesRegularExpression('#<tbody id="detailPengeluaranRows">\s*</tbody>#', $html);
     }
 }
