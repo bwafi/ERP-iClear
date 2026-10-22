@@ -7,6 +7,9 @@ use CodeIgniter\Controller;
 
 class TutupKasir extends BaseController
 {
+    /** Kategori biaya terkontrol (maks 6% omset). */
+    private const KATEGORI_TERKONTROL = [1, 2, 3, 4, 5, 18];
+
     protected $db;
     protected $TutupKasir;
 
@@ -841,7 +844,7 @@ class TutupKasir extends BaseController
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
-            ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,18])
+            ->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL)
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -852,7 +855,7 @@ class TutupKasir extends BaseController
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
-            ->whereNotIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,18])
+            ->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL)
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -888,7 +891,68 @@ class TutupKasir extends BaseController
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }
-    
+
+    /**
+     * Detail pengeluaran untuk kartu Biaya Terkontrol / Biaya Kebutuhan.
+     * Dimuat hanya saat tombol Detail diklik (bukan saat halaman dibuka).
+     */
+    public function detailPengeluaran()
+    {
+        $scope = $this->resolveUnitScope();
+
+        // resolveUnitScope() sudah mem-fallback unit di luar izin; kalau hasilnya
+        // beda dengan yang diminta, berarti user tidak berhak atas unit itu.
+        $unit = (int) ($this->request->getGet('unit') ?: $scope['unit']);
+        if ($unit !== (int) $scope['unit']) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Unit tidak diizinkan']);
+        }
+
+        $kelompok = (string) $this->request->getGet('kelompok');
+        if (! in_array($kelompok, ['terkontrol', 'kebutuhan'], true)) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Kelompok tidak dikenal']);
+        }
+
+        $bulan = (int) $this->request->getGet('bulan');
+        $tahun = (int) $this->request->getGet('tahun');
+        if ($bulan < 1 || $bulan > 12 || $tahun < 2000 || $tahun > 2100) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Periode tidak valid']);
+        }
+
+        $builder = $this->db->table('kas_keluar')
+            ->select('kas_keluar.idkas_keluar, kas_keluar.tanggal, kas_keluar.kategori_idkategori, kategori_kas.kategori AS nama_kategori, kas_keluar.deskripsi, kas_keluar.penerima, kas_keluar.jumlah')
+            ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left')
+            ->where('MONTH(kas_keluar.tanggal)', $bulan)
+            ->where('YEAR(kas_keluar.tanggal)', $tahun)
+            ->where('kas_keluar.idunit', $unit);
+
+        if ($kelompok === 'terkontrol') {
+            $builder->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+        } else {
+            $builder->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+        }
+
+        $rows = $builder->orderBy('kas_keluar.tanggal', 'ASC')
+            ->orderBy('kas_keluar.idkas_keluar', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $total = 0.0;
+        foreach ($rows as &$row) {
+            $row['jumlah'] = (float) $row['jumlah'];
+            $total += $row['jumlah'];
+        }
+        unset($row);
+
+        return $this->response->setJSON([
+            'unit'     => $unit,
+            'bulan'    => $bulan,
+            'tahun'    => $tahun,
+            'kelompok' => $kelompok,
+            'rows'     => $rows,
+            'total'    => $total,
+        ]);
+    }
+
     public function tutup()
     {
         $today = date('Y-m-d');

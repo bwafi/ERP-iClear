@@ -82,7 +82,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
                 sub_total REAL NULL, hpp_penjualan REAL NULL)');
         $q('CREATE TABLE barang (idbarang INT PRIMARY KEY, nama_barang TEXT NULL, idkategori INT NULL)');
 
-        $q('CREATE TABLE kategori_kas (idkategori_kas INTEGER PRIMARY KEY, nama_kategori TEXT NULL)');
+        $q('CREATE TABLE kategori_kas (idkategori_kas INTEGER PRIMARY KEY, kategori TEXT NULL)');
         $q('CREATE TABLE kas_keluar (
                 idkas_keluar INTEGER PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
                 kategori_idkategori INT NULL, deskripsi TEXT NULL, jumlah REAL NULL,
@@ -162,7 +162,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             (41, 1, NULL, 2000000, 'fixed', NULL, '2026-01-01', NULL),
             (41, 2, NULL, 850000, 'percent_of_kpi', NULL, '2026-01-01', NULL),
             (41, 3, NULL, 250000, 'percent_of_kpi', NULL, '2026-01-01', NULL)");
-        $q("INSERT INTO kategori_kas (idkategori_kas, nama_kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(6,'Lain-lain'),(11,'Lainnya'),(18,'Transport')");
+        $q("INSERT INTO kategori_kas (idkategori_kas, kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(6,'Lain-lain'),(11,'Lainnya'),(18,'Transport')");
         $q("INSERT INTO menu (idmenu, urutan, nama_menu, roles, url, show_menu) VALUES (1,1,'Dashboard','[]','dashboard',1)");
 
         // September 2026 data (bulan lampau)
@@ -322,5 +322,69 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         // Total 4.707.580 - biaya terkontrol 2.507.580 = 2.200.000 (kategori 6, 11, HPP).
         $this->assertSame('2.200.000', $this->kartu($html, 'Biaya Kebutuhan (Di Luar 6%)'));
+    }
+
+    /** Detail biaya terkontrol hanya memuat kategori A. */
+    public function testDetailTerkontrolHanyaKategoriTerkontrol(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $res = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=terkontrol');
+        $res->assertStatus(200);
+        $json = json_decode((string) $res->getJSON(), true);
+
+        $this->assertSame('terkontrol', $json['kelompok']);
+        $this->assertSame(2507580.0, (float) $json['total']);
+        $kategori = array_map('intval', array_column($json['rows'], 'kategori_idkategori'));
+        sort($kategori);
+        $this->assertSame([1, 18], $kategori);
+    }
+
+    /** Detail biaya kebutuhan = semua kas keluar di luar kategori A; total = angka kartu. */
+    public function testDetailKebutuhanTotalSamaDenganKartu(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $res = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=kebutuhan');
+        $res->assertStatus(200);
+        $json = json_decode((string) $res->getJSON(), true);
+
+        $this->assertSame(2200000.0, (float) $json['total']);
+        $kategori = array_map('intval', array_column($json['rows'], 'kategori_idkategori'));
+        sort($kategori);
+        $this->assertSame([6, 7, 11], $kategori);
+    }
+
+    public function testDetailMenolakKelompokTidakDikenal(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=foo')
+            ->assertStatus(400);
+    }
+
+    /** Staf cabang tidak boleh menarik detail unit lain lewat parameter. */
+    public function testDetailMenolakUnitDiLuarScope(): void
+    {
+        $this->sesi(100, 3, 41);
+        $this->db->setPrefix('');
+
+        $this->get('asset_berjalan/detail-pengeluaran?unit=4&bulan=10&tahun=2026&kelompok=terkontrol')
+            ->assertStatus(403);
+    }
+
+    /** Tombol detail ada, tapi tabel detail masih kosong saat halaman dimuat. */
+    public function testHalamanPunyaTombolDetailTanpaMemuatData(): void
+    {
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
+
+        $this->assertStringContainsString('data-kelompok="terkontrol"', $html);
+        $this->assertStringContainsString('data-kelompok="kebutuhan"', $html);
+        $this->assertStringContainsString('id="modalDetailPengeluaran"', $html);
+        $this->assertMatchesRegularExpression('#<tbody id="detailPengeluaranRows">\s*</tbody>#', $html);
     }
 }

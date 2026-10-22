@@ -27,6 +27,14 @@ $labelSebelum   = ($namaBulan[$bulanSebelum] ?? '-') . ' ' . $tahunSebelum;
 // maupun dirender tanpa parameter tren).
 $pertumbuhanOmset = $pertumbuhan_omset ?? null;
 
+$namaUnitAktif = '';
+foreach (($list_unit ?? []) as $u) {
+    if ((int) ($u['idunit'] ?? 0) === (int) $selected_unit) {
+        $namaUnitAktif = (string) ($u['NAMA_UNIT'] ?? '');
+        break;
+    }
+}
+
 // ---------------------------------------------------------------
 // Kalkulasi nilai metrik (formula bisnis — jangan diubah).
 // ---------------------------------------------------------------
@@ -68,67 +76,60 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     }
 </style>
 
-<!-- Page Header & Breadcrumb -->
-<div class="card shadow-none position-relative overflow-hidden mb-4 bg-light-subtle border">
-    <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 p-4">
-        <div>
-            <h4 class="fw-bold mb-1 text-dark">Asset Berjalan</h4>
-            <p class="fs-3 text-muted mb-0">Laporan asset berjalan dan pembagian hasil operasional per cabang</p>
-        </div>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0 bg-transparent p-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a>
-                </li>
-                <li class="breadcrumb-item text-primary fw-medium" aria-current="page">Asset Berjalan</li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
-<!-- Period Navigation Bar -->
+<!-- Page Toolbar -->
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body py-3 px-4">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-            <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSebelum . '&tahun=' . $tahunSebelum) ?>"
-                class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
-                <iconify-icon icon="solar:arrow-left-bold-duotone" class="text-primary fs-5"></iconify-icon>
-                <span class="fw-medium d-none d-md-inline"><?= esc($labelSebelum) ?></span>
-                <span class="fw-medium d-md-none">Sebelumnya</span>
-            </a>
-
-            <div class="d-flex align-items-center gap-2 px-3 py-2 border rounded-pill bg-primary-subtle bg-opacity-10 border-primary-subtle">
-                <iconify-icon icon="solar:calendar-bold-duotone" class="text-primary fs-5"></iconify-icon>
-                <span class="fs-4 fw-bold text-primary"><?= esc($periodeLabelId) ?></span>
+    <div class="card-body p-3 p-md-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <nav aria-label="breadcrumb" class="mb-1">
+                    <ol class="breadcrumb mb-0 fs-2">
+                        <li class="breadcrumb-item">
+                            <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a>
+                        </li>
+                        <li class="breadcrumb-item text-primary fw-medium active" aria-current="page">Asset Berjalan</li>
+                    </ol>
+                </nav>
+                <h4 class="fw-bold mb-0 text-dark">Asset Berjalan</h4>
+                <small class="text-muted">Ringkasan omset, biaya, dan pembagian hasil per cabang</small>
             </div>
 
-            <?php if (!$isBulanBerjalan): ?>
-                <?php $bulanSesudah = (int) date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
-                <?php $tahunSesudah = (int) date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
-                <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSesudah . '&tahun=' . $tahunSesudah) ?>"
-                    class="btn btn-outline-light text-dark border d-inline-flex align-items-center gap-2 py-2 px-3 shadow-sm">
-                    <span class="fw-medium d-none d-md-inline"><?= esc(($namaBulan[$bulanSesudah] ?? '-') . ' ' . $tahunSesudah) ?></span>
-                    <span class="fw-medium d-md-none">Berikutnya</span>
-                    <iconify-icon icon="solar:arrow-right-bold-duotone" class="text-primary fs-5"></iconify-icon>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSebelum . '&tahun=' . $tahunSebelum) ?>"
+                    class="btn btn-light border btn-sm d-inline-flex align-items-center gap-1 py-2 px-3"
+                    title="<?= esc($labelSebelum) ?>">
+                    <iconify-icon icon="solar:arrow-left-bold-duotone" class="text-primary"></iconify-icon>
+                    <span class="d-none d-lg-inline"><?= esc($labelSebelum) ?></span>
+                    <span class="d-lg-none">Sebelumnya</span>
                 </a>
-            <?php else: ?>
-                <span class="btn btn-light text-muted border disabled d-inline-flex align-items-center gap-2 py-2 px-3 opacity-50" title="Bulan berikutnya belum tersedia">
-                    <span class="fw-medium d-none d-md-inline">Berikutnya</span>
-                    <iconify-icon icon="solar:arrow-right-bold-duotone" class="fs-5"></iconify-icon>
-                </span>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
 
-<!-- Filter Toolbar (For Authorized Roles) -->
-<?php if ($bolehPilihUnit): ?>
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body p-4">
-            <form method="GET" class="row align-items-end g-3">
-                <div class="col-md-5">
-                    <label class="form-label fw-semibold fs-3 text-dark">Pilih Unit Cabang</label>
-                    <select name="unit" class="form-select bg-white" onchange="this.form.submit()">
+                <span class="badge bg-primary-subtle text-primary-emphasis fs-3 fw-bold px-3 py-2 rounded-pill">
+                    <?= esc($periodeLabelId) ?>
+                </span>
+
+                <?php if (!$isBulanBerjalan): ?>
+                    <?php $bulanSesudah = (int) date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
+                    <?php $tahunSesudah = (int) date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
+                    <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . $bulanSesudah . '&tahun=' . $tahunSesudah) ?>"
+                        class="btn btn-light border btn-sm d-inline-flex align-items-center gap-1 py-2 px-3"
+                        title="<?= esc(($namaBulan[$bulanSesudah] ?? '-') . ' ' . $tahunSesudah) ?>">
+                        <span class="d-none d-lg-inline"><?= esc(($namaBulan[$bulanSesudah] ?? '-') . ' ' . $tahunSesudah) ?></span>
+                        <span class="d-lg-none">Berikutnya</span>
+                        <iconify-icon icon="solar:arrow-right-bold-duotone" class="text-primary"></iconify-icon>
+                    </a>
+                <?php else: ?>
+                    <span class="btn btn-light border btn-sm d-inline-flex align-items-center gap-1 py-2 px-3 text-muted opacity-50 disabled" title="Bulan berikutnya belum tersedia">
+                        <span>Berikutnya</span>
+                        <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
+                    </span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if ($bolehPilihUnit): ?>
+            <form method="GET" class="row g-2 align-items-end mt-3 pt-3 border-top">
+                <div class="col-12 col-md-5">
+                    <label for="filterUnit" class="form-label fs-2 fw-semibold text-muted mb-1">Unit cabang</label>
+                    <select id="filterUnit" name="unit" class="form-select" onchange="this.form.submit()">
                         <?php foreach ($list_unit as $u): ?>
                             <option value="<?= $u['idunit'] ?>" <?= $selected_unit == $u['idunit'] ? 'selected' : '' ?>>
                                 <?= esc($u['NAMA_UNIT']) ?>
@@ -136,31 +137,43 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold fs-3 text-dark">Bulan Pelaporan</label>
-                    <select name="bulan" class="form-select bg-white" onchange="this.form.submit()">
+                <div class="col-6 col-md-3">
+                    <label for="filterBulan" class="form-label fs-2 fw-semibold text-muted mb-1">Bulan</label>
+                    <select id="filterBulan" name="bulan" class="form-select" onchange="this.form.submit()">
                         <?php for ($i = 1; $i <= 12; $i++): ?>
                             <option value="<?= $i ?>" <?= $bulan == $i ? 'selected' : '' ?>><?= esc($namaBulan[$i]) ?></option>
                         <?php endfor; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold fs-3 text-dark">Tahun</label>
-                    <select name="tahun" class="form-select bg-white" onchange="this.form.submit()">
+                <div class="col-6 col-md-2">
+                    <label for="filterTahun" class="form-label fs-2 fw-semibold text-muted mb-1">Tahun</label>
+                    <select id="filterTahun" name="tahun" class="form-select" onchange="this.form.submit()">
                         <?php for ($i = (int) date('Y'); $i >= (int) date('Y') - 3; $i--): ?>
                             <option value="<?= $i ?>" <?= $tahun == $i ? 'selected' : '' ?>><?= $i ?></option>
                         <?php endfor; ?>
                     </select>
                 </div>
+                <div class="col-12 col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-1">
+                        <iconify-icon icon="solar:filter-bold-duotone" class="align-middle"></iconify-icon>
+                        Tampilkan
+                    </button>
+                </div>
             </form>
-        </div>
+        <?php endif; ?>
     </div>
-<?php endif; ?>
+</div>
 
-<!-- Main Metrics Grid -->
+<div class="d-flex align-items-end justify-content-between mb-2">
+    <div>
+        <h5 class="fw-bold text-dark mb-0">Ringkasan</h5>
+        <small class="text-muted">Periode <?= esc($periodeLabelId) ?></small>
+    </div>
+</div>
+
 <div class="row g-3 mb-4">
     <!-- Omset Bulan Ini -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-xl-3">
         <div class="card border shadow-none h-100 bg-success-subtle bg-opacity-10 border-success-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -190,7 +203,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     </div>
 
     <!-- Biaya Terkontrol (Maks 6%) -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-xl-3">
         <div class="card border shadow-none h-100 bg-warning-subtle bg-opacity-10 border-warning-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -212,12 +225,19 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <small class="text-<?= $warnaBiayaTerkontrol ?> fw-semibold d-block mt-1">
                     <?= number_format($rasioBiayaTerkontrol, 1, ',', '.') ?>% dari batas — <?= $statusBiayaTerkontrol ?>
                 </small>
+                <button type="button"
+                    class="btn btn-sm btn-outline-warning fw-semibold mt-3 align-self-start d-inline-flex align-items-center gap-1"
+                    data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
+                    data-kelompok="terkontrol" data-judul="Biaya Terkontrol (Maks 6%)">
+                    <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                    Detail
+                </button>
             </div>
         </div>
     </div>
 
     <!-- Biaya Kebutuhan (Di Luar 6%) -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-xl-3">
         <div class="card border shadow-none h-100 bg-secondary-subtle bg-opacity-10 border-secondary-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -230,12 +250,19 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     </div>
                 </div>
                 <small class="text-muted">Seluruh kas keluar di luar biaya terkontrol (termasuk HPP, SDM, sewa, cicilan)</small>
+                <button type="button"
+                    class="btn btn-sm btn-outline-secondary fw-semibold mt-3 align-self-start d-inline-flex align-items-center gap-1"
+                    data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
+                    data-kelompok="kebutuhan" data-judul="Biaya Kebutuhan (Di Luar 6%)">
+                    <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                    Detail
+                </button>
             </div>
         </div>
     </div>
 
     <!-- Total Gaji -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-6 col-xl-3">
         <div class="card border shadow-none h-100 bg-danger-subtle bg-opacity-10 border-danger-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -258,9 +285,18 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             </div>
         </div>
     </div>
+</div>
 
+<div class="d-flex align-items-end justify-content-between mb-2">
+    <div>
+        <h5 class="fw-bold text-dark mb-0">Pembagian Hasil</h5>
+        <small class="text-muted">Dihitung dari laba bersih periode ini</small>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
     <!-- Total Tanggungan Asset -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-4">
         <div class="card border shadow-none h-100 bg-primary-subtle bg-opacity-10 border-primary-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -278,7 +314,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     </div>
 
     <!-- Hak Cabang -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-4">
         <div class="card border shadow-none h-100 bg-info-subtle bg-opacity-10 border-info-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -296,7 +332,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     </div>
 
     <!-- Tagihan Center -->
-    <div class="col-md-6 col-lg-4">
+    <div class="col-md-4">
         <div class="card border shadow-none h-100 bg-primary-subtle bg-opacity-10 border-primary-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -372,6 +408,167 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         </div>
     </div>
 <?php endif; ?>
+
+<!-- Detail Pengeluaran: data baru diambil saat tombol Detail diklik -->
+<div class="modal fade" id="modalDetailPengeluaran" tabindex="-1" aria-labelledby="detailPengeluaranTitle" aria-hidden="true"
+    data-url="<?= base_url('asset_berjalan/detail-pengeluaran') ?>"
+    data-unit="<?= (int) $selected_unit ?>"
+    data-bulan="<?= (int) $bulan ?>"
+    data-tahun="<?= (int) $tahun ?>">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header align-items-start">
+                <div>
+                    <h5 class="modal-title mb-0" id="detailPengeluaranTitle">Detail Pengeluaran</h5>
+                    <small class="text-muted">
+                        <?= esc($namaUnitAktif ?: ('Unit ' . $selected_unit)) ?> &middot; <?= esc($periodeLabelId) ?>
+                    </small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <div id="detailPengeluaranLoading" class="text-center text-muted py-5">
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Memuat detail pengeluaran…
+                </div>
+                <div id="detailPengeluaranError" class="alert alert-danger d-none mb-0" role="alert">
+                    <span id="detailPengeluaranErrorText">Gagal memuat detail.</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="detailPengeluaranRetry">Coba lagi</button>
+                </div>
+                <div id="detailPengeluaranEmpty" class="text-center text-muted py-5 d-none">
+                    Tidak ada pengeluaran pada periode ini.
+                </div>
+                <div id="detailPengeluaranTableWrap" class="table-responsive d-none">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Kategori</th>
+                                <th>Deskripsi</th>
+                                <th>Penerima</th>
+                                <th class="text-end text-nowrap">Jumlah</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailPengeluaranRows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <span class="text-muted fs-2" id="detailPengeluaranCount"></span>
+                <span class="fw-semibold">Total <span class="ms-1 metric-figure" id="detailPengeluaranTotal">Rp 0</span></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const modal = document.getElementById('modalDetailPengeluaran');
+    if (!modal) return;
+
+    const url = modal.dataset.url;
+    const params = {
+        unit: modal.dataset.unit,
+        bulan: modal.dataset.bulan,
+        tahun: modal.dataset.tahun,
+    };
+    const cache = new Map();
+    let aktif = null;
+
+    const el = (id) => document.getElementById(id);
+    const loading = el('detailPengeluaranLoading');
+    const errorBox = el('detailPengeluaranError');
+    const errorText = el('detailPengeluaranErrorText');
+    const empty = el('detailPengeluaranEmpty');
+    const wrap = el('detailPengeluaranTableWrap');
+    const tbody = el('detailPengeluaranRows');
+    const totalEl = el('detailPengeluaranTotal');
+    const countEl = el('detailPengeluaranCount');
+    const rupiah = new Intl.NumberFormat('id-ID');
+
+    const tampil = (state) => {
+        loading.classList.toggle('d-none', state !== 'loading');
+        errorBox.classList.toggle('d-none', state !== 'error');
+        empty.classList.toggle('d-none', state !== 'empty');
+        wrap.classList.toggle('d-none', state !== 'table');
+    };
+
+    const tanggal = (v) => {
+        const s = String(v || '').slice(0, 10).split('-');
+        return s.length === 3 ? s[2] + '/' + s[1] + '/' + s[0] : (v || '-');
+    };
+
+    const render = (data) => {
+        tbody.textContent = '';
+        data.rows.forEach((row) => {
+            const tr = document.createElement('tr');
+            const isi = [
+                tanggal(row.tanggal),
+                row.nama_kategori || 'Tanpa kategori',
+                row.deskripsi || '-',
+                row.penerima || '-',
+                'Rp ' + rupiah.format(row.jumlah || 0),
+            ];
+            isi.forEach((text, i) => {
+                const td = document.createElement('td');
+                td.textContent = text;
+                if (i === 1) td.className = 'text-nowrap';
+                if (i === 4) td.className = 'text-end fw-semibold metric-figure text-nowrap';
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+
+        totalEl.textContent = 'Rp ' + rupiah.format(data.total || 0);
+        countEl.textContent = data.rows.length + ' transaksi';
+        tampil(data.rows.length ? 'table' : 'empty');
+    };
+
+    const muat = async (kelompok) => {
+        aktif = kelompok;
+        tampil('loading');
+
+        const qs = new URLSearchParams({ ...params, kelompok });
+        try {
+            const res = await fetch(url + '?' + qs.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (res.redirected) {
+                throw new Error('Sesi berakhir. Muat ulang halaman.');
+            }
+            if (!res.ok) {
+                throw new Error(res.status === 403
+                    ? 'Anda tidak berhak melihat unit ini.'
+                    : 'Gagal memuat detail.');
+            }
+            const data = await res.json();
+            cache.set(kelompok, data);
+            if (aktif === kelompok) render(data);
+        } catch (e) {
+            if (aktif !== kelompok) return;
+            errorText.textContent = e.message || 'Gagal memuat detail.';
+            tampil('error');
+        }
+    };
+
+    modal.addEventListener('show.bs.modal', (event) => {
+        const btn = event.relatedTarget;
+        if (!btn || !btn.dataset.kelompok) return;
+
+        el('detailPengeluaranTitle').textContent = btn.dataset.judul || 'Detail Pengeluaran';
+
+        if (cache.has(btn.dataset.kelompok)) {
+            render(cache.get(btn.dataset.kelompok));
+            return;
+        }
+        muat(btn.dataset.kelompok);
+    });
+
+    el('detailPengeluaranRetry').addEventListener('click', () => {
+        if (aktif) muat(aktif);
+    });
+})();
+</script>
 
 <?php if (isset($gaji_detail)): ?>
 <!-- Rincian Total Gaji: hanya dikirim controller untuk Admin root (1), Finance (0), Manager (34) -->
