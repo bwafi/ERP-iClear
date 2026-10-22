@@ -846,12 +846,13 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
-        // Seluruh kas keluar bulan itu, termasuk HPP, untuk kartu "Pengeluaran Full 1 Bulan".
+        // Seluruh kas keluar bulan itu di luar biaya terkontrol, untuk kartu "Pengeluaran di Luar 6%".
         $pengeluaranFull = $this->db->table('kas_keluar')
             ->selectSum('kas_keluar.jumlah', 'total')
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
+            ->whereNotIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,18])
             ->get()
             ->getRow()
             ->total ?? 0;

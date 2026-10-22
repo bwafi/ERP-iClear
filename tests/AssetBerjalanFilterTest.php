@@ -219,7 +219,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
         // Pengeluaran September harus Rp 3.496.682, bukan pengeluaran Oktober
-        $this->assertSame('3.496.682', $this->kartu($html, 'Pengeluaran Bulan Ini'));
+        $this->assertSame('3.496.682', $this->kartu($html, 'Biaya Terkontrol (Maks 6%)'));
         // Omset September (10jt - 5jt), bukan omset Oktober (8jt - 4jt).
         $this->assertSame('5.000.000', $this->kartu($html, 'Omset Bulan Ini'));
     }
@@ -230,7 +230,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=3&bulan=8&tahun=2026');
 
-        $this->assertSame('1.234.567', $this->kartu($html, 'Pengeluaran Bulan Ini'));
+        $this->assertSame('1.234.567', $this->kartu($html, 'Biaya Terkontrol (Maks 6%)'));
     }
 
     /**
@@ -287,7 +287,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
 
         // 2.207.580 (kategori 1) + 300.000 (kategori 18); 500.000 kategori 6 dan 700.000 kategori 11 tidak ikut.
-        $this->assertSame('2.507.580', $this->kartu($html, 'Pengeluaran Bulan Ini'));
+        $this->assertSame('2.507.580', $this->kartu($html, 'Biaya Terkontrol (Maks 6%)'));
     }
 
     /** Peringatan hanya muncul kalau realisasi kategori A melebihi 6% omset. */
@@ -304,13 +304,13 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertStringNotContainsString('Melebihi batas 6%', $aman);
     }
 
-    /** Kartu full 1 bulan = seluruh kas keluar, termasuk HPP. */
-    public function testPengeluaranFullSatuBulanTermasukHpp(): void
+    /** Kartu di luar 6% = seluruh kas keluar dikurangi biaya terkontrol, termasuk HPP. */
+    public function testPengeluaranDiLuarBatasTidakTermasukBiayaTerkontrol(): void
     {
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
 
-        // 2.207.580 + 500.000 (kategori 6) + 300.000 (kategori 18) + 700.000 (kategori 11) + 1.000.000 (HPP).
-        $this->assertSame('4.707.580', $this->kartu($html, 'Pengeluaran Full 1 Bulan'));
+        // Total 4.707.580 - biaya terkontrol 2.507.580 = 2.200.000 (kategori 6, 11, HPP).
+        $this->assertSame('2.200.000', $this->kartu($html, 'Pengeluaran di Luar 6%'));
     }
 }

@@ -175,20 +175,20 @@ if (in_array($selected_unit, [3, 4, 5])) {
         </div>
     </div>
 
-    <!-- Pengeluaran Bulan Ini -->
+    <!-- Biaya Terkontrol (Maks 6%) -->
     <div class="col-md-6 col-lg-4">
         <div class="card border shadow-none h-100 bg-warning-subtle bg-opacity-10 border-warning-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
-                        <h6 class="text-uppercase fs-2 text-warning-emphasis fw-bold d-block mb-1">Pengeluaran Bulan Ini</h6>
+                        <h6 class="text-uppercase fs-2 text-warning-emphasis fw-bold d-block mb-1">Biaya Terkontrol (Maks 6%)</h6>
                         <h3 class="fw-bold mb-0 text-warning-emphasis metric-figure">Rp <?= number_format($pengeluaran ?? 0, 0, ',', '.') ?></h3>
                     </div>
                     <div class="p-3 bg-warning-subtle rounded-3 text-warning-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
                         <iconify-icon icon="solar:card-send-bold-duotone" width="28" height="28"></iconify-icon>
                     </div>
                 </div>
-                <small class="text-muted">Biaya operasional terkontrol unit periode ini</small>
+                <small class="text-muted">Realisasi biaya operasional kecil unit periode ini</small>
                 <?php if (($pengeluaran ?? 0) > 0.06 * ($omset_bulan ?? 0)): ?>
                     <small class="text-danger fw-semibold d-block mt-1">
                         <iconify-icon icon="solar:danger-triangle-bold-duotone" class="align-middle"></iconify-icon>
@@ -199,20 +199,20 @@ if (in_array($selected_unit, [3, 4, 5])) {
         </div>
     </div>
 
-    <!-- Pengeluaran Full 1 Bulan -->
+    <!-- Pengeluaran di Luar 6% -->
     <div class="col-md-6 col-lg-4">
         <div class="card border shadow-none h-100 bg-secondary-subtle bg-opacity-10 border-secondary-subtle">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
-                        <h6 class="text-uppercase fs-2 text-secondary-emphasis fw-bold d-block mb-1">Pengeluaran Full 1 Bulan</h6>
+                        <h6 class="text-uppercase fs-2 text-secondary-emphasis fw-bold d-block mb-1">Pengeluaran di Luar 6%</h6>
                         <h3 class="fw-bold mb-0 text-secondary-emphasis metric-figure">Rp <?= number_format($pengeluaran_full ?? 0, 0, ',', '.') ?></h3>
                     </div>
                     <div class="p-3 bg-secondary-subtle rounded-3 text-secondary-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
                         <iconify-icon icon="solar:wallet-money-bold-duotone" width="28" height="28"></iconify-icon>
                     </div>
                 </div>
-                <small class="text-muted">Seluruh kas keluar unit periode ini (termasuk HPP)</small>
+                <small class="text-muted">Seluruh kas keluar di luar biaya terkontrol (termasuk HPP, SDM, sewa, cicilan)</small>
             </div>
         </div>
     </div>
