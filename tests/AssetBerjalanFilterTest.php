@@ -177,10 +177,11 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         // October 2026 data
         $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (2,'SLL-2','2026-10-15 10:00:00',3)");
         $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (2,NULL,8000000,4000000)");
-        // Kategori terkontrol (6) ikut Pengeluaran; administrasi (11) dan HPP (7) tidak.
+        // Kategori terkontrol (18) ikut Pengeluaran; 6 (Lain-lain), 11 (Administrasi), dan HPP (7) tidak.
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-05',6,500000,3)");
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-06',11,700000,3)");
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-07',7,1000000,3)");
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-08',18,300000,3)");
         // Omset Agustus besar supaya realisasi kategori A di bawah batas 6%.
         $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (3,'SLL-3','2026-08-15 10:00:00',3)");
         $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (3,NULL,70000000,10000000)");
@@ -277,16 +278,16 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
     }
 
     /**
-     * Kategori biaya terkontrol: kategori 6 (Lain-lain) ikut dihitung,
-     * kategori 11 (Administrasi) tidak karena masuk biaya kebutuhan.
+     * Kategori biaya terkontrol: kategori 18 (Lainnya 6%) ikut dihitung,
+     * kategori 6 (Lain-lain) dan 11 (Administrasi) tidak.
      */
     public function testPengeluaranMemakaiKategoriBiayaTerkontrol(): void
     {
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
 
-        // 2.207.580 (kategori 1) + 500.000 (kategori 6); 700.000 kategori 11 tidak ikut.
-        $this->assertSame('2.707.580', $this->kartu($html, 'Pengeluaran Bulan Ini'));
+        // 2.207.580 (kategori 1) + 300.000 (kategori 18); 500.000 kategori 6 dan 700.000 kategori 11 tidak ikut.
+        $this->assertSame('2.507.580', $this->kartu($html, 'Pengeluaran Bulan Ini'));
     }
 
     /** Peringatan hanya muncul kalau realisasi kategori A melebihi 6% omset. */
@@ -294,7 +295,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
     {
         $this->sesi(44, 50, 0);
 
-        // Oktober: omset 4.000.000 -> batas 240.000; realisasi 2.707.580.
+        // Oktober: omset 4.000.000 -> batas 240.000; realisasi 2.507.580.
         $melebihi = $this->halaman('?unit=3&bulan=10&tahun=2026');
         $this->assertStringContainsString('Melebihi batas 6%', $melebihi);
 
@@ -309,7 +310,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
 
-        // 2.207.580 + 500.000 (kategori 6) + 700.000 (kategori 11) + 1.000.000 (HPP).
-        $this->assertSame('4.407.580', $this->kartu($html, 'Pengeluaran Full 1 Bulan'));
+        // 2.207.580 + 500.000 (kategori 6) + 300.000 (kategori 18) + 700.000 (kategori 11) + 1.000.000 (HPP).
+        $this->assertSame('4.707.580', $this->kartu($html, 'Pengeluaran Full 1 Bulan'));
     }
 }

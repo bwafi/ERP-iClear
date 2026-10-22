@@ -841,7 +841,7 @@ class TutupKasir extends BaseController
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
-            ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,6,18])
+            ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,18])
             ->get()
             ->getRow()
             ->total ?? 0;
