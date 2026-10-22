@@ -162,7 +162,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             (41, 1, NULL, 2000000, 'fixed', NULL, '2026-01-01', NULL),
             (41, 2, NULL, 850000, 'percent_of_kpi', NULL, '2026-01-01', NULL),
             (41, 3, NULL, 250000, 'percent_of_kpi', NULL, '2026-01-01', NULL)");
-        $q("INSERT INTO kategori_kas (idkategori_kas, nama_kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(11,'Lainnya'),(18,'Transport')");
+        $q("INSERT INTO kategori_kas (idkategori_kas, nama_kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(6,'Lain-lain'),(11,'Lainnya'),(18,'Transport')");
         $q("INSERT INTO menu (idmenu, urutan, nama_menu, roles, url, show_menu) VALUES (1,1,'Dashboard','[]','dashboard',1)");
 
         // September 2026 data (bulan lampau)
@@ -177,6 +177,13 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         // October 2026 data
         $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (2,'SLL-2','2026-10-15 10:00:00',3)");
         $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (2,NULL,8000000,4000000)");
+        // Kategori terkontrol (6) ikut Pengeluaran; administrasi (11) dan HPP (7) tidak.
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-05',6,500000,3)");
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-06',11,700000,3)");
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-10-07',7,1000000,3)");
+        // Omset Agustus besar supaya realisasi kategori A di bawah batas 6%.
+        $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (3,'SLL-3','2026-08-15 10:00:00',3)");
+        $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (3,NULL,70000000,10000000)");
     }
 
     private function sesi(int $akun, int $unit, int $jabatan): void
@@ -267,5 +274,42 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
 
         $this->assertStringContainsString('Pembagian Gaji Head Office', $html);
+    }
+
+    /**
+     * Kategori biaya terkontrol: kategori 6 (Lain-lain) ikut dihitung,
+     * kategori 11 (Administrasi) tidak karena masuk biaya kebutuhan.
+     */
+    public function testPengeluaranMemakaiKategoriBiayaTerkontrol(): void
+    {
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
+
+        // 2.207.580 (kategori 1) + 500.000 (kategori 6); 700.000 kategori 11 tidak ikut.
+        $this->assertSame('2.707.580', $this->kartu($html, 'Pengeluaran Bulan Ini'));
+    }
+
+    /** Peringatan hanya muncul kalau realisasi kategori A melebihi 6% omset. */
+    public function testPeringatanBatasEnamPersenHanyaSaatMelebihi(): void
+    {
+        $this->sesi(44, 50, 0);
+
+        // Oktober: omset 4.000.000 -> batas 240.000; realisasi 2.707.580.
+        $melebihi = $this->halaman('?unit=3&bulan=10&tahun=2026');
+        $this->assertStringContainsString('Melebihi batas 6%', $melebihi);
+
+        // Agustus: omset 60.000.000 -> batas 3.600.000; realisasi 1.234.567.
+        $aman = $this->halaman('?unit=3&bulan=8&tahun=2026');
+        $this->assertStringNotContainsString('Melebihi batas 6%', $aman);
+    }
+
+    /** Kartu full 1 bulan = seluruh kas keluar, termasuk HPP. */
+    public function testPengeluaranFullSatuBulanTermasukHpp(): void
+    {
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
+
+        // 2.207.580 + 500.000 (kategori 6) + 700.000 (kategori 11) + 1.000.000 (HPP).
+        $this->assertSame('4.407.580', $this->kartu($html, 'Pengeluaran Full 1 Bulan'));
     }
 }

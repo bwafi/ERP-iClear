@@ -188,7 +188,31 @@ if (in_array($selected_unit, [3, 4, 5])) {
                         <iconify-icon icon="solar:card-send-bold-duotone" width="28" height="28"></iconify-icon>
                     </div>
                 </div>
-                <small class="text-muted">Biaya operasional unit periode ini</small>
+                <small class="text-muted">Biaya operasional terkontrol unit periode ini</small>
+                <?php if (($pengeluaran ?? 0) > 0.06 * ($omset_bulan ?? 0)): ?>
+                    <small class="text-danger fw-semibold d-block mt-1">
+                        <iconify-icon icon="solar:danger-triangle-bold-duotone" class="align-middle"></iconify-icon>
+                        Melebihi batas 6% (Rp <?= number_format(0.06 * ($omset_bulan ?? 0), 0, ',', '.') ?>)
+                    </small>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pengeluaran Full 1 Bulan -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border shadow-none h-100 bg-secondary-subtle bg-opacity-10 border-secondary-subtle">
+            <div class="card-body p-3 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="text-uppercase fs-2 text-secondary-emphasis fw-bold d-block mb-1">Pengeluaran Full 1 Bulan</h6>
+                        <h3 class="fw-bold mb-0 text-secondary-emphasis metric-figure">Rp <?= number_format($pengeluaran_full ?? 0, 0, ',', '.') ?></h3>
+                    </div>
+                    <div class="p-3 bg-secondary-subtle rounded-3 text-secondary-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
+                        <iconify-icon icon="solar:wallet-money-bold-duotone" width="28" height="28"></iconify-icon>
+                    </div>
+                </div>
+                <small class="text-muted">Seluruh kas keluar unit periode ini (termasuk HPP)</small>
             </div>
         </div>
     </div>
@@ -279,6 +303,8 @@ if (in_array($selected_unit, [3, 4, 5])) {
     <span>
         <strong class="text-dark">Total Tanggungan Asset</strong> — unit 4 = 20% laba; unit 1 &amp; 2 = jumlah hari bulan ini &times; Rp 355.000; unit franchise (3 &amp; 5) = Rp 0.
         <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Pengeluaran &minus; Total Gaji) unit 3, 4, &amp; 5.
+        <br>
+        <strong class="text-dark">Batas 6%</strong> hanya peringatan — transaksi tetap tercatat dan tidak dibatalkan.
     </span>
 </div>
 

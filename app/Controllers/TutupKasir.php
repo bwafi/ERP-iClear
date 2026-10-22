@@ -841,7 +841,17 @@ class TutupKasir extends BaseController
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
-            ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,11,18])
+            ->whereIn('kas_keluar.kategori_idkategori', [1,2,3,4,5,6,18])
+            ->get()
+            ->getRow()
+            ->total ?? 0;
+
+        // Seluruh kas keluar bulan itu, termasuk HPP, untuk kartu "Pengeluaran Full 1 Bulan".
+        $pengeluaranFull = $this->db->table('kas_keluar')
+            ->selectSum('kas_keluar.jumlah', 'total')
+            ->where('MONTH(kas_keluar.tanggal)', $bulan)
+            ->where('YEAR(kas_keluar.tanggal)', $tahun)
+            ->where('kas_keluar.idunit', $unit)
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -862,6 +872,7 @@ class TutupKasir extends BaseController
             'bulanSebelum'   => $bulanSebelum,
             'tahunSebelum'   => $tahunSebelum,
             'pengeluaran'     => $pengeluaran,
+            'pengeluaran_full' => $pengeluaranFull,
             'totalGajiUnit'  => $totalGajiUnit,
             // Rincian per pegawai hanya untuk yang berhak; null = tidak dikirim
             // sama sekali, jadi tidak ada datanya di HTML.
