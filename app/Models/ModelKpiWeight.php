@@ -68,7 +68,7 @@ class ModelKpiWeight extends Model
     public function getTotalWeightByPosition(
         $position_id,
         $date = null,
-        $group = null,
+        $group = null
     ) {
         $date = $date ?? date("Y-m-d");
 
