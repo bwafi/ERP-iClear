@@ -760,10 +760,14 @@ class TutupKasir extends BaseController
         // ============================
         // HO SALARY DISTRIBUTION
         // ============================
-        $hoDistribution = (new \App\Services\Payroll\HoSalaryDistributionService())
-            ->calculateDistribution($bulanStr, (string)$tahun);
-        $hoUnitShares = (new \App\Services\Payroll\HoSalaryDistributionService())
-            ->getUnitShares($bulanStr, (string)$tahun);
+        // Agregat gaji HO hanya untuk role lintas cabang (issue #23). Staf
+        // cabang tidak boleh menerimanya, jadi tidak dihitung sama sekali
+        // untuk mereka — hitungannya juga mahal (±650 ms).
+        $hoDistribution = null;
+        if (self::bolehLihatPanelHo((int) $id_jabatan)) {
+            $hoDistribution = (new \App\Services\Payroll\HoSalaryDistributionService())
+                ->calculateDistribution($bulanStr, (string)$tahun);
+        }
 
         // ==========================
         // TOTAL OMSET BULAN INI
@@ -869,7 +873,6 @@ class TutupKasir extends BaseController
             'selisih_omset'     => $selisih_omset,
             // HO Salary Distribution
             'ho_distribution' => $hoDistribution,
-            'ho_unit_shares'  => $hoUnitShares,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }
@@ -964,6 +967,16 @@ class TutupKasir extends BaseController
     public static function bolehLihatRincianGaji(int $idJabatan): bool
     {
         return in_array($idJabatan, [0, 1, 34], true);
+    }
+
+    /**
+     * Panel "Pembagian Gaji Head Office" (agregat gaji HO) hanya untuk role
+     * lintas cabang: Finance (0), Admin root (1), Direktur (2), Manager (34),
+     * dan SPV (40). Staf cabang hanya boleh melihat gaji unitnya sendiri.
+     */
+    public static function bolehLihatPanelHo(int $idJabatan): bool
+    {
+        return in_array($idJabatan, [0, 1, 2, 34, 40], true);
     }
 
     private function cleanClosingDate($value): ?string

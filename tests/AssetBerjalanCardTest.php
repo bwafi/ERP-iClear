@@ -176,4 +176,22 @@ class AssetBerjalanCardTest extends CIUnitTestCase
             );
         }
     }
+
+    /** Panel gaji HO (agregat HO) hanya untuk role lintas cabang. */
+    public function testHanyaRoleLintasUnitYangBolehLihatPanelHo(): void
+    {
+        foreach ([0, 1, 2, 34, 40] as $jabatan) {
+            $this->assertTrue(
+                \App\Controllers\TutupKasir::bolehLihatPanelHo($jabatan),
+                "jabatan {$jabatan} seharusnya boleh melihat panel gaji HO"
+            );
+        }
+
+        foreach ([35, 36, 37, 41, 42, 43, 44, 45, 46, 48] as $jabatan) {
+            $this->assertFalse(
+                \App\Controllers\TutupKasir::bolehLihatPanelHo($jabatan),
+                "jabatan {$jabatan} tidak boleh melihat panel gaji HO"
+            );
+        }
+    }
 }

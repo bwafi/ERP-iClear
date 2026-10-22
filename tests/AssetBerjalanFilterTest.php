@@ -243,4 +243,29 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('<th class="text-end">Lembur</th>', $html);
         $this->assertStringContainsString('>100.000<', $html);
     }
+
+    /**
+     * Panel "Pembagian Gaji Head Office" hanya untuk role lintas cabang.
+     * Staf cabang (mis. Teknisi) yang membuka URL langsung tidak boleh
+     * menerima total gaji HO.
+     */
+    public function testPanelGajiHoTidakDirenderUntukStafCabang(): void
+    {
+        $this->sesi(100, 3, 36); // Teknisi unit 3
+        $html = $this->halaman('?bulan=9&tahun=2026');
+
+        $this->assertStringNotContainsString('Pembagian Gaji Head Office', $html);
+
+        // Total gaji unit sendiri tetap boleh dilihat staf cabang.
+        $this->assertSame('2.450.000', $this->kartu($html, 'Total Gaji'));
+    }
+
+    /** Role lintas cabang (Finance) tetap melihat panel gaji HO. */
+    public function testPanelGajiHoDirenderUntukRoleLintasUnit(): void
+    {
+        $this->sesi(44, 50, 0); // Finance
+        $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
+
+        $this->assertStringContainsString('Pembagian Gaji Head Office', $html);
+    }
 }
