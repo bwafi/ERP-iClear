@@ -30,11 +30,10 @@ use App\Services\Kpi\KpiCalculationService;
  *     Finance menekan "Sudah Dibayar" lewat
  *     HutangPiutangService::settleKasbonFromPayroll(), supaya tidak ada
  *     kasbon yang terpotong dua kali.
- *   - tidak menyentuh baris yang sudah ada. Generate adalah idempotent per
- *     (karyawan, bulan): karyawan yang sudah punya baris di bulan itu
- *     dilewati, bukan ditulis ulang. Nominal hasil hitung ulang bisa berbeda
- *     karena KPI berubah, sehingga menimpa diam-diam berisiko menghapus
- *     koreksi Finance.
+ *   - menimpa baris 'rencana' yang sudah ada bila opsi overwrite aktif,
+ *     supaya hasil hitung ulang dari KPI terbaru bisa dipakai tanpa membuat
+ *     baris ganda. Baris 'dibayar' tidak disentuh karena paid_date dan
+ *     potongan kasbonnya sudah terpakai.
  *   - tidak membuat baris untuk karyawan yang structure gaji-nya kosong;
  *     mereka dilaporkan sebagai dilewati supaya bisa ditangani manual.
  *   - tidak membuat baris untuk akun yang tidak menerima gaji
@@ -76,7 +75,8 @@ class PayrollGenerator
      * Buat baris payroll 'rencana' untuk seluruh karyawan pada satu bulan.
      *
      * @param string $bulan   'YYYY-MM'
-     * @param array  $options due_date (default akhir bulan), unit_ids (filter)
+     * @param array  $options due_date (default akhir bulan), unit_ids (filter),
+     *                        overwrite (timpa baris 'rencana' yang sudah ada)
      *
      * @return array ringkasan: created, skipped, errors, rows, total_nominal
      */
@@ -100,18 +100,21 @@ class PayrollGenerator
         }
 
         $unitIds = array_values(array_filter(array_map('intval', (array) ($options['unit_ids'] ?? []))));
+        $overwrite = (bool) ($options['overwrite'] ?? false);
         $sudah  = $this->daftarSudahAda($from, $to);
         $lembur = $this->daftarLembur($from, $to);
 
         $hasil = [
-            'bulan'         => $bulan,
-            'due_date'      => $dueDate,
-            'created'       => 0,
-            'skipped'       => 0,
-            'dikecualikan'  => 0,
-            'total_nominal' => 0,
-            'errors'        => [],
-            'rows'          => [],
+            'bulan'           => $bulan,
+            'due_date'        => $dueDate,
+            'created'         => 0,
+            'updated'         => 0,
+            'skipped'         => 0,
+            'dikecualikan'    => 0,
+            'total_nominal'   => 0,
+            'updated_nominal' => 0,
+            'errors'          => [],
+            'rows'            => [],
         ];
 
         foreach ($this->daftarKaryawan($unitIds) as $karyawan) {
@@ -133,7 +136,9 @@ class PayrollGenerator
                 continue;
             }
 
-            if (isset($sudah[$id])) {
+            $existing = $sudah[$id] ?? null;
+
+            if ($existing !== null && ! $overwrite) {
                 $hasil['skipped']++;
                 $hasil['rows'][] = [
                     'nama'  => (string) $karyawan['NAMA_AKUN'],
@@ -141,6 +146,20 @@ class PayrollGenerator
                     'total' => null,
                     'status' => 'skip',
                     'alasan' => 'sudah ada baris payroll bulan ini',
+                ];
+                continue;
+            }
+
+            // Uang yang sudah dibayar tidak boleh dihitung ulang diam-diam:
+            // paid_date dan potongan kasbon sudah terpakai.
+            if ($existing !== null && ($existing['status'] ?? '') !== 'rencana') {
+                $hasil['skipped']++;
+                $hasil['rows'][] = [
+                    'nama'  => (string) $karyawan['NAMA_AKUN'],
+                    'unit'  => (int) $karyawan['ID_UNIT'],
+                    'total' => null,
+                    'status' => 'skip',
+                    'alasan' => 'sudah dibayar',
                 ];
                 continue;
             }
@@ -169,32 +188,45 @@ class PayrollGenerator
             }
 
             $total = (int) round((float) $gaji['total_gaji']);
+            $notes = $this->susunCatatan($gaji, $lemburOrg);
 
-            // Model::insert() mengembalikan false tanpa melempar error kalau
-            // kueri ditolak, jadi hasilnya wajib diperiksa. Kegagalan yang
-            // diam-diam di sini akan terlihat sebagai "sudah ada baris"
-            // pada bulan depan, padahal karyawannya belum pernah dapat
-            // payroll.
-            $tersimpan = $this->payrollModel->insert([
-                'unit_id'    => (int) $karyawan['ID_UNIT'],
-                'pegawai_id' => $id,
-                'due_date'   => $dueDate,
-                'paid_date'  => null,
-                'status'     => 'rencana',
-                'total'      => $total,
-                'notes'      => $this->susunCatatan($gaji, $lemburOrg),
-                'sumber'     => 'auto',
-                'created_by' => (int) session('ID_AKUN'),
-            ]);
+            // Model::insert()/update() mengembalikan false tanpa melempar
+            // error kalau kueri ditolak, jadi hasilnya wajib diperiksa.
+            // Kegagalan yang diam-diam di sini akan terlihat sebagai
+            // "sudah ada baris" pada bulan depan, padahal karyawannya belum
+            // pernah dapat payroll.
+            if ($existing !== null) {
+                $tersimpan = $this->payrollModel->update($existing['id'], [
+                    'due_date' => $dueDate,
+                    'total'    => $total,
+                    'notes'    => $notes,
+                ]);
+                $status = 'updated';
+                $aksi   = 'memperbarui';
+            } else {
+                $tersimpan = $this->payrollModel->insert([
+                    'unit_id'    => (int) $karyawan['ID_UNIT'],
+                    'pegawai_id' => $id,
+                    'due_date'   => $dueDate,
+                    'paid_date'  => null,
+                    'status'     => 'rencana',
+                    'total'      => $total,
+                    'notes'      => $notes,
+                    'sumber'     => 'auto',
+                    'created_by' => (int) session('ID_AKUN'),
+                ]);
+                $status = 'created';
+                $aksi   = 'menyimpan';
+            }
 
             if (! $tersimpan) {
-                $pesan = $this->db->error()['message'] ?: 'gagal disimpan ke database';
+                $pesan = $this->db->error()['message'] ?: 'gagal ' . $aksi . ' ke database';
 
-                log_message('error', 'PayrollGenerator: simpan payroll #' . $id . ' gagal: ' . $pesan);
+                log_message('error', 'PayrollGenerator: ' . $aksi . ' payroll #' . $id . ' gagal: ' . $pesan);
 
                 $hasil['errors'][] = [
                     'nama'  => (string) $karyawan['NAMA_AKUN'],
-                    'pesan' => 'gagal disimpan: ' . $pesan,
+                    'pesan' => 'gagal ' . $aksi . ': ' . $pesan,
                 ];
                 $hasil['rows'][] = [
                     'nama'   => (string) $karyawan['NAMA_AKUN'],
@@ -206,18 +238,24 @@ class PayrollGenerator
                 continue;
             }
 
-            $hasil['created']++;
-            $hasil['total_nominal'] += $total;
+            if ($status === 'updated') {
+                $hasil['updated']++;
+                $hasil['updated_nominal'] += $total;
+            } else {
+                $hasil['created']++;
+                $hasil['total_nominal'] += $total;
+            }
+
             $hasil['rows'][] = [
                 'nama'   => (string) $karyawan['NAMA_AKUN'],
                 'unit'   => (int) $karyawan['ID_UNIT'],
                 'total'  => $total,
-                'status' => 'created',
+                'status' => $status,
                 'alasan' => '',
             ];
         }
 
-        if ($hasil['created'] > 0) {
+        if ($hasil['created'] > 0 || $hasil['updated'] > 0) {
             HoSalaryDistributionService::invalidateCache($bulan);
         }
 
@@ -405,16 +443,23 @@ class PayrollGenerator
     {
         $ada = [];
 
+        // Satu karyawan bisa punya lebih dari satu baris dalam sebulan (mis.
+        // gaji pokok dibayar terpisah dari tunjangan). Yang ditimpa hanya
+        // baris pertama; baris lain dibiarkan.
         $rows = $this->db->table('finance_payroll')
-            ->select('pegawai_id')
+            ->select('id, pegawai_id, status, sumber, due_date, total')
             ->where('due_date >=', $from)
             ->where('due_date <=', $to)
             ->where('pegawai_id IS NOT', null)
+            ->orderBy('id', 'ASC')
             ->get()
             ->getResultArray();
 
         foreach ($rows as $row) {
-            $ada[(int) $row['pegawai_id']] = true;
+            $id = (int) $row['pegawai_id'];
+            if (! isset($ada[$id])) {
+                $ada[$id] = $row;
+            }
         }
 
         return $ada;

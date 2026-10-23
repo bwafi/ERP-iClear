@@ -300,8 +300,8 @@ class Payroll extends BaseController
      * Finance tidak lagi mengetik nominal satu per satu: sistem menghitung
      * dari master gaji + skor KPI bulan itu, membuat baris berstatus
      * 'rencana', lalu Finance tinggal mengoreksi bila perlu dan menekan
-     * "Sudah Dibayar". Baris yang sudah ada tidak pernah ditimpa, jadi
-     * generator ini aman dijalankan berulang kali untuk bulan yang sama.
+     * "Sudah Dibayar". Menjalankan ulang akan menimpa baris 'rencana' yang
+     * sudah ada; baris 'dibayar' tetap dilewati.
      */
     public function generateRegister()
     {
@@ -336,8 +336,9 @@ class Payroll extends BaseController
         try {
             $generator = new \App\Services\Payroll\PayrollGenerator();
             $hasil = $generator->generate($bulan, [
-                'due_date' => (string) ($this->request->getPost('due_date') ?? ''),
-                'unit_ids' => $unitIds,
+                'due_date'  => (string) ($this->request->getPost('due_date') ?? ''),
+                'unit_ids'  => $unitIds,
+                'overwrite' => true,
             ]);
         } catch (\Throwable $e) {
             log_message('error', 'Payroll: generate register gagal: ' . $e->getMessage());
@@ -355,7 +356,7 @@ class Payroll extends BaseController
         $bulanLabel = date('F Y', strtotime($hasil['bulan'] . '-01'));
 
         $pesan = sprintf(
-            'Payroll %s disusun dari salary_structures: %d karyawan jadi baris baru',
+            'Payroll %s disusun dari salary_structures: %d baris baru',
             $bulanLabel,
             $hasil['created']
         );
@@ -364,8 +365,16 @@ class Payroll extends BaseController
             $pesan .= sprintf(' (total Rp %s)', number_format($hasil['total_nominal'], 0, ',', '.'));
         }
 
+        if (($hasil['updated'] ?? 0) > 0) {
+            $pesan .= sprintf(
+                ', %d baris diperbarui (total Rp %s)',
+                $hasil['updated'],
+                number_format($hasil['updated_nominal'] ?? 0, 0, ',', '.')
+            );
+        }
+
         if ($hasil['skipped'] > 0) {
-            $pesan .= sprintf(', %d dilewati karena sudah ada', $hasil['skipped']);
+            $pesan .= sprintf(', %d dilewati karena sudah ada/sudah dibayar', $hasil['skipped']);
         }
 
         if (($hasil['dikecualikan'] ?? 0) > 0) {
@@ -391,7 +400,7 @@ class Payroll extends BaseController
             );
         }
 
-        if ($hasil['created'] === 0) {
+        if ($hasil['created'] === 0 && ($hasil['updated'] ?? 0) === 0) {
             return $pesan . '. Tidak ada angka baru yang perlu ditinjau.';
         }
 

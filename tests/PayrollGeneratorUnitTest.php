@@ -31,7 +31,7 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         $q = function (string $sql): void { $this->db->query($sql); };
 
         foreach ([
-            'unit', 'akun', 'jabatan', 'kas_keluar',
+            'unit', 'akun', 'jabatan', 'kas_keluar', 'finance_payroll',
             'salary_components', 'salary_structures',
             'incentive_members', 'incentive_groups', 'incentive_rules',
             'kpi_weights', 'kpi_components', 'kpi_targets', 'kpi_evaluations',
@@ -61,6 +61,13 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
                 idkas_keluar INT PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
                 kategori_idkategori INT NULL, deskripsi TEXT NULL, jumlah REAL NULL,
                 penerima TEXT NULL, idunit INT NULL)');
+
+        $q('CREATE TABLE finance_payroll (
+                id INT PRIMARY KEY AUTO_INCREMENT, unit_id INT NULL,
+                pegawai_id INT NULL, due_date TEXT NULL, paid_date TEXT NULL,
+                status TEXT NULL, total REAL NULL, potongan_kasbon REAL NULL,
+                total_bersih REAL NULL, notes TEXT NULL, created_by INT NULL,
+                sumber TEXT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
 
         $q('CREATE TABLE salary_components (
                 id INT PRIMARY KEY, code TEXT NULL, name TEXT NULL,
@@ -179,5 +186,65 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         $ids = array_column($hasil, 'id_akun');
         $this->assertNotContains(505, $ids, 'akun tanpa jabatan dilewati');
         $this->assertContains(501, $ids, 'karyawan lain tetap dihitung');
+    }
+
+    /** Susun Otomatis harus memperbarui baris rencana, bukan membuat baris ganda. */
+    public function testGenerateMenimpaBarisRencanaYangSudahAda(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES (1, 3, 501, '2026-09-30', 'rencana', 100, 'nilai lama', 'auto', '2026-09-01', '2026-09-01')");
+
+        $hasil = (new PayrollGenerator())->generate('2026-09', [
+            'unit_ids' => [3],
+            'overwrite' => true,
+        ]);
+
+        $this->assertSame(0, $hasil['created'], 'tidak boleh membuat baris baru');
+        $this->assertSame(1, $hasil['updated'], 'baris rencana harus ditimpa');
+        $this->assertSame(0, $hasil['skipped']);
+
+        $row = $this->db->table('finance_payroll')->where('id', 1)->get()->getRow();
+        $this->assertSame(2450000, (int) $row->total, 'total dihitung ulang');
+        $this->assertSame('rencana', $row->status, 'status tidak berubah');
+        $this->assertStringContainsString('Gaji Pokok', (string) $row->notes);
+        $this->assertSame(1, $this->db->table('finance_payroll')->countAllResults(), 'tetap satu baris');
+    }
+
+    /** Payroll yang sudah dibayar tidak boleh ditimpa. */
+    public function testGenerateTidakMenimpaBarisDibayar(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES (1, 3, 501, '2026-09-30', 'dibayar', 100, 'sudah dibayar', 'auto', '2026-09-01', '2026-09-01')");
+
+        $hasil = (new PayrollGenerator())->generate('2026-09', [
+            'unit_ids' => [3],
+            'overwrite' => true,
+        ]);
+
+        $this->assertSame(0, $hasil['created']);
+        $this->assertSame(0, $hasil['updated']);
+        $this->assertSame(1, $hasil['skipped'], 'baris dibayar dilewati');
+
+        $row = $this->db->table('finance_payroll')->where('id', 1)->get()->getRow();
+        $this->assertSame(100, (int) $row->total, 'nominal yang sudah dibayar tidak berubah');
+        $this->assertSame('dibayar', $row->status);
+    }
+
+    /** Tanpa opsi overwrite, perilaku lama (lewati baris yang sudah ada) tetap berlaku. */
+    public function testGenerateTanpaOverwriteTetapMelewati(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES (1, 3, 501, '2026-09-30', 'rencana', 100, 'nilai lama', 'auto', '2026-09-01', '2026-09-01')");
+
+        $hasil = (new PayrollGenerator())->generate('2026-09', ['unit_ids' => [3]]);
+
+        $this->assertSame(0, $hasil['updated']);
+        $this->assertSame(1, $hasil['skipped']);
+
+        $row = $this->db->table('finance_payroll')->where('id', 1)->get()->getRow();
+        $this->assertSame(100, (int) $row->total, 'nilai lama tetap');
     }
 }

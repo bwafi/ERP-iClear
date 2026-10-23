@@ -382,7 +382,7 @@ $bank           = $bank ?? [];
                         <div class="d-flex gap-2">
                             <i class="ti ti-info-circle fs-5 flex-shrink-0"></i>
                             <div class="small">
-                                Nominal dihitung berdasarkan <code>salary_structures</code> (Gaji Pokok + Tunjangan KPI) + Lembur Kas Keluar. Hasil generate berstatus <strong>Rencana</strong>.
+                                Nominal dihitung dari <code>salary_structures</code> (Gaji Pokok + Tunjangan Kinerja + Tunjangan Absen + Penempatan + Insentif) + Lembur Kas Keluar. Baris <strong>Rencana</strong> yang sudah ada akan dihitung ulang dan ditimpa; baris yang sudah <strong>Dibayar</strong> tidak diubah.
                             </div>
                         </div>
                     </div>
