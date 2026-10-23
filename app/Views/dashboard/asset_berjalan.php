@@ -161,6 +161,84 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         border-color: var(--bs-border-color-translucent);
         vertical-align: middle;
     }
+
+    /* Pagination DataTables: angka & next/prev sebagai kontrol yang jelas,
+       aksen mengikuti warna kartu (warning = terkontrol, secondary = kebutuhan). */
+    #modalDetailPengeluaran .detail-dt-foot {
+        padding: .9rem .25rem .15rem;
+        font-size: .75rem;
+        color: var(--bs-secondary-color);
+    }
+    #modalDetailPengeluaran .detail-dt-foot .dataTables_info {
+        padding: 0;
+    }
+    #modalDetailPengeluaran .detail-dt-foot .dataTables_paginate {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    #modalDetailPengeluaran .detail-dt-foot .dataTables_paginate > span {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    #modalDetailPengeluaran .detail-dt-foot .paginate_button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 34px;
+        padding: 0 .6rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 9px;
+        background: var(--bs-body-bg);
+        color: var(--bs-body-color) !important;
+        font-size: .78rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+    #modalDetailPengeluaran .detail-dt-foot .paginate_button:hover:not(.disabled):not(.current) {
+        border-color: var(--bs-warning);
+        background: var(--bs-warning-bg-subtle);
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] .detail-dt-foot .paginate_button:hover:not(.disabled):not(.current) {
+        border-color: var(--bs-secondary);
+        background: var(--bs-secondary-bg-subtle);
+    }
+    #modalDetailPengeluaran .detail-dt-foot .paginate_button.current {
+        border-color: var(--bs-warning);
+        background: var(--bs-warning);
+        color: #000 !important;
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] .detail-dt-foot .paginate_button.current {
+        border-color: var(--bs-secondary);
+        background: var(--bs-secondary);
+        color: #fff !important;
+    }
+    #modalDetailPengeluaran .detail-dt-foot .paginate_button.disabled {
+        opacity: .45;
+        background: transparent;
+        color: var(--bs-secondary-color) !important;
+        cursor: default;
+    }
+    #modalDetailPengeluaran .detail-dt-foot .paginate_button:focus-visible {
+        outline: 2px solid var(--bs-warning);
+        outline-offset: 2px;
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] .detail-dt-foot .paginate_button:focus-visible {
+        outline-color: var(--bs-secondary);
+    }
+    #modalDetailPengeluaran .detail-dt-foot .ellipsis {
+        padding: 0 2px;
+        color: var(--bs-secondary-color);
+    }
     @media (max-width: 767.98px) {
         /* Di layar sempit, kategori sudah terwakili chip; penerima bisa dibuka di desktop. */
         #modalDetailPengeluaran .detail-table th:nth-child(2),
@@ -188,6 +266,13 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         }
     }
     @media (max-width: 575.98px) {
+        /* Pager di layar sempit: tombol lebih rapat supaya tetap satu-dua baris. */
+        #modalDetailPengeluaran .detail-dt-foot .paginate_button {
+            min-width: 30px;
+            height: 30px;
+            padding: 0 .45rem;
+            font-size: .72rem;
+        }
         #modalDetailPengeluaran .detail-summary {
             grid-template-columns: 1fr 1fr;
         }
@@ -721,7 +806,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 zeroRecords: 'Tidak ada pengeluaran.',
                 emptyTable: 'Tidak ada pengeluaran.',
                 processing: 'Memuat…',
-                paginate: { previous: '‹', next: '›' }
+                paginate: { previous: '‹ Sebelumnya', next: 'Berikutnya ›' }
             }
         });
         return table;
