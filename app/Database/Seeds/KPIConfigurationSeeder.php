@@ -653,7 +653,7 @@ class KPIConfigurationSeeder extends Seeder
         // Old logic: tunjangan_absen = (skor_total2/100) * 250000 untuk SEMUA jabatan
         // Hint: komponen ini dipakai bila skor absen tersedia → percent_of_kpi dengan skor absen.
         // Untuk regression diset 250k base. KPI achievement yang masuk dihitung dari score2.
-        foreach ([1, 2, 35, 36, 40, 41, 42, 43, 44, 45, 46] as $pid) {
+        foreach ([0, 1, 2, 34, 35, 36, 40, 41, 42, 43, 44, 45, 46] as $pid) {
             $data[] = $mk($pid, 'TUNJANGAN_ABSEN', 250000, 'percent_of_kpi');
         }
 
