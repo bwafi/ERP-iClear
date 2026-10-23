@@ -701,7 +701,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 </div>
                 <div id="detailPengeluaranTableWrap" class="d-none">
                     <div class="detail-section-label mb-2 mt-3">Rincian kategori</div>
-                    <div id="detailPengeluaranKategori" class="d-flex flex-wrap gap-2 mb-3"></div>
+                    <div id="detailPengeluaranKategori" class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Filter kategori"></div>
                     <input type="search" id="detailPengeluaranSearch" class="form-control form-control-sm mb-2"
                         placeholder="Cari deskripsi, penerima, atau kategori…" aria-label="Cari transaksi">
                     <div>
@@ -776,6 +776,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         if (dapatDiklik) {
             chip.type = 'button';
             chip.dataset.id = id == null ? '' : String(id);
+            chip.setAttribute('aria-pressed', aktif ? 'true' : 'false');
         }
         chip.className = 'detail-chip' + (aktif ? ' is-active' : '');
         const teks = document.createElement('span');

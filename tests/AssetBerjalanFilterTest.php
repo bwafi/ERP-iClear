@@ -398,6 +398,15 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $ids = array_map('intval', array_column($json['kategori'], 'id'));
         sort($ids);
         $this->assertSame([6, 7, 11], $ids);
+
+        // Gabungan kategori + pencarian (AND); recordsTotal tetap total kelompok
+        // (bukan hasil cari).
+        $res2 = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=kebutuhan&kategori=6&search%5Bvalue%5D=Lain');
+        $res2->assertStatus(200);
+        $json2 = json_decode((string) $res2->getJSON(), true);
+        $this->assertSame(3, (int) $json2['recordsTotal']);
+        $this->assertSame(1, (int) $json2['recordsFiltered']);
+        $this->assertSame([6], array_map('intval', array_column($json2['data'], 'kategori_idkategori')));
     }
 
     public function testDetailMenolakKelompokTidakDikenal(): void

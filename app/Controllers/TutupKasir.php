@@ -950,7 +950,8 @@ class TutupKasir extends BaseController
         // Syarat yang sama dipakai count, sum, group, dan halaman baris.
         // $denganKategori=false untuk chip kategori: chip harus tetap lengkap
         // walau tabel sedang difilter, supaya user bisa ganti kategori langsung.
-        $saring = function ($builder, bool $denganKategori = true) use ($bulan, $tahun, $unit, $kelompok, $search, $kategoriFilter): void {
+        // $denganCari=false untuk recordsTotal: itu total kelompok, bukan hasil cari.
+        $saring = function ($builder, bool $denganKategori = true, bool $denganCari = true) use ($bulan, $tahun, $unit, $kelompok, $search, $kategoriFilter): void {
             $builder->where('MONTH(kas_keluar.tanggal)', $bulan)
                 ->where('YEAR(kas_keluar.tanggal)', $tahun)
                 ->where('kas_keluar.idunit', $unit);
@@ -965,7 +966,7 @@ class TutupKasir extends BaseController
                 $builder->where('kas_keluar.kategori_idkategori', $kategoriFilter);
             }
 
-            if ($search !== '') {
+            if ($denganCari && $search !== '') {
                 $builder->groupStart()
                     ->like('kas_keluar.deskripsi', $search)
                     ->orLike('kas_keluar.penerima', $search)
@@ -977,7 +978,7 @@ class TutupKasir extends BaseController
             ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left');
 
         $tanpaCari = $dasar();
-        $saring($tanpaCari, false);
+        $saring($tanpaCari, false, false);
         $totalSemua = (int) $tanpaCari->countAllResults();
 
         $denganCari = $dasar()->select('COUNT(*) AS c, COALESCE(SUM(kas_keluar.jumlah), 0) AS t');
