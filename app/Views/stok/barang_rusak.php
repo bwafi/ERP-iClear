@@ -140,6 +140,52 @@
     </div>
 </div>
 
+<div class="card w-100 position-relative overflow-hidden mt-4">
+    <div class="px-4 py-3 border-bottom d-flex align-items-center justify-content-between">
+        <h4 class="fw-semibold mb-0">Barang Rusak Klaim Garansi</h4>
+        <span class="badge bg-warning-subtle text-warning">Tidak mengurangi stok</span>
+    </div>
+
+    <div class="table-responsive mb-2 px-4 pt-4">
+        <table class="table border text-nowrap mb-0 align-middle" id="zero_config_claim">
+            <thead class="text-dark fs-4">
+                <tr>
+                    <th>No Service</th>
+                    <th>Tanggal</th>
+                    <th>Kode Barang</th>
+                    <th>Nama Barang</th>
+                    <th>Qty</th>
+                    <th>Keterangan</th>
+                    <th>Unit</th>
+                    <th>Input By</th>
+                    <th>Pelanggan</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (!empty($barang_rusak_claim)): ?>
+                    <?php foreach ($barang_rusak_claim as $row): ?>
+                        <tr>
+                            <td><?= esc($row->no_service ?? '-') ?></td>
+                            <td><?= esc($row->created_at ?? '-') ?></td>
+                            <td><?= esc($row->kode_barang ?? '-') ?></td>
+                            <td><?= esc($row->nama_barang ?? '-') ?></td>
+                            <td><?= esc($row->jumlah) ?></td>
+                            <td><?= esc($row->keterangan ?? '-') ?></td>
+                            <td><?= esc($row->nama_unit ?? '-') ?></td>
+                            <td><?= esc($row->nama_input ?? '-') ?></td>
+                            <td><?= esc($row->nama_pelanggan ?? '-') ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="9" class="text-center">Tidak ada barang rusak dari klaim garansi</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- Modal Edit Kategori -->
 <div class="modal fade" id="edit-kategori-modal" tabindex="-1" aria-labelledby="editKategoriModalLabel"
     aria-hidden="true">

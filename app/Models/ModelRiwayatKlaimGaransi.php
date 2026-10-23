@@ -9,7 +9,7 @@ class ModelRiwayatKlaimGaransi extends Model
     protected $table = 'riwayat_claim_garansi';
     protected $primaryKey = 'idriwayat_claim_garansi';
     protected $returnType = 'object';
-    protected $allowedFields = ['idriwayat_claim_garansi', 'service_idservice', 'tanggal_claim'];
+    protected $allowedFields = ['idriwayat_claim_garansi', 'service_idservice', 'tanggal_claim', 'catatan'];
 
     /**
      * Ambil semua riwayat claim
