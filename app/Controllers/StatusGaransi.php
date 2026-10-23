@@ -7,6 +7,7 @@ use App\Services\Service\GaransiClaimService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use App\Models\ModelAuth;
 use App\Models\ModelBarang;
+use App\Models\ModelBarangRusakClaim;
 use App\Models\ModelKerusakan;
 use App\Models\ModelKartuStok;
 use App\Models\ModelPelanggan;
@@ -35,6 +36,7 @@ class StatusGaransi extends BaseController
 
     protected $AuthModel;
     protected $BarangModel;
+    protected $BarangRusakClaimModel;
     protected $KerusakanModel;
     protected $KartuStokModel;
     protected $PelangganModel;
@@ -56,6 +58,7 @@ class StatusGaransi extends BaseController
     {
         $this->AuthModel = new ModelAuth();
         $this->BarangModel = new ModelBarang();
+        $this->BarangRusakClaimModel = new ModelBarangRusakClaim();
         $this->KerusakanModel = new ModelKerusakan();
         $this->KartuStokModel = new ModelKartuStok();
         $this->PelangganModel = new ModelPelanggan();
@@ -221,9 +224,19 @@ class StatusGaransi extends BaseController
     public function claim_garansi()
     {
         $idservice = (int) $this->request->getPost('idservice');
+        $catatan = trim((string) $this->request->getPost('catatan'));
+        $produkData = $this->request->getPost('produk');
+        $produkData = is_array($produkData) ? $produkData : [];
+        $barangRusakData = $this->request->getPost('barang_rusak');
+        $barangRusakData = is_array($barangRusakData) ? $barangRusakData : [];
 
         if ($idservice <= 0) {
             return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service tidak valid.');
+        }
+
+        if ($catatan === '') {
+            return redirect()->to(base_url('claim_garansi/detail/' . $idservice))
+                ->with('gagal', 'Catatan klaim wajib diisi.');
         }
 
         $db = Database::connect();
@@ -255,17 +268,25 @@ class StatusGaransi extends BaseController
 
             $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
 
+            $this->simpanSparepartKlaim($db, $service, $produkData);
+            $this->simpanBarangRusakKlaim($db, $service, $barangRusakData, $wibTime);
+
             $db->table('service')->where('idservice', $idservice)->update([
                 'status_service' => 2,
                 'tanggal_bisa_diambil' => null,
                 'tanggal_selesai' => null,
                 'status_proses' => 1,
                 'tanggal_claim_garansi' => $wibTime->format('Y-m-d H:i:s'),
+                'total_service_garansi' => 0,
+                'total_diskon_garansi' => 0,
+                'biaya_tambahan_garansi' => 0,
+                'harus_dibayar_garansi' => 0,
             ]);
             $db->table('proses_service')->where('service_idservice', $idservice)->delete();
             $db->table('riwayat_claim_garansi')->insert([
                 'service_idservice' => $idservice,
                 'tanggal_claim' => $wibTime->format('Y-m-d'),
+                'catatan' => $catatan,
             ]);
 
             if (!$db->transStatus()) {
@@ -281,7 +302,7 @@ class StatusGaransi extends BaseController
             $db->transRollback();
             log_message('error', 'claim_garansi service ' . $idservice . ': ' . $e->getMessage());
 
-            return redirect()->to(base_url('garansi_service'))->with('gagal', $e->getMessage());
+            return redirect()->to(base_url('claim_garansi/detail/' . $idservice))->with('gagal', $e->getMessage());
         }
     }
 
@@ -691,6 +712,138 @@ class StatusGaransi extends BaseController
         }
     }
 
+
+    private function simpanSparepartKlaim($db, object $service, array $produkData): void
+    {
+        $idservice = (int) $service->idservice;
+        $unitId = (int) $service->unit_idunit;
+
+        $existingMap = [];
+        foreach ($db->table('service_sparepart')->where('service_idservice', $idservice)->get()->getResult() as $item) {
+            $existingMap[(int) $item->barang_idbarang] = $item;
+        }
+
+        $submitted = [];
+
+        foreach ($produkData as $produk) {
+            if (!is_array($produk)) {
+                continue;
+            }
+
+            $id = (int) ($produk['id'] ?? 0);
+            $qty = max(0, (int) ($produk['qty'] ?? 0));
+
+            if ($id <= 0 || $qty <= 0 || isset($submitted[$id])) {
+                continue;
+            }
+
+            $dataHpp = $this->HppBarangModel->getById($id);
+            if ($dataHpp === null) {
+                throw new \RuntimeException('Sparepart tidak ditemukan.');
+            }
+
+            $stokUnit = $this->StokBarangModel->where('idbarang', $id)->where('id_unit', $unitId)->first();
+            if ($stokUnit === null) {
+                throw new \RuntimeException('Sparepart tidak tersedia di unit ini.');
+            }
+
+            if ((int) ($stokUnit->stok_akhir ?? 0) < $qty) {
+                throw new \RuntimeException('Stok sparepart tidak cukup.');
+            }
+
+            $dataStokAwal = $this->StokAwalModel->getByIdBarang($id);
+            $data = [
+                'jumlah_tambahan_garansi' => $qty,
+                'harga_penjualan_garansi' => 0,
+                'sub_total_garansi' => 0,
+                'diskon_penjualan_garansi' => 0,
+                'hpp_penjualan_garansi' => (int) ($dataHpp->hpp ?? 0),
+                'satuan_jual' => $dataStokAwal->satuan_terkecil ?? 'pcs',
+                'service_idservice' => $idservice,
+                'barang_idbarang' => $id,
+                'unit_idunit' => $unitId,
+            ];
+
+            $submitted[$id] = true;
+
+            if (isset($existingMap[$id])) {
+                $db->table('service_sparepart')
+                    ->where('idservice_sparepart', $existingMap[$id]->idservice_sparepart)
+                    ->update($data);
+            } else {
+                $db->table('service_sparepart')->insert($data + [
+                    'jumlah' => 0,
+                    'harga_penjualan' => 0,
+                    'sub_total' => 0,
+                    'diskon_penjualan' => 0,
+                ]);
+            }
+        }
+
+        foreach ($existingMap as $barangId => $item) {
+            if (isset($submitted[$barangId])) {
+                continue;
+            }
+
+            if ((int) ($item->jumlah ?? 0) === 0 && (int) ($item->harga_penjualan ?? 0) === 0) {
+                $db->table('service_sparepart')
+                    ->where('idservice_sparepart', $item->idservice_sparepart)
+                    ->delete();
+                continue;
+            }
+
+            // Baris normal tetap disimpan; hanya tambahan garansinya dibersihkan.
+            $db->table('service_sparepart')
+                ->where('idservice_sparepart', $item->idservice_sparepart)
+                ->update([
+                    'jumlah_tambahan_garansi' => 0,
+                    'harga_penjualan_garansi' => 0,
+                    'sub_total_garansi' => 0,
+                    'diskon_penjualan_garansi' => 0,
+                    'hpp_penjualan_garansi' => 0,
+                ]);
+        }
+    }
+
+    private function simpanBarangRusakKlaim($db, object $service, array $barangRusakData, \DateTime $wibTime): void
+    {
+        $seen = [];
+
+        foreach ($barangRusakData as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $id = (int) ($item['id'] ?? 0);
+            $qty = max(0, (int) ($item['qty'] ?? 0));
+
+            if ($id <= 0 || $qty <= 0 || isset($seen[$id])) {
+                continue;
+            }
+
+            $barang = $db->table('barang')
+                ->where('idbarang', $id)
+                ->where('deleted', '0')
+                ->get()
+                ->getRow();
+
+            if ($barang === null) {
+                throw new \RuntimeException('Barang rusak tidak ditemukan.');
+            }
+
+            $seen[$id] = true;
+
+            $db->table('barang_rusak_claim')->insert([
+                'service_idservice' => (int) $service->idservice,
+                'barang_idbarang' => $id,
+                'jumlah' => $qty,
+                'keterangan' => trim((string) ($item['keterangan'] ?? '')),
+                'unit_idunit' => (int) $service->unit_idunit,
+                'input_by' => (int) session('ID_AKUN'),
+                'created_at' => $wibTime->format('Y-m-d H:i:s'),
+            ]);
+        }
+    }
 
     private function claimableServiceForUser(int $idservice): ?object
     {
