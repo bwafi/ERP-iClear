@@ -145,12 +145,15 @@ class Riwayat_Service extends BaseController
 
     public function index2()
     {
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = in_array($idJabatan, [0, 1, 42, '0', '1', '42'], true);
+        $unitFilter = $isHO ? '' : (int) session('ID_UNIT');
 
         $data =  array(
 
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->getRiwayatServiceGaransi(),
+            'service' => $this->ServiceModel->getRiwayatServiceGaransi($unitFilter),
             'body'  => 'riwayat/service_garansi'
         );
         return view('template', $data);
@@ -715,9 +718,17 @@ class Riwayat_Service extends BaseController
 
         $tanggal_awal  = $this->request->getPost('tanggal_awal');
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
+        $sumber        = $this->request->getPost('sumber');
 
-        // Ambil data dari model
-        $dataservice = $this->ServiceModel->filterExportGaransi($tanggal_awal, $tanggal_akhir);
+        $idJabatan = session()->get('ID_JABATAN');
+        $isHO = in_array($idJabatan, [0, 1, 42, '0', '1', '42'], true);
+        $unitFilter = $isHO ? '' : (int) session('ID_UNIT');
+
+        // Halaman garansi mengirim sumber=garansi (filter tanggal selesai);
+        // halaman riwayat klaim memakai filter tanggal claim.
+        $dataservice = $sumber === 'garansi'
+            ? $this->ServiceModel->filterExportGaransiAktif($tanggal_awal, $tanggal_akhir, $unitFilter)
+            : $this->ServiceModel->filterExportGaransi($tanggal_awal, $tanggal_akhir, $unitFilter);
 
         // Header kolom
         $headers = [

@@ -1,4 +1,5 @@
 <form action="<?php echo base_url('update_garansi_service/saveKerusakan') ?>" enctype="multipart/form-data" method="post">
+    <?= csrf_field() ?>
     <?php
     $kerusakan_terpilih = [];
     foreach ($oldkerusakan as $item) {

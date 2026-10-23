@@ -1,5 +1,6 @@
 <form action="<?php echo base_url('update_service_garansi/savePembayaran') ?>" id="form_pemPembayaran" enctype="multipart/form-data"
     method="post">
+    <?= csrf_field() ?>
     <div class="mt-3">
 
         <div class="col-md-6">
@@ -234,9 +235,9 @@
 
         function hitungKembalian() {
             const totalHarga = parseRupiahToNumber(totalAkhirInput.value);
-            const biayaTambahan = biayaTambahanInput ? parseRupiahToNumber(biayaTambahanInput.value) : 0;
             const totalBayar = hitungTotalPembayaran();
-            const totalHarusBayar = totalHarga + biayaTambahan;
+            // total_harga_pembayaran_akhir sudah termasuk biaya tambahan.
+            const totalHarusBayar = totalHarga;
 
             let kembalian = totalBayar - totalHarusBayar;
             if (kembalian < 0) kembalian = 0;
@@ -250,9 +251,9 @@
         // Validasi submit
         document.getElementById('form_pemPembayaran').addEventListener('submit', function(e) {
             const totalHarga = parseRupiahToNumber(totalAkhirInput.value);
-            const biayaTambahan = biayaTambahanInput ? parseRupiahToNumber(biayaTambahanInput.value) : 0;
             const totalBayar = hitungTotalPembayaran();
-            const totalHarusBayar = totalHarga + biayaTambahan;
+            // total_harga_pembayaran_akhir sudah termasuk biaya tambahan.
+            const totalHarusBayar = totalHarga;
 
             if (totalBayar < totalHarusBayar) {
                 alert('Pembayaran kurang! Silakan periksa kembali.');
