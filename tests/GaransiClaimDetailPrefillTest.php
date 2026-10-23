@@ -5,12 +5,12 @@ namespace Tests;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
- * Halaman klaim: sparepart yang sudah dipakai service otomatis muncul
- * di tabel Sparepart Rusak.
+ * Halaman klaim: sparepart service otomatis muncul di tabel Sparepart Rusak
+ * dan user memilih sendiri part mana yang diklaim.
  */
 final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
 {
-    public function testSparepartServiceOtomatisMasukTabelRusak(): void
+    private function render(array $serviceSparepart): string
     {
         $service = (object) [
             'idservice' => 1,
@@ -25,19 +25,23 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
             'keterangan' => '-',
         ];
 
-        $html = view('transaksi/table_garansi/claim_detail', [
+        return view('transaksi/table_garansi/claim_detail', [
             'service' => $service,
             'oldkerusakan' => [],
-            'service_sparepart' => [
-                (object) ['barang_idbarang' => 10, 'nama_barang' => 'LCD Tes', 'jumlah' => 2],
-                (object) ['barang_idbarang' => 10, 'nama_barang' => 'LCD Tes', 'jumlah' => 1],
-                (object) ['barang_idbarang' => 11, 'nama_barang' => 'Baterai Tes', 'jumlah' => 1],
-            ],
+            'service_sparepart' => $serviceSparepart,
             'fungsiMap' => [],
             'sparepart' => [],
-            'sparepart_rusak' => [],
             'warranty_end' => null,
             'status_garansi' => 'Aktif',
+        ]);
+    }
+
+    public function testSparepartServiceTampilDenganPilihanKlaim(): void
+    {
+        $html = $this->render([
+            (object) ['barang_idbarang' => 10, 'nama_barang' => 'LCD Tes', 'jumlah' => 2],
+            (object) ['barang_idbarang' => 10, 'nama_barang' => 'LCD Tes', 'jumlah' => 1],
+            (object) ['barang_idbarang' => 11, 'nama_barang' => 'Baterai Tes', 'jumlah' => 1],
         ]);
 
         $this->assertStringContainsString('id="damaged-row-10"', $html);
@@ -46,6 +50,14 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
         $this->assertStringContainsString('name="barang_rusak[1][id]" value="11"', $html);
         $this->assertStringContainsString('name="barang_rusak[1][qty]" value="1"', $html);
         $this->assertSame(1, substr_count($html, 'id="damaged-row-10"'));
-        $this->assertStringContainsString('let damagedIndex = 2;', $html);
+        $this->assertStringNotContainsString('Tambah Sparepart Rusak', $html);
+        $this->assertStringNotContainsString('damagedPartModal', $html);
+    }
+
+    public function testServiceTanpaSparepartMenampilkanPesanKosong(): void
+    {
+        $html = $this->render([]);
+
+        $this->assertStringContainsString('Tidak ada sparepart di service ini.', $html);
     }
 }

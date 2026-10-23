@@ -204,11 +204,6 @@ class StatusGaransi extends BaseController
                 && (int) ($barang->stok_akhir ?? 0) > 0
         ));
 
-        $sparepartRusak = array_values(array_filter(
-            $this->BarangModel->getBarangSparepart(),
-            static fn ($barang) => (int) ($barang->deleted ?? 0) === 0
-        ));
-
         $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
 
         return view('template', [
@@ -217,7 +212,6 @@ class StatusGaransi extends BaseController
             'service_sparepart' => $serviceSparepart,
             'fungsiMap' => $fungsiMap,
             'sparepart' => $sparepart,
-            'sparepart_rusak' => $sparepartRusak,
             'warranty_end' => GaransiClaimService::warrantyEnd($service),
             'status_garansi' => GaransiClaimService::statusText($service, $today),
             'body' => 'transaksi/table_garansi/claim_detail',

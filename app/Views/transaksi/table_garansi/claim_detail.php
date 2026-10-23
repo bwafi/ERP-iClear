@@ -149,46 +149,47 @@ foreach (($service_sparepart ?? []) as $item) {
 
     <div class="card w-100 position-relative overflow-hidden mb-4">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                    <h5 class="mb-1">Sparepart Rusak</h5>
-                    <p class="text-muted mb-0">Otomatis dari sparepart service; dicatat untuk laporan, tidak mengurangi stok.</p>
-                </div>
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
-                    data-bs-target="#damagedPartModal">Tambah Sparepart Rusak</button>
+            <div class="mb-3">
+                <h5 class="mb-1">Sparepart Rusak</h5>
+                <p class="text-muted mb-0">Pilih sparepart service yang diklaim; dicatat untuk laporan, tidak mengurangi stok.</p>
             </div>
 
             <div class="table-responsive">
                 <table class="table border align-middle mb-0">
                     <thead class="text-dark fs-4">
                         <tr>
+                            <th style="width: 70px;" class="text-center">Klaim</th>
                             <th>Nama Sparepart</th>
                             <th style="width: 120px;">Qty</th>
                             <th>Keterangan</th>
-                            <th style="width: 90px;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="damagedRows">
                         <?php $damagedIndex = 0; ?>
                         <?php foreach ($rusakAwal as $item): ?>
                             <tr id="damaged-row-<?= $item['id'] ?>">
-                                <td>
-                                    <?= esc($item['nama']) ?>
-                                    <input type="hidden" name="barang_rusak[<?= $damagedIndex ?>][id]" value="<?= $item['id'] ?>">
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input damaged-select"
+                                        name="barang_rusak[<?= $damagedIndex ?>][id]" value="<?= $item['id'] ?>">
                                 </td>
+                                <td><?= esc($item['nama']) ?></td>
                                 <td>
-                                    <input type="number" class="form-control form-control-sm"
-                                        name="barang_rusak[<?= $damagedIndex ?>][qty]" value="<?= $item['qty'] ?>" min="1" required>
+                                    <input type="number" class="form-control form-control-sm damaged-qty"
+                                        name="barang_rusak[<?= $damagedIndex ?>][qty]" value="<?= $item['qty'] ?>" min="1">
                                 </td>
                                 <td>
                                     <textarea class="form-control form-control-sm"
                                         name="barang_rusak[<?= $damagedIndex ?>][keterangan]" rows="1"
                                         placeholder="Keterangan kerusakan"></textarea>
                                 </td>
-                                <td><button type="button" class="btn btn-sm btn-danger remove-damaged">Hapus</button></td>
                             </tr>
                             <?php $damagedIndex++; ?>
                         <?php endforeach; ?>
+                        <?php if (empty($rusakAwal)): ?>
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">Tidak ada sparepart di service ini.</td>
+                            </tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -243,51 +244,10 @@ foreach (($service_sparepart ?? []) as $item) {
     </div>
 </div>
 
-<div class="modal fade" id="damagedPartModal" tabindex="-1" aria-labelledby="damagedPartModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="damagedPartModalLabel">Pilih Sparepart Rusak</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table table-bordered" id="damagedPartTable">
-                        <thead>
-                            <tr>
-                                <th></th>
-                                <th>Nama Sparepart</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($sparepart_rusak as $s): ?>
-                                <tr>
-                                    <td>
-                                        <input type="checkbox" class="damaged-check"
-                                            data-id="<?= (int) $s->idbarang ?>"
-                                            data-nama="<?= esc($s->nama_barang) ?>">
-                                    </td>
-                                    <td><?= esc($s->nama_barang) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                <button type="button" class="btn btn-success" id="addSelectedDamaged">Tambahkan</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
     (function() {
         let replacementIndex = 0;
-        let damagedIndex = <?= (int) $damagedIndex ?>;
         const replacementRows = document.getElementById('replacementRows');
-        const damagedRows = document.getElementById('damagedRows');
 
         function addReplacementRow(id, nama, stok) {
             if (document.getElementById('replacement-row-' + id)) {
@@ -306,23 +266,6 @@ foreach (($service_sparepart ?? []) as $item) {
             replacementRows.appendChild(row);
         }
 
-        function addDamagedRow(id, nama) {
-            if (document.getElementById('damaged-row-' + id)) {
-                return;
-            }
-
-            const index = damagedIndex++;
-            const row = document.createElement('tr');
-            row.id = 'damaged-row-' + id;
-            row.innerHTML = `
-                <td>${nama}<input type="hidden" name="barang_rusak[${index}][id]" value="${id}"></td>
-                <td><input type="number" class="form-control form-control-sm" name="barang_rusak[${index}][qty]" value="1" min="1" required></td>
-                <td><textarea class="form-control form-control-sm" name="barang_rusak[${index}][keterangan]" rows="1" placeholder="Keterangan kerusakan"></textarea></td>
-                <td><button type="button" class="btn btn-sm btn-danger remove-damaged">Hapus</button></td>
-            `;
-            damagedRows.appendChild(row);
-        }
-
         document.getElementById('addSelectedReplacement').addEventListener('click', function() {
             document.querySelectorAll('.replacement-check:checked').forEach(function(checkbox) {
                 addReplacementRow(
@@ -334,22 +277,20 @@ foreach (($service_sparepart ?? []) as $item) {
             });
         });
 
-        document.getElementById('addSelectedDamaged').addEventListener('click', function() {
-            document.querySelectorAll('.damaged-check:checked').forEach(function(checkbox) {
-                addDamagedRow(checkbox.dataset.id, checkbox.dataset.nama);
-                checkbox.checked = false;
-            });
+        document.querySelectorAll('.damaged-select').forEach(function(checkbox) {
+            const qty = checkbox.closest('tr').querySelector('.damaged-qty');
+            const sync = function() {
+                qty.required = checkbox.checked;
+            };
+
+            checkbox.addEventListener('change', sync);
+            sync();
         });
 
         document.addEventListener('click', function(event) {
             const replacementButton = event.target.closest('.remove-replacement');
             if (replacementButton) {
                 replacementButton.closest('tr').remove();
-            }
-
-            const damagedButton = event.target.closest('.remove-damaged');
-            if (damagedButton) {
-                damagedButton.closest('tr').remove();
             }
         });
 
@@ -373,10 +314,6 @@ foreach (($service_sparepart ?? []) as $item) {
 
         $(document).ready(function() {
             $('#replacementPartTable').DataTable({
-                pageLength: 5,
-                lengthChange: false
-            });
-            $('#damagedPartTable').DataTable({
                 pageLength: 5,
                 lengthChange: false
             });

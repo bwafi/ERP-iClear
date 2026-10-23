@@ -414,6 +414,23 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
             ->getRow());
     }
 
+    public function testBarangRusakTanpaPilihanTidakDisimpan(): void
+    {
+        $this->seedService(1);
+
+        $this->postClaim([
+            'idservice' => 1,
+            'catatan' => 'Hanya ganti sparepart',
+            'produk' => [['id' => 10, 'qty' => 1]],
+            'barang_rusak' => [['qty' => 2, 'keterangan' => 'Tidak dicentang']],
+        ])->assertRedirect();
+
+        $this->assertSame(
+            0,
+            $this->fresh()->table('barang_rusak_claim')->where('service_idservice', 1)->countAllResults()
+        );
+    }
+
     public function testRiwayatKlaimMenampilkanCatatan(): void
     {
         $this->seedService(1);
