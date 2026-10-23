@@ -161,14 +161,6 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         border-color: var(--bs-border-color-translucent);
         vertical-align: middle;
     }
-    #modalDetailPengeluaran .detail-empty-icon {
-        width: 48px;
-        height: 48px;
-        margin-left: auto;
-        margin-right: auto;
-        color: var(--bs-secondary-color);
-        opacity: .55;
-    }
     @media (max-width: 767.98px) {
         /* Di layar sempit, kategori sudah terwakili chip; penerima bisa dibuka di desktop. */
         #modalDetailPengeluaran .detail-table th:nth-child(2),
@@ -581,24 +573,17 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             </div>
 
             <div class="modal-body">
-                <div id="detailPengeluaranLoading" class="text-center text-muted py-5">
-                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    Memuat detail pengeluaran…
-                </div>
                 <div id="detailPengeluaranError" class="alert alert-danger d-none mb-0 mt-3" role="alert">
                     <span id="detailPengeluaranErrorText">Gagal memuat detail.</span>
                     <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="detailPengeluaranRetry">Coba lagi</button>
                 </div>
-                <div id="detailPengeluaranEmpty" class="text-center text-muted py-5 d-none">
-                    <iconify-icon icon="solar:wallet-money-bold-duotone" width="48" height="48" class="detail-empty-icon d-block mx-auto mb-2"></iconify-icon>
-                    <div class="fw-semibold text-dark mb-1">Tidak ada pengeluaran</div>
-                    <small>Tidak ada transaksi pada unit dan periode ini.</small>
-                </div>
                 <div id="detailPengeluaranTableWrap" class="d-none">
                     <div class="detail-section-label mb-2 mt-3">Rincian kategori</div>
                     <div id="detailPengeluaranKategori" class="d-flex flex-wrap gap-2 mb-3"></div>
+                    <input type="search" id="detailPengeluaranSearch" class="form-control form-control-sm mb-2"
+                        placeholder="Cari deskripsi, penerima, atau kategori…" aria-label="Cari transaksi">
                     <div>
-                        <table class="table table-hover align-middle mb-0 detail-table">
+                        <table class="table table-hover align-middle mb-0 detail-table" id="detailPengeluaranTable">
                             <thead>
                                 <tr>
                                     <th>Tanggal</th>
@@ -628,32 +613,30 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     if (!modal) return;
 
     const url = modal.dataset.url;
-    const params = {
-        unit: modal.dataset.unit,
-        bulan: modal.dataset.bulan,
-        tahun: modal.dataset.tahun,
-    };
-    const cache = new Map();
-    let aktif = null;
-
     const el = (id) => document.getElementById(id);
-    const loading = el('detailPengeluaranLoading');
     const errorBox = el('detailPengeluaranError');
     const errorText = el('detailPengeluaranErrorText');
-    const empty = el('detailPengeluaranEmpty');
     const wrap = el('detailPengeluaranTableWrap');
-    const tbody = el('detailPengeluaranRows');
+    const searchInput = el('detailPengeluaranSearch');
     const kategoriWrap = el('detailPengeluaranKategori');
     const totalEl = el('detailPengeluaranTotal');
     const countEl = el('detailPengeluaranCount');
     const kategoriCountEl = el('detailPengeluaranKategoriCount');
     const rupiah = new Intl.NumberFormat('id-ID');
 
-    const tampil = (state) => {
-        loading.classList.toggle('d-none', state !== 'loading');
-        errorBox.classList.toggle('d-none', state !== 'error');
-        empty.classList.toggle('d-none', state !== 'empty');
-        wrap.classList.toggle('d-none', state !== 'table');
+    let table = null;
+    let aktif = null;
+
+    const tanggal = (v) => {
+        const s = String(v || '').slice(0, 10).split('-');
+        return s.length === 3 ? s[2] + '/' + s[1] + '/' + s[0] : (v || '-');
+    };
+    const escHtml = (v) => String(v == null ? '' : v)
+        .replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+    const tampilError = (teks) => {
+        errorBox.classList.toggle('d-none', !teks);
+        if (teks) errorText.textContent = teks;
     };
 
     const resetRingkasan = (teks) => {
@@ -663,95 +646,85 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         kategoriWrap.textContent = '';
     };
 
-    const tanggal = (v) => {
-        const s = String(v || '').slice(0, 10).split('-');
-        return s.length === 3 ? s[2] + '/' + s[1] + '/' + s[0] : (v || '-');
-    };
+    // Ringkasan dihitung server dari seluruh hasil filter, bukan dari baris
+    // halaman ini saja — jadi angkanya tidak berubah saat pindah halaman.
+    const isiRingkasan = (json) => {
+        totalEl.textContent = 'Rp ' + rupiah.format(json.total || 0);
+        countEl.textContent = json.recordsFiltered || 0;
 
-    const render = (data) => {
-        const perKategori = new Map();
-        data.rows.forEach((row) => {
-            const nama = row.nama_kategori || 'Tanpa kategori';
-            perKategori.set(nama, (perKategori.get(nama) || 0) + (Number(row.jumlah) || 0));
-        });
-
-        tbody.textContent = '';
-        data.rows.forEach((row) => {
-            const tr = document.createElement('tr');
-            const isi = [
-                tanggal(row.tanggal),
-                row.nama_kategori || 'Tanpa kategori',
-                row.deskripsi || '-',
-                row.penerima || '-',
-                'Rp ' + rupiah.format(row.jumlah || 0),
-            ];
-            isi.forEach((text, i) => {
-                const td = document.createElement('td');
-                if (i === 1) {
-                    const badge = document.createElement('span');
-                    badge.className = 'badge rounded-pill bg-light text-dark border fw-medium';
-                    badge.textContent = text;
-                    td.appendChild(badge);
-                } else {
-                    td.textContent = text;
-                }
-                if (i === 0) td.className = 'text-nowrap text-secondary';
-                if (i === 3) td.className = 'text-muted';
-                if (i === 4) td.className = 'text-end fw-semibold metric-figure text-nowrap';
-                tr.appendChild(td);
-            });
-            tbody.appendChild(tr);
-        });
-
+        const kategori = json.kategori || [];
+        kategoriCountEl.textContent = kategori.length;
         kategoriWrap.textContent = '';
-        [...perKategori.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .forEach(([nama, jumlah]) => {
-                const chip = document.createElement('span');
-                chip.className = 'detail-chip';
-                const label = document.createElement('span');
-                label.textContent = nama;
-                const value = document.createElement('strong');
-                value.textContent = 'Rp ' + rupiah.format(jumlah);
-                chip.append(label, value);
-                kategoriWrap.appendChild(chip);
-            });
-
-        totalEl.textContent = 'Rp ' + rupiah.format(data.total || 0);
-        countEl.textContent = data.rows.length;
-        kategoriCountEl.textContent = perKategori.size;
-        tampil(data.rows.length ? 'table' : 'empty');
+        kategori.forEach((k) => {
+            const chip = document.createElement('span');
+            chip.className = 'detail-chip';
+            const label = document.createElement('span');
+            label.textContent = k.nama;
+            const value = document.createElement('strong');
+            value.textContent = 'Rp ' + rupiah.format(k.jumlah || 0);
+            chip.append(label, value);
+            kategoriWrap.appendChild(chip);
+        });
     };
 
-    const muat = async (kelompok) => {
-        aktif = kelompok;
-        resetRingkasan('…');
-        tampil('loading');
-
-        const qs = new URLSearchParams({ ...params, kelompok });
-        try {
-            const res = await fetch(url + '?' + qs.toString(), {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            if (res.redirected) {
-                throw new Error('Sesi berakhir. Muat ulang halaman.');
+    // DataTables server-side: modal hanya memuat satu halaman baris, bukan
+    // seluruh pengeluaran, sehingga tetap ringan walau transaksinya banyak.
+    const buatTabel = () => {
+        table = $('#detailPengeluaranTable').DataTable({
+            serverSide: true,
+            processing: true,
+            // Modal masih tersembunyi saat init; biarkan CSS .detail-table yang
+            // mengatur lebar, bukan autoWidth yang menghitung dari container 0.
+            autoWidth: false,
+            pageLength: 10,
+            lengthChange: false,
+            order: [[0, 'asc']],
+            columnDefs: [{ orderable: false, targets: [2] }],
+            dom: 'rt<"detail-dt-foot d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"ip>',
+            ajax: {
+                url: url,
+                data: (d) => {
+                    d.unit = modal.dataset.unit;
+                    d.bulan = modal.dataset.bulan;
+                    d.tahun = modal.dataset.tahun;
+                    d.kelompok = aktif;
+                },
+                dataSrc: (json) => {
+                    tampilError('');
+                    isiRingkasan(json);
+                    return json.data;
+                },
+                error: (xhr) => {
+                    resetRingkasan('—');
+                    tampilError(xhr && xhr.status === 403
+                        ? 'Anda tidak berhak melihat unit ini.'
+                        : (xhr && xhr.status === 401
+                            ? 'Sesi berakhir. Muat ulang halaman.'
+                            : 'Gagal memuat detail. Periksa koneksi lalu coba lagi.'));
+                }
+            },
+            columns: [
+                { data: 'tanggal', render: (d) => tanggal(d), className: 'text-nowrap text-secondary' },
+                {
+                    data: 'nama_kategori',
+                    render: (d) => '<span class="badge rounded-pill bg-light text-dark border fw-medium">'
+                        + escHtml(d || 'Tanpa kategori') + '</span>'
+                },
+                { data: 'deskripsi', render: (d) => escHtml(d || '-') },
+                { data: 'penerima', render: (d) => escHtml(d || '-'), className: 'text-muted' },
+                { data: 'jumlah', render: (d) => 'Rp ' + rupiah.format(d || 0), className: 'text-end fw-semibold metric-figure text-nowrap' }
+            ],
+            language: {
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ transaksi',
+                infoEmpty: 'Tidak ada transaksi',
+                infoFiltered: '',
+                zeroRecords: 'Tidak ada pengeluaran.',
+                emptyTable: 'Tidak ada pengeluaran.',
+                processing: 'Memuat…',
+                paginate: { previous: '‹', next: '›' }
             }
-            if (!res.ok) {
-                throw new Error(res.status === 403
-                    ? 'Anda tidak berhak melihat unit ini.'
-                    : 'Gagal memuat detail.');
-            }
-            const data = await res.json();
-            cache.set(kelompok, data);
-            if (aktif === kelompok) render(data);
-        } catch (e) {
-            if (aktif !== kelompok) return;
-            resetRingkasan('—');
-            errorText.textContent = e.message === 'Failed to fetch'
-                ? 'Gagal memuat detail. Periksa koneksi lalu coba lagi.'
-                : (e.message || 'Gagal memuat detail.');
-            tampil('error');
-        }
+        });
+        return table;
     };
 
     modal.addEventListener('show.bs.modal', (event) => {
@@ -762,15 +735,29 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         modal.dataset.warna = btn.dataset.warna || 'warning';
         el('detailPengeluaranIcon').setAttribute('icon', btn.dataset.icon || 'solar:list-bold-duotone');
 
-        if (cache.has(btn.dataset.kelompok)) {
-            render(cache.get(btn.dataset.kelompok));
-            return;
+        wrap.classList.remove('d-none');
+        tampilError('');
+        aktif = btn.dataset.kelompok;
+        if (searchInput) searchInput.value = '';
+
+        if (!table) {
+            resetRingkasan('…');
+            buatTabel();
+        } else {
+            resetRingkasan('…');
+            table.search('').ajax.reload();
         }
-        muat(btn.dataset.kelompok);
     });
 
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            if (table) table.search(searchInput.value).draw();
+        });
+    }
+
     el('detailPengeluaranRetry').addEventListener('click', () => {
-        if (aktif) muat(aktif);
+        tampilError('');
+        if (table) table.ajax.reload();
     });
 })();
 </script>

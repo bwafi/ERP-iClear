@@ -334,9 +334,8 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $res->assertStatus(200);
         $json = json_decode((string) $res->getJSON(), true);
 
-        $this->assertSame('terkontrol', $json['kelompok']);
         $this->assertSame(2507580.0, (float) $json['total']);
-        $kategori = array_map('intval', array_column($json['rows'], 'kategori_idkategori'));
+        $kategori = array_map('intval', array_column($json['data'], 'kategori_idkategori'));
         sort($kategori);
         $this->assertSame([1, 18], $kategori);
     }
@@ -352,9 +351,26 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $json = json_decode((string) $res->getJSON(), true);
 
         $this->assertSame(2200000.0, (float) $json['total']);
-        $kategori = array_map('intval', array_column($json['rows'], 'kategori_idkategori'));
+        $kategori = array_map('intval', array_column($json['data'], 'kategori_idkategori'));
         sort($kategori);
         $this->assertSame([6, 7, 11], $kategori);
+    }
+
+    /** Server-side: hanya satu halaman baris yang dikirim, agregat tetap dari seluruh hasil filter. */
+    public function testDetailServerSideHanyaKirimSatuHalaman(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $res = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=kebutuhan&draw=7&start=0&length=1');
+        $res->assertStatus(200);
+        $json = json_decode((string) $res->getJSON(), true);
+
+        $this->assertSame(7, (int) $json['draw']);
+        $this->assertCount(1, $json['data']);
+        $this->assertSame(3, (int) $json['recordsFiltered']);
+        $this->assertSame(3, count($json['kategori']));
+        $this->assertSame(2200000.0, (float) $json['total']);
     }
 
     public function testDetailMenolakKelompokTidakDikenal(): void

@@ -922,38 +922,90 @@ class TutupKasir extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['error' => 'Periode tidak valid']);
         }
 
-        $builder = $this->db->table('kas_keluar')
-            ->select('kas_keluar.idkas_keluar, kas_keluar.tanggal, kas_keluar.kategori_idkategori, kategori_kas.kategori AS nama_kategori, kas_keluar.deskripsi, kas_keluar.penerima, kas_keluar.jumlah')
-            ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left')
-            ->where('MONTH(kas_keluar.tanggal)', $bulan)
-            ->where('YEAR(kas_keluar.tanggal)', $tahun)
-            ->where('kas_keluar.idunit', $unit);
+        // DataTables server-side: hanya satu halaman baris yang dikirim, bukan
+        // seluruh pengeluaran. Ringkasan (total & per kategori) tetap dihitung
+        // dari seluruh hasil filter, bukan hanya halaman yang tampil.
+        $draw   = (int) ($this->request->getGet('draw') ?? 0);
+        $start  = max(0, (int) ($this->request->getGet('start') ?? 0));
+        $length = (int) ($this->request->getGet('length') ?? 10);
+        $length = ($length > 0 && $length <= 100) ? $length : 10;
 
-        if ($kelompok === 'terkontrol') {
-            $builder->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
-        } else {
-            $builder->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
-        }
+        $search = $this->request->getGet('search');
+        $search = is_array($search) ? trim((string) ($search['value'] ?? '')) : '';
 
-        $rows = $builder->orderBy('kas_keluar.tanggal', 'ASC')
+        $order   = $this->request->getGet('order');
+        $order   = is_array($order) ? ($order[0] ?? []) : [];
+        $sortMap = [
+            0 => 'kas_keluar.tanggal',
+            1 => 'kategori_kas.kategori',
+            3 => 'kas_keluar.penerima',
+            4 => 'kas_keluar.jumlah',
+        ];
+        $sortCol = $sortMap[(int) ($order['column'] ?? 0)] ?? 'kas_keluar.tanggal';
+        $dir     = strtoupper((string) ($order['dir'] ?? 'asc')) === 'DESC' ? 'DESC' : 'ASC';
+
+        // Syarat yang sama dipakai count, sum, group, dan halaman baris.
+        $saring = function ($builder) use ($bulan, $tahun, $unit, $kelompok, $search): void {
+            $builder->where('MONTH(kas_keluar.tanggal)', $bulan)
+                ->where('YEAR(kas_keluar.tanggal)', $tahun)
+                ->where('kas_keluar.idunit', $unit);
+
+            if ($kelompok === 'terkontrol') {
+                $builder->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+            } else {
+                $builder->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+            }
+
+            if ($search !== '') {
+                $builder->groupStart()
+                    ->like('kas_keluar.deskripsi', $search)
+                    ->orLike('kas_keluar.penerima', $search)
+                    ->orLike('kategori_kas.kategori', $search)
+                    ->groupEnd();
+            }
+        };
+        $dasar = fn () => $this->db->table('kas_keluar')
+            ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left');
+
+        $tanpaCari = $dasar();
+        $saring($tanpaCari);
+        $totalSemua = (int) $tanpaCari->countAllResults();
+
+        $denganCari = $dasar()->select('COUNT(*) AS c, COALESCE(SUM(kas_keluar.jumlah), 0) AS t');
+        $saring($denganCari);
+        $agregat = $denganCari->get()->getRow();
+
+        $halaman = $dasar()
+            ->select('kas_keluar.idkas_keluar, kas_keluar.tanggal, kas_keluar.kategori_idkategori, kategori_kas.kategori AS nama_kategori, kas_keluar.deskripsi, kas_keluar.penerima, kas_keluar.jumlah');
+        $saring($halaman);
+        $rows = $halaman->orderBy($sortCol, $dir)
             ->orderBy('kas_keluar.idkas_keluar', 'ASC')
+            ->limit($length, $start)
             ->get()
             ->getResultArray();
 
-        $total = 0.0;
         foreach ($rows as &$row) {
             $row['jumlah'] = (float) $row['jumlah'];
-            $total += $row['jumlah'];
         }
         unset($row);
 
+        $grup = $dasar()
+            ->select('COALESCE(kategori_kas.kategori, "Tanpa kategori") AS nama, SUM(kas_keluar.jumlah) AS jumlah')
+            ->groupBy('nama');
+        $saring($grup);
+        $kategori = [];
+        foreach ($grup->get()->getResultArray() as $g) {
+            $kategori[] = ['nama' => (string) $g['nama'], 'jumlah' => (float) $g['jumlah']];
+        }
+        usort($kategori, static fn ($a, $b) => $b['jumlah'] <=> $a['jumlah']);
+
         return $this->response->setJSON([
-            'unit'     => $unit,
-            'bulan'    => $bulan,
-            'tahun'    => $tahun,
-            'kelompok' => $kelompok,
-            'rows'     => $rows,
-            'total'    => $total,
+            'draw'            => $draw,
+            'recordsTotal'    => $totalSemua,
+            'recordsFiltered' => (int) $agregat->c,
+            'data'            => $rows,
+            'total'           => (float) $agregat->t,
+            'kategori'        => $kategori,
         ]);
     }
 
