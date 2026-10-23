@@ -363,6 +363,57 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertSame(0, $db->table('service_sparepart')->where('service_idservice', 3)->countAllResults());
     }
 
+    public function testBarisSparepartNormalTidakHilangSaatKlaim(): void
+    {
+        $this->seedService(1);
+
+        $this->fresh()->table('service_sparepart')->insert([
+            'service_idservice' => 1,
+            'barang_idbarang' => 12,
+            'unit_idunit' => 1,
+            'jumlah' => 2,
+            'harga_penjualan' => 50000,
+            'sub_total' => 100000,
+            'hpp_penjualan' => 2000,
+            'satuan_jual' => 'pcs',
+            'diskon_penjualan' => 0,
+            'jumlah_tambahan_garansi' => 0,
+            'harga_penjualan_garansi' => 0,
+            'sub_total_garansi' => 0,
+            'diskon_penjualan_garansi' => 0,
+            'hpp_penjualan_garansi' => 0,
+        ]);
+
+        $this->postClaim([
+            'idservice' => 1,
+            'catatan' => 'Ganti LCD',
+            'produk' => [['id' => 10, 'qty' => 1]],
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $normal = $db->table('service_sparepart')
+            ->where('service_idservice', 1)
+            ->where('barang_idbarang', 12)
+            ->get()
+            ->getRow();
+
+        $this->assertNotNull($normal);
+        $this->assertSame(2, (int) $normal->jumlah);
+        $this->assertSame(50000, (int) $normal->harga_penjualan);
+        $this->assertSame(100000, (int) $normal->sub_total);
+        $this->assertSame(2000, (int) $normal->hpp_penjualan);
+        $this->assertSame(0, (int) $normal->jumlah_tambahan_garansi);
+        $this->assertSame(0, (int) $normal->harga_penjualan_garansi);
+        $this->assertSame(0, (int) $normal->sub_total_garansi);
+        $this->assertSame(0, (int) $normal->hpp_penjualan_garansi);
+
+        $this->assertNotNull($db->table('service_sparepart')
+            ->where('service_idservice', 1)
+            ->where('barang_idbarang', 10)
+            ->get()
+            ->getRow());
+    }
+
     public function testRiwayatKlaimMenampilkanCatatan(): void
     {
         $this->seedService(1);
