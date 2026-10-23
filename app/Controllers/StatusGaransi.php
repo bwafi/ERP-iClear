@@ -162,13 +162,14 @@ class StatusGaransi extends BaseController
         }
 
         $html = '<table class="table table-sm table-bordered">
-                <thead><tr><th>#</th><th>Tanggal Klaim</th></tr></thead><tbody>';
+                <thead><tr><th>#</th><th>Tanggal Klaim</th><th>Catatan</th></tr></thead><tbody>';
 
         foreach ($riwayat as $i => $row) {
             $tanggal = $row->tanggal_claim ? date('d-m-Y', strtotime($row->tanggal_claim)) : '-';
             $html .= '<tr>
                     <td>' . ($i + 1) . '</td>
                     <td>' . esc($tanggal) . '</td>
+                    <td>' . esc($row->catatan ?? '-') . '</td>
                 </tr>';
         }
 
