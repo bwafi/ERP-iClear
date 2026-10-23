@@ -162,7 +162,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             (41, 1, NULL, 2000000, 'fixed', NULL, '2026-01-01', NULL),
             (41, 2, NULL, 850000, 'percent_of_kpi', NULL, '2026-01-01', NULL),
             (41, 3, NULL, 250000, 'percent_of_kpi', NULL, '2026-01-01', NULL)");
-        $q("INSERT INTO kategori_kas (idkategori_kas, kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(6,'Lain-lain'),(11,'Lainnya'),(18,'Transport')");
+        $q("INSERT INTO kategori_kas (idkategori_kas, kategori) VALUES (1,'Operasional'),(2,'ATK'),(3,'Listrik'),(4,'Air'),(5,'Kebersihan'),(6,'Lain-lain'),(7,'HPP'),(10,'SDM'),(11,'Lainnya'),(18,'Transport')");
         $q("INSERT INTO menu (idmenu, urutan, nama_menu, roles, url, show_menu) VALUES (1,1,'Dashboard','[]','dashboard',1)");
 
         // September 2026 data (bulan lampau)
@@ -371,6 +371,33 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertSame(3, (int) $json['recordsFiltered']);
         $this->assertSame(3, count($json['kategori']));
         $this->assertSame(2200000.0, (float) $json['total']);
+    }
+
+    /**
+     * Filter kategori server-side: tabel & ringkasan ikut kategori terpilih,
+     * tapi chip kategori tetap lengkap (semua kategori kelompok) supaya user
+     * bisa ganti kategori tanpa reset dulu.
+     */
+    public function testDetailFilterKategoriServerSide(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $res = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=kebutuhan&kategori=6');
+        $res->assertStatus(200);
+        $json = json_decode((string) $res->getJSON(), true);
+
+        // Hanya baris kategori 6 (Rp 500.000), bukan seluruh kelompok.
+        $this->assertSame([6], array_map('intval', array_column($json['data'], 'kategori_idkategori')));
+        $this->assertSame(1, (int) $json['recordsFiltered']);
+        $this->assertSame(500000.0, (float) $json['total']);
+        // recordsTotal tetap total kelompok (tanpa filter kategori).
+        $this->assertSame(3, (int) $json['recordsTotal']);
+
+        // Chip tetap lengkap & membawa id untuk filter.
+        $ids = array_map('intval', array_column($json['kategori'], 'id'));
+        sort($ids);
+        $this->assertSame([6, 7, 11], $ids);
     }
 
     public function testDetailMenolakKelompokTidakDikenal(): void

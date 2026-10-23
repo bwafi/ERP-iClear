@@ -933,6 +933,9 @@ class TutupKasir extends BaseController
         $search = $this->request->getGet('search');
         $search = is_array($search) ? trim((string) ($search['value'] ?? '')) : '';
 
+        // Filter kategori (single pilih). 0 / kosong = tanpa filter.
+        $kategoriFilter = (int) ($this->request->getGet('kategori') ?? 0);
+
         $order   = $this->request->getGet('order');
         $order   = is_array($order) ? ($order[0] ?? []) : [];
         $sortMap = [
@@ -945,7 +948,9 @@ class TutupKasir extends BaseController
         $dir     = strtoupper((string) ($order['dir'] ?? 'asc')) === 'DESC' ? 'DESC' : 'ASC';
 
         // Syarat yang sama dipakai count, sum, group, dan halaman baris.
-        $saring = function ($builder) use ($bulan, $tahun, $unit, $kelompok, $search): void {
+        // $denganKategori=false untuk chip kategori: chip harus tetap lengkap
+        // walau tabel sedang difilter, supaya user bisa ganti kategori langsung.
+        $saring = function ($builder, bool $denganKategori = true) use ($bulan, $tahun, $unit, $kelompok, $search, $kategoriFilter): void {
             $builder->where('MONTH(kas_keluar.tanggal)', $bulan)
                 ->where('YEAR(kas_keluar.tanggal)', $tahun)
                 ->where('kas_keluar.idunit', $unit);
@@ -954,6 +959,10 @@ class TutupKasir extends BaseController
                 $builder->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
             } else {
                 $builder->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+            }
+
+            if ($denganKategori && $kategoriFilter > 0) {
+                $builder->where('kas_keluar.kategori_idkategori', $kategoriFilter);
             }
 
             if ($search !== '') {
@@ -968,7 +977,7 @@ class TutupKasir extends BaseController
             ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_keluar.kategori_idkategori', 'left');
 
         $tanpaCari = $dasar();
-        $saring($tanpaCari);
+        $saring($tanpaCari, false);
         $totalSemua = (int) $tanpaCari->countAllResults();
 
         $denganCari = $dasar()->select('COUNT(*) AS c, COALESCE(SUM(kas_keluar.jumlah), 0) AS t');
@@ -990,12 +999,16 @@ class TutupKasir extends BaseController
         unset($row);
 
         $grup = $dasar()
-            ->select('COALESCE(kategori_kas.kategori, "Tanpa kategori") AS nama, SUM(kas_keluar.jumlah) AS jumlah')
-            ->groupBy('nama');
-        $saring($grup);
+            ->select('kategori_kas.idkategori_kas AS id, COALESCE(kategori_kas.kategori, "Tanpa kategori") AS nama, SUM(kas_keluar.jumlah) AS jumlah')
+            ->groupBy('kategori_kas.idkategori_kas, kategori_kas.kategori');
+        $saring($grup, false);
         $kategori = [];
         foreach ($grup->get()->getResultArray() as $g) {
-            $kategori[] = ['nama' => (string) $g['nama'], 'jumlah' => (float) $g['jumlah']];
+            $kategori[] = [
+                'id'     => (int) ($g['id'] ?? 0),
+                'nama'   => (string) $g['nama'],
+                'jumlah' => (float) $g['jumlah'],
+            ];
         }
         usort($kategori, static fn ($a, $b) => $b['jumlah'] <=> $a['jumlah']);
 

@@ -146,6 +146,34 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         font-variant-numeric: tabular-nums;
         font-weight: 700;
     }
+    /* Chip kategori bisa diklik sebagai filter. Aksen mengikuti warna kartu. */
+    #modalDetailPengeluaran button.detail-chip {
+        cursor: pointer;
+        font-family: inherit;
+        transition: border-color .15s ease, background-color .15s ease;
+    }
+    #modalDetailPengeluaran button.detail-chip:hover {
+        border-color: var(--bs-warning);
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] button.detail-chip:hover {
+        border-color: var(--bs-secondary);
+    }
+    #modalDetailPengeluaran button.detail-chip.is-active {
+        border-color: var(--bs-warning);
+        background: var(--bs-warning-bg-subtle);
+        font-weight: 600;
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] button.detail-chip.is-active {
+        border-color: var(--bs-secondary);
+        background: var(--bs-secondary-bg-subtle);
+    }
+    #modalDetailPengeluaran button.detail-chip:focus-visible {
+        outline: 2px solid var(--bs-warning);
+        outline-offset: 2px;
+    }
+    #modalDetailPengeluaran[data-warna="secondary"] button.detail-chip:focus-visible {
+        outline-color: var(--bs-secondary);
+    }
     #modalDetailPengeluaran .detail-table thead th {
         position: sticky;
         top: 0;
@@ -720,6 +748,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 
     let table = null;
     let aktif = null;
+    let kategoriAktif = null;
 
     const tanggal = (v) => {
         const s = String(v || '').slice(0, 10).split('-');
@@ -740,6 +769,26 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         kategoriWrap.textContent = '';
     };
 
+    // Chip kategori: bisa diklik untuk memfilter tabel (single pilih).
+    // id null = "Semua" (reset); tanpa id = kategori tak terfilter (mis. tanpa kategori).
+    const buatChip = (label, { id = null, aktif = false, jumlah = null, dapatDiklik = true } = {}) => {
+        const chip = document.createElement(dapatDiklik ? 'button' : 'span');
+        if (dapatDiklik) {
+            chip.type = 'button';
+            chip.dataset.id = id == null ? '' : String(id);
+        }
+        chip.className = 'detail-chip' + (aktif ? ' is-active' : '');
+        const teks = document.createElement('span');
+        teks.textContent = label;
+        chip.appendChild(teks);
+        if (jumlah != null) {
+            const value = document.createElement('strong');
+            value.textContent = 'Rp ' + rupiah.format(jumlah);
+            chip.appendChild(value);
+        }
+        return chip;
+    };
+
     // Ringkasan dihitung server dari seluruh hasil filter, bukan dari baris
     // halaman ini saja — jadi angkanya tidak berubah saat pindah halaman.
     const isiRingkasan = (json) => {
@@ -749,15 +798,17 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         const kategori = json.kategori || [];
         kategoriCountEl.textContent = kategori.length;
         kategoriWrap.textContent = '';
+        // Chip tetap lengkap (semua kategori kelompok) walau tabel difilter,
+        // supaya user bisa ganti kategori tanpa reset dulu.
+        kategoriWrap.appendChild(buatChip('Semua', { aktif: kategoriAktif === null }));
         kategori.forEach((k) => {
-            const chip = document.createElement('span');
-            chip.className = 'detail-chip';
-            const label = document.createElement('span');
-            label.textContent = k.nama;
-            const value = document.createElement('strong');
-            value.textContent = 'Rp ' + rupiah.format(k.jumlah || 0);
-            chip.append(label, value);
-            kategoriWrap.appendChild(chip);
+            const id = parseInt(k.id, 10) || 0;
+            kategoriWrap.appendChild(buatChip(k.nama, {
+                id,
+                aktif: id > 0 && kategoriAktif === id,
+                jumlah: k.jumlah || 0,
+                dapatDiklik: id > 0,
+            }));
         });
     };
 
@@ -782,6 +833,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     d.bulan = modal.dataset.bulan;
                     d.tahun = modal.dataset.tahun;
                     d.kelompok = aktif;
+                    d.kategori = kategoriAktif == null ? '' : kategoriAktif;
                 },
                 dataSrc: (json) => {
                     tampilError('');
@@ -832,6 +884,8 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         wrap.classList.remove('d-none');
         tampilError('');
         aktif = btn.dataset.kelompok;
+        // Ganti kartu = mulai dari filter bersih (semua kategori).
+        kategoriAktif = null;
         if (searchInput) searchInput.value = '';
 
         if (!table) {
@@ -848,6 +902,20 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             if (table) table.search(searchInput.value).draw();
         });
     }
+
+    // Klik chip = saring tabel ke kategori itu; klik chip aktif lagi atau
+    // "Semua" = tampil semua. Server-side: reload dari halaman 1.
+    kategoriWrap.addEventListener('click', (event) => {
+        const btn = event.target.closest('button.detail-chip');
+        if (!btn || !kategoriWrap.contains(btn)) return;
+
+        const id = btn.dataset.id ? parseInt(btn.dataset.id, 10) : null;
+        const baru = (id && kategoriAktif === id) ? null : id;
+        if (baru === kategoriAktif) return;
+
+        kategoriAktif = baru;
+        if (table) table.ajax.reload(null, true);
+    });
 
     el('detailPengeluaranRetry').addEventListener('click', () => {
         tampilError('');
