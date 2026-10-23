@@ -113,6 +113,9 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     }
     #modalDetailPengeluaran .modal-body {
         padding-top: 0;
+        /* Bar pagination sticky menempel tepat di tepi bawah modal-body; tanpa
+           padding bawah, baris tidak menyembul di celah bawah bar. */
+        padding-bottom: 0;
     }
     #modalDetailPengeluaran .detail-summary-label,
     #modalDetailPengeluaran .detail-section-label {
@@ -163,9 +166,15 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     }
 
     /* Pagination DataTables: angka & next/prev sebagai kontrol yang jelas,
-       aksen mengikuti warna kartu (warning = terkontrol, secondary = kebutuhan). */
+       aksen mengikuti warna kartu (warning = terkontrol, secondary = kebutuhan).
+       Sticky di bawah modal-body supaya tetap terjangkau saat 25 baris di-scroll. */
     #modalDetailPengeluaran .detail-dt-foot {
-        padding: .9rem .25rem .15rem;
+        position: sticky;
+        bottom: 0;
+        z-index: 3;
+        padding: .9rem .25rem .6rem;
+        background: var(--bs-body-bg);
+        border-top: 1px solid var(--bs-border-color);
         font-size: .75rem;
         color: var(--bs-secondary-color);
     }
@@ -761,11 +770,11 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             // Modal masih tersembunyi saat init; biarkan CSS .detail-table yang
             // mengatur lebar, bukan autoWidth yang menghitung dari container 0.
             autoWidth: false,
-            pageLength: 10,
+            pageLength: 25,
             lengthChange: false,
             order: [[0, 'asc']],
             columnDefs: [{ orderable: false, targets: [2] }],
-            dom: 'rt<"detail-dt-foot d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3"ip>',
+            dom: 'rt<"detail-dt-foot d-flex flex-wrap justify-content-between align-items-center gap-2"ip>',
             ajax: {
                 url: url,
                 data: (d) => {
