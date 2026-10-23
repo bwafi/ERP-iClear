@@ -202,16 +202,17 @@ $routes->get('riwayat_service_garansi', 'Riwayat_Service::index2', ['filter' => 
 
 //service_by_garansi
 $routes->get('service_by_garansi/(:num)', 'StatusGaransi::service_by_garansi/$1', ['filter' => 'auth']);
-$routes->post('update/pelanggan_service_garansi', 'StatusGaransi::update_service_pelanggan_garansi', ['filter' => 'auth']);
-$routes->post('update_garansi_service/saveKerusakan', 'StatusGaransi::insert_kerusakan_garansi', ['filter' => 'auth']);
-$routes->post('update_service_garansi/saveSparepart', 'StatusGaransi::insert_sparepart_garansi', ['filter' => 'auth']);
-$routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pembayaran_garansi', ['filter' => 'auth']);
+$routes->post('update/pelanggan_service_garansi', 'StatusGaransi::update_service_pelanggan_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->post('update_garansi_service/saveKerusakan', 'StatusGaransi::insert_kerusakan_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->post('update_service_garansi/saveSparepart', 'StatusGaransi::insert_sparepart_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pembayaran_garansi', ['filter' => ['auth', 'csrf']]);
 
 //garansiservice
 $routes->get('garansi_service', 'StatusGaransi::index', ['filter' => 'auth']);
 $routes->post('garansi_service/ajax', 'StatusGaransi::garansi_service_ajax', ['filter' => 'auth']);
-$routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => 'auth']);
-$routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1');
+$routes->get('claim_garansi/detail/(:num)', 'StatusGaransi::claim_detail/$1', ['filter' => 'auth']);
+$routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1', ['filter' => 'auth']);
 
 //status service
 $routes->get('status_service/(:num)', 'Status_Service::index/$1');
