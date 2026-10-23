@@ -167,10 +167,21 @@ class Payroll extends BaseController
             'left'
         );
 
-        $builder->where('kk.kategori_idkategori', 10)->groupStart()->like('kk.deskripsi', 'bon')->orLike('kk.deskripsi', 'lembur')->groupEnd()->orderBy('kk.tanggal', 'DESC');
+        $builder->where('kk.kategori_idkategori', 10)->groupStart()->like('kk.deskripsi', 'bon')->orLike('kk.deskripsi', 'lembur')->groupEnd();
+
+        // Bonus/lembur ikut periode yang sedang dibaca, supaya papan fase dan
+        // tabel tidak menunjukkan dua rentang waktu yang berbeda.
+        if (!$showAll) {
+            $builder->where('kk.tanggal >=', $from)
+                ->where('kk.tanggal <=', $to);
+        }
+
+        $builder->orderBy('kk.tanggal', 'DESC');
         $builder->orderBy('kk.idkas_keluar', 'DESC');
 
         $kas_keluar = $builder->get()->getResult();
+
+        $runSummary = \App\Services\Payroll\PayrollRunSummary::build($payrollItems, $kas_keluar);
 
         // Data unit
         $unit = $this->db->table('unit')
@@ -198,6 +209,10 @@ class Payroll extends BaseController
             'payrollLocks'  => $payrollLocks,
             'payrollItems'  => $payrollItems,
             'payrollSummary' => array_values($payrollSummary),
+            'payrollRun'    => $runSummary['run'],
+            'payrollTotals' => $runSummary['totals'],
+            'bonusCount'    => $runSummary['run']['bonus']['count'],
+            'bonusTotal'    => $runSummary['run']['bonus']['total'],
             'bulan'         => $bulan,
             'show_all'      => $showAll,
             'can_input'     => $scope->canInput(),

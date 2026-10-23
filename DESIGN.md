@@ -87,6 +87,14 @@
 - **Rules:** same accent/no-gradient rules, no color-only states, focus visible, motion limited to control transitions and the detail caret.
 
 
+### Payroll Run Sheet (`.pay-*`)
+- **Scope:** `app/Views/jurnal/payroll.php` + `app/Views/jurnal/_payroll_theme.php`; every selector lives under `.payroll-page` and derives from `--pay-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head (breadcrumb, title, period badge, month control, Susun/Input actions) → run board (status line + four hairline-separated phases: Susun = unpaid auto, Koreksi = unpaid manual/null, Bayar = paid, Bonus/Lembur = period-scoped kas keluar) → KPI unit strip (score/100, total, meter, tepat/terlambat/menunggu counts) → payroll ledger → bonus/lembur ledger. “Semua bulan” hides the board and KPI, empties the month input, and shows a notice.
+- **Ledger:** custom search + status chips (Semua/Rencana/Dibayar/Telat) replace DataTables; `data-status` and `data-late` drive filtering, with Telat counting unpaid overdue rows to match the board alert. Rows become stacked cards at `899.98px` (the six-column table needs ~824px); captions come from `data-label`, amounts align right with `tabular-nums`. Pagination is deliberately omitted at payroll scale (23 rows/month; the all-months bonus list can exceed 100).
+- **Bonus/lembur:** period-scoped to the selected month; search covers description, penerima, and unit; lock/unlock and the existing edit/delete modals are preserved; rows use the same stacked-card breakpoint.
+- **Color/motion:** phase dots use the app’s primary/warning/success/info semantics; secondary copy uses the derived `--pay-muted` token (≥4.5:1 in both themes); outline-primary labels use `--pay-primary-ink`. Motion is limited to hover/focus/meter and disabled under `prefers-reduced-motion`.
+- **Rules:** routes, field names, role gates, modals, overwrite semantics, and DB schema are unchanged. The template’s floating theme customizer is hidden on this page because it covers the right-aligned amount/action column on mobile.
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.
