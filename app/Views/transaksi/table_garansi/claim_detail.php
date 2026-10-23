@@ -1,6 +1,24 @@
 <?php
 $tglSelesai = !empty($service->tanggal_selesai) ? date('d-m-Y', strtotime((string) $service->tanggal_selesai)) : '-';
 $tglGaransi = $warranty_end ? $warranty_end->format('d-m-Y') : '-';
+
+// Sparepart yang sudah dipakai di service ini otomatis dicatat sebagai rusak.
+$rusakAwal = [];
+foreach (($service_sparepart ?? []) as $item) {
+    $id = (int) ($item->barang_idbarang ?? 0);
+    $qty = (int) ($item->jumlah ?? 0);
+    if ($id <= 0 || $qty <= 0) {
+        continue;
+    }
+    if (!isset($rusakAwal[$id])) {
+        $rusakAwal[$id] = [
+            'id' => $id,
+            'nama' => $item->nama_barang ?? ('Barang #' . $id),
+            'qty' => 0,
+        ];
+    }
+    $rusakAwal[$id]['qty'] += $qty;
+}
 ?>
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
@@ -134,7 +152,7 @@ $tglGaransi = $warranty_end ? $warranty_end->format('d-m-Y') : '-';
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                     <h5 class="mb-1">Sparepart Rusak</h5>
-                    <p class="text-muted mb-0">Dicatat untuk laporan, tidak mengurangi stok.</p>
+                    <p class="text-muted mb-0">Otomatis dari sparepart service; dicatat untuk laporan, tidak mengurangi stok.</p>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
                     data-bs-target="#damagedPartModal">Tambah Sparepart Rusak</button>
@@ -150,7 +168,28 @@ $tglGaransi = $warranty_end ? $warranty_end->format('d-m-Y') : '-';
                             <th style="width: 90px;">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody id="damagedRows"></tbody>
+                    <tbody id="damagedRows">
+                        <?php $damagedIndex = 0; ?>
+                        <?php foreach ($rusakAwal as $item): ?>
+                            <tr id="damaged-row-<?= $item['id'] ?>">
+                                <td>
+                                    <?= esc($item['nama']) ?>
+                                    <input type="hidden" name="barang_rusak[<?= $damagedIndex ?>][id]" value="<?= $item['id'] ?>">
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm"
+                                        name="barang_rusak[<?= $damagedIndex ?>][qty]" value="<?= $item['qty'] ?>" min="1" required>
+                                </td>
+                                <td>
+                                    <textarea class="form-control form-control-sm"
+                                        name="barang_rusak[<?= $damagedIndex ?>][keterangan]" rows="1"
+                                        placeholder="Keterangan kerusakan"></textarea>
+                                </td>
+                                <td><button type="button" class="btn btn-sm btn-danger remove-damaged">Hapus</button></td>
+                            </tr>
+                            <?php $damagedIndex++; ?>
+                        <?php endforeach; ?>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -246,7 +285,7 @@ $tglGaransi = $warranty_end ? $warranty_end->format('d-m-Y') : '-';
 <script>
     (function() {
         let replacementIndex = 0;
-        let damagedIndex = 0;
+        let damagedIndex = <?= (int) $damagedIndex ?>;
         const replacementRows = document.getElementById('replacementRows');
         const damagedRows = document.getElementById('damagedRows');
 

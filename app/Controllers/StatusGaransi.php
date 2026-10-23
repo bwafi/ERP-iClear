@@ -190,6 +190,7 @@ class StatusGaransi extends BaseController
         }
 
         $oldkerusakan = $this->ServiceKerusakanModel->getSerModelServiceKerusakanByServiceId($idservice);
+        $serviceSparepart = $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice);
 
         $fungsiMap = [];
         foreach ($this->KerusakanModel->getKerusakan() as $fungsi) {
@@ -213,6 +214,7 @@ class StatusGaransi extends BaseController
         return view('template', [
             'service' => $service,
             'oldkerusakan' => $oldkerusakan,
+            'service_sparepart' => $serviceSparepart,
             'fungsiMap' => $fungsiMap,
             'sparepart' => $sparepart,
             'sparepart_rusak' => $sparepartRusak,
