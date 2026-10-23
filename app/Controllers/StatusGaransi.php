@@ -748,6 +748,7 @@ class StatusGaransi extends BaseController
                 throw new \RuntimeException('Sparepart tidak tersedia di unit ini.');
             }
 
+            // shortcut: stok dibaca tanpa lock barang; dua klaim berbeda untuk part yang sama bisa oversell. Upgrade saat konkurensi klaim nyata.
             if ((int) ($stokUnit->stok_akhir ?? 0) < $qty) {
                 throw new \RuntimeException('Stok sparepart tidak cukup.');
             }
