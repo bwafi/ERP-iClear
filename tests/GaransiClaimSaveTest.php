@@ -287,7 +287,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertSame(0, (int) $sparepart->harga_penjualan_garansi);
         $this->assertSame(0, (int) $sparepart->sub_total_garansi);
         $this->assertSame(0, (int) $sparepart->diskon_penjualan_garansi);
-        $this->assertSame(4000, (int) $sparepart->hpp_penjualan_garansi);
+        $this->assertSame(0, (int) $sparepart->hpp_penjualan_garansi);
         $this->assertSame(0, (int) $sparepart->jumlah);
         $this->assertSame(0, (int) $sparepart->harga_penjualan);
         $this->assertSame('pcs', $sparepart->satuan_jual);

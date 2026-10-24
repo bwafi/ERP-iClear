@@ -175,7 +175,7 @@ foreach (($service_sparepart ?? []) as $item) {
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                     <h5 class="mb-1">Sparepart Pengganti</h5>
-                    <p class="text-muted mb-0">Gratis (Rp 0), stok berkurang, HPP tetap tercatat.</p>
+                    <p class="text-muted mb-0">Stok berkurang; harga dan HPP klaim Rp 0.</p>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
                     data-bs-target="#replacementPartModal">Tambah Sparepart</button>
@@ -187,6 +187,8 @@ foreach (($service_sparepart ?? []) as $item) {
                         <tr>
                             <th>Nama Sparepart</th>
                             <th>Stok</th>
+                            <th>HPP</th>
+                            <th>Harga</th>
                             <th style="width: 120px;">Qty</th>
                             <th style="width: 90px;">Aksi</th>
                         </tr>
@@ -249,10 +251,17 @@ foreach (($service_sparepart ?? []) as $item) {
                                         <span class="service-sp-name"><?= esc($s->nama_barang) ?></span>
                                         <span class="service-sp-meta">
                                             <span class="service-sp-code"><?= esc($s->kode_barang ?? '-') ?></span>
+                                            <?php if (!empty($s->nama_suplier)): ?>
+                                                <span class="service-sp-meta-item"><i class="bi bi-truck"></i><?= esc($s->nama_suplier) ?></span>
+                                            <?php endif; ?>
+                                            <span class="service-sp-meta-item">
+                                                <i class="bi bi-tag"></i>HPP Rp <?= number_format((float) ($s->hpp ?? 0), 0, ',', '.') ?>
+                                            </span>
+                                            <span class="service-sp-meta-item"><i class="bi bi-gift"></i>Gratis</span>
                                         </span>
                                     </span>
                                     <span class="service-sp-side">
-                                        <span class="service-sp-price">Gratis</span>
+                                        <span class="service-sp-price">Rp <?= number_format((float) ($s->harga ?? 0), 0, ',', '.') ?></span>
                                         <span class="service-sp-stock<?= (int) ($s->stok_akhir ?? 0) <= 2 ? ' is-low' : '' ?>">
                                             Stok <?= (int) ($s->stok_akhir ?? 0) ?>
                                         </span>
@@ -332,6 +341,8 @@ foreach (($service_sparepart ?? []) as $item) {
             row.innerHTML = `
                 <td>${escapeHtml(nama)}<input type="hidden" name="produk[${index}][id]" value="${id}"></td>
                 <td>${stok}</td>
+                <td>Rp 0</td>
+                <td>Rp 0</td>
                 <td><input type="number" class="form-control form-control-sm replacement-qty" name="produk[${index}][qty]" value="1" min="1" max="${stok}" data-max="${stok}" required></td>
                 <td><button type="button" class="btn btn-sm btn-danger remove-replacement">Hapus</button></td>
             `;

@@ -75,6 +75,9 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
                 'nama_barang' => 'LCD Tes',
                 'kode_barang' => 'SP-10',
                 'stok_akhir' => 5,
+                'harga' => 50000,
+                'hpp' => 4000,
+                'nama_suplier' => 'PT Supplier Tes',
             ],
         ]);
 
@@ -84,7 +87,12 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
         $this->assertStringContainsString('id="replacement-selected-count"', $html);
         $this->assertStringContainsString('class="service-sp-item__input replacement-check"', $html);
         $this->assertStringContainsString('class="service-sp-stock"', $html);
+        $this->assertStringContainsString('PT Supplier Tes', $html);
+        $this->assertStringContainsString('HPP Rp 4.000', $html);
+        $this->assertStringContainsString('Rp 50.000', $html);
         $this->assertStringContainsString('Gratis', $html);
+        $this->assertStringContainsString('<th>HPP</th>', $html);
+        $this->assertStringContainsString('<th>Harga</th>', $html);
         $this->assertStringNotContainsString('id="replacementPartTable"', $html);
     }
 }

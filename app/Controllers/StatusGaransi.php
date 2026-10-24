@@ -204,6 +204,20 @@ class StatusGaransi extends BaseController
                 && (int) ($barang->stok_akhir ?? 0) > 0
         ));
 
+        $sparepartIds = array_map(static fn ($barang) => (int) ($barang->idbarang ?? 0), $sparepart);
+        $hppMap = [];
+        if ($sparepartIds !== []) {
+            foreach ($this->HppBarangModel->whereIn('idbarang', $sparepartIds)->findAll() as $hpp) {
+                $hppMap[(int) $hpp->idbarang] = (int) ($hpp->hpp ?? 0);
+            }
+        }
+        $supplierMap = $this->BarangModel->getSuplierPerUnit($unitId)[$unitId] ?? [];
+        foreach ($sparepart as $barang) {
+            $id = (int) $barang->idbarang;
+            $barang->hpp = $hppMap[$id] ?? 0;
+            $barang->nama_suplier = $supplierMap[$id] ?? '';
+        }
+
         $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
 
         return view('template', [
@@ -734,11 +748,6 @@ class StatusGaransi extends BaseController
                 continue;
             }
 
-            $dataHpp = $this->HppBarangModel->getById($id);
-            if ($dataHpp === null) {
-                throw new \RuntimeException('Sparepart tidak ditemukan.');
-            }
-
             $stokUnit = $this->StokBarangModel->where('idbarang', $id)->where('id_unit', $unitId)->first();
             if ($stokUnit === null) {
                 throw new \RuntimeException('Sparepart tidak tersedia di unit ini.');
@@ -755,7 +764,7 @@ class StatusGaransi extends BaseController
                 'harga_penjualan_garansi' => 0,
                 'sub_total_garansi' => 0,
                 'diskon_penjualan_garansi' => 0,
-                'hpp_penjualan_garansi' => (int) ($dataHpp->hpp ?? 0),
+                'hpp_penjualan_garansi' => 0,
                 'satuan_jual' => $dataStokAwal->satuan_terkecil ?? 'pcs',
                 'service_idservice' => $idservice,
                 'barang_idbarang' => $id,
