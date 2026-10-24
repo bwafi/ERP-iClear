@@ -98,18 +98,13 @@
                                 <?php endif ?>
                             </td>
                             <td>
-                                <!-- <?php if ($row->status_service == 4): ?>
-                                    <button type="button" class="btn btn-warning edit-button" disabled>
-                                        <iconify-icon icon="solar:clapperboard-edit-broken" width="24" height="24"></iconify-icon>
-                                    </button>
-                                <?php else: ?>
-                                    <a href="<?php echo base_url('detail/riwayat_service/' . $row->idservice) ?>">
-                                        <button type="button" class="btn btn-warning edit-button">
-                                            <iconify-icon icon="solar:clapperboard-edit-broken" width="24" height="24">
-                                            </iconify-icon>
-                                        </button>
-                                    <?php endif; ?>
-                                    </a> -->
+                                <button type="button" class="btn btn-sm btn-warning me-1 btn-riwayat"
+                                    data-idservice="<?= (int) $row->idservice ?>"
+                                    style="display: inline-flex; align-items: center;">
+                                    <iconify-icon icon="solar:document-text-broken" width="24" height="24">
+                                    </iconify-icon>
+                                    Riwayat Klaim
+                                </button>
                                 <a href="<?php echo base_url('cetak/invoice_service/' . $row->idservice) ?>">
                                     <button type="button" class="btn btn-sm btn-danger"
                                         style="display: inline-flex; align-items: center;">
@@ -131,6 +126,26 @@
     </div>
 </div>
 
+<!-- Modal Riwayat Klaim -->
+<div class="modal fade" id="modalRiwayatKlaim" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Riwayat Klaim</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="riwayat-klaim-content" class="text-center">
+                    <span class="text-muted">Pilih data untuk melihat riwayat klaim...</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     window.onload = function() {
         const endDateInput = document.getElementById('endDate');
@@ -140,6 +155,29 @@
         endDateInput.value = '';
 
         filterData();
+
+        document.addEventListener('click', function(e) {
+            const button = e.target.closest('.btn-riwayat');
+            if (!button) return;
+
+            const content = document.getElementById('riwayat-klaim-content');
+            content.innerHTML = '<div class="text-center p-3">Loading...</div>';
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRiwayatKlaim')).show();
+
+            fetch('<?= base_url('riwayat-klaim') ?>/' + button.dataset.idservice, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    content.innerHTML = data.html;
+                })
+                .catch(() => {
+                    content.innerHTML = '<div class="alert alert-danger">Gagal memuat riwayat klaim.</div>';
+                });
+        });
     };
 
     function filterData() {

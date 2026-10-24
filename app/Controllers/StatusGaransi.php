@@ -161,7 +161,14 @@ class StatusGaransi extends BaseController
             ]);
         }
 
-        $html = '<table class="table table-sm table-bordered">
+        $rusak = $this->BarangRusakClaimModel->getByService($idservice);
+        $pengganti = array_values(array_filter(
+            $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice),
+            static fn ($item) => (int) ($item->jumlah_tambahan_garansi ?? 0) > 0
+        ));
+
+        $html = '<h6 class="fw-semibold mb-2">Catatan Klaim</h6>
+                <table class="table table-sm table-bordered">
                 <thead><tr><th>#</th><th>Tanggal Klaim</th><th>Catatan</th></tr></thead><tbody>';
 
         foreach ($riwayat as $i => $row) {
@@ -174,6 +181,43 @@ class StatusGaransi extends BaseController
         }
 
         $html .= '</tbody></table>';
+
+        if (!empty($rusak)) {
+            $html .= '<h6 class="fw-semibold mt-3 mb-2">Sparepart Rusak</h6>
+                    <table class="table table-sm table-bordered">
+                    <thead><tr><th>#</th><th>Kode</th><th>Nama Barang</th><th>Qty</th><th>Keterangan</th></tr></thead><tbody>';
+
+            foreach ($rusak as $i => $item) {
+                $html .= '<tr>
+                        <td>' . ($i + 1) . '</td>
+                        <td>' . esc($item->kode_barang ?? '-') . '</td>
+                        <td>' . esc($item->nama_barang ?? '-') . '</td>
+                        <td>' . esc((string) (float) $item->jumlah) . '</td>
+                        <td>' . esc($item->keterangan ?? '-') . '</td>
+                    </tr>';
+            }
+
+            $html .= '</tbody></table>';
+        }
+
+        if (!empty($pengganti)) {
+            $html .= '<h6 class="fw-semibold mt-3 mb-2">Sparepart Pengganti</h6>
+                    <table class="table table-sm table-bordered">
+                    <thead><tr><th>#</th><th>Kode</th><th>Nama Barang</th><th>Qty</th><th>HPP</th><th>Harga</th></tr></thead><tbody>';
+
+            foreach ($pengganti as $i => $item) {
+                $html .= '<tr>
+                        <td>' . ($i + 1) . '</td>
+                        <td>' . esc($item->kode_barang ?? '-') . '</td>
+                        <td>' . esc($item->nama_barang ?? '-') . '</td>
+                        <td>' . (int) $item->jumlah_tambahan_garansi . '</td>
+                        <td>Rp ' . number_format((float) ($item->hpp_penjualan_garansi ?? 0), 0, ',', '.') . '</td>
+                        <td>Rp ' . number_format((float) ($item->harga_penjualan_garansi ?? 0), 0, ',', '.') . '</td>
+                    </tr>';
+            }
+
+            $html .= '</tbody></table>';
+        }
 
         return $this->response->setJSON(['html' => $html]);
     }

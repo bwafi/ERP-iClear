@@ -439,6 +439,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
             'idservice' => 1,
             'catatan' => 'LCD rusak karena pecah',
             'produk' => [['id' => 10, 'qty' => 1]],
+            'barang_rusak' => [['id' => 11, 'qty' => 1, 'keterangan' => 'Baterai kembung']],
         ])->assertRedirect();
 
         $this->sesi();
@@ -447,5 +448,10 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
 
         $this->assertIsArray($json);
         $this->assertStringContainsString('LCD rusak karena pecah', $json['html']);
+        $this->assertStringContainsString('Sparepart Rusak', $json['html']);
+        $this->assertStringContainsString('Baterai Tes', $json['html']);
+        $this->assertStringContainsString('Baterai kembung', $json['html']);
+        $this->assertStringContainsString('Sparepart Pengganti', $json['html']);
+        $this->assertStringContainsString('LCD Tes', $json['html']);
     }
 }

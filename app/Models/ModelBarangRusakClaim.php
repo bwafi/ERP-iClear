@@ -20,6 +20,15 @@ class ModelBarangRusakClaim extends Model
         'created_at',
     ];
 
+    public function getByService($serviceId)
+    {
+        return $this->select('barang_rusak_claim.*, barang.kode_barang, barang.nama_barang')
+            ->join('barang', 'barang.idbarang = barang_rusak_claim.barang_idbarang', 'left')
+            ->where('barang_rusak_claim.service_idservice', $serviceId)
+            ->orderBy('barang_rusak_claim.idbarang_rusak_claim', 'ASC')
+            ->findAll();
+    }
+
     public function getAll()
     {
         return $this->select('
