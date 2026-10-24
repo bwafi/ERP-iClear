@@ -688,8 +688,66 @@ class Marketing extends BaseController
             'campaigns' => $this->AdsPerfModel->campaigns($bulan, $tahun),
             'channels' => $this->ChannelModel->active(),
             'units'    => $this->units(),
+            'logMeta'  => (new \App\Models\ModelMetaPullLog())->terakhir(),
             'canWrite' => $this->canWrite(),
         ]);
+    }
+
+    /**
+     * Tarik biaya & insight Meta untuk bulan yang sedang dilihat.
+     *
+     * Rentangnya sengaja satu bulan penuh (bukan 7 hari seperti command) supaya
+     * menyusul bulan berjalan setelah campaign disinkronkan dari Meta.
+     */
+    public function ads_performa_tarik()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/ads_performa'));
+        }
+
+        $bulan = (int)$this->request->getPost('period_month');
+        $tahun = (int)$this->request->getPost('period_year');
+        if (!$this->validPeriod($bulan, $tahun)) {
+            return redirect()->back()->with('error', 'Periode tarikan Meta tidak valid.');
+        }
+
+        $dari   = sprintf('%04d-%02d-01', $tahun, $bulan);
+        $sampai = date('Y-m-t', strtotime($dari));
+
+        // Satu tarikan = beberapa panggilan ke Meta. Batas 30 detik bawaan PHP
+        // bisa terlampaui, terutama saat percobaan ulang jaringan.
+        set_time_limit(120);
+
+        // Campaign harus ada lebih dulu. Gagal sync (mis. periode sebelum
+        // 2026-10) tidak membatalkan tarikan.
+        try {
+            (new \App\Services\Meta\MetaCampaignSyncService())->sync($bulan, $tahun);
+        } catch (\Throwable $e) {
+            // biarkan; pull akan melaporkan campaign yang belum dikenal
+        }
+
+        try {
+            $hasil = (new \App\Services\Meta\MetaAdsPullService())->pull($dari, $sampai);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Tarikan Meta gagal: ' . $e->getMessage());
+        }
+
+        $pesan = sprintf(
+            'Tarikan Meta %s s/d %s: %d baris baru, %d diperbarui, %d dilewati.',
+            $dari,
+            $sampai,
+            $hasil['baru'],
+            $hasil['diperbarui'],
+            $hasil['dilewati']
+        );
+        if (!empty($hasil['tanpa_peta'])) {
+            $pesan .= ' ' . count($hasil['tanpa_peta']) . ' campaign Meta belum dikenal — jalankan sync campaign Meta.';
+        }
+
+        return redirect()->to(base_url('marketing/ads_performa?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $pesan);
     }
 
     public function ads_performa_simpan()
@@ -907,6 +965,12 @@ class Marketing extends BaseController
         }
         $campaignId = (int)($this->request->getGet('campaign') ?? 0);
 
+        $minggu = (int)($this->request->getGet('minggu') ?? 0);
+        if ($minggu < 0 || $minggu > 4) {
+            $minggu = 0;
+        }
+        $rentang = $minggu > 0 ? \App\Services\Marketing\WeeklyReport::range($bulan, $tahun, $minggu) : null;
+
         $db = $this->db();
 
         // ── Data spending per (tanggal, campaign, channel, unit) ────
@@ -915,6 +979,11 @@ class Marketing extends BaseController
         if ($campaignId > 0) {
             $where  .= ' AND a.campaign_id = ?';
             $params[] = $campaignId;
+        }
+        if ($rentang !== null) {
+            $where  .= ' AND a.tanggal BETWEEN ? AND ?';
+            $params[] = $rentang['mulai'];
+            $params[] = $rentang['selesai'];
         }
 
         $raw = $db->query(
@@ -926,13 +995,12 @@ class Marketing extends BaseController
             $params
         )->getResultArray();
 
-        // Daftar campaign utk filter (semua Campaign Digital Marketing periode ini).
-        $allCampaigns = $db->query(
-            'SELECT id, nama FROM marketing_campaigns
-             WHERE period_month = ? AND period_year = ?
-             ORDER BY nama ASC',
-            [$bulan, $tahun]
-        )->getResultArray();
+        // Daftar campaign utk filter: periode ini, yang aktif, atau yang
+        // berbelanja di periode ini (satu campaign Meta = satu baris).
+        $allCampaigns = array_map(
+            fn($c) => ['id' => (int)$c->id, 'nama' => $c->nama],
+            (new \App\Models\ModelMarketingCampaign())->options($bulan, $tahun)
+        );
 
         $channels = $this->ChannelModel->active();
         $chName   = [];
@@ -951,6 +1019,11 @@ class Marketing extends BaseController
         if ($campaignId > 0) {
             $perfWhere  .= ' AND p.campaign_id = ?';
             $perfParams[] = $campaignId;
+        }
+        if ($rentang !== null) {
+            $perfWhere  .= ' AND p.tanggal BETWEEN ? AND ?';
+            $perfParams[] = $rentang['mulai'];
+            $perfParams[] = $rentang['selesai'];
         }
 
         $perfRows = $db->query(
@@ -1262,13 +1335,50 @@ class Marketing extends BaseController
             $metricsPerUnit = $perUnitRows;
         }
 
+        // ── Laporan mingguan: status kirim + daftar minggu ─────────
+        $laporanMinggu = [];
+        foreach ((new \App\Models\ModelMarketingLaporanMingguan())
+            ->where('period_year', $tahun)
+            ->where('period_month', $bulan)
+            ->findAll() as $lap) {
+            $laporanMinggu[(int)$lap->minggu] = $lap;
+        }
+        if ($laporanMinggu !== []) {
+            $ids = array_values(array_filter(array_map(fn($l) => (int)$l->submitted_by, $laporanMinggu)));
+            $namaAkun = [];
+            if ($ids !== []) {
+                foreach ($db->table('akun')->whereIn('ID_AKUN', $ids)->get()->getResultArray() as $a) {
+                    $namaAkun[(int)$a['ID_AKUN']] = $a['NAMA_AKUN'];
+                }
+            }
+            foreach ($laporanMinggu as $lap) {
+                $lap->nama_pengirim = $namaAkun[(int)$lap->submitted_by] ?? '-';
+            }
+        }
+
+        $mingguList = [];
+        for ($w = 1; $w <= 4; $w++) {
+            $r = \App\Services\Marketing\WeeklyReport::range($bulan, $tahun, $w);
+            $mingguList[$w] = date('d/m', strtotime($r['mulai'])) . '–' . date('d/m', strtotime($r['selesai']));
+        }
+
+        $mingguSudahBerakhir = $minggu > 0
+            && \App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, \App\Services\Marketing\WeeklyReport::today());
+        $mingguAktif = ($tahun * 100 + $bulan) >= 202611;
+
         return view('template', [
             'body'       => 'marketing/laporan',
             'akun'       => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'bulan'      => $bulan,
             'tahun'      => $tahun,
             'kampanye'   => $campaignId,
-            'campaigns'  => array_map(fn($c) => ['id' => (int)$c['id'], 'nama' => $c['nama']], $allCampaigns),
+            'campaigns'  => $allCampaigns,
+            'minggu'     => $minggu,
+            'mingguList' => $mingguList,
+            'laporanMinggu' => $laporanMinggu,
+            'mingguSudahBerakhir' => $mingguSudahBerakhir,
+            'mingguAktif' => $mingguAktif,
+            'canWrite'   => $this->canWrite(),
             'sum'        => $summary,
             'daily'      => array_values($daily),
             'perTgl'     => $perTgl,
@@ -1280,6 +1390,56 @@ class Marketing extends BaseController
         ]);
     }
 
+    public function laporan_minggu_simpan()
+    {
+        if ($r = $this->writeOrRedirect()) {
+            return $r;
+        }
+        if (!$this->request->is('post')) {
+            return redirect()->to(base_url('marketing/laporan'));
+        }
+
+        $bulan  = (int)$this->request->getPost('bulan');
+        $tahun  = (int)$this->request->getPost('tahun');
+        $minggu = (int)$this->request->getPost('minggu');
+
+        $kembali = base_url('marketing/laporan?bulan=' . $bulan . '&tahun=' . $tahun . '&minggu=' . $minggu);
+
+        if (!$this->validPeriod($bulan, $tahun) || $minggu < 1 || $minggu > 4) {
+            return redirect()->to(base_url('marketing/laporan'))->with('error', 'Periode laporan tidak valid.');
+        }
+        if ($tahun * 100 + $bulan < 202611) {
+            return redirect()->to($kembali)->with('error', 'Laporan mingguan berlaku mulai November 2026.');
+        }
+        if (!\App\Services\Marketing\WeeklyReport::sudahBerakhir($bulan, $tahun, $minggu, \App\Services\Marketing\WeeklyReport::today())) {
+            return redirect()->to($kembali)->with('error', 'Minggu ini belum berakhir, belum bisa dilaporkan.');
+        }
+
+        $model = new \App\Models\ModelMarketingLaporanMingguan();
+        $ada = $model->where('period_year', $tahun)
+            ->where('period_month', $bulan)
+            ->where('minggu', $minggu)
+            ->first();
+        if ($ada) {
+            return redirect()->to($kembali)->with('error', 'Laporan minggu ini sudah dikirim.');
+        }
+
+        try {
+            $model->insert([
+                'period_year'  => $tahun,
+                'period_month' => $bulan,
+                'minggu'       => $minggu,
+                'submitted_by' => $this->currentAkun(),
+                'submitted_at' => \App\Services\Marketing\WeeklyReport::now(),
+            ]);
+        } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
+            // Kalah balapan dengan kiriman lain: UNIQUE (tahun, bulan, minggu).
+            return redirect()->to($kembali)->with('error', 'Laporan minggu ini sudah dikirim.');
+        }
+
+        return redirect()->to($kembali)->with('success', 'Laporan minggu ini terkirim.');
+    }
+
     // ── Campaign Digital Marketing (master) ────────────────────────
 
     public function campaign()
@@ -1288,24 +1448,14 @@ class Marketing extends BaseController
             return $r;
         }
 
-        $bulan = (int)($this->request->getGet('bulan') ?? date('n'));
-        $tahun = (int)($this->request->getGet('tahun') ?? date('Y'));
-        if (!$this->validPeriod($bulan, $tahun)) {
-            $bulan = (int)date('n');
-            $tahun = (int)date('Y');
-        }
-
         $model = new \App\Models\ModelMarketingCampaign();
 
         return view('template', [
             'body'     => 'marketing/kampanye',
             'akun'     => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
-            'bulan'    => $bulan,
-            'tahun'    => $tahun,
-            'rows'     => $model->where('period_month', $bulan)
-                ->where('period_year', $tahun)
-                ->orderBy('nama', 'ASC')->findAll(),
+            'rows'     => $model->orderBy('nama', 'ASC')->findAll(),
             'statusLabels' => \App\Models\ModelMarketingCampaign::STATUS_LABELS,
+            'unitList' => $this->units(),
             'canWrite' => $this->canWrite(),
         ]);
     }
@@ -1319,63 +1469,31 @@ class Marketing extends BaseController
             return redirect()->to(base_url('marketing/campaign'));
         }
 
-        $id           = (int)($this->request->getPost('id') ?? 0);
-        $nama         = trim((string)$this->request->getPost('nama') ?: '');
-        $deskripsi    = trim((string)$this->request->getPost('deskripsi') ?: '');
-        $tanggalMulai = trim((string)$this->request->getPost('tanggal_mulai') ?: '');
-        $tanggalSelesai = trim((string)$this->request->getPost('tanggal_selesai') ?: '');
-        $bulan        = (int)$this->request->getPost('period_month');
-        $tahun        = (int)$this->request->getPost('period_year');
-        $status       = trim((string)$this->request->getPost('status') ?: \App\Models\ModelMarketingCampaign::STATUS_DRAFT);
-
-        if (!$this->validPeriod($bulan, $tahun)) {
-            return redirect()->back()->with('error', 'Periode campaign tidak valid.');
-        }
-        if ($nama === '') {
-            return redirect()->back()->with('error', 'Nama campaign wajib diisi.');
-        }
-        if (!array_key_exists($status, \App\Models\ModelMarketingCampaign::STATUS_LABELS)) {
-            $status = \App\Models\ModelMarketingCampaign::STATUS_DRAFT;
-        }
-        $dateCheck = [];
-        foreach ([$tanggalMulai, $tanggalSelesai] as $d) {
-            if ($d !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
-                return redirect()->back()->with('error', 'Format tanggal campaign tidak valid.');
-            }
-            $dateCheck[$d === $tanggalMulai ? 'mulai' : 'selesai'] = $d;
-        }
-        if (!empty($dateCheck['mulai']) && !empty($dateCheck['selesai'])
-            && $dateCheck['selesai'] < $dateCheck['mulai']) {
-            return redirect()->back()->with('error', 'Tanggal selesai harus setelah tanggal mulai.');
-        }
-
+        $id = (int)($this->request->getPost('id') ?? 0);
         $model = new \App\Models\ModelMarketingCampaign();
-        $data = [
-            'nama'             => $nama,
-            'deskripsi'        => $deskripsi !== '' ? $deskripsi : null,
-            'tanggal_mulai'    => !empty($dateCheck['mulai']) ? $dateCheck['mulai'] : null,
-            'tanggal_selesai'  => !empty($dateCheck['selesai']) ? $dateCheck['selesai'] : null,
-            'period_month'     => $bulan,
-            'period_year'      => $tahun,
-            'status'           => $status,
-            'pic'              => $this->currentAkun(),
-            'created_by'       => $this->currentAkun(),
-        ];
 
-        if ($id > 0 && $model->find($id)) {
-            $model->update($id, $data);
-            $msg = 'Campaign diperbarui.';
-        } else {
-            $model->insert($data);
-            $msg = 'Campaign tersimpan.';
+        if ($id <= 0 || !$model->find($id)) {
+            return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
         }
 
-        $ref = trim((string)$this->request->getPost('redirect') ?: '');
-        if ($ref !== '' && strpos($ref, base_url()) === 0) {
-            return redirect()->to($ref)->with('success', $msg);
+        // Satu-satunya yang bisa diubah: unit pembebanan biaya.
+        $unitId = (int)$this->request->getPost('unit_id');
+        if ($unitId <= 0 || !(new \App\Models\ModelUnit())->getById($unitId)) {
+            return redirect()->back()->with('error', 'Pilih unit pembebanan biaya.');
         }
 
-        return redirect()->to(base_url('marketing/campaign?bulan=' . $bulan . '&tahun=' . $tahun))->with('success', $msg);
+        $model->update($id, [
+            'unit_id'     => $unitId,
+            'unit_sumber' => 'manual',
+        ]);
+
+        // Baris iklan yang sudah tertulis ikut pindah unit.
+        (new \App\Models\ModelMarketingAdsPerf())
+            ->where('campaign_id', $id)
+            ->set('unit_id', $unitId)
+            ->update();
+
+        return redirect()->to(base_url('marketing/campaign'))->with('success', 'Unit campaign diperbarui.');
     }
 
     public function campaign_hapus()
@@ -1388,8 +1506,12 @@ class Marketing extends BaseController
         }
         $id = (int)$this->request->getPost('id');
         $model = new \App\Models\ModelMarketingCampaign();
-        if (!$model->find($id)) {
+        $row = $model->find($id);
+        if (!$row) {
             return redirect()->back()->with('error', 'Campaign tidak ditemukan.');
+        }
+        if (!empty($row->meta_campaign_id)) {
+            return redirect()->back()->with('error', 'Campaign dari Meta tidak bisa dihapus; akan muncul lagi saat sync. Koreksi unitnya saja.');
         }
         $ads = new \App\Models\ModelMarketingAdsPerf();
         if ($ads->where('campaign_id', $id)->countAllResults() > 0) {

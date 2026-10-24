@@ -25,7 +25,8 @@ use App\Services\Konten\MultimediaKpiService;
  *   CONVERSION           10  Closing CS / Lead CS (target % di kpi_targets).
  *   CPL                  10  Budget Ads (data Performa Ads) / Datang & Closing CS
  *   CAMPAIGN_PERFORMANCE  5  Ads ber-campaign valid / total ads.
- *   REPORTING             5  Campaign selesai (done) / total campaign.
+ *   REPORTING             5  Sejak 2026-11: laporan mingguan tepat waktu.
+ *                             Sebelumnya: campaign selesai (done) / total campaign.
  *   IMPROVEMENT           5  Reuse MultimediaKpiService::improvementResult.
  *
  * Seluruh komponen memakai periode KPI yang sama (month/year). Data kosong
@@ -238,6 +239,27 @@ class DigitalMarketingKpiService
     }
 
     /** Reporting: % campaign selesai (done) terhadap total campaign pada periode. */
+    /**
+     * Laporan mingguan periode ini: skor ketepatan waktu kirim.
+     *
+     * @return array{terkirim: array<int,string>, skor: ?float}
+     */
+    public function reportingWeekly(int $month, int $year): array
+    {
+        $terkirim = [];
+        foreach ($this->db->table('marketing_laporan_mingguan')
+            ->where('period_year', $year)
+            ->where('period_month', $month)
+            ->get()->getResultArray() as $row) {
+            $terkirim[(int)$row['minggu']] = (string)$row['submitted_at'];
+        }
+
+        return [
+            'terkirim' => $terkirim,
+            'skor'     => WeeklyReport::score($month, $year, $terkirim, WeeklyReport::today()),
+        ];
+    }
+
     public function reportingCoverage(int $month, int $year): array
     {
         $db = $this->db;
@@ -413,6 +435,18 @@ class DigitalMarketingKpiService
                 ];
 
             case 'REPORTING':
+                // Sejak 2026-11 REPORTING = laporan mingguan tepat waktu.
+                if ((int)$year * 100 + (int)$month >= 202611) {
+                    $rw = $this->reportingWeekly($month, $year);
+                    return [
+                        'achievement' => $rw['skor'],
+                        'target'      => 100,
+                        'actual'      => $rw['skor'],
+                        'shortfall'   => $rw['skor'] === null ? null : round(max(100 - $rw['skor'], 0), 2),
+                        'source'      => 'Laporan mingguan tepat waktu',
+                    ];
+                }
+
                 $rc = $this->reportingCoverage($month, $year);
                 $pct = $rc['total'] > 0 ? round($rc['done'] / $rc['total'] * 100, 2) : null;
                 return [

@@ -7,9 +7,13 @@ use CodeIgniter\Model;
 /**
  * Master Campaign Digital Marketing.
  *
- * Status: draft (Draft) / active (Aktif) / done (Selesai) — mengikuti pola
- * content_campaigns. KPI Reporting = % campaign selesai (done) dari total
- * campaign pada periode (tanpa tautan laporan).
+ * Baris dibuat otomatis dari Meta (`meta:sync-campaigns`). Satu campaign Meta
+ * = satu baris (`meta_campaign_id` UNIQUE). Status mengikuti Meta: ACTIVE →
+ * active, selain itu draft. Unit ditebak dari nama (`unit_sumber='auto'`) dan
+ * boleh dikoreksi (`unit_sumber='manual'`).
+ *
+ * KPI Reporting sejak 2026-11 = laporan mingguan tepat waktu (bukan status
+ * campaign lagi).
  */
 class ModelMarketingCampaign extends Model
 {
@@ -28,6 +32,9 @@ class ModelMarketingCampaign extends Model
         'period_year',
         'status',
         'pic',
+        'meta_campaign_id',
+        'unit_id',
+        'unit_sumber',
         'created_by',
     ];
 
@@ -41,12 +48,46 @@ class ModelMarketingCampaign extends Model
         self::STATUS_DONE   => 'Selesai',
     ];
 
-    /** Daftar campaign utk pilihan di form Performa Ads. */
+    /**
+     * Daftar campaign untuk pemilih di Performa Ads & Laporan.
+     *
+     * Satu campaign Meta hanya punya satu baris (`meta_campaign_id` UNIQUE),
+     * jadi saringan periode saja akan menyembunyikannya di bulan lain.
+     * Sertakan: periode itu, yang sedang aktif, dan yang punya baris iklan
+     * di periode itu.
+     */
     public function options(int $month, int $year): array
     {
-        return $this->where('period_month', $month)
-            ->where('period_year', $year)
-            ->orderBy('nama', 'ASC')
-            ->findAll();
+        return $this->db->query(
+            "SELECT * FROM marketing_campaigns
+             WHERE (period_month = ? AND period_year = ?)
+                OR status = ?
+                OR id IN (SELECT DISTINCT campaign_id FROM marketing_ads_performance
+                          WHERE period_month = ? AND period_year = ? AND campaign_id IS NOT NULL)
+             ORDER BY nama ASC",
+            [$month, $year, self::STATUS_ACTIVE, $month, $year]
+        )->getResult();
+    }
+
+    /**
+     * Peta campaign Meta → campaign ERP, untuk tarikan otomatis.
+     *
+     * @return array<string, array{campaign_id: int, unit_id: int|null}>
+     */
+    public function metaMap(): array
+    {
+        $map = [];
+        foreach ($this->where('meta_campaign_id IS NOT NULL', null, false)->findAll() as $row) {
+            $metaId = trim((string)$row->meta_campaign_id);
+            if ($metaId === '') {
+                continue;
+            }
+            $map[$metaId] = [
+                'campaign_id' => (int)$row->id,
+                'unit_id'     => $row->unit_id !== null && (int)$row->unit_id > 0 ? (int)$row->unit_id : null,
+            ];
+        }
+
+        return $map;
     }
 }

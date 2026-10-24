@@ -38,6 +38,8 @@ class ModelMarketingAdsPerf extends Model
         'hasil',
         'qualified',
         'note',
+        'sumber',
+        'ditarik_pada',
         'created_by',
     ];
 
@@ -75,9 +77,35 @@ class ModelMarketingAdsPerf extends Model
         ])->first();
     }
 
-    /** Daftar campaign (id + nama) utk filter/select. */
-    public function campaigns(int $month, int $year): array
+    /**
+     * Baris untuk satu (periode, campaign, tanggal), MENGABAIKAN saluran & unit.
+     *
+     * Dipakai tarikan Meta. Kuncinya cukup periode + campaign + tanggal karena
+     * satu campaign = satu unit (lihat marketing_campaigns.unit_id). Kalau
+     * memakai getByUnique(), baris manual lama — yang channel_id/unit_id-nya
+     * terisi berbeda — tidak akan ketemu, sehingga tarikan menambah baris
+     * KEDUA untuk tanggal yang sama alih-alih menimpanya.
+     *
+     * Urutan `id` dibuat pasti: kalau ada baris kembar, yang ditimpa selalu
+     * baris tertua — hasilnya tidak berubah-ubah antar-tarikan.
+     *
+     * shortcut: aturan "satu baris per (periode, campaign, tanggal)" tidak
+     * dijaga indeks UNIQUE — menambahkannya berisiko menolak baris sah dari
+     * form manual yang sudah ada. Tinjau ulang bila laporan mulai menemukan
+     * baris kembar untuk tanggal yang sama.
+     */
+    public function getByPeriodeCampaignTanggal(int $month, int $year, int $campaignId, string $tanggal)
     {
+        return $this->where('period_month', $month)
+            ->where('period_year', $year)
+            ->where('campaign_id', $campaignId)
+            ->where('tanggal', $tanggal)
+            ->orderBy('id', 'ASC')
+            ->first();
+    }
+
+    /** Daftar campaign (id + nama) utk filter/select. */
+    public function campaigns(int $month, int $year): array    {
         $rows = (new ModelMarketingCampaign())->options($month, $year);
 
         return array_map(fn($c) => ['id' => (int)$c->id, 'nama' => $c->nama], $rows);
