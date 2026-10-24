@@ -101,7 +101,7 @@ class StatusGaransi extends BaseController
         $orderDir = is_array($order) && isset($order[0]['dir']) ? (string) $order[0]['dir'] : 'desc';
         $startDate = (string) ($request->getPost('startDate') ?? '');
         $endDate = (string) ($request->getPost('endDate') ?? '');
-        $unitFilter = $this->isHO() ? '' : (int) session('ID_UNIT');
+        $unitFilter = $this->canSeeAllUnits() ? '' : (int) session('ID_UNIT');
 
         $result = $this->ServiceModel->getGaransiServiceServerSide(
             $start,
@@ -305,7 +305,7 @@ class StatusGaransi extends BaseController
                 throw new \RuntimeException('Service tidak ditemukan.');
             }
 
-            if (!$this->isHO() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            if (!$this->canSeeAllUnits() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
                 throw new \RuntimeException('Service ini bukan milik unit Anda.');
             }
 
@@ -649,7 +649,7 @@ class StatusGaransi extends BaseController
                 throw new \RuntimeException('Service garansi tidak ditemukan.');
             }
 
-            if (!$this->isHO() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            if (!$this->canSeeAllUnits() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
                 throw new \RuntimeException('Service ini bukan milik unit Anda.');
             }
 
@@ -907,7 +907,7 @@ class StatusGaransi extends BaseController
             return null;
         }
 
-        if (!$this->isHO() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+        if (!$this->canSeeAllUnits() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
             return null;
         }
 
@@ -925,7 +925,7 @@ class StatusGaransi extends BaseController
             return null;
         }
 
-        if (!$this->isHO() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+        if (!$this->canSeeAllUnits() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
             return null;
         }
 
@@ -933,11 +933,9 @@ class StatusGaransi extends BaseController
     }
 
 
-    private function isHO(): bool
+    private function canSeeAllUnits(): bool
     {
-        $idJabatan = session()->get('ID_JABATAN');
-
-        return in_array($idJabatan, [0, 1, 42, '0', '1', '42'], true);
+        return GaransiClaimService::canSeeAllUnits((int) session('ID_JABATAN'));
     }
 
 

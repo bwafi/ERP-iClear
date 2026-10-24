@@ -461,10 +461,11 @@ class ModelService extends Model
             ->findAll();
     }
 
-    public function getRiwayatServiceGaransi($unitFilter = '')
+    public function getRiwayatServiceGaransi($unitFilter = '', $startDate = '', $endDate = '')
     {
-        $builder = $this->select('service.*, pelanggan.nama as nama_pelanggan')
+        $builder = $this->select('service.*, pelanggan.nama as nama_pelanggan, unit.NAMA_UNIT as nama_unit')
             ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
+            ->join('unit', 'unit.idunit = service.unit_idunit', 'left')
             ->where('tanggal_claim_garansi IS NOT NULL')
             ->where('tanggal_claim_garansi !=', '0000-00-00')
             ->where('tanggal_claim_garansi !=', '1970-01-01');
@@ -474,6 +475,13 @@ class ModelService extends Model
             if ($unitId !== null) {
                 $builder->where('service.unit_idunit', $unitId);
             }
+        }
+
+        if ($startDate !== '' && $startDate !== null) {
+            $builder->where('service.tanggal_claim_garansi >=', $startDate . ' 00:00:00');
+        }
+        if ($endDate !== '' && $endDate !== null) {
+            $builder->where('service.tanggal_claim_garansi <=', $endDate . ' 23:59:59');
         }
 
         return $builder->orderBy('service.tanggal_claim_garansi', 'DESC')->findAll();

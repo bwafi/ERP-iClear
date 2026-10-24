@@ -15,6 +15,16 @@ use DateTimeZone;
 final class GaransiClaimService
 {
     private const ZONA = 'Asia/Jakarta';
+    private const CROSS_UNIT_ROLES = [0, 1, 34, 40];
+
+    /**
+     * Hanya Admin Root, Manager, Finance, dan SPV yang boleh melihat
+     * seluruh unit. Role toko lain tetap terkunci ke unit sesi.
+     */
+    public static function canSeeAllUnits(int $idJabatan): bool
+    {
+        return in_array($idJabatan, self::CROSS_UNIT_ROLES, true);
+    }
 
     public static function isClaimed(object $service): bool
     {

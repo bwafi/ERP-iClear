@@ -109,4 +109,28 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
         $this->assertCount(1, $hasil['data']);
         $this->assertSame('SRV-002', $hasil['data'][0]->no_service);
     }
+
+    public function testRiwayatKlaimFilterUnitTanggalDanUrutTerbaru(): void
+    {
+        $this->db->table('service')->insertBatch([
+            ['idservice' => 4, 'no_service' => 'SRV-004', 'created_at' => '2026-10-01 09:00:00', 'tanggal_selesai' => '2026-10-01 09:00:00', 'tanggal_claim_garansi' => '2026-10-24 10:00:00', 'status_service' => 2, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 5, 'no_service' => 'SRV-005', 'created_at' => '2026-09-01 09:00:00', 'tanggal_selesai' => '2026-09-01 09:00:00', 'tanggal_claim_garansi' => '2026-09-15 10:00:00', 'status_service' => 2, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 6, 'no_service' => 'SRV-006', 'created_at' => '2026-10-02 09:00:00', 'tanggal_selesai' => '2026-10-02 09:00:00', 'tanggal_claim_garansi' => '2026-10-02 10:00:00', 'status_service' => 2, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
+        ]);
+
+        $model = new ModelService();
+
+        $oktober = $model->getRiwayatServiceGaransi('', '2026-10-01', '2026-10-31');
+        $this->assertSame(['SRV-004', 'SRV-006'], array_column($oktober, 'no_service'));
+        $this->assertSame('Unit Satu', $oktober[0]->nama_unit);
+
+        $satuHari = $model->getRiwayatServiceGaransi('', '2026-10-02', '2026-10-02');
+        $this->assertSame(['SRV-006'], array_column($satuHari, 'no_service'));
+
+        $unitSatu = $model->getRiwayatServiceGaransi(1, '', '');
+        $this->assertSame(['SRV-004', 'SRV-005'], array_column($unitSatu, 'no_service'));
+
+        $semua = $model->getRiwayatServiceGaransi('', '', '');
+        $this->assertSame(['SRV-004', 'SRV-006', 'SRV-005'], array_column($semua, 'no_service'));
+    }
 }

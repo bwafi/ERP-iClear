@@ -95,6 +95,13 @@
 - **Color/motion:** phase dots use the app’s primary/warning/success/info semantics; secondary copy uses the derived `--pay-muted` token (≥4.5:1 in both themes); outline-primary labels use `--pay-primary-ink`. Motion is limited to hover/focus/meter and disabled under `prefers-reduced-motion`.
 - **Rules:** routes, field names, role gates, modals, overwrite semantics, and DB schema are unchanged. The template’s floating theme customizer is hidden on this page because it covers the right-aligned amount/action column on mobile.
 
+### Riwayat Service Garansi (`.rsg-*`)
+- **Scope:** `app/Views/riwayat/service_garansi.php` + `app/Views/riwayat/_service_garansi_theme.php`; every selector lives under `.rsg-page` / `.rsg-modal` and derives from `--rsg-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head (breadcrumb, title, count/unit/period chips) → data panel (search → filter band: unit, claim period, actions → table → DataTables footer). The unit select is rendered only for roles 0/1/34/40; other roles see a locked unit display and no posted unit value. The default period is the current month in WIB; explicit empty dates mean all periods.
+- **Table:** No. Service + customer, claim date, optional unit column, status, actions; newest claim first via ISO `data-order`; becomes stacked cards at `767.98px` with `data-label` captions. Actions are Riwayat Klaim (modal) and Cetak (existing print route).
+- **Modal:** claim note, damaged parts, and replacement parts (HPP, price 0) from the shared `/riwayat-klaim/{id}` endpoint; opened with Bootstrap 5 `getOrCreateInstance`.
+- **Rules:** one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`; the empty state disables search and skips DataTables init.
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.

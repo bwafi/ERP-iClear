@@ -27,6 +27,7 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
+use App\Services\Service\GaransiClaimService;
 use App\Services\Service\SparepartKeluarHardDeleteService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
 use App\Models\ModelServiceDp;
@@ -145,17 +146,61 @@ class Riwayat_Service extends BaseController
 
     public function index2()
     {
-        $idJabatan = session()->get('ID_JABATAN');
-        $isHO = in_array($idJabatan, [0, 1, 42, '0', '1', '42'], true);
-        $unitFilter = $isHO ? '' : (int) session('ID_UNIT');
+        $idJabatan = (int) session('ID_JABATAN');
+        $canSeeAllUnits = GaransiClaimService::canSeeAllUnits($idJabatan);
+        $userUnit = (int) session('ID_UNIT');
 
-        $data =  array(
+        $requestedUnit = (int) ($this->request->getGet('unit') ?? 0);
+        $selectedUnit = $canSeeAllUnits ? $requestedUnit : $userUnit;
 
-            'fungsi' => $this->KerusakanModel->getKerusakan(),
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->getRiwayatServiceGaransi($unitFilter),
+        if ($canSeeAllUnits && $selectedUnit > 0 && $this->UnitModel->getById($selectedUnit) === null) {
+            $selectedUnit = 0;
+        }
+
+        $unitList = $canSeeAllUnits ? $this->UnitModel->getUnit() : [];
+        usort($unitList, static fn ($a, $b) => strcmp((string) $a->NAMA_UNIT, (string) $b->NAMA_UNIT));
+
+        $selectedUnitName = $canSeeAllUnits ? 'Semua unit' : 'Unit Anda';
+        if ($selectedUnit > 0) {
+            $selectedUnitName = '';
+            foreach ($unitList as $unit) {
+                if ((int) $unit->idunit === $selectedUnit) {
+                    $selectedUnitName = (string) $unit->NAMA_UNIT;
+                    break;
+                }
+            }
+            if ($selectedUnitName === '') {
+                $unit = $this->UnitModel->getById($selectedUnit);
+                $selectedUnitName = $unit->NAMA_UNIT ?? '-';
+            }
+        }
+
+        $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
+        $startDate = $this->request->getGet('tanggal_awal');
+        $endDate = $this->request->getGet('tanggal_akhir');
+
+        if ($startDate === null) {
+            $startDate = $today->modify('first day of this month')->format('Y-m-d');
+        }
+        if ($endDate === null) {
+            $endDate = $today->modify('last day of this month')->format('Y-m-d');
+        }
+
+        $unitFilter = $selectedUnit > 0 ? $selectedUnit : '';
+        $service = ($canSeeAllUnits || $userUnit > 0)
+            ? $this->ServiceModel->getRiwayatServiceGaransi($unitFilter, (string) $startDate, (string) $endDate)
+            : [];
+
+        $data = [
+            'service' => $service,
+            'unit' => $unitList,
+            'can_see_all_units' => $canSeeAllUnits,
+            'selected_unit' => $selectedUnit,
+            'selected_unit_name' => $selectedUnitName,
+            'start_date' => (string) $startDate,
+            'end_date' => (string) $endDate,
             'body'  => 'riwayat/service_garansi'
-        );
+        ];
         return view('template', $data);
     }
 
@@ -720,9 +765,17 @@ class Riwayat_Service extends BaseController
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
         $sumber        = $this->request->getPost('sumber');
 
-        $idJabatan = session()->get('ID_JABATAN');
-        $isHO = in_array($idJabatan, [0, 1, 42, '0', '1', '42'], true);
-        $unitFilter = $isHO ? '' : (int) session('ID_UNIT');
+        $idJabatan = (int) session('ID_JABATAN');
+        $canSeeAllUnits = GaransiClaimService::canSeeAllUnits($idJabatan);
+
+        if ($canSeeAllUnits) {
+            $requestedUnit = (int) $this->request->getPost('unit');
+            $unitFilter = ($requestedUnit > 0 && $this->UnitModel->getById($requestedUnit) !== null)
+                ? $requestedUnit
+                : '';
+        } else {
+            $unitFilter = (int) session('ID_UNIT');
+        }
 
         // Halaman garansi mengirim sumber=garansi (filter tanggal selesai);
         // halaman riwayat klaim memakai filter tanggal claim.
