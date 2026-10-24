@@ -293,7 +293,7 @@
 
             // tampilkan loading
             $('#riwayat-klaim-content').html('<div class="text-center p-3">Loading...</div>');
-            $('#modalRiwayatKlaim').modal('show');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRiwayatKlaim')).show();
 
             // request data via AJAX
             $.get('<?= base_url('riwayat-klaim') ?>/' + idservice, function(response) {
