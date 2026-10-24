@@ -113,9 +113,9 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
     public function testRiwayatKlaimFilterUnitTanggalDanUrutTerbaru(): void
     {
         $this->db->table('service')->insertBatch([
-            ['idservice' => 4, 'no_service' => 'SRV-004', 'created_at' => '2026-10-01 09:00:00', 'tanggal_selesai' => '2026-10-01 09:00:00', 'tanggal_claim_garansi' => '2026-10-24 10:00:00', 'status_service' => 2, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
-            ['idservice' => 5, 'no_service' => 'SRV-005', 'created_at' => '2026-09-01 09:00:00', 'tanggal_selesai' => '2026-09-01 09:00:00', 'tanggal_claim_garansi' => '2026-09-15 10:00:00', 'status_service' => 2, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
-            ['idservice' => 6, 'no_service' => 'SRV-006', 'created_at' => '2026-10-02 09:00:00', 'tanggal_selesai' => '2026-10-02 09:00:00', 'tanggal_claim_garansi' => '2026-10-02 10:00:00', 'status_service' => 2, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
+            ['idservice' => 4, 'no_service' => 'SRV-004', 'created_at' => '2026-10-01 09:00:00', 'tanggal_selesai' => '2026-10-01 09:00:00', 'tanggal_claim_garansi' => '2026-10-24 10:00:00', 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 5, 'no_service' => 'SRV-005', 'created_at' => '2026-09-01 09:00:00', 'tanggal_selesai' => '2026-09-01 09:00:00', 'tanggal_claim_garansi' => '2026-09-15 10:00:00', 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 6, 'no_service' => 'SRV-006', 'created_at' => '2026-10-02 09:00:00', 'tanggal_selesai' => '2026-10-02 09:00:00', 'tanggal_claim_garansi' => '2026-10-02 10:00:00', 'status_service' => 4, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
         ]);
 
         $model = new ModelService();

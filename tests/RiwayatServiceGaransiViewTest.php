@@ -21,7 +21,7 @@ final class RiwayatServiceGaransiViewTest extends CIUnitTestCase
             'nama_pelanggan' => 'Pelanggan Tes',
             'no_hp' => '0811',
             'alamat' => 'Alamat',
-            'status_service' => 2,
+            'status_service' => 4,
             'nama_unit' => 'Unit Tes',
         ], $override);
     }
@@ -44,7 +44,7 @@ final class RiwayatServiceGaransiViewTest extends CIUnitTestCase
         $this->assertStringContainsString('id="rsgTable"', $html);
         $this->assertStringContainsString('Riwayat Klaim', $html);
         $this->assertStringContainsString('cetak/invoice_service/99', $html);
-        $this->assertStringContainsString('Dalam Pengerjaan', $html);
+        $this->assertStringContainsString('Sudah Diambil', $html);
 
         $this->assertStringContainsString('name="tanggal_awal"', $html);
         $this->assertStringContainsString('value="2026-10-01"', $html);

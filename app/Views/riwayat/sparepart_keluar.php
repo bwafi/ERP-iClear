@@ -42,7 +42,7 @@
             </div>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-semibold mb-2">Search</label>
-                <input type="text" id="searchBox" class="form-control" placeholder="Cari invoice, nama barang...">
+                <input type="text" id="searchBox" class="form-control" placeholder="Cari invoice/no. service, nama barang...">
             </div>
             <div class="col-lg-2 col-md-3">
                 <label class="form-label fw-semibold mb-2">Show</label>
@@ -67,7 +67,7 @@
             <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
                 <thead class="text-dark fs-4">
                     <tr>
-                        <th>Kode Invoice</th>
+                        <th>Kode Invoice / Service</th>
                         <th>Tanggal</th>
                         <th>Nama Sparepart</th>
                         <th>Unit</th>
@@ -150,7 +150,10 @@
                     }
                 },
                 {
-                    data: 'nama_barang'
+                    data: 'nama_barang',
+                    render: function(d, t, r) {
+                        return d + (r.sumber === 'klaim' ? ' <span class="badge bg-info text-dark">Klaim Garansi</span>' : '');
+                    }
                 },
                 {
                     data: 'NAMA_UNIT'
@@ -173,7 +176,7 @@
                     render: function(d, t, r, m) {
                         var b = '<div class="d-flex gap-1">';
                         b += '<button class="btn btn-primary btn-sm btn-d" data-i="' + m.row + '"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20"></iconify-icon></button>';
-                        if (is_admin) {
+                        if (is_admin && r.sumber !== 'klaim') {
                             b += '<button class="btn btn-warning btn-sm btn-e" data-i="' + m.row + '"><iconify-icon icon="solar:pen-bold" width="20"></iconify-icon></button>';
                             b += '<button class="btn btn-danger btn-sm btn-x" data-i="' + m.row + '"><iconify-icon icon="solar:trash-bin-trash-broken" width="20"></iconify-icon></button>';
                         }
@@ -229,8 +232,11 @@
             h += '<div class="modal-header"><h5 class="modal-title">Detail Sparepart</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>';
             h += '<div class="modal-body">';
             h += '<p><strong>Tanggal:</strong> ' + fmtDate(r.tanggal) + '</p>';
-            h += '<p><strong>Invoice:</strong> ' + r.kode_invoice + '</p>';
-            h += '<p><strong>Id Detail:</strong> ' + r.iddetail_penjualan + '</p>';
+            h += '<p><strong>Invoice/Service:</strong> ' + r.kode_invoice + '</p>';
+            h += '<p><strong>Sumber:</strong> ' + (r.sumber === 'klaim' ? 'Klaim Garansi' : 'Penjualan') + '</p>';
+            if (r.sumber !== 'klaim') {
+                h += '<p><strong>Id Detail:</strong> ' + r.iddetail_penjualan + '</p>';
+            }
             h += '<p><strong>Nama Sparepart:</strong> ' + r.nama_barang + '</p>';
             h += '<p><strong>Unit:</strong> ' + r.NAMA_UNIT + '</p>';
             h += '<p><strong>Jumlah:</strong> ' + r.jumlah + ' unit</p>';

@@ -33,6 +33,8 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         'db_hpp_barang',
         'db_stok_awal',
         'db_proses_service',
+        'db_penjualan',
+        'db_detail_penjualan',
     ];
 
     /** @var \CodeIgniter\Database\BaseConnection */
@@ -204,6 +206,26 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
             PRIMARY KEY (idproses_service)
         ) ENGINE=InnoDB');
 
+        $q('CREATE TABLE db_penjualan (
+            idpenjualan INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            kode_invoice VARCHAR(64) NULL,
+            tanggal DATETIME NULL,
+            unit_idunit INT NULL,
+            PRIMARY KEY (idpenjualan)
+        ) ENGINE=InnoDB');
+
+        $q('CREATE TABLE db_detail_penjualan (
+            iddetail_penjualan INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            penjualan_idpenjualan INT NULL,
+            barang_idbarang INT NULL,
+            jumlah INT NULL DEFAULT 0,
+            harga_penjualan INT NULL DEFAULT 0,
+            diskon_penjualan INT NULL DEFAULT 0,
+            sub_total INT NULL DEFAULT 0,
+            hpp_penjualan INT NULL DEFAULT 0,
+            PRIMARY KEY (iddetail_penjualan)
+        ) ENGINE=InnoDB');
+
         $q("INSERT INTO db_akun (ID_AKUN, ID_JABATAN, ID_UNIT, NAMA_AKUN) VALUES (43, 1, 1, 'Akun Tes')");
         $q("INSERT INTO db_jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES (1, 'Admin Tes', NULL)");
         $q("INSERT INTO db_pelanggan (id_pelanggan, nama) VALUES (1, 'Pelanggan Tes')");
@@ -261,21 +283,36 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
     public function testSimpanKlaimMenyimpanCatatanPenggantiDanBarangRusak(): void
     {
         $this->seedService(1);
+        $this->fresh()->table('service')->where('idservice', 1)->update([
+            'status_proses' => 4,
+            'total_service_garansi' => 111,
+            'total_diskon_garansi' => 22,
+            'biaya_tambahan_garansi' => 33,
+            'harus_dibayar_garansi' => 44,
+        ]);
+        $this->fresh()->table('proses_service')->insert(['service_idservice' => 1]);
+        $sebelum = $this->fresh()->table('service')->where('idservice', 1)->get()->getRow();
 
         $this->postClaim([
             'idservice' => 1,
             'catatan' => 'LCD rusak karena pecah',
-            'produk' => [['id' => 10, 'qty' => 2]],
+            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'nol']],
             'barang_rusak' => [['id' => 11, 'qty' => 1, 'keterangan' => 'LCD pecah']],
         ])->assertRedirect();
 
         $db = $this->fresh();
         $service = $db->table('service')->where('idservice', 1)->get()->getRow();
 
-        $this->assertSame(2, (int) $service->status_service);
+        $this->assertSame(4, (int) $service->status_service);
+        $this->assertSame($sebelum->tanggal_selesai, $service->tanggal_selesai);
+        $this->assertSame($sebelum->tanggal_bisa_diambil, $service->tanggal_bisa_diambil);
+        $this->assertSame(4, (int) $service->status_proses);
+        $this->assertSame(111, (int) $service->total_service_garansi);
+        $this->assertSame(22, (int) $service->total_diskon_garansi);
+        $this->assertSame(33, (int) $service->biaya_tambahan_garansi);
+        $this->assertSame(44, (int) $service->harus_dibayar_garansi);
+        $this->assertSame(1, $db->table('proses_service')->where('service_idservice', 1)->countAllResults());
         $this->assertNotEmpty($service->tanggal_claim_garansi);
-        $this->assertNull($service->tanggal_selesai);
-        $this->assertNull($service->tanggal_bisa_diambil);
 
         $riwayat = $db->table('riwayat_claim_garansi')->where('service_idservice', 1)->get()->getResultArray();
         $this->assertCount(1, $riwayat);
@@ -299,6 +336,26 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertSame('LCD pecah', $rusak[0]['keterangan']);
         $this->assertSame(1, (int) $rusak[0]['unit_idunit']);
         $this->assertSame(43, (int) $rusak[0]['input_by']);
+    }
+
+    public function testHppAsliKlaimDisimpan(): void
+    {
+        $this->seedService(1);
+
+        $this->postClaim([
+            'idservice' => 1,
+            'catatan' => 'Ganti LCD',
+            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'asli']],
+        ])->assertRedirect();
+
+        $sparepart = $this->fresh()->table('service_sparepart')
+            ->where('service_idservice', 1)
+            ->where('barang_idbarang', 10)
+            ->get()
+            ->getRow();
+
+        $this->assertNotNull($sparepart);
+        $this->assertSame(4000, (int) $sparepart->hpp_penjualan_garansi);
     }
 
     public function testKlaimKeduaTidakMenggandakanRiwayatDanBarangRusak(): void
@@ -453,5 +510,90 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertStringContainsString('Baterai kembung', $json['html']);
         $this->assertStringContainsString('Sparepart Pengganti', $json['html']);
         $this->assertStringContainsString('LCD Tes', $json['html']);
+    }
+
+    public function testSparepartKlaimTampilDiSparepartKeluar(): void
+    {
+        $this->seedService(1);
+
+        $this->postClaim([
+            'idservice' => 1,
+            'catatan' => 'Ganti LCD',
+            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'asli']],
+        ])->assertRedirect();
+
+        $now = date('Y-m-d H:i:s');
+        $db = $this->fresh();
+        $db->table('penjualan')->insert([
+            'idpenjualan' => 1,
+            'kode_invoice' => 'INV-1',
+            'tanggal' => $now,
+            'unit_idunit' => 1,
+        ]);
+        $db->table('detail_penjualan')->insert([
+            'iddetail_penjualan' => 1,
+            'penjualan_idpenjualan' => 1,
+            'barang_idbarang' => 12,
+            'jumlah' => 1,
+            'harga_penjualan' => 75000,
+            'diskon_penjualan' => 0,
+            'sub_total' => 75000,
+            'hpp_penjualan' => 2000,
+        ]);
+
+        $this->sesi();
+        $result = $this->post('sparepart_keluar/ajax', [
+            'draw' => 1,
+            'start' => 0,
+            'length' => 10,
+            'unit' => 1,
+            'day' => '',
+            'search' => ['value' => 'SRV-1'],
+            'order' => [['column' => 1, 'dir' => 'desc']],
+            'csrf_test_name' => service('security')->getHash(),
+        ]);
+        $json = json_decode((string) $result->getJSON(), true);
+
+        $this->assertIsArray($json);
+        $this->assertSame(2, $json['recordsTotal']);
+        $this->assertSame(1, $json['recordsFiltered']);
+        $this->assertCount(1, $json['data']);
+
+        $row = $json['data'][0];
+        $this->assertSame('klaim', $row['sumber']);
+        $this->assertSame('SRV-1', $row['kode_invoice']);
+        $this->assertSame('LCD Tes', $row['nama_barang']);
+        $this->assertSame(2, (int) $row['jumlah']);
+        $this->assertSame(4000, (int) $row['hpp_penjualan']);
+        $this->assertSame(0, (int) $row['sub_total']);
+        $this->assertNull($row['iddetail_penjualan']);
+    }
+
+    public function testSparepartKlaimHppNolTampilNolDiSparepartKeluar(): void
+    {
+        $this->seedService(1);
+
+        $this->postClaim([
+            'idservice' => 1,
+            'catatan' => 'Ganti LCD',
+            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'nol']],
+        ])->assertRedirect();
+
+        $this->sesi();
+        $result = $this->post('sparepart_keluar/ajax', [
+            'draw' => 1,
+            'start' => 0,
+            'length' => 10,
+            'unit' => 1,
+            'day' => '',
+            'search' => ['value' => 'SRV-1'],
+            'order' => [['column' => 1, 'dir' => 'desc']],
+            'csrf_test_name' => service('security')->getHash(),
+        ]);
+        $json = json_decode((string) $result->getJSON(), true);
+
+        $this->assertIsArray($json);
+        $this->assertSame(1, $json['recordsFiltered']);
+        $this->assertSame(0, (int) $json['data'][0]['hpp_penjualan']);
     }
 }

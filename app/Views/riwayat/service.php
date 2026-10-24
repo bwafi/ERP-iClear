@@ -347,10 +347,10 @@
                         let buttons = '';
 
                         // Tombol Edit
-                        if (row.status_service == 4) {
-                            buttons += '<button type="button" class="btn btn-sm btn-warning me-1" disabled><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button>';
-                        } else if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
+                        if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
                             buttons += `<a href="<?= base_url('service_by_garansi/') ?>${row.idservice}" class="me-1"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
+                        } else if (row.status_service == 4) {
+                            buttons += '<button type="button" class="btn btn-sm btn-warning me-1" disabled><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button>';
                         } else {
                             buttons += `<a href="<?= base_url('detail/riwayat_service/') ?>${row.idservice}?tab=sparepart" class="me-1"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
                         }

@@ -341,10 +341,10 @@
                     orderable: false,
                     render: function(data, type, row) {
                         let editBtn = '';
-                        if (row.status_service == 4) {
-                            editBtn = '<button type="button" class="btn btn-sm btn-warning" disabled><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button>';
-                        } else if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
+                        if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
                             editBtn = `<a href="<?= base_url('service_by_garansi/') ?>${row.idservice}"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
+                        } else if (row.status_service == 4) {
+                            editBtn = '<button type="button" class="btn btn-sm btn-warning" disabled><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button>';
                         } else {
                             editBtn = `<a href="<?= base_url('detail/riwayat_service/') ?>${row.idservice}?tab=sparepart"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
                         }

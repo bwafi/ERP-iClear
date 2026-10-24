@@ -326,18 +326,10 @@ class StatusGaransi extends BaseController
             $this->simpanSparepartKlaim($db, $service, $produkData);
             $this->simpanBarangRusakKlaim($db, $service, $barangRusakData, $wibTime);
 
+            // Klaim hanya menandai tanggal klaim; proses service asli tidak diubah.
             $db->table('service')->where('idservice', $idservice)->update([
-                'status_service' => 2,
-                'tanggal_bisa_diambil' => null,
-                'tanggal_selesai' => null,
-                'status_proses' => 1,
                 'tanggal_claim_garansi' => $wibTime->format('Y-m-d H:i:s'),
-                'total_service_garansi' => 0,
-                'total_diskon_garansi' => 0,
-                'biaya_tambahan_garansi' => 0,
-                'harus_dibayar_garansi' => 0,
             ]);
-            $db->table('proses_service')->where('service_idservice', $idservice)->delete();
             $db->table('riwayat_claim_garansi')->insert([
                 'service_idservice' => $idservice,
                 'tanggal_claim' => $wibTime->format('Y-m-d'),
@@ -802,13 +794,21 @@ class StatusGaransi extends BaseController
                 throw new \RuntimeException('Stok sparepart tidak cukup.');
             }
 
+            $dataHpp = $this->HppBarangModel->getById($id);
+            if ($dataHpp === null) {
+                throw new \RuntimeException('Sparepart tidak ditemukan.');
+            }
+
+            $hppMode = (string) ($produk['hpp_mode'] ?? 'asli');
+            $hpp = $hppMode === 'nol' ? 0 : (int) ($dataHpp->hpp ?? 0);
+
             $dataStokAwal = $this->StokAwalModel->getByIdBarang($id);
             $data = [
                 'jumlah_tambahan_garansi' => $qty,
                 'harga_penjualan_garansi' => 0,
                 'sub_total_garansi' => 0,
                 'diskon_penjualan_garansi' => 0,
-                'hpp_penjualan_garansi' => 0,
+                'hpp_penjualan_garansi' => $hpp,
                 'satuan_jual' => $dataStokAwal->satuan_terkecil ?? 'pcs',
                 'service_idservice' => $idservice,
                 'barang_idbarang' => $id,

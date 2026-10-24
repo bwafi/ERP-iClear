@@ -175,7 +175,7 @@ foreach (($service_sparepart ?? []) as $item) {
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                     <h5 class="mb-1">Sparepart Pengganti</h5>
-                    <p class="text-muted mb-0">Stok berkurang; harga dan HPP klaim Rp 0.</p>
+                    <p class="text-muted mb-0">Stok berkurang; harga klaim Rp 0. Pilih HPP asli, atau HPP 0 jika sparepart bisa diretur ke supplier.</p>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
                     data-bs-target="#replacementPartModal">Tambah Sparepart</button>
@@ -244,7 +244,8 @@ foreach (($service_sparepart ?? []) as $item) {
                                 <input type="checkbox" class="service-sp-item__input replacement-check"
                                     data-id="<?= (int) $s->idbarang ?>"
                                     data-nama="<?= esc($s->nama_barang, 'attr') ?>"
-                                    data-stok="<?= (int) ($s->stok_akhir ?? 0) ?>">
+                                    data-stok="<?= (int) ($s->stok_akhir ?? 0) ?>"
+                                    data-hpp="<?= (int) ($s->hpp ?? 0) ?>">
                                 <span class="service-sp-item__box">
                                     <span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
                                     <span class="service-sp-item__main">
@@ -330,18 +331,24 @@ foreach (($service_sparepart ?? []) as $item) {
             replacementSearch.focus();
         });
 
-        function addReplacementRow(id, nama, stok) {
+        function addReplacementRow(id, nama, stok, hpp) {
             if (document.getElementById('replacement-row-' + id)) {
                 return;
             }
 
             const index = replacementIndex++;
+            const hppLabel = Number(hpp || 0).toLocaleString('id-ID');
             const row = document.createElement('tr');
             row.id = 'replacement-row-' + id;
             row.innerHTML = `
                 <td>${escapeHtml(nama)}<input type="hidden" name="produk[${index}][id]" value="${id}"></td>
                 <td>${stok}</td>
-                <td>Rp 0</td>
+                <td>
+                    <select class="form-select form-select-sm" name="produk[${index}][hpp_mode]">
+                        <option value="asli">HPP asli (Rp ${hppLabel})</option>
+                        <option value="nol">HPP 0</option>
+                    </select>
+                </td>
                 <td>Rp 0</td>
                 <td><input type="number" class="form-control form-control-sm replacement-qty" name="produk[${index}][qty]" value="1" min="1" max="${stok}" data-max="${stok}" required></td>
                 <td><button type="button" class="btn btn-sm btn-danger remove-replacement">Hapus</button></td>
@@ -354,7 +361,8 @@ foreach (($service_sparepart ?? []) as $item) {
                 addReplacementRow(
                     checkbox.dataset.id,
                     checkbox.dataset.nama,
-                    checkbox.dataset.stok
+                    checkbox.dataset.stok,
+                    checkbox.dataset.hpp
                 );
                 checkbox.checked = false;
             });

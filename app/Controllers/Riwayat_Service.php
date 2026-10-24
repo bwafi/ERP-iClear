@@ -1445,39 +1445,48 @@ class Riwayat_Service extends BaseController
     {
         $db = \Config\Database::connect();
 
+        $tDetail = $db->prefixTable('detail_penjualan');
+        $tBarang = $db->prefixTable('barang');
+        $tPenjualan = $db->prefixTable('penjualan');
+        $tUnit = $db->prefixTable('unit');
+        $tServiceSparepart = $db->prefixTable('service_sparepart');
+        $tService = $db->prefixTable('service');
+
         $allowedColumns = [
-            0 => 'p.kode_invoice',
-            1 => 'p.tanggal',
-            2 => 'b.nama_barang',
-            3 => 'u.NAMA_UNIT',
-            4 => 'dp.hpp_penjualan',
-            5 => 'dp.sub_total'
+            0 => 'x.kode_invoice',
+            1 => 'x.tanggal',
+            2 => 'x.nama_barang',
+            3 => 'x.NAMA_UNIT',
+            4 => 'x.hpp_penjualan',
+            5 => 'x.sub_total'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
-        $orderColumnName = $allowedColumns[$orderColumn] ?? 'p.tanggal';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'x.tanggal';
 
-        $where = ['p.unit_idunit = ?'];
+        $salesWhere = ['p.unit_idunit = ?'];
+        $claimWhere = ['COALESCE(sp.unit_idunit, s.unit_idunit) = ?'];
         $params = [(int)$selected_unit];
 
-        $where[] = 'YEAR(p.tanggal) = ?';
+        $salesWhere[] = 'YEAR(p.tanggal) = ?';
         $params[] = (int)$year;
 
         if (!empty($selected_day)) {
-            $where[] = 'DATE(p.tanggal) = ?';
+            $salesWhere[] = 'DATE(p.tanggal) = ?';
             $params[] = $selected_day;
         }
 
-        $searchCondition = '';
-        if (!empty($searchValue)) {
-            $searchCondition = ' AND (p.kode_invoice LIKE ? OR b.nama_barang LIKE ? OR u.NAMA_UNIT LIKE ?)';
-            $searchParam = "%{$searchValue}%";
-            $params = array_merge($params, [$searchParam, $searchParam, $searchParam]);
+        $params[] = (int)$selected_unit;
+        $claimWhere[] = 'YEAR(s.tanggal_claim_garansi) = ?';
+        $params[] = (int)$year;
+
+        if (!empty($selected_day)) {
+            $claimWhere[] = 'DATE(s.tanggal_claim_garansi) = ?';
+            $params[] = $selected_day;
         }
 
-        $whereClause = implode(' AND ', $where) . $searchCondition;
-
-        $sql = "SELECT 
+        // Penjualan dan sparepart klaim digabung agar pengeluaran stok klaim ikut terlihat.
+        $baseSql = "SELECT
                 p.kode_invoice,
                 p.idpenjualan,
                 dp.iddetail_penjualan,
@@ -1489,39 +1498,62 @@ class Riwayat_Service extends BaseController
                 dp.barang_idbarang,
                 b.nama_barang,
                 p.tanggal,
-                u.NAMA_UNIT
-            FROM detail_penjualan dp
-            JOIN barang b ON b.idbarang = dp.barang_idbarang
-            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
-            JOIN unit u ON u.idunit = p.unit_idunit
-            WHERE {$whereClause}
+                u.NAMA_UNIT,
+                'penjualan' AS sumber
+            FROM {$tDetail} dp
+            JOIN {$tBarang} b ON b.idbarang = dp.barang_idbarang
+            JOIN {$tPenjualan} p ON p.idpenjualan = dp.penjualan_idpenjualan
+            JOIN {$tUnit} u ON u.idunit = p.unit_idunit
+            WHERE " . implode(' AND ', $salesWhere) . "
+            UNION ALL
+            SELECT
+                s.no_service AS kode_invoice,
+                NULL AS idpenjualan,
+                NULL AS iddetail_penjualan,
+                sp.jumlah_tambahan_garansi AS jumlah,
+                0 AS harga_penjualan,
+                0 AS diskon_penjualan,
+                sp.sub_total_garansi AS sub_total,
+                COALESCE(sp.hpp_penjualan_garansi, 0) AS hpp_penjualan,
+                sp.barang_idbarang,
+                b.nama_barang,
+                s.tanggal_claim_garansi AS tanggal,
+                u.NAMA_UNIT,
+                'klaim' AS sumber
+            FROM {$tServiceSparepart} sp
+            JOIN {$tService} s ON s.idservice = sp.service_idservice
+            JOIN {$tBarang} b ON b.idbarang = sp.barang_idbarang
+            JOIN {$tUnit} u ON u.idunit = COALESCE(sp.unit_idunit, s.unit_idunit)
+            WHERE " . implode(' AND ', $claimWhere) . "
+              AND sp.jumlah_tambahan_garansi > 0
+              AND s.tanggal_claim_garansi IS NOT NULL";
+
+        $searchCondition = '';
+        $filteredParams = $params;
+        if (!empty($searchValue)) {
+            $searchCondition = 'WHERE (x.kode_invoice LIKE ? OR x.nama_barang LIKE ? OR x.NAMA_UNIT LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $filteredParams = array_merge($filteredParams, [$searchParam, $searchParam, $searchParam]);
+        }
+
+        $sql = "SELECT * FROM ({$baseSql}) x
+            {$searchCondition}
             ORDER BY {$orderColumnName} {$orderDir}
             LIMIT ? OFFSET ?";
 
-        $params[] = (int)$length;
-        $params[] = (int)$start;
+        $filteredParams[] = (int)$length;
+        $filteredParams[] = (int)$start;
 
-        $query = $db->query($sql, $params);
+        $query = $db->query($sql, $filteredParams);
         $data = $query->getResultArray();
 
-        $countSql = "SELECT COUNT(*) as total
-            FROM detail_penjualan dp
-            JOIN barang b ON b.idbarang = dp.barang_idbarang
-            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
-            JOIN unit u ON u.idunit = p.unit_idunit
-            WHERE {$whereClause}";
-
-        $countQuery = $db->query($countSql, array_slice($params, 0, -2));
+        $countSql = "SELECT COUNT(*) as total FROM ({$baseSql}) x {$searchCondition}";
+        $countQuery = $db->query($countSql, array_slice($filteredParams, 0, -2));
         $totalFiltered = (int)$countQuery->getRow()->total;
 
         // Total records (tanpa search, dengan filter unit/day)
-        $totalSql = "SELECT COUNT(*) as total
-            FROM detail_penjualan dp
-            JOIN barang b ON b.idbarang = dp.barang_idbarang
-            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
-            JOIN unit u ON u.idunit = p.unit_idunit
-            WHERE " . implode(' AND ', $where);
-        $totalQuery = $db->query($totalSql, array_slice($params, 0, count($where)));
+        $totalSql = "SELECT COUNT(*) as total FROM ({$baseSql}) x";
+        $totalQuery = $db->query($totalSql, $params);
         $recordsTotal = (int)$totalQuery->getRow()->total;
 
         return [
