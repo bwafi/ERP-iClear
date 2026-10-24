@@ -163,8 +163,8 @@ class ReturBarangRusakKlaim extends Migration
                 $roles = [];
             }
 
-            $merged = array_values(array_unique(array_merge(array_map('intval', $roles), [self::MENU_ID])));
-            if ($merged !== array_map('intval', $roles)) {
+            $merged = array_values(array_unique(array_merge($roles, [self::MENU_ID])));
+            if ($merged !== $roles) {
                 $this->db->table('jabatan')
                     ->where('ID_JABATAN', $jabatanId)
                     ->update(['ROLES_JABATAN' => json_encode($merged)]);
@@ -191,11 +191,11 @@ class ReturBarangRusakKlaim extends Migration
             }
 
             $filtered = array_values(array_filter(
-                array_map('intval', $roles),
-                static fn ($id) => $id !== self::MENU_ID
+                $roles,
+                static fn ($id) => (int) $id !== self::MENU_ID
             ));
 
-            if ($filtered !== array_map('intval', $roles)) {
+            if ($filtered !== $roles) {
                 $this->db->table('jabatan')
                     ->where('ID_JABATAN', $row->ID_JABATAN)
                     ->update(['ROLES_JABATAN' => json_encode($filtered)]);

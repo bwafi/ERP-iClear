@@ -8,6 +8,7 @@ use App\Models\ModelKasKeluar;
 use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPiutang;
 use App\Models\ModelUnit;
+use App\Models\ModelHppKlaimLoss;
 use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\HutangPiutangService;
 use Config\Database;
@@ -348,9 +349,14 @@ class DashboardKeuangan extends BaseController
         $hpp_service = $builder_hpp_service->get()->getRow();
         $total_hpp_service = $hpp_service->total ?? 0;
 
+        // 7. HPP Klaim garansi, periode mengikuti tanggal_hpp_klaim.
+        $lossStart = $tanggal_awal ?: '1970-01-01';
+        $lossEnd = $tanggal_akhir ?: date('Y-m-d');
+        $total_hpp_klaim = (new ModelHppKlaimLoss())->getTotalLoss($lossStart, $lossEnd, $id_unit);
+
         // Hitung total pendapatan dan biaya
         $total_pendapatan = $total_penjualan + $total_service + $total_kas_masuk;
-        $total_biaya = $total_kas_keluar + $total_hpp + $total_hpp_service;
+        $total_biaya = $total_kas_keluar + $total_hpp + $total_hpp_service + $total_hpp_klaim;
         $laba_rugi = $total_pendapatan - $total_biaya;
 
         return [
@@ -364,6 +370,7 @@ class DashboardKeuangan extends BaseController
                 'kas_keluar' => $total_kas_keluar,
                 'hpp_penjualan' => $total_hpp,
                 'hpp_service' => $total_hpp_service,
+                'hpp_klaim' => $total_hpp_klaim,
                 'total' => $total_biaya
             ],
             'laba_rugi' => $laba_rugi

@@ -434,6 +434,10 @@
                                 <td>HPP Service</td>
                                 <td class="text-end"><?= 'Rp ' . number_format($data_transaksi['biaya']['hpp_service'], 0, ',', '.') ?></td>
                             </tr>
+                            <tr>
+                                <td>HPP Klaim</td>
+                                <td class="text-end"><?= 'Rp ' . number_format($data_transaksi['biaya']['hpp_klaim'] ?? 0, 0, ',', '.') ?></td>
+                            </tr>
                         </tbody>
                         <tfoot class="table-light">
                             <tr>

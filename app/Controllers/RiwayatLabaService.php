@@ -14,6 +14,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use App\Models\ModelService;
+use App\Models\ModelHppKlaimLoss;
 
 class RiwayatLabaService extends BaseController
 
@@ -24,6 +25,7 @@ class RiwayatLabaService extends BaseController
     protected $AuthModel;
     protected $ReturCustomerModel;
     protected $ServiceModel;
+    protected $HppKlaimLossModel;
 
 
     public function __construct()
@@ -33,13 +35,17 @@ class RiwayatLabaService extends BaseController
         $this->AuthModel = new ModelAuth();
         $this->ReturCustomerModel = new ModelReturCustomer();
         $this->ServiceModel = new ModelService();
+        $this->HppKlaimLossModel = new ModelHppKlaimLoss();
     }
 
     public function index()
     {
         $service = $this->ServiceModel->getServiceWithLaba();
+        $hppKlaim = $this->HppKlaimLossModel->getLoss(date('Y-m-01'), date('Y-m-t'));
         $data = array(
             'service' => $service,
+            'hpp_klaim' => $hppKlaim,
+            'total_hpp_klaim' => array_sum(array_map(static fn ($row) => (int) $row->total, $hppKlaim)),
             'body' => 'riwayat/laba_service'
         );
         return view('template', $data);
@@ -58,6 +64,9 @@ class RiwayatLabaService extends BaseController
 
         // Ambil data dari model
         $dataservice = $this->ServiceModel->filterexportlaba($tanggal_awal, $tanggal_akhir);
+        $lossStart = $tanggal_awal ?: '1970-01-01';
+        $lossEnd = $tanggal_akhir ?: date('Y-m-d');
+        $loss = $this->HppKlaimLossModel->getLoss($lossStart, $lossEnd);
 
         // Header kolom
         $headers = [
@@ -112,6 +121,54 @@ class RiwayatLabaService extends BaseController
 
         // Freeze header
         $sheet->freezePane('A2');
+
+        // Sheet HPP Klaim: loss mengikuti tanggal_hpp_klaim, bukan tanggal service.
+        $lossSheet = $spreadsheet->createSheet();
+        $lossSheet->setTitle('HPP Klaim');
+        $lossHeaders = [
+            'A1' => 'Tanggal Klaim',
+            'B1' => 'No. Service',
+            'C1' => 'Nama Teknisi',
+            'D1' => 'Barang',
+            'E1' => 'HPP',
+            'F1' => 'Qty',
+            'G1' => 'Total',
+        ];
+        foreach ($lossHeaders as $cell => $text) {
+            $lossSheet->setCellValue($cell, $text);
+        }
+        $lossSheet->getStyle('A1:G1')->getFont()->setBold(true);
+        $lossSheet->getStyle('A1:G1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $lossSheet->getStyle('A1:G1')->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFFFE2E2');
+
+        $lossRow = 2;
+        foreach ($loss as $item) {
+            $lossSheet->setCellValue('A' . $lossRow, $item->tanggal_hpp_klaim);
+            $lossSheet->setCellValue('B' . $lossRow, $item->no_service);
+            $lossSheet->setCellValue('C' . $lossRow, $item->nama_teknisi);
+            $lossSheet->setCellValue('D' . $lossRow, $item->nama_barang);
+            $lossSheet->setCellValue('E' . $lossRow, $item->hpp);
+            $lossSheet->setCellValue('F' . $lossRow, $item->qty);
+            $lossSheet->setCellValue('G' . $lossRow, $item->total);
+            $lossRow++;
+        }
+        $lossSheet->getStyle('A1:G' . ($lossRow - 1))
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
+        foreach (range('A', 'G') as $col) {
+            $lossSheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        if ($lossRow > 2) {
+            $lossSheet->getStyle('A2:A' . ($lossRow - 1))
+                ->getNumberFormat()
+                ->setFormatCode('yyyy-mm-dd');
+        }
+        $lossSheet->freezePane('A2');
+
+        $spreadsheet->setActiveSheetIndex(0);
 
         // Nama file
         $filename = 'Riwayat_Laba_Service_' . date('Ymd_His') . '.xlsx';

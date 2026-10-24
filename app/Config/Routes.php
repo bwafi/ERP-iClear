@@ -310,6 +310,10 @@ $routes->get('cetak/invoice_mutasi/(:num)', 'MutasiStok::cetak_notamutasi/$1', [
 //retur
 $routes->get('retur_suplier', 'Retur_Suplier::index', ['filter' => 'auth']);
 $routes->post('insert_retur_suplier', 'Retur_Suplier::insert', ['filter' => 'auth']);
+$routes->get('retur_barang_rusak', 'ReturBarangRusak::index', ['filter' => 'auth']);
+$routes->post('retur_barang_rusak/simpan', 'ReturBarangRusak::simpan', ['filter' => ['auth', 'csrf']]);
+$routes->post('retur_barang_rusak/ubah-status/(:num)', 'ReturBarangRusak::ubahStatus/$1', ['filter' => ['auth', 'csrf']]);
+$routes->post('retur_barang_rusak/batal/(:num)', 'ReturBarangRusak::batal/$1', ['filter' => ['auth', 'csrf']]);
 
 //retur customer
 $routes->get('retur_customer', 'Retur_Customer::index', ['filter' => 'auth']);

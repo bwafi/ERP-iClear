@@ -9,6 +9,7 @@ use App\Models\ModelPenjualan;
 use App\Models\ModelService;
 use App\Models\ModelKasMasuk;
 use App\Models\ModelKasKeluar;
+use App\Models\ModelHppKlaimLoss;
 
 class LabaRugi extends BaseController
 {
@@ -237,8 +238,15 @@ class LabaRugi extends BaseController
             ->orderBy('service.created_at', 'DESC')
             ->get()->getResult();
 
+        // Biaya: HPP klaim garansi, periode mengikuti tanggal_hpp_klaim.
+        $hppKlaimModel = new ModelHppKlaimLoss();
+        $lossStart = $tanggal_awal ?: '1970-01-01';
+        $lossEnd = $tanggal_akhir ?: date('Y-m-d');
+        $total_hpp_klaim = $hppKlaimModel->getTotalLoss($lossStart, $lossEnd, $id_unit);
+        $hpp_klaim_detail = $hppKlaimModel->getLoss($lossStart, $lossEnd, $id_unit);
+
         $total_pendapatan = $total_penjualan + $total_service + $total_kas_masuk;
-        $total_biaya = $total_kas_keluar + $total_hpp + $total_hpp_service;
+        $total_biaya = $total_kas_keluar + $total_hpp + $total_hpp_service + $total_hpp_klaim;
         $laba_rugi = $total_pendapatan - $total_biaya;
 
         return [
@@ -252,6 +260,7 @@ class LabaRugi extends BaseController
                 'kas_keluar' => $total_kas_keluar,
                 'hpp_penjualan' => $total_hpp,
                 'hpp_service' => $total_hpp_service,
+                'hpp_klaim' => $total_hpp_klaim,
                 'total' => $total_biaya
             ],
             'detail' => [
@@ -264,6 +273,7 @@ class LabaRugi extends BaseController
                     'kas_keluar' => $kas_keluar_detail,
                     'hpp_penjualan' => $hpp_detail,
                     'hpp_service' => $hpp_service_detail,
+                    'hpp_klaim' => $hpp_klaim_detail,
                 ],
             ],
             'laba_rugi' => $laba_rugi

@@ -373,6 +373,7 @@ class Riwayat_Service extends BaseController
             // lama dibersihkan/dicocokkan dalam transaksi yang sama, lalu satu
             // invoice baru dibuat dari pilihan sparepart terbaru.
             $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
+            $lockedIds = $this->returLockedSparepartIds($db, $idservice);
             (new ServiceSparepartPenjualanSyncService($db))->hapusTransaksiLama(
                 $idservice,
                 $existingItems,
@@ -395,6 +396,11 @@ class Riwayat_Service extends BaseController
                 $id = (int) ($produk['id'] ?? 0);
                 if ($id <= 0) {
                     throw new \RuntimeException('Data sparepart tidak valid.');
+                }
+
+                if (array_key_exists($id, $existingMap)
+                    && in_array((int) $existingMap[$id]->idservice_sparepart, $lockedIds, true)) {
+                    throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
                 }
                 $jumlah = (int) ($produk['jumlah'] ?? 0);
                 $harga = $this->rupiahToInt($produk['harga'] ?? '0');
@@ -425,8 +431,15 @@ class Riwayat_Service extends BaseController
             }
 
             foreach ($existingMap as $barangId => $item) {
-                if (! in_array((int) $barangId, $submittedIds, true)
-                    && ! $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId)) {
+                if (in_array((int) $barangId, $submittedIds, true)) {
+                    continue;
+                }
+
+                if (in_array((int) $item->idservice_sparepart, $lockedIds, true)) {
+                    throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
+                }
+
+                if (! $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId)) {
                     throw new \RuntimeException('Gagal menghapus sparepart yang dilepas dari service.');
                 }
             }
@@ -443,6 +456,22 @@ class Riwayat_Service extends BaseController
             log_message('error', 'Riwayat_Service::insert_sparepart gagal untuk service ' . $idservice . ': ' . $e->getMessage());
             return redirect()->to($urlKembali)->with('gagal', 'Sparepart tidak tersimpan: ' . $e->getMessage());
         }
+    }
+
+    private function returLockedSparepartIds($db, int $idservice): array
+    {
+        if (! $db->tableExists('retur_klaim_item')) {
+            return [];
+        }
+
+        $rows = $db->table('retur_klaim_item rki')
+            ->select('rki.service_sparepart_idservice_sparepart')
+            ->join('service_sparepart sp', 'sp.idservice_sparepart = rki.service_sparepart_idservice_sparepart')
+            ->where('sp.service_idservice', $idservice)
+            ->get()
+            ->getResultArray();
+
+        return array_map('intval', array_column($rows, 'service_sparepart_idservice_sparepart'));
     }
 
     private function buatPenjualanDariService($idservice, $produkData)

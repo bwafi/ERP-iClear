@@ -503,6 +503,7 @@ class StatusGaransi extends BaseController
         $db->transBegin();
 
         try {
+            $lockedIds = $this->returLockedSparepartIds($db, $idservice);
             $existingMap = [];
             foreach ($this->ServiceSparepartModel->getByServiceId($idservice) as $item) {
                 $existingMap[(int) $item->barang_idbarang] = $item;
@@ -520,6 +521,11 @@ class StatusGaransi extends BaseController
                 $id = (int) ($produk['id'] ?? 0);
                 if ($id <= 0 || in_array($id, $submittedIds, true)) {
                     continue;
+                }
+
+                if (isset($existingMap[$id])
+                    && in_array((int) $existingMap[$id]->idservice_sparepart, $lockedIds, true)) {
+                    throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
                 }
 
                 $jumlahTambahan = max(0, (int) ($produk['qty_tambahan'] ?? 0));
@@ -540,6 +546,7 @@ class StatusGaransi extends BaseController
                 }
 
                 $dataStokAwal = $this->StokAwalModel->getByIdBarang($id);
+                $statusRetur = (string) ($existingMap[$id]->status_retur ?? 'bisa');
                 $datas = [
                     'jumlah_tambahan_garansi' => $jumlahTambahan,
                     'harga_penjualan_garansi' => $harga,
@@ -551,6 +558,12 @@ class StatusGaransi extends BaseController
                     'barang_idbarang' => $id,
                     'unit_idunit' => $unitId,
                 ];
+
+                if ($statusRetur === 'tidak_bisa') {
+                    $datas['hpp_omset_garansi'] = (int) ($dataHpp->hpp ?? 0);
+                    $datas['tanggal_hpp_klaim'] = $existingMap[$id]->tanggal_hpp_klaim
+                        ?? date('Y-m-d', strtotime((string) ($service->tanggal_claim_garansi ?: 'now')));
+                }
 
                 $submittedIds[] = $id;
 
@@ -564,6 +577,9 @@ class StatusGaransi extends BaseController
                         'harga_penjualan' => 0,
                         'sub_total' => 0,
                         'diskon_penjualan' => 0,
+                        'status_retur' => 'bisa',
+                        'hpp_omset_garansi' => 0,
+                        'tanggal_hpp_klaim' => null,
                     ]);
                 }
             }
@@ -571,6 +587,10 @@ class StatusGaransi extends BaseController
             foreach ($existingMap as $barangId => $item) {
                 if (in_array($barangId, $submittedIds, true)) {
                     continue;
+                }
+
+                if (in_array((int) $item->idservice_sparepart, $lockedIds, true)) {
+                    throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
                 }
 
                 if ((int) ($item->jumlah ?? 0) === 0 && (int) ($item->harga_penjualan ?? 0) === 0) {
@@ -586,6 +606,9 @@ class StatusGaransi extends BaseController
                     'sub_total_garansi' => 0,
                     'hpp_penjualan_garansi' => 0,
                     'diskon_penjualan_garansi' => 0,
+                    'status_retur' => 'bisa',
+                    'hpp_omset_garansi' => 0,
+                    'tanggal_hpp_klaim' => null,
                 ]);
             }
 
@@ -944,6 +967,22 @@ class StatusGaransi extends BaseController
         return $service;
     }
 
+
+    private function returLockedSparepartIds($db, int $idservice): array
+    {
+        if (! $db->tableExists('retur_klaim_item')) {
+            return [];
+        }
+
+        $rows = $db->table('retur_klaim_item rki')
+            ->select('rki.service_sparepart_idservice_sparepart')
+            ->join('service_sparepart sp', 'sp.idservice_sparepart = rki.service_sparepart_idservice_sparepart')
+            ->where('sp.service_idservice', $idservice)
+            ->get()
+            ->getResultArray();
+
+        return array_map('intval', array_column($rows, 'service_sparepart_idservice_sparepart'));
+    }
 
     private function canSeeAllUnits(): bool
     {
