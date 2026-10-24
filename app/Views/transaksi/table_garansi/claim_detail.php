@@ -1,3 +1,4 @@
+<?= $this->include('partials/sparepart_picker_style') ?>
 <?php
 $tglSelesai = !empty($service->tanggal_selesai) ? date('d-m-Y', strtotime((string) $service->tanggal_selesai)) : '-';
 $tglGaransi = $warranty_end ? $warranty_end->format('d-m-Y') : '-';
@@ -203,42 +204,74 @@ foreach (($service_sparepart ?? []) as $item) {
 </form>
 
 <div class="modal fade" id="replacementPartModal" tabindex="-1" aria-labelledby="replacementPartModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="replacementPartModalLabel">Pilih Sparepart Pengganti</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="bg-primary-subtle text-primary rounded-2 d-flex align-items-center justify-content-center"
+                        style="width: 36px; height: 36px;">
+                        <i class="bi bi-box-seam fs-5"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title" id="replacementPartModalLabel">Pilih Sparepart Pengganti</h5>
+                        <p class="text-muted fs-3 mb-0">Cari nama atau kode, lalu centang yang dipakai.</p>
+                    </div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table table-bordered" id="replacementPartTable">
-                        <thead>
-                            <tr>
-                                <th></th>
-                                <th>Nama Sparepart</th>
-                                <th>Stok</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($sparepart as $s): ?>
-                                <tr>
-                                    <td>
-                                        <input type="checkbox" class="replacement-check"
-                                            data-id="<?= (int) $s->idbarang ?>"
-                                            data-nama="<?= esc($s->nama_barang) ?>"
-                                            data-stok="<?= (int) ($s->stok_akhir ?? 0) ?>">
-                                    </td>
-                                    <td><?= esc($s->nama_barang) ?></td>
-                                    <td><?= (int) ($s->stok_akhir ?? 0) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+            <div class="modal-body pt-3">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <div class="service-sp-search flex-grow-1">
+                        <i class="bi bi-search service-sp-search-icon"></i>
+                        <input type="text" class="form-control" id="searchReplacementInput"
+                            placeholder="Cari nama atau kode sparepart..." autocomplete="off">
+                    </div>
+                    <span class="service-sp-unit badge text-bg-light border d-none d-sm-inline-flex">
+                        <i class="bi bi-shop me-1"></i>Unit <?= (int) $service->unit_idunit ?>
+                    </span>
+                </div>
+                <div class="service-sp-list" id="replacementPartList" aria-live="polite">
+                    <?php if (empty($sparepart)): ?>
+                        <div class="service-sp-state">
+                            <i class="bi bi-inbox"></i>
+                            <p>Tidak ada sparepart dengan stok tersedia di unit ini.</p>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($sparepart as $s): ?>
+                            <label class="service-sp-item replacement-option">
+                                <input type="checkbox" class="service-sp-item__input replacement-check"
+                                    data-id="<?= (int) $s->idbarang ?>"
+                                    data-nama="<?= esc($s->nama_barang, 'attr') ?>"
+                                    data-stok="<?= (int) ($s->stok_akhir ?? 0) ?>">
+                                <span class="service-sp-item__box">
+                                    <span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                                    <span class="service-sp-item__main">
+                                        <span class="service-sp-name"><?= esc($s->nama_barang) ?></span>
+                                        <span class="service-sp-meta">
+                                            <span class="service-sp-code"><?= esc($s->kode_barang ?? '-') ?></span>
+                                        </span>
+                                    </span>
+                                    <span class="service-sp-side">
+                                        <span class="service-sp-price">Gratis</span>
+                                        <span class="service-sp-stock<?= (int) ($s->stok_akhir ?? 0) <= 2 ? ' is-low' : '' ?>">
+                                            Stok <?= (int) ($s->stok_akhir ?? 0) ?>
+                                        </span>
+                                    </span>
+                                </span>
+                            </label>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                <button type="button" class="btn btn-success" id="addSelectedReplacement">Tambahkan</button>
+            <div class="modal-footer justify-content-between">
+                <span class="service-sp-count" id="replacement-selected-count" aria-live="polite">Belum ada yang dipilih</span>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" id="addSelectedReplacement"
+                        class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-dismiss="modal" disabled>
+                        <i class="bi bi-plus-lg"></i> Tambahkan
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -248,6 +281,45 @@ foreach (($service_sparepart ?? []) as $item) {
     (function() {
         let replacementIndex = 0;
         const replacementRows = document.getElementById('replacementRows');
+        const replacementCount = document.getElementById('replacement-selected-count');
+        const addReplacementButton = document.getElementById('addSelectedReplacement');
+        const replacementSearch = document.getElementById('searchReplacementInput');
+        const replacementList = document.getElementById('replacementPartList');
+
+        function escapeHtml(value) {
+            return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function(ch) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                } [ch];
+            });
+        }
+
+        function updateReplacementSelection() {
+            const count = document.querySelectorAll('.replacement-check:checked').length;
+            replacementCount.textContent = count > 0 ? count + ' sparepart dipilih' : 'Belum ada yang dipilih';
+            addReplacementButton.disabled = count === 0;
+        }
+
+        replacementSearch.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            replacementList.querySelectorAll('.replacement-option').forEach(function(item) {
+                item.classList.toggle('d-none', query !== '' && !item.textContent.toLowerCase().includes(query));
+            });
+        });
+
+        document.addEventListener('change', function(event) {
+            if (event.target.classList.contains('replacement-check')) {
+                updateReplacementSelection();
+            }
+        });
+
+        document.getElementById('replacementPartModal').addEventListener('shown.bs.modal', function() {
+            replacementSearch.focus();
+        });
 
         function addReplacementRow(id, nama, stok) {
             if (document.getElementById('replacement-row-' + id)) {
@@ -258,7 +330,7 @@ foreach (($service_sparepart ?? []) as $item) {
             const row = document.createElement('tr');
             row.id = 'replacement-row-' + id;
             row.innerHTML = `
-                <td>${nama}<input type="hidden" name="produk[${index}][id]" value="${id}"></td>
+                <td>${escapeHtml(nama)}<input type="hidden" name="produk[${index}][id]" value="${id}"></td>
                 <td>${stok}</td>
                 <td><input type="number" class="form-control form-control-sm replacement-qty" name="produk[${index}][qty]" value="1" min="1" max="${stok}" data-max="${stok}" required></td>
                 <td><button type="button" class="btn btn-sm btn-danger remove-replacement">Hapus</button></td>
@@ -275,6 +347,7 @@ foreach (($service_sparepart ?? []) as $item) {
                 );
                 checkbox.checked = false;
             });
+            updateReplacementSelection();
         });
 
         document.addEventListener('click', function(event) {
@@ -302,11 +375,6 @@ foreach (($service_sparepart ?? []) as $item) {
             event.target.value = value;
         });
 
-        $(document).ready(function() {
-            $('#replacementPartTable').DataTable({
-                pageLength: 5,
-                lengthChange: false
-            });
-        });
+        updateReplacementSelection();
     })();
 </script>

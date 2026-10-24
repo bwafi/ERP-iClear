@@ -10,7 +10,7 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
 {
-    private function render(array $serviceSparepart): string
+    private function render(array $serviceSparepart, array $sparepart = []): string
     {
         $service = (object) [
             'idservice' => 1,
@@ -20,6 +20,7 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
             'alamat' => 'Alamat',
             'tipe_hp' => 'HP',
             'imei' => '123',
+            'unit_idunit' => 1,
             'tanggal_selesai' => '2026-10-01 10:00:00',
             'keluhan' => 'LCD rusak',
             'keterangan' => '-',
@@ -30,7 +31,7 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
             'oldkerusakan' => [],
             'service_sparepart' => $serviceSparepart,
             'fungsiMap' => [],
-            'sparepart' => [],
+            'sparepart' => $sparepart,
             'warranty_end' => null,
             'status_garansi' => 'Aktif',
         ]);
@@ -64,5 +65,26 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
         $html = $this->render([]);
 
         $this->assertStringContainsString('Tidak ada sparepart di service ini.', $html);
+    }
+
+    public function testModalPenggantiMemakaiDesainPemilihSparepart(): void
+    {
+        $html = $this->render([], [
+            (object) [
+                'idbarang' => 10,
+                'nama_barang' => 'LCD Tes',
+                'kode_barang' => 'SP-10',
+                'stok_akhir' => 5,
+            ],
+        ]);
+
+        $this->assertStringContainsString('id="replacementPartModal"', $html);
+        $this->assertStringContainsString('id="searchReplacementInput"', $html);
+        $this->assertStringContainsString('id="replacementPartList"', $html);
+        $this->assertStringContainsString('id="replacement-selected-count"', $html);
+        $this->assertStringContainsString('class="service-sp-item__input replacement-check"', $html);
+        $this->assertStringContainsString('class="service-sp-stock"', $html);
+        $this->assertStringContainsString('Gratis', $html);
+        $this->assertStringNotContainsString('id="replacementPartTable"', $html);
     }
 }
