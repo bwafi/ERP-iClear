@@ -1,3 +1,8 @@
+<?php
+$hariIni = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
+$awalBulan = $hariIni->modify('first day of this month')->format('Y-m-d');
+$akhirBulan = $hariIni->modify('last day of this month')->format('Y-m-d');
+?>
 <div class="card shadow-none position-relative overflow-hidden mb-4">
     <div class="card-body d-flex align-items-center justify-content-between p-4">
         <h4 class="fw-semibold mb-0">Riwayat Service</h4>
@@ -30,11 +35,11 @@
 
             <label class="ms-3 me-2">Tanggal Awal:</label>
             <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
-                style="width: auto; display: inline-block;" onchange="filterData()">
+                style="width: auto; display: inline-block;" value="<?= esc($awalBulan) ?>" onchange="filterData()">
 
             <label class="ms-3 me-2">Tanggal Akhir:</label>
             <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
-                style="width: auto; display: inline-block;" onchange="filterData()">
+                style="width: auto; display: inline-block;" value="<?= esc($akhirBulan) ?>" onchange="filterData()">
 
             <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
         </div>
@@ -78,7 +83,7 @@
                         <tr>
                             <td><?= esc($row->no_service) ?></td>
                             <td><?= esc(date('d-m-Y', strtotime($row->created_at))) ?></td>
-                            <td><?= esc(date('d-m-Y', strtotime($row->tanggal_claim_garansi))) ?></td>
+                            <td data-order="<?= esc(date('Y-m-d H:i:s', strtotime($row->tanggal_claim_garansi))) ?>"><?= esc(date('d-m-Y', strtotime($row->tanggal_claim_garansi))) ?></td>
                             <td><?= esc($row->nama_pelanggan) ?></td>
                             <td><?= esc($row->no_hp) ?></td>
                             <td><?= esc($row->alamat) ?></td>
@@ -147,12 +152,28 @@
 </div>
 
 <script>
+    let riwayatTable = null;
+
     window.onload = function() {
         const endDateInput = document.getElementById('endDate');
         const startDateInput = document.getElementById('startDate');
 
-        startDateInput.value = '';
-        endDateInput.value = '';
+        riwayatTable = $('#zero_config').DataTable();
+        riwayatTable.order([2, 'desc']).draw();
+
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+            if (settings.nTable.id !== 'zero_config') return true;
+
+            const row = settings.aoData[dataIndex] ? settings.aoData[dataIndex].nTr : null;
+            const cell = row ? row.cells[2] : null;
+            const rowDate = cell ? (cell.getAttribute('data-order') || '').slice(0, 10) : '';
+            if (!rowDate) return true;
+
+            const start = startDateInput.value;
+            const end = endDateInput.value;
+
+            return (!start || rowDate >= start) && (!end || rowDate <= end);
+        });
 
         filterData();
 
@@ -181,28 +202,9 @@
     };
 
     function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-
-
-        const rows = document.querySelectorAll('#zero_config tbody tr');
-        rows.forEach(row => {
-            const dateCell = row.children[2];
-            if (!dateCell) return;
-
-            const dateText = dateCell.textContent.trim();
-            const parts = dateText.split('-');
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-
-            const startDate = start ? new Date(start) : null;
-            const endDate = end ? new Date(end) : null;
-
-            let dateMatch = true;
-            if (startDate && rowDate < startDate) dateMatch = false;
-            if (endDate && rowDate > endDate) dateMatch = false;
-
-            row.style.display = (dateMatch) ? '' : 'none';
-        });
+        if (riwayatTable) {
+            riwayatTable.draw();
+        }
     }
 
     function resetFilter() {
