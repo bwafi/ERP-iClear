@@ -50,8 +50,13 @@ final class GaransiClaimDetailPrefillTest extends CIUnitTestCase
         $this->assertStringContainsString('name="barang_rusak[1][id]" value="11"', $html);
         $this->assertStringContainsString('name="barang_rusak[1][qty]" value="1"', $html);
         $this->assertSame(1, substr_count($html, 'id="damaged-row-10"'));
+        $this->assertStringNotContainsString('damaged-qty', $html);
         $this->assertStringNotContainsString('Tambah Sparepart Rusak', $html);
         $this->assertStringNotContainsString('damagedPartModal', $html);
+        $this->assertLessThan(
+            strpos($html, 'Sparepart Pengganti'),
+            strpos($html, 'Sparepart Rusak')
+        );
     }
 
     public function testServiceTanpaSparepartMenampilkanPesanKosong(): void

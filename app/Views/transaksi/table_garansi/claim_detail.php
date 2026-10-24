@@ -122,33 +122,6 @@ foreach (($service_sparepart ?? []) as $item) {
 
     <div class="card w-100 position-relative overflow-hidden mb-4">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                    <h5 class="mb-1">Sparepart Pengganti</h5>
-                    <p class="text-muted mb-0">Gratis (Rp 0), stok berkurang, HPP tetap tercatat.</p>
-                </div>
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
-                    data-bs-target="#replacementPartModal">Tambah Sparepart</button>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table border align-middle mb-0">
-                    <thead class="text-dark fs-4">
-                        <tr>
-                            <th>Nama Sparepart</th>
-                            <th>Stok</th>
-                            <th style="width: 120px;">Qty</th>
-                            <th style="width: 90px;">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody id="replacementRows"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="card w-100 position-relative overflow-hidden mb-4">
-        <div class="card-body">
             <div class="mb-3">
                 <h5 class="mb-1">Sparepart Rusak</h5>
                 <p class="text-muted mb-0">Pilih sparepart service yang diklaim; dicatat untuk laporan, tidak mengurangi stok.</p>
@@ -174,8 +147,8 @@ foreach (($service_sparepart ?? []) as $item) {
                                 </td>
                                 <td><?= esc($item['nama']) ?></td>
                                 <td>
-                                    <input type="number" class="form-control form-control-sm damaged-qty"
-                                        name="barang_rusak[<?= $damagedIndex ?>][qty]" value="<?= $item['qty'] ?>" min="1">
+                                    <?= $item['qty'] ?>
+                                    <input type="hidden" name="barang_rusak[<?= $damagedIndex ?>][qty]" value="<?= $item['qty'] ?>">
                                 </td>
                                 <td>
                                     <textarea class="form-control form-control-sm"
@@ -191,6 +164,33 @@ foreach (($service_sparepart ?? []) as $item) {
                             </tr>
                         <?php endif; ?>
                     </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card w-100 position-relative overflow-hidden mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h5 class="mb-1">Sparepart Pengganti</h5>
+                    <p class="text-muted mb-0">Gratis (Rp 0), stok berkurang, HPP tetap tercatat.</p>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
+                    data-bs-target="#replacementPartModal">Tambah Sparepart</button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table border align-middle mb-0">
+                    <thead class="text-dark fs-4">
+                        <tr>
+                            <th>Nama Sparepart</th>
+                            <th>Stok</th>
+                            <th style="width: 120px;">Qty</th>
+                            <th style="width: 90px;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="replacementRows"></tbody>
                 </table>
             </div>
         </div>
@@ -275,16 +275,6 @@ foreach (($service_sparepart ?? []) as $item) {
                 );
                 checkbox.checked = false;
             });
-        });
-
-        document.querySelectorAll('.damaged-select').forEach(function(checkbox) {
-            const qty = checkbox.closest('tr').querySelector('.damaged-qty');
-            const sync = function() {
-                qty.required = checkbox.checked;
-            };
-
-            checkbox.addEventListener('change', sync);
-            sync();
         });
 
         document.addEventListener('click', function(event) {
