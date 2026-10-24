@@ -175,7 +175,7 @@ foreach (($service_sparepart ?? []) as $item) {
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                     <h5 class="mb-1">Sparepart Pengganti</h5>
-                    <p class="text-muted mb-0">Stok berkurang; harga klaim Rp 0. Pilih HPP asli, atau HPP 0 jika sparepart bisa diretur ke supplier.</p>
+                    <p class="text-muted mb-0">Stok berkurang; harga klaim Rp 0. HPP asli tetap tampil. Pilih status retur: omset hanya berkurang kalau tidak bisa retur atau ditolak supplier.</p>
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
                     data-bs-target="#replacementPartModal">Tambah Sparepart</button>
@@ -188,6 +188,7 @@ foreach (($service_sparepart ?? []) as $item) {
                             <th>Nama Sparepart</th>
                             <th>Stok</th>
                             <th>HPP</th>
+                            <th>Status Retur</th>
                             <th>Harga</th>
                             <th style="width: 120px;">Qty</th>
                             <th style="width: 90px;">Aksi</th>
@@ -343,10 +344,11 @@ foreach (($service_sparepart ?? []) as $item) {
             row.innerHTML = `
                 <td>${escapeHtml(nama)}<input type="hidden" name="produk[${index}][id]" value="${id}"></td>
                 <td>${stok}</td>
+                <td>Rp ${hppLabel}</td>
                 <td>
-                    <select class="form-select form-select-sm" name="produk[${index}][hpp_mode]">
-                        <option value="asli">HPP asli (Rp ${hppLabel})</option>
-                        <option value="nol">HPP 0</option>
+                    <select class="form-select form-select-sm" name="produk[${index}][status_retur]">
+                        <option value="bisa">Bisa retur</option>
+                        <option value="tidak_bisa">Tidak bisa retur</option>
                     </select>
                 </td>
                 <td>Rp 0</td>

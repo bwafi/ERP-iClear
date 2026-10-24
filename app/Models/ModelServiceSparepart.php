@@ -24,7 +24,10 @@ class ModelServiceSparepart extends Model
         'barang_idbarang',
         'unit_idunit',
         'jumlah_tambahan_garansi',
-        'hpp_penjualan_garansi'
+        'hpp_penjualan_garansi',
+        'status_retur',
+        'hpp_omset_garansi',
+        'tanggal_hpp_klaim'
     ];
 
     public function getSerModelServiceSparepart()

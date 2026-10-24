@@ -323,7 +323,7 @@ class StatusGaransi extends BaseController
 
             $wibTime = new \DateTime('now', new \DateTimeZone('Asia/Jakarta'));
 
-            $this->simpanSparepartKlaim($db, $service, $produkData);
+            $this->simpanSparepartKlaim($db, $service, $produkData, $wibTime);
             $this->simpanBarangRusakKlaim($db, $service, $barangRusakData, $wibTime);
 
             // Klaim hanya menandai tanggal klaim; proses service asli tidak diubah.
@@ -760,7 +760,7 @@ class StatusGaransi extends BaseController
     }
 
 
-    private function simpanSparepartKlaim($db, object $service, array $produkData): void
+    private function simpanSparepartKlaim($db, object $service, array $produkData, \DateTimeInterface $claimTime): void
     {
         $idservice = (int) $service->idservice;
         $unitId = (int) $service->unit_idunit;
@@ -799,8 +799,14 @@ class StatusGaransi extends BaseController
                 throw new \RuntimeException('Sparepart tidak ditemukan.');
             }
 
-            $hppMode = (string) ($produk['hpp_mode'] ?? 'asli');
-            $hpp = $hppMode === 'nol' ? 0 : (int) ($dataHpp->hpp ?? 0);
+            $statusRetur = (string) ($produk['status_retur'] ?? 'bisa');
+            if (! in_array($statusRetur, ['bisa', 'tidak_bisa'], true)) {
+                $statusRetur = 'bisa';
+            }
+
+            $hpp = (int) ($dataHpp->hpp ?? 0);
+            $hppOmset = $statusRetur === 'tidak_bisa' ? $hpp : 0;
+            $tanggalHppKlaim = $statusRetur === 'tidak_bisa' ? $claimTime->format('Y-m-d') : null;
 
             $dataStokAwal = $this->StokAwalModel->getByIdBarang($id);
             $data = [
@@ -809,6 +815,9 @@ class StatusGaransi extends BaseController
                 'sub_total_garansi' => 0,
                 'diskon_penjualan_garansi' => 0,
                 'hpp_penjualan_garansi' => $hpp,
+                'status_retur' => $statusRetur,
+                'hpp_omset_garansi' => $hppOmset,
+                'tanggal_hpp_klaim' => $tanggalHppKlaim,
                 'satuan_jual' => $dataStokAwal->satuan_terkecil ?? 'pcs',
                 'service_idservice' => $idservice,
                 'barang_idbarang' => $id,
@@ -852,6 +861,9 @@ class StatusGaransi extends BaseController
                     'sub_total_garansi' => 0,
                     'diskon_penjualan_garansi' => 0,
                     'hpp_penjualan_garansi' => 0,
+                    'status_retur' => 'bisa',
+                    'hpp_omset_garansi' => 0,
+                    'tanggal_hpp_klaim' => null,
                 ]);
         }
     }

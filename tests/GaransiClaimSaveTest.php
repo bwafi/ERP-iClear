@@ -120,6 +120,9 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
             diskon_penjualan_garansi INT NULL DEFAULT 0,
             jumlah_tambahan_garansi INT NULL DEFAULT 0,
             hpp_penjualan_garansi INT NULL DEFAULT 0,
+            status_retur VARCHAR(20) NULL DEFAULT NULL,
+            hpp_omset_garansi INT NOT NULL DEFAULT 0,
+            tanggal_hpp_klaim DATE NULL DEFAULT NULL,
             PRIMARY KEY (idservice_sparepart)
         ) ENGINE=InnoDB');
 
@@ -296,7 +299,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->postClaim([
             'idservice' => 1,
             'catatan' => 'LCD rusak karena pecah',
-            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'nol']],
+            'produk' => [['id' => 10, 'qty' => 2, 'status_retur' => 'bisa']],
             'barang_rusak' => [['id' => 11, 'qty' => 1, 'keterangan' => 'LCD pecah']],
         ])->assertRedirect();
 
@@ -324,7 +327,10 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertSame(0, (int) $sparepart->harga_penjualan_garansi);
         $this->assertSame(0, (int) $sparepart->sub_total_garansi);
         $this->assertSame(0, (int) $sparepart->diskon_penjualan_garansi);
-        $this->assertSame(0, (int) $sparepart->hpp_penjualan_garansi);
+        $this->assertSame(4000, (int) $sparepart->hpp_penjualan_garansi);
+        $this->assertSame('bisa', $sparepart->status_retur);
+        $this->assertSame(0, (int) $sparepart->hpp_omset_garansi);
+        $this->assertNull($sparepart->tanggal_hpp_klaim);
         $this->assertSame(0, (int) $sparepart->jumlah);
         $this->assertSame(0, (int) $sparepart->harga_penjualan);
         $this->assertSame('pcs', $sparepart->satuan_jual);
@@ -345,7 +351,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->postClaim([
             'idservice' => 1,
             'catatan' => 'Ganti LCD',
-            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'asli']],
+            'produk' => [['id' => 10, 'qty' => 2, 'status_retur' => 'bisa']],
         ])->assertRedirect();
 
         $sparepart = $this->fresh()->table('service_sparepart')
@@ -356,6 +362,33 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
 
         $this->assertNotNull($sparepart);
         $this->assertSame(4000, (int) $sparepart->hpp_penjualan_garansi);
+        $this->assertSame(0, (int) $sparepart->hpp_omset_garansi);
+        $this->assertNull($sparepart->tanggal_hpp_klaim);
+    }
+
+    public function testKlaimTidakBisaReturMenyimpanHppOmsetDanTanggal(): void
+    {
+        $this->seedService(1);
+
+        $this->postClaim([
+            'idservice' => 1,
+            'catatan' => 'Tidak bisa retur',
+            'produk' => [['id' => 10, 'qty' => 2, 'status_retur' => 'tidak_bisa']],
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $sparepart = $db->table('service_sparepart')
+            ->where('service_idservice', 1)
+            ->where('barang_idbarang', 10)
+            ->get()
+            ->getRow();
+        $service = $db->table('service')->where('idservice', 1)->get()->getRow();
+
+        $this->assertNotNull($sparepart);
+        $this->assertSame(4000, (int) $sparepart->hpp_penjualan_garansi);
+        $this->assertSame('tidak_bisa', $sparepart->status_retur);
+        $this->assertSame(4000, (int) $sparepart->hpp_omset_garansi);
+        $this->assertSame(date('Y-m-d', strtotime($service->tanggal_claim_garansi)), $sparepart->tanggal_hpp_klaim);
     }
 
     public function testKlaimKeduaTidakMenggandakanRiwayatDanBarangRusak(): void
@@ -519,7 +552,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->postClaim([
             'idservice' => 1,
             'catatan' => 'Ganti LCD',
-            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'asli']],
+            'produk' => [['id' => 10, 'qty' => 2, 'status_retur' => 'bisa']],
         ])->assertRedirect();
 
         $now = date('Y-m-d H:i:s');
@@ -569,14 +602,14 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertNull($row['iddetail_penjualan']);
     }
 
-    public function testSparepartKlaimHppNolTampilNolDiSparepartKeluar(): void
+    public function testSparepartKlaimHppAsliTampilAsliDiSparepartKeluar(): void
     {
         $this->seedService(1);
 
         $this->postClaim([
             'idservice' => 1,
             'catatan' => 'Ganti LCD',
-            'produk' => [['id' => 10, 'qty' => 2, 'hpp_mode' => 'nol']],
+            'produk' => [['id' => 10, 'qty' => 2, 'status_retur' => 'bisa']],
         ])->assertRedirect();
 
         $this->sesi();
@@ -594,6 +627,6 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
 
         $this->assertIsArray($json);
         $this->assertSame(1, $json['recordsFiltered']);
-        $this->assertSame(0, (int) $json['data'][0]['hpp_penjualan']);
+        $this->assertSame(4000, (int) $json['data'][0]['hpp_penjualan']);
     }
 }
