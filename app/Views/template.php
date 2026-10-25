@@ -70,6 +70,7 @@
                 <div class="container-fluid mw-100">
                     <!--  Header Start -->
                     <!-- Header Start -->
+                    <?= view('inc/_topbar_theme') ?>
                     <header class="topbar sticky-top">
                         <div class="with-vertical">
                             <?php
@@ -109,10 +110,11 @@
                                 <!-- Topbar Search Bar -->
                                 <div class="d-none d-md-block position-relative me-3 w-100" style="max-width: 300px;" id="topbar-search-form">
                                     <form role="search" autocomplete="off" onsubmit="return false;">
-                                        <input type="text" id="topbar-search" class="form-control rounded-3 py-2 ps-5 text-dark" placeholder="Cari menu... (Tekan '/')">
+                                        <input type="text" id="topbar-search" class="form-control" placeholder="Cari menu..." aria-label="Cari menu">
                                         <iconify-icon icon="solar:magnifer-linear" class="text-muted position-absolute top-50 start-0 translate-middle-y ms-3"></iconify-icon>
+                                        <kbd class="tb-kbd" aria-hidden="true">/</kbd>
                                     </form>
-                                    <div class="topbar-search-results d-none position-absolute w-100 bg-white shadow-sm rounded-2 mt-1 border overflow-hidden" id="topbar-search-results" style="z-index: 1050; max-height: 350px; overflow-y: auto;"></div>
+                                    <div class="topbar-search-results d-none position-absolute w-100 overflow-hidden" id="topbar-search-results" style="z-index: 1050; max-height: 350px; overflow-y: auto;"></div>
                                 </div>
 
                                 <!-- Right Navbar Items -->
@@ -120,17 +122,17 @@
 
                                     <!-- Dark / Light Toggle -->
                                     <li class="nav-item d-flex align-items-center">
-                                        <a class="nav-link nav-icon-hover moon dark-layout" href="javascript:void(0)">
+                                        <a class="nav-link nav-icon-hover moon dark-layout" href="javascript:void(0)" aria-label="Aktifkan mode gelap">
                                             <iconify-icon icon="solar:moon-line-duotone" class="moon fs-7"></iconify-icon>
                                         </a>
-                                        <a class="nav-link nav-icon-hover sun light-layout" href="javascript:void(0)">
+                                        <a class="nav-link nav-icon-hover sun light-layout" href="javascript:void(0)" aria-label="Aktifkan mode terang">
                                             <iconify-icon icon="solar:sun-2-line-duotone" class="sun fs-7"></iconify-icon>
                                         </a>
                                     </li>
 
                                     <!-- Notifications Dropdown -->
                                     <li class="nav-item dropdown">
-                                        <a class="nav-link position-relative nav-icon-hover" href="javascript:void(0)" id="dropNotif" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <a class="nav-link position-relative nav-icon-hover" href="javascript:void(0)" id="dropNotif" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifikasi">
                                             <div class="nav-icon-hover-bg rounded-circle">
                                                 <iconify-icon icon="solar:bell-bing-line-duotone" class="fs-7 text-dark"></iconify-icon>
                                                 <?php if ($notif_total > 0): ?>
@@ -237,16 +239,18 @@
 
                                     <!-- Manualbook -->
                                     <li class="nav-item">
-                                        <a class="nav-link position-relative nav-icon-hover" href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#Modal-Manualbook">
+                                        <a class="nav-link position-relative nav-icon-hover" href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#Modal-Manualbook" aria-label="Buka manual book">
                                             <div class="nav-icon-hover-bg rounded-circle">
                                                 <iconify-icon icon="solar:book-2-line-duotone" class="fs-7 text-dark"></iconify-icon>
                                             </div>
                                         </a>
                                     </li>
 
+                                    <li class="nav-item tb-divider" aria-hidden="true"></li>
+
                                     <!-- Profile Dropdown -->
                                     <li class="nav-item dropdown">
-                                        <a class="nav-link position-relative ms-6" href="javascript:void(0)" id="drop1" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <a class="nav-link position-relative tb-profile" href="javascript:void(0)" id="drop1" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Menu profil">
                                             <div class="d-flex align-items-center flex-shrink-0">
                                                 <div class="user-profile me-sm-3 me-2">
                                                     <img src="<?= base_url('template/') ?>assets/images/profile/user-1.jpg" width="45" class="rounded-circle" alt="">
@@ -643,26 +647,6 @@
             </div>
         </div>
     </div>
-
-
-
-
-    <style>
-        .notif-count {
-            position: absolute;
-            top: 13px;
-            right: -1px;
-            background-color: #f00;
-            color: #fff;
-            font-size: 10px;
-            font-weight: bold;
-            padding: 2px 5px;
-            border-radius: 50%;
-            line-height: 1;
-            min-width: 16px;
-            text-align: center;
-        }
-    </style>
 
 
 
