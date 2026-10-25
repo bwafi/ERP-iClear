@@ -251,7 +251,7 @@ final class SparepartKeluarUnitFilterTest extends CIUnitTestCase
         ]);
 
         $this->assertStringContainsString('id="unitFilter"', $html);
-        $this->assertStringContainsString('disabled', $html);
+        $this->assertMatchesRegularExpression('/id="unitFilter"[^>]*disabled/', $html);
         $this->assertStringContainsString('Unit Beta', $html);
         $this->assertStringNotContainsString('Unit Alpha', $html);
     }
@@ -269,7 +269,7 @@ final class SparepartKeluarUnitFilterTest extends CIUnitTestCase
             'is_admin'          => false,
         ]);
 
-        $this->assertStringNotContainsString('disabled', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="unitFilter"[^>]*disabled/', $html);
         $this->assertStringContainsString('<option value="1" selected>', $html);
         $this->assertStringContainsString('<option value="2"', $html);
     }

@@ -102,6 +102,14 @@
 - **Modal:** claim note, damaged parts, and replacement parts (HPP, price 0) from the shared `/riwayat-klaim/{id}` endpoint; opened with Bootstrap 5 `getOrCreateInstance`.
 - **Rules:** one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`; the empty state disables search and skips DataTables init.
 
+### Sparepart Keluar (`.sk-*`)
+- **Scope:** `app/Views/riwayat/sparepart_keluar.php` + `app/Views/riwayat/_sparepart_keluar_theme.php`; every selector lives under `.sk-page` / `.sk-modal` and derives from `--sk-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head (breadcrumb, title, count/unit/date chips) → data panel (search → filter band: unit, date, page size, reset → table → DataTables footer).
+- **Unit filter:** only operational units (`unit.is_operational = 1`) for roles 0/1/34/40; other roles are locked to their session unit — the select is disabled, the head shows a lock chip, and the ajax endpoint enforces the same rule server-side. Head Office and other non-operational units never appear.
+- **Table:** Dokumen (invoice/service + source tag), Tanggal (date + WIB time), Sparepart (name + qty), Unit chip, right-aligned HPP and Sub Total with `tabular-nums`, and icon actions (Detail; Edit/Hapus only for Admin Root and non-claim rows). Becomes stacked cards at `767.98px` with `data-label` captions.
+- **Modals:** detail uses a definition list; edit/delete keep the existing fields, routes, and role gates. Dynamic row values are escaped before injection.
+- **Rules:** one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`.
+
 ### Detail Klaim Garansi (`.cg-*`)
 - **Scope:** `app/Views/transaksi/table_garansi/claim_detail.php` + `_claim_theme.php`; every selector lives under `.cg-page` / `.cg-modal` and derives from `--cg-*` tokens tied to the app theme. No new palette, font, or dependency.
 - **Layout:** hero (breadcrumb, back, service code, active-warranty/unit chips) → data service card (customer row, four-field grid, keluhan/keterangan notes) → damage card → numbered claim form (catatan → sparepart rusak → sparepart pengganti) → action bar. The action bar is sticky on desktop and static under `768px`.
