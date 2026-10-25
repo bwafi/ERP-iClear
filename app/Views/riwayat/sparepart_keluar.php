@@ -28,7 +28,7 @@
         <div class="row g-3 mb-3">
             <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-semibold mb-2">Unit</label>
-                <select id="unitFilter" class="form-select" onchange="reloadTable()">
+                <select id="unitFilter" class="form-select" onchange="reloadTable()" <?= $can_see_all_units ? '' : 'disabled' ?>>
                     <?php foreach ($list_unit as $u): ?>
                         <option value="<?= $u['idunit'] ?>" <?= $selected_unit == $u['idunit'] ? 'selected' : '' ?>>
                             <?= $u['NAMA_UNIT'] ?>

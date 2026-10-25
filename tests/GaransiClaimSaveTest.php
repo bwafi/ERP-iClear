@@ -155,6 +155,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $q('CREATE TABLE db_unit (
             idunit INT UNSIGNED NOT NULL AUTO_INCREMENT,
             NAMA_UNIT VARCHAR(150) NULL,
+            is_operational TINYINT NOT NULL DEFAULT 1,
             PRIMARY KEY (idunit)
         ) ENGINE=InnoDB');
 

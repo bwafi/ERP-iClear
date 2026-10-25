@@ -1429,25 +1429,53 @@ class Riwayat_Service extends BaseController
     
     public function sparepart()
     {
-        $db = \Config\Database::connect();
-
-        $selected_unit = $this->request->getGet('unit') ?? 1;
-        $selected_day  = $this->request->getGet('day');
-
-        $list_unit = $db->table('unit')
-            ->orderBy('NAMA_UNIT', 'ASC')
-            ->get()
-            ->getResultArray();
+        $scope = $this->sparepartUnitScope((int) ($this->request->getGet('unit') ?? 1));
 
         $data = [
-            'list_unit'      => $list_unit,
-            'selected_unit'  => $selected_unit,
-            'selected_day'   => $selected_day,
-            'is_admin'       => session('ID_JABATAN') == 1,
-            'body'           => 'riwayat/sparepart_keluar'
+            'list_unit'         => $scope['list'],
+            'selected_unit'     => $scope['selected'],
+            'selected_day'      => $this->request->getGet('day'),
+            'can_see_all_units' => $scope['can_see_all_units'],
+            'is_admin'          => session('ID_JABATAN') == 1,
+            'body'              => 'riwayat/sparepart_keluar'
         ];
 
         return view('template', $data);
+    }
+
+    /**
+     * Daftar & unit terpilih pada filter sparepart keluar. Hanya Admin Root,
+     * Manager, Finance, dan SPV yang boleh memilih unit; role toko lain
+     * terkunci ke unit sesi agar tidak bisa melihat unit lain lewat request
+     * manual. Unit non-operasional (mis. Head Office) tidak masuk filter.
+     *
+     * @return array{list: array<int, array<string, mixed>>, selected: int, can_see_all_units: bool}
+     */
+    private function sparepartUnitScope(int $requested): array
+    {
+        $canSeeAllUnits = GaransiClaimService::canSeeAllUnits((int) session('ID_JABATAN'));
+        $userUnit = (int) session('ID_UNIT');
+
+        $builder = \Config\Database::connect()->table('unit')->orderBy('NAMA_UNIT', 'ASC');
+        if ($canSeeAllUnits) {
+            $builder->where('is_operational', 1);
+        } else {
+            $builder->where('idunit', $userUnit);
+        }
+
+        $list = $builder->get()->getResultArray();
+        $unitIds = array_map(static fn ($u) => (int) $u['idunit'], $list);
+        $selected = $canSeeAllUnits ? $requested : $userUnit;
+
+        if (! in_array($selected, $unitIds, true)) {
+            $selected = (int) ($unitIds[0] ?? $userUnit);
+        }
+
+        return [
+            'list'              => $list,
+            'selected'          => $selected,
+            'can_see_all_units' => $canSeeAllUnits,
+        ];
     }
 
     public function sparepart_keluar_ajax()
@@ -1461,7 +1489,7 @@ class Riwayat_Service extends BaseController
         $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 1;
         $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
         
-        $selected_unit = $request->getPost('unit') ?? 1;
+        $selected_unit = $this->sparepartUnitScope((int) ($request->getPost('unit') ?? 1))['selected'];
         $selected_day = $request->getPost('day') ?? '';
         $year = date('Y');
 
