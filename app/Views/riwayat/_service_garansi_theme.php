@@ -369,6 +369,12 @@
         outline-offset: 2px;
     }
 
+    .rsg-btn:disabled,
+    .rsg-btn[disabled] {
+        opacity: .55;
+        cursor: not-allowed;
+    }
+
     .rsg-btn--primary {
         background: var(--rsg-accent-solid);
         color: #fff;
@@ -631,6 +637,16 @@
     .rsg-btn--claim:focus {
         background: var(--rsg-accent-solid);
         color: #fff;
+    }
+
+    .rsg-btn--claim:disabled,
+    .rsg-btn--claim[disabled],
+    .rsg-btn--claim:disabled:hover,
+    .rsg-btn--claim[disabled]:hover,
+    .rsg-btn--claim:disabled:focus,
+    .rsg-btn--claim[disabled]:focus {
+        background: var(--rsg-accent-soft);
+        color: var(--rsg-muted);
     }
 
     .rsg-btn--print {

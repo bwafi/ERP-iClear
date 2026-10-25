@@ -152,7 +152,7 @@ class StatusGaransi extends BaseController
             $row->no_hp = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->no_hp ?? '')));
             $row->kecamatan = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->kecamatan ?? '')));
             $row->kabupaten = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->kabupaten ?? '')));
-            $row->nama_unit = esc((string) ($row->nama_unit ?? ''));
+            $row->nama_unit = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->nama_unit ?? '')));
         }
 
         return $this->response->setJSON([

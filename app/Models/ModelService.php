@@ -359,16 +359,13 @@ class ModelService extends Model
      */
     public function getGaransiServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter = '')
     {
+        // Indeks mengikuti urutan kolom tabel server-side di garansi_service.php.
         $allowedColumns = [
             0 => 'service.no_service',
-            1 => 'service.created_at',
+            1 => 'pelanggan.nama',
             2 => 'service.tanggal_selesai',
-            3 => 'pelanggan.nama',
-            4 => 'service.no_hp',
-            5 => 'pelanggan.kecamatan',
-            6 => 'unit.NAMA_UNIT',
-            7 => 'service.garansi_hari',
-            8 => 'service.tanggal_claim_garansi'
+            3 => 'unit.NAMA_UNIT',
+            4 => 'service.garansi_hari'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';

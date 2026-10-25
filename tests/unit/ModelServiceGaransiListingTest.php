@@ -136,6 +136,17 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
         $this->assertSame('SRV-002', $hasil['data'][0]->no_service);
     }
 
+    public function testUrutanMengikutiKolomTabelBaru(): void
+    {
+        $model = new ModelService();
+
+        $pelanggan = $model->getGaransiServiceServerSide(0, 10, '', 1, 'asc', '', '', '');
+        $this->assertSame(['SRV-001', 'SRV-002'], array_column($pelanggan['data'], 'no_service'));
+
+        $unit = $model->getGaransiServiceServerSide(0, 10, '', 3, 'asc', '', '', '');
+        $this->assertSame(['SRV-002', 'SRV-001'], array_column($unit['data'], 'no_service'));
+    }
+
     public function testRiwayatKlaimFilterUnitTanggalDanUrutTerbaru(): void
     {
         $this->db->table('service')->insertBatch([
