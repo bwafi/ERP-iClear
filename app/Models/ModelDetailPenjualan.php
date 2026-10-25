@@ -107,6 +107,7 @@ class ModelDetailPenjualan extends Model
             penjualan.kode_invoice,
             penjualan.tanggal,
             barang.nama_barang,
+            barang.imei,
             unit.NAMA_UNIT')
             ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
             ->join('barang', 'barang.idbarang = detail_penjualan.barang_idbarang')

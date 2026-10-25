@@ -2,8 +2,6 @@
 
 namespace App\Controllers;
 
-use App\Models\ModelKategori;
-use App\Models\ModelDetailPembelian;
 use App\Models\ModelDetailPenjualan;
 use App\Models\ModelPenjualan;
 use Config\Database;
@@ -23,8 +21,6 @@ class Riwayat_Penjualan extends BaseController
 
 {
 
-    protected $KategoriModel;
-    protected $DetailPembelianModel;
     protected $DetailPenjualanModel;
     protected $PenjualanModel;
     protected $AuthModel;
@@ -34,8 +30,6 @@ class Riwayat_Penjualan extends BaseController
 
     public function __construct()
     {
-        $this->KategoriModel = new ModelKategori();
-        $this->DetailPembelianModel = new ModelDetailPembelian();
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
         $this->PenjualanModel = new ModelPenjualan();
         $this->AuthModel = new ModelAuth();
@@ -49,12 +43,80 @@ class Riwayat_Penjualan extends BaseController
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $data = [
             'akun' => $akun,
-            'kategori' => $this->KategoriModel->getKategori(),
-            'detail_penjualan' => $this->DetailPenjualanModel->getDetailPenjualan(),
+            'unit' => $this->UnitModel->getUnit(),
             'body' => 'riwayat/penjualan'
         ];
 
         return view('template', $data);
+    }
+
+    public function ajax()
+    {
+        $request = $this->request;
+        $draw = (int) ($request->getPost('draw') ?? 0);
+        $start = max(0, (int) ($request->getPost('start') ?? 0));
+        $length = (int) ($request->getPost('length') ?? 10);
+        $length = $length > 0 ? min($length, 100) : 10;
+
+        $search = $request->getPost('search');
+        $searchValue = is_array($search) ? trim((string) ($search['value'] ?? '')) : '';
+
+        $order = $request->getPost('order');
+        $orderRow = is_array($order) ? ($order[0] ?? []) : [];
+
+        $result = $this->PenjualanModel->getPenjualanServerSide(
+            $start,
+            $length,
+            $searchValue,
+            (int) ($orderRow['column'] ?? 1),
+            (string) ($orderRow['dir'] ?? 'desc'),
+            (string) ($request->getPost('startDate') ?? ''),
+            (string) ($request->getPost('endDate') ?? ''),
+            (string) ($request->getPost('unitFilter') ?? '')
+        );
+
+        return $this->response->setJSON([
+            'draw' => $draw,
+            'recordsTotal' => $this->PenjualanModel->countPenjualan(),
+            'recordsFiltered' => $result['recordsFiltered'],
+            'data' => $result['data'],
+        ]);
+    }
+
+    public function detail($kode_invoice)
+    {
+        $penjualan = $this->PenjualanModel->getByKodeInvoice($kode_invoice);
+        if (empty($penjualan)) {
+            return $this->response->setStatusCode(404)->setJSON(['message' => 'Invoice tidak ditemukan.']);
+        }
+
+        $items = $this->DetailPenjualanModel->getDetailPenjualanByInvoice($kode_invoice);
+        $pelanggan = !empty($penjualan->id_pelanggan)
+            ? $this->PelangganModel->getById($penjualan->id_pelanggan)
+            : null;
+        $kasir = $this->AuthModel->getById($penjualan->input_by ?? 0);
+
+        return $this->response->setJSON([
+            'kode_invoice' => $penjualan->kode_invoice,
+            'tanggal' => $penjualan->tanggal,
+            'nama_unit' => $items[0]->NAMA_UNIT ?? '',
+            'nama_pelanggan' => $pelanggan->nama ?? 'Pelanggan Umum',
+            'kasir' => $kasir->NAMA_AKUN ?? '-',
+            'total_ppn' => (int) ($penjualan->total_ppn ?? 0),
+            'total' => (int) ($penjualan->total_penjualan ?? 0),
+            'boleh_cetak' => (int) ($penjualan->id_pelanggan ?? 0) > 0,
+            'items' => array_map(static function ($item) {
+                return [
+                    'nama_barang' => $item->nama_barang,
+                    'imei' => $item->imei,
+                    'jumlah' => (int) $item->jumlah,
+                    'hpp' => (int) $item->hpp_penjualan,
+                    'harga' => (int) $item->harga_penjualan,
+                    'diskon' => (int) $item->diskon_penjualan,
+                    'sub_total' => (int) $item->sub_total,
+                ];
+            }, $items),
+        ]);
     }
 
     public function export()

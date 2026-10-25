@@ -283,6 +283,7 @@ $routes->post('riwayat_pembelian/export', 'Riwayat_pembelian::export', ['filter'
 
 //riwayat penjualan
 $routes->get('riwayat_penjualan', 'Riwayat_Penjualan::index', ['filter' => 'auth']);
+$routes->post('riwayat_penjualan/ajax', 'Riwayat_Penjualan::ajax', ['filter' => 'auth']);
 $routes->get('riwayat_penjualan/detail/(:segment)', 'Riwayat_Penjualan::detail/$1', ['filter' => 'auth']);
 $routes->post('riwayat_penjualan/export', 'Riwayat_Penjualan::export', ['filter' => 'auth']);
 $routes->get('riwayat_penjualan/struk/(:segment)', 'Riwayat_Penjualan::cetak_struk/$1', ['filter' => 'auth']);
