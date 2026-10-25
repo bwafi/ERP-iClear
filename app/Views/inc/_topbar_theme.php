@@ -272,7 +272,7 @@
     }
 
     header.topbar .tb-profile .user-profile {
-        margin-right: 0 !important;
+        margin-right: 1rem !important;
     }
 
     header.topbar .tb-profile .user-profile img {
