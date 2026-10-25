@@ -3,7 +3,7 @@
     <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 p-4">
         <div>
             <h4 class="fw-bold mb-1 text-dark">Omset Bulanan</h4>
-            <p class="fs-3 text-muted mb-0">Laporan ringkasan penjualan, performa produk, dan tren pendapatan harian</p>
+            <p class="fs-3 text-muted mb-0">Laporan ringkasan penjualan, performa produk, dan tren pendapatan harian (net HPP Klaim service)</p>
         </div>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0 bg-transparent p-0">
@@ -102,7 +102,7 @@
                         <iconify-icon icon="solar:chart-bold-duotone" width="28" height="28"></iconify-icon>
                     </div>
                 </div>
-                <small class="text-muted">Akumulasi pendapatan hari ini</small>
+                <small class="text-muted">Akumulasi pendapatan hari ini (net HPP Klaim service)</small>
                 <?php if ((int)($dp_hari_ini ?? 0) > 0): ?>
                     <small class="text-success fw-semibold d-block mt-2">
                         <iconify-icon icon="solar:hand-money-bold-duotone" aria-hidden="true"></iconify-icon>
@@ -137,6 +137,7 @@
                     <?php else: ?>
                         <span class="text-muted">±0%</span>
                     <?php endif; ?>
+                    · net HPP Klaim service
                 </small>
             </div>
         </div>
@@ -330,7 +331,7 @@
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
             <div>
                 <h5 class="fw-bold mb-1">Grafik Omset Harian</h5>
-                <small class="text-muted">Tren pendapatan per hari bulan <?= esc($periodeLabel) ?>. Pilih satu atau beberapa bulan pembanding untuk membandingkan.</small>
+                <small class="text-muted">Tren pendapatan per hari bulan <?= esc($periodeLabel) ?> (net HPP Klaim service). Pilih satu atau beberapa bulan pembanding untuk membandingkan.</small>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <div class="dropdown">
@@ -427,7 +428,7 @@
         </div>
         <div class="alert alert-light border mt-3 mb-0 d-flex align-items-center gap-2 py-2 px-3 text-muted fs-2">
             <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
-            <span>Kolom <strong>Omset</strong> murni menghitung nilai penjualan/penyerahan barang/jasa. Tombol <strong>Arus Kas</strong> menampilkan mutasi fisik kas/bank masuk dan keluar pada tanggal tersebut.</span>
+            <span>Kolom <strong>Omset</strong> menghitung nilai penjualan/penyerahan barang/jasa dikurangi HPP Klaim service pada tanggal klaim. Tombol <strong>Arus Kas</strong> menampilkan mutasi fisik kas/bank masuk dan keluar pada tanggal tersebut, plus HPP Klaim non-kas.</span>
         </div>
     </div>
 </div>
@@ -962,7 +963,7 @@
             <div class="alert alert-info border-0 shadow-sm d-flex gap-2 align-items-start mb-3 p-3">
                 <iconify-icon icon="solar:info-circle-bold-duotone" width="20" height="20" class="flex-shrink-0 mt-1"></iconify-icon>
                 <div class="fs-2">
-                    Angka di bawah adalah <strong>mutasi fisik kas/bank</strong> (bukan omset). DP service masuk pada tanggal diterima dan dikeluarkan dari sisa tagihan saat service selesai agar tidak terhitung dua kali.
+                    Angka di bawah adalah <strong>mutasi fisik kas/bank</strong> (bukan omset). HPP Klaim service yang tidak bisa retur ditampilkan terpisah karena bukan mutasi kas. DP service masuk pada tanggal diterima dan dikeluarkan dari sisa tagihan saat service selesai agar tidak terhitung dua kali.
                 </div>
             </div>
         `;
@@ -990,6 +991,51 @@
             subtotal.keluar_transfer,
             true
         );
+
+        // HPP Klaim service (non-kas): pengurang omset, bukan mutasi kas.
+        const hppKlaim = data.hpp_klaim || [];
+        if (hppKlaim.length) {
+            const totalHppKlaim = hppKlaim.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+            html += `
+                <div class="card border shadow-none mb-3 overflow-hidden">
+                    <div class="card-header bg-warning-subtle border-bottom d-flex align-items-center gap-2 py-2 px-3">
+                        <iconify-icon icon="solar:info-circle-bold-duotone" width="18" height="18" class="text-warning-emphasis"></iconify-icon>
+                        <span class="fw-bold text-dark fs-3">HPP Klaim (non-kas)</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr class="bg-light-subtle text-muted fs-2">
+                                    <th class="ps-3 border-bottom text-nowrap">No Service</th>
+                                    <th class="border-bottom">Teknisi / Barang</th>
+                                    <th class="text-end border-bottom text-nowrap">Qty</th>
+                                    <th class="text-end pe-3 border-bottom text-nowrap">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${hppKlaim.map((row) => `
+                                    <tr>
+                                        <td class="ps-3 fs-2 text-nowrap">${escHtml(row.no_service || '-')}</td>
+                                        <td class="fs-2 text-break">${escHtml(row.nama_teknisi || '-')}<br><span class="text-muted">${escHtml(row.nama_barang || '-')}</span></td>
+                                        <td class="text-end fs-2">${Number(row.qty) || 0}</td>
+                                        <td class="text-end pe-3 fw-semibold fs-2 text-danger">${formatRupiah(row.total)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-light">
+                                    <th colspan="3" class="text-end fs-2 ps-3 border-top">Total HPP Klaim</th>
+                                    <th class="text-end fs-2 pe-3 border-top text-danger">${formatRupiah(totalHppKlaim)}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    <div class="card-footer bg-light border-top py-2 px-3">
+                        <small class="text-muted fs-2">Bukan mutasi kas. HPP klaim mengurangi omset, bukan saldo kas/bank.</small>
+                    </div>
+                </div>
+            `;
+        }
 
         // Transfer Internal
         if (internal && internal.length) {

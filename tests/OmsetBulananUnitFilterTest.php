@@ -57,7 +57,7 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
 
         foreach ([
             'unit', 'akun', 'jabatan', 'menu',
-            'stok_barang', 'service', 'pelanggan',
+            'stok_barang', 'service', 'service_sparepart', 'pelanggan',
             'penjualan', 'detail_penjualan', 'barang',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
@@ -83,7 +83,14 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
                 idservice INT PRIMARY KEY, status_service INT NULL,
                 pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL,
                 tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
-                tipe_hp TEXT NULL, created_at TEXT NULL)');
+                tipe_hp TEXT NULL, created_at TEXT NULL,
+                no_service TEXT NULL, service_by INT NULL)');
+        $q('CREATE TABLE service_sparepart (
+                idservice_sparepart INTEGER PRIMARY KEY AUTO_INCREMENT,
+                service_idservice INT NULL, barang_idbarang INT NULL,
+                unit_idunit INT NULL, hpp_omset_garansi REAL NULL,
+                jumlah_tambahan_garansi INT NULL, status_retur TEXT NULL,
+                tanggal_hpp_klaim TEXT NULL)');
         $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL, kabupaten TEXT NULL, kecamatan TEXT NULL, deleted TEXT NULL)');
 
         // Tabel laporan omset.
@@ -281,5 +288,30 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
 
         // Dua belas bulan ke belakang: yang tertua adalah Februari 2024.
         $this->assertStringContainsString('"value":"2024-02"', $html);
+    }
+
+    public function testOmsetBulananDikurangiHppKlaimService(): void
+    {
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO service
+            (idservice, status_service, unit_idunit, tanggal_selesai, created_at, no_service, service_by)
+            VALUES (9001, 4, 1, '2026-10-10 10:00:00', '2026-10-10 09:00:00', 'SRV-TEST', 43)");
+        $this->db->query("INSERT INTO penjualan
+            (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan)
+            VALUES (9101, 'INV-TEST', '2026-10-10 10:00:00', 1, NULL)");
+        $this->db->query("INSERT INTO detail_penjualan
+            (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan)
+            VALUES (9101, NULL, 1000000, 200000)");
+        $this->db->query("INSERT INTO service_sparepart
+            (service_idservice, barang_idbarang, unit_idunit, hpp_omset_garansi,
+             jumlah_tambahan_garansi, status_retur, tanggal_hpp_klaim)
+            VALUES (9001, NULL, 1, 50000, 1, 'tidak_bisa', '2026-10-10')");
+
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=1&bulan=10&tahun=2026');
+
+        // Penjualan 1.000.000 - HPP 200.000 = 800.000; klaim 50.000 -> 750.000.
+        $this->assertStringContainsString('Rp 750.000', $html);
+        $this->assertStringContainsString('total: 750000', $html);
     }
 }

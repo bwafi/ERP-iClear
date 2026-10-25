@@ -90,6 +90,22 @@ class TutupKasir extends BaseController
         ];
     }
 
+    /**
+     * HPP Klaim service per tanggal_hpp_klaim, untuk mengurangi omset.
+     *
+     * @return array<string, int>
+     */
+    private function hppKlaimHarian(string $start, string $end, int $unit): array
+    {
+        $harian = [];
+        foreach ((new \App\Models\ModelHppKlaimLoss())->getLoss($start, $end, $unit) as $row) {
+            $tanggal = (string) $row->tanggal_hpp_klaim;
+            $harian[$tanggal] = ($harian[$tanggal] ?? 0) + (int) $row->total;
+        }
+
+        return $harian;
+    }
+
     public function index()
     {
         $today = date('Y-m-d');
@@ -350,6 +366,11 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
+        // Omset halaman ini = penjualan - HPP Klaim service pada tanggal klaim.
+        $awalBulan = sprintf('%04d-%02d-01', (int) $tahun, (int) $bulan);
+        $hppKlaimBulan = $this->hppKlaimHarian($awalBulan, date('Y-m-t', strtotime($awalBulan)), (int) $unit);
+        $omset_bulan -= array_sum($hppKlaimBulan);
+
         // HITUNG PERTUMBUHAN OMSET VS BULAN SEBELUMNYA
         $omset_bulan_sebelum = $this->db->table('detail_penjualan')
             ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
@@ -360,6 +381,10 @@ class TutupKasir extends BaseController
             ->get()
             ->getRow()
             ->total ?? 0;
+
+        $awalBulanSebelum = sprintf('%04d-%02d-01', (int) $tahunSebelum, (int) $bulanSebelum);
+        $hppKlaimBulanSebelum = $this->hppKlaimHarian($awalBulanSebelum, date('Y-m-t', strtotime($awalBulanSebelum)), (int) $unit);
+        $omset_bulan_sebelum -= array_sum($hppKlaimBulanSebelum);
 
         if ($omset_bulan_sebelum > 0) {
             $pertumbuhan_omset = (($omset_bulan - $omset_bulan_sebelum) / $omset_bulan_sebelum) * 100;
@@ -560,6 +585,9 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
+        $omset_hari_ini -= (new \App\Models\ModelHppKlaimLoss())
+            ->getTotalLoss(date('Y-m-d'), date('Y-m-d'), (int) $unit);
+
         // DP tetap terpisah dari omset penjualan, tetapi ditampilkan sebagai
         // informasi tambahan di kartu Omset Hari Ini untuk unit yang dipilih.
         $dpHariIni = (new \App\Services\Finance\TutupKasirSourceDefinition($this->db))
@@ -616,6 +644,10 @@ class TutupKasir extends BaseController
             $dataHarian[$row->tgl] = $row->total;
         }
 
+        foreach ($hppKlaimBulan as $tanggal => $total) {
+            $dataHarian[$tanggal] = ($dataHarian[$tanggal] ?? 0) - $total;
+        }
+
         // ==========================
         // DATA HARIAN BULAN PEMBANDING (12 bulan ke belakang)
         // ==========================
@@ -644,6 +676,15 @@ class TutupKasir extends BaseController
 
         foreach ($resultsPembanding as $row) {
             $dataHarianPembanding[$row->tgl] = $row->total;
+        }
+
+        $hppKlaimPembanding = $this->hppKlaimHarian(
+            $awalBulanTerlama,
+            date('Y-m-d', strtotime($awalPeriodeTerpilih . ' -1 day')),
+            (int) $unit
+        );
+        foreach ($hppKlaimPembanding as $tanggal => $total) {
+            $dataHarianPembanding[$tanggal] = ($dataHarianPembanding[$tanggal] ?? 0) - $total;
         }
 
         $listBulanPembanding = [];

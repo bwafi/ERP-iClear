@@ -218,4 +218,24 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
         $this->assertSame('B', $result['masuk']['tunai'][0]['keterangan']);
         $this->assertSame('A', $result['masuk']['tunai'][1]['keterangan']);
     }
+
+    public function testHppKlaimTampilTanpaMengubahNetCashFlow(): void
+    {
+        $result = $this->service()->assemble([
+            'hpp_klaim' => [
+                (object) [
+                    'no_service' => 'SRV-1',
+                    'nama_teknisi' => 'Teknisi',
+                    'nama_barang' => 'LCD',
+                    'qty' => 1,
+                    'total' => 242000,
+                ],
+            ],
+        ]);
+
+        $this->assertCount(1, $result['hpp_klaim']);
+        $this->assertSame(242000, $result['total_hpp_klaim']);
+        $this->assertSame(0, $result['net']);
+        $this->assertSame('SRV-1', $result['hpp_klaim'][0]['no_service']);
+    }
 }

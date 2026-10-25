@@ -55,6 +55,7 @@ class DailyCashFlowService
      *   masuk: array{tunai: array, transfer: array},
      *   keluar: array{tunai: array, transfer: array},
      *   transfer_internal: array,
+     *   hpp_klaim: array, total_hpp_klaim: int,
      *   subtotal: array, total_masuk: int, total_keluar: int, net: int
      * }
      */
@@ -74,6 +75,7 @@ class DailyCashFlowService
             'dp_service_selesai' => array_map(static fn (array $row) => (object) $row, $dpServiceSelesai),
             'kas_keluar' => $this->fetchKasKeluar($unitId, $tanggal),
             'ledger'    => $this->fetchLedger($unitId, $tanggal),
+            'hpp_klaim' => (new \App\Models\ModelHppKlaimLoss())->getLoss($tanggal, $tanggal, $unitId),
         ]);
     }
 
@@ -233,6 +235,19 @@ class DailyCashFlowService
             );
         }
 
+        // HPP Klaim bukan mutasi kas: tampil sebagai informasi, tidak masuk
+        // subtotal maupun net cash flow.
+        $hppKlaim = [];
+        foreach ($sources['hpp_klaim'] ?? [] as $row) {
+            $hppKlaim[] = [
+                'no_service'   => (string) ($row->no_service ?? ''),
+                'nama_teknisi' => (string) ($row->nama_teknisi ?? ''),
+                'nama_barang'  => (string) ($row->nama_barang ?? ''),
+                'qty'          => (int) ($row->qty ?? 0),
+                'total'        => (int) ($row->total ?? 0),
+            ];
+        }
+
         $subtotal = [
             'masuk_tunai'    => $this->total($masuk['tunai']),
             'masuk_transfer' => $this->total($masuk['transfer']),
@@ -255,6 +270,8 @@ class DailyCashFlowService
                 'transfer' => $this->urutkan($keluar['transfer']),
             ],
             'transfer_internal' => $this->urutkan($internal),
+            'hpp_klaim' => $hppKlaim,
+            'total_hpp_klaim' => array_sum(array_column($hppKlaim, 'total')),
             'subtotal' => $subtotal,
             'total_masuk' => $totalMasuk,
             'total_keluar' => $totalKeluar,

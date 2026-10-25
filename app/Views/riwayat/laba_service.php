@@ -330,7 +330,8 @@ function updateCardTotals() {
     });
 
     document.getElementById('totalHPP').textContent = formatRupiah(totalHPP);
-    document.getElementById('totalService').textContent = formatRupiah(totalService);
+    // Kartu omset net; baris per service tetap bruto sesuai spec.
+    document.getElementById('totalService').textContent = formatRupiah(totalService - totalHppKlaim);
     document.getElementById('totalDiskon').textContent = formatRupiah(totalDiskon);
     document.getElementById('totalHppKlaim').textContent = formatRupiah(totalHppKlaim);
     document.getElementById('hppKlaimSectionTotal').textContent = formatRupiah(totalHppKlaim);
