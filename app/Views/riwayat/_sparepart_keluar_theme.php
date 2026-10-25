@@ -42,8 +42,6 @@
         --sk-radius: 16px;
         --sk-radius-sm: 10px;
         --sk-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 18px 42px -36px rgba(16, 24, 40, .35);
-        max-width: 1280px;
-        margin-inline: auto;
         color: var(--sk-ink);
         font-size: .875rem;
     }
@@ -265,7 +263,8 @@
     /* ===== Filter ===== */
     .sk-filter {
         display: grid;
-        grid-template-columns: minmax(200px, 1.2fr) minmax(170px, .8fr) 120px auto;
+        grid-template-columns: minmax(200px, 280px) minmax(170px, 220px) 120px auto;
+        justify-content: start;
         align-items: end;
         gap: 14px;
         padding: 16px 24px;

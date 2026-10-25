@@ -104,11 +104,11 @@
 
 ### Sparepart Keluar (`.sk-*`)
 - **Scope:** `app/Views/riwayat/sparepart_keluar.php` + `app/Views/riwayat/_sparepart_keluar_theme.php`; every selector lives under `.sk-page` / `.sk-modal` and derives from `--sk-*` tokens tied to the app theme. No new palette, font, or dependency.
-- **Layout:** page head (breadcrumb, title, count/unit/date chips) → data panel (search → filter band: unit, date, page size, reset → table → DataTables footer).
+- **Layout:** full-width di layar lebar — `.sk-page` tidak dibatasi `max-width` 1280px sehingga mengikuti lebar penuh container (`mw-100`), menyisakan hanya padding container; filter tetap ringkas dan rata kiri (maks 280px/220px untuk unit/tanggal) agar kontrol tidak ikut melebar; page head (breadcrumb, title, count/unit/date chips) → data panel (search → filter band: unit, date, page size, reset → table → DataTables footer).
 - **Unit filter:** only operational units (`unit.is_operational = 1`) for roles 0/1/34/40; other roles are locked to their session unit — the select is disabled, the head shows a lock chip, and the ajax endpoint enforces the same rule server-side. Head Office and other non-operational units never appear.
 - **Table:** Dokumen (invoice/service + source tag), Tanggal (date + WIB time), Sparepart (name + qty), Unit chip, right-aligned HPP and Sub Total with `tabular-nums`, and icon actions (Detail; Edit/Hapus only for Admin Root and non-claim rows). Becomes stacked cards at `767.98px` with `data-label` captions.
 - **Modals:** detail uses a definition list; edit/delete keep the existing fields, routes, and role gates. Dynamic row values are escaped before injection.
-- **Rules:** one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`.
+- **Rules:** layout full-width hanya untuk halaman ini (halaman lain tetap 1280px); one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`.
 
 ### Detail Klaim Garansi (`.cg-*`)
 - **Scope:** `app/Views/transaksi/table_garansi/claim_detail.php` + `_claim_theme.php`; every selector lives under `.cg-page` / `.cg-modal` and derives from `--cg-*` tokens tied to the app theme. No new palette, font, or dependency.
