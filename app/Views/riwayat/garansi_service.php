@@ -23,11 +23,22 @@
                 <label class="form-label fw-semibold mb-2">Tanggal Selesai (sampai)</label>
                 <input type="date" id="endDate" class="form-control">
             </div>
-            <div class="col-lg-4 col-md-6">
+            <?php if (!empty($can_see_all_units)): ?>
+                <div class="col-lg-2 col-md-6">
+                    <label class="form-label fw-semibold mb-2">Unit</label>
+                    <select id="unitFilter" class="form-select">
+                        <option value="">Semua Unit</option>
+                        <?php foreach (($unit ?? []) as $u): ?>
+                            <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            <?php endif; ?>
+            <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-semibold mb-2">Search</label>
-                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, alamat...">
+                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, kecamatan/kabupaten...">
             </div>
-            <div class="col-lg-2 col-md-3">
+            <div class="col-lg-1 col-md-3">
                 <label class="form-label fw-semibold mb-2">Show</label>
                 <select id="pageLength" class="form-select">
                     <option value="10">10</option>
@@ -51,6 +62,7 @@
                 <input type="hidden" name="sumber" value="garansi">
                 <input type="hidden" name="tanggal_awal" id="exportStartDate">
                 <input type="hidden" name="tanggal_akhir" id="exportEndDate">
+                <input type="hidden" name="unit" id="exportUnit">
                 <button type="submit" class="btn btn-danger">
                     <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
                     Export
@@ -78,7 +90,10 @@
                             <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
                         </th>
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">Kecamatan / Kabupaten</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
                         </th>
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Status garansi</h6>
@@ -134,6 +149,7 @@
         const endDateInput = document.getElementById('endDate');
         const searchBox = document.getElementById('searchBox');
         const pageLength = document.getElementById('pageLength');
+        const unitFilter = document.getElementById('unitFilter');
 
         document.getElementById('exportStartDate').value = '';
         document.getElementById('exportEndDate').value = '';
@@ -170,6 +186,7 @@
                 data: function(d) {
                     d.startDate = startDateInput.value;
                     d.endDate = endDateInput.value;
+                    d.unitFilter = unitFilter ? unitFilter.value : '';
                     d.search = {
                         value: searchBox.value
                     };
@@ -199,7 +216,25 @@
                     data: 'no_hp'
                 },
                 {
-                    data: 'alamat'
+                    data: null,
+                    render: function(data, type, row) {
+                        const kecamatan = (row.kecamatan ?? '').trim();
+                        const kabupaten = (row.kabupaten ?? '').trim();
+                        if (!kecamatan && !kabupaten) {
+                            return '-';
+                        }
+                        const baris = [];
+                        if (kecamatan) {
+                            baris.push(`<span>${kecamatan}</span>`);
+                        }
+                        if (kabupaten) {
+                            baris.push(`<span class="text-muted fs-2">${kabupaten}</span>`);
+                        }
+                        return `<div class="d-flex flex-column lh-sm">${baris.join('')}</div>`;
+                    }
+                },
+                {
+                    data: 'nama_unit'
                 },
                 {
                     data: 'status_garansi',
@@ -266,6 +301,9 @@
 
         startDateInput.addEventListener('change', filterData);
         endDateInput.addEventListener('change', filterData);
+        if (unitFilter) {
+            unitFilter.addEventListener('change', filterData);
+        }
 
         // WhatsApp button (delegated agar tetap jalan untuk baris dari server)
         $(document).on('click', '.btn-wa', function() {
@@ -308,14 +346,21 @@
         dataTable.ajax.reload();
         document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
         document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
+        const unitFilter = document.getElementById('unitFilter');
+        document.getElementById('exportUnit').value = unitFilter ? unitFilter.value : '';
     }
 
     function resetFilter() {
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
         document.getElementById('searchBox').value = '';
+        const unitFilter = document.getElementById('unitFilter');
+        if (unitFilter) {
+            unitFilter.value = '';
+        }
         document.getElementById('exportStartDate').value = '';
         document.getElementById('exportEndDate').value = '';
+        document.getElementById('exportUnit').value = '';
         dataTable.ajax.reload();
     }
 </script>

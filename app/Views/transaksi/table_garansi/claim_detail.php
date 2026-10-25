@@ -1,7 +1,18 @@
+<?= $this->include('transaksi/table_garansi/_claim_theme') ?>
 <?= $this->include('partials/sparepart_picker_style') ?>
 <?php
 $tglSelesai = !empty($service->tanggal_selesai) ? date('d-m-Y', strtotime((string) $service->tanggal_selesai)) : '-';
 $tglGaransi = $warranty_end ? $warranty_end->format('d-m-Y') : '-';
+
+$namaPelanggan = trim((string) ($service->nama ?? '')) ?: '-';
+$noHp = trim((string) ($service->no_hp ?? '')) ?: '-';
+$lokasi = implode(', ', array_filter([
+    trim((string) ($service->kecamatan ?? '')),
+    trim((string) ($service->kabupaten ?? '')),
+]));
+$unitLabel = trim((string) ($unit_label ?? '')) ?: ('Unit ' . (int) ($service->unit_idunit ?? 0));
+$inisial = mb_strtoupper(mb_substr($namaPelanggan, 0, 1));
+$jumlahKerusakan = count($oldkerusakan ?? []);
 
 // Sparepart yang sudah dipakai di service ini otomatis dicatat sebagai rusak.
 $rusakAwal = [];
@@ -21,120 +32,168 @@ foreach (($service_sparepart ?? []) as $item) {
     $rusakAwal[$id]['qty'] += $qty;
 }
 ?>
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Klaim Garansi</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('garansi_service') ?>">Garansi Service</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">Klaim</li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
-<div class="card w-100 position-relative overflow-hidden mb-4">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <div>
-                <h5 class="mb-1"><?= esc($service->no_service ?? '-') ?></h5>
-                <span class="text-muted"><?= esc($status_garansi) ?></span>
-            </div>
-            <a href="<?= base_url('garansi_service') ?>" class="btn btn-light">
-                <i class="bi bi-arrow-left"></i> Kembali
+<div class="cg-page">
+    <header class="cg-hero">
+        <div class="cg-hero__top">
+            <nav aria-label="breadcrumb">
+                <ol class="cg-crumb">
+                    <li><a href="<?= base_url('garansi_service') ?>">Garansi Service</a></li>
+                    <li aria-hidden="true">/</li>
+                    <li aria-current="page">Klaim Garansi</li>
+                </ol>
+            </nav>
+            <a href="<?= base_url('garansi_service') ?>" class="cg-back">
+                <iconify-icon icon="solar:arrow-left-linear" width="16" height="16"></iconify-icon>
+                Kembali
             </a>
         </div>
 
-        <div class="row g-3">
-            <div class="col-md-4">
-                <small class="text-muted d-block">Pelanggan</small>
-                <strong><?= esc($service->nama ?? '-') ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">No. HP</small>
-                <strong><?= esc($service->no_hp ?? '-') ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">Alamat</small>
-                <strong><?= esc($service->alamat ?? '-') ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">Tipe HP</small>
-                <strong><?= esc($service->tipe_hp ?? '-') ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">IMEI</small>
-                <strong><?= esc($service->imei ?? '-') ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">Tanggal Selesai</small>
-                <strong><?= esc($tglSelesai) ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">Garansi Sampai</small>
-                <strong><?= esc($tglGaransi) ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">Keluhan</small>
-                <strong><?= esc($service->keluhan ?? '-') ?></strong>
-            </div>
-            <div class="col-md-4">
-                <small class="text-muted d-block">Keterangan</small>
-                <strong><?= esc($service->keterangan ?? '-') ?></strong>
+        <span class="cg-eyebrow">Garansi Service</span>
+        <h1 class="cg-title">Klaim Garansi</h1>
+        <div class="cg-chips">
+            <span class="cg-chip cg-chip--code">
+                <iconify-icon icon="solar:hashtag-linear" width="15" height="15"></iconify-icon>
+                <?= esc($service->no_service ?? '-') ?>
+            </span>
+            <span class="cg-status" title="<?= esc($status_garansi) ?>">Garansi aktif</span>
+            <span class="cg-chip">
+                <iconify-icon icon="solar:calendar-mark-linear" width="15" height="15"></iconify-icon>
+                Garansi s.d. <?= esc($tglGaransi) ?>
+            </span>
+            <span class="cg-chip">
+                <iconify-icon icon="solar:shop-2-linear" width="15" height="15"></iconify-icon>
+                <?= esc($unitLabel) ?>
+            </span>
+        </div>
+    </header>
+
+    <section class="cg-card" aria-labelledby="cg-service-title">
+        <div class="cg-card__head">
+            <div>
+                <h2 class="cg-card__title" id="cg-service-title">Data Service</h2>
+                <p class="cg-card__sub">Periksa perangkat dan pelanggan sebelum mencatat klaim.</p>
             </div>
         </div>
-    </div>
-</div>
 
-<div class="card w-100 position-relative overflow-hidden mb-4">
-    <div class="card-body">
-        <h5 class="mb-3">Kerusakan Service</h5>
+        <div class="cg-person">
+            <span class="cg-avatar" aria-hidden="true"><?= esc($inisial) ?></span>
+            <div>
+                <span class="cg-person__name"><?= esc($namaPelanggan) ?></span>
+                <span class="cg-person__sub">
+                    <span>
+                        <iconify-icon icon="solar:phone-linear" width="14" height="14"></iconify-icon>
+                        <?= esc($noHp) ?>
+                    </span>
+                </span>
+            </div>
+            <span class="cg-person__loc">
+                <iconify-icon icon="solar:map-point-linear" width="14" height="14"></iconify-icon>
+                <?= esc($lokasi !== '' ? $lokasi : '-') ?>
+            </span>
+        </div>
+
+        <dl class="cg-grid">
+            <div>
+                <dt>Tipe HP</dt>
+                <dd><?= esc($service->tipe_hp ?? '-') ?></dd>
+            </div>
+            <div>
+                <dt>IMEI</dt>
+                <dd><?= esc($service->imei ?? '-') ?></dd>
+            </div>
+            <div>
+                <dt>Tanggal Selesai</dt>
+                <dd><?= esc($tglSelesai) ?></dd>
+            </div>
+            <div>
+                <dt>Garansi Sampai</dt>
+                <dd><?= esc($tglGaransi) ?></dd>
+            </div>
+        </dl>
+
+        <div class="cg-notes">
+            <div class="cg-note">
+                <span>Keluhan</span>
+                <p><?= esc($service->keluhan ?? '-') ?></p>
+            </div>
+            <div class="cg-note">
+                <span>Keterangan</span>
+                <p><?= esc($service->keterangan ?? '-') ?></p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cg-card" aria-labelledby="cg-damage-title">
+        <div class="cg-card__head">
+            <div>
+                <h2 class="cg-card__title" id="cg-damage-title">Kerusakan Service</h2>
+                <p class="cg-card__sub">Temuan awal dari teknisi saat service diterima.</p>
+            </div>
+            <span class="cg-count"><?= $jumlahKerusakan ?> temuan</span>
+        </div>
+
         <?php if (!empty($oldkerusakan)): ?>
-            <ul class="mb-0">
+            <ul class="cg-damage-list">
                 <?php foreach ($oldkerusakan as $kerusakan): ?>
-                    <li>
-                        <?= esc($fungsiMap[(int) ($kerusakan->fungsi_idfungsi ?? 0)] ?? 'Fungsi #' . ($kerusakan->fungsi_idfungsi ?? '-')) ?>
-                        <?php if (!empty($kerusakan->keterangan)): ?>
-                            <span class="text-muted">- <?= esc($kerusakan->keterangan) ?></span>
-                        <?php endif; ?>
+                    <li class="cg-damage-item">
+                        <iconify-icon icon="solar:danger-triangle-line-duotone" width="17" height="17"></iconify-icon>
+                        <div>
+                            <strong><?= esc($fungsiMap[(int) ($kerusakan->fungsi_idfungsi ?? 0)] ?? 'Fungsi #' . ($kerusakan->fungsi_idfungsi ?? '-')) ?></strong>
+                            <?php if (!empty($kerusakan->keterangan)): ?>
+                                <span><?= esc($kerusakan->keterangan) ?></span>
+                            <?php endif; ?>
+                        </div>
                     </li>
                 <?php endforeach; ?>
             </ul>
         <?php else: ?>
-            <p class="text-muted mb-0">Tidak ada data kerusakan.</p>
+            <p class="cg-empty mb-0">Tidak ada data kerusakan.</p>
         <?php endif; ?>
-    </div>
-</div>
+    </section>
 
-<form action="<?= base_url('claim_garansi') ?>" method="post" id="form-claim-garansi">
-    <?= csrf_field() ?>
-    <input type="hidden" name="idservice" value="<?= (int) $service->idservice ?>">
+    <form action="<?= base_url('claim_garansi') ?>" method="post" id="form-claim-garansi">
+        <?= csrf_field() ?>
+        <input type="hidden" name="idservice" value="<?= (int) $service->idservice ?>">
 
-    <div class="card w-100 position-relative overflow-hidden mb-4">
-        <div class="card-body">
-            <label for="catatan" class="form-label fw-semibold">Catatan Klaim <span class="text-danger">*</span></label>
+        <section class="cg-card" aria-labelledby="cg-note-title">
+            <div class="cg-card__head">
+                <div class="cg-step__main">
+                    <span class="cg-step__num" aria-hidden="true">1</span>
+                    <div class="cg-step__body">
+                        <h2 class="cg-card__title" id="cg-note-title">Catatan Klaim</h2>
+                        <p class="cg-card__sub">Jelaskan alasan klaim supaya riwayat garansi mudah ditelusuri.</p>
+                    </div>
+                </div>
+                <span class="cg-req">Wajib</span>
+            </div>
+            <label for="catatan" class="visually-hidden">Catatan klaim</label>
             <textarea name="catatan" id="catatan" class="form-control" rows="3" required
                 placeholder="Contoh: LCD pecah karena terbentur"><?= esc(old('catatan')) ?></textarea>
-            <small class="text-muted">Wajib diisi, jelaskan alasan klaim garansi.</small>
-        </div>
-    </div>
+            <p class="cg-hint">
+                <iconify-icon icon="solar:info-circle-linear" width="15" height="15"></iconify-icon>
+                Wajib diisi, jelaskan alasan klaim garansi.
+            </p>
+        </section>
 
-    <div class="card w-100 position-relative overflow-hidden mb-4">
-        <div class="card-body">
-            <div class="mb-3">
-                <h5 class="mb-1">Sparepart Rusak</h5>
-                <p class="text-muted mb-0">Pilih sparepart service yang diklaim; dicatat untuk laporan, tidak mengurangi stok.</p>
+        <section class="cg-card" aria-labelledby="cg-damaged-title">
+            <div class="cg-card__head">
+                <div class="cg-step__main">
+                    <span class="cg-step__num" aria-hidden="true">2</span>
+                    <div class="cg-step__body">
+                        <h2 class="cg-card__title" id="cg-damaged-title">Sparepart Rusak</h2>
+                        <p class="cg-card__sub">Pilih sparepart service yang diklaim; dicatat untuk laporan, tidak mengurangi stok.</p>
+                    </div>
+                </div>
+                <span class="cg-count" id="damagedSelectedCount">0 dipilih</span>
             </div>
 
             <div class="table-responsive">
-                <table class="table border align-middle mb-0">
-                    <thead class="text-dark fs-4">
+                <table class="cg-table cg-table--damaged">
+                    <thead>
                         <tr>
                             <th style="width: 70px;" class="text-center">Klaim</th>
                             <th>Nama Sparepart</th>
-                            <th style="width: 120px;">Qty</th>
+                            <th style="width: 110px;">Qty</th>
                             <th>Keterangan</th>
                         </tr>
                     </thead>
@@ -144,80 +203,99 @@ foreach (($service_sparepart ?? []) as $item) {
                             <tr id="damaged-row-<?= $item['id'] ?>">
                                 <td class="text-center">
                                     <input type="checkbox" class="form-check-input damaged-select"
-                                        name="barang_rusak[<?= $damagedIndex ?>][id]" value="<?= $item['id'] ?>">
+                                        name="barang_rusak[<?= $damagedIndex ?>][id]" value="<?= $item['id'] ?>"
+                                        aria-label="Klaim <?= esc($item['nama'], 'attr') ?>">
                                 </td>
                                 <td><?= esc($item['nama']) ?></td>
                                 <td>
-                                    <?= $item['qty'] ?>
+                                    <span class="cg-qty"><?= $item['qty'] ?></span>
                                     <input type="hidden" name="barang_rusak[<?= $damagedIndex ?>][qty]" value="<?= $item['qty'] ?>">
                                 </td>
                                 <td>
                                     <textarea class="form-control form-control-sm"
                                         name="barang_rusak[<?= $damagedIndex ?>][keterangan]" rows="1"
-                                        placeholder="Keterangan kerusakan"></textarea>
+                                        placeholder="Keterangan kerusakan"
+                                        aria-label="Keterangan kerusakan <?= esc($item['nama'], 'attr') ?>"></textarea>
                                 </td>
                             </tr>
                             <?php $damagedIndex++; ?>
                         <?php endforeach; ?>
                         <?php if (empty($rusakAwal)): ?>
-                            <tr>
-                                <td colspan="4" class="text-center text-muted">Tidak ada sparepart di service ini.</td>
+                            <tr class="cg-empty-row">
+                                <td colspan="4" class="cg-empty">Tidak ada sparepart di service ini.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
+        </section>
 
-    <div class="card w-100 position-relative overflow-hidden mb-4">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                    <h5 class="mb-1">Sparepart Pengganti</h5>
-                    <p class="text-muted mb-0">Stok berkurang; harga klaim Rp 0. HPP asli tetap tampil. Pilih status retur: omset hanya berkurang kalau tidak bisa retur atau ditolak supplier.</p>
+        <section class="cg-card" aria-labelledby="cg-replacement-title">
+            <div class="cg-card__head">
+                <div class="cg-step__main">
+                    <span class="cg-step__num" aria-hidden="true">3</span>
+                    <div class="cg-step__body">
+                        <h2 class="cg-card__title" id="cg-replacement-title">Sparepart Pengganti</h2>
+                        <p class="cg-card__sub">Stok berkurang; harga klaim Rp 0. HPP asli tetap tampil. Pilih status retur: omset hanya berkurang kalau tidak bisa retur atau ditolak supplier.</p>
+                    </div>
                 </div>
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
-                    data-bs-target="#replacementPartModal">Tambah Sparepart</button>
+                <button type="button" class="cg-btn cg-btn--primary" data-bs-toggle="modal"
+                    data-bs-target="#replacementPartModal">
+                    <iconify-icon icon="solar:add-circle-linear" width="17" height="17"></iconify-icon>
+                    Tambah Sparepart
+                </button>
             </div>
 
             <div class="table-responsive">
-                <table class="table border align-middle mb-0">
-                    <thead class="text-dark fs-4">
+                <table class="cg-table cg-table--replacement">
+                    <thead>
                         <tr>
                             <th>Nama Sparepart</th>
                             <th>Stok</th>
                             <th>HPP</th>
                             <th>Status Retur</th>
                             <th>Harga</th>
-                            <th style="width: 120px;">Qty</th>
+                            <th style="width: 110px;">Qty</th>
                             <th style="width: 90px;">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody id="replacementRows"></tbody>
+                    <tbody id="replacementRows">
+                        <tr id="replacementEmpty">
+                            <td colspan="7" class="cg-empty">Belum ada sparepart pengganti dipilih.</td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
+            <p class="cg-scroll-hint">Geser tabel ke samping untuk melihat semua kolom.</p>
+        </section>
+
+        <div class="cg-actionbar">
+            <div class="cg-actionbar__note">
+                <iconify-icon icon="solar:shield-check-linear" width="17" height="17"></iconify-icon>
+                <span>Catatan klaim wajib diisi. Periksa sparepart rusak dan pengganti sebelum menyimpan.</span>
+            </div>
+            <div class="cg-actions">
+                <a href="<?= base_url('garansi_service') ?>" class="cg-btn cg-btn--ghost">Batal</a>
+                <button type="submit" class="cg-btn cg-btn--save">
+                    <iconify-icon icon="solar:check-circle-linear" width="17" height="17"></iconify-icon>
+                    Simpan Klaim
+                </button>
+            </div>
         </div>
-    </div>
+    </form>
+</div>
 
-    <div class="d-flex justify-content-end gap-2 mb-4">
-        <a href="<?= base_url('garansi_service') ?>" class="btn btn-light">Batal</a>
-        <button type="submit" class="btn btn-success">Simpan Klaim</button>
-    </div>
-</form>
-
-<div class="modal fade" id="replacementPartModal" tabindex="-1" aria-labelledby="replacementPartModalLabel" aria-hidden="true">
+<div class="modal fade cg-modal" id="replacementPartModal" tabindex="-1" aria-labelledby="replacementPartModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
+            <div class="modal-header align-items-start">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="bg-primary-subtle text-primary rounded-2 d-flex align-items-center justify-content-center"
-                        style="width: 36px; height: 36px;">
-                        <i class="bi bi-box-seam fs-5"></i>
+                    <span class="cg-modal__icon">
+                        <iconify-icon icon="solar:box-minimalistic-line-duotone" width="20" height="20"></iconify-icon>
                     </span>
                     <div>
                         <h5 class="modal-title" id="replacementPartModalLabel">Pilih Sparepart Pengganti</h5>
-                        <p class="text-muted fs-3 mb-0">Cari nama atau kode, lalu centang yang dipakai.</p>
+                        <p class="mb-0">Cari nama atau kode, lalu centang yang dipakai.</p>
                     </div>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -230,7 +308,7 @@ foreach (($service_sparepart ?? []) as $item) {
                             placeholder="Cari nama atau kode sparepart..." autocomplete="off">
                     </div>
                     <span class="service-sp-unit badge text-bg-light border d-none d-sm-inline-flex">
-                        <i class="bi bi-shop me-1"></i>Unit <?= (int) $service->unit_idunit ?>
+                        <i class="bi bi-shop me-1"></i><?= esc($unitLabel) ?>
                     </span>
                 </div>
                 <div class="service-sp-list" id="replacementPartList" aria-live="polite">
@@ -277,10 +355,11 @@ foreach (($service_sparepart ?? []) as $item) {
             <div class="modal-footer justify-content-between">
                 <span class="service-sp-count" id="replacement-selected-count" aria-live="polite">Belum ada yang dipilih</span>
                 <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="cg-btn cg-btn--ghost" data-bs-dismiss="modal">Batal</button>
                     <button type="button" id="addSelectedReplacement"
-                        class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-dismiss="modal" disabled>
-                        <i class="bi bi-plus-lg"></i> Tambahkan
+                        class="cg-btn cg-btn--primary" data-bs-dismiss="modal" disabled>
+                        <iconify-icon icon="solar:add-circle-linear" width="17" height="17"></iconify-icon>
+                        Tambahkan
                     </button>
                 </div>
             </div>
@@ -292,6 +371,8 @@ foreach (($service_sparepart ?? []) as $item) {
     (function() {
         let replacementIndex = 0;
         const replacementRows = document.getElementById('replacementRows');
+        const replacementEmpty = document.getElementById('replacementEmpty');
+        const damagedSelectedCount = document.getElementById('damagedSelectedCount');
         const replacementCount = document.getElementById('replacement-selected-count');
         const addReplacementButton = document.getElementById('addSelectedReplacement');
         const replacementSearch = document.getElementById('searchReplacementInput');
@@ -309,10 +390,23 @@ foreach (($service_sparepart ?? []) as $item) {
             });
         }
 
+        function updateDamagedSelection() {
+            const checked = document.querySelectorAll('.damaged-select:checked');
+            damagedSelectedCount.textContent = checked.length + ' dipilih';
+            document.querySelectorAll('.damaged-select').forEach(function(checkbox) {
+                checkbox.closest('tr').classList.toggle('is-selected', checkbox.checked);
+            });
+        }
+
         function updateReplacementSelection() {
             const count = document.querySelectorAll('.replacement-check:checked').length;
             replacementCount.textContent = count > 0 ? count + ' sparepart dipilih' : 'Belum ada yang dipilih';
             addReplacementButton.disabled = count === 0;
+        }
+
+        function syncReplacementEmpty() {
+            const hasRows = replacementRows.querySelector('tr:not(#replacementEmpty)') !== null;
+            replacementEmpty.classList.toggle('d-none', hasRows);
         }
 
         replacementSearch.addEventListener('input', function() {
@@ -325,6 +419,9 @@ foreach (($service_sparepart ?? []) as $item) {
         document.addEventListener('change', function(event) {
             if (event.target.classList.contains('replacement-check')) {
                 updateReplacementSelection();
+            }
+            if (event.target.classList.contains('damaged-select')) {
+                updateDamagedSelection();
             }
         });
 
@@ -353,9 +450,10 @@ foreach (($service_sparepart ?? []) as $item) {
                 </td>
                 <td>Rp 0</td>
                 <td><input type="number" class="form-control form-control-sm replacement-qty" name="produk[${index}][qty]" value="1" min="1" max="${stok}" data-max="${stok}" required></td>
-                <td><button type="button" class="btn btn-sm btn-danger remove-replacement">Hapus</button></td>
+                <td><button type="button" class="cg-btn cg-btn--ghost remove-replacement">Hapus</button></td>
             `;
             replacementRows.appendChild(row);
+            syncReplacementEmpty();
         }
 
         document.getElementById('addSelectedReplacement').addEventListener('click', function() {
@@ -375,6 +473,7 @@ foreach (($service_sparepart ?? []) as $item) {
             const replacementButton = event.target.closest('.remove-replacement');
             if (replacementButton) {
                 replacementButton.closest('tr').remove();
+                syncReplacementEmpty();
             }
         });
 
@@ -396,6 +495,8 @@ foreach (($service_sparepart ?? []) as $item) {
             event.target.value = value;
         });
 
+        updateDamagedSelection();
         updateReplacementSelection();
+        syncReplacementEmpty();
     })();
 </script>

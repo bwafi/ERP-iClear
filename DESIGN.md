@@ -102,6 +102,12 @@
 - **Modal:** claim note, damaged parts, and replacement parts (HPP, price 0) from the shared `/riwayat-klaim/{id}` endpoint; opened with Bootstrap 5 `getOrCreateInstance`.
 - **Rules:** one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`; the empty state disables search and skips DataTables init.
 
+### Detail Klaim Garansi (`.cg-*`)
+- **Scope:** `app/Views/transaksi/table_garansi/claim_detail.php` + `_claim_theme.php`; every selector lives under `.cg-page` / `.cg-modal` and derives from `--cg-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** hero (breadcrumb, back, service code, active-warranty/unit chips) → data service card (customer row, four-field grid, keluhan/keterangan notes) → damage card → numbered claim form (catatan → sparepart rusak → sparepart pengganti) → action bar. The action bar is sticky on desktop and static under `768px`.
+- **Tables:** Damaged parts become stacked cards at `767.98px` (checkbox, name, qty, note) so mobile users do not need horizontal scroll; the replacement table keeps horizontal scroll with a visible hint. Selected damaged rows tint with the single accent color.
+- **Rules:** location text uses `pelanggan.kecamatan` + `kabupaten`, not the long street address; one accent for primary action/focus; no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions and disabled under `prefers-reduced-motion`.
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.

@@ -42,7 +42,10 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
             pelanggan_id_pelanggan INT NULL)');
         $this->db->query('CREATE TABLE pelanggan (
             id_pelanggan INT PRIMARY KEY,
-            nama VARCHAR(100) NULL)');
+            nama VARCHAR(100) NULL,
+            alamat VARCHAR(255) NULL,
+            kecamatan VARCHAR(100) NULL,
+            kabupaten VARCHAR(100) NULL)');
         $this->db->query('CREATE TABLE unit (
             idunit INT PRIMARY KEY,
             NAMA_UNIT VARCHAR(100) NULL,
@@ -53,12 +56,12 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
             ['idunit' => 2, 'NAMA_UNIT' => 'Unit Dua', 'KABUPATEN_UNIT' => 'Kota B'],
         ]);
         $this->db->table('pelanggan')->insertBatch([
-            ['id_pelanggan' => 1, 'nama' => 'Ayu'],
-            ['id_pelanggan' => 2, 'nama' => 'Bima'],
+            ['id_pelanggan' => 1, 'nama' => 'Ayu', 'alamat' => 'Alamat Pelanggan Satu', 'kecamatan' => 'Kecamatan Satu', 'kabupaten' => 'Kabupaten Satu'],
+            ['id_pelanggan' => 2, 'nama' => 'Bima', 'alamat' => 'Alamat Pelanggan Dua', 'kecamatan' => 'Kecamatan Dua', 'kabupaten' => 'Kabupaten Dua'],
         ]);
         $this->db->table('service')->insertBatch([
-            ['idservice' => 1, 'no_service' => 'SRV-001', 'created_at' => '2026-09-01 10:00:00', 'tanggal_selesai' => '2026-09-20 10:00:00', 'no_hp' => '0811', 'alamat' => 'Alamat A', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
-            ['idservice' => 2, 'no_service' => 'SRV-002', 'created_at' => '2026-09-02 10:00:00', 'tanggal_selesai' => '2026-10-02 10:00:00', 'no_hp' => '0822', 'alamat' => 'Alamat B', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
+            ['idservice' => 1, 'no_service' => 'SRV-001', 'created_at' => '2026-09-01 10:00:00', 'tanggal_selesai' => '2026-09-20 10:00:00', 'no_hp' => '0811', 'alamat' => 'Alamat Service Satu', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 2, 'no_service' => 'SRV-002', 'created_at' => '2026-09-02 10:00:00', 'tanggal_selesai' => '2026-10-02 10:00:00', 'no_hp' => '0822', 'alamat' => '', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
             ['idservice' => 3, 'no_service' => 'SRV-003', 'created_at' => '2026-09-03 10:00:00', 'tanggal_selesai' => '2026-09-21 10:00:00', 'no_hp' => '0833', 'alamat' => 'Alamat C', 'garansi_hari' => 0, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
         ]);
     }
@@ -90,6 +93,29 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
         $this->assertSame(1, (int) $hasil['recordsFiltered']);
         $this->assertCount(1, $hasil['data']);
         $this->assertSame('SRV-001', $hasil['data'][0]->no_service);
+        $this->assertSame('Unit Satu', $hasil['data'][0]->nama_unit);
+        $this->assertSame('Kecamatan Satu', $hasil['data'][0]->kecamatan);
+        $this->assertSame('Kabupaten Satu', $hasil['data'][0]->kabupaten);
+    }
+
+    public function testLokasiMemakaiKecamatanKabupatenDanIkutDicari(): void
+    {
+        $model = new ModelService();
+
+        $semua = $model->getGaransiServiceServerSide(0, 10, '', 2, 'desc', '', '', '');
+        $lokasiPerNoService = [];
+        foreach ($semua['data'] as $row) {
+            $lokasiPerNoService[$row->no_service] = $row->kecamatan . '|' . $row->kabupaten;
+        }
+
+        $this->assertSame('Kecamatan Satu|Kabupaten Satu', $lokasiPerNoService['SRV-001']);
+        $this->assertSame('Kecamatan Dua|Kabupaten Dua', $lokasiPerNoService['SRV-002']);
+
+        $cariKecamatan = $model->getGaransiServiceServerSide(0, 10, 'Kecamatan Dua', 2, 'desc', '', '', '');
+        $this->assertSame(['SRV-002'], array_column($cariKecamatan['data'], 'no_service'));
+
+        $cariKabupaten = $model->getGaransiServiceServerSide(0, 10, 'Kabupaten Satu', 2, 'desc', '', '', '');
+        $this->assertSame(['SRV-001'], array_column($cariKabupaten['data'], 'no_service'));
     }
 
     public function testFilterTanggalMemakaiTanggalSelesai(): void

@@ -27,6 +27,7 @@ use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelRiwayatKlaimGaransi;
 use App\Models\ModelRegion;
+use App\Models\ModelUnit;
 
 
 
@@ -51,6 +52,7 @@ class StatusGaransi extends BaseController
     protected $PembayaranBankModel;
     protected $RiwayatKlaimGaransiModel;
     protected $RegionModel;
+    protected $UnitModel;
 
 
 
@@ -73,14 +75,27 @@ class StatusGaransi extends BaseController
         $this->PembayaranBankModel = new ModelPembayaranBank();
         $this->RiwayatKlaimGaransiModel = new ModelRiwayatKlaimGaransi();
         $this->RegionModel = new ModelRegion();
+        $this->UnitModel = new ModelUnit();
     }
 
     public function index()
     {
+        $canSeeAllUnits = $this->canSeeAllUnits();
+        // Hanya unit operasional yang boleh dipilih di filter.
+        $unitList = $canSeeAllUnits
+            ? array_values(array_filter(
+                $this->UnitModel->getUnit(),
+                static fn ($u) => (int) ($u->is_operational ?? 1) === 1
+            ))
+            : [];
+        usort($unitList, static fn ($a, $b) => strcmp((string) $a->NAMA_UNIT, (string) $b->NAMA_UNIT));
+
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
+            'unit' => $unitList,
+            'can_see_all_units' => $canSeeAllUnits,
             'body'  => 'riwayat/garansi_service'
         );
         return view('template', $data);
@@ -101,7 +116,12 @@ class StatusGaransi extends BaseController
         $orderDir = is_array($order) && isset($order[0]['dir']) ? (string) $order[0]['dir'] : 'desc';
         $startDate = (string) ($request->getPost('startDate') ?? '');
         $endDate = (string) ($request->getPost('endDate') ?? '');
-        $unitFilter = $this->canSeeAllUnits() ? '' : (int) session('ID_UNIT');
+        if ($this->canSeeAllUnits()) {
+            $requestedUnit = (int) $request->getPost('unitFilter');
+            $unitFilter = $requestedUnit > 0 ? $requestedUnit : '';
+        } else {
+            $unitFilter = (int) session('ID_UNIT');
+        }
 
         $result = $this->ServiceModel->getGaransiServiceServerSide(
             $start,
@@ -130,7 +150,9 @@ class StatusGaransi extends BaseController
             $row->no_service = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->no_service ?? '')));
             $row->nama_pelanggan = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->nama_pelanggan ?? '')));
             $row->no_hp = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->no_hp ?? '')));
-            $row->alamat = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->alamat ?? '')));
+            $row->kecamatan = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->kecamatan ?? '')));
+            $row->kabupaten = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->kabupaten ?? '')));
+            $row->nama_unit = esc((string) ($row->nama_unit ?? ''));
         }
 
         return $this->response->setJSON([
@@ -263,6 +285,7 @@ class StatusGaransi extends BaseController
         }
 
         $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
+        $unitRow = $this->UnitModel->getById($unitId);
 
         return view('template', [
             'service' => $service,
@@ -272,6 +295,7 @@ class StatusGaransi extends BaseController
             'sparepart' => $sparepart,
             'warranty_end' => GaransiClaimService::warrantyEnd($service),
             'status_garansi' => GaransiClaimService::statusText($service, $today),
+            'unit_label' => $unitRow->NAMA_UNIT ?? ('Unit ' . $unitId),
             'body' => 'transaksi/table_garansi/claim_detail',
         ]);
     }

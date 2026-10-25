@@ -365,9 +365,10 @@ class ModelService extends Model
             2 => 'service.tanggal_selesai',
             3 => 'pelanggan.nama',
             4 => 'service.no_hp',
-            5 => 'service.alamat',
-            6 => 'service.garansi_hari',
-            7 => 'service.tanggal_claim_garansi'
+            5 => 'pelanggan.kecamatan',
+            6 => 'unit.NAMA_UNIT',
+            7 => 'service.garansi_hari',
+            8 => 'service.tanggal_claim_garansi'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
@@ -394,9 +395,9 @@ class ModelService extends Model
 
         $searchCondition = '';
         if (!empty($searchValue)) {
-            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR service.alamat LIKE ?)';
+            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR pelanggan.kecamatan LIKE ? OR pelanggan.kabupaten LIKE ?)';
             $searchParam = "%{$searchValue}%";
-            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam]);
         }
 
         $whereClause = implode(' AND ', $whereConditions) . $searchCondition;
@@ -407,14 +408,17 @@ class ModelService extends Model
                 service.created_at,
                 service.tanggal_selesai,
                 service.no_hp,
-                service.alamat,
+                pelanggan.kecamatan,
+                pelanggan.kabupaten,
                 service.garansi_hari,
                 service.tanggal_claim_garansi,
                 service.status_service,
                 service.unit_idunit,
-                pelanggan.nama as nama_pelanggan
+                pelanggan.nama as nama_pelanggan,
+                unit.NAMA_UNIT as nama_unit
             FROM service
             LEFT JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            LEFT JOIN unit ON unit.idunit = service.unit_idunit
             WHERE {$whereClause}
             ORDER BY {$orderColumnName} {$orderDir}
             LIMIT ? OFFSET ?";
