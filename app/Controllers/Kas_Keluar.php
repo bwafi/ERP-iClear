@@ -17,6 +17,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelUnit;
 use App\Libraries\ModeKasBank;
 use App\Services\Finance\BankRekeningValidator;
+use App\Services\Finance\FinanceScopeService;
 use App\Exceptions\PostingLedgerException;
 
 class Kas_Keluar extends BaseController
@@ -29,6 +30,7 @@ class Kas_Keluar extends BaseController
     protected $JurnalModel;
     protected $UnitModel;
     protected $KasBankLib;
+    protected $FinanceScope;
 
     public function __construct()
     {
@@ -40,6 +42,47 @@ class Kas_Keluar extends BaseController
         $this->JurnalModel = new ModelJurnal();
         $this->UnitModel = new ModelUnit();
         $this->KasBankLib = new ModeKasBank();
+        $this->FinanceScope = new FinanceScopeService();
+    }
+
+    private function bebasPilihUnit(): bool
+    {
+        return in_array((int) session('ID_JABATAN'), FinanceScopeService::inputRoles(), true);
+    }
+
+    /**
+     * Unit untuk dropdown filter. SPV hanya unit binaannya (spv_units),
+     * role lain hanya unitnya sendiri.
+     *
+     * @return object[]
+     */
+    private function unitFilterList(): array
+    {
+        if ($this->bebasPilihUnit()) {
+            return $this->UnitModel->getUnit();
+        }
+
+        return $this->FinanceScope->resolveAllowedUnits();
+    }
+
+    /**
+     * Unit filter yang benar-benar dipakai. Request dari role terbatas tidak
+     * dipercaya: unit di luar scope jatuh ke unit pertama yang diizinkan.
+     */
+    private function unitFilterTerpilih($requested): int
+    {
+        $req = (int) $requested;
+
+        if ($this->bebasPilihUnit()) {
+            return $req;
+        }
+
+        $allowed = array_map('intval', $this->FinanceScope->allowedUnitIds());
+        if ($req > 0 && in_array($req, $allowed, true)) {
+            return $req;
+        }
+
+        return (int) ($allowed[0] ?? session('ID_UNIT'));
     }
 
     public function index()
@@ -93,6 +136,10 @@ class Kas_Keluar extends BaseController
 
         $loginUnit = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
 
+        $bebasPilihUnit = $this->bebasPilihUnit();
+        $unitFilter = $this->unitFilterList();
+        $unitFilterIds = array_map(static fn ($u) => (int) $u->idunit, $unitFilter);
+
         $data = [
             'akun' => $akun,
             'kategori_kas' => $this->KategoriKasModel->getKategoriKas(),
@@ -100,6 +147,12 @@ class Kas_Keluar extends BaseController
             'bank' => $bankPerUnit[$loginUnit] ?? [],
             'bank_per_unit' => $bankPerUnit,
             'unit' => $unitList,
+            'unit_filter' => $unitFilter,
+            // Role terbatas hanya punya satu unit; SPV baru bisa memfilter
+            // kalau binaannya lebih dari satu.
+            'can_filter_unit' => $bebasPilihUnit || count($unitFilterIds) > 1,
+            'show_all_units' => $bebasPilihUnit,
+            'default_filter_unit' => $bebasPilihUnit ? 0 : (int) ($unitFilterIds[0] ?? $loginUnit),
             'body' => 'jurnal/kas_keluar'
         ];
 
@@ -136,7 +189,7 @@ class Kas_Keluar extends BaseController
 
         $startDate = trim((string)$this->request->getGet('tanggal_awal'));
         $endDate   = trim((string)$this->request->getGet('tanggal_akhir'));
-        $unitId    = (int)$this->request->getGet('unit_id');
+        $unitId    = $this->unitFilterTerpilih($this->request->getGet('unit_id'));
 
         // Kueri yang isinya hanya angka dibaca sebagai pencarian ID: dicocokkan
         // persis ke primary key, bukan sebagai substring. "3" sebagai substring
@@ -147,7 +200,12 @@ class Kas_Keluar extends BaseController
         $searchMode = (string)$this->request->getGet('search_mode');
         $idExact    = ($search !== '' && $searchMode !== 'text' && ctype_digit($search));
 
-        $total    = $this->KasKeluarModel->countAllKasKeluar();
+        // recordsTotal adalah "semua baris yang boleh dilihat user", bukan
+        // seluruh perusahaan: role terbatas tidak boleh membaca hitungan unit
+        // lain lewat angka ini.
+        $total = $this->bebasPilihUnit()
+            ? $this->KasKeluarModel->countAllKasKeluar()
+            : $this->KasKeluarModel->countKasKeluarFiltered('', null, null, $unitId ?: null);
         $filtered = $this->KasKeluarModel->countKasKeluarFiltered(
             $search,
             $startDate ?: null,
@@ -180,7 +238,13 @@ class Kas_Keluar extends BaseController
         $idHit = null;
         if ($idExact) {
             $hit = $this->KasKeluarModel->findKasKeluarById((int)$search);
-            if ($hit) {
+            // Role terbatas tidak boleh melihat transaksi unit lain, termasuk
+            // lewat tebakan ID. Dianggap tidak ada, bukan "di luar filter".
+            $bolehLihat = $hit && (
+                $this->bebasPilihUnit()
+                || in_array((int)$hit->idunit, array_map('intval', $this->FinanceScope->allowedUnitIds()), true)
+            );
+            if ($bolehLihat) {
                 $idHit = [
                     'id'       => (int)$hit->idkas_keluar,
                     'tanggal'  => $hit->tanggal,
@@ -568,9 +632,14 @@ class Kas_Keluar extends BaseController
         $sheet = $spreadsheet->getActiveSheet();
 
         $unit = $this->request->getPost('nama_unit');
-        $unitId = (int)$this->request->getPost('unit_id');
+        $unitId = $this->unitFilterTerpilih($this->request->getPost('unit_id'));
         $tanggal_awal = $this->request->getPost('tanggal_awal');
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
+
+        // Nama unit dari POST tidak boleh menimpa scope role terbatas.
+        if (! $this->bebasPilihUnit()) {
+            $unit = null;
+        }
 
 
         $kasKeluarData = $this->KasKeluarModel->getKasKeluarFiltered($tanggal_awal, $tanggal_akhir, $unit, $unitId ?: null);

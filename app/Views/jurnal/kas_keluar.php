@@ -13,6 +13,10 @@ $canAct = (int) ($akun->ID_JABATAN ?? 1) === 1;
 $akunRole = (int) ($akun->ID_JABATAN ?? 0);
 $akunUnit = (int) ($akun->ID_UNIT ?? 0);
 $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
+$unitFilter = $unit_filter ?? [];
+$canFilterUnit = $can_filter_unit ?? false;
+$showAllUnits = $show_all_units ?? false;
+$defaultFilterUnit = (int) ($default_filter_unit ?? 0);
 ?>
 <style>
     .kk-scope {
@@ -1213,10 +1217,12 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             </div>
             <div class="kk-filter">
                 <label class="kk-field-label" for="kkUnitFilter">Unit</label>
-                <select class="form-select" id="kkUnitFilter">
-                    <option value="">Semua Unit</option>
-                    <?php foreach ($unit as $u): ?>
-                        <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                <select class="form-select" id="kkUnitFilter" <?= $canFilterUnit ? '' : 'disabled' ?>>
+                    <?php if ($showAllUnits): ?>
+                        <option value="" <?= $defaultFilterUnit === 0 ? 'selected' : '' ?>>Semua Unit</option>
+                    <?php endif; ?>
+                    <?php foreach ($unitFilter as $u): ?>
+                        <option value="<?= (int) $u->idunit ?>" <?= (int) $u->idunit === $defaultFilterUnit ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -1335,6 +1341,9 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
 
         const CAN_ACT = <?= $canAct ? 'true' : 'false' ?>;
         const CAN_PICK_UNIT = <?= $canPickUnit ? 'true' : 'false' ?>;
+        const CAN_FILTER_UNIT = <?= $canFilterUnit ? 'true' : 'false' ?>;
+        const SHOW_ALL_UNITS = <?= $showAllUnits ? 'true' : 'false' ?>;
+        const DEFAULT_FILTER_UNIT = <?= $defaultFilterUnit ?>;
         const LOGIN_UNIT = <?= $akunUnit ?>;
 
         // ── Option lists, dipakai untuk baris rincian akun ──────────
@@ -1424,6 +1433,10 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
         const start = document.getElementById('kkStart');
         const end = document.getElementById('kkEnd');
         const unit = document.getElementById('kkUnitFilter');
+        // Role tanpa hak filter terkunci ke unitnya sendiri; SPV terkunci ke
+        // unit binaan pertama (server juga memaksa ini).
+        unit.disabled = !CAN_FILTER_UNIT;
+        if (!SHOW_ALL_UNITS) unit.value = String(DEFAULT_FILTER_UNIT);
         const chips = document.getElementById('kkChips');
         const idHit = document.getElementById('kkIdHit');
         const empty = document.getElementById('kkEmpty');
@@ -2053,10 +2066,12 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                     dt.draw(false);
                 }));
             }
-            if (unit.value) {
+            // Unit sendiri / unit binaan pertama bukan "filter aktif"; hanya
+            // pilihan yang berbeda dari default yang perlu chip.
+            if (unit.value && CAN_FILTER_UNIT && unit.value !== String(DEFAULT_FILTER_UNIT)) {
                 const opt = unit.options[unit.selectedIndex].text;
                 chips.appendChild(chip('Unit', opt, function () {
-                    unit.value = '';
+                    unit.value = SHOW_ALL_UNITS ? '' : String(DEFAULT_FILTER_UNIT);
                     dt.draw(false);
                 }));
             }
@@ -2129,7 +2144,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
                 btn.addEventListener('click', function () {
                     start.value = '';
                     end.value = '';
-                    unit.value = '';
+                    unit.value = SHOW_ALL_UNITS ? '' : String(DEFAULT_FILTER_UNIT);
                     dt.page(0).draw(false);
                 });
                 idHit.appendChild(btn);
@@ -2247,7 +2262,7 @@ $canPickUnit = in_array($akunRole, [0, 1, 2, 34], true);
             searchWrap.dataset.filled = 'false';
             start.value = '';
             end.value = '';
-            unit.value = '';
+            unit.value = SHOW_ALL_UNITS ? '' : String(DEFAULT_FILTER_UNIT);
             forceTextSearch = false;
             targetId = null;
             dt.search('').page(0).draw(false);
