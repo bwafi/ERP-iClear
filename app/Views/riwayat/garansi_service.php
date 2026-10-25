@@ -24,13 +24,23 @@ $unitLabel = $showUnitColumn ? 'Semua unit' : (session('NAMA_UNIT') ?: 'Unit And
     }
 
     .rsg-page .rsg-table td.dataTables_empty {
-        display: block;
         padding: 0;
         border: 0;
+        text-align: center;
+    }
+
+    .rsg-page .rsg-table td.dataTables_empty .rsg-empty {
+        width: 100%;
     }
 
     .rsg-page .rsg-table td.dataTables_empty::before {
         display: none;
+    }
+
+    @media (max-width: 767.98px) {
+        .rsg-page .rsg-table td.dataTables_empty {
+            display: block;
+        }
     }
 
     .rsg-page .rsg-filter__actions form {

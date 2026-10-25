@@ -29,6 +29,7 @@ final class GaransiServiceViewTest extends CIUnitTestCase
         $this->assertStringContainsString('riwayat-klaim', $html);
         $this->assertStringContainsString('Sudah Diklaim', $html);
         $this->assertStringContainsString('rsg-btn--claim:disabled', $html);
+        $this->assertStringContainsString('td.dataTables_empty .rsg-empty', $html);
         $this->assertStringContainsString("data-label', 'Pelanggan'", $html);
         $this->assertStringContainsString("data-label', 'Aksi'", $html);
     }
