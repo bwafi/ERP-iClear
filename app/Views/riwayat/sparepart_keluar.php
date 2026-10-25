@@ -10,6 +10,9 @@ if (!empty($selected_day)) {
 }
 
 $unitLabel = 'Unit Anda';
+if ((int) $selected_unit === 0) {
+    $unitLabel = 'Semua unit';
+}
 foreach ($list_unit as $u) {
     if ((int) $u['idunit'] === (int) $selected_unit) {
         $unitLabel = (string) $u['NAMA_UNIT'];
@@ -29,7 +32,7 @@ foreach ($list_unit as $u) {
             </nav>
             <h1 class="sk-title">Sparepart Keluar</h1>
             <p><?= $can_see_all_units
-                    ? 'Sparepart yang keluar dari stok lewat penjualan dan klaim garansi. Pilih unit dan tanggal untuk mempersempit data.'
+                    ? 'Sparepart yang keluar dari stok lewat penjualan dan klaim garansi. Semua unit ditampilkan secara default; pilih unit dan tanggal untuk mempersempit data.'
                     : 'Sparepart yang keluar dari stok lewat penjualan dan klaim garansi pada unit Anda.' ?></p>
         </div>
         <div class="sk-head__meta">
@@ -65,6 +68,9 @@ foreach ($list_unit as $u) {
             <div class="sk-field">
                 <label for="unitFilter">Unit</label>
                 <select id="unitFilter" class="sk-input" onchange="reloadTable()" <?= $can_see_all_units ? '' : 'disabled' ?>>
+                    <?php if ($can_see_all_units): ?>
+                        <option value=""<?= (int) $selected_unit === 0 ? ' selected' : '' ?>>Semua Unit</option>
+                    <?php endif; ?>
                     <?php foreach ($list_unit as $u): ?>
                         <option value="<?= $u['idunit'] ?>"<?= $selected_unit == $u['idunit'] ? ' selected' : '' ?>>
                             <?= esc($u['NAMA_UNIT']) ?>
@@ -277,6 +283,10 @@ foreach ($list_unit as $u) {
         jQuery('#searchBox').on('input', function() {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(function() {
+                // Pencarian berlaku lintas unit: filter otomatis pindah ke Semua Unit.
+                if (!jQuery('#unitFilter').prop('disabled')) {
+                    jQuery('#unitFilter').val('');
+                }
                 dt.ajax.reload();
             }, 500);
         });
@@ -301,7 +311,7 @@ foreach ($list_unit as $u) {
     }
 
     function resetFilter() {
-        jQuery('#unitFilter').val('<?= (int) $selected_unit ?>');
+        jQuery('#unitFilter').val('<?= (int) $selected_unit ?: '' ?>');
         jQuery('#dayFilter').val('');
         jQuery('#searchBox').val('');
         dt.ajax.reload();

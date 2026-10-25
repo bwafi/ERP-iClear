@@ -1429,7 +1429,7 @@ class Riwayat_Service extends BaseController
     
     public function sparepart()
     {
-        $scope = $this->sparepartUnitScope((int) ($this->request->getGet('unit') ?? 1));
+        $scope = $this->sparepartUnitScope((int) ($this->request->getGet('unit') ?? 0));
 
         $data = [
             'list_unit'         => $scope['list'],
@@ -1448,6 +1448,7 @@ class Riwayat_Service extends BaseController
      * Manager, Finance, dan SPV yang boleh memilih unit; role toko lain
      * terkunci ke unit sesi agar tidak bisa melihat unit lain lewat request
      * manual. Unit non-operasional (mis. Head Office) tidak masuk filter.
+     * Nilai 0 berarti seluruh unit dan hanya berlaku untuk role lintas unit.
      *
      * @return array{list: array<int, array<string, mixed>>, selected: int, can_see_all_units: bool}
      */
@@ -1467,7 +1468,9 @@ class Riwayat_Service extends BaseController
         $unitIds = array_map(static fn ($u) => (int) $u['idunit'], $list);
         $selected = $canSeeAllUnits ? $requested : $userUnit;
 
-        if (! in_array($selected, $unitIds, true)) {
+        if ($canSeeAllUnits && $requested === 0) {
+            $selected = 0;
+        } elseif (! in_array($selected, $unitIds, true)) {
             $selected = (int) ($unitIds[0] ?? $userUnit);
         }
 
@@ -1489,7 +1492,7 @@ class Riwayat_Service extends BaseController
         $orderColumnIndex = $request->getPost('order')[0]['column'] ?? 1;
         $orderDir = $request->getPost('order')[0]['dir'] ?? 'desc';
         
-        $selected_unit = $this->sparepartUnitScope((int) ($request->getPost('unit') ?? 1))['selected'];
+        $selected_unit = $this->sparepartUnitScope((int) ($request->getPost('unit') ?? 0))['selected'];
         $selected_day = $request->getPost('day') ?? '';
         $year = date('Y');
 
@@ -1521,9 +1524,15 @@ class Riwayat_Service extends BaseController
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
         $orderColumnName = $allowedColumns[$orderColumn] ?? 'x.tanggal';
 
-        $salesWhere = ['p.unit_idunit = ?'];
-        $claimWhere = ['COALESCE(sp.unit_idunit, s.unit_idunit) = ?'];
-        $params = [(int)$selected_unit];
+        // selected_unit 0 = seluruh unit: tanpa klausa unit sama sekali.
+        $salesWhere = [];
+        $claimWhere = [];
+        $params = [];
+
+        if ((int) $selected_unit > 0) {
+            $salesWhere[] = 'p.unit_idunit = ?';
+            $params[] = (int)$selected_unit;
+        }
 
         $salesWhere[] = 'YEAR(p.tanggal) = ?';
         $params[] = (int)$year;
@@ -1533,7 +1542,11 @@ class Riwayat_Service extends BaseController
             $params[] = $selected_day;
         }
 
-        $params[] = (int)$selected_unit;
+        if ((int) $selected_unit > 0) {
+            $claimWhere[] = 'COALESCE(sp.unit_idunit, s.unit_idunit) = ?';
+            $params[] = (int)$selected_unit;
+        }
+
         $claimWhere[] = 'YEAR(s.tanggal_claim_garansi) = ?';
         $params[] = (int)$year;
 

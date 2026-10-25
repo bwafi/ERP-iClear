@@ -240,6 +240,25 @@ final class SparepartKeluarUnitFilterTest extends CIUnitTestCase
         $this->assertSame(['INV-ALPHA'], $this->ajax(['unit' => 50], 50, 40));
     }
 
+    public function testSemuaUnitMenggabungkanDataLintasUnit(): void
+    {
+        foreach ([0, 1, 34, 40] as $role) {
+            $this->assertSame(
+                ['INV-BETA', 'INV-ALPHA'],
+                $this->ajax(['unit' => 0], 50, $role),
+                'Role ' . $role . ' harus melihat semua unit'
+            );
+        }
+    }
+
+    public function testSemuaUnitTetapTerkunciUntukRoleToko(): void
+    {
+        // unit=0 tidak boleh membuka unit lain bagi role toko.
+        foreach ([35, 41, 2] as $role) {
+            $this->assertSame(['INV-BETA'], $this->ajax(['unit' => 0], 2, $role));
+        }
+    }
+
     public function testDropdownTerkunciUntukRoleToko(): void
     {
         $html = view('riwayat/sparepart_keluar', [
@@ -272,5 +291,53 @@ final class SparepartKeluarUnitFilterTest extends CIUnitTestCase
         $this->assertDoesNotMatchRegularExpression('/id="unitFilter"[^>]*disabled/', $html);
         $this->assertStringContainsString('<option value="1" selected>', $html);
         $this->assertStringContainsString('<option value="2"', $html);
+    }
+
+    public function testDropdownMenyediakanPilihanSemuaUnit(): void
+    {
+        $html = view('riwayat/sparepart_keluar', [
+            'list_unit'         => [['idunit' => 1, 'NAMA_UNIT' => 'Unit Alpha']],
+            'selected_unit'     => 0,
+            'selected_day'      => '',
+            'can_see_all_units' => true,
+            'is_admin'          => false,
+        ]);
+
+        $this->assertStringContainsString('<option value="" selected>Semua Unit</option>', $html);
+        $this->assertStringContainsString('Semua unit', $html);
+    }
+
+    public function testRoleTokoTidakMelihatPilihanSemuaUnit(): void
+    {
+        $html = view('riwayat/sparepart_keluar', [
+            'list_unit'         => [['idunit' => 2, 'NAMA_UNIT' => 'Unit Beta']],
+            'selected_unit'     => 2,
+            'selected_day'      => '',
+            'can_see_all_units' => false,
+            'is_admin'          => false,
+        ]);
+
+        $this->assertStringNotContainsString('<option value=""', $html);
+    }
+
+    public function testHalamanDefaultMemilihSemuaUnitUntukRoleLintasUnit(): void
+    {
+        $this->withSession([
+            'logged_in'    => true,
+            'ID_AKUN'      => 1,
+            'ID_UNIT'      => 50,
+            'ID_JABATAN'   => 40,
+            'NAMA'         => 'Tester',
+            'NAMA_JABATAN' => 'Tester',
+            'EMAIL'        => 'tester@example.com',
+        ]);
+
+        $response = $this->get('sparepart_keluar');
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString(
+            '<option value="" selected>Semua Unit</option>',
+            (string) $response->response()->getBody()
+        );
     }
 }
