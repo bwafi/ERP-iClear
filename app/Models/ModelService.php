@@ -214,7 +214,7 @@ class ModelService extends Model
     public function getByIdWithPelanggan($id)
     {
         return $this->select('service.*, pelanggan.nama, pelanggan.provinsi, pelanggan.kabupaten, pelanggan.kecamatan')
-            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
             ->where('service.idservice', $id)
             ->first();
     }
@@ -352,11 +352,12 @@ class ModelService extends Model
     /**
      * Data untuk halaman Garansi Service (pagination server-side).
      *
-     * Mengembalikan seluruh service (tanpa filter status) karena status garansi
-     * dihitung di sisi tampilan dari garansi_hari, tanggal_selesai, dan
-     * tanggal_claim_garansi.
+     * Hanya service bergaransi. Filter tanggal memakai tanggal selesai
+     * (awal masa garansi), bukan tanggal masuk, supaya garansi lama tetap
+     * tampil. Status klaim dihitung di controller dari aturan yang sama
+     * dengan aksi klaim.
      */
-    public function getGaransiServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate)
+    public function getGaransiServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter = '')
     {
         $allowedColumns = [
             0 => 'service.no_service',
@@ -364,31 +365,39 @@ class ModelService extends Model
             2 => 'service.tanggal_selesai',
             3 => 'pelanggan.nama',
             4 => 'service.no_hp',
-            5 => 'service.alamat',
-            6 => 'service.garansi_hari',
-            7 => 'service.tanggal_claim_garansi'
+            5 => 'pelanggan.kecamatan',
+            6 => 'unit.NAMA_UNIT',
+            7 => 'service.garansi_hari',
+            8 => 'service.tanggal_claim_garansi'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
-        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.created_at';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'service.tanggal_selesai';
 
-        $whereConditions = ['1=1'];
+        $whereConditions = ['service.garansi_hari > 0'];
         $params = [];
 
         if (!empty($startDate)) {
-            $whereConditions[] = 'DATE(service.created_at) >= ?';
+            $whereConditions[] = 'DATE(service.tanggal_selesai) >= ?';
             $params[] = $startDate;
         }
         if (!empty($endDate)) {
-            $whereConditions[] = 'DATE(service.created_at) <= ?';
+            $whereConditions[] = 'DATE(service.tanggal_selesai) <= ?';
             $params[] = $endDate;
+        }
+        if ($unitFilter !== '' && $unitFilter !== null) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
+                $whereConditions[] = 'service.unit_idunit = ?';
+                $params[] = $unitId;
+            }
         }
 
         $searchCondition = '';
         if (!empty($searchValue)) {
-            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR service.alamat LIKE ?)';
+            $searchCondition = ' AND (service.no_service LIKE ? OR pelanggan.nama LIKE ? OR service.no_hp LIKE ? OR pelanggan.kecamatan LIKE ? OR pelanggan.kabupaten LIKE ?)';
             $searchParam = "%{$searchValue}%";
-            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam]);
         }
 
         $whereClause = implode(' AND ', $whereConditions) . $searchCondition;
@@ -399,12 +408,17 @@ class ModelService extends Model
                 service.created_at,
                 service.tanggal_selesai,
                 service.no_hp,
-                service.alamat,
+                pelanggan.kecamatan,
+                pelanggan.kabupaten,
                 service.garansi_hari,
                 service.tanggal_claim_garansi,
-                pelanggan.nama as nama_pelanggan
+                service.status_service,
+                service.unit_idunit,
+                pelanggan.nama as nama_pelanggan,
+                unit.NAMA_UNIT as nama_unit
             FROM service
-            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            LEFT JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            LEFT JOIN unit ON unit.idunit = service.unit_idunit
             WHERE {$whereClause}
             ORDER BY {$orderColumnName} {$orderDir}
             LIMIT ? OFFSET ?";
@@ -417,7 +431,7 @@ class ModelService extends Model
 
         $countSql = "SELECT COUNT(*) as total
             FROM service
-            JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
+            LEFT JOIN pelanggan ON pelanggan.id_pelanggan = service.pelanggan_id_pelanggan
             WHERE {$whereClause}";
 
         $countQuery = $this->db->query($countSql, array_slice($params, 0, -2));
@@ -429,6 +443,20 @@ class ModelService extends Model
         ];
     }
 
+    public function getGaransiServiceTotal($unitFilter = '')
+    {
+        $builder = $this->db->table('service')->where('service.garansi_hari >', 0);
+
+        if ($unitFilter !== '' && $unitFilter !== null) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
+                $builder->where('service.unit_idunit', $unitId);
+            }
+        }
+
+        return $builder->countAllResults();
+    }
+
     public function getRiwayatServiceTanpaClaimGaransi()
     {
         return $this->select('service.*, pelanggan.nama as nama_pelanggan')
@@ -437,14 +465,30 @@ class ModelService extends Model
             ->findAll();
     }
 
-    public function getRiwayatServiceGaransi()
+    public function getRiwayatServiceGaransi($unitFilter = '', $startDate = '', $endDate = '')
     {
-        return $this->select('service.*, pelanggan.nama as nama_pelanggan')
-            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan')
+        $builder = $this->select('service.*, pelanggan.nama as nama_pelanggan, unit.NAMA_UNIT as nama_unit')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
+            ->join('unit', 'unit.idunit = service.unit_idunit', 'left')
             ->where('tanggal_claim_garansi IS NOT NULL')
             ->where('tanggal_claim_garansi !=', '0000-00-00')
-            ->where('tanggal_claim_garansi !=', '1970-01-01')
-            ->findAll();
+            ->where('tanggal_claim_garansi !=', '1970-01-01');
+
+        if ($unitFilter !== '' && $unitFilter !== null) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
+                $builder->where('service.unit_idunit', $unitId);
+            }
+        }
+
+        if ($startDate !== '' && $startDate !== null) {
+            $builder->where('service.tanggal_claim_garansi >=', $startDate . ' 00:00:00');
+        }
+        if ($endDate !== '' && $endDate !== null) {
+            $builder->where('service.tanggal_claim_garansi <=', $endDate . ' 23:59:59');
+        }
+
+        return $builder->orderBy('service.tanggal_claim_garansi', 'DESC')->findAll();
     }
 
 
@@ -636,7 +680,7 @@ class ModelService extends Model
     }
 
 
-    public function filterExportGaransi($tanggal_awal = null, $tanggal_akhir = null)
+    public function filterExportGaransi($tanggal_awal = null, $tanggal_akhir = null, $unitFilter = '')
     {
         $builder = $this->db->table('service')
             ->select('
@@ -645,15 +689,56 @@ class ModelService extends Model
             pelanggan.nama AS nama_pelanggan
         ')
             ->join('akun', 'akun.ID_AKUN = service.service_by_garansi', 'left')
-            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left');
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
+            ->where('service.tanggal_claim_garansi IS NOT NULL')
+            ->where('service.tanggal_claim_garansi !=', '0000-00-00')
+            ->where('service.tanggal_claim_garansi !=', '1970-01-01');
 
-        if ($tanggal_awal && $tanggal_akhir) {
-            $tanggal_akhir .= ' 23:59:59';
-            $builder->where('service.tanggal_claim_garansi >=', $tanggal_awal)
-                ->where('service.tanggal_claim_garansi <=', $tanggal_akhir);
+        if ($unitFilter !== '' && $unitFilter !== null) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
+                $builder->where('service.unit_idunit', $unitId);
+            }
+        }
+
+        if (!empty($tanggal_awal)) {
+            $builder->where('service.tanggal_claim_garansi >=', $tanggal_awal . ' 00:00:00');
+        }
+        if (!empty($tanggal_akhir)) {
+            $builder->where('service.tanggal_claim_garansi <=', $tanggal_akhir . ' 23:59:59');
         }
 
         return $builder->get()->getResult();
+    }
+
+
+    public function filterExportGaransiAktif($tanggal_awal = null, $tanggal_akhir = null, $unitFilter = '')
+    {
+        $builder = $this->db->table('service')
+            ->select('
+            service.*,
+            akun.NAMA_AKUN AS nama_service_by_garansi,
+            pelanggan.nama AS nama_pelanggan
+        ')
+            ->join('akun', 'akun.ID_AKUN = service.service_by_garansi', 'left')
+            ->join('pelanggan', 'pelanggan.id_pelanggan = service.pelanggan_id_pelanggan', 'left')
+            ->where('service.garansi_hari >', 0);
+
+        if ($unitFilter !== '' && $unitFilter !== null) {
+            $unitId = $this->resolveUnitFilter($unitFilter);
+            if ($unitId !== null) {
+                $builder->where('service.unit_idunit', $unitId);
+            }
+        }
+
+        if (!empty($tanggal_awal)) {
+            $builder->where('DATE(service.tanggal_selesai) >=', $tanggal_awal);
+        }
+        if (!empty($tanggal_akhir)) {
+            $builder->where('DATE(service.tanggal_selesai) <=', $tanggal_akhir);
+        }
+
+        return $builder->orderBy('service.tanggal_selesai', 'DESC')->get()->getResult();
     }
 
 

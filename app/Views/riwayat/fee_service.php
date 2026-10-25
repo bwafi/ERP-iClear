@@ -83,6 +83,17 @@
                 </div>
             </div>
         </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card text-bg-warning text-white">
+                <div class="card-body d-flex no-block align-items-center">
+                    <iconify-icon icon="solar:cart-2-linear" width="48" height="48" style="color: #fff"></iconify-icon>
+                    <div class="ms-3 mt-2">
+                        <h4 class="mb-0 text-white">HPP Klaim</h4>
+                        <h5 class="text-white" id="totalHppKlaim">Rp. 0</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Main Table -->
@@ -129,6 +140,53 @@
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+
+    <!-- HPP Klaim: loss mengikuti tanggal_hpp_klaim, bukan tanggal service. -->
+    <div class="card w-100 position-relative overflow-hidden mb-4 mx-4" style="width: auto;">
+        <div class="card-body">
+            <h5 class="fw-semibold mb-3">HPP Klaim</h5>
+            <div class="table-responsive">
+                <table class="table border text-nowrap mb-0 align-middle" id="hpp_klaim_table">
+                    <thead class="text-dark fs-4">
+                        <tr>
+                            <th>Tanggal Klaim</th>
+                            <th>No Service</th>
+                            <th>Nama Teknisi</th>
+                            <th>Barang</th>
+                            <th class="text-end">HPP</th>
+                            <th class="text-end">Qty</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach (($hpp_klaim ?? []) as $loss): ?>
+                        <tr data-teknisi="<?= md5((string) ($loss->nama_teknisi ?? '')) ?>"
+                            data-tanggal="<?= esc((string) $loss->tanggal_hpp_klaim, 'attr') ?>">
+                            <td><?= date('d-m-Y', strtotime((string) $loss->tanggal_hpp_klaim)) ?></td>
+                            <td><?= esc($loss->no_service) ?></td>
+                            <td><?= esc($loss->nama_teknisi ?? '-') ?></td>
+                            <td><?= esc($loss->nama_barang ?? '-') ?></td>
+                            <td class="text-end">Rp. <?= number_format((float) $loss->hpp, 0, ',', '.') ?></td>
+                            <td class="text-end"><?= (int) $loss->qty ?></td>
+                            <td class="text-end hpp-klaim-total">Rp. <?= number_format((float) $loss->total, 0, ',', '.') ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($hpp_klaim)): ?>
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">Tidak ada HPP klaim pada periode ini.</td>
+                        </tr>
+                        <?php endif; ?>
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="6" class="text-end">Total HPP Klaim:</th>
+                            <th class="text-end" id="hppKlaimSectionTotal">Rp. <?= number_format((float) ($total_hpp_klaim ?? 0), 0, ',', '.') ?></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Details -->
@@ -228,6 +286,11 @@ $tableId = 'datatable_' . md5($nama);
             r.style.display = ((sd && dt < sd) || (ed && dt > ed)) ? 'none' : '';
         });
 
+        document.querySelectorAll('#hpp_klaim_table tbody tr[data-tanggal]').forEach(r => {
+            const dt = new Date(r.getAttribute('data-tanggal') + 'T00:00:00');
+            r.style.display = ((sd && dt < sd) || (ed && dt > ed)) ? 'none' : '';
+        });
+
         updateCardTotals();
         updateLabaPerTeknisi();
     }
@@ -246,7 +309,8 @@ $tableId = 'datatable_' . md5($nama);
         let totalHPP = 0,
             totalService = 0,
             totalDiskon = 0,
-            totalLaba = 0;
+            totalLaba = 0,
+            totalHppKlaim = 0;
 
         document.querySelectorAll('.modal table tbody tr').forEach(r => {
             if (r.style.display === 'none') return;
@@ -256,13 +320,28 @@ $tableId = 'datatable_' . md5($nama);
             totalLaba += parseInt(r.children[6].textContent.replace(/[^\d]/g, '')) || 0;
         });
 
+        document.querySelectorAll('#hpp_klaim_table tbody tr[data-tanggal]').forEach(r => {
+            if (r.style.display === 'none') return;
+            totalHppKlaim += parseInt(r.querySelector('.hpp-klaim-total').textContent.replace(/[^\d]/g, '')) || 0;
+        });
+
         document.getElementById('totalHPP').textContent = formatRupiah(totalHPP);
         document.getElementById('totalService').textContent = formatRupiah(totalService);
         document.getElementById('totalDiskon').textContent = formatRupiah(totalDiskon);
-        document.getElementById('totalLaba').textContent = formatRupiah(totalLaba);
+        document.getElementById('totalHppKlaim').textContent = formatRupiah(totalHppKlaim);
+        document.getElementById('hppKlaimSectionTotal').textContent = formatRupiah(totalHppKlaim);
+        document.getElementById('totalLaba').textContent = formatRupiah(totalLaba - totalHppKlaim);
     }
 
     function updateLabaPerTeknisi() {
+        const lossByTeknisi = {};
+        document.querySelectorAll('#hpp_klaim_table tbody tr[data-tanggal]').forEach(r => {
+            if (r.style.display === 'none') return;
+            const key = r.getAttribute('data-teknisi');
+            lossByTeknisi[key] = (lossByTeknisi[key] || 0) +
+                (parseInt(r.querySelector('.hpp-klaim-total').textContent.replace(/[^\d]/g, '')) || 0);
+        });
+
         document.querySelectorAll('.teknisi-row').forEach(row => {
             const teknisiId = row.getAttribute('data-teknisi');
             const modal = document.getElementById('modal_' + teknisiId);
@@ -272,6 +351,8 @@ $tableId = 'datatable_' . md5($nama);
                 if (r.style.display === 'none') return;
                 subtotal += parseInt(r.children[6].textContent.replace(/[^\d]/g, '')) || 0;
             });
+
+            subtotal -= lossByTeknisi[teknisiId] || 0;
 
             const cell = row.querySelector('.total-laba-per-teknisi');
             cell.textContent = formatRupiah(subtotal);

@@ -87,6 +87,27 @@
 - **Rules:** same accent/no-gradient rules, no color-only states, focus visible, motion limited to control transitions and the detail caret.
 
 
+### Payroll Run Sheet (`.pay-*`)
+- **Scope:** `app/Views/jurnal/payroll.php` + `app/Views/jurnal/_payroll_theme.php`; every selector lives under `.payroll-page` and derives from `--pay-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head (breadcrumb, title, period badge, month control, Susun/Input actions) → run board (status line + four hairline-separated phases: Susun = unpaid auto, Koreksi = unpaid manual/null, Bayar = paid, Bonus/Lembur = period-scoped kas keluar) → KPI unit strip (score/100, total, meter, tepat/terlambat/menunggu counts) → payroll ledger → bonus/lembur ledger. “Semua bulan” hides the board and KPI, empties the month input, and shows a notice.
+- **Ledger:** custom search + status chips (Semua/Rencana/Dibayar/Telat) replace DataTables; `data-status` and `data-late` drive filtering, with Telat counting unpaid overdue rows to match the board alert. Rows become stacked cards at `899.98px` (the six-column table needs ~824px); captions come from `data-label`, amounts align right with `tabular-nums`. Pagination is deliberately omitted at payroll scale (23 rows/month; the all-months bonus list can exceed 100).
+- **Bonus/lembur:** period-scoped to the selected month; search covers description, penerima, and unit; lock/unlock and the existing edit/delete modals are preserved; rows use the same stacked-card breakpoint.
+- **Color/motion:** phase dots use the app’s primary/warning/success/info semantics; secondary copy uses the derived `--pay-muted` token (≥4.5:1 in both themes); outline-primary labels use `--pay-primary-ink`. Motion is limited to hover/focus/meter and disabled under `prefers-reduced-motion`.
+- **Rules:** routes, field names, role gates, modals, overwrite semantics, and DB schema are unchanged. The template’s floating theme customizer is hidden on this page because it covers the right-aligned amount/action column on mobile.
+
+### Riwayat Service Garansi (`.rsg-*`)
+- **Scope:** `app/Views/riwayat/service_garansi.php` + `app/Views/riwayat/_service_garansi_theme.php`; every selector lives under `.rsg-page` / `.rsg-modal` and derives from `--rsg-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head (breadcrumb, title, count/unit/period chips) → data panel (search → filter band: unit, claim period, actions → table → DataTables footer). The unit select is rendered only for roles 0/1/34/40; other roles see a locked unit display and no posted unit value. The default period is the current month in WIB; explicit empty dates mean all periods.
+- **Table:** No. Service + customer, claim date, optional unit column, status, actions; newest claim first via ISO `data-order`; becomes stacked cards at `767.98px` with `data-label` captions. Actions are Riwayat Klaim (modal) and Cetak (existing print route).
+- **Modal:** claim note, damaged parts, and replacement parts (HPP, price 0) from the shared `/riwayat-klaim/{id}` endpoint; opened with Bootstrap 5 `getOrCreateInstance`.
+- **Rules:** one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`; the empty state disables search and skips DataTables init.
+
+### Detail Klaim Garansi (`.cg-*`)
+- **Scope:** `app/Views/transaksi/table_garansi/claim_detail.php` + `_claim_theme.php`; every selector lives under `.cg-page` / `.cg-modal` and derives from `--cg-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** hero (breadcrumb, back, service code, active-warranty/unit chips) → data service card (customer row, four-field grid, keluhan/keterangan notes) → damage card → numbered claim form (catatan → sparepart rusak → sparepart pengganti) → action bar. The action bar is sticky on desktop and static under `768px`.
+- **Tables:** Damaged parts become stacked cards at `767.98px` (checkbox, name, qty, note) so mobile users do not need horizontal scroll; the replacement table keeps horizontal scroll with a visible hint. Selected damaged rows tint with the single accent color.
+- **Rules:** location text uses `pelanggan.kecamatan` + `kabupaten`, not the long street address; one accent for primary action/focus; no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions and disabled under `prefers-reduced-motion`.
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.

@@ -202,16 +202,17 @@ $routes->get('riwayat_service_garansi', 'Riwayat_Service::index2', ['filter' => 
 
 //service_by_garansi
 $routes->get('service_by_garansi/(:num)', 'StatusGaransi::service_by_garansi/$1', ['filter' => 'auth']);
-$routes->post('update/pelanggan_service_garansi', 'StatusGaransi::update_service_pelanggan_garansi', ['filter' => 'auth']);
-$routes->post('update_garansi_service/saveKerusakan', 'StatusGaransi::insert_kerusakan_garansi', ['filter' => 'auth']);
-$routes->post('update_service_garansi/saveSparepart', 'StatusGaransi::insert_sparepart_garansi', ['filter' => 'auth']);
-$routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pembayaran_garansi', ['filter' => 'auth']);
+$routes->post('update/pelanggan_service_garansi', 'StatusGaransi::update_service_pelanggan_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->post('update_garansi_service/saveKerusakan', 'StatusGaransi::insert_kerusakan_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->post('update_service_garansi/saveSparepart', 'StatusGaransi::insert_sparepart_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->post('update_service_garansi/savePembayaran', 'StatusGaransi::insert_pembayaran_garansi', ['filter' => ['auth', 'csrf']]);
 
 //garansiservice
 $routes->get('garansi_service', 'StatusGaransi::index', ['filter' => 'auth']);
 $routes->post('garansi_service/ajax', 'StatusGaransi::garansi_service_ajax', ['filter' => 'auth']);
-$routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => 'auth']);
-$routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1');
+$routes->get('claim_garansi/detail/(:num)', 'StatusGaransi::claim_detail/$1', ['filter' => 'auth']);
+$routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1', ['filter' => 'auth']);
 
 //status service
 $routes->get('status_service/(:num)', 'Status_Service::index/$1');
@@ -309,6 +310,10 @@ $routes->get('cetak/invoice_mutasi/(:num)', 'MutasiStok::cetak_notamutasi/$1', [
 //retur
 $routes->get('retur_suplier', 'Retur_Suplier::index', ['filter' => 'auth']);
 $routes->post('insert_retur_suplier', 'Retur_Suplier::insert', ['filter' => 'auth']);
+$routes->get('retur_barang_rusak', 'ReturBarangRusak::index', ['filter' => 'auth']);
+$routes->post('retur_barang_rusak/simpan', 'ReturBarangRusak::simpan', ['filter' => ['auth', 'csrf']]);
+$routes->post('retur_barang_rusak/ubah-status/(:num)', 'ReturBarangRusak::ubahStatus/$1', ['filter' => ['auth', 'csrf']]);
+$routes->post('retur_barang_rusak/batal/(:num)', 'ReturBarangRusak::batal/$1', ['filter' => ['auth', 'csrf']]);
 
 //retur customer
 $routes->get('retur_customer', 'Retur_Customer::index', ['filter' => 'auth']);

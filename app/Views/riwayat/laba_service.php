@@ -121,6 +121,24 @@
                 </div>
             </div>
         </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card text-bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex no-block align-items-center">
+                        <a href="JavaScript: void(0);">
+                            <iconify-icon icon="solar:cart-2-linear" width="48" height="48" style="color: #fff">
+                            </iconify-icon>
+                        </a>
+                        <div class="ms-3 mt-2">
+                            <h4 class=" mb-0 text-white">
+                                HPP Klaim
+                            </h4>
+                            <h5 class="text-white" id="totalHppKlaim">Rp. 0</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="table-responsive mb-4 px-4">
@@ -170,6 +188,52 @@
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- HPP Klaim: loss mengikuti tanggal_hpp_klaim, bukan tanggal service. -->
+<div class="card w-100 position-relative overflow-hidden mb-4">
+    <div class="card-body">
+        <h5 class="fw-semibold mb-3">HPP Klaim</h5>
+        <div class="table-responsive">
+            <table class="table border text-nowrap mb-0 align-middle" id="hpp_klaim_table">
+                <thead class="text-dark fs-4">
+                    <tr>
+                        <th>Tanggal Klaim</th>
+                        <th>No Service</th>
+                        <th>Nama Teknisi</th>
+                        <th>Barang</th>
+                        <th class="text-end">HPP</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach (($hpp_klaim ?? []) as $loss): ?>
+                    <tr data-tanggal="<?= esc((string) $loss->tanggal_hpp_klaim, 'attr') ?>">
+                        <td><?= date('d-m-Y', strtotime((string) $loss->tanggal_hpp_klaim)) ?></td>
+                        <td><?= esc($loss->no_service) ?></td>
+                        <td><?= esc($loss->nama_teknisi ?? '-') ?></td>
+                        <td><?= esc($loss->nama_barang ?? '-') ?></td>
+                        <td class="text-end">Rp. <?= number_format((float) $loss->hpp, 0, ',', '.') ?></td>
+                        <td class="text-end"><?= (int) $loss->qty ?></td>
+                        <td class="text-end hpp-klaim-total">Rp. <?= number_format((float) $loss->total, 0, ',', '.') ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($hpp_klaim)): ?>
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">Tidak ada HPP klaim pada periode ini.</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <th colspan="6" class="text-end">Total HPP Klaim:</th>
+                        <th class="text-end" id="hppKlaimSectionTotal">Rp. <?= number_format((float) ($total_hpp_klaim ?? 0), 0, ',', '.') ?></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -242,6 +306,7 @@ function updateCardTotals() {
     let totalService = 0;
     let totalDiskon = 0;
     let totalLaba = 0;
+    let totalHppKlaim = 0;
 
     const rows = document.querySelectorAll('#zero_config tbody tr');
 
@@ -259,15 +324,24 @@ function updateCardTotals() {
         totalLaba += laba;
     });
 
+    document.querySelectorAll('#hpp_klaim_table tbody tr[data-tanggal]').forEach(row => {
+        if (row.style.display === 'none') return;
+        totalHppKlaim += parseInt(row.querySelector('.hpp-klaim-total').textContent.replace(/[^\d]/g, '')) || 0;
+    });
+
     document.getElementById('totalHPP').textContent = formatRupiah(totalHPP);
     document.getElementById('totalService').textContent = formatRupiah(totalService);
     document.getElementById('totalDiskon').textContent = formatRupiah(totalDiskon);
-    document.getElementById('totalLaba').textContent = formatRupiah(totalLaba);
+    document.getElementById('totalHppKlaim').textContent = formatRupiah(totalHppKlaim);
+    document.getElementById('hppKlaimSectionTotal').textContent = formatRupiah(totalHppKlaim);
+    document.getElementById('totalLaba').textContent = formatRupiah(totalLaba - totalHppKlaim);
 }
 
 function filterData() {
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
+    const startDate = start ? new Date(start) : null;
+    const endDate = end ? new Date(end) : null;
 
     const rows = document.querySelectorAll('#zero_config tbody tr');
     rows.forEach(row => {
@@ -278,14 +352,19 @@ function filterData() {
         const parts = dateText.split('-');
         const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
 
-        const startDate = start ? new Date(start) : null;
-        const endDate = end ? new Date(end) : null;
-
         let dateMatch = true;
         if (startDate && rowDate < startDate) dateMatch = false;
         if (endDate && rowDate > endDate) dateMatch = false;
 
         row.style.display = (dateMatch) ? '' : 'none';
+    });
+
+    document.querySelectorAll('#hpp_klaim_table tbody tr[data-tanggal]').forEach(row => {
+        const rowDate = new Date(row.getAttribute('data-tanggal') + 'T00:00:00');
+        let dateMatch = true;
+        if (startDate && rowDate < startDate) dateMatch = false;
+        if (endDate && rowDate > endDate) dateMatch = false;
+        row.style.display = dateMatch ? '' : 'none';
     });
 
     updateCardTotals();

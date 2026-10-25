@@ -27,6 +27,7 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelPenjualan;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
+use App\Services\Service\GaransiClaimService;
 use App\Services\Service\SparepartKeluarHardDeleteService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
 use App\Models\ModelServiceDp;
@@ -145,14 +146,61 @@ class Riwayat_Service extends BaseController
 
     public function index2()
     {
+        $idJabatan = (int) session('ID_JABATAN');
+        $canSeeAllUnits = GaransiClaimService::canSeeAllUnits($idJabatan);
+        $userUnit = (int) session('ID_UNIT');
 
-        $data =  array(
+        $requestedUnit = (int) ($this->request->getGet('unit') ?? 0);
+        $selectedUnit = $canSeeAllUnits ? $requestedUnit : $userUnit;
 
-            'fungsi' => $this->KerusakanModel->getKerusakan(),
-            'pelanggan' => $this->PelangganModel->getPelanggan(),
-            'service' => $this->ServiceModel->getRiwayatServiceGaransi(),
+        if ($canSeeAllUnits && $selectedUnit > 0 && $this->UnitModel->getById($selectedUnit) === null) {
+            $selectedUnit = 0;
+        }
+
+        $unitList = $canSeeAllUnits ? $this->UnitModel->getUnit() : [];
+        usort($unitList, static fn ($a, $b) => strcmp((string) $a->NAMA_UNIT, (string) $b->NAMA_UNIT));
+
+        $selectedUnitName = $canSeeAllUnits ? 'Semua unit' : 'Unit Anda';
+        if ($selectedUnit > 0) {
+            $selectedUnitName = '';
+            foreach ($unitList as $unit) {
+                if ((int) $unit->idunit === $selectedUnit) {
+                    $selectedUnitName = (string) $unit->NAMA_UNIT;
+                    break;
+                }
+            }
+            if ($selectedUnitName === '') {
+                $unit = $this->UnitModel->getById($selectedUnit);
+                $selectedUnitName = $unit->NAMA_UNIT ?? '-';
+            }
+        }
+
+        $today = new \DateTimeImmutable('today', new \DateTimeZone('Asia/Jakarta'));
+        $startDate = $this->request->getGet('tanggal_awal');
+        $endDate = $this->request->getGet('tanggal_akhir');
+
+        if ($startDate === null) {
+            $startDate = $today->modify('first day of this month')->format('Y-m-d');
+        }
+        if ($endDate === null) {
+            $endDate = $today->modify('last day of this month')->format('Y-m-d');
+        }
+
+        $unitFilter = $selectedUnit > 0 ? $selectedUnit : '';
+        $service = ($canSeeAllUnits || $userUnit > 0)
+            ? $this->ServiceModel->getRiwayatServiceGaransi($unitFilter, (string) $startDate, (string) $endDate)
+            : [];
+
+        $data = [
+            'service' => $service,
+            'unit' => $unitList,
+            'can_see_all_units' => $canSeeAllUnits,
+            'selected_unit' => $selectedUnit,
+            'selected_unit_name' => $selectedUnitName,
+            'start_date' => (string) $startDate,
+            'end_date' => (string) $endDate,
             'body'  => 'riwayat/service_garansi'
-        );
+        ];
         return view('template', $data);
     }
 
@@ -325,6 +373,7 @@ class Riwayat_Service extends BaseController
             // lama dibersihkan/dicocokkan dalam transaksi yang sama, lalu satu
             // invoice baru dibuat dari pilihan sparepart terbaru.
             $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);
+            $lockedIds = $this->returLockedSparepartIds($db, $idservice);
             (new ServiceSparepartPenjualanSyncService($db))->hapusTransaksiLama(
                 $idservice,
                 $existingItems,
@@ -347,6 +396,11 @@ class Riwayat_Service extends BaseController
                 $id = (int) ($produk['id'] ?? 0);
                 if ($id <= 0) {
                     throw new \RuntimeException('Data sparepart tidak valid.');
+                }
+
+                if (array_key_exists($id, $existingMap)
+                    && in_array((int) $existingMap[$id]->idservice_sparepart, $lockedIds, true)) {
+                    throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
                 }
                 $jumlah = (int) ($produk['jumlah'] ?? 0);
                 $harga = $this->rupiahToInt($produk['harga'] ?? '0');
@@ -377,8 +431,15 @@ class Riwayat_Service extends BaseController
             }
 
             foreach ($existingMap as $barangId => $item) {
-                if (! in_array((int) $barangId, $submittedIds, true)
-                    && ! $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId)) {
+                if (in_array((int) $barangId, $submittedIds, true)) {
+                    continue;
+                }
+
+                if (in_array((int) $item->idservice_sparepart, $lockedIds, true)) {
+                    throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
+                }
+
+                if (! $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId)) {
                     throw new \RuntimeException('Gagal menghapus sparepart yang dilepas dari service.');
                 }
             }
@@ -395,6 +456,22 @@ class Riwayat_Service extends BaseController
             log_message('error', 'Riwayat_Service::insert_sparepart gagal untuk service ' . $idservice . ': ' . $e->getMessage());
             return redirect()->to($urlKembali)->with('gagal', 'Sparepart tidak tersimpan: ' . $e->getMessage());
         }
+    }
+
+    private function returLockedSparepartIds($db, int $idservice): array
+    {
+        if (! $db->tableExists('retur_klaim_item')) {
+            return [];
+        }
+
+        $rows = $db->table('retur_klaim_item rki')
+            ->select('rki.service_sparepart_idservice_sparepart')
+            ->join('service_sparepart sp', 'sp.idservice_sparepart = rki.service_sparepart_idservice_sparepart')
+            ->where('sp.service_idservice', $idservice)
+            ->get()
+            ->getResultArray();
+
+        return array_map('intval', array_column($rows, 'service_sparepart_idservice_sparepart'));
     }
 
     private function buatPenjualanDariService($idservice, $produkData)
@@ -715,9 +792,25 @@ class Riwayat_Service extends BaseController
 
         $tanggal_awal  = $this->request->getPost('tanggal_awal');
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
+        $sumber        = $this->request->getPost('sumber');
 
-        // Ambil data dari model
-        $dataservice = $this->ServiceModel->filterExportGaransi($tanggal_awal, $tanggal_akhir);
+        $idJabatan = (int) session('ID_JABATAN');
+        $canSeeAllUnits = GaransiClaimService::canSeeAllUnits($idJabatan);
+
+        if ($canSeeAllUnits) {
+            $requestedUnit = (int) $this->request->getPost('unit');
+            $unitFilter = ($requestedUnit > 0 && $this->UnitModel->getById($requestedUnit) !== null)
+                ? $requestedUnit
+                : '';
+        } else {
+            $unitFilter = (int) session('ID_UNIT');
+        }
+
+        // Halaman garansi mengirim sumber=garansi (filter tanggal selesai);
+        // halaman riwayat klaim memakai filter tanggal claim.
+        $dataservice = $sumber === 'garansi'
+            ? $this->ServiceModel->filterExportGaransiAktif($tanggal_awal, $tanggal_akhir, $unitFilter)
+            : $this->ServiceModel->filterExportGaransi($tanggal_awal, $tanggal_akhir, $unitFilter);
 
         // Header kolom
         $headers = [
@@ -1381,39 +1474,48 @@ class Riwayat_Service extends BaseController
     {
         $db = \Config\Database::connect();
 
+        $tDetail = $db->prefixTable('detail_penjualan');
+        $tBarang = $db->prefixTable('barang');
+        $tPenjualan = $db->prefixTable('penjualan');
+        $tUnit = $db->prefixTable('unit');
+        $tServiceSparepart = $db->prefixTable('service_sparepart');
+        $tService = $db->prefixTable('service');
+
         $allowedColumns = [
-            0 => 'p.kode_invoice',
-            1 => 'p.tanggal',
-            2 => 'b.nama_barang',
-            3 => 'u.NAMA_UNIT',
-            4 => 'dp.hpp_penjualan',
-            5 => 'dp.sub_total'
+            0 => 'x.kode_invoice',
+            1 => 'x.tanggal',
+            2 => 'x.nama_barang',
+            3 => 'x.NAMA_UNIT',
+            4 => 'x.hpp_penjualan',
+            5 => 'x.sub_total'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
-        $orderColumnName = $allowedColumns[$orderColumn] ?? 'p.tanggal';
+        $orderColumnName = $allowedColumns[$orderColumn] ?? 'x.tanggal';
 
-        $where = ['p.unit_idunit = ?'];
+        $salesWhere = ['p.unit_idunit = ?'];
+        $claimWhere = ['COALESCE(sp.unit_idunit, s.unit_idunit) = ?'];
         $params = [(int)$selected_unit];
 
-        $where[] = 'YEAR(p.tanggal) = ?';
+        $salesWhere[] = 'YEAR(p.tanggal) = ?';
         $params[] = (int)$year;
 
         if (!empty($selected_day)) {
-            $where[] = 'DATE(p.tanggal) = ?';
+            $salesWhere[] = 'DATE(p.tanggal) = ?';
             $params[] = $selected_day;
         }
 
-        $searchCondition = '';
-        if (!empty($searchValue)) {
-            $searchCondition = ' AND (p.kode_invoice LIKE ? OR b.nama_barang LIKE ? OR u.NAMA_UNIT LIKE ?)';
-            $searchParam = "%{$searchValue}%";
-            $params = array_merge($params, [$searchParam, $searchParam, $searchParam]);
+        $params[] = (int)$selected_unit;
+        $claimWhere[] = 'YEAR(s.tanggal_claim_garansi) = ?';
+        $params[] = (int)$year;
+
+        if (!empty($selected_day)) {
+            $claimWhere[] = 'DATE(s.tanggal_claim_garansi) = ?';
+            $params[] = $selected_day;
         }
 
-        $whereClause = implode(' AND ', $where) . $searchCondition;
-
-        $sql = "SELECT 
+        // Penjualan dan sparepart klaim digabung agar pengeluaran stok klaim ikut terlihat.
+        $baseSql = "SELECT
                 p.kode_invoice,
                 p.idpenjualan,
                 dp.iddetail_penjualan,
@@ -1425,39 +1527,62 @@ class Riwayat_Service extends BaseController
                 dp.barang_idbarang,
                 b.nama_barang,
                 p.tanggal,
-                u.NAMA_UNIT
-            FROM detail_penjualan dp
-            JOIN barang b ON b.idbarang = dp.barang_idbarang
-            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
-            JOIN unit u ON u.idunit = p.unit_idunit
-            WHERE {$whereClause}
+                u.NAMA_UNIT,
+                'penjualan' AS sumber
+            FROM {$tDetail} dp
+            JOIN {$tBarang} b ON b.idbarang = dp.barang_idbarang
+            JOIN {$tPenjualan} p ON p.idpenjualan = dp.penjualan_idpenjualan
+            JOIN {$tUnit} u ON u.idunit = p.unit_idunit
+            WHERE " . implode(' AND ', $salesWhere) . "
+            UNION ALL
+            SELECT
+                s.no_service AS kode_invoice,
+                NULL AS idpenjualan,
+                NULL AS iddetail_penjualan,
+                sp.jumlah_tambahan_garansi AS jumlah,
+                0 AS harga_penjualan,
+                0 AS diskon_penjualan,
+                sp.sub_total_garansi AS sub_total,
+                COALESCE(sp.hpp_penjualan_garansi, 0) AS hpp_penjualan,
+                sp.barang_idbarang,
+                b.nama_barang,
+                s.tanggal_claim_garansi AS tanggal,
+                u.NAMA_UNIT,
+                'klaim' AS sumber
+            FROM {$tServiceSparepart} sp
+            JOIN {$tService} s ON s.idservice = sp.service_idservice
+            JOIN {$tBarang} b ON b.idbarang = sp.barang_idbarang
+            JOIN {$tUnit} u ON u.idunit = COALESCE(sp.unit_idunit, s.unit_idunit)
+            WHERE " . implode(' AND ', $claimWhere) . "
+              AND sp.jumlah_tambahan_garansi > 0
+              AND s.tanggal_claim_garansi IS NOT NULL";
+
+        $searchCondition = '';
+        $filteredParams = $params;
+        if (!empty($searchValue)) {
+            $searchCondition = 'WHERE (x.kode_invoice LIKE ? OR x.nama_barang LIKE ? OR x.NAMA_UNIT LIKE ?)';
+            $searchParam = "%{$searchValue}%";
+            $filteredParams = array_merge($filteredParams, [$searchParam, $searchParam, $searchParam]);
+        }
+
+        $sql = "SELECT * FROM ({$baseSql}) x
+            {$searchCondition}
             ORDER BY {$orderColumnName} {$orderDir}
             LIMIT ? OFFSET ?";
 
-        $params[] = (int)$length;
-        $params[] = (int)$start;
+        $filteredParams[] = (int)$length;
+        $filteredParams[] = (int)$start;
 
-        $query = $db->query($sql, $params);
+        $query = $db->query($sql, $filteredParams);
         $data = $query->getResultArray();
 
-        $countSql = "SELECT COUNT(*) as total
-            FROM detail_penjualan dp
-            JOIN barang b ON b.idbarang = dp.barang_idbarang
-            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
-            JOIN unit u ON u.idunit = p.unit_idunit
-            WHERE {$whereClause}";
-
-        $countQuery = $db->query($countSql, array_slice($params, 0, -2));
+        $countSql = "SELECT COUNT(*) as total FROM ({$baseSql}) x {$searchCondition}";
+        $countQuery = $db->query($countSql, array_slice($filteredParams, 0, -2));
         $totalFiltered = (int)$countQuery->getRow()->total;
 
         // Total records (tanpa search, dengan filter unit/day)
-        $totalSql = "SELECT COUNT(*) as total
-            FROM detail_penjualan dp
-            JOIN barang b ON b.idbarang = dp.barang_idbarang
-            JOIN penjualan p ON p.idpenjualan = dp.penjualan_idpenjualan
-            JOIN unit u ON u.idunit = p.unit_idunit
-            WHERE " . implode(' AND ', $where);
-        $totalQuery = $db->query($totalSql, array_slice($params, 0, count($where)));
+        $totalSql = "SELECT COUNT(*) as total FROM ({$baseSql}) x";
+        $totalQuery = $db->query($totalSql, $params);
         $recordsTotal = (int)$totalQuery->getRow()->total;
 
         return [

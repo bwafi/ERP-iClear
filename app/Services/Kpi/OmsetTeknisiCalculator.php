@@ -36,6 +36,10 @@ class OmsetTeknisiCalculator implements KpiCalculatorInterface
             [$employeeId, $startDate, $endDate]
         )->getRow();
 
-        return (float) ($result->total ?? 0);
+        // Loss klaim mengurangi omset teknisi pada bulan tanggal_hpp_klaim.
+        $loss = (new \App\Models\ModelHppKlaimLoss())
+            ->getTotalLoss($startDate, $endDate, $unitId, $employeeId);
+
+        return (float) ($result->total ?? 0) - $loss;
     }
 }

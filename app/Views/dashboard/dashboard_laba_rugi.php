@@ -219,6 +219,10 @@
                                         <td class="text-end">Rp <?= number_format($laba_rugi_transaksi['biaya']['hpp_service'] ?? 0, 0, ',', '.') ?></td>
                                     </tr>
                                     <tr>
+                                        <td>HPP Klaim</td>
+                                        <td class="text-end">Rp <?= number_format($laba_rugi_transaksi['biaya']['hpp_klaim'] ?? 0, 0, ',', '.') ?></td>
+                                    </tr>
+                                    <tr>
                                         <td><strong>Total Biaya</strong></td>
                                         <td class="text-end"><strong class="text-danger">Rp <?= number_format($laba_rugi_transaksi['biaya']['total'] ?? 0, 0, ',', '.') ?></strong></td>
                                     </tr>

@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\ModelBarangRusak;
+use App\Models\ModelBarangRusakClaim;
 
 use Config\Database;
 use App\Models\ModelAuth;
@@ -23,6 +24,7 @@ class BarangRusak extends BaseController
     protected $BankModel;
 
     protected $BarangRusakModel;
+    protected $BarangRusakClaimModel;
     protected $BarangModel;
     protected $PembelianModel;
     protected $DetailPembelianModel;
@@ -37,6 +39,7 @@ class BarangRusak extends BaseController
         $this->AuthModel = new ModelAuth();
         $this->BankModel = new ModelBank();
         $this->BarangRusakModel = new ModelBarangRusak();
+        $this->BarangRusakClaimModel = new ModelBarangRusakClaim();
         $this->BarangModel = new ModelBarang();
         $this->PembelianModel = new ModelPembelian();
         $this->DetailPembelianModel = new ModelDetailPembelian();
@@ -50,6 +53,7 @@ class BarangRusak extends BaseController
         //ini perubahan
         $data =  array(
             'barang_rusak' => $this->BarangRusakModel->getBarangRusak(),
+            'barang_rusak_claim' => $this->BarangRusakClaimModel->getAll(),
             'unit' => $this->UnitModel->getUnit(),
             'body'  => 'stok/barang_rusak',
             'kategori' => $this->KategoriModel->getKategori(),

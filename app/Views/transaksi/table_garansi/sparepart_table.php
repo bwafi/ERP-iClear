@@ -1,4 +1,5 @@
 <form action="<?php echo base_url('update_service_garansi/saveSparepart') ?>" enctype="multipart/form-data" method="post">
+    <?= csrf_field() ?>
     <div class="mt-3">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal">
             Tambah Sparepart
@@ -191,7 +192,7 @@
         <td>
   <input type="text" class="form-control harga" 
          name="produk[${nextIndex}][harga]" 
-         value="Rp ${formatNumber(harga_penjualan_garansi && harga_penjualan_garansi != 0 ? harga_penjualan_garansi : harga)}">
+         value="Rp ${formatNumber(parseInt(jumlah_tambahan_garansi) > 0 ? harga_penjualan_garansi : harga)}">
 </td>
 
         <td hidden>

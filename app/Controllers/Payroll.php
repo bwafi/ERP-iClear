@@ -167,10 +167,21 @@ class Payroll extends BaseController
             'left'
         );
 
-        $builder->where('kk.kategori_idkategori', 10)->groupStart()->like('kk.deskripsi', 'bon')->orLike('kk.deskripsi', 'lembur')->groupEnd()->orderBy('kk.tanggal', 'DESC');
+        $builder->where('kk.kategori_idkategori', 10)->groupStart()->like('kk.deskripsi', 'bon')->orLike('kk.deskripsi', 'lembur')->groupEnd();
+
+        // Bonus/lembur ikut periode yang sedang dibaca, supaya papan fase dan
+        // tabel tidak menunjukkan dua rentang waktu yang berbeda.
+        if (!$showAll) {
+            $builder->where('kk.tanggal >=', $from)
+                ->where('kk.tanggal <=', $to);
+        }
+
+        $builder->orderBy('kk.tanggal', 'DESC');
         $builder->orderBy('kk.idkas_keluar', 'DESC');
 
         $kas_keluar = $builder->get()->getResult();
+
+        $runSummary = \App\Services\Payroll\PayrollRunSummary::build($payrollItems, $kas_keluar);
 
         // Data unit
         $unit = $this->db->table('unit')
@@ -198,6 +209,10 @@ class Payroll extends BaseController
             'payrollLocks'  => $payrollLocks,
             'payrollItems'  => $payrollItems,
             'payrollSummary' => array_values($payrollSummary),
+            'payrollRun'    => $runSummary['run'],
+            'payrollTotals' => $runSummary['totals'],
+            'bonusCount'    => $runSummary['run']['bonus']['count'],
+            'bonusTotal'    => $runSummary['run']['bonus']['total'],
             'bulan'         => $bulan,
             'show_all'      => $showAll,
             'can_input'     => $scope->canInput(),
@@ -300,8 +315,8 @@ class Payroll extends BaseController
      * Finance tidak lagi mengetik nominal satu per satu: sistem menghitung
      * dari master gaji + skor KPI bulan itu, membuat baris berstatus
      * 'rencana', lalu Finance tinggal mengoreksi bila perlu dan menekan
-     * "Sudah Dibayar". Baris yang sudah ada tidak pernah ditimpa, jadi
-     * generator ini aman dijalankan berulang kali untuk bulan yang sama.
+     * "Sudah Dibayar". Menjalankan ulang akan menimpa baris 'rencana' yang
+     * sudah ada; baris 'dibayar' tetap dilewati.
      */
     public function generateRegister()
     {
@@ -336,8 +351,9 @@ class Payroll extends BaseController
         try {
             $generator = new \App\Services\Payroll\PayrollGenerator();
             $hasil = $generator->generate($bulan, [
-                'due_date' => (string) ($this->request->getPost('due_date') ?? ''),
-                'unit_ids' => $unitIds,
+                'due_date'  => (string) ($this->request->getPost('due_date') ?? ''),
+                'unit_ids'  => $unitIds,
+                'overwrite' => true,
             ]);
         } catch (\Throwable $e) {
             log_message('error', 'Payroll: generate register gagal: ' . $e->getMessage());
@@ -355,7 +371,7 @@ class Payroll extends BaseController
         $bulanLabel = date('F Y', strtotime($hasil['bulan'] . '-01'));
 
         $pesan = sprintf(
-            'Payroll %s disusun dari salary_structures: %d karyawan jadi baris baru',
+            'Payroll %s disusun dari salary_structures: %d baris baru',
             $bulanLabel,
             $hasil['created']
         );
@@ -364,8 +380,16 @@ class Payroll extends BaseController
             $pesan .= sprintf(' (total Rp %s)', number_format($hasil['total_nominal'], 0, ',', '.'));
         }
 
+        if (($hasil['updated'] ?? 0) > 0) {
+            $pesan .= sprintf(
+                ', %d baris diperbarui (total Rp %s)',
+                $hasil['updated'],
+                number_format($hasil['updated_nominal'] ?? 0, 0, ',', '.')
+            );
+        }
+
         if ($hasil['skipped'] > 0) {
-            $pesan .= sprintf(', %d dilewati karena sudah ada', $hasil['skipped']);
+            $pesan .= sprintf(', %d dilewati karena sudah ada/sudah dibayar', $hasil['skipped']);
         }
 
         if (($hasil['dikecualikan'] ?? 0) > 0) {
@@ -391,7 +415,7 @@ class Payroll extends BaseController
             );
         }
 
-        if ($hasil['created'] === 0) {
+        if ($hasil['created'] === 0 && ($hasil['updated'] ?? 0) === 0) {
             return $pesan . '. Tidak ada angka baru yang perlu ditinjau.';
         }
 

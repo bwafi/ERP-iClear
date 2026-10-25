@@ -16,18 +16,29 @@
     <div class="card-body">
         <div class="row g-3 mb-3">
             <div class="col-lg-2 col-md-6">
-                <label class="form-label fw-semibold mb-2">Tanggal Awal</label>
+                <label class="form-label fw-semibold mb-2">Tanggal Selesai (dari)</label>
                 <input type="date" id="startDate" class="form-control">
             </div>
             <div class="col-lg-2 col-md-6">
-                <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
+                <label class="form-label fw-semibold mb-2">Tanggal Selesai (sampai)</label>
                 <input type="date" id="endDate" class="form-control">
             </div>
-            <div class="col-lg-4 col-md-6">
+            <?php if (!empty($can_see_all_units)): ?>
+                <div class="col-lg-2 col-md-6">
+                    <label class="form-label fw-semibold mb-2">Unit</label>
+                    <select id="unitFilter" class="form-select">
+                        <option value="">Semua Unit</option>
+                        <?php foreach (($unit ?? []) as $u): ?>
+                            <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            <?php endif; ?>
+            <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-semibold mb-2">Search</label>
-                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, alamat...">
+                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, kecamatan/kabupaten...">
             </div>
-            <div class="col-lg-2 col-md-3">
+            <div class="col-lg-1 col-md-3">
                 <label class="form-label fw-semibold mb-2">Show</label>
                 <select id="pageLength" class="form-select">
                     <option value="10">10</option>
@@ -47,9 +58,11 @@
         </div>
 
         <div class="d-flex justify-content-end mb-3">
-            <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
+            <form action="<?php echo base_url('riwayat_service_garansi/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
+                <input type="hidden" name="sumber" value="garansi">
                 <input type="hidden" name="tanggal_awal" id="exportStartDate">
                 <input type="hidden" name="tanggal_akhir" id="exportEndDate">
+                <input type="hidden" name="unit" id="exportUnit">
                 <button type="submit" class="btn btn-danger">
                     <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
                     Export
@@ -77,7 +90,10 @@
                             <h6 class="fs-4 fw-semibold mb-0">Nomor Handphone</h6>
                         </th>
                         <th>
-                            <h6 class="fs-4 fw-semibold mb-0">Alamat</h6>
+                            <h6 class="fs-4 fw-semibold mb-0">Kecamatan / Kabupaten</h6>
+                        </th>
+                        <th>
+                            <h6 class="fs-4 fw-semibold mb-0">Unit</h6>
                         </th>
                         <th>
                             <h6 class="fs-4 fw-semibold mb-0">Status garansi</h6>
@@ -93,28 +109,6 @@
                 <tbody>
                 </tbody>
             </table>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Konfirmasi Claim Garansi (dipakai bersama semua baris) -->
-<div class="modal fade" id="ClaimGaransiModal" tabindex="-1" aria-labelledby="ClaimGaransiModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header d-flex align-items-center">
-                <h4 class="modal-title" id="ClaimGaransiModalLabel">Konfirmasi Klaim Garansi</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-            </div>
-            <form action="<?= base_url('claim_garansi') ?>" method="post">
-                <div class="modal-body">
-                    <input type="hidden" name="idservice" id="modal-claim-idservice">
-                    <p>Apakah Anda yakin service Akan klaim garansi?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-success">Konfirmasi</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
@@ -155,23 +149,10 @@
         const endDateInput = document.getElementById('endDate');
         const searchBox = document.getElementById('searchBox');
         const pageLength = document.getElementById('pageLength');
+        const unitFilter = document.getElementById('unitFilter');
 
-        const today = new Date();
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(today.getDate() - 15);
-
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        // Set default 15 hari ke belakang
-        startDateInput.value = toDateInputValue(fifteenDaysAgo);
-        endDateInput.value = toDateInputValue(today);
-        document.getElementById('exportStartDate').value = startDateInput.value;
-        document.getElementById('exportEndDate').value = endDateInput.value;
+        document.getElementById('exportStartDate').value = '';
+        document.getElementById('exportEndDate').value = '';
 
         if ($.fn.DataTable.isDataTable('#zero_config')) {
             $('#zero_config').DataTable().destroy();
@@ -205,6 +186,7 @@
                 data: function(d) {
                     d.startDate = startDateInput.value;
                     d.endDate = endDateInput.value;
+                    d.unitFilter = unitFilter ? unitFilter.value : '';
                     d.search = {
                         value: searchBox.value
                     };
@@ -234,69 +216,45 @@
                     data: 'no_hp'
                 },
                 {
-                    data: 'alamat'
-                },
-                {
-                    data: 'garansi_hari',
+                    data: null,
                     render: function(data, type, row) {
-                        if (row.garansi_hari > 0 && row.tanggal_selesai) {
-                            const tanggalSelesai = new Date(row.tanggal_selesai);
-                            const tanggalAkhir = new Date(tanggalSelesai);
-                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
-                            const today = new Date();
-
-                            const claimDate = row.tanggal_claim_garansi;
-                            const isClaimed = claimDate && claimDate > '1971-01-01 00:00:00';
-
-                            if (isClaimed) {
-                                return 'Di klaim pada ' + formatDate(new Date(claimDate));
-                            }
-
-                            if (today > tanggalAkhir) {
-                                return 'Tidak Claim (kadaluarsa pada ' + formatDate(tanggalAkhir) + ')';
-                            }
-
-                            return row.garansi_hari + ' hari (aktif sampai ' + formatDate(tanggalAkhir) + ')';
+                        const kecamatan = (row.kecamatan ?? '').trim();
+                        const kabupaten = (row.kabupaten ?? '').trim();
+                        if (!kecamatan && !kabupaten) {
+                            return '-';
                         }
-
-                        return 'Tidak ada garansi';
+                        const baris = [];
+                        if (kecamatan) {
+                            baris.push(`<span>${kecamatan}</span>`);
+                        }
+                        if (kabupaten) {
+                            baris.push(`<span class="text-muted fs-2">${kabupaten}</span>`);
+                        }
+                        return `<div class="d-flex flex-column lh-sm">${baris.join('')}</div>`;
                     }
                 },
                 {
-                    data: 'tanggal_claim_garansi',
-                    render: function(data) {
-                        if (data && data > '1971-01-01') {
-                            return 'Klaim pada tanggal ' + formatDate(new Date(data));
-                        }
-                        return 'Tidak ada riwayat';
-                    }
+                    data: 'nama_unit'
+                },
+                {
+                    data: 'status_garansi',
+                    orderable: false
+                },
+                {
+                    data: 'riwayat_klaim',
+                    orderable: false
                 },
                 {
                     data: null,
                     orderable: false,
                     render: function(data, type, row) {
-                        const adaGaransi = parseInt(row.garansi_hari) > 0 && !!row.tanggal_selesai;
-                        let masihDalamGaransi = false;
-
-                        if (adaGaransi) {
-                            const tanggalAkhir = new Date(row.tanggal_selesai);
-                            tanggalAkhir.setDate(tanggalAkhir.getDate() + parseInt(row.garansi_hari));
-                            tanggalAkhir.setHours(0, 0, 0, 0);
-
-                            const hariIni = new Date();
-                            hariIni.setHours(0, 0, 0, 0);
-
-                            masihDalamGaransi = hariIni <= tanggalAkhir;
-                        }
-
                         let buttons = '';
 
-                        // Tombol Claim Garansi
-                        if (adaGaransi && masihDalamGaransi) {
-                            buttons += `<button type="button" class="btn btn-sm btn-danger btn-claim-garansi me-1" style="display: inline-flex; align-items: center;" data-idservice="${row.idservice}">
+                        if (row.claimable) {
+                            buttons += `<a href="<?= base_url('claim_garansi/detail') ?>/${row.idservice}" class="btn btn-sm btn-danger me-1" style="display: inline-flex; align-items: center;">
                                 <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
                                 Claim Garansi
-                            </button>`;
+                            </a>`;
                         } else {
                             buttons += `<button type="button" class="btn btn-sm btn-danger me-1" style="display: inline-flex; align-items: center;" disabled>
                                 <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
@@ -313,18 +271,20 @@
                         </button>`;
 
                         // Tombol Riwayat Klaim
-                        buttons += `<button type="button" class="btn btn-wa btn-riwayat"
-                            data-idservice="${row.idservice}"
-                            style="height: 40px; background-color: antiquewhite;">
-                            Riwayat Klaim
-                        </button>`;
+                        if (row.claimed) {
+                            buttons += `<button type="button" class="btn btn-wa btn-riwayat"
+                                data-idservice="${row.idservice}"
+                                style="height: 40px; background-color: antiquewhite;">
+                                Riwayat Klaim
+                            </button>`;
+                        }
 
                         return buttons;
                     }
                 }
             ],
             order: [
-                [1, 'desc']
+                [2, 'desc']
             ]
         });
 
@@ -341,12 +301,9 @@
 
         startDateInput.addEventListener('change', filterData);
         endDateInput.addEventListener('change', filterData);
-
-        // Buka modal konfirmasi claim untuk baris yang dipilih
-        $(document).on('click', '.btn-claim-garansi', function() {
-            $('#modal-claim-idservice').val($(this).data('idservice'));
-            $('#ClaimGaransiModal').modal('show');
-        });
+        if (unitFilter) {
+            unitFilter.addEventListener('change', filterData);
+        }
 
         // WhatsApp button (delegated agar tetap jalan untuk baris dari server)
         $(document).on('click', '.btn-wa', function() {
@@ -374,11 +331,13 @@
 
             // tampilkan loading
             $('#riwayat-klaim-content').html('<div class="text-center p-3">Loading...</div>');
-            $('#modalRiwayatKlaim').modal('show');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRiwayatKlaim')).show();
 
             // request data via AJAX
             $.get('<?= base_url('riwayat-klaim') ?>/' + idservice, function(response) {
                 $('#riwayat-klaim-content').html(response.html);
+            }).fail(function() {
+                $('#riwayat-klaim-content').html('<div class="alert alert-danger">Gagal memuat riwayat klaim.</div>');
             });
         });
     };
@@ -387,25 +346,21 @@
         dataTable.ajax.reload();
         document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
         document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
+        const unitFilter = document.getElementById('unitFilter');
+        document.getElementById('exportUnit').value = unitFilter ? unitFilter.value : '';
     }
 
     function resetFilter() {
-        const today = new Date();
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(today.getDate() - 15);
-
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        document.getElementById('startDate').value = toDateInputValue(fifteenDaysAgo);
-        document.getElementById('endDate').value = toDateInputValue(today);
+        document.getElementById('startDate').value = '';
+        document.getElementById('endDate').value = '';
         document.getElementById('searchBox').value = '';
-        document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
-        document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
+        const unitFilter = document.getElementById('unitFilter');
+        if (unitFilter) {
+            unitFilter.value = '';
+        }
+        document.getElementById('exportStartDate').value = '';
+        document.getElementById('exportEndDate').value = '';
+        document.getElementById('exportUnit').value = '';
         dataTable.ajax.reload();
     }
 </script>

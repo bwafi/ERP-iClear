@@ -1,326 +1,428 @@
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-
-<!-- ====================================================== -->
-<!-- HEADER & BREADCRUMB -->
-<!-- ====================================================== -->
-<div class="card bg-light-subtle shadow-none position-relative overflow-hidden mb-4 border-0">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <div>
-            <h4 class="fw-bold mb-1">Payroll & Penggajian</h4>
-            <p class="text-muted mb-0 small">Kelola jadwal gaji, realisasi pembayaran, dan kas lembur/bonus karyawan.</p>
-        </div>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">
-                        <i class="ti ti-home me-1"></i>Jurnal
-                    </a>
-                </li>
-                <li class="breadcrumb-item active fw-semibold text-primary" aria-current="page">Payroll</li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
+<?= $this->include('jurnal/_payroll_theme') ?>
 <?php
+/**
+ * Payroll — Lembar Proses Payroll.
+ *
+ * Satu periode dibaca sebagai proses yang berjalan: papan fase di atas,
+ * ledger sebagai tempat kerja. Route, field, role gating, dan logika bisnis
+ * tidak berubah; yang berubah hanya susunan, hierarki, dan cara mencari.
+ */
 $todayTs        = strtotime(date('Y-m-d'));
 $payrollSummary = $payrollSummary ?? [];
 $payrollItems   = $payrollItems ?? [];
+$payrollRun     = $payrollRun ?? [
+    'auto'   => ['count' => 0, 'total' => 0],
+    'manual' => ['count' => 0, 'total' => 0],
+    'paid'   => ['count' => 0, 'total' => 0],
+    'bonus'  => ['count' => 0, 'total' => 0],
+];
+$payrollTotals  = $payrollTotals ?? [
+    'count' => 0, 'total' => 0, 'paid_count' => 0, 'paid_total' => 0,
+    'unpaid_count' => 0, 'unpaid_total' => 0, 'overdue_count' => 0,
+    'overdue_total' => 0, 'employees' => 0,
+];
 $can_input      = $can_input ?? false;
 $bulan          = $bulan ?? date('Y-m');
 $show_all       = $show_all ?? ($bulan === '');
+$kas_keluar     = $kas_keluar ?? [];
 $unit           = $unit ?? [];
 $akun           = $akun ?? [];
 $bank           = $bank ?? [];
+$kategori_kas   = $kategori_kas ?? [];
+$bonusCount     = $bonusCount ?? count($kas_keluar);
+$bonusTotal     = $bonusTotal ?? 0;
+$payrollLocks   = $payrollLocks ?? [];
+$locks          = $payrollLocks;
+
+$namaBulan = [
+    '01' => 'Januari', '02' => 'Februari', '03' => 'Maret', '04' => 'April',
+    '05' => 'Mei', '06' => 'Juni', '07' => 'Juli', '08' => 'Agustus',
+    '09' => 'September', '10' => 'Oktober', '11' => 'November', '12' => 'Desember',
+];
+$bulanLabel = 'Semua bulan';
+if (! $show_all && $bulan !== '' && preg_match('/^(\d{4})-(\d{2})$/', $bulan, $m)) {
+    $bulanLabel = ($namaBulan[$m[2]] ?? $m[2]) . ' ' . $m[1];
+}
+
+$fmtRupiah = static function ($value): string {
+    return 'Rp ' . number_format((float) $value, 0, ',', '.');
+};
+$fmtTanggal = static function ($value): string {
+    $ts = strtotime((string) $value);
+    return !empty($value) && $ts !== false ? date('d/m/Y', $ts) : '—';
+};
 ?>
-
-<!-- ====================================================== -->
-<!-- FILTER PERIODE -->
-<!-- ====================================================== -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-3">
-        <form class="row g-2 align-items-center" method="get" action="<?= base_url('payroll') ?>">
-            <div class="col-12 col-sm-auto d-flex align-items-center gap-2">
-                <label class="form-label mb-0 fw-semibold text-nowrap"><i class="ti ti-calendar me-1"></i>Periode Bulan:</label>
-                <input type="month" class="form-control form-control-sm" name="bulan" value="<?= esc($bulan) ?>" placeholder="Semua Bulan">
-            </div>
-
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary btn-sm px-3">
-                    <i class="ti ti-filter me-1"></i>Tampilkan
-                </button>
-            </div>
-
-            <div class="col-auto">
-                <button type="submit" name="bulan" value="" class="btn <?= $show_all ? 'btn-secondary' : 'btn-outline-secondary' ?> btn-sm px-3">
-                    <i class="ti ti-list me-1"></i>Semua Bulan
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ====================================================== -->
-<!-- RINGKASAN KPI PER UNIT -->
-<!-- ====================================================== -->
-<div class="row mb-4">
-    <?php if ($show_all): ?>
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center text-muted py-4">
-                    <i class="ti ti-info-circle fs-6 d-block mb-1 text-primary"></i>
-                    Menampilkan semua bulan. Pilih periode bulan pada filter di atas untuk melihat ringkasan KPI per unit.
+<div class="payroll-page">
+    <section class="pay-sheet" aria-labelledby="payroll-title">
+        <header class="pay-head">
+            <div class="pay-head-main">
+                <nav class="pay-crumb" aria-label="breadcrumb">
+                    <a href="<?= base_url('/') ?>">Jurnal</a>
+                    <span aria-hidden="true">/</span>
+                    <span>Payroll</span>
+                </nav>
+                <div class="pay-title-row">
+                    <h1 class="pay-title" id="payroll-title">Payroll &amp; Penggajian</h1>
+                    <span class="pay-period-badge">
+                        <iconify-icon icon="solar:calendar-linear" width="13" height="13" aria-hidden="true"></iconify-icon>
+                        <?= esc($bulanLabel) ?>
+                    </span>
                 </div>
+                <p class="pay-sub">Kelola jadwal gaji, realisasi pembayaran, dan bonus/lembur karyawan dalam satu periode.</p>
             </div>
-        </div>
-    <?php elseif (empty($payrollSummary)): ?>
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center text-muted py-4">
-                    <i class="ti ti-file-x fs-6 d-block mb-1 text-warning"></i>
-                    Belum ada data ringkasan payroll untuk bulan <strong><?= esc($bulan) ?></strong>.
-                </div>
-            </div>
-        </div>
-    <?php else: ?>
-        <?php foreach ($payrollSummary as $ps): ?>
-            <?php
-            $score = (float) ($ps['score'] ?? 0);
-            $badgeCls = $score >= 80 ? 'bg-success' : ($score >= 60 ? 'bg-warning text-dark' : 'bg-danger');
-            $statusLabel = ($ps['status'] ?? 'no_data') === 'no_data' ? 'Belum Dinilai' : 'Sudah Dinilai';
-            $badgeStatus = ($ps['status'] ?? 'no_data') === 'no_data' ? 'bg-secondary-subtle text-secondary' : 'bg-primary-subtle text-primary';
-            ?>
-            <div class="col-xl-4 col-md-6 mb-3">
-                <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center justify-content-between mb-3">
-                            <h6 class="mb-0 fw-bold text-dark">
-                                <i class="ti ti-building me-1 text-primary"></i><?= esc($ps['nama_unit'] ?? '-') ?>
-                            </h6>
-                            <span class="badge <?= $badgeStatus ?> px-2 py-1 rounded-pill">
-                                <?= $statusLabel ?>
-                            </span>
-                        </div>
 
-                        <div class="row align-items-center g-0">
-                            <div class="col-5 border-end pe-3">
-                                <div class="text-muted small mb-1">Skor KPI</div>
-                                <div class="d-flex align-items-baseline gap-1">
-                                    <h2 class="mb-0 fw-bold"><?= number_format($score, 0, ',', '.') ?></h2>
-                                    <small class="text-muted">/100</small>
-                                </div>
-                            </div>
-                            <div class="col-7 ps-3">
-                                <div class="d-flex justify-content-between mb-1 gap-1">
-                                    <span class="badge bg-success-subtle text-success small">Tepat: <?= (int) ($ps['detail']['tepat'] ?? 0) ?></span>
-                                    <span class="badge bg-danger-subtle text-danger small">Terlambat: <?= (int) ($ps['detail']['terlambat'] ?? 0) ?></span>
-                                    <span class="badge bg-warning-subtle text-warning small">Menunggu: <?= (int) ($ps['detail']['open'] ?? 0) ?></span>
-                                </div>
-                                <div class="mt-2 text-end">
-                                    <span class="text-muted small d-block">Total Nominal:</span>
-                                    <span class="fw-bold text-dark">Rp <?= number_format((float) ($ps['detail']['total_payroll'] ?? 0), 0, ',', '.') ?></span>
-                                </div>
-                            </div>
-                        </div>
+            <div class="pay-head-side">
+                <form class="pay-period" method="get" action="<?= base_url('payroll') ?>">
+                    <label for="payroll-bulan">Periode</label>
+                    <input id="payroll-bulan" type="month" class="form-control form-control-sm" name="bulan" value="<?= esc($show_all ? '' : $bulan) ?>" placeholder="Semua bulan">
+                    <button type="submit" class="btn btn-primary btn-sm">Tampilkan</button>
+                    <a href="<?= base_url('payroll?bulan=') ?>" class="btn btn-outline-secondary btn-sm <?= $show_all ? 'active' : '' ?>" <?= $show_all ? 'aria-current="page"' : '' ?>>Semua</a>
+                </form>
+
+                <?php if ($can_input): ?>
+                    <div class="pay-actions">
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#generate-payroll-modal">
+                            <iconify-icon icon="solar:magic-stick-2-bold-duotone" width="15" height="15" aria-hidden="true"></iconify-icon>
+                            Susun Otomatis
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#input-payroll-finance-modal">
+                            <iconify-icon icon="solar:wallet-money-line-duotone" width="15" height="15" aria-hidden="true"></iconify-icon>
+                            Input Payroll Gaji
+                        </button>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </header>
+
+        <?php if ($show_all): ?>
+            <div class="pay-run-note">
+                <iconify-icon icon="solar:info-circle-linear" width="17" height="17" aria-hidden="true"></iconify-icon>
+                <div><strong>Menampilkan semua bulan.</strong> Pilih periode untuk melihat status proses dan KPI unit.</div>
+            </div>
+        <?php else: ?>
+            <div class="pay-run">
+                <div class="pay-run-head">
+                    <span><strong>Status proses</strong> <?= esc($bulanLabel) ?></span>
+                    <?php if ((int) ($payrollTotals['overdue_count'] ?? 0) > 0): ?>
+                        <span class="pay-run-alert">
+                            <iconify-icon icon="solar:danger-triangle-linear" width="14" height="14" aria-hidden="true"></iconify-icon>
+                            <?= (int) $payrollTotals['overdue_count'] ?> baris lewat jatuh tempo · <?= $fmtRupiah($payrollTotals['overdue_total']) ?>
+                        </span>
+                    <?php else: ?>
+                        <span class="pay-run-ok">
+                            <iconify-icon icon="solar:check-circle-linear" width="14" height="14" aria-hidden="true"></iconify-icon>
+                            Tidak ada baris lewat jatuh tempo
+                        </span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="pay-phases">
+                    <div class="pay-phase pay-phase--auto">
+                        <div class="pay-phase-label"><span class="pay-dot" aria-hidden="true"></span>Susun</div>
+                        <div class="pay-phase-value"><?= (int) $payrollRun['auto']['count'] ?> <small>baris</small></div>
+                        <div class="pay-phase-money"><?= $fmtRupiah($payrollRun['auto']['total']) ?></div>
+                        <div class="pay-phase-note">Otomatis, belum dikoreksi</div>
+                    </div>
+                    <div class="pay-phase pay-phase--manual">
+                        <div class="pay-phase-label"><span class="pay-dot" aria-hidden="true"></span>Koreksi</div>
+                        <div class="pay-phase-value"><?= (int) $payrollRun['manual']['count'] ?> <small>baris</small></div>
+                        <div class="pay-phase-money"><?= $fmtRupiah($payrollRun['manual']['total']) ?></div>
+                        <div class="pay-phase-note">Manual atau sudah dikoreksi</div>
+                    </div>
+                    <div class="pay-phase pay-phase--paid">
+                        <div class="pay-phase-label"><span class="pay-dot" aria-hidden="true"></span>Bayar</div>
+                        <div class="pay-phase-value"><?= (int) $payrollRun['paid']['count'] ?> <small>baris</small></div>
+                        <div class="pay-phase-money"><?= $fmtRupiah($payrollRun['paid']['total']) ?></div>
+                        <div class="pay-phase-note">Sudah dibayar</div>
+                    </div>
+                    <div class="pay-phase pay-phase--bonus">
+                        <div class="pay-phase-label"><span class="pay-dot" aria-hidden="true"></span>Bonus / Lembur</div>
+                        <div class="pay-phase-value"><?= (int) $payrollRun['bonus']['count'] ?> <small>transaksi</small></div>
+                        <div class="pay-phase-money"><?= $fmtRupiah($payrollRun['bonus']['total']) ?></div>
+                        <div class="pay-phase-note">Kas keluar periode ini</div>
                     </div>
                 </div>
             </div>
-        <?php endforeach; ?>
-    <?php endif; ?>
-</div>
 
-<!-- ====================================================== -->
-<!-- JADWAL & REALISASI GAJI -->
-<!-- ====================================================== -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-transparent border-bottom py-3 px-4">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <h5 class="fw-bold mb-0 text-dark">
-                <i class="ti ti-calendar-event me-2 text-primary"></i>Jadwal & Realisasi Gaji
-            </h5>
-            <?php if ($can_input): ?>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#generate-payroll-modal">
-                        <iconify-icon icon="solar:magic-stick-2-bold-duotone" width="18" height="18"></iconify-icon>
-                        <span>Susun Otomatis</span>
-                    </button>
-                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#input-payroll-finance-modal">
-                        <iconify-icon icon="solar:wallet-money-line-duotone" width="18" height="18"></iconify-icon>
-                        <span>Input Payroll Gaji</span>
-                    </button>
+            <div class="pay-units">
+                <div class="pay-units-head">
+                    <span>KPI unit</span>
+                    <span><?= count($payrollSummary) ?> unit dengan payroll</span>
                 </div>
-            <?php endif; ?>
-        </div>
-    </div>
+                <?php if (!empty($payrollSummary)): ?>
+                    <div class="pay-units-grid">
+                        <?php foreach ($payrollSummary as $ps): ?>
+                            <?php
+                            $score = (float) ($ps['score'] ?? 0);
+                            $isNoData = ($ps['status'] ?? 'no_data') === 'no_data';
+                            $tepat = (int) ($ps['detail']['tepat'] ?? 0);
+                            $telat = (int) ($ps['detail']['terlambat'] ?? 0);
+                            $menunggu = (int) ($ps['detail']['open'] ?? 0);
+                            ?>
+                            <div class="pay-unit">
+                                <div class="pay-unit-name" title="<?= esc($ps['nama_unit'] ?? '-') ?>">
+                                    <iconify-icon icon="solar:buildings-2-linear" width="13" height="13" aria-hidden="true"></iconify-icon>
+                                    <?= esc($ps['nama_unit'] ?? '-') ?>
+                                </div>
+                                <div class="pay-unit-row">
+                                    <span class="pay-unit-score">
+                                        <?= $isNoData ? '—' : number_format($score, 0, ',', '.') ?><?php if (! $isNoData): ?><small>/100</small><?php endif; ?>
+                                    </span>
+                                    <span class="pay-unit-total"><?= $fmtRupiah($ps['detail']['total_payroll'] ?? 0) ?></span>
+                                </div>
+                                <?php if (! $isNoData): ?>
+                                    <div class="pay-meter" role="img" aria-label="Skor KPI <?= esc($ps['nama_unit'] ?? '') ?> <?= number_format($score, 0, ',', '.') ?> dari 100">
+                                        <span style="--pay-score: <?= max(0, min(100, $score)) ?>%"></span>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="pay-unit-status">
+                                    <?= $isNoData ? 'Belum dinilai' : 'Tepat ' . $tepat . ' · Terlambat ' . $telat . ' · Menunggu ' . $menunggu ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <p class="pay-units-empty">Belum ada payroll untuk periode ini, jadi skor KPI unit belum bisa dihitung.</p>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </section>
 
-    <div class="card-body p-0">
-        <div class="table-responsive p-4">
-            <table class="table table-hover align-middle w-100" id="table-payroll-fp">
-                <thead class="table-light">
-                    <tr>
-                        <th class="text-center" width="50">No</th>
-                        <th>Karyawan</th>
-                        <th>Unit</th>
-                        <th>Jatuh Tempo</th>
-                        <th>Tanggal Bayar</th>
-                        <th class="text-center">Status</th>
-                        <th class="text-center">Klasifikasi</th>
-                        <th class="text-end">Total</th>
-                        <th>Catatan</th>
-                        <th class="text-center" width="120">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($payrollItems)): ?>
-                        <?php $no = 1; ?>
+    <section class="pay-panel" aria-labelledby="payroll-ledger-title">
+        <div class="pay-panel-head">
+            <div>
+                <h2 class="pay-panel-title" id="payroll-ledger-title">Jadwal &amp; realisasi gaji</h2>
+                <p class="pay-panel-sub">Baris rencana yang sudah dikoreksi siap dibayar; baris dibayar tidak ikut dihitung ulang.</p>
+            </div>
+            <div class="pay-panel-meta">
+                <span><?= (int) $payrollTotals['count'] ?> baris · <?= (int) $payrollTotals['employees'] ?> karyawan</span>
+                <b><?= $fmtRupiah($payrollTotals['total']) ?></b>
+            </div>
+        </div>
+
+        <?php if (!empty($payrollItems)): ?>
+        <div class="pay-toolbar">
+            <label class="pay-search" for="payroll-search">
+                <iconify-icon icon="solar:card-search-linear" width="15" height="15" aria-hidden="true"></iconify-icon>
+                <input id="payroll-search" type="search" placeholder="Cari karyawan, unit, atau catatan..." autocomplete="off">
+            </label>
+            <div class="pay-chips" role="group" aria-label="Filter status payroll">
+                <button type="button" class="pay-chip is-active" data-payroll-status="all" aria-pressed="true">Semua <span><?= (int) $payrollTotals['count'] ?></span></button>
+                <button type="button" class="pay-chip" data-payroll-status="rencana" aria-pressed="false">Rencana <span><?= (int) $payrollTotals['unpaid_count'] ?></span></button>
+                <button type="button" class="pay-chip" data-payroll-status="dibayar" aria-pressed="false">Dibayar <span><?= (int) $payrollTotals['paid_count'] ?></span></button>
+                <button type="button" class="pay-chip" data-payroll-status="telat" aria-pressed="false">Telat <span><?= (int) $payrollTotals['overdue_count'] ?></span></button>
+            </div>
+            <div class="pay-result" id="payroll-result" aria-live="polite"><?= count($payrollItems) ?> baris</div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (empty($payrollItems)): ?>
+            <div class="pay-empty">
+                <iconify-icon icon="solar:document-add-linear" width="34" height="34" aria-hidden="true"></iconify-icon>
+                <h3>Belum ada payroll untuk periode ini</h3>
+                <p>Susun payroll otomatis dari struktur gaji, atau input satu karyawan secara manual.</p>
+                <?php if ($can_input): ?>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#generate-payroll-modal">Susun Otomatis</button>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <div class="pay-table-wrap">
+                <table class="pay-table" id="payroll-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Karyawan</th>
+                            <th scope="col">Jatuh tempo</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="pay-th-right">Total</th>
+                            <th scope="col">Catatan</th>
+                            <th scope="col" class="pay-th-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         <?php foreach ($payrollItems as $row): ?>
                             <?php
-                            $dueTs = strtotime($row->due_date);
-                            $paidTs = !empty($row->paid_date) ? strtotime($row->paid_date) : null;
-
-                            if ($row->status === 'dibayar' && $paidTs !== null) {
-                                if ($paidTs <= $dueTs) {
-                                    $cls = 'bg-success-subtle text-success';
-                                    $label = 'Tepat Waktu';
+                            $isPaid = ($row->status ?? '') === 'dibayar';
+                            $dueTs = strtotime((string) ($row->due_date ?? ''));
+                            $paidTs = !empty($row->paid_date) ? strtotime((string) $row->paid_date) : null;
+                            $isLate = ! $isPaid && $dueTs !== false && $dueTs < $todayTs;
+                            if ($isPaid) {
+                                if ($paidTs !== null && $dueTs !== false) {
+                                    $onTime = $paidTs <= $dueTs;
+                                    $timingClass = $onTime ? 'is-ok' : 'is-late';
+                                    $timingLabel = $onTime ? 'Tepat waktu' : 'Terlambat';
                                 } else {
-                                    $cls = 'bg-danger-subtle text-danger';
-                                    $label = 'Terlambat';
+                                    $timingClass = '';
+                                    $timingLabel = 'Tanggal bayar belum tercatat';
                                 }
-                            } elseif ($todayTs > $dueTs) {
-                                $cls = 'bg-danger-subtle text-danger';
-                                $label = 'Belum Bayar (Overdue)';
+                            } elseif ($dueTs === false) {
+                                $timingClass = '';
+                                $timingLabel = 'Jatuh tempo belum tercatat';
+                            } elseif ($isLate) {
+                                $timingClass = 'is-late';
+                                $timingLabel = 'Lewat jatuh tempo';
                             } else {
-                                $cls = 'bg-warning-subtle text-warning';
-                                $label = 'Belum Jatuh Tempo';
+                                $timingClass = '';
+                                $timingLabel = 'Belum jatuh tempo';
                             }
                             ?>
-                            <tr>
-                                <td class="text-center text-muted small"><?= $no++ ?></td>
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="avatar-sm bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 32px; height: 32px;">
-                                            <?= strtoupper(substr($row->NAMA_AKUN ?? 'K', 0, 1)) ?>
-                                        </div>
-                                        <span class="fw-semibold text-dark"><?= esc($row->NAMA_AKUN ?? '-') ?></span>
+                            <tr data-status="<?= $isPaid ? 'dibayar' : 'rencana' ?>" data-late="<?= $isLate ? '1' : '0' ?>">
+                                <td class="pay-cell-person" data-label="Karyawan">
+                                    <div class="pay-person">
+                                        <span class="pay-avatar" aria-hidden="true"><?= esc(strtoupper(substr((string) ($row->NAMA_AKUN ?? 'K'), 0, 1))) ?></span>
+                                        <span class="pay-person-copy">
+                                            <span class="pay-person-name"><?= esc($row->NAMA_AKUN ?? '-') ?></span>
+                                            <span class="pay-person-unit"><?= esc($row->NAMA_UNIT ?? '-') ?></span>
+                                        </span>
                                     </div>
                                 </td>
-                                <td><span class="badge bg-light text-dark border"><?= esc($row->NAMA_UNIT ?? '-') ?></span></td>
-                                <td class="small"><i class="ti ti-calendar me-1 text-muted"></i><?= esc(date('d-m-Y', $dueTs)) ?></td>
-                                <td class="small">
-                                    <?= $paidTs !== null
-                                        ? '<i class="ti ti-circle-check text-success me-1"></i>' . esc(date('d-m-Y', $paidTs))
-                                        : '<span class="text-muted">—</span>' ?>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge rounded-pill <?= $row->status === 'dibayar' ? 'bg-success' : 'bg-secondary' ?>">
-                                        <?= $row->status === 'dibayar' ? 'Dibayar' : 'Rencana' ?>
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge <?= $cls ?> px-2 py-1">
-                                        <?= $label ?>
-                                    </span>
-                                </td>
-                                <td class="text-end fw-bold text-dark">
-                                    Rp <?= number_format((float) $row->total, 0, ',', '.') ?>
-                                </td>
-                                <td class="small">
-                                    <?php if (($row->sumber ?? 'manual') === 'auto'): ?>
-                                        <span class="badge bg-info-subtle text-info me-1">Auto</span>
+                                <td data-label="Jatuh tempo">
+                                    <span class="pay-date"><?= $fmtTanggal($row->due_date ?? '') ?></span>
+                                    <?php if ($isPaid): ?>
+                                        <span class="pay-date-sub"><?= $paidTs !== null ? 'Dibayar ' . $fmtTanggal($row->paid_date) : 'Tanggal bayar belum tercatat' ?></span>
+                                    <?php else: ?>
+                                        <span class="pay-date-sub">Belum dibayar</span>
                                     <?php endif; ?>
-                                    <span class="text-muted"><?= esc($row->notes ?? '-') ?></span>
                                 </td>
-                                <td class="text-center">
-                                    <?php if ($row->status !== 'dibayar' && $can_input): ?>
-                                        <div class="btn-group btn-group-sm">
-                                            <button type="button" class="btn btn-outline-warning edit-register-button" data-bs-toggle="modal" data-bs-target="#edit-register-modal" data-id="<?= esc($row->id) ?>" data-karyawan="<?= esc($row->NAMA_AKUN ?? '-') ?>" data-total="<?= esc($row->total) ?>" data-due="<?= esc($row->due_date) ?>" data-notes="<?= esc($row->notes ?? '') ?>" title="Koreksi Data">
-                                                <i class="ti ti-pencil"></i>
+                                <td data-label="Status">
+                                    <span class="pay-badge <?= $isPaid ? 'pay-badge--paid' : 'pay-badge--plan' ?>"><?= $isPaid ? 'Dibayar' : 'Rencana' ?></span>
+                                    <span class="pay-timing <?= $timingClass ?>"><?= $timingLabel ?></span>
+                                </td>
+                                <td class="pay-amount" data-label="Total"><?= $fmtRupiah($row->total ?? 0) ?></td>
+                                <td class="pay-cell-note" data-label="Catatan">
+                                    <?php if (($row->sumber ?? 'manual') === 'auto'): ?>
+                                        <span class="pay-src">Auto</span>
+                                    <?php else: ?>
+                                        <span class="pay-src pay-src--manual">Manual</span>
+                                    <?php endif; ?>
+                                    <span class="pay-note" title="<?= esc($row->notes ?? '') ?>"><?= esc($row->notes ?? '—') ?></span>
+                                </td>
+                                <td class="pay-cell-actions" data-label="Aksi">
+                                    <?php if (! $isPaid && $can_input): ?>
+                                        <div class="pay-row-actions">
+                                            <button type="button"
+                                                class="pay-icon-btn pay-icon-btn--edit edit-register-button"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#edit-register-modal"
+                                                data-id="<?= esc($row->id) ?>"
+                                                data-karyawan="<?= esc($row->NAMA_AKUN ?? '-') ?>"
+                                                data-total="<?= esc($row->total ?? 0) ?>"
+                                                data-due="<?= esc($row->due_date ?? '') ?>"
+                                                data-notes="<?= esc($row->notes ?? '') ?>"
+                                                aria-label="Koreksi payroll <?= esc($row->NAMA_AKUN ?? '') ?>"
+                                                title="Koreksi payroll">
+                                                <i class="ti ti-pencil" aria-hidden="true"></i>
                                             </button>
-                                            <button type="button" class="btn btn-success bayar-button" data-bs-toggle="modal" data-bs-target="#bayar-payroll-modal" data-id="<?= esc($row->id) ?>" data-karyawan="<?= esc($row->NAMA_AKUN ?? '-') ?>" data-total="<?= esc($row->total) ?>" title="Tandai Sudah Dibayar">
-                                                <i class="ti ti-check"></i>
+                                            <button type="button"
+                                                class="pay-icon-btn pay-icon-btn--pay bayar-button"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#bayar-payroll-modal"
+                                                data-id="<?= esc($row->id) ?>"
+                                                data-karyawan="<?= esc($row->NAMA_AKUN ?? '-') ?>"
+                                                aria-label="Tandai sudah dibayar <?= esc($row->NAMA_AKUN ?? '') ?>"
+                                                title="Tandai sudah dibayar">
+                                                <i class="ti ti-check" aria-hidden="true"></i>
                                             </button>
                                         </div>
                                     <?php else: ?>
-                                        <span class="text-muted small">—</span>
+                                        <span class="pay-muted">—</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pay-empty" id="payroll-empty" hidden>
+                <iconify-icon icon="solar:card-search-linear" width="30" height="30" aria-hidden="true"></iconify-icon>
+                <h3>Tidak ada baris yang cocok</h3>
+                <p>Ubah kata kunci atau pilih filter “Semua”.</p>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="payroll-reset">Reset filter</button>
+            </div>
+        <?php endif; ?>
+    </section>
 
-<!-- ====================================================== -->
-<!-- BONUS / LEMBUR (KAS KELUAR) -->
-<!-- ====================================================== -->
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-transparent border-bottom py-3 px-4">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <h5 class="fw-bold mb-0 text-dark">
-                <i class="ti ti-receipt-tax me-2 text-primary"></i>Bonus / Lembur (Kas Keluar)
-            </h5>
-            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#input-kas-modal">
-                <iconify-icon icon="solar:wallet-money-line-duotone" width="18" height="18"></iconify-icon>
-                <span>Input Bonus / Lembur</span>
+    <section class="pay-panel pay-panel--bonus" aria-labelledby="bonus-title">
+        <div class="pay-panel-head">
+            <div>
+                <h2 class="pay-panel-title" id="bonus-title">Bonus / lembur</h2>
+                <p class="pay-panel-sub">Kas keluar kategori bonus/lembur pada periode yang sama.</p>
+            </div>
+            <div class="pay-panel-meta">
+                <span><?= (int) $bonusCount ?> transaksi</span>
+                <b><?= $fmtRupiah($bonusTotal) ?></b>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#input-kas-modal">
+                <iconify-icon icon="solar:wallet-money-line-duotone" width="15" height="15" aria-hidden="true"></iconify-icon>
+                Input Bonus / Lembur
             </button>
         </div>
-    </div>
 
-    <div class="card-body p-0">
-        <div class="table-responsive p-4">
-            <table class="table table-hover align-middle w-100" id="zero_config">
-                <thead class="table-light">
-                    <tr>
-                        <th class="text-center" width="50">No</th>
-                        <th>Tanggal</th>
-                        <th>Unit</th>
-                        <th>Kategori</th>
-                        <th>Deskripsi</th>
-                        <th>Penerima</th>
-                        <th>Bank / Rekening</th>
-                        <th class="text-end">Jumlah</th>
-                        <th class="text-center">Jenis</th>
-                        <th class="text-center" width="120">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($kas_keluar)): ?>
-                        <?php $no = 1; ?>
+        <?php if (!empty($kas_keluar)): ?>
+        <div class="pay-toolbar">
+            <label class="pay-search" for="bonus-search">
+                <iconify-icon icon="solar:card-search-linear" width="15" height="15" aria-hidden="true"></iconify-icon>
+                <input id="bonus-search" type="search" placeholder="Cari deskripsi, penerima, atau unit..." autocomplete="off">
+            </label>
+            <div class="pay-result" id="bonus-result" aria-live="polite"><?= count($kas_keluar) ?> transaksi</div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (empty($kas_keluar)): ?>
+            <div class="pay-empty">
+                <iconify-icon icon="solar:wallet-money-linear" width="34" height="34" aria-hidden="true"></iconify-icon>
+                <h3>Belum ada bonus/lembur</h3>
+                <p>Catat bonus atau lembur karyawan untuk periode ini agar ikut terbaca di lembar proses.</p>
+                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#input-kas-modal">Input Bonus / Lembur</button>
+            </div>
+        <?php else: ?>
+            <div class="pay-table-wrap">
+                <table class="pay-table pay-table--bonus" id="bonus-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Tanggal</th>
+                            <th scope="col">Keterangan</th>
+                            <th scope="col">Penerima</th>
+                            <th scope="col" class="pay-th-right">Jumlah</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="pay-th-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         <?php foreach ($kas_keluar as $row): ?>
+                            <?php $isLocked = !empty($locks[(string) $row->idkas_keluar]); ?>
                             <tr>
-                                <td class="text-center text-muted small"><?= $no++ ?></td>
-                                <td class="small"><?= esc(date('d-m-Y', strtotime($row->tanggal))) ?></td>
-                                <td><span class="badge bg-light text-dark border"><?= esc($row->NAMA_UNIT ?? '-') ?></span></td>
-                                <td><span class="badge bg-secondary-subtle text-secondary"><?= esc($row->kategori ?? '-') ?></span></td>
-                                <td class="small"><?= esc($row->deskripsi) ?></td>
-                                <td class="fw-semibold text-dark"><?= esc($row->NAMA_AKUN ?? '-') ?></td>
-                                <td class="small">
-                                    <div class="fw-bold text-dark"><?= esc($row->nama_bank ?? '-') ?></div>
-                                    <div class="text-muted"><?= esc($row->atas_nama ?? '-') ?></div>
+                                <td data-label="Tanggal"><span class="pay-date"><?= $fmtTanggal($row->tanggal ?? '') ?></span></td>
+                                <td class="pay-cell-note" data-label="Keterangan">
+                                    <span class="pay-src"><?= esc($row->kategori ?? 'Bonus') ?></span>
+                                    <span class="pay-note" title="<?= esc($row->deskripsi ?? '') ?>"><?= esc($row->deskripsi ?? '—') ?></span>
+                                    <span class="pay-date-sub"><?= esc($row->NAMA_UNIT ?? '-') ?></span>
                                 </td>
-                                <td class="text-end fw-bold text-dark">
-                                    Rp <?= number_format($row->jumlah ?? 0, 0, ',', '.') ?>
+                                <td class="pay-cell-stack" data-label="Penerima">
+                                    <span class="pay-person-name"><?= esc($row->NAMA_AKUN ?? '-') ?></span>
+                                    <span class="pay-date-sub"><?= esc($row->nama_bank ?: 'Tanpa bank') ?><?= !empty($row->atas_nama) ? ' · ' . esc($row->atas_nama) : '' ?></span>
                                 </td>
-                                <td class="text-center">
-                                    <span class="badge <?= strtolower($row->jenis) === 'debet' ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success' ?>">
-                                        <?= strtoupper(esc($row->jenis ?? '-')) ?>
-                                    </span>
+                                <td class="pay-amount" data-label="Jumlah">
+                                    <?= $fmtRupiah($row->jumlah ?? 0) ?>
+                                    <span class="pay-type <?= strtolower((string) ($row->jenis ?? '')) === 'debet' ? 'is-debet' : 'is-kredit' ?>"><?= esc(strtoupper((string) ($row->jenis ?? '-'))) ?></span>
                                 </td>
-                                <td class="text-center">
-                                    <?php
-                                    $locks = $payrollLocks ?? [];
-                                    $isLocked = !empty($locks[(string) $row->idkas_keluar]);
-                                    ?>
+                                <td data-label="Status">
+                                    <?php if ($isLocked): ?>
+                                        <span class="pay-badge pay-badge--paid"><i class="ti ti-lock" aria-hidden="true"></i> Terkunci</span>
+                                    <?php else: ?>
+                                        <span class="pay-badge pay-badge--plan">Terbuka</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="pay-cell-actions" data-label="Aksi">
                                     <?php if (
                                         session()->get('ID_JABATAN') == 1 ||
                                         (session()->get('ID_JABATAN') == 35 && session()->get('ID_UNIT') == 1)
                                     ): ?>
-                                        <div class="d-flex align-items-center justify-content-center gap-1">
-                                            <?php if (!$isLocked): ?>
-                                                <button type="button" class="btn btn-outline-warning btn-sm edit-button" data-bs-toggle="modal" data-bs-target="#edit-kas-modal"
+                                        <div class="pay-row-actions">
+                                            <?php if (! $isLocked): ?>
+                                                <button type="button"
+                                                    class="pay-icon-btn pay-icon-btn--edit edit-button"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#edit-kas-modal"
                                                     data-id="<?= esc($row->idkas_keluar) ?>"
                                                     data-tanggal="<?= esc($row->tanggal) ?>"
                                                     data-unit="<?= esc($row->idunit) ?>"
@@ -330,43 +432,51 @@ $bank           = $bank ?? [];
                                                     data-penerima="<?= esc($row->penerima) ?>"
                                                     data-no-rekening="<?= esc($row->no_rekening ?? '') ?>"
                                                     data-jumlah="<?= esc($row->jumlah) ?>"
-                                                    data-jenis="<?= esc($row->jenis) ?>" title="Edit">
-                                                    <i class="ti ti-edit"></i>
+                                                    data-jenis="<?= esc($row->jenis) ?>"
+                                                    aria-label="Edit bonus/lembur <?= esc($row->deskripsi ?? '') ?>"
+                                                    title="Edit">
+                                                    <i class="ti ti-pencil" aria-hidden="true"></i>
                                                 </button>
-
-                                                <button type="button" class="btn btn-outline-danger btn-sm delete-button" data-bs-toggle="modal" data-bs-target="#delete-kas-modal" data-id="<?= esc($row->idkas_keluar) ?>" title="Hapus">
-                                                    <i class="ti ti-trash"></i>
+                                                <button type="button"
+                                                    class="pay-icon-btn delete-button"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#delete-kas-modal"
+                                                    data-id="<?= esc($row->idkas_keluar) ?>"
+                                                    aria-label="Hapus bonus/lembur <?= esc($row->deskripsi ?? '') ?>"
+                                                    title="Hapus">
+                                                    <i class="ti ti-trash" aria-hidden="true"></i>
                                                 </button>
-
-                                                <form action="<?= base_url('payroll/lock') ?>" method="post" class="d-inline">
+                                                <form action="<?= base_url('payroll/lock') ?>" method="post">
                                                     <input type="hidden" name="idkas_keluar" value="<?= esc($row->idkas_keluar) ?>">
-                                                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Lock Transaksi">
-                                                        <i class="ti ti-lock"></i>
+                                                    <button type="submit" class="pay-icon-btn" aria-label="Kunci transaksi" title="Kunci transaksi">
+                                                        <i class="ti ti-lock" aria-hidden="true"></i>
                                                     </button>
                                                 </form>
                                             <?php else: ?>
-                                                <form action="<?= base_url('payroll/unlock') ?>" method="post" class="d-inline">
+                                                <form action="<?= base_url('payroll/unlock') ?>" method="post">
                                                     <input type="hidden" name="idkas_keluar" value="<?= esc($row->idkas_keluar) ?>">
-                                                    <button type="submit" class="btn btn-success btn-sm" title="Unlock Transaksi">
-                                                        <i class="ti ti-lock-open"></i>
+                                                    <button type="submit" class="pay-icon-btn pay-icon-btn--unlock" aria-label="Buka kunci transaksi" title="Buka kunci transaksi">
+                                                        <i class="ti ti-lock-open" aria-hidden="true"></i>
                                                     </button>
                                                 </form>
                                             <?php endif; ?>
                                         </div>
                                     <?php else: ?>
-                                        <span class="text-muted small">—</span>
+                                        <span class="pay-muted">—</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- ====================================================== -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pay-empty" id="bonus-empty" hidden>
+                <iconify-icon icon="solar:card-search-linear" width="30" height="30" aria-hidden="true"></iconify-icon>
+                <h3>Tidak ada transaksi yang cocok</h3>
+                <p>Ubah kata kunci pencarian.</p>
+            </div>
+        <?php endif; ?>
+    </section>
 <!-- MODAL SUSUN PAYROLL OTOMATIS -->
 <!-- ====================================================== -->
 <div class="modal fade" id="generate-payroll-modal" tabindex="-1">
@@ -382,7 +492,7 @@ $bank           = $bank ?? [];
                         <div class="d-flex gap-2">
                             <i class="ti ti-info-circle fs-5 flex-shrink-0"></i>
                             <div class="small">
-                                Nominal dihitung berdasarkan <code>salary_structures</code> (Gaji Pokok + Tunjangan KPI) + Lembur Kas Keluar. Hasil generate berstatus <strong>Rencana</strong>.
+                                Nominal dihitung dari <code>salary_structures</code> (Gaji Pokok + Tunjangan Kinerja + Tunjangan Absen + Penempatan + Insentif) + Lembur Kas Keluar. Baris <strong>Rencana</strong> yang sudah ada akan dihitung ulang dan ditimpa; baris yang sudah <strong>Dibayar</strong> tidak diubah.
                             </div>
                         </div>
                     </div>
@@ -436,10 +546,7 @@ $bank           = $bank ?? [];
                         <label class="form-label fw-semibold">Total Gaji</label>
                         <div class="input-group">
                             <span class="input-group-text">Rp</span>
-                            <div class="input-group">
-                                <span class="input-group-text">Rp</span>
-                                <input type="text" class="form-control currency-input" name="total" id="edit_register_total" inputmode="numeric" autocomplete="off" required>
-                            </div>
+                            <input type="text" class="form-control currency-input" name="total" id="edit_register_total" inputmode="numeric" autocomplete="off" required>
                         </div>
                     </div>
 
@@ -544,7 +651,7 @@ $bank           = $bank ?? [];
                     <div class="avatar-lg bg-success-subtle text-success rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width:60px; height:60px;">
                         <i class="ti ti-cash fs-2"></i>
                     </div>
-                    <p class="mb-3 fs-6">Tandai penggajian <strong id="bayar_karyawan" class="text-dark">-</strong> sebagai telah dibayar?</p>
+                    <p class="mb-3 fs-6">Tandai penggajian <strong id="bayar_karyawan" class="text-primary">-</strong> sebagai telah dibayar?</p>
 
                     <div class="text-start">
                         <label class="form-label fw-semibold">Tanggal Pelunasan / Bayar</label>
@@ -747,69 +854,31 @@ $bank           = $bank ?? [];
         </div>
     </div>
 </div>
+</div>
 
 <script>
-    // Tabel diinisialisasi di luar document.ready supaya menang dari init
-    // global di datatable-basic.init.js yang dimuat di footer. Kalau footer
-    // yang lebih dulu, konfigurasi searchPlaceholder di bawah hilang dan
-    // muncul peringatan "Cannot reinitialise DataTable". Pengecekan
-    // isDataTable menjaga halaman ini tetap aman bila urutannya berubah.
-    if ($('#table-payroll-fp').length && !$.fn.dataTable.isDataTable('#table-payroll-fp')) {
-        $('#table-payroll-fp').DataTable({
-            responsive: true,
-            language: {
-                search: "",
-                searchPlaceholder: "Cari data payroll..."
-            }
-        });
-    }
+    $(document).ready(function () {
+        // Select2
+        $('#penerima').select2({ width: '100%', dropdownParent: $('#input-kas-modal') });
+        $('#edit_penerima').select2({ width: '100%', dropdownParent: $('#edit-kas-modal') });
+        $('#input_pegawai').select2({ width: '100%', dropdownParent: $('#input-payroll-finance-modal') });
 
-    if ($('#zero_config').length && !$.fn.dataTable.isDataTable('#zero_config')) {
-        $('#zero_config').DataTable({
-            responsive: true,
-            language: {
-                search: "",
-                searchPlaceholder: "Cari data lembur/bonus..."
-            }
-        });
-    }
-
-    $(document).ready(function() {
-        // Select2 Integration
-        const selectOptions = {
-            width: '100%'
-        };
-        $('#penerima').select2({
-            ...selectOptions,
-            dropdownParent: $('#input-kas-modal')
-        });
-        $('#edit_penerima').select2({
-            ...selectOptions,
-            dropdownParent: $('#edit-kas-modal')
-        });
-        $('#input_pegawai').select2({
-            ...selectOptions,
-            dropdownParent: $('#input-payroll-finance-modal')
-        });
-
-        // Auto select unit ketika pegawai dipilih
-        $('#input_pegawai').on('change', function() {
+        $('#input_pegawai').on('change', function () {
             const unitId = $(this).find('option:selected').data('unit');
             if (unitId) {
                 $('#input_unit').val(String(unitId));
             }
         });
 
-        // Tandai Sudah Dibayar
-        $('#table-payroll-fp').on('click', '.bayar-button', function() {
+        // Aksi payroll
+        $('#payroll-table').on('click', '.bayar-button', function () {
             const btn = $(this);
             $('#bayar_id').val(btn.data('id'));
             $('#bayar_karyawan').text(btn.data('karyawan'));
             $('#bayar_tanggal').val('<?= date('Y-m-d') ?>');
         });
 
-        // Koreksi Payroll Register
-        $('#table-payroll-fp').on('click', '.edit-register-button', function() {
+        $('#payroll-table').on('click', '.edit-register-button', function () {
             const btn = $(this);
             $('#edit_register_id').val(btn.data('id'));
             $('#edit_register_karyawan').text(btn.data('karyawan'));
@@ -819,8 +888,8 @@ $bank           = $bank ?? [];
             $('#edit_register_notes').val(btn.data('notes') || '');
         });
 
-        // Edit Kas Keluar (Bonus/Lembur)
-        $('#zero_config').on('click', '.edit-button', function() {
+        // Aksi bonus / lembur
+        $('#bonus-table').on('click', '.edit-button', function () {
             const btn = $(this);
             $('#edit_id').val(btn.data('id'));
             $('#edit_tanggal').val(btn.data('tanggal'));
@@ -832,7 +901,10 @@ $bank           = $bank ?? [];
             $('#edit_jenis').val(btn.data('jenis'));
         });
 
-        // Format Rupiah pada input currency
+        $('#bonus-table').on('click', '.delete-button', function () {
+            $('#delete_id').val($(this).data('id'));
+        });
+
         function formatRupiah(angka, prefix = 'Rp ') {
             const numberString = angka.toString().replace(/[^\d]/g, '');
             const split = numberString.split(',');
@@ -853,7 +925,7 @@ $bank           = $bank ?? [];
             return parseInt(value.toString().replace(/[^\d]/g, ''), 10) || 0;
         }
 
-        $(document).on('input', '.currency-input', function(e) {
+        $(document).on('input', '.currency-input', function (e) {
             const cursorPos = e.target.selectionStart;
             const oldLength = e.target.value.length;
             const raw = parseRupiah(e.target.value);
@@ -862,9 +934,90 @@ $bank           = $bank ?? [];
             e.target.selectionStart = e.target.selectionEnd = cursorPos + (newLength - oldLength);
         });
 
-        // Hapus Kas Keluar
-        $('#zero_config').on('click', '.delete-button', function() {
-            $('#delete_id').val($(this).data('id'));
-        });
+        // Filter payroll tanpa DataTables. Data payroll bulanan cukup kecil;
+        // kalau tampilan "Semua Bulan" melewati ~300 baris, tambahkan paging.
+        // shortcut: pagination nonaktif, cek volume saat semua bulan dipakai.
+        const payrollTable = document.getElementById('payroll-table');
+        if (payrollTable) {
+            const rows = Array.from(payrollTable.querySelectorAll('tbody tr'));
+            const search = document.getElementById('payroll-search');
+            const chips = Array.from(document.querySelectorAll('[data-payroll-status]'));
+            const result = document.getElementById('payroll-result');
+            const empty = document.getElementById('payroll-empty');
+            const reset = document.getElementById('payroll-reset');
+            let activeStatus = 'all';
+
+            const applyPayrollFilter = () => {
+                const query = (search?.value || '').trim().toLowerCase();
+                let visible = 0;
+
+                rows.forEach((row) => {
+                    const matchesQuery = !query || row.textContent.toLowerCase().includes(query);
+                    const matchesStatus = activeStatus === 'all'
+                        || (activeStatus === 'telat' ? row.dataset.late === '1' : row.dataset.status === activeStatus);
+
+                    const show = matchesQuery && matchesStatus;
+                    row.hidden = !show;
+                    if (show) visible++;
+                });
+
+                if (result) result.textContent = visible + ' baris';
+                if (empty) empty.hidden = visible !== 0;
+            };
+
+            chips.forEach((chip) => {
+                chip.addEventListener('click', () => {
+                    activeStatus = chip.dataset.payrollStatus;
+                    chips.forEach((item) => {
+                        const active = item === chip;
+                        item.classList.toggle('is-active', active);
+                        item.setAttribute('aria-pressed', active ? 'true' : 'false');
+                    });
+                    applyPayrollFilter();
+                });
+            });
+
+            search?.addEventListener('input', applyPayrollFilter);
+
+            reset?.addEventListener('click', () => {
+                if (search) search.value = '';
+                activeStatus = 'all';
+                chips.forEach((item) => {
+                    const active = item.dataset.payrollStatus === 'all';
+                    item.classList.toggle('is-active', active);
+                    item.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                applyPayrollFilter();
+                search?.focus();
+            });
+
+            applyPayrollFilter();
+        }
+
+        // Pencarian bonus / lembur.
+        const bonusTable = document.getElementById('bonus-table');
+        if (bonusTable) {
+            const rows = Array.from(bonusTable.querySelectorAll('tbody tr'));
+            const search = document.getElementById('bonus-search');
+            const result = document.getElementById('bonus-result');
+            const empty = document.getElementById('bonus-empty');
+
+            const applyBonusFilter = () => {
+                const query = (search?.value || '').trim().toLowerCase();
+                let visible = 0;
+
+                rows.forEach((row) => {
+                    const show = !query || row.textContent.toLowerCase().includes(query);
+                    row.hidden = !show;
+                    if (show) visible++;
+                });
+
+                if (result) result.textContent = visible + ' transaksi';
+                if (empty) empty.hidden = visible !== 0;
+            };
+
+            search?.addEventListener('input', applyBonusFilter);
+            applyBonusFilter();
+        }
     });
 </script>

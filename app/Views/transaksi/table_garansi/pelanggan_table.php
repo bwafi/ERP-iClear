@@ -26,6 +26,7 @@
 </div>
 
 <form action="<?php echo base_url('update/pelanggan_service_garansi') ?>" enctype="multipart/form-data" method="post">
+    <?= csrf_field() ?>
     <div class="row g-3">
 
         <input hidden type="text" name="idservice" value="<?php echo @$idservice ?>">
