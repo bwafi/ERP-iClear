@@ -86,6 +86,18 @@ final class ReturBarangRusakTest extends CIUnitTestCase
         $this->assertSame(4000, (int) $sparepart->hpp_penjualan_garansi);
     }
 
+    public function testSimpanTidakMeneruskanFilterKlaim(): void
+    {
+        $result = $this->postRetur([
+            'suplier_id' => 1,
+            'tanggal' => '2026-10-25',
+            'kembali' => 'tanggal_awal=2020-01-01&tanggal_akhir=2020-01-31',
+            'items' => [['selected' => 1, 'id' => 1, 'hpp_manual' => '4500', 'hasil' => 'ditolak']],
+        ]);
+
+        $result->assertRedirectTo(base_url('retur_barang_rusak'));
+    }
+
     public function testSimpanBanyakItemSatuUnit(): void
     {
         $this->db->table('service_sparepart')->insert([
@@ -232,6 +244,18 @@ final class ReturBarangRusakTest extends CIUnitTestCase
         $this->assertNull($sparepart->tanggal_hpp_klaim);
     }
 
+    public function testUbahStatusMempertahankanFilter(): void
+    {
+        $this->sesi();
+        $result = $this->post('retur_barang_rusak/ubah-status/1', [
+            'status' => 'tidak_bisa',
+            'kembali' => 'unit=1&tanggal_awal=2026-10-01&tanggal_akhir=2026-10-31',
+            'csrf_test_name' => service('security')->getHash(),
+        ]);
+
+        $result->assertRedirectTo(base_url('retur_barang_rusak?unit=1&tanggal_awal=2026-10-01&tanggal_akhir=2026-10-31'));
+    }
+
     public function testBarisSudahReturTidakMunculDiDaftar(): void
     {
         $this->postRetur([
@@ -362,6 +386,10 @@ final class ReturBarangRusakTest extends CIUnitTestCase
         $this->assertStringContainsString('SRV-1', $html);
         $this->assertStringContainsString('RTB120261025001', $html);
         $this->assertStringContainsString('name="items[0][hpp_manual]"', $html);
+        $this->assertStringContainsString('name="items[0][barang_pengganti_id]"', $html);
+        $this->assertStringContainsString('name="suplier_id"', $html);
+        $this->assertStringContainsString('rt-table--klaim', $html);
+        $this->assertStringContainsString('name="status"', $html);
         $this->assertStringContainsString('Ditolak supplier', $html);
     }
 

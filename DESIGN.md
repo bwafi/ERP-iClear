@@ -118,6 +118,13 @@
 - **Tables:** Damaged parts become stacked cards at `767.98px` (checkbox, name, qty, note) so mobile users do not need horizontal scroll; the replacement table keeps horizontal scroll with a visible hint. Selected damaged rows tint with the single accent color.
 - **Rules:** location text uses `pelanggan.kecamatan` + `kabupaten`, not the long street address; one accent for primary action/focus; no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions and disabled under `prefers-reduced-motion`.
 
+### Retur Barang Rusak (`.rt-*`)
+- **Scope:** `app/Views/retur/retur_barang_rusak.php` + `app/Views/retur/_retur_theme.php`; every selector lives under `.rt-page` / `.rt-modal` and derives from `--rt-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head (breadcrumb, title, count/period/unit chips) → filter band (unit, claim-date range, reset) → claim panel (document band: supplier, return date, note → claim table → action bar with selected count and HPP total) → return-history panel. The claim table is the primary surface; history stays visible below it.
+- **Claim table:** nine working columns — pick, document (service + claim date + unit chip), claimed item (sparepart + damaged part + qty), original HPP, return status with inline status switcher, manual HPP, return result, replacement (part + qty), note. Selecting a row enables its inputs and tints the row with the single accent color; the action bar totals manual HPP × qty in `tabular-nums`.
+- **Responsive:** below `991.98px` the claim and history tables become stacked cards with `data-label` captions; below `575.98px` the document band and filters stack full width and the save action spans the panel. The detail modal keeps horizontal scroll for its line table.
+- **Rules:** keep the return-status switcher next to the status badge, never as a far-right column; supplier/date gates, field names, routes, and existing save/cancel semantics are unchanged. The status switch posts its own form, warns before discarding unsaved row input, and carries the active unit/date filter back through the `kembali` field. One accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions and disabled under `prefers-reduced-motion`.
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.

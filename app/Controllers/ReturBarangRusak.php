@@ -73,12 +73,13 @@ class ReturBarangRusak extends BaseController
     public function simpan()
     {
         $db = Database::connect();
+        $target = base_url('retur_barang_rusak');
         $items = $this->request->getPost('items');
         $items = is_array($items) ? $items : [];
         $selected = array_values(array_filter($items, static fn ($item) => is_array($item) && !empty($item['selected'])));
 
         if ($selected === []) {
-            return redirect()->to(base_url('retur_barang_rusak'))->with('gagal', 'Pilih minimal satu barang yang diretur.');
+            return redirect()->to($target)->with('gagal', 'Pilih minimal satu barang yang diretur.');
         }
 
         $supplierId = (int) $this->request->getPost('suplier_id');
@@ -88,7 +89,7 @@ class ReturBarangRusak extends BaseController
             ->get()
             ->getRow();
         if (! $supplier) {
-            return redirect()->to(base_url('retur_barang_rusak'))->with('gagal', 'Supplier tidak valid.');
+            return redirect()->to($target)->with('gagal', 'Supplier tidak valid.');
         }
 
         $tanggal = $this->normalizeDate($this->request->getPost('tanggal')) ?: date('Y-m-d');
@@ -249,17 +250,18 @@ class ReturBarangRusak extends BaseController
         } catch (\Throwable $e) {
             $db->transRollback();
 
-            return redirect()->to(base_url('retur_barang_rusak'))->with('gagal', $e->getMessage());
+            return redirect()->to($target)->with('gagal', $e->getMessage());
         }
 
-        return redirect()->to(base_url('retur_barang_rusak'))->with('sukses', 'Retur barang rusak berhasil disimpan.');
+        return redirect()->to($target)->with('sukses', 'Retur barang rusak berhasil disimpan.');
     }
 
     public function ubahStatus(int $id)
     {
+        $target = $this->kembaliUrl();
         $status = (string) $this->request->getPost('status');
         if (! in_array($status, ['bisa', 'tidak_bisa'], true)) {
-            return redirect()->to(base_url('retur_barang_rusak'))->with('gagal', 'Status retur tidak valid.');
+            return redirect()->to($target)->with('gagal', 'Status retur tidak valid.');
         }
 
         $db = Database::connect();
@@ -298,15 +300,16 @@ class ReturBarangRusak extends BaseController
         } catch (\Throwable $e) {
             $db->transRollback();
 
-            return redirect()->to(base_url('retur_barang_rusak'))->with('gagal', $e->getMessage());
+            return redirect()->to($target)->with('gagal', $e->getMessage());
         }
 
-        return redirect()->to(base_url('retur_barang_rusak'))->with('sukses', 'Status retur berhasil diubah.');
+        return redirect()->to($target)->with('sukses', 'Status retur berhasil diubah.');
     }
 
     public function batal(int $id)
     {
         $db = Database::connect();
+        $target = $this->kembaliUrl();
         $db->transBegin();
 
         try {
@@ -344,10 +347,10 @@ class ReturBarangRusak extends BaseController
         } catch (\Throwable $e) {
             $db->transRollback();
 
-            return redirect()->to(base_url('retur_barang_rusak'))->with('gagal', $e->getMessage());
+            return redirect()->to($target)->with('gagal', $e->getMessage());
         }
 
-        return redirect()->to(base_url('retur_barang_rusak'))->with('sukses', 'Retur dibatalkan dan status barang dikembalikan.');
+        return redirect()->to($target)->with('sukses', 'Retur dibatalkan dan status barang dikembalikan.');
     }
 
     private function lockSparepart($db, int $id): object
@@ -379,6 +382,17 @@ class ReturBarangRusak extends BaseController
     private function canSeeAllUnits(): bool
     {
         return GaransiClaimService::canSeeAllUnits((int) session('ID_JABATAN'));
+    }
+
+    private function kembaliUrl(): string
+    {
+        $base = base_url('retur_barang_rusak');
+        $kembali = $this->request->getPost('kembali');
+        $query = is_string($kembali) ? trim($kembali) : '';
+
+        return $query !== '' && preg_match('/^[A-Za-z0-9_%&=.,+-]+$/', $query) === 1
+            ? $base . '?' . $query
+            : $base;
     }
 
     private function normalizeDate($value): ?string
