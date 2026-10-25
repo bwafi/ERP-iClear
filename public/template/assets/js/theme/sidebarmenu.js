@@ -30,6 +30,8 @@ document.querySelectorAll("#sidebarnav a").forEach(function (link) {
       // hide any open menus and remove all other classes
       parentUl.querySelectorAll("ul").forEach(function (submenu) {
         submenu.classList.remove("in");
+        const trigger = submenu.previousElementSibling;
+        if (trigger) trigger.setAttribute("aria-expanded", "false");
       });
       parentUl.querySelectorAll("a").forEach(function (navLink) {
         navLink.classList.remove("active");
@@ -39,6 +41,7 @@ document.querySelectorAll("#sidebarnav a").forEach(function (link) {
       const submenu = this.nextElementSibling;
       if (submenu) {
         submenu.classList.add("in");
+        this.setAttribute("aria-expanded", "true");
       }
 
       this.classList.add("active");
@@ -48,6 +51,7 @@ document.querySelectorAll("#sidebarnav a").forEach(function (link) {
       const submenu = this.nextElementSibling;
       if (submenu) {
         submenu.classList.remove("in");
+        this.setAttribute("aria-expanded", "false");
       }
     }
   });
