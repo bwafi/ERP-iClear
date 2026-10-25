@@ -17,7 +17,9 @@
 
 <style>
     /* ===== Token ===== */
-    .sk-page {
+    /* Modal dirender di #modalContainer, di luar .sk-page, jadi token diduplikasi di sini. */
+    .sk-page,
+    .sk-modal {
         --sk-surface: var(--bs-card-bg, #fff);
         --sk-subtle: #f6f8fc;
         --sk-rule: var(--bs-border-color, #e5eaf1);
@@ -46,7 +48,8 @@
         font-size: .875rem;
     }
 
-    html[data-bs-theme="dark"] .sk-page {
+    html[data-bs-theme="dark"] .sk-page,
+    html[data-bs-theme="dark"] .sk-modal {
         --sk-surface: var(--bs-card-bg, #2a3547);
         --sk-subtle: rgba(255, 255, 255, .035);
         --sk-rule: var(--bs-border-color, rgba(255, 255, 255, .12));
