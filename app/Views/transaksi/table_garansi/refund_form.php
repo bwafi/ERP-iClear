@@ -2,6 +2,7 @@
 $refunded = $refunded ?? false;
 $bank = $bank ?? [];
 $sparepart = $sparepart ?? [];
+$totalDibayar = (int) ($service->dp_bayar ?? 0) + (int) ($service->bayar ?? 0);
 $rupiah = static fn ($nilai) => 'Rp ' . number_format((float) $nilai, 0, ',', '.');
 ?>
 <?php if ($refunded): ?>
@@ -9,8 +10,8 @@ $rupiah = static fn ($nilai) => 'Rp ' . number_format((float) $nilai, 0, ',', '.
         Refund untuk service <strong><?= esc($service->no_service ?? '-') ?></strong> sudah dicatat
         pada <?= esc($service->refund_garansi_tanggal ? date('d-m-Y', strtotime((string) $service->refund_garansi_tanggal)) : '-') ?>.
     </div>
-<?php elseif ((int) ($service->bayar_garansi ?? 0) <= 0): ?>
-    <div class="alert alert-info mb-0">Service ini tidak punya pembayaran klaim yang bisa direfund.</div>
+<?php elseif ($totalDibayar <= 0): ?>
+    <div class="alert alert-info mb-0">Service ini tidak punya pembayaran yang bisa direfund.</div>
 <?php else: ?>
     <form id="refundGaransiForm" method="post" action="<?= base_url('garansi_service/refund') ?>">
         <?= csrf_field() ?>
@@ -26,8 +27,8 @@ $rupiah = static fn ($nilai) => 'Rp ' . number_format((float) $nilai, 0, ',', '.
                 <div class="fw-semibold"><?= esc($service->nama ?? $service->nama_pelanggan ?? '-') ?></div>
             </div>
             <div class="col-sm-6">
-                <div class="text-muted small">Nominal refund</div>
-                <div class="fw-semibold"><?= esc($rupiah($service->bayar_garansi)) ?></div>
+                <div class="text-muted small">Nominal refund (DP + pembayaran)</div>
+                <div class="fw-semibold"><?= esc($rupiah($totalDibayar)) ?></div>
             </div>
         </div>
 

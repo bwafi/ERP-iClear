@@ -9,8 +9,8 @@ use Tests\Support\Entitlement\EntitlementFixture;
 use Tests\Support\Entitlement\Fase1;
 
 /**
- * Refund pembayaran klaim garansi: kas keluar, jurnal seimbang, dan keputusan
- * kondisi sparepart pengganti per baris.
+ * Refund uang service: kas keluar, jurnal seimbang, dan keputusan kondisi
+ * sparepart pengganti per baris. Nominal = dp_bayar + bayar; garansi aktif.
  */
 final class GaransiRefundServiceTest extends CIUnitTestCase
 {
@@ -71,7 +71,10 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
             unit_idunit INT NULL,
             status_service INT NULL,
             tanggal_selesai DATETIME NULL,
+            garansi_hari INT NOT NULL DEFAULT 0,
             tanggal_claim_garansi DATETIME NULL,
+            dp_bayar INT NOT NULL DEFAULT 0,
+            bayar INT NOT NULL DEFAULT 0,
             bayar_garansi INT NOT NULL DEFAULT 0,
             service_by INT NULL,
             refund_garansi_idkas_keluar INT NULL,
@@ -155,8 +158,10 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
             'unit_idunit'            => 1,
             'status_service'         => 4,
             'tanggal_selesai'        => date('Y-m-d H:i:s'),
-            'tanggal_claim_garansi'  => date('Y-m-d H:i:s'),
-            'bayar_garansi'          => 500000,
+            'garansi_hari'           => 7,
+            'tanggal_claim_garansi'  => null,
+            'dp_bayar'               => 200000,
+            'bayar'                  => 300000,
             'service_by'             => 7,
         ]);
 
@@ -338,9 +343,34 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
         $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
     }
 
-    public function testServiceBelumDiklaimDitolak(): void
+    public function testRefundServiceBelumDiklaimTetapBisa(): void
     {
-        $this->db->table('service')->where('idservice', 1)->update(['tanggal_claim_garansi' => null]);
+        // Nominal harus dari dp_bayar + bayar, bukan bayar_garansi lama.
+        $this->db->table('service')->where('idservice', 1)->update(['bayar_garansi' => 999]);
+
+        $hasil = (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1);
+
+        $this->assertSame(500000, $hasil['jumlah']);
+        $this->assertSame(1, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testRefundServiceSudahDiklaimTetapBisa(): void
+    {
+        $this->db->table('service')->where('idservice', 1)->update([
+            'tanggal_claim_garansi' => date('Y-m-d H:i:s'),
+        ]);
+
+        $hasil = (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1);
+
+        $this->assertSame(500000, $hasil['jumlah']);
+    }
+
+    public function testRefundDitolakBilaGaransiKadaluarsa(): void
+    {
+        $this->db->table('service')->where('idservice', 1)->update([
+            'tanggal_selesai' => date('Y-m-d H:i:s', strtotime('-10 days')),
+            'garansi_hari'    => 7,
+        ]);
 
         $this->harapGagal(
             fn () => (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1)
@@ -351,7 +381,7 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
 
     public function testServiceTanpaPembayaranDitolak(): void
     {
-        $this->db->table('service')->where('idservice', 1)->update(['bayar_garansi' => 0]);
+        $this->db->table('service')->where('idservice', 1)->update(['dp_bayar' => 0, 'bayar' => 0]);
 
         $this->harapGagal(
             fn () => (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1)

@@ -45,12 +45,15 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - `dp_service` + `dp_service_ajax`; `refund_dp_service` (`ServiceDpService`); `DP_SERVICE_MENU` migration.
 ### 4.7 Lainnya
 - `Expired_service::index/export/expired_proses`, `Fee_Service::index`, `NotifikasiService::index`, `RiwayatLabaService::index/export`.
-### 4.8 Refund Klaim Garansi
+### 4.8 Refund Uang Service Garansi
 - `StatusGaransi::refund_detail` (GET) dan `StatusGaransi::refund` (POST `['auth','csrf']`); form dimuat dari tombol `Refund` di `/garansi_service`.
-- Nominal refund otomatis `service.bayar_garansi` (tidak boleh melebihi); metode `tunai` atau `bank` (bank wajib rekening unit yang sah + referensi transfer).
+- Syarat: garansi masih aktif (`status_service = 4`, `garansi_hari > 0`, hari ini ≤ `tanggal_selesai + garansi_hari`) dan sudah ada pembayaran. Klaim tidak menghalangi; service yang sudah diklaim tetap bisa direfund.
+- Nominal refund otomatis `service.dp_bayar + service.bayar` (uang yang sudah diterima), bukan `bayar_garansi` dan bukan input form; metode `tunai` atau `bank` (bank wajib rekening unit yang sah + referensi transfer).
+- Refund dicatat sebagai `kas_keluar` kategori `REFUND` + jurnal `refund_garansi_tunai`/`refund_garansi_bank`, dan mengurangi KPI omset Toko/Cabang/Teknisi pada tanggal refund.
 - Kondisi tiap baris sparepart pengganti wajib dipilih: `baik` mengembalikan qty ke stok lewat `service_sparepart.jumlah_refund_garansi`; `rusak` mencatat `barang_rusak_claim` dan kerugian HPP pada `hpp_omset_garansi`/`tanggal_hpp_klaim` tanggal refund.
 - Refund hanya sekali per service (`service.refund_garansi_at`) dan mengunci perubahan klaim setelahnya.
 - Sparepart yang sudah diretur ke supplier tidak boleh direfund; baris `baik` ditolak bila kerugian HPP sudah tercatat.
+- 🔶 Porsi DP sudah dijurnal ke `2010302000`; pembayaran non-DP belum dijurnal (#37), sehingga seluruh refund saat ini mendebit akun diterima di muka. Pemisahan akun menunggu posting pendapatan service.
 
 ## 5. Business Rules (Bukti)
 1. Satu transaksi service aktif per user (session `idservice`). — `Service::insert_service`

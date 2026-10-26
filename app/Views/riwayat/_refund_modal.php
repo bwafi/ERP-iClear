@@ -8,7 +8,7 @@
                     </span>
                     <div>
                         <h5 class="modal-title" id="modalRefundGaransiLabel">Refund Garansi</h5>
-                        <p>Refund pembayaran klaim dan tentukan kondisi sparepart pengganti.</p>
+                        <p>Refund uang service yang sudah dibayar dan tentukan kondisi sparepart pengganti.</p>
                     </div>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>

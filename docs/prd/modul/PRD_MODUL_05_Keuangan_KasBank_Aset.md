@@ -31,7 +31,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 ### 4.2 Kas Masuk — `Kas_Masuk::insert_kas_Masuk` (pola serupa, `postingKasMasuk`). **Update/delete kas masuk tidak menyinkronkan/menghapus jurnal.**
 ### 4.3 Jurnal & Laporan
 - `Jurnal::index/export_jurnal`; `SisiKeuangan::index/export_pdf/export_excel`; `LabaRugi::index/laporan_unit/laporan_perbandingan_periode/cetak_*`.
-- Refund klaim garansi (`GaransiRefundService`) dicatat sebagai `kas_keluar` kategori `REFUND` (akun `2010302000`) dengan jurnal seimbang memakai template `refund_garansi_tunai` (kredit `1010101000`) atau `refund_garansi_bank` (kredit `1010102000`).
+- Refund uang service garansi (`GaransiRefundService`, nominal `dp_bayar + bayar`) dicatat sebagai `kas_keluar` kategori `REFUND` (akun `2010302000`) dengan jurnal seimbang memakai template `refund_garansi_tunai` (kredit `1010101000`) atau `refund_garansi_bank` (kredit `1010102000`). 🔶 Pemisahan akun untuk porsi non-DP menunggu posting pembayaran service (#37).
 ### 4.4 KasBank (modul terpusat)
 - Akun (`saveAkun`), saldo awal (`saveSaldoAwal`), alokasi saldo (`saveAlokasiSaldo`), opening kas (`saveOpeningKas`).
 - Transfer internal (`saveTransfer`), antar unit (`saveAntarUnit`), setor tunai (`saveSetorTunai`), penarikan tunai (`savePenarikanTunai`), reversal.

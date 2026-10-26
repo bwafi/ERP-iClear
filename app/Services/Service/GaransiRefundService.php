@@ -8,11 +8,12 @@ use CodeIgniter\Database\BaseConnection;
 use Config\Database;
 
 /**
- * Refund pembayaran klaim garansi ke pelanggan.
+ * Refund uang service yang sudah dibayar pelanggan.
  *
  * Satu transaksi: kunci service, catat kas keluar + jurnal seimbang, putuskan
  * kondisi tiap sparepart pengganti, lalu simpan audit refund di `service`.
- * Nominal selalu `service.bayar_garansi`; angka dari form tidak dipercaya.
+ * Nominal selalu `dp_bayar + bayar`; angka dari form tidak dipercaya. Syaratnya
+ * garansi masih aktif; service yang sudah diklaim tetap boleh direfund.
  */
 class GaransiRefundService
 {
@@ -24,6 +25,10 @@ class GaransiRefundService
     private const COA_DITERIMA_DI_MUKA = '2010302000';
     private const COA_KAS_BESAR        = '1010101000';
     private const COA_KAS_BANK         = '1010102000';
+
+    // shortcut: pembayaran non-DP service belum dijurnal (#37), jadi seluruh
+    // refund mendebit akun diterima di muka; pisahkan porsi pendapatan saat
+    // posting pembayaran service sudah ada.
 
     private BaseConnection $db;
     private ModelJurnal $jurnal;
@@ -131,11 +136,13 @@ class GaransiRefundService
             if ($service === null) {
                 throw new \RuntimeException('Service tidak ditemukan.');
             }
-            if (! GaransiClaimService::isClaimed($service)) {
-                throw new \RuntimeException('Service ini belum diklaim.');
+            if (! GaransiClaimService::isWarrantyActive($service)) {
+                throw new \RuntimeException('Garansi service ini sudah kadaluarsa atau belum aktif.');
             }
-            if ((int) ($service->bayar_garansi ?? 0) <= 0) {
-                throw new \RuntimeException('Service ini tidak punya pembayaran klaim untuk direfund.');
+
+            $jumlah = (int) ($service->dp_bayar ?? 0) + (int) ($service->bayar ?? 0);
+            if ($jumlah <= 0) {
+                throw new \RuntimeException('Service ini tidak punya pembayaran untuk direfund.');
             }
             if (! empty($service->refund_garansi_at)) {
                 throw new \RuntimeException('Service ini sudah direfund.');
@@ -231,7 +238,7 @@ class GaransiRefundService
                 throw new \RuntimeException('Kategori kas keluar REFUND belum tersedia.');
             }
 
-            $jumlah = (int) $service->bayar_garansi;
+            $jumlah = (int) $service->dp_bayar + (int) $service->bayar;
             $waktu  = (new \DateTime('now', new \DateTimeZone('Asia/Jakarta')))->format('Y-m-d H:i:s');
             $tanggal = substr($waktu, 0, 10);
             $deskripsi = 'Refund garansi ' . trim((string) ($service->no_service ?? ('#' . $idservice))) . ' - ' . $alasan;

@@ -40,6 +40,8 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
             status_service INT NULL,
             unit_idunit INT NULL,
             pelanggan_id_pelanggan INT NULL,
+            dp_bayar INT NULL DEFAULT 0,
+            bayar INT NULL DEFAULT 0,
             bayar_garansi INT NULL DEFAULT 0,
             refund_garansi_at DATETIME NULL,
             refund_garansi_jumlah INT NULL DEFAULT 0)');
@@ -121,13 +123,17 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
         $this->assertSame(['SRV-001'], array_column($cariKabupaten['data'], 'no_service'));
     }
 
-    public function testListingMengembalikanStatusRefund(): void
+    public function testListingMengembalikanNominalDibayarDanStatusRefund(): void
     {
-        $this->db->table('service')->where('idservice', 1)->update(['bayar_garansi' => 500000]);
+        $this->db->table('service')->where('idservice', 1)->update([
+            'dp_bayar' => 200000,
+            'bayar'    => 300000,
+        ]);
 
         $hasil = (new ModelService())->getGaransiServiceServerSide(0, 10, '', 2, 'desc', '', '', 1);
 
-        $this->assertSame(500000, (int) $hasil['data'][0]->bayar_garansi);
+        $this->assertSame(200000, (int) $hasil['data'][0]->dp_bayar);
+        $this->assertSame(300000, (int) $hasil['data'][0]->bayar);
         $this->assertNull($hasil['data'][0]->refund_garansi_at);
     }
 

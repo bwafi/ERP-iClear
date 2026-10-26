@@ -1,19 +1,23 @@
 # Refund Garansi Service
 
 Tanggal: 2026-10-26
-Status: disetujui 2026-10-26 (diimplementasikan)
+Status: disetujui 2026-10-26 (direvisi: refund uang service, garansi aktif)
 
 ## Tujuan
 
-Pelanggan yang sudah membayar klaim garansi kadang meminta uangnya kembali.
-Saat refund, sparepart pengganti yang terpasang harus diputuskan: kembali ke
-stok kalau masih baik, atau dicatat rusak kalau tidak layak pakai. Fitur ini
-membuat refund dari halaman `/garansi_service` tanpa mengubah data klaim lama.
+Pelanggan kadang meminta uang service yang sudah dibayar kembali, selama
+garansi service masih aktif. Saat refund, sparepart pengganti yang terpasang
+harus diputuskan: kembali ke stok kalau masih baik, atau dicatat rusak kalau
+tidak layak pakai. Fitur ini membuat refund dari halaman `/garansi_service`
+tanpa mengubah data klaim lama.
 
 ## Goals
 
-- Refund tunai atau bank untuk pembayaran klaim garansi (`bayar_garansi`).
-- Nominal refund otomatis sebesar total yang sudah dibayar; tidak bisa melebihi.
+- Refund tunai atau bank sebesar uang service yang sudah dibayar
+  (`dp_bayar + bayar`).
+- Nominal refund otomatis sebesar total yang sudah dibayar; bukan input form.
+- Refund tersedia selama garansi masih aktif. Service yang sudah diklaim tetap
+  boleh direfund; klaim tidak menghalangi.
 - Pilih kondisi tiap sparepart pengganti: `baik` (kembali ke stok akhir) atau
   `rusak` (masuk riwayat barang rusak klaim).
 - Sparepart rusak mengurangi omset pada tanggal refund lewat mekanisme
@@ -29,7 +33,8 @@ membuat refund dari halaman `/garansi_service` tanpa mengubah data klaim lama.
 
 - Tidak refund sebagian, tidak refund berulang, tidak refund qty sebagian per
   baris sparepart. Satu baris mengikuti satu kondisi.
-- Tidak me-refund pembayaran service normal di luar pembayaran klaim garansi.
+- Tidak me-refund pembayaran DP lewat alur DP terpisah; DP ikut dihitung sebagai
+  bagian uang service yang dikembalikan.
 - Tidak mengubah/membalik omset yang sudah tercatat saat klaim.
 - Tidak menyambungkan ke retur supplier atau `retur_klaim`.
 - Tidak membuat jurnal untuk pembayaran klaim asal yang belum pernah dijurnal.
@@ -43,17 +48,20 @@ membuat refund dari halaman `/garansi_service` tanpa mengubah data klaim lama.
 
 Tombol **Refund** tampil di daftar garansi bila:
 
-- service sudah diklaim (`tanggal_claim_garansi` valid),
-- `bayar_garansi > 0`,
+- garansi masih aktif: `status_service = 4`, `garansi_hari > 0`, dan tanggal
+  hari ini tidak melewati `tanggal_selesai + garansi_hari`,
+- `dp_bayar + bayar > 0`,
 - belum pernah direfund (`refund_garansi_at` kosong),
 - user berhak atas unit service (aturan `GaransiClaimService::canSeeAllUnits`).
 
-Service yang belum diklaim atau tanpa pembayaran tidak bisa direfund.
+Status klaim tidak menjadi syarat. Service yang belum diklaim maupun sudah
+diklaim sama-sama bisa direfund selama garansinya masih aktif dan ada uang
+yang sudah dibayar.
 
 ### Nominal dan metode
 
-- Nominal selalu `service.bayar_garansi`, dihitung ulang di server. Nominal dari
-  form tidak dipercaya.
+- Nominal selalu `service.dp_bayar + service.bayar`, dihitung ulang di server.
+  Nominal dari form tidak dipercaya. `bayar_garansi` tidak lagi dipakai.
 - Metode: `tunai` atau `bank`.
 - Metode `bank` wajib memilih rekening yang valid untuk unit service
   (`BankRekeningValidator::validateUntukUnit`) dan wajib mengisi referensi.
@@ -182,7 +190,8 @@ Kategori kas keluar `REFUND` dipakai ulang.
 4. `POST garansi_service/refund` (filter `auth` + `csrf`) memproses dalam satu
    transaksi:
    - lock service `FOR UPDATE`,
-   - validasi klaim, unit, nominal, metode, rekening, dan kondisi sparepart,
+   - validasi garansi aktif, unit, nominal (`dp_bayar + bayar`), metode,
+     rekening, dan kondisi sparepart,
    - insert `kas_keluar` + jurnal, cek jurnal seimbang,
    - update `service_sparepart` dan `barang_rusak_claim`,
    - update `service` dengan syarat belum pernah refund,
@@ -213,7 +222,9 @@ Setelah `refund_garansi_at` terisi, service dianggap terkunci:
     `hpp_omset_garansi`/`tanggal_hpp_klaim`.
   - refund bank: rekening wajib valid, referensi wajib.
   - refund kedua ditolak.
-  - service belum diklaim / tanpa pembayaran ditolak.
+  - service belum diklaim tetap bisa direfund; service yang sudah diklaim juga
+    bisa; garansi kadaluarsa dan service tanpa pembayaran ditolak.
+  - nominal memakai `dp_bayar + bayar`, bukan `bayar_garansi`.
   - unit di luar wewenang ditolak.
   - baris yang sudah diretur supplier, atau sudah punya kerugian dengan pilihan
     `baik`, ditolak.
@@ -228,8 +239,10 @@ Setelah `refund_garansi_at` terisi, service dianggap terkunci:
 
 ## Risiko
 
-- Akun debet refund memakai `2010302000` mengikuti pola refund DP. Pembayaran
-  klaim asal belum dijurnal, jadi Finance perlu mengonfirmasi akun ini.
+- Akun debet refund memakai `2010302000` mengikuti pola refund DP. Porsi DP
+  sudah dijurnal ke akun itu, tetapi pembayaran non-DP service belum dijurnal
+  (#37); Finance perlu mengonfirmasi pemisahan akun saat posting pembayaran
+  service sudah ada.
 - Perubahan view `stok_barang` memengaruhi semua laporan stok. Test view wajib
   memastikan qty refund mengurangi pemakaian garansi, bukan menambah stok dua
   kali.

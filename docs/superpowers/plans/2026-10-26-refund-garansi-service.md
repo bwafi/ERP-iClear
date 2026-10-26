@@ -1,8 +1,14 @@
 # Refund Garansi Service Implementation Plan
 
+> **Revisi 2026-10-26:** Semantik refund diganti dari pembayaran klaim
+> (`bayar_garansi`) menjadi uang service yang sudah dibayar
+> (`dp_bayar + bayar`). Syarat berubah dari "sudah diklaim" menjadi "garansi
+> masih aktif"; klaim tidak menghalangi. Langkah task di bawah adalah riwayat
+> implementasi awal — ikuti spec revisi untuk perilaku yang berlaku.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Tambah refund tunai/bank atas pembayaran klaim garansi di `/garansi_service`, dengan keputusan kondisi sparepart per baris dan pengurangan KPI omset pada bulan refund.
+**Goal:** Tambah refund tunai/bank atas uang service yang sudah dibayar di `/garansi_service`, dengan keputusan kondisi sparepart per baris dan pengurangan KPI omset pada bulan refund.
 
 **Architecture:** Satu service domain (`GaransiRefundService`) menangani transaksi atomik: kunci service, validasi, `kas_keluar` + jurnal seimbang, update `service_sparepart`/`barang_rusak_claim`, lalu metadata refund di `service`. Dampak KPI dibaca dari `service.refund_garansi_tanggal` lewat `ModelRefundGaransiLoss`, bukan dari query terpisah di tiap laporan.
 

@@ -429,6 +429,8 @@ class ModelService extends Model
                 service.status_service,
                 service.unit_idunit,
                 service.bayar_garansi,
+                service.dp_bayar,
+                service.bayar,
                 service.refund_garansi_at,
                 service.refund_garansi_jumlah,
                 pelanggan.nama as nama_pelanggan,

@@ -63,6 +63,14 @@ final class GaransiClaimServiceTest extends CIUnitTestCase
         $this->assertFalse(GaransiClaimService::isClaimable($service, $this->today('2026-01-06')));
     }
 
+    public function testGaransiAktifTetapAktifWalauSudahDiklaim(): void
+    {
+        $service = $this->service(['tanggal_claim_garansi' => '2026-01-05 08:00:00']);
+
+        $this->assertTrue(GaransiClaimService::isWarrantyActive($service, $this->today('2026-01-06')));
+        $this->assertFalse(GaransiClaimService::isWarrantyActive($service, $this->today('2026-02-01')));
+    }
+
     public function testStatusTextMembedakanAktifKadaluarsaDanSudahDiklaim(): void
     {
         $this->assertSame(

@@ -146,7 +146,9 @@ class StatusGaransi extends BaseController
                 ? 'Klaim pada ' . date('d-m-Y', strtotime((string) $row->tanggal_claim_garansi))
                 : 'Tidak ada riwayat';
             $row->refunded = !empty($row->refund_garansi_at);
-            $row->can_refund = $row->claimed && (int) ($row->bayar_garansi ?? 0) > 0 && !$row->refunded;
+            $row->can_refund = !$row->refunded
+                && GaransiClaimService::isWarrantyActive($row, $today)
+                && ((int) ($row->dp_bayar ?? 0) + (int) ($row->bayar ?? 0)) > 0;
 
             // Nilai ini juga masuk ke template literal JS (tombol WhatsApp),
             // jadi netralkan backtick dan ${ agar tidak dieksekusi browser.
@@ -251,7 +253,7 @@ class StatusGaransi extends BaseController
     public function refund_detail($idservice)
     {
         $idservice = (int) $idservice;
-        $service = $this->claimedServiceForUser($idservice);
+        $service = $this->warrantyServiceForUser($idservice);
 
         if ($service === null) {
             return $this->response->setJSON([
@@ -284,8 +286,8 @@ class StatusGaransi extends BaseController
         $kondisi   = $this->request->getPost('kondisi');
         $kondisi   = is_array($kondisi) ? $kondisi : [];
 
-        if ($this->claimedServiceForUser($idservice) === null) {
-            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service garansi tidak ditemukan.');
+        if ($this->warrantyServiceForUser($idservice) === null) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service garansi tidak ditemukan atau garansi sudah tidak aktif.');
         }
 
         try {
@@ -1075,6 +1077,24 @@ class StatusGaransi extends BaseController
 
         $service = $this->ServiceModel->getServiceById($idservice);
         if ($service === null || !GaransiClaimService::isClaimed($service)) {
+            return null;
+        }
+
+        if (!$this->canSeeAllUnits() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {
+            return null;
+        }
+
+        return $service;
+    }
+
+    private function warrantyServiceForUser(int $idservice): ?object
+    {
+        if ($idservice <= 0) {
+            return null;
+        }
+
+        $service = $this->ServiceModel->getServiceById($idservice);
+        if ($service === null || !GaransiClaimService::isWarrantyActive($service)) {
             return null;
         }
 

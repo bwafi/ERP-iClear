@@ -45,18 +45,20 @@ final class GaransiClaimService
         return $selesai->modify("+{$hari} days");
     }
 
-    public static function isClaimable(object $service, ?DateTimeImmutable $today = null): bool
+    public static function isWarrantyActive(object $service, ?DateTimeImmutable $today = null): bool
     {
-        if ((int) ($service->status_service ?? 0) !== 4 || self::isClaimed($service)) {
+        if ((int) ($service->status_service ?? 0) !== 4) {
             return false;
         }
 
         $end = self::warrantyEnd($service);
-        if ($end === null) {
-            return false;
-        }
 
-        return self::today($today) <= $end;
+        return $end !== null && self::today($today) <= $end;
+    }
+
+    public static function isClaimable(object $service, ?DateTimeImmutable $today = null): bool
+    {
+        return ! self::isClaimed($service) && self::isWarrantyActive($service, $today);
     }
 
     public static function statusText(object $service, ?DateTimeImmutable $today = null): string
