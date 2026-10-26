@@ -370,9 +370,16 @@ class Service extends BaseController
         $db->transBegin();
 
         try {
-            $service = $db->table('service')->where('idservice', $idservice)->get()->getRow();
+            $service = $db->query(
+                'SELECT * FROM ' . $db->prefixTable('service') . ' WHERE idservice = ? FOR UPDATE',
+                [$idservice]
+            )->getRow();
             if (! $service) {
                 throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+
+            if (!empty($service->refund_garansi_at)) {
+                throw new \RuntimeException('Service sudah direfund; sparepart tidak dapat diubah.');
             }
 
             $existingItems = $this->ServiceSparepartModel->getByServiceId($idservice);

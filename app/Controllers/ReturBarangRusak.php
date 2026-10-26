@@ -110,7 +110,7 @@ class ReturBarangRusak extends BaseController
                 }
 
                 $row = $db->query(
-                    "SELECT sp.*, s.unit_idunit AS service_unit, s.tanggal_claim_garansi, s.no_service
+                    "SELECT sp.*, s.unit_idunit AS service_unit, s.tanggal_claim_garansi, s.no_service, s.refund_garansi_at
                        FROM {$sparepartTable} sp
                        JOIN {$serviceTable} s ON s.idservice = sp.service_idservice
                       WHERE sp.idservice_sparepart = ?
@@ -120,6 +120,10 @@ class ReturBarangRusak extends BaseController
 
                 if (! $row) {
                     throw new \RuntimeException('Sparepart klaim tidak ditemukan.');
+                }
+
+                if (! empty($row->refund_garansi_at)) {
+                    throw new \RuntimeException('Service sudah direfund; retur tidak dapat disimpan.');
                 }
 
                 if ($row->status_retur !== 'bisa') {
@@ -271,6 +275,10 @@ class ReturBarangRusak extends BaseController
             $row = $this->lockSparepart($db, $id);
             $this->pastikanUnit($row);
 
+            if (! empty($row->refund_garansi_at)) {
+                throw new \RuntimeException('Service sudah direfund; status retur tidak dapat diubah.');
+            }
+
             if ((int) $row->jumlah_tambahan_garansi <= 0
                 || ! in_array($row->status_retur, ['bisa', 'tidak_bisa'], true)) {
                 throw new \RuntimeException('Baris ini bukan klaim yang bisa diubah statusnya.');
@@ -326,6 +334,19 @@ class ReturBarangRusak extends BaseController
                 throw new \RuntimeException('Retur bukan milik unit Anda.');
             }
 
+            $sudahRefund = $db->query(
+                'SELECT 1 FROM ' . $db->prefixTable('retur_klaim_item') . ' rki
+                   JOIN ' . $db->prefixTable('service_sparepart') . ' sp ON sp.idservice_sparepart = rki.service_sparepart_idservice_sparepart
+                   JOIN ' . $db->prefixTable('service') . ' s ON s.idservice = sp.service_idservice
+                  WHERE rki.retur_klaim_idretur_klaim = ? AND s.refund_garansi_at IS NOT NULL
+                  LIMIT 1',
+                [$id]
+            )->getRow();
+
+            if ($sudahRefund) {
+                throw new \RuntimeException('Retur tidak dapat dibatalkan karena service sudah direfund.');
+            }
+
             $items = $db->table('retur_klaim_item')
                 ->where('retur_klaim_idretur_klaim', $id)
                 ->get()
@@ -356,7 +377,7 @@ class ReturBarangRusak extends BaseController
     private function lockSparepart($db, int $id): object
     {
         $row = $db->query(
-            'SELECT sp.*, s.unit_idunit AS service_unit, s.tanggal_claim_garansi
+            'SELECT sp.*, s.unit_idunit AS service_unit, s.tanggal_claim_garansi, s.refund_garansi_at
                FROM ' . $db->prefixTable('service_sparepart') . ' sp
                JOIN ' . $db->prefixTable('service') . ' s ON s.idservice = sp.service_idservice
               WHERE sp.idservice_sparepart = ?

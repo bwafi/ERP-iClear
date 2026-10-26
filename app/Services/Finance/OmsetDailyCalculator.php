@@ -30,7 +30,10 @@ class OmsetDailyCalculator implements FinanceCalculatorInterface
             ->where('DATE(penjualan.tanggal)', $date)
             ->first();
 
-        return (float) ($result->total_omset ?? 0);
+        $omset = (float) ($result->total_omset ?? 0);
+        $omset -= (new \App\Models\ModelRefundGaransiLoss())->getTotal($date, $date, $unitId);
+
+        return $omset;
     }
 
     /**
@@ -53,6 +56,10 @@ class OmsetDailyCalculator implements FinanceCalculatorInterface
         $map = [];
         foreach ($rows as $row) {
             $map[$row->tanggal] = (float) ($row->total_omset ?? 0);
+        }
+
+        foreach ((new \App\Models\ModelRefundGaransiLoss())->getByDateRange($startDate, $endDate, $unitId) as $tanggal => $nilai) {
+            $map[$tanggal] = ($map[$tanggal] ?? 0.0) - $nilai;
         }
 
         return $map;

@@ -112,6 +112,11 @@ class ModelService extends Model
             return false;
         }
 
+        if ($this->hasRefundedGaransi($idservice)) {
+            log_message('warning', 'hardDeleteService ditolak: service ' . $idservice . ' sudah direfund garansinya');
+            return false;
+        }
+
         try {
             log_message('info', 'Starting delete service ID: ' . $idservice);
 
@@ -208,6 +213,18 @@ class ModelService extends Model
         return $this->where('idservice', $id)
             ->get()
             ->getRow();
+    }
+
+    public function hasRefundedGaransi($idservice): bool
+    {
+        if (! $this->db->fieldExists('refund_garansi_at', 'service')) {
+            return false;
+        }
+
+        return $this->db->table('service')
+            ->where('idservice', (int) $idservice)
+            ->where('refund_garansi_at IS NOT NULL', null, false)
+            ->countAllResults() > 0;
     }
 
 
@@ -411,6 +428,9 @@ class ModelService extends Model
                 service.tanggal_claim_garansi,
                 service.status_service,
                 service.unit_idunit,
+                service.bayar_garansi,
+                service.refund_garansi_at,
+                service.refund_garansi_jumlah,
                 pelanggan.nama as nama_pelanggan,
                 unit.NAMA_UNIT as nama_unit
             FROM service

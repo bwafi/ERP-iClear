@@ -326,6 +326,186 @@ final class ReturBarangRusakTest extends CIUnitTestCase
         $this->assertSame(1, $db->table('retur_klaim_item')->countAllResults());
     }
 
+    public function testSimpanReturDitolakSetelahRefund(): void
+    {
+        $this->tandaiRefund();
+
+        $this->postRetur([
+            'suplier_id' => 1,
+            'tanggal' => '2026-10-25',
+            'items' => [['selected' => 1, 'id' => 1, 'hpp_manual' => '4500', 'hasil' => 'ditolak']],
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $this->assertSame(0, $db->table('retur_klaim')->countAllResults());
+        $this->assertSame('bisa', $db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow()->status_retur);
+    }
+
+    public function testUbahStatusDitolakSetelahRefund(): void
+    {
+        $this->tandaiRefund();
+        $this->sesi();
+
+        $this->post('retur_barang_rusak/ubah-status/1', [
+            'status' => 'tidak_bisa',
+            'csrf_test_name' => service('security')->getHash(),
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $sparepart = $db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow();
+        $this->assertSame('bisa', $sparepart->status_retur);
+        $this->assertSame(0, (int) $sparepart->hpp_omset_garansi);
+    }
+
+    public function testBatalReturDitolakSetelahRefund(): void
+    {
+        $this->postRetur([
+            'suplier_id' => 1,
+            'tanggal' => '2026-10-25',
+            'items' => [['selected' => 1, 'id' => 1, 'hpp_manual' => '4500', 'hasil' => 'ditolak']],
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $headerId = (int) $db->table('retur_klaim')->get()->getRow()->idretur_klaim;
+        $this->tandaiRefund();
+
+        $this->sesi();
+        $this->post('retur_barang_rusak/batal/' . $headerId, [
+            'csrf_test_name' => service('security')->getHash(),
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $this->assertSame(1, $db->table('retur_klaim')->countAllResults());
+        $this->assertSame(1, $db->table('retur_klaim_item')->countAllResults());
+    }
+
+    public function testEditSparepartGaransiDitolakSetelahRefund(): void
+    {
+        $this->tandaiRefund();
+        $this->sesi();
+
+        $result = $this->post('update_service_garansi/saveSparepart', [
+            'idservice_s' => 1,
+            'biaya_garansi' => 0,
+            'produk' => [[
+                'id' => 11,
+                'qty_tambahan' => 1,
+                'harga' => '50000',
+                'diskon_penjualan_garansi' => '0',
+            ]],
+            'csrf_test_name' => service('security')->getHash(),
+        ]);
+
+        $result->assertRedirect();
+        $result->assertSessionHas('gagal');
+
+        $db = $this->fresh();
+        $this->assertSame(2, (int) $db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow()->jumlah_tambahan_garansi);
+    }
+
+    public function testTambahPembayaranGaransiDitolakSetelahRefund(): void
+    {
+        $this->tandaiRefund();
+        $this->sesi();
+
+        $result = $this->post('update_service_garansi/savePembayaran', [
+            'idservice_p' => 1,
+            'bayar_pembayaran' => '100000',
+            'csrf_test_name' => service('security')->getHash(),
+        ]);
+
+        $result->assertRedirect();
+        $this->assertStringContainsString('direfund', (string) session('gagal'));
+
+        $db = $this->fresh();
+        $this->assertSame(0, (int) $db->table('service')->where('idservice', 1)->get()->getRow()->bayar_garansi);
+    }
+
+    public function testLegacyServiceSparepartDitolakSetelahRefund(): void
+    {
+        $this->tandaiRefund();
+        $this->sesi();
+
+        $result = $this->post('service/saveSparepart', [
+            'idservice_s' => 1,
+            'garansi' => 30,
+            'produk' => [[
+                'id' => 10,
+                'jumlah' => 1,
+                'harga' => '100000',
+                'diskon' => '0',
+                'total' => '100000',
+            ]],
+        ]);
+
+        $result->assertRedirect();
+        $this->assertStringContainsString('direfund', (string) session('gagal'));
+
+        $db = $this->fresh();
+        $row = $db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow();
+        $this->assertSame(2, (int) $row->jumlah_tambahan_garansi);
+        $this->assertSame(0, (int) $row->jumlah);
+    }
+
+    public function testLegacyRiwayatSparepartDitolakSetelahRefund(): void
+    {
+        $this->tandaiRefund();
+        $this->sesi();
+
+        $result = $this->post('update_service/saveSparepart', [
+            'idservice_s' => 1,
+            'garansi' => 30,
+            'produk' => [[
+                'id' => 10,
+                'jumlah' => 1,
+                'harga' => '100000',
+                'diskon' => '0',
+                'total' => '100000',
+            ]],
+        ]);
+
+        $result->assertRedirect();
+        $this->assertStringContainsString('direfund', (string) session('gagal'));
+
+        $db = $this->fresh();
+        $row = $db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow();
+        $this->assertSame(2, (int) $row->jumlah_tambahan_garansi);
+        $this->assertSame(0, (int) $row->jumlah);
+    }
+
+    public function testUbahSparepartTidakBisaMenghapusBarisRefund(): void
+    {
+        $this->db->table('service_sparepart')->where('idservice_sparepart', 1)->update(['jumlah_refund_garansi' => 1]);
+        $this->sesi();
+
+        $result = $this->post('update_service_garansi/saveSparepart', [
+            'idservice_s' => 1,
+            'biaya_garansi' => 0,
+            'produk' => [[
+                'id' => 11,
+                'qty_tambahan' => 1,
+                'harga' => '50000',
+                'diskon_penjualan_garansi' => '0',
+            ]],
+            'csrf_test_name' => service('security')->getHash(),
+        ]);
+
+        $result->assertRedirect();
+        $this->assertStringContainsString('direfund', (string) session('gagal'));
+
+        $db = $this->fresh();
+        $this->assertSame(1, $db->table('service_sparepart')->countAllResults());
+        $this->assertSame(1, (int) $db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow()->jumlah_refund_garansi);
+    }
+
+    private function tandaiRefund(): void
+    {
+        $this->db->table('service')->where('idservice', 1)->update([
+            'refund_garansi_at' => date('Y-m-d H:i:s'),
+            'refund_garansi_jumlah' => 4000,
+        ]);
+    }
+
     public function testIndexMenampilkanHalaman(): void
     {
         $this->sesi();
@@ -532,6 +712,9 @@ final class ReturBarangRusakTest extends CIUnitTestCase
             total_diskon_garansi INT NULL DEFAULT 0,
             biaya_tambahan_garansi INT NULL DEFAULT 0,
             harus_dibayar_garansi INT NULL DEFAULT 0,
+            bayar_garansi INT NULL DEFAULT 0,
+            refund_garansi_at DATETIME NULL,
+            refund_garansi_jumlah INT NULL DEFAULT 0,
             created_at DATETIME NULL,
             updated_at DATETIME NULL,
             PRIMARY KEY (idservice)
@@ -556,6 +739,7 @@ final class ReturBarangRusakTest extends CIUnitTestCase
             status_retur VARCHAR(20) NULL DEFAULT NULL,
             hpp_omset_garansi INT NOT NULL DEFAULT 0,
             tanggal_hpp_klaim DATE NULL DEFAULT NULL,
+            jumlah_refund_garansi INT NOT NULL DEFAULT 0,
             PRIMARY KEY (idservice_sparepart)
         ) ENGINE=InnoDB');
 

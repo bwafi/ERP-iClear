@@ -212,6 +212,8 @@ $routes->get('garansi_service', 'StatusGaransi::index', ['filter' => 'auth']);
 $routes->post('garansi_service/ajax', 'StatusGaransi::garansi_service_ajax', ['filter' => 'auth']);
 $routes->get('claim_garansi/detail/(:num)', 'StatusGaransi::claim_detail/$1', ['filter' => 'auth']);
 $routes->post('claim_garansi', 'StatusGaransi::claim_garansi', ['filter' => ['auth', 'csrf']]);
+$routes->get('garansi_service/refund/detail/(:num)', 'StatusGaransi::refund_detail/$1', ['filter' => 'auth']);
+$routes->post('garansi_service/refund', 'StatusGaransi::refund', ['filter' => ['auth', 'csrf']]);
 $routes->get('riwayat-klaim/(:num)', 'StatusGaransi::getRiwayatKlaim/$1', ['filter' => 'auth']);
 
 //status service

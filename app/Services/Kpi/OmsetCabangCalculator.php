@@ -35,6 +35,10 @@ class OmsetCabangCalculator implements KpiCalculatorInterface
             ->where('DATE(penjualan.tanggal) <=', $endDate)
             ->first();
 
-        return self::$memo[$key] = (float) ($result->total_omset ?? 0);
+        $omset = (float) ($result->total_omset ?? 0);
+        $omset -= (new \App\Models\ModelRefundGaransiLoss())
+            ->getTotal($startDate, $endDate, (int) $unitId);
+
+        return self::$memo[$key] = $omset;
     }
 }

@@ -39,7 +39,10 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
             tanggal_claim_garansi DATETIME NULL,
             status_service INT NULL,
             unit_idunit INT NULL,
-            pelanggan_id_pelanggan INT NULL)');
+            pelanggan_id_pelanggan INT NULL,
+            bayar_garansi INT NULL DEFAULT 0,
+            refund_garansi_at DATETIME NULL,
+            refund_garansi_jumlah INT NULL DEFAULT 0)');
         $this->db->query('CREATE TABLE pelanggan (
             id_pelanggan INT PRIMARY KEY,
             nama VARCHAR(100) NULL,
@@ -116,6 +119,24 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
 
         $cariKabupaten = $model->getGaransiServiceServerSide(0, 10, 'Kabupaten Satu', 2, 'desc', '', '', '');
         $this->assertSame(['SRV-001'], array_column($cariKabupaten['data'], 'no_service'));
+    }
+
+    public function testListingMengembalikanStatusRefund(): void
+    {
+        $this->db->table('service')->where('idservice', 1)->update(['bayar_garansi' => 500000]);
+
+        $hasil = (new ModelService())->getGaransiServiceServerSide(0, 10, '', 2, 'desc', '', '', 1);
+
+        $this->assertSame(500000, (int) $hasil['data'][0]->bayar_garansi);
+        $this->assertNull($hasil['data'][0]->refund_garansi_at);
+    }
+
+    public function testHardDeleteDitolakSetelahRefund(): void
+    {
+        $this->db->table('service')->where('idservice', 1)->update(['refund_garansi_at' => date('Y-m-d H:i:s')]);
+
+        $this->assertFalse((new ModelService())->hardDeleteService(1));
+        $this->assertSame(1, (int) $this->db->table('service')->where('idservice', 1)->countAllResults());
     }
 
     public function testFilterTanggalMemakaiTanggalSelesai(): void

@@ -40,6 +40,10 @@ class OmsetTeknisiCalculator implements KpiCalculatorInterface
         $loss = (new \App\Models\ModelHppKlaimLoss())
             ->getTotalLoss($startDate, $endDate, $unitId, $employeeId);
 
-        return (float) ($result->total ?? 0) - $loss;
+        // Refund garansi mengurangi omset teknisi pada bulan refund.
+        $refund = (new \App\Models\ModelRefundGaransiLoss())
+            ->getTotal($startDate, $endDate, (int) $unitId, (int) $employeeId);
+
+        return (float) ($result->total ?? 0) - $loss - $refund;
     }
 }

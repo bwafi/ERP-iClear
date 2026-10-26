@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Services\Service\GaransiClaimService;
+use App\Services\Service\GaransiRefundService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use App\Models\ModelAuth;
 use App\Models\ModelBarang;
@@ -144,6 +145,8 @@ class StatusGaransi extends BaseController
             $row->riwayat_klaim = $row->claimed
                 ? 'Klaim pada ' . date('d-m-Y', strtotime((string) $row->tanggal_claim_garansi))
                 : 'Tidak ada riwayat';
+            $row->refunded = !empty($row->refund_garansi_at);
+            $row->can_refund = $row->claimed && (int) ($row->bayar_garansi ?? 0) > 0 && !$row->refunded;
 
             // Nilai ini juga masuk ke template literal JS (tombol WhatsApp),
             // jadi netralkan backtick dan ${ agar tidak dieksekusi browser.
@@ -244,6 +247,64 @@ class StatusGaransi extends BaseController
         return $this->response->setJSON(['html' => $html]);
     }
 
+
+    public function refund_detail($idservice)
+    {
+        $idservice = (int) $idservice;
+        $service = $this->claimedServiceForUser($idservice);
+
+        if ($service === null) {
+            return $this->response->setJSON([
+                'html' => '<div class="alert alert-info mb-0">Data garansi tidak ditemukan.</div>',
+            ]);
+        }
+
+        $service->nama_pelanggan = $this->PelangganModel->getById($service->pelanggan_id_pelanggan)->nama ?? '';
+        $sparepart = array_values(array_filter(
+            $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice),
+            static fn ($item) => (int) ($item->jumlah_tambahan_garansi ?? 0) > 0
+        ));
+
+        return $this->response->setJSON([
+            'html' => view('transaksi/table_garansi/refund_form', [
+                'service'   => $service,
+                'sparepart' => $sparepart,
+                'bank'      => $this->BankModel->getBankDalamScopeUnit((int) $service->unit_idunit),
+                'refunded'  => $this->ServiceModel->hasRefundedGaransi($idservice),
+            ]),
+        ]);
+    }
+
+    public function refund()
+    {
+        $idservice = (int) $this->request->getPost('idservice');
+        $metode    = (string) $this->request->getPost('metode');
+        $idbank    = $this->request->getPost('idbank');
+        $referensi = $this->request->getPost('referensi');
+        $kondisi   = $this->request->getPost('kondisi');
+        $kondisi   = is_array($kondisi) ? $kondisi : [];
+
+        if ($this->claimedServiceForUser($idservice) === null) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service garansi tidak ditemukan.');
+        }
+
+        try {
+            (new GaransiRefundService())->refund(
+                $idservice,
+                $metode,
+                is_string($idbank) ? $idbank : null,
+                is_string($referensi) ? $referensi : null,
+                (string) $this->request->getPost('alasan'),
+                $kondisi,
+                (int) session('ID_AKUN'),
+                $this->canSeeAllUnits() ? null : (int) session('ID_UNIT')
+            );
+        } catch (\Throwable $e) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', $e->getMessage());
+        }
+
+        return redirect()->to(base_url('garansi_service'))->with('sukses', 'Refund garansi berhasil dicatat.');
+    }
 
     public function claim_detail($idservice)
     {
@@ -519,6 +580,10 @@ class StatusGaransi extends BaseController
             return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service garansi tidak ditemukan.');
         }
 
+        if ($this->ServiceModel->hasRefundedGaransi($idservice)) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service sudah direfund; data klaim tidak dapat diubah.');
+        }
+
         $produkData = $this->request->getPost('produk');
         $produkData = is_array($produkData) ? $produkData : [];
         $biayaTambahan = $this->rupiahToInt($this->request->getPost('biaya_garansi'));
@@ -527,6 +592,19 @@ class StatusGaransi extends BaseController
         $db->transBegin();
 
         try {
+            $serviceLocked = $db->query(
+                'SELECT refund_garansi_at FROM ' . $db->prefixTable('service') . ' WHERE idservice = ? FOR UPDATE',
+                [$idservice]
+            )->getRow();
+
+            if ($serviceLocked === null) {
+                throw new \RuntimeException('Service garansi tidak ditemukan.');
+            }
+
+            if (!empty($serviceLocked->refund_garansi_at)) {
+                throw new \RuntimeException('Service sudah direfund; data klaim tidak dapat diubah.');
+            }
+
             $lockedIds = $this->returLockedSparepartIds($db, $idservice);
             $existingMap = [];
             foreach ($this->ServiceSparepartModel->getByServiceId($idservice) as $item) {
@@ -550,6 +628,10 @@ class StatusGaransi extends BaseController
                 if (isset($existingMap[$id])
                     && in_array((int) $existingMap[$id]->idservice_sparepart, $lockedIds, true)) {
                     throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
+                }
+
+                if (isset($existingMap[$id]) && (int) ($existingMap[$id]->jumlah_refund_garansi ?? 0) > 0) {
+                    throw new \RuntimeException('Sparepart ini sudah direfund; qty tidak dapat diubah.');
                 }
 
                 $jumlahTambahan = max(0, (int) ($produk['qty_tambahan'] ?? 0));
@@ -617,6 +699,10 @@ class StatusGaransi extends BaseController
                     throw new \RuntimeException('Sparepart klaim sudah diretur; batalkan retur dulu.');
                 }
 
+                if ((int) ($item->jumlah_refund_garansi ?? 0) > 0) {
+                    throw new \RuntimeException('Sparepart ini sudah direfund; qty tidak dapat diubah.');
+                }
+
                 if ((int) ($item->jumlah ?? 0) === 0 && (int) ($item->harga_penjualan ?? 0) === 0) {
                     $this->ServiceSparepartModel->deleteByServiceAndBarang($idservice, $barangId);
                     continue;
@@ -677,6 +763,10 @@ class StatusGaransi extends BaseController
             return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service garansi tidak ditemukan.');
         }
 
+        if ($this->ServiceModel->hasRefundedGaransi($idservice)) {
+            return redirect()->to(base_url('garansi_service'))->with('gagal', 'Service sudah direfund; pembayaran tidak dapat ditambah.');
+        }
+
         $db = Database::connect();
         $db->transBegin();
 
@@ -686,6 +776,10 @@ class StatusGaransi extends BaseController
 
             if ($service === null || !GaransiClaimService::isClaimed($service)) {
                 throw new \RuntimeException('Service garansi tidak ditemukan.');
+            }
+
+            if (!empty($service->refund_garansi_at)) {
+                throw new \RuntimeException('Service sudah direfund; pembayaran tidak dapat ditambah.');
             }
 
             if (!$this->canSeeAllUnits() && (int) $service->unit_idunit !== (int) session('ID_UNIT')) {

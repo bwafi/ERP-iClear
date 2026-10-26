@@ -588,6 +588,9 @@ class TutupKasir extends BaseController
         $omset_hari_ini -= (new \App\Models\ModelHppKlaimLoss())
             ->getTotalLoss(date('Y-m-d'), date('Y-m-d'), (int) $unit);
 
+        $omset_hari_ini -= (new \App\Models\ModelRefundGaransiLoss())
+            ->getTotal(date('Y-m-d'), date('Y-m-d'), (int) $unit);
+
         // DP tetap terpisah dari omset penjualan, tetapi ditampilkan sebagai
         // informasi tambahan di kartu Omset Hari Ini untuk unit yang dipilih.
         $dpHariIni = (new \App\Services\Finance\TutupKasirSourceDefinition($this->db))

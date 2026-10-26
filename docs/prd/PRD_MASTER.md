@@ -56,6 +56,7 @@ Baseline repository yang diverifikasi: **88 controller · 127 model · 86 servic
 - Hutang/piutang terpusat memiliki guard double counting pada jalur authoritative, tetapi projection dari pembelian memakai `total_bayar` (bukan `total_transaksi`) sehingga total/sisa dapat salah (PI-05/HP-01).
 - Detail penjualan bundle menulis `sub_total` penuh untuk setiap komponen; laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet (SL-03).
 - KPI memakai sumber achievement (rekap/lead/snapshot) pada engine aktif `KpiCalculationService`; sebagian istilah “omzet” sebenarnya berarti gross profit (KPI-06).
+- Refund garansi mengurangi KPI omset Toko/Cabang/Teknisi pada bulan `refund_garansi_tanggal`, sedangkan HPP sparepart rusak tetap memakai `hpp_omset_garansi`/`tanggal_hpp_klaim` dan hanya mengurangi Omset Teknisi. — `ModelRefundGaransiLoss`; test `GaransiRefundKpiTest`.
 
 ## 4. Matriks Cakupan Verifikasi
 

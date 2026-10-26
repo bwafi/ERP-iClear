@@ -45,6 +45,12 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - `dp_service` + `dp_service_ajax`; `refund_dp_service` (`ServiceDpService`); `DP_SERVICE_MENU` migration.
 ### 4.7 Lainnya
 - `Expired_service::index/export/expired_proses`, `Fee_Service::index`, `NotifikasiService::index`, `RiwayatLabaService::index/export`.
+### 4.8 Refund Klaim Garansi
+- `StatusGaransi::refund_detail` (GET) dan `StatusGaransi::refund` (POST `['auth','csrf']`); form dimuat dari tombol `Refund` di `/garansi_service`.
+- Nominal refund otomatis `service.bayar_garansi` (tidak boleh melebihi); metode `tunai` atau `bank` (bank wajib rekening unit yang sah + referensi transfer).
+- Kondisi tiap baris sparepart pengganti wajib dipilih: `baik` mengembalikan qty ke stok lewat `service_sparepart.jumlah_refund_garansi`; `rusak` mencatat `barang_rusak_claim` dan kerugian HPP pada `hpp_omset_garansi`/`tanggal_hpp_klaim` tanggal refund.
+- Refund hanya sekali per service (`service.refund_garansi_at`) dan mengunci perubahan klaim setelahnya.
+- Sparepart yang sudah diretur ke supplier tidak boleh direfund; baris `baik` ditolak bila kerugian HPP sudah tercatat.
 
 ## 5. Business Rules (Bukti)
 1. Satu transaksi service aktif per user (session `idservice`). — `Service::insert_service`
@@ -77,6 +83,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: guard transaksi aktif, DP ledger, garansi sparepart, route NET dinonaktifkan, klaim garansi.
+- ✅ Refund klaim garansi: tunai/bank, keputusan kondisi sparepart per baris, kunci sekali refund, dan guard retur supplier. — `GaransiRefundService`; test `GaransiRefundServiceTest`, `GaransiServiceViewTest`, `ReturBarangRusakTest`.
 - ⚠️ Gap tinggi:
   1. `cancel_service` tidak menghapus invoice/detail/pembayaran sparepart → invoice yatim & stok tetap terpotong. — SV-01
   2. Route `service_kerusakan`/`service_sparepart` menunjuk method yang tidak ada. — SV-02

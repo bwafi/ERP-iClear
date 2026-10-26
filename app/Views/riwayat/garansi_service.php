@@ -189,6 +189,8 @@ $unitLabel = $showUnitColumn ? 'Semua unit' : (session('NAMA_UNIT') ?: 'Unit And
             </div>
         </div>
     </div>
+
+    <?= view('riwayat/_refund_modal') ?>
 </div>
 
 <script>
@@ -379,7 +381,19 @@ $(function() {
                         </button>`
                         : '';
 
-                    return `<div class="rsg-actions">${klaim}${whatsapp}${riwayat}</div>`;
+                    const refund = row.refunded
+                        ? `<button type="button" class="rsg-btn rsg-btn--claim" disabled title="Refund sudah dicatat">
+                            <iconify-icon icon="solar:check-circle-linear" width="16" height="16"></iconify-icon>
+                            Sudah Refund
+                        </button>`
+                        : row.can_refund
+                            ? `<button type="button" class="rsg-btn rsg-btn--print btn-refund" data-idservice="${Number(row.idservice)}">
+                                <iconify-icon icon="solar:wad-of-money-linear" width="16" height="16"></iconify-icon>
+                                Refund
+                            </button>`
+                            : '';
+
+                    return `<div class="rsg-actions">${klaim}${whatsapp}${riwayat}${refund}</div>`;
                 }
             }
         ],

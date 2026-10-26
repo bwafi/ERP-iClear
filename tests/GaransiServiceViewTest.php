@@ -3,6 +3,7 @@
 namespace Tests;
 
 use CodeIgniter\Test\CIUnitTestCase;
+use CodeIgniter\Test\FeatureTestTrait;
 
 /**
  * Halaman garansi service memakai tema .rsg-*, tetap server-side, dan
@@ -10,6 +11,8 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class GaransiServiceViewTest extends CIUnitTestCase
 {
+    use FeatureTestTrait;
+
     public function testMemakaiTemaRsgDanDataTablesServerSide(): void
     {
         $html = view('riwayat/garansi_service', [
@@ -32,6 +35,16 @@ final class GaransiServiceViewTest extends CIUnitTestCase
         $this->assertStringContainsString('td.dataTables_empty .rsg-empty', $html);
         $this->assertStringContainsString("data-label', 'Pelanggan'", $html);
         $this->assertStringContainsString("data-label', 'Aksi'", $html);
+        $this->assertStringContainsString('id="modalRefundGaransi"', $html);
+        $this->assertStringContainsString('btn-refund', $html);
+        $this->assertStringContainsString('garansi_service/refund', $html);
+    }
+
+    public function testRouteRefundTerdaftar(): void
+    {
+        // Tanpa sesi, filter auth mengalihkan. 404 berarti route belum terdaftar.
+        $this->post('garansi_service/refund')->assertRedirect();
+        $this->get('garansi_service/refund/detail/1')->assertRedirect();
     }
 
     public function testRoleLintasUnitMendapatFilterUnit(): void
