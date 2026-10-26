@@ -416,6 +416,22 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         $this->assertSame(1, $db->table('service_sparepart')->where('service_idservice', 1)->countAllResults());
     }
 
+    public function testBarangRusakYangSudahSoftDeletedTetapBisaDiklaim(): void
+    {
+        $this->seedService(4);
+        $this->fresh()->table('barang')->where('idbarang', 11)->update(['deleted' => '1']);
+
+        $this->postClaim([
+            'idservice' => 4,
+            'catatan' => 'Baterai rusak, master barang sudah dihapus',
+            'barang_rusak' => [['id' => 11, 'qty' => 1, 'keterangan' => 'Baterai kembung']],
+        ])->assertRedirect();
+
+        $db = $this->fresh();
+        $this->assertSame(1, $db->table('riwayat_claim_garansi')->where('service_idservice', 4)->countAllResults());
+        $this->assertSame(1, $db->table('barang_rusak_claim')->where('service_idservice', 4)->countAllResults());
+    }
+
     public function testCatatanKosongTidakMenyimpanKlaim(): void
     {
         $this->seedService(2);

@@ -931,9 +931,9 @@ class StatusGaransi extends BaseController
                 continue;
             }
 
+            // Sparepart yang sudah dipakai bisa sudah soft-deleted; klaim tetap harus bisa mencatatnya.
             $barang = $db->table('barang')
                 ->where('idbarang', $id)
-                ->where('deleted', '0')
                 ->get()
                 ->getRow();
 
