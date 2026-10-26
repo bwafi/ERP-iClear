@@ -38,7 +38,8 @@ Menjembatani ERP dengan sistem eksternal: Kommo CRM (webhook & API read-only), c
 4. [⚠️] Tidak ada verifikasi `X-Hub-Signature` HMAC-SHA1 (TODO). — `KommoWebhook`
 5. [⚠️] Secret webhook kosong = terbuka (belum dikonfigurasi). — `Config/Kommo`
 6. Token refresh Kommo tidak persisten. — `KommoApiService`
-7. Route duplikat `api/crm/lead-list` (dua baris identik). — `Routes.php:736-737`
+7. Route duplikat `api/crm/lead-list` (dua baris identik). — `Routes.php:736-737` (IN-02)
+8. **`CrmLeadBridge::leadSummary/leadList` tidak memfilter `ml.kommo_deleted_at IS NULL`**, sehingga lead yang dihapus di Kommo tetap muncul di CRM. — `CrmLeadBridge.php`; kolom di `2026-09-11-000100_AddKommoLeadFields.php` (IN-01)
 
 ## 6. Acceptance Criteria
 - [ ] Webhook Kommo menyimpan/update lead idempotent; tidak dobel.
@@ -52,5 +53,9 @@ Menjembatani ERP dengan sistem eksternal: Kommo CRM (webhook & API read-only), c
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: HMAC bridge, webhook idempotent, tidak menulis omset, gap status.
-- ⚠️ Risiko: ketidakselarasan status Kommo vs manual → lead sinkronisasi bisa hilang dari pelaporan KPI; webhook tanpa signature; secret kosong.
+- ⚠️ Gap:
+  1. `CrmLeadBridge` tidak memfilter `kommo_deleted_at`. — IN-01
+  2. Route `api/crm/lead-list` duplikat. — IN-02
+  3. Webhook Kommo belum memverifikasi `X-Hub-Signature`; secret kosong = terbuka (status konfigurasi produksi tidak diketahui). — X-10
+- ⚠️ Risiko: ketidakselarasan status Kommo vs manual → lead sinkronisasi bisa hilang dari pelaporan KPI.
 - Test: **tidak ada test otomatis** untuk Kommo/bridge; hanya script manual `app/Scripts/kommo_test.php`.

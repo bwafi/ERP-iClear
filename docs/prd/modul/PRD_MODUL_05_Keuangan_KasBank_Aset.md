@@ -27,15 +27,15 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 2. Per baris: validasi rekening via `BankRekeningValidator::validateUntukUnit` (gagal → `PostingLedgerException`).
 3. Insert `kas_keluar` → `postingKasKeluar` (ledger `transaksi_kas_bank`, idempotent) → insert jurnal (posisi `debet/kredit` dari `posisi_drk`).
 4. Seluruh batch dalam SATU transaksi `transStart`; kegagalan posting → `transRollback` (anti partial-success).
-5. Update/delete: hapus posting lama, posting ulang, sinkron kasbon (`HutangPiutangService::guardKasbonKasKeluar/syncKasbonDariKasKeluar/hapusKasbonDariKasKeluar`).
-### 4.2 Kas Masuk — `Kas_Masuk::insert_kas_Masuk` (pola serupa, `postingKasMasuk`).
+5. Update/delete: hapus posting lama, posting ulang, sinkron kasbon (`HutangPiutangService::guardKasbonKasKeluar/syncKasbonDariKasKeluar/hapusKasbonDariKasKeluar`). **Update tidak menghapus/menulis ulang jurnal; delete menghapus jurnal.**
+### 4.2 Kas Masuk — `Kas_Masuk::insert_kas_Masuk` (pola serupa, `postingKasMasuk`). **Update/delete kas masuk tidak menyinkronkan/menghapus jurnal.**
 ### 4.3 Jurnal & Laporan
 - `Jurnal::index/export_jurnal`; `SisiKeuangan::index/export_pdf/export_excel`; `LabaRugi::index/laporan_unit/laporan_perbandingan_periode/cetak_*`.
 ### 4.4 KasBank (modul terpusat)
 - Akun (`saveAkun`), saldo awal (`saveSaldoAwal`), alokasi saldo (`saveAlokasiSaldo`), opening kas (`saveOpeningKas`).
 - Transfer internal (`saveTransfer`), antar unit (`saveAntarUnit`), setor tunai (`saveSetorTunai`), penarikan tunai (`savePenarikanTunai`), reversal.
 - Posting ke `transaksi_kas_bank` via `ModeKasBank` (resolve akun, scope source/destination, idempotent guard).
-- CSRF aktif per-route menulis ledger.
+- **CSRF hanya pada setor/tarik tunai (`['auth','csrf']`); transfer internal/antar-unit hanya `auth`.**
 ### 4.5 Tutup Kasir — `TutupKasir::tutup`
 - One-time closing harian per unit; saldo awal laci; `cash_laci` dari browser; perhitungan server-side (`TutupKasirClosing::hitung`); selisih kas fisik vs sistem; PDF bukti.
 - `kasirbulanan`, `omsetbulanan`, `arusKasHarian`, `assetberjalan`, `detailPengeluaran`.
@@ -49,12 +49,16 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 2. **Anti partial-success**: bila posting ledger gagal, seluruh batch dibatalkan. — `Kas_Keluar::insert_kas_keluar` + `PostingLedgerException::wajibBerhasil`
 3. **Resolve akun**: bila `bankId` diberikan, wajib rekening BANK aktif milik unit; tidak boleh fallback ke KAS. Bila `bankId` kosong → akun KAS aktif pertama (prioritas Kas Besar COA 1010101000 > tanpa COA > Kas Kecil). — `ModeKasBank::resolveAkunDetail`
 4. **Scope account berarah**: Finance/HO (`is_finance_ho`) hanya boleh jadi source oleh role 0/1; sebagai destination diterima dari unit mana pun; shared hanya unit dengan baris alokasi; unit hanya pemilik. — `KasBankScopeService::canUseAsSource/canUseAsDestination`
-5. **Unit filter**: role 0/1/2/34 bebas pilih unit; lainnya dibatasi (unit sendiri / `spv_units`). Request unit di luar scope jatuh ke unit pertama diizinkan. — `Kas_Keluar::bebasPilihUnit/unitFilterTerpilih`
+5. **Unit filter baca**: role 0/1/2/34 bebas pilih unit; lainnya dibatasi (unit sendiri / `spv_units`). Request unit di luar scope jatuh ke unit pertama diizinkan. — `Kas_Keluar::bebasPilihUnit/unitFilterTerpilih`. **Scope ini tidak memvalidasi unit tulis:** `insert_kas_keluar`/`insert_kas_Masuk` memakai `unit_idunit` dari POST; `Asset` memakai `unit` dari POST. — X-06/FN-05
 6. **Transaksi kas keluar** → posting ledger + jurnal, dipisah `debet/kredit` berdasar `posisi_drk`. — `Kas_Keluar::insert_kas_keluar`
 7. **Kasbon**: baris `kas_keluar` dari payroll menyimpan `penerima=ID_AKUN`; guard mencegah ubah/hapus kasbon yang sudah lunas. — `HutangPiutangService::guardKasbonKasKeluar`
 8. **Tutup kasir**: perhitungan saldo server-side; browser hanya kirim `cash_laci`; one-time per hari per unit. — `PRODUCT.md`; `TutupKasirClosing::hitung`
-9. **CSRF per-route** untuk semua penulisan ledger kas-bank & tutup kasir. — `Routes.php`
+9. **CSRF per-route hanya pada sebagian route.** Setor/tarik tunai, refund DP, sebagian `StatusGaransi`, `StokOpname`, `ReturBarangRusak`, dan `tutupkasir/tutup` memakai `csrf`; **kas masuk/keluar, aset, transfer internal/antar-unit, pembelian, penjualan, dan retur supplier/customer tidak**. — `Routes.php`; X-04/FN-02/FN-07
 10. **Reversal** menghapus posting lalu post ulang (idempotent). — `ModeKasBank::hapusPosting`
+11. **Edit/hapus kas tidak selalu sinkron jurnal.** `Kas_Masuk::update_kas_Masuk` memperbarui sumber + ledger tetapi tidak jurnal; `delete_kas_Masuk` tidak menghapus jurnal. `Kas_Keluar::update_kas_keluar` hanya posting ulang ledger; delete menghapus jurnal. — X-07/FN-03/FN-04
+12. **Aset tidak memakai role/scope**, unit dari POST, insert aset + riwayat penyusutan tidak atomik, `update_asset` mengabaikan `asset_code`/`nilai_perolehan`/`nilai_sekarang`, dan `GET penyusutan_cronjob`/`pulihkan_asset/{id}` tanpa guard. — `Asset.php:54,89,140,172,190,267`; `Routes.php:580` (FN-06)
+13. **`GET /kas_masuk` dan `GET /kategori_kas` tanpa filter auth.** — `Routes.php:416,431` (FN-01)
+14. **`laba_service`/`fee_service` memakai typo `['fileter'=>'auth']`**, bukan `filter`; proteksi auth tidak berlaku/route dapat error. — `Routes.php:336-340` (FN-08)
 
 ## 6. Acceptance Criteria
 - [ ] Insert/update/delete kas keluar & masuk atomik & konsisten dengan ledger & jurnal.
@@ -70,5 +74,12 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - Modul: Hutang Piutang (kasbon), Payroll (kas_keluar), Penjualan/Pembelian (jurnal).
 
 ## 8. Status & Tandai
-- ✅ Terverifikasi penuh: kas keluar, ledger idempotent, scope unit/account, transaksi atomik, CSRF, kasbon guard.
-- ⚠️ Belum diverifikasi penuh: body penuh `KasBank.php` (2989 baris), `TutupKasir.php`, `DashboardFinance.php`, `LabaRugi.php`, `SisiKeuangan.php`, `Asset.php` (metode & transaksi detail). Rujuk `tests/KasBank*`, `tests/TutupKasir*`, `tests/AssetBerjalan*`, `tests/unit/FinanceKpiTest`, dst.
+- ✅ Terverifikasi: insert kas keluar/masuk, ledger idempotent (`ModeKasBank`), scope account berarah, atomisitas insert, kasbon guard.
+- ⚠️ Gap tinggi:
+  1. Update kas keluar dan update/delete kas masuk tidak menyinkronkan jurnal. — FN-03/FN-04/X-07
+  2. Scope unit tidak divalidasi pada operasi tulis (unit dari POST). — FN-05/X-06
+  3. Aset tanpa role/scope, tidak atomik, field update tidak lengkap, cron publik. — FN-06
+  4. Hanya sebagian route mutasi memakai CSRF. — FN-02/FN-07
+  5. `GET /kas_masuk`, `GET /kategori_kas` tanpa auth; typo `fileter`. — FN-01/FN-08
+- ⚠️ Belum diverifikasi penuh: body penuh `KasBank.php`, `TutupKasir.php`, `DashboardFinance.php`, `LabaRugi.php`, `SisiKeuangan.php`, `Asset.php` (metode & transaksi detail). Rujuk `tests/KasBank*`, `tests/TutupKasir*`, `tests/AssetBerjalan*`, `tests/unit/FinanceKpiTest`, dst.
+- Test gap: tidak ada test untuk konsistensi jurnal pada edit/hapus kas masuk/keluar, scope tulis, dan route tanpa auth. Lihat X-08.

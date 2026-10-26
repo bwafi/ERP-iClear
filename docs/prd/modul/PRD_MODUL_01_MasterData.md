@@ -64,9 +64,10 @@ CRUD; pelanggan mendukung ekspor/impor Excel, pencarian, region; bundle menyimpa
 ## 8. Status & Tandai
 - ✅ Fakta terverifikasi: mayoritas aturan di atas.
 - ⚠️ Gap penting:
-  1. Route `pegawai/delete_jabatan` menunjuk method yang tidak ada → 404. — `Routes.php:49`
-  2. CRUD kategori route dikomentari → kategori tidak bisa diisi via UI. — `Routes.php:89-91`
-  3. Mismatch argumen `getLastBarangByKategori` (model butuh 2, controller kirim 1). — `Produk.php`
-  4. Typo `$THIS` pada `Pegawai::update`. — `Pegawai.php:205`
-  5. Import Excel memakai SQL mentah + `addslashes`. — `Produk::import_produk`, dll.
-  6. Tidak ada test otomatis untuk modul ini (kecuali penggunaan `ModelBank` pada test modul lain).
+  1. Route `pegawai/delete_jabatan` menunjuk method yang tidak ada → 404. — `Routes.php:49`; `Pegawai.php` (MD-04)
+  2. CRUD kategori master diarahkan ke `Kategori_Kas` dengan field form yang tidak cocok (`idnya`/`nama_kategori` vs `idkategori_kas`/`kategori`), sehingga berpotensi menulis ke tabel kategori kas atau gagal. — `Routes.php:416-419`; `Views/datamaster/kategori.php`; `Kategori_Kas.php` (MD-01)
+  3. `Produk::insert_produk`, `Produk::update_produk`, dan `Produk::import_produk` memanggil `getLastBarangByKategori()` dengan satu argumen, padahal model membutuhkan dua → `ArgumentCountError` di PHP 8. — `Produk.php:71,138,276`; `ModelBarang.php:210` (MD-02)
+  4. Typo `$THIS` pada `Pegawai::update` saat `jenis_pegawai == 100` → fatal. — `Pegawai.php:205` (MD-03)
+  5. CRUD `Pegawai`, `Unit`, dan `Produk` tidak memeriksa role; setiap user login dapat mengubah pegawai/role/unit/produk. — route grup hanya `auth` (MD-05)
+  6. Import Excel memakai SQL mentah + `addslashes` ⚠️ (belum diverifikasi ulang pada audit ini).
+  7. Tidak ada test otomatis untuk alur master data di atas (kecuali penggunaan `ModelBank` pada test modul lain).

@@ -56,6 +56,11 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 7. **Route pembayaran NET disonaktifkan**; pembayaran DP dipakai alur GROSS di `TutupKasir::dpServiceSelesai`. — `Routes.php:186-193`
 8. Klaim garansi tercatat di `riwayat_claim_garansi`; terkait `barang_rusak_claim` (migration 2026-10-23/24). — test `GaransiClaimServiceTest`
 9. HPP sparepart klaim di-backfill (migration 2026-10-24-000100). — migrasi
+10. `cancel_service` menghapus service/kerusakan/sparepart dan DP/jurnal DP, tetapi **tidak** menghapus invoice `penjualan`/`detail_penjualan`/pembayaran yang dibuat `buatPenjualanDariService()`; invoice yatim tetap ada dan stok tetap terpotong. — `Service.php:484-547,886-932` (SV-01)
+11. Route `service_kerusakan` dan `service_sparepart` menunjuk `Service::kerusakan_table`/`sparepart_table` yang tidak ada. — `Routes.php:151-152` (SV-02)
+12. DP tambahan setelah DP awal memakai `kode_dp` yang sama (`DP{no_service}`), sehingga `ServiceDpService::catatDp()` mengembalikan `duplikat` dan pembayaran DP kedua gagal. — `Service::insert_service/insert_pembayaran`; `ServiceDpService` (SV-03)
+13. Halaman `GET status_service/{id}` publik, tanpa auth, dan view mencetak nama/keluhan pelanggan tanpa `esc()` → PII/XSS. — `Routes.php:218`; `Views/transaksi/status_service.php:83-88` (SV-04)
+14. Pembatalan service memakai `GET service/cancel/{id}` tanpa CSRF. — `Routes.php:158`; `Service::cancel_service` (SV-05)
 
 ## 6. Acceptance Criteria
 - [ ] Intake service menolak transaksi aktif kedua; memaksa pelanggan.
@@ -72,5 +77,11 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: guard transaksi aktif, DP ledger, garansi sparepart, route NET dinonaktifkan, klaim garansi.
+- ⚠️ Gap tinggi:
+  1. `cancel_service` tidak menghapus invoice/detail/pembayaran sparepart → invoice yatim & stok tetap terpotong. — SV-01
+  2. Route `service_kerusakan`/`service_sparepart` menunjuk method yang tidak ada. — SV-02
+  3. DP kedua gagal karena `kode_dp` sama; perlu keputusan aturan DP. — SV-03
+  4. `status_service/{id}` publik, PII tanpa escape. — SV-04
+  5. Cancel service via GET tanpa CSRF. — SV-05
 - ⚠️ Belum diverifikasi penuh: isi lengkap `Riwayat_Service` (proses/pengambilan cronology per baris), `StatusGaransi` (semua method), dan integrasi `TutupKasir::dpServiceSelesai` (dibaca hanya bukti komentar).
-- Test padat: `ServiceIntakeDpTest`, `ServicePengambilanDpTest`, `ServiceCancelDpTest`, `GaransiClaimSaveTest`, `StokBarangKurangiSparepartGaransiTest`, dst.
+- Test padat: `ServiceIntakeDpTest`, `ServicePengambilanDpTest`, `ServiceCancelDpTest`, `GaransiClaimSaveTest`, `StokBarangKurangiSparepartGaransiTest`, dst. Tidak ditemukan test untuk cancel invoice/detail, DP kedua, route mati, dan akses publik `status_service`.

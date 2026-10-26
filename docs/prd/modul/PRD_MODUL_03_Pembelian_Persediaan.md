@@ -43,10 +43,13 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
 2. PPN per item = 11% dari subtotal setelah diskon bila item dicentang ppn. — `Pembelian::insert`
 3. HPP disimpan per detail (`hitung_hpp`) dari `ModelHppBarang`. — `Pembelian::insert`
 4. Status = `Lunas` bila `sisa==0`, else `Belum Lunas`. — `Pembelian::insert`
-5. Sinkronisasi projection hutang supplier ke registry H/P (best-effort). — `Pembelian::insert` → `HutangPiutangService::syncFromPembelian`
+5. Sinkronisasi projection hutang supplier ke registry H/P (best-effort; gagal hanya di-log). **Total projection memakai `pembelian.total_bayar`, bukan `total_transaksi`, sehingga untuk pembelian sebagian total/sisa bisa salah.** — `Pembelian::insert` → `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)
 6. Transaksi atomik untuk header+detail+jurnal+pembayaran. — `Pembelian::insert`
-7. `Pembelian::insert_produk` (route `insert_produk` juga dipakai dari halaman pembelian) membuat barang baru dengan kode `kodeKategori+nomor(2)`. — `Pembelian::insert_produk`
-8. [⚠️] Detail alur stok opname, mutasi, dan retur serta mekanisme nilai/penyesuaian stok belum diverifikasi penuh di dokumen ini (belum dibaca lengkap: `StokOpname.php`, `MutasiStok.php`, `ReturBarangRusak.php`); lihat gap di bawah.
+7. `Pembelian::insert_produk` (route `insert_produk` juga dipakai dari halaman pembelian) membuat barang baru dengan kode `kodeKategori+nomor(2)`. **Route ini tidak memakai filter `auth`.** — `Routes.php:140`; `Pembelian.php:412` (PI-06)
+8. `StokMinimum::update` menulis ke VIEW `stok_barang`, yang bukan view updatable; `stok_minimum` berada di tabel `barang`. — `ModelStokBarang::updateStokMinimum` (PI-01)
+9. Finalisasi stok opname tidak lagi mengoreksi `stok_akhir`; migration 2026-10-07 menghapus komponen opname dari view, dan view final menulis `0 AS stok_opname` untuk cabang opname. — `2026-10-07-000001_RemoveStokOpnameSelisihFromStokAkhir.php`; `2026-10-23-000500...:80` (PI-02)
+10. `StokOpnameService::batalDraft()` menulis aksi `batal_draft`, tetapi ENUM audit hanya `mulai|simpan|finalisasi|reopen`. — `StokOpnameService.php:710`; `2026-09-28-000001...:127` (PI-03)
+11. Retur supplier/customer tidak memakai transaksi, mengambil unit per item dari POST, dan route-nya tanpa CSRF. — `Retur_Suplier.php:80,96`; `Retur_Customer.php`; `Routes.php:313,321` (PI-04)
 
 ## 6. Acceptance Criteria
 - [ ] Input pembelian tersimpan atomik beserta jurnal & pembayaran.
@@ -61,5 +64,12 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: alur pembelian (nota, PPN, HPP, jurnal, sync H/P, atomik).
-- ⚠️ Belum diverifikasi penuh: alur detail Opname (mulai/simpan/finalisasi/reopen/batal), Mutasi (terima/batal terima), Retur barang rusak (ubah status), serta integrasinya dengan `StokBarang` (migration `StokBarangHanyaMutasiDiterima` mengindikasikan stok hanya bertambah dari mutasi yang diterima).
-- Test yang ad: `StokOpnameBukanProdukTest`, `StokBarangHanyaMutasiDiterimaTest`, `MutasiNoNotaUniqueTest`, `MutasiStokPickerTest`, `ReturBarangRusakTest`, `StokBarangKurangiSparepartGaransiTest`.
+- ✅ Terverifikasi: VIEW `stok_barang` mengurangi penjualan, menambah pembelian/mutasi diterima/retur, dan mengabaikan opname pada `stok_akhir`; retur customer/supplier serta pemakaian garansi ikut dihitung.
+- ⚠️ Gap tinggi:
+  1. Projection hutang memakai `total_bayar` → total/sisa salah untuk pembelian tidak lunas. — PI-05/HP-01
+  2. `StokMinimum::update` menulis ke VIEW `stok_barang`; fitur stok minimum tidak berfungsi. — PI-01
+  3. `batal_draft` tidak ada di ENUM audit stok opname. — PI-03
+  4. Retur supplier/customer tidak atomik, unit item dari POST, tanpa CSRF. — PI-04
+  5. Route `insert_produk` dari halaman pembelian tanpa auth. — PI-06
+- 🔶 Inferensi/keputusan bisnis: apakah opname seharusnya mengoreksi `stok_akhir` (kode saat ini tidak) perlu konfirmasi user. — PI-02
+- Test yang ada: `StokOpnameBukanProdukTest`, `StokBarangHanyaMutasiDiterimaTest`, `MutasiNoNotaUniqueTest`, `MutasiStokPickerTest`, `ReturBarangRusakTest`, `StokBarangKurangiSparepartGaransiTest`. Tidak ada test untuk projection `total_bayar`, update stok minimum, `batal_draft`, retur atomik/scope, dan route `insert_produk`.

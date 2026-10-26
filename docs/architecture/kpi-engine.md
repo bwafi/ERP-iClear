@@ -1,8 +1,10 @@
 # KPI Engine Architecture
 
-**Tanggal:** 28 Agustus 2026
+**Tanggal:** 28 Agustus 2026 (diperbarui 2026-10-26)
 **Branch:** `refactor/kpi-incentive-engine`
-**Status:** Service layer dibangun, regression test lulus. Belum wiring ke Controller.
+**Status:** Dokumen historis + catatan implementasi aktual. Service layer sudah dibangun; **`KpiCalculationService` sudah dipakai controller/payroll aktif**. Bagian “legacy” di bawah dipertahankan sebagai rekaman refactor.
+
+> **Koreksi audit 2026-10-26:** pernyataan lama “belum wiring ke Controller” dan “`KpiCalculationService` belum dipakai periode berjalan” **tidak lagi benar**. Pemanggilan aktif ditemukan di `PenilaianKPI`, `PayrollGenerator`, `HoSalaryDistributionService`, `UnitSalaryCalculationService`, dan `ManagerKpiService`. `LegacyKpiCalculationService` tidak dipanggil controller aktif. Lihat `docs/prd/audit/PRD_AUDIT_REPORT.md` X-09/KPI-05.
 
 ---
 
@@ -23,18 +25,18 @@ Tabel konfigurasi baru (`kpi_components`, `kpi_weights`, dst.) disiapkan untuk t
 
 ```
 app/
-├── Controllers/                  ← TIDAK diubah (tunggu regression selesai)
+├── Controllers/                  ← sudah memakai KpiCalculationService untuk periode berjalan
 │   ├── PenilaianKPI.php
 │   ├── TutupKasir.php
 │   └── KeyPerformance.php
 │
 ├── Services/
 │   ├── Kpi/
-│   │   ├── LegacyKpiCalculationService.php   ← REPLIKASI hitungKPIGaji() (hasil identik)
+│   │   ├── LegacyKpiCalculationService.php   ← HISTORIS: replikasi hitungKPIGaji(), tidak dipanggil controller aktif
 │   │   ├── KpiScoreService.php               ← helper generic (score, weighted score)
-│   │   ├── KpiCalculationService.php         ← (strategi baru, belum dipakai periode berjalan)
-│   │   ├── KpiEvaluationService.php          ← (manual KPI, tahap berikutnya)
-│   │   ├── OmsetTokoCalculator.php           ← (calculators baru)
+│   │   ├── KpiCalculationService.php         ← ENGINE AKTIF periode berjalan
+│   │   ├── KpiEvaluationService.php          ← manual KPI
+│   │   ├── OmsetTokoCalculator.php           ← calculator (omzet = gross profit; lihat catatan)
 │   │   ├── CustomerCalculator.php
 │   │   ├── OmsetCabangCalculator.php
 │   │   └── Calculators/
@@ -170,16 +172,15 @@ Dibandingkan untuk 19 karyawan × 3 context (gaji, penilaian_kinerja, slip_gaji)
 
 ---
 
-## 6. Status Integrasi
+## 6. Status Integrasi (diperbarui 2026-10-26)
 
-**NOT_READY_FOR_CONTROLLER_INTEGRATION**
+**ACTIVE — `KpiCalculationService` dipakai.**
 
-Alasan:
-- Service belum di-wiring ke controller (sesuai instruksi).
-- `assetberjalan()` (dashboard) di TutupKasir masih menyimpan formula & query KPI terpisah;
-  **insentif-nya sudah memakai engine tunggal** `KpiCalculationService::computeIncentive()`
-  (sama dengan gaji/payroll) sejak 2026-10-15.
-- Salary / manual KPI / evaluasi multi-periode masih tahap berikutnya.
+- Pemanggilan aktif: `PenilaianKPI`, `PayrollGenerator`, `HoSalaryDistributionService`, `UnitSalaryCalculationService`, `ManagerKpiService`.
+- `LegacyKpiCalculationService` hanya menjadi pembanding historis/regression, bukan jalur produksi.
+- `TutupKasir::assetberjalan()` masih menyimpan formula/query dashboard terpisah; insentif-nya memakai `KpiCalculationService::computeIncentive()`.
+- Manual KPI, evaluasi multi-periode, dan salary component tetap memiliki jalur/service masing-masing; lihat PRD Modul 08.
+- Catatan definisi: komponen KPI bernama “omzet” pada `OmsetTokoCalculator`/`OmsetCabangCalculator` dihitung dari gross profit (`SUM(sub_total - hpp_penjualan)`). Konfirmasi bisnis diperlukan bila label “omzet” harus berarti omzet penjualan (KPI-06).
 
 ---
 

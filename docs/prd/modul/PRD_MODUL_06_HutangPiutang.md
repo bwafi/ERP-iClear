@@ -47,8 +47,10 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 6. Settlement kasbon dari payroll idempotent. — `settleKasbonFromPayroll`
 7. Jurnal H/P via `template_jurnal`; bila template absent → hanya log, transaksi tetap tersimpan. — `postJurnal`
 8. Settlement legacy bukan pembayaran (tidak ubah `total_dibayar`, tidak sentuh saldo/ledger). — `tandaiLunasLegacy`
-9. Projection disinkron dari sumber (`syncFromPembelian`, `syncFromPiutangLegacy`); lunas-legacy projection ditimpa sync → ditolak. — `refreshProjections`
+9. Projection disinkron dari sumber (`syncFromPembelian`, `syncFromPiutangLegacy`); lunas-legacy projection ditimpa sync → ditolak. — `refreshProjections`. **`syncFromPembelian` mengisi `total` dari `pembelian.total_bayar` (nilai yang sudah dibayar), bukan `total_transaksi`; untuk pembelian sebagian total/sisa/status salah.** — `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)
 10. Kode normalisasi `<SEG>-Ymd<unit><seq4>`. — `generateKode`
+11. `Piutang::bayar_piutang` (legacy) mengambil `sisa` dari POST, menyimpan `pembayaran_piutang`, memperbarui `piutang.sisa_hutang` dengan nilai itu, memakai `if ($sisa >= 0) 0 else 1` sehingga status Lunas tidak pernah tercapai, dan tidak membuat jurnal/ledger kas. — `Piutang.php:153-190` (HP-02/SL-06)
+12. `syncFromPiutangLegacy` hanya menyinkronkan projection; tidak memperbaiki pembayaran legacy di atas. — `HutangPiutangService`
 
 ## 6. Acceptance Criteria
 - [ ] Buat hutang/piutang authoritative tersimpan; jenis manual divalidasi.
@@ -65,6 +67,9 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: aturan di atas (dengan bukti `HutangPiutangService::method`).
-- ⚠️ Gap terkonfirmasi: **KPI Piutang selalu null** karena `pembayaran_piutang` tidak punya `tanggal_bayar` (status `gap_no_payment_date`). — `PiutangTimelinessCalculator`
+- ⚠️ Gap terkonfirmasi:
+  1. **Projection pembelian memakai `total_bayar`**, bukan `total_transaksi`; total/sisa hutang supplier bisa salah. — HP-01/PI-05
+  2. **Pembayaran piutang legacy** memakai `sisa` dari POST, tidak memposting kas/jurnal, dan status Lunas tidak pernah tercapai. — HP-02/SL-06
+  3. **KPI Piutang selalu null** karena `pembayaran_piutang` tidak punya `tanggal_bayar` (status `gap_no_payment_date`). — `PiutangTimelinessCalculator` (HP-03)
 - ⚠️ Inferensi/risiko: pembayaran tanpa rincian metode dipaksa tunai; jurnal manual tidak terposting; dua mekanisme guard saldo paralel; enum `sumber` untuk `antar_unit/kas_bank/legacy` belum terkonfirmasi.
-- Test: `HutangPiutangDetailLinkTest`, `HutangPiutangListRedesignTest`, `ScopeConsolidasiTest`, `ScopeFinanceRoleTest`, `FinanceKpiTest`.
+- Test: `HutangPiutangDetailLinkTest`, `HutangPiutangListRedesignTest`, `ScopeConsolidasiTest`, `ScopeFinanceRoleTest`, `FinanceKpiTest`. Tidak ada test untuk projection `total_bayar`, pembayaran piutang legacy, dan KPI timeliness.

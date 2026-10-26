@@ -44,7 +44,11 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 6. Kategori akun jurnal dibedakan: HP baru PPN/non-PPN/second, sparepart, aksesoris, PPN, diskon. — `insert_penjualan`
 7. Penjualan berjalan dalam SATU transaksi (header+detail+jurnal+pembayaran bank). — `insert_penjualan`
 8. Kode pembayaran bank = `PJL{date}{unit}{rand4}`; di-refer ke `id_referensi` penjualan setelah insert. — `insert_penjualan`
-9. [⚠️] Potongan stok saat penjualan TIDAK terlihat eksplisit pada `Penjualan::insert_penjualan` maupun `ModelPenjualan/ModelDetailPenjualan` (tidak ada panggilan kurangi stok). Perlu verifikasi mekanisme stok (kartu stok) untuk memastikan stok benar-benar berkurang.
+9. Potongan stok penjualan **tidak** dilakukan oleh `Penjualan::insert_penjualan`; stok dihitung oleh VIEW `stok_barang` yang mengurangi `total_penjualan` dari `SUM(detail_penjualan.jumlah)`. — `2026-10-23-000500_StokBarangKurangiSparepartGaransi.php:103-105` (SL-01)
+10. Tidak ada validasi ketersediaan stok sebelum penjualan; pengecekan stok terkait dikomentari. — `Penjualan.php:278-279` (SL-05)
+11. Penjualan kredit hanya mengisi `keterangan='Belum Lunas'`; tidak membentuk piutang pelanggan dan tidak memanggil `HutangPiutangService`. — `Penjualan::insert_penjualan` (SL-02)
+12. Setiap komponen bundle ditulis dengan `sub_total` penuh, sehingga laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet/laba. — `Penjualan.php:327-334`; `TutupKasir.php:360,610`; `ModelPenjualan.php:132` (SL-03)
+13. `kode_invoice` tidak memiliki unique constraint; dua transaksi bersamaan dapat memperoleh kode sama. Kode invoice service juga memakai `SRV{date('YmdHis')}` tanpa random. — migration `penjualan`; `Service.php:496` (SL-04)
 
 ## 6. Acceptance Criteria
 - [ ] Input penjualan menyimpan header+detail+pembayaran bank+jurnal dalam satu transaksi.
@@ -59,5 +63,12 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: alur input, invoice, pembayaran, jurnal, transaksi atomik.
-- ⚠️ Belum terverifikasi: mekanisme pengurangan stok pada penjualan; test otomatis end-to-end controller `Penjualan` (hanya ada `tests/RiwayatPenjualanViewTest.php` untuk view riwayat).
-- 🔶 Inferensi: piutang pelanggan pada alur penjualan "Belum Lunas" belum terbukti menulis `piutang_pelanggan`/registry H/P secara otomatis (perlu verifikasi integrasi Hutang Piutang).
+- ✅ Terverifikasi: stok penjualan dihitung oleh VIEW `stok_barang` dari `detail_penjualan` (bukan update stok eksplisit).
+- ⚠️ Gap tinggi:
+  1. Penjualan kredit tidak membentuk piutang pelanggan/registry H/P; `Piutang` legacy adalah piutang pegawai. — SL-02
+  2. `detail_penjualan.sub_total` bundle digandakan per komponen; laporan omzet/laba dapat salah. — SL-03
+  3. `Piutang::bayar_piutang` mengambil `sisa` dari POST, tidak memposting kas/jurnal, dan status Lunas tidak pernah tercapai. — SL-06/HP-02
+  4. `kode_invoice` tidak dijamin unik oleh database. — SL-04
+  5. Tidak ada validasi stok sebelum penjualan. — SL-05
+- 🔶 Inferensi: aturan bisnis penjualan kredit dan definisi omzet bundle memerlukan konfirmasi user.
+- Test: hanya `tests/RiwayatPenjualanViewTest.php` untuk view riwayat; tidak ada test end-to-end `Penjualan`/piutang legacy. Lihat `docs/prd/audit/PRD_AUDIT_REPORT.md` X-08.

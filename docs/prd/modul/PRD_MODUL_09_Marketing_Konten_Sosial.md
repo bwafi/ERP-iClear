@@ -57,6 +57,9 @@ Mengelola KPI divisi pemasaran & kreatif: (1) Content Management / KPI Multimedi
 6. Rekap harian = source of truth lead; CLOSING dari service; omzet KPI = Σ `omset` detail prospek manual CLOSING by `tanggal_won`. — `MarketingRekapService`, `MarketingKpiService::countCustomers/marketingRevenue`
 7. KPI Digital Marketing (43) 7 komponen bobot Σ=100 (Omzet Global 50, Leads Quality 15, Conversion 10, CPL 10, Campaign 5, Reporting 5, Improvement 5). — `DigitalMarketingKpiService::BOBOT`
 8. Data kosong per komponen → null (dikecualikan) kecuali leads bernilai 0 → 0. — `DigitalMarketingKpiService`
+9. `ModelSocialMediaTarget::findTarget()` dimaksudkan fallback target unit → global (`unit_id=0`), tetapi query fallback dibangun di atas builder yang sudah memfilter `unit_id=$unitId`, sehingga target global tidak pernah ditemukan. — `ModelSocialMediaTarget.php:33-48` (MK-01)
+10. Route marketing/konten/sosial hanya memakai `auth`; seluruh POST (`simpan`, `status`, `qc`, `channel`, `campaign`, `leads`, `ads`, `target`) tanpa `csrf`. — `Routes.php:677-728` (MK-02)
+11. [🔶] “Omzet” pada KPI marketing berasal dari `omset` detail prospek CLOSING; ini berbeda dari KPI `OMZET_GLOBAL` yang memakai gross profit. Perlu konfirmasi definisi. — `MarketingKpiService::marketingRevenue`; `OmsetTokoCalculator` (KPI-06)
 
 ## 6. Acceptance Criteria
 - [ ] Konten dapat dibuat (DRAFT), diedit (role write), status transisi legal, QC, brief verdict.
@@ -73,5 +76,11 @@ Mengelola KPI divisi pemasaran & kreatif: (1) Content Management / KPI Multimedi
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: permission, workflow, KPI konten/multimedia/sosial/marketing, scrape, rekap, ads.
-- ⚠️ Gap utama: (1) dua "wajah" KPI Marketing (legacy vs baru); (2) `performance_metrics`/`publication_performance` sisa legacy ter-join tapi tidak dipakai; (3) `SALES_UNITS=[1..5]` hardcode; (4) CLOSING menimpa data manual lama tanpa jejak; (5) jadwal cron `social:pull/process` tidak terverifikasi.
-- Test: `tests/SocialMedia/*` (padat), `tests/unit/DigitalMarketingKpiTest`, `ManagerKpiTest`.
+- ⚠️ Gap utama:
+  1. Fallback target sosial global tidak berfungsi (query mencampur filter unit spesifik dan global). — MK-01
+  2. Seluruh route tulis marketing/konten/sosial tanpa CSRF. — MK-02
+  3. Dua “wajah” KPI Marketing (legacy vs baru); `performance_metrics`/`publication_performance` sisa legacy ter-join tapi tidak dipakai.
+  4. `SALES_UNITS=[1..5]` hardcode.
+  5. CLOSING menimpa data manual lama tanpa jejak.
+  6. Jadwal cron `social:pull/process` tidak terverifikasi.
+- Test: `tests/SocialMedia/*` (padat), `tests/unit/DigitalMarketingKpiTest`, `ManagerKpiTest`. Tidak ada test untuk fallback target global dan CSRF marketing.

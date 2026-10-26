@@ -8,9 +8,13 @@ Folder ini berisi **Product Requirements Document berdasarkan implementasi aktua
 - `_analysis/` — hasil analisis mentah per kelompok modul (bukti & temuan detail):
   - `00_cross_cutting.md` — analisis lintas-modul
   - `Group_A_Inti_MasterData.md`
+  - `Group_C_Pembelian_Persediaan.md`
+  - `Group_D_Service_Garansi.md`
   - `Group_F_HutangPiutang.md`
   - `Group_I_Marketing_Konten_Sosial.md`
   - `Group_J_Integrasi_Cross.md`
+- `audit/` — audit PRD terhadap implementasi:
+  - `PRD_AUDIT_REPORT.md` — temuan per ID, bukti kode, dampak, rekomendasi, gap test, dan urutan perbaikan
 
 ## Legenda Status Verifikasi
 - ✅ Fakta terverifikasi dari kode
