@@ -188,7 +188,39 @@ class HutangPiutang extends BaseController
             'bank' => $this->service->getBankOptions($this->allowedUnitIds()),
             'can_input' => $this->scopeService->canInput(),
             'antar_unit' => $this->antarUnitPaymentData($row),
+            'can_edit_jatuh_tempo' => $this->canEditJatuhTempo($row),
         ]);
+    }
+
+    /**
+     * Ubah jatuh tempo hanya untuk Admin Root (ID_JABATAN = 1).
+     */
+    public function ubahJatuhTempo()
+    {
+        $id = (int) $this->request->getPost('hutang_piutang_id');
+
+        if ((int) session('ID_JABATAN') !== 1) {
+            return redirect()->back()->with('gagal', 'Hanya Admin Root yang boleh mengubah jatuh tempo.');
+        }
+
+        $result = $this->service->ubahJatuhTempo(
+            $id,
+            (string) $this->request->getPost('jatuh_tempo'),
+            (int) session('ID_AKUN')
+        );
+
+        $tujuan = $id > 0 ? 'hutangpiutang/detail/' . $id : 'hutangpiutang/piutang';
+
+        return redirect()->to(base_url($tujuan))
+            ->with($result['success'] ? 'sukses' : 'gagal', $result['message']);
+    }
+
+    private function canEditJatuhTempo(object $row): bool
+    {
+        return (int) session('ID_JABATAN') === 1
+            && (int) ($row->is_projection ?? 0) === 0
+            && ($row->scope ?? 'active') !== FinanceScopeService::SCOPE_LEGACY
+            && $row->status !== HutangPiutangService::STATUS_LUNAS;
     }
 
     /**

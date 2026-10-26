@@ -94,6 +94,31 @@ final class HutangPiutangListRedesignTest extends CIUnitTestCase
         $this->assertStringContainsString('>Lunasi</a>', $html);
     }
 
+    public function testBarisMutasiMenampilkanArahAsalTujuan(): void
+    {
+        $piutang = $this->render([
+            $this->row([
+                'id' => 8,
+                'sumber_tipe' => 'mutasi_unit',
+                'jenis' => 'piutang',
+                'nama_pihak' => 'Gudang Pusat',
+                'nama_lawan' => 'Cabang A',
+            ]),
+        ], 'piutang');
+        $this->assertStringContainsString('Gudang Pusat → Cabang A', $piutang);
+
+        $hutang = $this->render([
+            $this->row([
+                'id' => 9,
+                'sumber_tipe' => 'mutasi_unit',
+                'jenis' => 'hutang',
+                'nama_pihak' => 'Cabang A',
+                'nama_lawan' => 'Gudang Pusat',
+            ]),
+        ], 'hutang');
+        $this->assertStringContainsString('Gudang Pusat → Cabang A', $hutang);
+    }
+
     private function render(array $rows, string $jenis, array $filters = [], bool $canInput = false): string
     {
         $filters = array_merge([

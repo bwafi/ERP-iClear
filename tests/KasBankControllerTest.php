@@ -571,6 +571,26 @@ class KasBankControllerTest extends CIUnitTestCase
         $this->assertStringContainsString('name="akun_penerima_id"', $html);
     }
 
+    public function testFormUbahJatuhTempoHanyaMunculUntukAdminRoot(): void
+    {
+        $this->sesi();
+        $this->assertStringContainsString(
+            'hutangpiutang/ubah-jatuh-tempo',
+            (string) $this->get('hutangpiutang/detail/901')->getBody()
+        );
+
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 44,
+            'ID_UNIT'    => 2,
+            'ID_JABATAN' => 35,
+        ]);
+        $this->assertStringNotContainsString(
+            'hutangpiutang/ubah-jatuh-tempo',
+            (string) $this->get('hutangpiutang/detail/901')->getBody()
+        );
+    }
+
     public function testUpdateKasMasukRefreshPostingDalamSatuTransaksi(): void
     {
         $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, idunit, idbank, tanggal, kategori_idkategori, deskripsi, jumlah, jenis, penerima, updated_on)
@@ -820,8 +840,8 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $jt = date('Y-m-d', strtotime(date('Y-m-d', strtotime($mutasi->tanggal_terima)) . ' +3 days'));
         $kode = array_map(fn ($h) => $h->kode, $rows);
-        $this->assertContains('MUT-1-1-P', $kode);
-        $this->assertContains('MUT-2-1-H', $kode);
+        $this->assertContains('MUT-1-2-260920-001', $kode);
+        $this->assertContains('MUT-2-1-260920-001', $kode);
         foreach ($rows as $h) {
             $this->assertSame($jt, $h->jatuh_tempo);
         }
@@ -883,6 +903,70 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             ->where('deleted', 0)
             ->get()->getResult();
         $this->assertCount(2, $rows);
+    }
+
+    public function testAdminRootBisaUbahJatuhTempoPasanganMutasi(): void
+    {
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 1,
+        ]);
+
+        $r = $this->post('hutangpiutang/ubah-jatuh-tempo', [
+            'hutang_piutang_id' => 901,
+            'jatuh_tempo'       => '2026-12-31',
+            'csrf_test_name'    => service('security')->getHash(),
+        ]);
+        $r->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $rows = $db->table('hutang_piutang')->whereIn('id', [901, 902])->get()->getResult();
+        $this->assertCount(2, $rows);
+        foreach ($rows as $row) {
+            $this->assertSame('2026-12-31', $row->jatuh_tempo);
+        }
+    }
+
+    public function testRoleSelainAdminRootTidakBisaUbahJatuhTempo(): void
+    {
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 44,
+            'ID_UNIT'    => 2,
+            'ID_JABATAN' => 35,
+        ]);
+
+        $this->post('hutangpiutang/ubah-jatuh-tempo', [
+            'hutang_piutang_id' => 901,
+            'jatuh_tempo'       => '2026-12-31',
+            'csrf_test_name'    => service('security')->getHash(),
+        ])->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $this->assertNull($db->table('hutang_piutang')->where('id', 901)->get()->getRow()->jatuh_tempo);
+    }
+
+    public function testUbahJatuhTempoMenolakBarisProjection(): void
+    {
+        $this->db->query('UPDATE db_hutang_piutang SET is_projection = 1 WHERE id = 901');
+
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 1,
+        ]);
+
+        $this->post('hutangpiutang/ubah-jatuh-tempo', [
+            'hutang_piutang_id' => 901,
+            'jatuh_tempo'       => '2026-12-31',
+            'csrf_test_name'    => service('security')->getHash(),
+        ])->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        $this->assertNull($db->table('hutang_piutang')->where('id', 901)->get()->getRow()->jatuh_tempo);
     }
 
     public function testTerimaMutasiNilaiNolTidakMenandaiDiterima(): void
@@ -1117,7 +1201,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             $this->assertSame(2.0, $it['qty']);
             $this->assertSame(1000.0, $it['harga']);
             $this->assertSame(2000.0, $it['subtotal']);
-            $this->assertContains($hp->kode, ['MUT-1-1-P', 'MUT-2-1-H']);
+            $this->assertContains($hp->kode, ['MUT-1-2-260920-001', 'MUT-2-1-260920-001']);
         }
     }
 

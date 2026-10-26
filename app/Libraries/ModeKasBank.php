@@ -667,6 +667,21 @@ class ModeKasBank
     }
 
     /**
+     * Urutan mutasi pada satu tanggal (1-based), dipakai untuk kode H/P.
+     */
+    private function urutanHarianMutasi(int $idMutasi, string $tanggal): int
+    {
+        $tanggal = date('Y-m-d', strtotime($tanggal));
+
+        $jumlah = $this->MutasiModel
+            ->like('tanggal_kirim', $tanggal, 'after')
+            ->where('idmutasi <=', $idMutasi)
+            ->countAllResults();
+
+        return max(1, (int) $jumlah);
+    }
+
+    /**
      * Buat pasangan HUTANG/PIUTANG antar unit dari satu mutasi.
      * Idempotent (guard uniq_hp_sumber + cek existing).
      * $akunUser = input_by pada hutang_piutang (fallback session / mutasi.input_by).
@@ -723,8 +738,16 @@ class ModeKasBank
 
         $tanggal = date('Y-m-d', strtotime($mutasi->tanggal_kirim));
         $uraian  = "Mutasi antar unit: {$namaKirim} → {$namaTerima} ({$mutasi->no_nota_mutasi})";
-        $kodeP   = 'MUT-' . $kirim . '-' . $idMutasi . '-P';
-        $kodeH   = 'MUT-' . $terima . '-' . $idMutasi . '-H';
+
+        // Kode dokumen: arah + tanggal + urutan harian. Kedua sisi memakai
+        // urutan yang sama; arah dibalik sehingga kodenya tetap unik.
+        // shortcut: urutan dihitung dari jumlah mutasi tanggal itu; dua
+        // penerimaan bersamaan bisa dapat nomor sama dan ditolak unique index.
+        // Ganti ke tabel sequence bila konkurensi mutasi meningkat.
+        $yymmdd = date('ymd', strtotime($tanggal));
+        $urut   = str_pad((string) $this->urutanHarianMutasi($idMutasi, $tanggal), 3, '0', STR_PAD_LEFT);
+        $kodeP  = "MUT-{$kirim}-{$terima}-{$yymmdd}-{$urut}";
+        $kodeH  = "MUT-{$terima}-{$kirim}-{$yymmdd}-{$urut}";
 
         // Baris mutasi bertanggal sebelum periode operasional baru adalah
         // legacy, sama seperti backfill cut-off untuk sumber lain.

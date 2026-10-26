@@ -37,6 +37,11 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 3. `batalkanLunasLegacy`: kembalikan sisa, status dihitung ulang, cabut penanda.
 ### 4.5 Cetak & umur
 `cetak/{id}` (mPDF); `umur_hutang/umur_piutang` + ekspor; `daftar_tagihan/daftar_piutang`.
+### 4.6 Ubah jatuh tempo (Admin Root)
+1. Hanya `ID_JABATAN = 1` (Admin Root); guard di controller, bukan hanya UI.
+2. `HutangPiutangService::ubahJatuhTempo()` menolak baris projection, legacy, dan lunas.
+3. Untuk `mutasi_unit`, baris hutang dan piutang diubah bersamaan dalam satu transaksi.
+4. Audit saat ini hanya `log_message('notice')`; tabel audit khusus belum ada.
 
 ## 5. Business Rules (Bukti)
 1. Hanya sumber authoritative yang bisa dibayar/dikompensasi/ditandai lunas. — `HutangPiutangService::AUTHORITATIVE_SUMBER`, `bayar`, `kompensasi`, `tandaiLunasLegacy`
@@ -48,9 +53,10 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 7. Jurnal H/P via `template_jurnal`; bila template absent → hanya log, transaksi tetap tersimpan. — `postJurnal`
 8. Settlement legacy bukan pembayaran (tidak ubah `total_dibayar`, tidak sentuh saldo/ledger). — `tandaiLunasLegacy`
 9. Projection disinkron dari sumber (`syncFromPembelian`, `syncFromPiutangLegacy`); lunas-legacy projection ditimpa sync → ditolak. — `refreshProjections`. **`syncFromPembelian` mengisi `total` dari `pembelian.total_bayar` (nilai yang sudah dibayar), bukan `total_transaksi`; untuk pembelian sebagian total tidak sama dengan sisa + dibayar (sisa tetap dari sumber).** — `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)
-10. Kode normalisasi `<SEG>-Ymd<unit><seq4>`. — `generateKode`
+10. Kode normalisasi `<SEG>-Ymd<unit><seq4>` untuk sumber authoritative/manual. — `generateKode`. Kode mutasi antar unit memakai `MUT-{unit asal}-{unit tujuan}-{yymmdd}-{urut3}`; `urut3` adalah urutan harian berdasarkan `tanggal_kirim`, dan kedua sisi (hutang & piutang) memakai urutan yang sama dengan arah dibalik. Kode mutasi lama `MUT-...-P/-H` tidak diubah. — `ModeKasBank::buatHutangPiutangDariMutasi`
 11. `Piutang::bayar_piutang` (legacy) mengambil `sisa` dari POST, menyimpan `pembayaran_piutang`, memperbarui `piutang.sisa_hutang` dengan nilai itu, memakai `if ($sisa >= 0) 0 else 1` sehingga status Lunas tidak pernah tercapai, dan tidak membuat jurnal/ledger kas. — `Piutang.php:153-190` (HP-02/SL-06)
 12. `syncFromPiutangLegacy` hanya menyinkronkan projection; tidak memperbaiki pembayaran legacy di atas. — `HutangPiutangService`
+13. Ubah jatuh tempo hanya Admin Root; projection/legacy/lunas ditolak; pasangan `mutasi_unit` selalu diubah bersama. — `HutangPiutang::ubahJatuhTempo`, `HutangPiutangService::ubahJatuhTempo`
 
 ## 6. Acceptance Criteria
 - [ ] Buat hutang/piutang authoritative tersimpan; jenis manual divalidasi.
@@ -59,6 +65,9 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 - [ ] Lunas legacy konsisten (tanpa jurnal/movement) & dapat dibatalkan.
 - [ ] Dashboard/ringkasan tidak double counting; legacy dikecualikan.
 - [ ] Cetak bukti & ekspor umur hutang/piutang berfungsi.
+- [ ] Daftar piutang/hutang menampilkan arah asal → tujuan untuk baris mutasi antar unit.
+- [ ] Mutasi baru memakai kode `MUT-{asal}-{tujuan}-{yymmdd}-{urut3}` dengan urutan harian.
+- [ ] Hanya Admin Root yang bisa mengubah jatuh tempo; pasangan mutasi tetap sinkron.
 
 ## 7. Dependensi
 - `ModelHutangPiutang`, `ModelPembayaranHutangPiutang`, `ModelKompensasiHutangPiutang` (migration 000400), `ModelJurnal`.

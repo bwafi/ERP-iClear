@@ -273,6 +273,15 @@ $notesSubtitle      = ($hasUraian || $hasKeterangan)
                     <?php if ($dueNote !== '') : ?>
                         <small><?= esc($dueNote) ?></small>
                     <?php endif; ?>
+                    <?php if ($can_edit_jatuh_tempo ?? false) : ?>
+                        <form method="post" action="<?= base_url('hutangpiutang/ubah-jatuh-tempo') ?>" class="d-flex gap-2 mt-2">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="hutang_piutang_id" value="<?= (int) $row->id ?>">
+                            <input type="date" name="jatuh_tempo" class="form-control form-control-sm"
+                                   value="<?= esc(substr((string) ($row->jatuh_tempo ?? ''), 0, 10)) ?>" required>
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Ubah</button>
+                        </form>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="hp-detail__side-row">

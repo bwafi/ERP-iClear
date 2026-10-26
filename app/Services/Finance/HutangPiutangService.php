@@ -1243,8 +1243,9 @@ class HutangPiutangService
         $this->refreshProjections($filters);
 
         $q = $this->db->table('hutang_piutang hp')
-            ->select('hp.*, unit.NAMA_UNIT')
+            ->select('hp.*, unit.NAMA_UNIT, lawan.NAMA_UNIT as nama_lawan')
             ->join('unit', 'unit.idunit = hp.unit_id', 'left')
+            ->join('unit as lawan', 'lawan.idunit = hp.lawan_unit_id', 'left')
             ->where('hp.deleted', 0);
 
         // Scope (cut-off): default hanya data aktif + opening; pengguna bisa
@@ -1356,6 +1357,82 @@ class HutangPiutangService
     public function getById(int $id)
     {
         return $this->hp->where('id', $id)->where('deleted', 0)->first();
+    }
+
+    /**
+     * Ubah jatuh tempo. Khusus Admin Root (guard di controller).
+     *
+     * Baris mutasi antar unit punya pasangan hutang/piutang dengan
+     * sumber_tipe + sumber_id yang sama; keduanya diubah dalam satu transaksi
+     * supaya tidak pernah berbeda tanggal. Projection dan legacy ditolak:
+     * projection akan tertimpa sync sumber, legacy tidak boleh ditulis ulang.
+     */
+    public function ubahJatuhTempo(int $id, string $tanggal, int $userId): array
+    {
+        $tanggal = trim($tanggal);
+        $parsed = \DateTime::createFromFormat('Y-m-d', $tanggal);
+        if (! $parsed || $parsed->format('Y-m-d') !== $tanggal) {
+            return ['success' => false, 'message' => 'Tanggal jatuh tempo tidak valid.'];
+        }
+
+        $row = $this->getById($id);
+        if (! $row) {
+            return ['success' => false, 'message' => 'Transaksi tidak ditemukan.'];
+        }
+        if ((int) ($row->is_projection ?? 0) === 1) {
+            return ['success' => false, 'message' => 'Jatuh tempo baris projection mengikuti sumber dan tidak bisa diubah di sini.'];
+        }
+        if (($row->scope ?? 'active') === FinanceScopeService::SCOPE_LEGACY) {
+            return ['success' => false, 'message' => 'Dokumen legacy tidak bisa diubah.'];
+        }
+        if ($row->status === self::STATUS_LUNAS) {
+            return ['success' => false, 'message' => 'Dokumen yang sudah lunas tidak bisa diubah jatuh temponya.'];
+        }
+
+        $pasangan = [];
+        if ($row->sumber_tipe === self::SUMBER_MUTASI && (int) ($row->sumber_id ?? 0) > 0) {
+            $pasangan = $this->db->table('hutang_piutang')
+                ->where('sumber_tipe', self::SUMBER_MUTASI)
+                ->where('sumber_id', (int) $row->sumber_id)
+                ->where('deleted', 0)
+                ->get()->getResult();
+
+            foreach ($pasangan as $p) {
+                if ((int) ($p->is_projection ?? 0) === 1 || ($p->scope ?? 'active') === FinanceScopeService::SCOPE_LEGACY) {
+                    return ['success' => false, 'message' => 'Pasangan mutasi tidak memenuhi syarat untuk diubah.'];
+                }
+            }
+        }
+
+        $this->db->transBegin();
+        try {
+            $this->db->table('hutang_piutang')->where('id', $id)->update([
+                'jatuh_tempo' => $tanggal,
+                'updated_at'  => date('Y-m-d H:i:s'),
+            ]);
+
+            foreach ($pasangan as $p) {
+                if ((int) $p->id === $id) {
+                    continue;
+                }
+                $this->db->table('hutang_piutang')->where('id', (int) $p->id)->update([
+                    'jatuh_tempo' => $tanggal,
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
+            }
+
+            $this->db->transCommit();
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            log_message('error', 'HutangPiutang: gagal ubah jatuh tempo #' . $id . ': ' . $e->getMessage());
+
+            return ['success' => false, 'message' => 'Gagal menyimpan jatuh tempo.'];
+        }
+
+        log_message('notice', 'HutangPiutang: jatuh tempo #' . $id . ' (' . $row->kode . ') '
+            . ($row->jatuh_tempo ?? '-') . ' -> ' . $tanggal . ' oleh akun ' . $userId);
+
+        return ['success' => true, 'message' => 'Jatuh tempo diperbarui.'];
     }
 
     /**

@@ -629,6 +629,7 @@ $routes->get('hutangpiutang/riwayat', 'HutangPiutang::riwayat', ['filter' => 'au
 $routes->get('hutangpiutang/form', 'HutangPiutang::form', ['filter' => 'auth']);
 $routes->post('hutangpiutang/store', 'HutangPiutang::store', ['filter' => 'auth']);
 $routes->get('hutangpiutang/detail/(:num)', 'HutangPiutang::detail/$1', ['filter' => 'auth']);
+$routes->post('hutangpiutang/ubah-jatuh-tempo', 'HutangPiutang::ubahJatuhTempo', ['filter' => ['auth', 'csrf']]);
 $routes->post('hutangpiutang/bayar', 'HutangPiutang::bayar', ['filter' => 'auth']);
 $routes->post('hutangpiutang/kompensasi', 'HutangPiutang::kompensasi', ['filter' => 'auth']);
 // Pelunasan legacy: settle TANPA pembayaran (tidak ada jurnal / movement kas-bank).

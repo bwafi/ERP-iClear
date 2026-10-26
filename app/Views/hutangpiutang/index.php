@@ -385,6 +385,13 @@ $emptyText = $activeFilterCount > 0
                             $due = $dueMeta($row['jatuh_tempo'] ?? null);
                             $namaUnit = trim((string) ($row['NAMA_UNIT'] ?? '')) ?: 'Tanpa unit';
                             $namaPihak = trim((string) ($row['nama_pihak'] ?? '')) ?: 'Tanpa nama';
+                            $namaLawan = trim((string) ($row['nama_lawan'] ?? ''));
+                            $arahMutasi = '';
+                            if ($row['sumber_tipe'] === HutangPiutangService::SUMBER_MUTASI && $namaLawan !== '') {
+                                $arahMutasi = $row['jenis'] === 'piutang'
+                                    ? $namaPihak . ' → ' . $namaLawan
+                                    : $namaLawan . ' → ' . $namaPihak;
+                            }
                             $canPayAuthoritative = $canInput
                                 && $authoritative
                                 && $status !== HutangPiutangService::STATUS_LUNAS
@@ -406,7 +413,7 @@ $emptyText = $activeFilterCount > 0
 
                                 <td data-label="Pihak">
                                     <div class="hp-party">
-                                        <span class="hp-party__name"><?= esc($namaPihak) ?></span>
+                                        <span class="hp-party__name"><?= esc($arahMutasi !== '' ? $arahMutasi : $namaPihak) ?></span>
                                         <span class="hp-party__meta">
                                             <span class="hp-tag"><?= esc($labelSumber[$row['sumber_tipe']] ?? $row['sumber_tipe']) ?></span>
                                             <?php if ($scopeLabel !== '') : ?>

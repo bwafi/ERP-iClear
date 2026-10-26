@@ -589,17 +589,47 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->assertSame('1', (string)$piutang->unit_id);
         $this->assertSame('1', (string)$piutang->pihak_id);
         $this->assertSame('2', (string)$piutang->lawan_unit_id);
-        $this->assertSame('MUT-1-1-P', $piutang->kode);
+        $this->assertSame('MUT-1-2-260205-001', $piutang->kode);
         $this->assertSame('3500', (string)$piutang->total);
         $this->assertSame('belum_lunas', $piutang->status);
 
         $this->assertSame('2', (string)$hutang->unit_id);
         $this->assertSame('2', (string)$hutang->pihak_id);
         $this->assertSame('1', (string)$hutang->lawan_unit_id);
-        $this->assertSame('MUT-2-1-H', $hutang->kode);
+        $this->assertSame('MUT-2-1-260205-001', $hutang->kode);
 
         $r2 = $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
         $this->assertSame('skipped', $r2['status']);
+    }
+
+    public function testKodeMutasiMemakaiUrutanHarian(): void
+    {
+        $this->db->query("INSERT INTO db_mutasi (idmutasi, no_nota_mutasi, tanggal_kirim, status, kirim_idunit, terima_idunit, input_by) VALUES
+            (1, 'A', '2026-02-05', 'terima', 1, 2, 9),
+            (2, 'B', '2026-02-05', 'terima', 3, 4, 9),
+            (3, 'C', '2026-02-06', 'terima', 1, 2, 9)");
+        $this->db->query("INSERT INTO db_detail_mutasi (iddetail_mutasi, mutasi_idmutasi, jumlah_kirim, jumlah_terima, harga_mutasi, hpp_barang, kirim_idunit, terima_idunit) VALUES
+            (1, 1, 1, 1, 1000, 0, 1, 2),
+            (2, 2, 1, 1, 1000, 0, 3, 4),
+            (3, 3, 1, 1, 1000, 0, 1, 2)");
+
+        $kode = function (int $id): array {
+            $out = [];
+            foreach ((new ModelHutangPiutang())->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', $id)->findAll() as $row) {
+                $out[$row->jenis] = $row->kode;
+            }
+            return $out;
+        };
+
+        $this->kasbank->buatHutangPiutangDariMutasi(1, 9);
+        $this->kasbank->buatHutangPiutangDariMutasi(2, 9);
+        $this->kasbank->buatHutangPiutangDariMutasi(3, 9);
+
+        $this->assertSame('MUT-1-2-260205-001', $kode(1)['piutang']);
+        $this->assertSame('MUT-2-1-260205-001', $kode(1)['hutang']);
+        $this->assertSame('MUT-3-4-260205-002', $kode(2)['piutang']);
+        $this->assertSame('MUT-4-3-260205-002', $kode(2)['hutang']);
+        $this->assertSame('MUT-1-2-260206-001', $kode(3)['piutang']);
     }
 
     public function testBuatHutangPiutangDariMutasiJatuhTempo(): void
@@ -615,8 +645,8 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $rows = $model->where('sumber_tipe', 'mutasi_unit')->where('sumber_id', 1)->findAll();
         $this->assertCount(2, $rows);
         $kode = array_map(fn ($x) => $x->kode, $rows);
-        $this->assertContains('MUT-1-1-P', $kode);
-        $this->assertContains('MUT-2-1-H', $kode);
+        $this->assertContains('MUT-1-2-260205-001', $kode);
+        $this->assertContains('MUT-2-1-260205-001', $kode);
         foreach ($rows as $r) {
             $this->assertSame('2026-02-11', $r->jatuh_tempo);
         }
