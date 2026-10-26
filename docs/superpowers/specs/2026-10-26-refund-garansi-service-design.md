@@ -18,8 +18,8 @@ tanpa mengubah data klaim lama.
 - Nominal refund otomatis sebesar total yang sudah dibayar; bukan input form.
 - Refund tersedia selama garansi masih aktif. Service yang sudah diklaim tetap
   boleh direfund; klaim tidak menghalangi.
-- Pilih kondisi tiap sparepart pengganti: `baik` (kembali ke stok akhir) atau
-  `rusak` (masuk riwayat barang rusak klaim).
+- Pilih kondisi tiap sparepart service, baik sparepart normal maupun pengganti:
+  `baik` (kembali ke stok akhir) atau `rusak` (masuk riwayat barang rusak klaim).
 - Sparepart rusak mengurangi omset pada tanggal refund lewat mekanisme
   `hpp_omset_garansi` + `tanggal_hpp_klaim` yang sudah ada, termasuk
   `status_retur = tidak_bisa` supaya `ModelHppKlaimLoss` membacanya.
@@ -69,32 +69,43 @@ yang sudah dibayar.
 
 ### Sparepart
 
-Baris yang diputuskan adalah `service_sparepart` dengan
-`jumlah_tambahan_garansi > 0` milik service tersebut.
+Baris yang diputuskan adalah `service_sparepart` milik service tersebut dengan
+`jumlah > 0` (sparepart normal) atau `jumlah_tambahan_garansi > 0` (sparepart
+pengganti). Satu baris mengikuti satu kondisi; qty yang ditampilkan adalah
+gabungan qty normal dan qty pengganti pada baris itu.
 
-- `baik`: `jumlah_refund_garansi = jumlah_tambahan_garansi`. View stok berhenti
-  mengurangi qty itu, sehingga stok akhir bertambah kembali.
-- `rusak`: `jumlah_refund_garansi = 0`; stok tetap seperti setelah klaim. Satu
-  baris `barang_rusak_claim` dibuat dengan keterangan berawalan `Refund:`.
-  `status_retur` diubah ke `tidak_bisa` bila belum, `hpp_omset_garansi` diisi
+- Sparepart pengganti `baik`: `jumlah_refund_garansi = jumlah_tambahan_garansi`.
+  View stok berhenti mengurangi qty itu, sehingga stok akhir bertambah kembali.
+- Sparepart normal `baik`: dibuat baris `retur_pelanggan` yang menunjuk
+  `detail_penjualan` invoice service. Stok bertambah lewat view
+  `total_retur_pelanggan`; detail penjualan asal tidak dihapus supaya riwayat
+  dan KPI tanggal penjualan tidak ditulis ulang. Qty retur dibatasi sisa qty
+  `detail_penjualan` yang belum pernah diretur.
+- `rusak`: `jumlah_refund_garansi = 0`; stok tetap seperti setelah klaim/penjualan.
+  Satu baris `barang_rusak_claim` dibuat dengan keterangan berawalan `Refund:`
+  sebesar qty normal + qty pengganti. Untuk porsi pengganti, `status_retur`
+  diubah ke `tidak_bisa` bila belum, `hpp_omset_garansi` diisi
   `hpp_penjualan_garansi` bila masih 0, dan `tanggal_hpp_klaim = tanggal refund`.
   Kalau kerugian sudah tercatat saat klaim, nilai lama dibiarkan (tidak dobel,
-  tidak menulis ulang bulan lama).
+  tidak menulis ulang bulan lama). Porsi normal tidak mengubah status/HPP klaim
+  karena HPP-nya sudah tercatat di `detail_penjualan`.
 
-Semua baris sparepart pengganti wajib punya pilihan kondisi. Baris yang tidak
-dikirim ditolak, supaya stok tidak berubah karena form setengah terisi.
+Semua baris sparepart wajib punya pilihan kondisi. Baris yang tidak dikirim
+ditolak, supaya stok tidak berubah karena form setengah terisi.
 
 ### Baris yang tidak boleh direfund
 
 Refund ditolak bila baris sparepart sudah terikat retur supplier
-(`retur_klaim_item` ada atau `status_retur = diterima`). Barang sudah keluar ke
-supplier; mengembalikan stok dari pelanggan akan menghitung stok dua kali.
+(`retur_klaim_item` ada, atau baris pengganti berstatus `diterima`). Barang sudah
+keluar ke supplier; mengembalikan stok dari pelanggan akan menghitung stok dua
+kali.
 
-- `baik` hanya boleh bila belum ada kerugian tercatat (`hpp_omset_garansi = 0`
-  dan `status_retur` bukan `tidak_bisa`/`ditolak`). Kalau kerugian sudah
-  tercatat, user harus mengubah status lewat menu Retur Barang Rusak dulu.
+- `baik` pada porsi pengganti hanya boleh bila belum ada kerugian tercatat
+  (`hpp_omset_garansi = 0` dan `status_retur` bukan `tidak_bisa`/`ditolak`).
+  Kalau kerugian sudah tercatat, user harus mengubah status lewat menu Retur
+  Barang Rusak dulu. Porsi normal tidak memakai guard ini.
 - `rusak` boleh bila `status_retur` masih `bisa`/`tidak_bisa`; kalau sudah
-  `tidak_bisa`/`ditolak`, kerugian tidak ditambah lagi.
+  `tidak_bisa`/`ditolak`, kerugian pengganti tidak ditambah lagi.
 
 ### Dampak KPI
 
@@ -116,9 +127,11 @@ refund, bukan bulan service selesai.
   (`hpp_omset_garansi`), karena barang tidak kembali ke stok. HPP klaim tetap
   hanya mengurangi Omset Teknisi (perilaku `ModelHppKlaimLoss` yang sudah ada);
   nominal refund yang mengurangi Toko/Cabang/Teknisi.
-- `/omset_bulanan` (arus kas harian) tidak diubah: `kas_keluar` refund sudah
-  mengurangi net kas pada tanggal refund. Jangan menambah pengurang kedua di
-  jalur kas.
+- `/omset_bulanan`: angka omset bulanan, pembanding, grafik, dan Detail Omset
+  Harian dikurangi refund pada tanggal refund (sumber
+  `ModelRefundGaransiLoss::getByDateRange`), konsisten dengan `omset_hari_ini`.
+  Arus kas tidak diubah: `kas_keluar` refund sudah mengurangi net kas pada
+  tanggal refund. Jangan menambah pengurang kedua di jalur kas.
 - Laba Rugi tidak diubah pada iterasi ini. Dashboard Finance memakai
   `OmsetDailyCalculator` yang sama, jadi kartu omzet hariannya ikut berkurang
   pada tanggal refund; jangan menambah pengurang refund kedua di Dashboard.
@@ -157,17 +170,11 @@ jumlah_refund_garansi INT NOT NULL DEFAULT 0
 
 ### View `stok_barang`
 
-Union `service_sparepart` pada view diubah dari:
-
-```sql
-SUM(jumlah_tambahan_garansi)
-```
-
-menjadi:
-
-```sql
-SUM(jumlah_tambahan_garansi - jumlah_refund_garansi)
-```
+Tidak berubah. Sparepart pengganti yang kembali baik tetap dikembalikan lewat
+`SUM(jumlah_tambahan_garansi - jumlah_refund_garansi)` yang sudah ada.
+Sparepart normal yang kembali baik masuk sebagai `retur_pelanggan`, sehingga
+bertambah lewat `SUM(retur_pelanggan.jumlah)`; `detail_penjualan` asal tidak
+dihapus.
 
 Tidak ada perubahan pada `barang_rusak_claim`: tabel itu memang tidak
 mengurangi stok, sehingga sparepart rusak tidak terhitung dua kali.
@@ -183,8 +190,8 @@ Kategori kas keluar `REFUND` dipakai ulang.
 ## Alur
 
 1. User klik **Refund** di `/garansi_service`.
-2. Modal memuat ringkasan service, rekening unit, dan daftar sparepart pengganti
-   lewat `GET garansi_service/refund/detail/{idservice}`.
+2. Modal memuat ringkasan service, rekening unit, dan daftar sparepart normal
+   maupun pengganti lewat `GET garansi_service/refund/detail/{idservice}`.
 3. User pilih metode, rekening (jika bank), referensi, alasan, dan kondisi tiap
    sparepart.
 4. `POST garansi_service/refund` (filter `auth` + `csrf`) memproses dalam satu
@@ -193,7 +200,7 @@ Kategori kas keluar `REFUND` dipakai ulang.
    - validasi garansi aktif, unit, nominal (`dp_bayar + bayar`), metode,
      rekening, dan kondisi sparepart,
    - insert `kas_keluar` + jurnal, cek jurnal seimbang,
-   - update `service_sparepart` dan `barang_rusak_claim`,
+   - update `service_sparepart`, `barang_rusak_claim`, dan `retur_pelanggan` (sparepart normal baik),
    - update `service` dengan syarat belum pernah refund,
    - commit.
 5. Redirect ke `/garansi_service` dengan flash sukses/gagal.

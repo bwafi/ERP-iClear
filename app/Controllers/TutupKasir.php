@@ -106,6 +106,16 @@ class TutupKasir extends BaseController
         return $harian;
     }
 
+    /**
+     * Refund garansi per tanggal refund, untuk mengurangi omset periode itu.
+     *
+     * @return array<string, int>
+     */
+    private function refundHarian(string $start, string $end, int $unit): array
+    {
+        return (new \App\Models\ModelRefundGaransiLoss())->getByDateRange($start, $end, $unit);
+    }
+
     public function index()
     {
         $today = date('Y-m-d');
@@ -366,10 +376,13 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
-        // Omset halaman ini = penjualan - HPP Klaim service pada tanggal klaim.
+        // Omset halaman ini = penjualan - HPP Klaim service pada tanggal klaim
+        // - refund garansi pada tanggal refund.
         $awalBulan = sprintf('%04d-%02d-01', (int) $tahun, (int) $bulan);
         $hppKlaimBulan = $this->hppKlaimHarian($awalBulan, date('Y-m-t', strtotime($awalBulan)), (int) $unit);
         $omset_bulan -= array_sum($hppKlaimBulan);
+        $refundBulan = $this->refundHarian($awalBulan, date('Y-m-t', strtotime($awalBulan)), (int) $unit);
+        $omset_bulan -= array_sum($refundBulan);
 
         // HITUNG PERTUMBUHAN OMSET VS BULAN SEBELUMNYA
         $omset_bulan_sebelum = $this->db->table('detail_penjualan')
@@ -385,6 +398,9 @@ class TutupKasir extends BaseController
         $awalBulanSebelum = sprintf('%04d-%02d-01', (int) $tahunSebelum, (int) $bulanSebelum);
         $hppKlaimBulanSebelum = $this->hppKlaimHarian($awalBulanSebelum, date('Y-m-t', strtotime($awalBulanSebelum)), (int) $unit);
         $omset_bulan_sebelum -= array_sum($hppKlaimBulanSebelum);
+        $omset_bulan_sebelum -= array_sum(
+            $this->refundHarian($awalBulanSebelum, date('Y-m-t', strtotime($awalBulanSebelum)), (int) $unit)
+        );
 
         if ($omset_bulan_sebelum > 0) {
             $pertumbuhan_omset = (($omset_bulan - $omset_bulan_sebelum) / $omset_bulan_sebelum) * 100;
@@ -651,6 +667,10 @@ class TutupKasir extends BaseController
             $dataHarian[$tanggal] = ($dataHarian[$tanggal] ?? 0) - $total;
         }
 
+        foreach ($refundBulan as $tanggal => $total) {
+            $dataHarian[$tanggal] = ($dataHarian[$tanggal] ?? 0) - $total;
+        }
+
         // ==========================
         // DATA HARIAN BULAN PEMBANDING (12 bulan ke belakang)
         // ==========================
@@ -687,6 +707,15 @@ class TutupKasir extends BaseController
             (int) $unit
         );
         foreach ($hppKlaimPembanding as $tanggal => $total) {
+            $dataHarianPembanding[$tanggal] = ($dataHarianPembanding[$tanggal] ?? 0) - $total;
+        }
+
+        $refundPembanding = $this->refundHarian(
+            $awalBulanTerlama,
+            date('Y-m-d', strtotime($awalPeriodeTerpilih . ' -1 day')),
+            (int) $unit
+        );
+        foreach ($refundPembanding as $tanggal => $total) {
             $dataHarianPembanding[$tanggal] = ($dataHarianPembanding[$tanggal] ?? 0) - $total;
         }
 

@@ -67,23 +67,44 @@ $rupiah = static fn ($nilai) => 'Rp ' . number_format((float) $nilai, 0, ',', '.
         </div>
 
         <?php if ($sparepart !== []): ?>
-            <h6>Kondisi Sparepart Pengganti</h6>
+            <h6>Kondisi Sparepart</h6>
             <div class="table-responsive mb-3">
                 <table class="table table-sm">
                     <thead>
                         <tr>
                             <th>Barang</th>
+                            <th>Jenis</th>
                             <th>Qty</th>
+                            <th>HPP</th>
+                            <th>Harga Jual</th>
                             <th>Baik (kembali ke stok)</th>
                             <th>Rusak</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($sparepart as $item): ?>
-                            <?php $id = (int) $item->idservice_sparepart; ?>
+                            <?php
+                            $id = (int) $item->idservice_sparepart;
+                            $qtyNormal = max(0, (int) ($item->jumlah ?? 0));
+                            $qtyKlaim = max(0, (int) ($item->jumlah_tambahan_garansi ?? 0));
+                            $jenis = [];
+                            if ($qtyNormal > 0) {
+                                $jenis[] = 'Normal';
+                            }
+                            if ($qtyKlaim > 0) {
+                                $jenis[] = 'Pengganti garansi';
+                            }
+                            $hpp = $qtyNormal * (int) ($item->hpp_penjualan ?? 0)
+                                + $qtyKlaim * (int) ($item->hpp_penjualan_garansi ?? 0);
+                            $harga = $qtyNormal * (int) ($item->harga_penjualan ?? 0)
+                                + $qtyKlaim * (int) ($item->harga_penjualan_garansi ?? 0);
+                            ?>
                             <tr>
                                 <td><?= esc(($item->kode_barang ?? '') . ' - ' . ($item->nama_barang ?? '')) ?></td>
-                                <td><?= (int) $item->jumlah_tambahan_garansi ?></td>
+                                <td><?= esc(implode(' + ', $jenis)) ?></td>
+                                <td><?= $qtyNormal + $qtyKlaim ?></td>
+                                <td><?= esc($rupiah($hpp)) ?></td>
+                                <td><?= esc($rupiah($harga)) ?></td>
                                 <td>
                                     <input class="form-check-input" type="radio" name="kondisi[<?= $id ?>]" value="baik" required>
                                 </td>

@@ -47,6 +47,39 @@ final class GaransiServiceViewTest extends CIUnitTestCase
         $this->get('garansi_service/refund/detail/1')->assertRedirect();
     }
 
+    public function testRefundFormMenampilkanHppDanHargaJualSparepart(): void
+    {
+        $html = view('transaksi/table_garansi/refund_form', [
+            'service' => (object) [
+                'idservice'       => 7,
+                'no_service'      => 'SRV-007',
+                'nama_pelanggan'  => 'Pelanggan Tes',
+                'dp_bayar'        => 100000,
+                'bayar'           => 200000,
+            ],
+            'bank' => [],
+            'sparepart' => [
+                (object) [
+                    'idservice_sparepart'       => 11,
+                    'kode_barang'               => 'BRG-1',
+                    'nama_barang'               => 'Sparepart Tes',
+                    'jumlah'                    => 2,
+                    'jumlah_tambahan_garansi'   => 1,
+                    'hpp_penjualan'             => 1000,
+                    'harga_penjualan'           => 5000,
+                    'hpp_penjualan_garansi'     => 800,
+                    'harga_penjualan_garansi'   => 4000,
+                ],
+            ],
+            'refunded' => false,
+        ]);
+
+        $this->assertStringContainsString('<th>HPP</th>', $html);
+        $this->assertStringContainsString('<th>Harga Jual</th>', $html);
+        $this->assertStringContainsString('Rp 2.800', $html);
+        $this->assertStringContainsString('Rp 14.000', $html);
+    }
+
     public function testRoleLintasUnitMendapatFilterUnit(): void
     {
         $html = view('riwayat/garansi_service', [

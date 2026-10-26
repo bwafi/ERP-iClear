@@ -10,7 +10,7 @@ use Tests\Support\Entitlement\Fase1;
 
 /**
  * Refund uang service: kas keluar, jurnal seimbang, dan keputusan kondisi
- * sparepart pengganti per baris. Nominal = dp_bayar + bayar; garansi aktif.
+ * sparepart normal/pengganti per baris. Nominal = dp_bayar + bayar; garansi aktif.
  */
 final class GaransiRefundServiceTest extends CIUnitTestCase
 {
@@ -37,7 +37,8 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
     protected function tearDown(): void
     {
         foreach ([
-            'db_retur_klaim_item', 'db_barang_rusak_claim', 'db_kas_keluar', 'db_jurnal',
+            'db_retur_pelanggan', 'db_detail_penjualan', 'db_penjualan', 'db_retur_klaim_item',
+            'db_barang_rusak_claim', 'db_kas_keluar', 'db_jurnal',
             'db_template_jurnal', 'db_kategori_kas', 'db_service_sparepart', 'db_service',
             'db_pelanggan',
         ] as $tabel) {
@@ -54,12 +55,33 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
         };
 
         foreach ([
-            'db_retur_klaim_item', 'db_barang_rusak_claim', 'db_kas_keluar', 'db_jurnal',
+            'db_retur_pelanggan', 'db_detail_penjualan', 'db_penjualan', 'db_retur_klaim_item',
+            'db_barang_rusak_claim', 'db_kas_keluar', 'db_jurnal',
             'db_template_jurnal', 'db_kategori_kas', 'db_service_sparepart', 'db_service',
             'db_pelanggan',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
+
+        $q('CREATE TABLE db_penjualan (
+            idpenjualan INT PRIMARY KEY,
+            service_idservice INT NULL) ENGINE=InnoDB');
+        $q('CREATE TABLE db_detail_penjualan (
+            iddetail_penjualan INT PRIMARY KEY,
+            penjualan_idpenjualan INT NULL,
+            barang_idbarang INT NULL,
+            jumlah INT NULL,
+            satuan_jual VARCHAR(45) NULL) ENGINE=InnoDB');
+        $q('CREATE TABLE db_retur_pelanggan (
+            idretur_pelanggan INT AUTO_INCREMENT PRIMARY KEY,
+            no_retur_pelanggan VARCHAR(45) NULL,
+            tanggal DATETIME NULL,
+            jumlah INT NULL,
+            satuan VARCHAR(45) NULL,
+            barang_idbarang INT NULL,
+            detail_penjualan_iddetail_penjualan INT NULL,
+            unit_idunit INT NULL,
+            input_by VARCHAR(45) NULL) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_pelanggan (
             id_pelanggan INT PRIMARY KEY,
@@ -91,6 +113,8 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
             service_idservice INT NULL,
             barang_idbarang INT NULL,
             unit_idunit INT NULL,
+            jumlah INT NOT NULL DEFAULT 0,
+            satuan_jual VARCHAR(225) NULL,
             jumlah_tambahan_garansi INT NOT NULL DEFAULT 0,
             hpp_penjualan_garansi INT NOT NULL DEFAULT 0,
             status_retur VARCHAR(20) NULL,
@@ -363,6 +387,91 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
         $hasil = (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1);
 
         $this->assertSame(500000, $hasil['jumlah']);
+    }
+
+    private function seedSparepartNormal(int $detailJumlah = 2): void
+    {
+        $this->db->table('service_sparepart')->where('idservice_sparepart', 1)->update([
+            'jumlah'                  => $detailJumlah,
+            'jumlah_tambahan_garansi' => 0,
+            'status_retur'            => 'bisa',
+            'hpp_omset_garansi'       => 0,
+        ]);
+
+        $this->db->table('penjualan')->insert([
+            'idpenjualan'      => 9,
+            'service_idservice' => 1,
+        ]);
+        $this->db->table('detail_penjualan')->insert([
+            'iddetail_penjualan'      => 9,
+            'penjualan_idpenjualan'   => 9,
+            'barang_idbarang'         => 10,
+            'jumlah'                  => $detailJumlah,
+            'satuan_jual'             => 'pcs',
+        ]);
+    }
+
+    public function testRefundSparepartNormalBaikMencatatReturPelanggan(): void
+    {
+        $this->seedSparepartNormal(2);
+
+        (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1);
+
+        $retur = $this->db->table('retur_pelanggan')->get()->getResult();
+        $this->assertCount(1, $retur);
+        $this->assertSame(2, (int) $retur[0]->jumlah);
+        $this->assertSame(9, (int) $retur[0]->detail_penjualan_iddetail_penjualan);
+
+        // Riwayat penjualan tidak ditulis ulang; stok kembali lewat retur.
+        $this->assertSame(1, $this->db->table('detail_penjualan')->where('iddetail_penjualan', 9)->countAllResults());
+
+        $sparepart = $this->db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow();
+        $this->assertSame(0, (int) $sparepart->jumlah_refund_garansi);
+    }
+
+    public function testRefundSparepartNormalRusakTidakMengembalikanStok(): void
+    {
+        $this->seedSparepartNormal(2);
+
+        (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'rusak'], 43, 1);
+
+        $this->assertSame(0, $this->db->table('retur_pelanggan')->countAllResults());
+
+        $rusak = $this->db->table('barang_rusak_claim')->get()->getResult();
+        $this->assertCount(1, $rusak);
+        $this->assertSame(2.0, (float) $rusak[0]->jumlah);
+
+        $sparepart = $this->db->table('service_sparepart')->where('idservice_sparepart', 1)->get()->getRow();
+        $this->assertSame('bisa', $sparepart->status_retur);
+        $this->assertSame(0, (int) $sparepart->hpp_omset_garansi);
+    }
+
+    public function testKondisiSparepartNormalWajibDipilih(): void
+    {
+        $this->seedSparepartNormal(2);
+
+        $this->harapGagal(
+            fn () => (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [], 43, 1)
+        );
+
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testReturSparepartNormalTidakMelebihiQtyPenjualan(): void
+    {
+        $this->seedSparepartNormal(2);
+        $this->db->table('retur_pelanggan')->insert([
+            'no_retur_pelanggan' => 'RTC-LAMA',
+            'tanggal'            => date('Y-m-d H:i:s'),
+            'jumlah'             => 2,
+            'barang_idbarang'    => 10,
+            'detail_penjualan_iddetail_penjualan' => 9,
+            'unit_idunit'        => 1,
+        ]);
+
+        (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1);
+
+        $this->assertSame(1, $this->db->table('retur_pelanggan')->countAllResults());
     }
 
     public function testRefundDitolakBilaGaransiKadaluarsa(): void

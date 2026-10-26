@@ -11,9 +11,9 @@ use Config\Database;
  * Refund uang service yang sudah dibayar pelanggan.
  *
  * Satu transaksi: kunci service, catat kas keluar + jurnal seimbang, putuskan
- * kondisi tiap sparepart pengganti, lalu simpan audit refund di `service`.
- * Nominal selalu `dp_bayar + bayar`; angka dari form tidak dipercaya. Syaratnya
- * garansi masih aktif; service yang sudah diklaim tetap boleh direfund.
+ * kondisi tiap sparepart (normal maupun pengganti), lalu simpan audit refund di
+ * `service`. Nominal selalu `dp_bayar + bayar`; angka dari form tidak dipercaya.
+ * Syaratnya garansi masih aktif; service yang sudah diklaim tetap boleh direfund.
  */
 class GaransiRefundService
 {
@@ -175,7 +175,11 @@ class GaransiRefundService
 
             $sparepart = $this->db->table('service_sparepart')
                 ->where('service_idservice', $idservice)
-                ->where('jumlah_tambahan_garansi >', 0)
+                ->groupStart()
+                    ->where('jumlah >', 0)
+                    ->orWhere('jumlah_tambahan_garansi >', 0)
+                ->groupEnd()
+                ->orderBy('idservice_sparepart', 'ASC')
                 ->get()
                 ->getResult();
 
@@ -195,12 +199,14 @@ class GaransiRefundService
                 }
             }
 
-            $qtyBaik = [];
-            $barisRusak = [];
+            $barisRefund = [];
             foreach ($sparepart as $baris) {
                 $id = (int) $baris->idservice_sparepart;
+                $qtyNormal = max(0, (int) ($baris->jumlah ?? 0));
+                $qtyKlaim  = max(0, (int) ($baris->jumlah_tambahan_garansi ?? 0));
+
                 if (! isset($kondisi[$id])) {
-                    throw new \RuntimeException('Kondisi setiap sparepart pengganti wajib dipilih.');
+                    throw new \RuntimeException('Kondisi setiap sparepart refund wajib dipilih.');
                 }
 
                 $pilihan = (string) $kondisi[$id];
@@ -211,22 +217,26 @@ class GaransiRefundService
                 $statusRetur = (string) ($baris->status_retur ?? '');
                 $hppLoss     = (int) ($baris->hpp_omset_garansi ?? 0);
 
-                if (isset($sudahReturSupplier[$id]) || $statusRetur === 'diterima') {
+                if (isset($sudahReturSupplier[$id]) || ($qtyKlaim > 0 && $statusRetur === 'diterima')) {
                     throw new \RuntimeException('Sparepart klaim sudah diretur ke supplier.');
                 }
 
-                if ($pilihan === 'baik') {
+                if ($pilihan === 'baik' && $qtyKlaim > 0) {
                     if ($hppLoss > 0 || in_array($statusRetur, ['tidak_bisa', 'ditolak'], true)) {
                         throw new \RuntimeException('Sparepart ini sudah tercatat rusak. Ubah kondisinya lewat menu Retur Barang Rusak.');
                     }
-                    $qtyBaik[$id] = (int) $baris->jumlah_tambahan_garansi;
-                } else {
-                    $barisRusak[$id] = $baris;
                 }
+
+                $barisRefund[] = [
+                    'row'        => $baris,
+                    'qty_normal' => $qtyNormal,
+                    'qty_klaim'  => $qtyKlaim,
+                    'kondisi'    => $pilihan,
+                ];
             }
 
-            if (count($kondisi) !== count($qtyBaik) + count($barisRusak)) {
-                throw new \RuntimeException('Kondisi sparepart tidak sesuai dengan daftar sparepart pengganti.');
+            if (count($kondisi) !== count($barisRefund)) {
+                throw new \RuntimeException('Kondisi sparepart tidak sesuai dengan daftar sparepart service.');
             }
 
             $kategoriRefund = $this->db->table('kategori_kas')
@@ -283,32 +293,56 @@ class GaransiRefundService
                 throw new \RuntimeException('Jurnal refund garansi gagal terbentuk seimbang. Refund dibatalkan.');
             }
 
-            foreach ($qtyBaik as $idSparepart => $qty) {
-                $this->db->table('service_sparepart')
-                    ->where('idservice_sparepart', $idSparepart)
-                    ->update(['jumlah_refund_garansi' => $qty]);
-            }
-
-            foreach ($barisRusak as $idSparepart => $baris) {
+            foreach ($barisRefund as $item) {
+                $baris       = $item['row'];
+                $idSparepart = (int) $baris->idservice_sparepart;
                 $statusRetur = (string) ($baris->status_retur ?? '');
-                $data = ['jumlah_refund_garansi' => 0];
 
-                if (! in_array($statusRetur, ['tidak_bisa', 'ditolak'], true)) {
-                    $data['status_retur'] = 'tidak_bisa';
-                }
-                if ((int) ($baris->hpp_omset_garansi ?? 0) === 0) {
-                    $data['hpp_omset_garansi'] = (int) ($baris->hpp_penjualan_garansi ?? 0);
-                    $data['tanggal_hpp_klaim'] = $tanggal;
+                if ($item['kondisi'] === 'baik') {
+                    if ($item['qty_klaim'] > 0) {
+                        $this->db->table('service_sparepart')
+                            ->where('idservice_sparepart', $idSparepart)
+                            ->update(['jumlah_refund_garansi' => $item['qty_klaim']]);
+                    }
+                    if ($item['qty_normal'] > 0) {
+                        $this->catatReturSparepartNormal(
+                            $idservice,
+                            $baris,
+                            $item['qty_normal'],
+                            $waktu,
+                            $inputBy,
+                            $unitId
+                        );
+                    }
+                    continue;
                 }
 
-                $this->db->table('service_sparepart')
-                    ->where('idservice_sparepart', $idSparepart)
-                    ->update($data);
+                $data = [];
+                if ($item['qty_klaim'] > 0) {
+                    $data['jumlah_refund_garansi'] = 0;
+
+                    if (! in_array($statusRetur, ['tidak_bisa', 'ditolak'], true)) {
+                        $data['status_retur'] = 'tidak_bisa';
+                    }
+                    if ((int) ($baris->hpp_omset_garansi ?? 0) === 0) {
+                        $data['hpp_omset_garansi'] = (int) ($baris->hpp_penjualan_garansi ?? 0);
+                        $data['tanggal_hpp_klaim'] = $tanggal;
+                    }
+
+                    $this->db->table('service_sparepart')
+                        ->where('idservice_sparepart', $idSparepart)
+                        ->update($data);
+                }
+
+                $qtyRusak = $item['qty_normal'] + $item['qty_klaim'];
+                if ($qtyRusak <= 0) {
+                    continue;
+                }
 
                 $this->db->table('barang_rusak_claim')->insert([
                     'service_idservice' => $idservice,
                     'barang_idbarang'   => (int) ($baris->barang_idbarang ?? 0),
-                    'jumlah'            => (int) $baris->jumlah_tambahan_garansi,
+                    'jumlah'            => $qtyRusak,
                     'keterangan'        => 'Refund: ' . $alasan,
                     'unit_idunit'       => $unitId,
                     'input_by'          => $inputBy > 0 ? $inputBy : null,
@@ -351,6 +385,68 @@ class GaransiRefundService
         } catch (\Throwable $e) {
             $this->db->transRollback();
             throw $e;
+        }
+    }
+
+    /**
+     * Sparepart normal keluar lewat `detail_penjualan`, bukan `jumlah_tambahan_garansi`.
+     * Barang baik dikembalikan sebagai retur pelanggan; detail penjualan asal tetap
+     * utuh supaya riwayat dan KPI tanggal penjualan tidak ditulis ulang.
+     */
+    private function catatReturSparepartNormal(
+        int $idservice,
+        object $baris,
+        int $qty,
+        string $waktu,
+        int $inputBy,
+        int $unitId
+    ): void {
+        $barangId = (int) ($baris->barang_idbarang ?? 0);
+        if ($qty <= 0 || $barangId <= 0) {
+            return;
+        }
+
+        $detail = $this->db->table('detail_penjualan dp')
+            ->select('dp.iddetail_penjualan, dp.jumlah, dp.satuan_jual')
+            ->join('penjualan p', 'p.idpenjualan = dp.penjualan_idpenjualan')
+            ->where('p.service_idservice', $idservice)
+            ->where('dp.barang_idbarang', $barangId)
+            ->orderBy('dp.iddetail_penjualan', 'ASC')
+            ->get()
+            ->getRow();
+
+        // Tanpa detail penjualan, stok barang ini tidak pernah keluar lewat
+        // invoice service (data lama atau sudah dihapus manual), jadi tidak ada
+        // stok yang perlu dikembalikan.
+        if ($detail === null) {
+            return;
+        }
+
+        $detailId = (int) $detail->iddetail_penjualan;
+        $sudahRetur = (int) ($this->db->table('retur_pelanggan')
+            ->selectSum('jumlah', 'total')
+            ->where('detail_penjualan_iddetail_penjualan', $detailId)
+            ->get()
+            ->getRow()->total ?? 0);
+
+        $qty = min($qty, max(0, (int) $detail->jumlah - $sudahRetur));
+        if ($qty <= 0) {
+            return;
+        }
+
+        $tersimpan = $this->db->table('retur_pelanggan')->insert([
+            'no_retur_pelanggan'                     => 'RFS' . $idservice . '-' . $barangId . '-' . date('YmdHis', strtotime($waktu)),
+            'tanggal'                                => $waktu,
+            'jumlah'                                 => $qty,
+            'satuan'                                 => $detail->satuan_jual ?? ($baris->satuan_jual ?? 'pcs'),
+            'barang_idbarang'                        => $barangId,
+            'detail_penjualan_iddetail_penjualan'    => $detailId,
+            'unit_idunit'                            => $unitId,
+            'input_by'                               => $inputBy > 0 ? (string) $inputBy : null,
+        ]);
+
+        if (! $tersimpan) {
+            throw new \RuntimeException('Gagal mencatat pengembalian stok sparepart refund.');
         }
     }
 }

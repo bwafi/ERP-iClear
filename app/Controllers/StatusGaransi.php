@@ -264,7 +264,7 @@ class StatusGaransi extends BaseController
         $service->nama_pelanggan = $this->PelangganModel->getById($service->pelanggan_id_pelanggan)->nama ?? '';
         $sparepart = array_values(array_filter(
             $this->ServiceSparepartModel->getSerModelServiceSparepartByServiceId($idservice),
-            static fn ($item) => (int) ($item->jumlah_tambahan_garansi ?? 0) > 0
+            static fn ($item) => ((int) ($item->jumlah ?? 0) + (int) ($item->jumlah_tambahan_garansi ?? 0)) > 0
         ));
 
         return $this->response->setJSON([
