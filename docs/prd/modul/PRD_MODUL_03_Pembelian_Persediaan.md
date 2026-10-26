@@ -43,7 +43,7 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
 2. PPN per item = 11% dari subtotal setelah diskon bila item dicentang ppn. — `Pembelian::insert`
 3. HPP disimpan per detail (`hitung_hpp`) dari `ModelHppBarang`. — `Pembelian::insert`
 4. Status = `Lunas` bila `sisa==0`, else `Belum Lunas`. — `Pembelian::insert`
-5. Sinkronisasi projection hutang supplier ke registry H/P (best-effort; gagal hanya di-log). **Total projection memakai `pembelian.total_bayar`, bukan `total_transaksi`, sehingga untuk pembelian sebagian total/sisa bisa salah.** — `Pembelian::insert` → `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)
+5. Sinkronisasi projection hutang supplier ke registry H/P (best-effort; gagal hanya di-log). **Total projection memakai `pembelian.total_bayar`, bukan `total_transaksi`, sehingga untuk pembelian sebagian total tidak sama dengan sisa + dibayar.** — `Pembelian::insert` → `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)
 6. Transaksi atomik untuk header+detail+jurnal+pembayaran. — `Pembelian::insert`
 7. `Pembelian::insert_produk` (route `insert_produk` juga dipakai dari halaman pembelian) membuat barang baru dengan kode `kodeKategori+nomor(2)`. **Route ini tidak memakai filter `auth`.** — `Routes.php:140`; `Pembelian.php:412` (PI-06)
 8. `StokMinimum::update` menulis ke VIEW `stok_barang`, yang bukan view updatable; `stok_minimum` berada di tabel `barang`. — `ModelStokBarang::updateStokMinimum` (PI-01)
@@ -66,7 +66,7 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
 - ✅ Terverifikasi: alur pembelian (nota, PPN, HPP, jurnal, sync H/P, atomik).
 - ✅ Terverifikasi: VIEW `stok_barang` mengurangi penjualan, menambah pembelian/mutasi diterima/retur, dan mengabaikan opname pada `stok_akhir`; retur customer/supplier serta pemakaian garansi ikut dihitung.
 - ⚠️ Gap tinggi:
-  1. Projection hutang memakai `total_bayar` → total/sisa salah untuk pembelian tidak lunas. — PI-05/HP-01
+  1. Projection hutang memakai `total_bayar` → total dan rekonsiliasi salah untuk pembelian tidak lunas. — PI-05/HP-01
   2. `StokMinimum::update` menulis ke VIEW `stok_barang`; fitur stok minimum tidak berfungsi. — PI-01
   3. `batal_draft` tidak ada di ENUM audit stok opname. — PI-03
   4. Retur supplier/customer tidak atomik, unit item dari POST, tanpa CSRF. — PI-04

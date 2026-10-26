@@ -57,7 +57,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 9. **CSRF per-route hanya pada sebagian route.** Setor/tarik tunai, refund DP, sebagian `StatusGaransi`, `StokOpname`, `ReturBarangRusak`, dan `tutupkasir/tutup` memakai `csrf`; **kas masuk/keluar, aset, transfer internal/antar-unit, pembelian, penjualan, dan retur supplier/customer tidak**. — `Routes.php`; X-04/FN-02/FN-07
 10. **Reversal** menghapus posting lalu post ulang (idempotent). — `ModeKasBank::hapusPosting`
 11. **Edit/hapus kas tidak selalu sinkron jurnal.** `Kas_Masuk::update_kas_Masuk` memperbarui sumber + ledger tetapi tidak jurnal; `delete_kas_Masuk` tidak menghapus jurnal. `Kas_Keluar::update_kas_keluar` hanya posting ulang ledger; delete menghapus jurnal. — X-07/FN-03/FN-04
-12. **Aset tidak memakai role/scope**, unit dari POST, insert aset + riwayat penyusutan tidak atomik, `update_asset` mengabaikan `asset_code`/`nilai_perolehan`/`nilai_sekarang`, dan `GET penyusutan_cronjob`/`pulihkan_asset/{id}` tanpa guard. — `Asset.php:54,89,140,172,190,267`; `Routes.php:580` (FN-06)
+12. **Aset tidak memakai role/scope**, unit dari POST, insert aset + riwayat penyusutan tidak atomik, `update_asset` mengabaikan `asset_code`/`nilai_perolehan`/`nilai_sekarang`, `GET penyusutan_cronjob` tanpa auth, dan `pulihkan_asset/{id}` hanya `auth` + GET (tanpa CSRF/role). — `Asset.php:54,89,140,172,190,267`; `Routes.php:484-488,580` (FN-06)
 13. **`GET /kas_masuk` dan `GET /kategori_kas` tanpa filter auth.** — `Routes.php:416,431` (FN-01)
 14. **`laba_service`/`fee_service` memakai typo `['fileter'=>'auth']`**, bukan `filter`; proteksi auth tidak berlaku/route dapat error. — `Routes.php:336-340` (FN-08)
 

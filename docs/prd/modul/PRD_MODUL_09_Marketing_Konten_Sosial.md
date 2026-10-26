@@ -58,7 +58,7 @@ Mengelola KPI divisi pemasaran & kreatif: (1) Content Management / KPI Multimedi
 7. KPI Digital Marketing (43) 7 komponen bobot Σ=100 (Omzet Global 50, Leads Quality 15, Conversion 10, CPL 10, Campaign 5, Reporting 5, Improvement 5). — `DigitalMarketingKpiService::BOBOT`
 8. Data kosong per komponen → null (dikecualikan) kecuali leads bernilai 0 → 0. — `DigitalMarketingKpiService`
 9. `ModelSocialMediaTarget::findTarget()` dimaksudkan fallback target unit → global (`unit_id=0`), tetapi query fallback dibangun di atas builder yang sudah memfilter `unit_id=$unitId`, sehingga target global tidak pernah ditemukan. — `ModelSocialMediaTarget.php:33-48` (MK-01)
-10. Route marketing/konten/sosial hanya memakai `auth`; seluruh POST (`simpan`, `status`, `qc`, `channel`, `campaign`, `leads`, `ads`, `target`) tanpa `csrf`. — `Routes.php:677-728` (MK-02)
+10. Route marketing/konten/sosial hanya memakai `auth`; seluruh POST (`simpan`, `status`, `qc`, `channel`, `campaign`, `leads`, `ads`, `target`) tanpa `csrf`. — `Routes.php:676-727` (MK-02)
 11. [🔶] “Omzet” pada KPI marketing berasal dari `omset` detail prospek CLOSING; ini berbeda dari KPI `OMZET_GLOBAL` yang memakai gross profit. Perlu konfirmasi definisi. — `MarketingKpiService::marketingRevenue`; `OmsetTokoCalculator` (KPI-06)
 
 ## 6. Acceptance Criteria

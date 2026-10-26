@@ -6,7 +6,7 @@ Status: disusun dari kode yang benar-benar dibaca. Metode: verifikasi langsung t
 - Framework: CodeIgniter `4.4.8` (`composer.lock`), PHP audit `8.5.12`; database produksi MySQL/MariaDB, database test MySQLi `erp_test` prefix `db_` (`phpunit.xml`). **Bukan SQLite3.** Sumber: `composer.json`, `phpunit.xml`, `app/Config/Database.php`.
 - Frontend: Bootstrap 5, Iconify Solar Icons, Vanilla JS, jQuery/DataTables (server-side) di banyak tabel. Sumber: `PRODUCT.md`, template.
 - Pola arsitektur: Controller << Model + Library + Service. Business logic berat berpindah ke `app/Services/*` (Finance, Kpi, Payroll, Marketing, Konten, SocialMedia, Incentive, Kommo).
-- Volume baseline 2026-10-26: **88 controller, 127 model, 86 service, 151 migration, 219 view, 87 file test**.
+- Volume baseline 2026-10-26: **88 controller, 127 model, 86 service, 151 file migration PHP, 219 view PHP, 87 file test**.
 
 ## 2. Autentikasi & Otorisasi (VERIFIKASI)
 - Filter global `AuthFilter` (`app/Filters/AuthFilter.php`): hanya memeriksa `session()->get('logged_in') === true`. Bila tidak, redirect ke `/login`. **Tidak ada cek menu/role global di filter.**
@@ -61,7 +61,7 @@ Status: disusun dari kode yang benar-benar dibaca. Metode: verifikasi langsung t
 4. [VERIFIKASI] Route `insert_produk` menunjuk ke `Pembelian::insert_produk` (bukan `Produk::insert_produk`) — potensi konflik naming (lihat modul).
 5. [BELUM TERVERIFIKASI] Konsistensi penggunaan `session('ID_UNIT')` vs `ID_GEDUNG` lintas controller.
 6. [VERIFIKASI] `Kas_Masuk::update_kas_Masuk`/`delete_kas_Masuk` dan `Kas_Keluar::update_kas_keluar` tidak menyinkronkan `jurnal`; laporan berbasis jurnal dapat berbeda dari sumber/ledger. — X-07/FN-03/FN-04
-7. [VERIFIKASI] Projection hutang supplier memakai `pembelian.total_bayar`, bukan `total_transaksi`; total/sisa/status salah untuk pembelian tidak lunas. — PI-05/HP-01
+7. [VERIFIKASI] Projection hutang supplier memakai `pembelian.total_bayar`, bukan `total_transaksi`; total dan rekonsiliasi/aging salah untuk pembelian tidak lunas (sisa tetap dari sumber). — PI-05/HP-01
 8. [VERIFIKASI] `Piutang::bayar_piutang` memakai `sisa` dari POST, tanpa jurnal/ledger kas, dan status Lunas tidak pernah tercapai. — SL-06/HP-02
 9. [VERIFIKASI] Penjualan kredit tidak membentuk piutang pelanggan; `Piutang` legacy adalah piutang pegawai. — SL-02
 10. [VERIFIKASI] `detail_penjualan.sub_total` bundle ditulis penuh per komponen; laporan omzet/laba dapat berlipat. — SL-03

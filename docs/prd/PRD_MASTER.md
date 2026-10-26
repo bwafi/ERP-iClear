@@ -13,7 +13,7 @@
 ## 1. Ringkasan Sistem
 Sistem ERP operasional toko/cabang berbasis **CodeIgniter 4** (PHP 8, MySQL/MariaDB; database test MySQLi `erp_test`), Bootstrap 5, Vanilla JS, jQuery/DataTables. Cakupan: penjualan (POS), pembelian & persediaan, service & garansi, keuangan (kas/bank/jurnal/laporan), hutang piutang terpusat, HRD & payroll, aset, KPI & penilaian, marketing digital/konten/social media, dan integrasi Kommo/CRM.
 
-Baseline repository yang diverifikasi: **88 controller · 127 model · 86 service · 151 migration · 219 view · 87 file `*Test.php`**. Framework `codeigniter4/framework v4.4.8`; PHP audit `8.5.12`; PHPUnit `9.6.23`. Konfigurasi test aktif: `phpunit.xml` → MySQLi, database `erp_test`, prefix `db_`; **bukan SQLite3**.
+Baseline repository yang diverifikasi: **88 controller · 127 model · 86 service · 151 file migration PHP · 219 view PHP · 87 file `*Test.php`**. Framework `codeigniter4/framework v4.4.8`; PHP audit `8.5.12`; PHPUnit `9.6.23`. Konfigurasi test aktif: `phpunit.xml` → MySQLi, database `erp_test`, prefix `db_`; **bukan SQLite3**.
 
 ## 2. Inventarisasi Modul (Induk)
 
@@ -53,7 +53,7 @@ Baseline repository yang diverifikasi: **88 controller · 127 model · 86 servic
 - `csrf` hanya aktif pada route yang eksplisit memakainya: refund DP, sebagian route `StatusGaransi`, `StokOpname`, `ReturBarangRusak`, setor/tarik tunai `KasBank`, dan `tutupkasir/tutup`. Dari 254 route `POST`, mayoritas transaksi (kas masuk/keluar, pembelian, penjualan, aset, transfer internal) **tidak** memakai CSRF. Lihat X-04.
 
 ### 3.5 Audit & Anti-Double-Counting
-- Hutang/piutang terpusat memiliki guard double counting pada jalur authoritative, tetapi projection dari pembelian memakai `total_bayar` (bukan `total_transaksi`) sehingga total/sisa dapat salah (PI-05/HP-01).
+- Hutang/piutang terpusat memiliki guard double counting pada jalur authoritative, tetapi projection dari pembelian memakai `total_bayar` (bukan `total_transaksi`) sehingga total dan rekonsiliasi dapat salah (PI-05/HP-01).
 - Detail penjualan bundle menulis `sub_total` penuh untuk setiap komponen; laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet (SL-03).
 - KPI memakai sumber achievement (rekap/lead/snapshot) pada engine aktif `KpiCalculationService`; sebagian istilah “omzet” sebenarnya berarti gross profit (KPI-06).
 - Refund garansi mengurangi KPI omset Toko/Cabang/Teknisi pada bulan `refund_garansi_tanggal`, sedangkan HPP sparepart rusak tetap memakai `hpp_omset_garansi`/`tanggal_hpp_klaim` dan hanya mengurangi Omset Teknisi. — `ModelRefundGaransiLoss`; test `GaransiRefundKpiTest`.

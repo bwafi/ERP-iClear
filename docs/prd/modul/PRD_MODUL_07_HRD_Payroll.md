@@ -39,7 +39,7 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 ## 5. Business Rules (Bukti)
 1. Generate register berasal dari master gaji + **skor KPI bulan itu** (blok `KpiCalculationService`). — `Payroll::generateRegister`
 2. Register aktif disimpan di **`finance_payroll`** (`PayrollGenerator`); CRUD legacy `insert/update/delete` masih menulis **`kas_keluar`**. `Payroll::index` menampilkan keduanya. — `Payroll::generateRegister/index/insert/update/delete` (PR-05)
-3. Update/delete **legacy** ditolak bila status `dibayar` atau baris terkunci; **`updateRegister` tidak memeriksa lock**. — `Payroll::update/delete/updateRegister` (PR-04)
+3. Update/delete **legacy** ditolak bila baris terkunci (tidak ada cek status `dibayar`); **`updateRegister` menolak baris `dibayar` tetapi tidak memeriksa lock**. — `Payroll::update/delete/updateRegister` (PR-04)
 4. Lock/unlock memakai file `writable/locks/payroll.json` (bukan kolom DB), tanpa guard role. — `Payroll::lockPayroll/unlockPayroll` (PR-08)
 5. Bayar → settle kasbon pegawai (idempotent per payroll); `total_bersih = total - potongan_kasbon`. **Pembayaran ulang tidak ditolak dan menimpa `potongan_kasbon` menjadi 0.** — `Payroll::bayar`; `HutangPiutangService::settleKasbonFromPayroll` (PR-03)
 6. `Payroll::index` menampilkan payroll seluruh unit; `FinanceScopeService` hanya dipakai untuk `can_input` di view, bukan filter query. — `Payroll.php:85-220` (PR-01)
@@ -62,7 +62,7 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 - Modul: KPI, Keuangan (kas_keluar), Hutang Piutang (kasbon).
 
 ## 8. Status & Tandai
-- ✅ Terverifikasi: lock file, generate register berbasis KPI (`finance_payroll`), bayar + potongan kasbon, tolak edit/delete legacy saat terkunci/dibayar.
+- ✅ Terverifikasi: lock file, generate register berbasis KPI (`finance_payroll`), bayar + potongan kasbon, tolak edit/delete legacy saat terkunci.
 - ⚠️ Gap kritis:
   1. `Payroll::index` membuka data gaji seluruh unit. — PR-01
   2. CRUD legacy payroll tanpa role/scope; `idunit` dari POST. — PR-02

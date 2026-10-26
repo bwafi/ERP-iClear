@@ -51,9 +51,9 @@ Mengelola template KPI, penilaian kinerja, evaluasi KPI otomatis dari data opera
 ## 6. Acceptance Criteria
 - [ ] Template KPI & penilaian dapat dikelola.
 - [ ] Evaluasi KPI otomatis dipicu dari data operasional & menghasilkan skor/grading.
-- [ ] Input manual terbatas 0–100 dan tersimpan.
-- [ ] Edit/hapus aset master dibatasi role; kontrol aset SPV dengan finalize/reopen.
-- [ ] Target KPI hanya dikelola root.
+- [ ] Input manual tersimpan sesuai range komponen (1–5 untuk kualitas; 0–100 untuk komponen lain).
+- [ ] Edit/hapus aset master mengikuti role `[0,1,2]`; kontrol aset SPV dengan finalize/reopen.
+- [ ] Target KPI dikelola role `[1,34]` sesuai guard saat ini.
 - [ ] Customer satisfaction & input kehadiran tersimpan.
 
 ## 7. Dependensi

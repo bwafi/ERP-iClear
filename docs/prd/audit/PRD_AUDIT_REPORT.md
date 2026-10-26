@@ -6,7 +6,7 @@
 | Ruang lingkup | `docs/prd/PRD_MASTER.md`, 10 PRD modul, seluruh `docs/prd/_analysis/*`, route/controller/model/service/view/migration/test yang relevan |
 | Metode | Audit kode baca-saja (read-only), tanpa perubahan source/DB/config dan tanpa menjalankan test |
 | Sumber fakta | Kode, route, migration, dan test di repository. PRD diperlakukan sebagai dokumen yang diuji, bukan bukti |
-| Baseline | CodeIgniter `4.4.8`; PHP `8.5.12`; PHPUnit `9.6.23`; 88 controller; 127 model; 86 service; 151 migration; 219 view; 87 file `*Test.php` |
+| Baseline | CodeIgniter `4.4.8`; PHP `8.5.12`; PHPUnit `9.6.23`; 88 controller; 127 model; 86 service; 151 file migration PHP; 219 view PHP; 87 file `*Test.php` |
 | Database test aktif | MySQLi `erp_test`, prefix `db_` (`phpunit.xml`) |
 
 ## 1. Ringkasan Eksekutif
@@ -60,7 +60,7 @@ Temuan yang tidak dapat dipastikan dari repository (status database runtime, isi
 
 - **Status:** `STALE`
 - **Lokasi PRD:** `PRD_MASTER.md` §1; `_analysis/00_cross_cutting.md` §1 dan §7.
-- **Bukti:** Repository berisi **151** migration (`find app/Database/Migrations`), **87** file `*Test.php`, bukan 157/88. `phpunit.xml` memakai `database.tests.DBDriver=MySQLi`, database `erp_test`, prefix `db_`. Tidak ada konfigurasi SQLite3 aktif.
+- **Bukti:** Repository berisi **151 file migration PHP** (`find app/Database/Migrations -maxdepth 1 -name '*.php'`; satu `.gitkeep` tidak dihitung), **87** file `*Test.php`, bukan 157/88. `phpunit.xml` memakai `database.tests.DBDriver=MySQLi`, database `erp_test`, prefix `db_`. Tidak ada konfigurasi SQLite3 aktif.
 - **Dampak:** Pembaca salah memahami cakupan test dan berisiko menjalankan asumsi database yang keliru.
 - **Rekomendasi:** Perbarui angka dan hapus klaim SQLite3. Sebutkan lokasi konfigurasi aktif.
 - **Risiko:** Angka dapat berubah bila file ditambah; cantumkan tanggal baseline.
@@ -296,7 +296,7 @@ Temuan yang tidak dapat dipastikan dari repository (status database runtime, isi
 - **Status:** `CONTRADICTION`
 - **Lokasi PRD:** `PRD_MODUL_03` §5.5; `PRD_MODUL_06` §5.9.
 - **Bukti:** `HutangPiutangService::syncFromPembelian()` mengisi `total` dengan `(int) $p->total_bayar`, sedangkan `total_bayar` di `Pembelian::insert()` adalah jumlah yang dibayar (`$bayar_tunai + $totalBayarBank`); total transaksi ada di `$total_harga`/`pembelian.total_transaksi`.
-- **Dampak:** Untuk pembelian sebagian, `total` projection bisa lebih kecil dari `sisa`; status, aging, dan laporan hutang salah.
+- **Dampak:** Untuk pembelian sebagian, `total` projection bisa lebih kecil dari `sisa` dan tidak sama dengan `sisa + dibayar`; aging/rekonsiliasi dan laporan hutang salah (status dihitung dari `sisa`/`dibayar`).
 - **Rekomendasi:** Gunakan `total_transaksi` untuk `total`.
 - **Risiko:** Tinggi; angka hutang supplier.
 
@@ -437,7 +437,7 @@ Temuan yang tidak dapat dipastikan dari repository (status database runtime, isi
 - **Status:** `CONTRADICTION`
 - **Lokasi PRD:** `PRD_MODUL_06` §5.9.
 - **Bukti:** Lihat PI-05 (`HutangPiutangService.php` `syncFromPembelian`).
-- **Dampak:** Saldo/status projection hutang supplier salah untuk pembelian tidak lunas.
+- **Dampak:** Total/rekonsiliasi projection hutang supplier salah untuk pembelian tidak lunas; status tetap dihitung dari `sisa`/`dibayar`.
 - **Rekomendasi:** Gunakan `total_transaksi`.
 - **Risiko:** Tinggi.
 
@@ -604,7 +604,7 @@ Temuan yang tidak dapat dipastikan dari repository (status database runtime, isi
 
 - **Status:** `MISSING`
 - **Lokasi PRD:** `PRD_MODUL_09` §6.
-- **Bukti:** `Routes.php:677-728` hanya `auth`; semua `POST` (`simpan`, `status`, `qc`, `channel`, `campaign`, `leads`, `ads`, `target`) tanpa `csrf`.
+- **Bukti:** `Routes.php:676-727` hanya `auth`; semua `POST` (`simpan`, `status`, `qc`, `channel`, `campaign`, `leads`, `ads`, `target`) tanpa `csrf`.
 - **Dampak:** Aksi tulis dapat dipicu lintas situs.
 - **Rekomendasi:** Tambahkan CSRF atau dokumentasikan risiko.
 - **Risiko:** Sedang.
