@@ -367,6 +367,28 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
         $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
     }
 
+    public function testKondisiSparepartSebagianTetapDitolak(): void
+    {
+        // Baris kedua tanpa kondisi tidak boleh lolos walau baris pertama diisi.
+        $this->db->table('service_sparepart')->insert([
+            'idservice_sparepart'     => 2,
+            'service_idservice'       => 1,
+            'barang_idbarang'         => 11,
+            'unit_idunit'             => 1,
+            'jumlah_tambahan_garansi' => 1,
+            'hpp_penjualan_garansi'   => 1000,
+            'status_retur'            => 'bisa',
+            'hpp_omset_garansi'       => 0,
+            'jumlah_refund_garansi'   => 0,
+        ]);
+
+        $this->harapGagal(
+            fn () => (new GaransiRefundService())->refund(1, 'tunai', null, null, 'Batal', [1 => 'baik'], 43, 1)
+        );
+
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+    }
+
     public function testRefundServiceBelumDiklaimTetapBisa(): void
     {
         // Nominal harus dari dp_bayar + bayar, bukan bayar_garansi lama.

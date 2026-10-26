@@ -78,6 +78,11 @@ final class GaransiServiceViewTest extends CIUnitTestCase
         $this->assertStringContainsString('<th>Harga Jual</th>', $html);
         $this->assertStringContainsString('Rp 2.800', $html);
         $this->assertStringContainsString('Rp 14.000', $html);
+
+        // Kondisi tiap baris wajib dipilih, bukan opsional.
+        $this->assertStringContainsString('Wajib dipilih untuk setiap baris', $html);
+        $this->assertStringContainsString('name="kondisi[11]" value="baik" aria-required="true" required', $html);
+        $this->assertStringContainsString('name="kondisi[11]" value="rusak" aria-required="true" required', $html);
     }
 
     public function testRoleLintasUnitMendapatFilterUnit(): void

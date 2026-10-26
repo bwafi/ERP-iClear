@@ -67,7 +67,8 @@ $rupiah = static fn ($nilai) => 'Rp ' . number_format((float) $nilai, 0, ',', '.
         </div>
 
         <?php if ($sparepart !== []): ?>
-            <h6>Kondisi Sparepart</h6>
+            <h6>Kondisi Sparepart <span class="text-danger">*</span></h6>
+            <small class="text-muted d-block mb-2">Wajib dipilih untuk setiap baris: baik dikembalikan ke stok, rusak dicatat sebagai barang rusak.</small>
             <div class="table-responsive mb-3">
                 <table class="table table-sm">
                     <thead>
@@ -106,10 +107,10 @@ $rupiah = static fn ($nilai) => 'Rp ' . number_format((float) $nilai, 0, ',', '.
                                 <td><?= esc($rupiah($hpp)) ?></td>
                                 <td><?= esc($rupiah($harga)) ?></td>
                                 <td>
-                                    <input class="form-check-input" type="radio" name="kondisi[<?= $id ?>]" value="baik" required>
+                                    <input class="form-check-input" type="radio" name="kondisi[<?= $id ?>]" value="baik" aria-required="true" required>
                                 </td>
                                 <td>
-                                    <input class="form-check-input" type="radio" name="kondisi[<?= $id ?>]" value="rusak" required>
+                                    <input class="form-check-input" type="radio" name="kondisi[<?= $id ?>]" value="rusak" aria-required="true" required>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
