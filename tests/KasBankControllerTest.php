@@ -929,6 +929,37 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         }
     }
 
+    public function testAdminRootBisaUbahJatuhTempoBarisLunas(): void
+    {
+        $this->db->query("UPDATE db_hutang_piutang SET status = 'lunas', total_dibayar = 500000, sisa = 0 WHERE id IN (901, 902)");
+        $this->sesi();
+
+        $this->post('hutangpiutang/ubah-jatuh-tempo', [
+            'hutang_piutang_id' => 901,
+            'jatuh_tempo'       => '2026-12-31',
+            'csrf_test_name'    => service('security')->getHash(),
+        ])->assertStatus(302);
+
+        $db = \Config\Database::connect('tests', false);
+        foreach ([901, 902] as $id) {
+            $this->assertSame(
+                '2026-12-31',
+                $db->table('hutang_piutang')->where('id', $id)->get()->getRow()->jatuh_tempo
+            );
+        }
+    }
+
+    public function testFormUbahJatuhTempoTetapMunculUntukBarisLunas(): void
+    {
+        $this->db->query("UPDATE db_hutang_piutang SET status = 'lunas', total_dibayar = 500000, sisa = 0 WHERE id = 901");
+        $this->sesi();
+
+        $this->assertStringContainsString(
+            'hutangpiutang/ubah-jatuh-tempo',
+            (string) $this->get('hutangpiutang/detail/901')->getBody()
+        );
+    }
+
     public function testRoleSelainAdminRootTidakBisaUbahJatuhTempo(): void
     {
         $this->withSession([

@@ -94,6 +94,52 @@ final class HutangPiutangListRedesignTest extends CIUnitTestCase
         $this->assertStringContainsString('>Lunasi</a>', $html);
     }
 
+    public function testBarisLunasTidakMenampilkanHitungMundurJatuhTempo(): void
+    {
+        $rows = [
+            $this->row([
+                'id' => 10,
+                'kode' => 'MUT-1-101-P',
+                'status' => 'lunas',
+                'total' => 973500,
+                'total_dibayar' => 973500,
+                'sisa' => 0,
+                'jatuh_tempo' => date('Y-m-d', strtotime('+2 days')),
+            ]),
+            $this->row([
+                'id' => 11,
+                'kode' => 'MUT-1-102-P',
+                'status' => 'belum_lunas',
+                'jatuh_tempo' => date('Y-m-d', strtotime('+2 days')),
+            ]),
+        ];
+
+        $html = $this->render($rows, 'piutang');
+
+        // Hanya baris yang masih terbuka yang boleh menampilkan hitung mundur.
+        $this->assertSame(1, substr_count($html, '2 hari lagi'));
+    }
+
+    public function testBarisLunasYangTerlambatTetapMenampilkanKeterlambatan(): void
+    {
+        $rows = [
+            $this->row([
+                'id' => 12,
+                'kode' => 'MUT-1-101-P',
+                'status' => 'lunas',
+                'total' => 973500,
+                'total_dibayar' => 973500,
+                'sisa' => 0,
+                'jatuh_tempo' => date('Y-m-d', strtotime('-3 days')),
+            ]),
+        ];
+
+        $html = $this->render($rows, 'piutang');
+
+        $this->assertStringContainsString('Terlambat 3 hari', $html);
+        $this->assertStringNotContainsString('hari lagi', $html);
+    }
+
     public function testBarisMutasiMenampilkanArahAsalTujuan(): void
     {
         $piutang = $this->render([

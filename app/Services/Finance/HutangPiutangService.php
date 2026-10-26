@@ -1385,9 +1385,6 @@ class HutangPiutangService
         if (($row->scope ?? 'active') === FinanceScopeService::SCOPE_LEGACY) {
             return ['success' => false, 'message' => 'Dokumen legacy tidak bisa diubah.'];
         }
-        if ($row->status === self::STATUS_LUNAS) {
-            return ['success' => false, 'message' => 'Dokumen yang sudah lunas tidak bisa diubah jatuh temponya.'];
-        }
 
         $pasangan = [];
         if ($row->sumber_tipe === self::SUMBER_MUTASI && (int) ($row->sumber_id ?? 0) > 0) {

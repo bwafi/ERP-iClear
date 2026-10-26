@@ -383,6 +383,12 @@ $emptyText = $activeFilterCount > 0
                             $settledLegacy = $cutoffReason === HutangPiutangService::SETTLEMENT_LEGACY;
                             $bisaLegacy = $bisaLegacyRow($row);
                             $due = $dueMeta($row['jatuh_tempo'] ?? null);
+                            if ($status === HutangPiutangService::STATUS_LUNAS && $due['class'] !== 'is-overdue') {
+                                // Lunas bukan lagi "jatuh tempo"; sembunyikan hitung mundur,
+                                // tetapi keterlambatan tetap ditampilkan.
+                                $due['note'] = '';
+                                $due['class'] = '';
+                            }
                             $namaUnit = trim((string) ($row['NAMA_UNIT'] ?? '')) ?: 'Tanpa unit';
                             $namaPihak = trim((string) ($row['nama_pihak'] ?? '')) ?: 'Tanpa nama';
                             $namaLawan = trim((string) ($row['nama_lawan'] ?? ''));

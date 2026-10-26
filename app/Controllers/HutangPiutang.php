@@ -219,8 +219,7 @@ class HutangPiutang extends BaseController
     {
         return (int) session('ID_JABATAN') === 1
             && (int) ($row->is_projection ?? 0) === 0
-            && ($row->scope ?? 'active') !== FinanceScopeService::SCOPE_LEGACY
-            && $row->status !== HutangPiutangService::STATUS_LUNAS;
+            && ($row->scope ?? 'active') !== FinanceScopeService::SCOPE_LEGACY;
     }
 
     /**

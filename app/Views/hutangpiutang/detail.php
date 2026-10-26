@@ -77,7 +77,13 @@ $unitName       = trim((string) ($unit->NAMA_UNIT ?? '')) ?: 'Tanpa unit';
 $namaPihak      = trim((string) ($row->nama_pihak ?? '')) ?: 'Tanpa nama';
 $due            = $dueMeta($row->jatuh_tempo ?? null);
 $outstanding    = $status !== HutangPiutangService::STATUS_LUNAS && (float) ($row->sisa ?? 0) > 0;
-$dueNote        = $outstanding ? $due['note'] : '';
+if (! $outstanding && $due['class'] !== 'is-overdue') {
+    // Dokumen selesai bukan lagi "jatuh tempo"; hitung mundur disembunyikan,
+    // tetapi keterlambatan tetap ditampilkan.
+    $due['note']  = '';
+    $due['class'] = '';
+}
+$dueNote        = $due['note'];
 $total          = max(0, (float) ($row->total ?? 0));
 $dibayar        = (float) ($row->total_dibayar ?? 0);
 $sisa           = max(0, (float) ($row->sisa ?? 0));

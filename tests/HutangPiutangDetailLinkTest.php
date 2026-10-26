@@ -90,6 +90,19 @@ final class HutangPiutangDetailLinkTest extends CIUnitTestCase
         $this->assertStringContainsString('Rp 500', $html);
     }
 
+    public function testDetailLunasYangTerlambatTetapMenampilkanKeterlambatan(): void
+    {
+        $html = $this->renderDetail('piutang', null, [], [
+            'status' => 'lunas',
+            'total_dibayar' => 1000,
+            'sisa' => 0,
+            'jatuh_tempo' => date('Y-m-d', strtotime('-4 days')),
+        ]);
+
+        $this->assertStringContainsString('Terlambat 4 hari', $html);
+        $this->assertStringNotContainsString('hari lagi', $html);
+    }
+
     private function antarUnitData(): array
     {
         return [
