@@ -1,18 +1,5 @@
-Direktur Unit Scope (Tests\DirekturUnitScope)
- [x] Direktur terpetakan mengembalikan daftar unit
- [x] Direktur tanpa pemetaan mengembalikan null
- [x] Filter branches membuang unit di luar area
- [x] Filter branches tanpa batas mengembalikan semua
-
-Omset Bulanan Unit Filter (Tests\OmsetBulananUnitFilter)
- [x] Finance bisa memfilter unit pandaan
- [x] Finance tanpa filter jatuh ke unit pertama
- [x] Finance unit tidak valid jatuh ke unit pertama
- [x] Role tak berwenang tidak bisa ganti unit via query
- [x] Direktur terbatas bisa memilih unit yang diizinkan
- [x] Direktur terbatas ditolak di unit lain
- [x] Direktur terbatas tanpa filter jatuh ke unit pertama
- [x] Direktur pandaan tetap terbatas
- [x] Direktur tanpa mapping bertindak lintas unit
- [x] Grafik menyediakan dua belas bulan pembanding
+Garansi Claim Detail Prefill (Tests\GaransiClaimDetailPrefill)
+ [x] Sparepart service tampil dengan pilihan klaim
+ [x] Service tanpa sparepart menampilkan pesan kosong
+ [x] Modal pengganti memakai desain pemilih sparepart
 
