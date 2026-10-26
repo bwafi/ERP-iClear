@@ -1,547 +1,675 @@
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Proses Service</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Proses</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">Service</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<?= view('riwayat/_proses_service_theme') ?>
+<?php
+$showUnitFilter = !empty($is_ho) && $is_ho;
+$unitLabel = $showUnitFilter ? 'Semua unit' : (session('NAMA_UNIT') ?: 'Unit Anda');
+?>
 
-<div class="card w-100 position-relative overflow-hidden">
-    <div class="card-body">
-        <div class="row g-3 mb-3">
-            <div class="col-lg-2 col-md-6">
-                <label class="form-label fw-semibold mb-2">Tanggal Awal</label>
-                <input type="date" id="startDate" class="form-control">
+<div class="ps-page">
+    <header class="ps-head">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="ps-crumb">
+                    <li><a href="<?= base_url('/') ?>">Proses</a></li>
+                    <li aria-hidden="true">/</li>
+                    <li aria-current="page">Service</li>
+                </ol>
+            </nav>
+            <h1 class="ps-title">Proses Service</h1>
+            <p>Antrean service aktif. Urut dari service garansi, prioritas, lalu tanggal masuk terbaru.</p>
+        </div>
+        <div class="ps-head__meta">
+            <span class="ps-chip ps-chip--accent">
+                <iconify-icon icon="solar:clipboard-list-linear" width="16" height="16"></iconify-icon>
+                <strong id="psCount">–</strong> service
+            </span>
+            <span class="ps-chip">
+                <iconify-icon icon="<?= $showUnitFilter ? 'solar:map-point-linear' : 'solar:lock-keyhole-minimalistic-linear' ?>" width="16" height="16"></iconify-icon>
+                <span id="psUnitLabel"><?= esc($unitLabel) ?></span>
+            </span>
+            <span class="ps-chip">
+                <iconify-icon icon="solar:calendar-linear" width="16" height="16"></iconify-icon>
+                <span id="psPeriodLabel">30 hari terakhir</span>
+            </span>
+        </div>
+    </header>
+
+    <section class="ps-panel" aria-labelledby="ps-panel-title">
+        <div class="ps-panel__head">
+            <div>
+                <h2 id="ps-panel-title">Antrean service</h2>
+                <p>Perbarui status, hubungi pelanggan, atau siapkan pengambilan.</p>
             </div>
-            <div class="col-lg-2 col-md-6">
-                <label class="form-label fw-semibold mb-2">Tanggal Akhir</label>
-                <input type="date" id="endDate" class="form-control">
+            <div class="ps-search">
+                <iconify-icon icon="solar:magnifer-linear" width="18" height="18"></iconify-icon>
+                <input type="search" id="searchBox"
+                    placeholder="Cari no service, nama, HP, tipe HP..."
+                    aria-label="Cari service" autocomplete="off">
             </div>
-            <?php $isHO = !empty($is_ho) && $is_ho; ?>
-            <div class="col-lg-2 col-md-6">
-                <label class="form-label fw-semibold mb-2">Unit</label>
-                <select id="unitFilter" class="form-select" <?= $isHO ? '' : 'disabled' ?>>
-                    <option value="">Semua Unit</option>
-                    <?php foreach (($unit ?? []) as $u): ?>
-                        <option value="<?= (int) $u->idunit ?>" <?= (!$isHO && (int) $u->idunit === (int) ($user_unit ?? 0)) ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
-                    <?php endforeach; ?>
-                </select>
+        </div>
+
+        <div class="ps-filter">
+            <div class="ps-field">
+                <span class="ps-field__label" id="psUnitFieldLabel">Unit</span>
+                <?php if ($showUnitFilter): ?>
+                    <select id="unitFilter" class="ps-input" aria-labelledby="psUnitFieldLabel">
+                        <option value="">Semua unit</option>
+                        <?php foreach (($unit ?? []) as $u): ?>
+                            <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                <?php else: ?>
+                    <div class="ps-locked" title="Role Anda hanya dapat melihat unit sendiri" aria-label="Unit terkunci: <?= esc($unitLabel) ?>">
+                        <iconify-icon icon="solar:lock-keyhole-minimalistic-linear" width="18" height="18"></iconify-icon>
+                        <span><?= esc($unitLabel) ?></span>
+                    </div>
+                <?php endif; ?>
             </div>
-            <div class="col-lg-3 col-md-6">
-                <label class="form-label fw-semibold mb-2">Search</label>
-                <input type="text" id="searchBox" class="form-control" placeholder="Cari no service, nama, HP, tipe HP...">
+
+            <div class="ps-field">
+                <span class="ps-field__label" id="psDateFieldLabel">Tanggal masuk</span>
+                <div class="ps-range">
+                    <input type="date" id="startDate" class="ps-input" aria-label="Tanggal masuk dari">
+                    <span aria-hidden="true">s.d.</span>
+                    <input type="date" id="endDate" class="ps-input" aria-label="Tanggal masuk sampai">
+                </div>
             </div>
-            <div class="col-lg-2 col-md-3">
-                <label class="form-label fw-semibold mb-2">Show</label>
-                <select id="pageLength" class="form-select">
+
+            <div class="ps-filter__actions">
+                <label class="visually-hidden" for="pageLength">Jumlah baris</label>
+                <select id="pageLength" class="ps-input ps-pagesize" aria-label="Jumlah baris">
                     <option value="10">10</option>
                     <option value="25">25</option>
                     <option value="50">50</option>
                     <option value="100">100</option>
                 </select>
-            </div>
-            <div class="col-lg-1 col-md-3 d-flex align-items-end">
-                <button type="button"
-                    onclick="resetFilter()"
-                    class="btn btn-outline-secondary w-100 d-flex justify-content-center align-items-center gap-1">
+                <button type="button" id="resetBtn" class="ps-btn ps-btn--ghost">
                     <iconify-icon icon="solar:refresh-linear" width="18" height="18"></iconify-icon>
-                    <span>Reset</span>
+                    Reset
                 </button>
+                <form action="<?= base_url('riwayat_service/export') ?>" method="post" id="exportForm" class="mb-0">
+                    <input type="hidden" name="tanggal_awal" id="exportStartDate">
+                    <input type="hidden" name="tanggal_akhir" id="exportEndDate">
+                    <button type="submit" class="ps-btn ps-btn--export">
+                        <iconify-icon icon="solar:export-broken" width="18" height="18"></iconify-icon>
+                        Export
+                    </button>
+                </form>
             </div>
         </div>
 
-        <div class="d-flex justify-content-end mb-3">
-            <form action="<?php echo base_url('riwayat_service/export') ?>" method="post" enctype="multipart/form-data" class="mb-0">
-                <input type="hidden" name="tanggal_awal" id="exportStartDate">
-                <input type="hidden" name="tanggal_akhir" id="exportEndDate">
-                <button type="submit" class="btn btn-danger">
-                    <iconify-icon icon="solar:export-broken" width="18" height="18" class="me-1"></iconify-icon>
-                    Export
-                </button>
-            </form>
-        </div>
+        <table class="ps-table" id="psTable">
+            <caption class="visually-hidden">Antrean service aktif</caption>
+            <thead>
+                <tr>
+                    <th scope="col" style="display:none;">Rank</th>
+                    <th scope="col">Prioritas</th>
+                    <th scope="col">Service</th>
+                    <th scope="col">Pelanggan</th>
+                    <th scope="col">Lama</th>
+                    <th scope="col">Jenis</th>
+                    <th scope="col">Status proses</th>
+                    <th scope="col">Aksi</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </section>
 
-        <div class="table-responsive">
-            <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
-                <thead class="text-dark fs-4">
-                    <tr>
-                        <th style="display: none;">Rank</th>
-                        <th>Prioritas</th>
-                        <th>No Service</th>
-                        <th>Tanggal Masuk</th>
-                        <th>Nama Pelanggan</th>
-                        <th>No HP</th>
-                        <th>Tipe HP</th>
-                        <th>Unit</th>
-                        <th>Lama</th>
-                        <th>Status Service</th>
-                        <th>Detail</th>
-                        <th>Ubah Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
+    <!-- Modal Bisa Diambil -->
+    <div class="modal fade ps-modal" id="bisaDiambilModal" tabindex="-1" aria-labelledby="bisaDiambilModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="ps-modal__title">
+                        <span class="ps-modal__icon">
+                            <iconify-icon icon="solar:clipboard-check-linear" width="22" height="22"></iconify-icon>
+                        </span>
+                        <div>
+                            <h5 class="modal-title" id="bisaDiambilModalLabel">Konfirmasi Bisa Diambil</h5>
+                            <p>Tandai service siap diambil pelanggan.</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <form action="<?= base_url('service/bisa_diambil') ?>" method="post">
+                    <div class="modal-body">
+                        <input type="hidden" name="idservice" id="modal-bisa-diambil-idservice">
+                        <div id="modal-bisa-diambil-alert"></div>
+                        <p class="ps-modal__question">Apakah Anda yakin service ini <strong>bisa diambil</strong>?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="ps-btn ps-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="ps-btn ps-btn--primary" id="modal-bisa-diambil-submit">Konfirmasi</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- Modal Bisa Diambil -->
-<div class="modal fade" id="bisaDiambilModal" tabindex="-1" aria-labelledby="bisaDiambilModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header d-flex align-items-center">
-                <h4 class="modal-title" id="bisaDiambilModalLabel">Konfirmasi Bisa Diambil</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <!-- Modal Sudah Diambil -->
+    <div class="modal fade ps-modal" id="sudahDiambilModal" tabindex="-1" aria-labelledby="sudahDiambilModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="ps-modal__title">
+                        <span class="ps-modal__icon">
+                            <iconify-icon icon="solar:check-circle-linear" width="22" height="22"></iconify-icon>
+                        </span>
+                        <div>
+                            <h5 class="modal-title" id="sudahDiambilModalLabel">Konfirmasi Sudah Diambil</h5>
+                            <p>Tutup service karena unit sudah diterima pelanggan.</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <form action="<?= base_url('service/sudah_diambil') ?>" method="post">
+                    <div class="modal-body">
+                        <input type="hidden" name="idservice" id="modal-sudah-diambil-idservice">
+                        <div id="modal-sudah-diambil-alert"></div>
+                        <p class="ps-modal__question">Apakah Anda yakin service ini <strong>sudah diambil</strong>?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="ps-btn ps-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="ps-btn ps-btn--primary" id="modal-sudah-diambil-submit">Konfirmasi</button>
+                    </div>
+                </form>
             </div>
-            <form action="<?= base_url('service/bisa_diambil') ?>" method="post">
-                <div class="modal-body">
-                    <input type="hidden" name="idservice" id="modal-bisa-diambil-idservice">
-                    <div id="modal-bisa-diambil-alert"></div>
-                    <p>Apakah Anda yakin service ini bisa diambil?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-success" id="modal-bisa-diambil-submit">Konfirmasi</button>
-                </div>
-            </form>
         </div>
     </div>
-</div>
 
-<!-- Modal Sudah Diambil -->
-<div class="modal fade" id="sudahDiambilModal" tabindex="-1" aria-labelledby="sudahDiambilModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header d-flex align-items-center">
-                <h4 class="modal-title" id="sudahDiambilModalLabel">Konfirmasi Sudah Diambil</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <!-- Modal Dibatalkan -->
+    <div class="modal fade ps-modal" id="DibatalkanModal" tabindex="-1" aria-labelledby="DibatalkanModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="ps-modal__title ps-modal__title--danger">
+                        <span class="ps-modal__icon">
+                            <iconify-icon icon="solar:close-circle-linear" width="22" height="22"></iconify-icon>
+                        </span>
+                        <div>
+                            <h5 class="modal-title" id="DibatalkanModalLabel">Konfirmasi Pembatalan</h5>
+                            <p>Service yang dibatalkan keluar dari antrean aktif.</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <form action="<?= base_url('service/dibatalkan') ?>" method="post">
+                    <div class="modal-body">
+                        <input type="hidden" name="idservice" id="modal-dibatalkan-idservice">
+                        <div id="modal-dibatalkan-alert"></div>
+                        <p class="ps-modal__question">Apakah Anda yakin ingin <strong>membatalkan</strong> service ini?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="ps-btn ps-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="ps-btn ps-btn--danger" id="modal-dibatalkan-submit">Batalkan Service</button>
+                    </div>
+                </form>
             </div>
-            <form action="<?= base_url('service/sudah_diambil') ?>" method="post">
-                <div class="modal-body">
-                    <input type="hidden" name="idservice" id="modal-sudah-diambil-idservice">
-                    <div id="modal-sudah-diambil-alert"></div>
-                    <p>Apakah Anda yakin service ini sudah diambil?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-success" id="modal-sudah-diambil-submit">Konfirmasi</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Dibatalkan -->
-<div class="modal fade" id="DibatalkanModal" tabindex="-1" aria-labelledby="DibatalkanModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header d-flex align-items-center">
-                <h4 class="modal-title" id="DibatalkanModalLabel">Konfirmasi Pembatalan</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="<?= base_url('service/dibatalkan') ?>" method="post">
-                <div class="modal-body">
-                    <input type="hidden" name="idservice" id="modal-dibatalkan-idservice">
-                    <div id="modal-dibatalkan-alert"></div>
-                    <p>Apakah Anda yakin ingin membatalkan service ini?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-danger" id="modal-dibatalkan-submit">Konfirmasi</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
 
 <script>
-    let dataTable;
-    let searchTimeout;
+$(function() {
+    const tableElement = document.getElementById('psTable');
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    const unitFilter = document.getElementById('unitFilter');
+    const searchBox = document.getElementById('searchBox');
+    const pageLength = document.getElementById('pageLength');
+    const countLabel = document.getElementById('psCount');
+    const unitLabel = document.getElementById('psUnitLabel');
+    const periodLabel = document.getElementById('psPeriodLabel');
+    const exportForm = document.getElementById('exportForm');
 
-    window.onload = function() {
-        const startDateInput = document.getElementById('startDate');
-        const endDateInput = document.getElementById('endDate');
-        const searchBox = document.getElementById('searchBox');
-        const pageLength = document.getElementById('pageLength');
-        const unitFilter = document.getElementById('unitFilter');
+    const ajaxUrl = <?= json_encode(base_url('proses_service/ajax'), JSON_UNESCAPED_SLASHES) ?>;
+    const prioritasUrl = <?= json_encode(base_url('service/toggle_prioritas'), JSON_UNESCAPED_SLASHES) ?>;
+    const statusUrl = <?= json_encode(base_url('update_status_proses'), JSON_UNESCAPED_SLASHES) ?>;
+    const detailUrl = <?= json_encode(base_url('detail/riwayat_service'), JSON_UNESCAPED_SLASHES) ?>;
+    const garansiUrl = <?= json_encode(base_url('service_by_garansi'), JSON_UNESCAPED_SLASHES) ?>;
+    const invoiceUrl = <?= json_encode(base_url('cetak/invoice_service'), JSON_UNESCAPED_SLASHES) ?>;
 
+    const statusMap = {
+        1: { text: 'Belum Dicek', variant: 'idle' },
+        2: { text: 'Sedang Dicek', variant: 'info' },
+        3: { text: 'Sedang Dikerjakan', variant: 'progress' },
+        4: { text: 'Sedang Testing', variant: 'success' },
+        5: { text: 'Menunggu Konfirmasi', variant: 'danger' },
+        6: { text: 'Menunggu Sparepart', variant: 'warn' }
+    };
+    const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const emptyState = '<div class="ps-empty"><span class="ps-empty__icon"><iconify-icon icon="solar:clipboard-list-linear" width="24" height="24"></iconify-icon></span><h3>Tidak ada service aktif</h3><p>Tidak ada service pada filter ini. Coba ubah tanggal, unit, atau kata kunci.</p></div>';
+
+    const escapeHtml = (value) => $('<div>').text(value ?? '').html();
+    const escapeAttr = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
+
+    function formatDate(value) {
+        if (!value) return '-';
+        const parts = String(value).slice(0, 10).split('-');
+        if (parts.length !== 3 || parts[0] === '0000' || parts[1] === '00' || parts[2] === '00') return '-';
+        return `${Number(parts[2])} ${bulan[Number(parts[1]) - 1] || parts[1]} ${parts[0]}`;
+    }
+
+    function formatTime(value) {
+        return String(value || '').slice(11, 16);
+    }
+
+    function isWarranty(row) {
+        return Boolean(row.tanggal_claim_garansi) && row.tanggal_claim_garansi > '1971-01-01';
+    }
+
+    function toDateInputValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function defaultRange() {
         const today = new Date();
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const start = new Date();
+        start.setDate(today.getDate() - 30);
+        return [toDateInputValue(start), toDateInputValue(today)];
+    }
 
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
+    function syncExport() {
+        document.getElementById('exportStartDate').value = startDateInput.value;
+        document.getElementById('exportEndDate').value = endDateInput.value;
+    }
 
-        startDateInput.value = toDateInputValue(thirtyDaysAgo);
-        endDateInput.value = toDateInputValue(today);
+    function syncMeta() {
+        syncExport();
 
-        const initialSearch = new URLSearchParams(window.location.search).get('search') || '';
-        if (initialSearch) {
-            startDateInput.value = '';
-            endDateInput.value = '';
-            searchBox.value = initialSearch;
+        const awal = startDateInput.value ? formatDate(startDateInput.value) : '';
+        const akhir = endDateInput.value ? formatDate(endDateInput.value) : '';
+        periodLabel.textContent = awal && akhir
+            ? `${awal} – ${akhir}`
+            : (awal ? `Sejak ${awal}` : (akhir ? `Sampai ${akhir}` : 'Semua periode'));
+
+        if (unitFilter) {
+            const selected = unitFilter.options[unitFilter.selectedIndex];
+            unitLabel.textContent = unitFilter.value ? selected.textContent : 'Semua unit';
         }
+    }
 
-        if ($.fn.DataTable.isDataTable('#zero_config')) {
-            $('#zero_config').DataTable().destroy();
-        }
+    const [defaultStart, defaultEnd] = defaultRange();
+    startDateInput.value = defaultStart;
+    endDateInput.value = defaultEnd;
 
-        const statusMap = {
-            1: {
-                text: 'Belum Dicek',
-                class: 'btn-light'
-            },
-            2: {
-                text: 'Sedang Dicek',
-                class: 'btn-primary'
-            },
-            3: {
-                text: 'Sedang Dikerjakan',
-                class: 'btn-success'
-            },
-            4: {
-                text: 'Sedang Testing',
-                class: 'btn-secondary'
-            },
-            5: {
-                text: 'Menunggu Konfirmasi',
-                class: 'btn-danger'
-            },
-            6: {
-                text: 'Menunggu Sparepart',
-                class: 'btn-warning'
+    const initialSearch = new URLSearchParams(window.location.search).get('search') || '';
+    if (initialSearch) {
+        startDateInput.value = '';
+        endDateInput.value = '';
+        searchBox.value = initialSearch;
+    }
+
+    let searchTimeout;
+    const table = $(tableElement).DataTable({
+        serverSide: true,
+        processing: true,
+        searching: false,
+        lengthChange: false,
+        pageLength: 10,
+        autoWidth: false,
+        order: [[0, 'asc']],
+        dom: "<'ps-table-scroll'rt><'ps-dt-foot'ip>",
+        language: {
+            processing: '<span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span> Memuat data...',
+            emptyTable: emptyState,
+            zeroRecords: emptyState,
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ service',
+            infoEmpty: 'Tidak ada service',
+            infoFiltered: '(difilter dari _MAX_ total service)',
+            paginate: {
+                first: 'Pertama',
+                last: 'Terakhir',
+                next: 'Berikutnya',
+                previous: 'Sebelumnya'
             }
-        };
-
-        dataTable = $('#zero_config').DataTable({
-            serverSide: true,
-            processing: true,
-            scrollY: '50vh',
-            scrollX: true,
-            scrollCollapse: true,
-            searching: false,
-            lengthChange: false,
-            pageLength: 10,
-            language: {
-                processing: '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>',
-                emptyTable: 'Tidak ada data',
-                info: 'Menampilkan _START_ sampai _END_ dari _TOTAL_ data',
-                infoEmpty: 'Menampilkan 0 sampai 0 dari 0 data',
-                infoFiltered: '(difilter dari _MAX_ total data)',
-                paginate: {
-                    first: 'Pertama',
-                    last: 'Terakhir',
-                    next: 'Selanjutnya',
-                    previous: 'Sebelumnya'
-                }
-            },
-            ajax: {
-                url: '<?= base_url('proses_service/ajax') ?>',
-                type: 'POST',
-                data: function(d) {
-                    d.startDate = startDateInput.value;
-                    d.endDate = endDateInput.value;
-                    d.unitFilter = unitFilter ? unitFilter.value : '';
-                    d.search = {
-                        value: searchBox.value
-                    };
-                }
-            },
-            columns: [{
-                    data: 'rank',
-                    visible: false
-                },
-                {
-                    data: null,
-                    orderable: false,
-                    render: function(data, type, row) {
-                        const isPrioritas = row.prioritas == 1;
-                        const btnClass = isPrioritas ? 'btn-warning' : 'btn-outline-warning';
-                        const btnText = isPrioritas ? '★ Prioritas' : '☆ Prioritaskan';
-                        return `<button class="btn btn-sm toggle-prioritas-btn ${btnClass}" data-idservice="${row.idservice}" data-prioritas="${row.prioritas}">${btnText}</button>`;
-                    }
-                },
-                {
-                    data: 'no_service'
-                },
-                {
-                    data: 'created_at',
-                    render: function(data) {
-                        if (!data) return '';
-                        const date = new Date(data);
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        const year = date.getFullYear();
-                        return `${day}-${month}-${year}`;
-                    }
-                },
-                {
-                    data: 'nama_pelanggan'
-                },
-                {
-                    data: 'no_hp'
-                },
-                {
-                    data: 'tipe_hp'
-                },
-                {
-                    data: 'nama_unit',
-                    render: function(data, type, row) {
-                        return data || ('Unit ' + (row.unit_idunit ?? '?'));
-                    }
-                },
-                {
-                    data: 'lama_service'
-                },
-                {
-                    data: null,
-                    render: function(data, type, row) {
-                        if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
-                            return '<span class="badge bg-warning text-dark">Service Garansi</span>';
-                        }
-                        return '<span class="badge bg-success">Service Baru</span>';
-                    }
-                },
-                {
-                    data: null,
-                    orderable: false,
-                    render: function(data, type, row) {
-                        const status = statusMap[row.status_proses] || {
-                            text: 'Status Tidak Diketahui',
-                            class: 'btn-outline-dark'
-                        };
-                        return `<button type="button" class="btn btn-sm ${status.class} btn-status-modal" data-idservice="${row.idservice}" data-status="${row.status_proses}">${status.text}</button>`;
-                    }
-                },
-                {
-                    data: null,
-                    orderable: false,
-                    render: function(data, type, row) {
-                        return `
-                            <button class="btn btn-sm btn-success btn-bisa-diambil" data-idservice="${row.idservice}" data-jumlah_kerusakan="${row.jumlah_kerusakan}" data-jumlah_sparepart="${row.jumlah_sparepart}">Bisa Diambil</button>
-                            <button class="btn btn-sm btn-success btn-sudah-diambil" data-idservice="${row.idservice}" data-jumlah_kerusakan="${row.jumlah_kerusakan}" data-jumlah_sparepart="${row.jumlah_sparepart}">Sudah Diambil</button>
-                            <button class="btn btn-sm btn-danger btn-dibatalkan" data-idservice="${row.idservice}" data-jumlah_kerusakan="${row.jumlah_kerusakan}" data-jumlah_sparepart="${row.jumlah_sparepart}">Dibatalkan</button>
-                        `;
-                    }
-                },
-                {
-                    data: null,
-                    orderable: false,
-                    render: function(data, type, row) {
-                        let editBtn = '';
-                        if (row.tanggal_claim_garansi && row.tanggal_claim_garansi > '1971-01-01') {
-                            editBtn = `<a href="<?= base_url('service_by_garansi/') ?>${row.idservice}"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
-                        } else if (row.status_service == 4) {
-                            editBtn = '<button type="button" class="btn btn-sm btn-warning" disabled><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button>';
-                        } else {
-                            editBtn = `<a href="<?= base_url('detail/riwayat_service/') ?>${row.idservice}?tab=sparepart"><button type="button" class="btn btn-sm btn-warning"><iconify-icon icon="solar:clapperboard-edit-broken" width="20" height="20"></iconify-icon></button></a>`;
-                        }
-
-                        return `
-                            ${editBtn}
-                            <a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-danger me-1 js-service-print" data-print-mode="invoice"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20" height="20"></iconify-icon> Cetak</a>
-                            <a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}?mode=thermal" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-danger me-1 js-service-print" data-print-mode="thermal"><iconify-icon icon="solar:folder-favourite-bookmark-broken" width="20" height="20"></iconify-icon> Thermal</a>
-                            <button type="button" class="btn btn-sm btn-wa" data-nohp="${row.no_hp}" data-nama="${row.nama_pelanggan}" style="background-color: greenyellow;"><iconify-icon icon="solar:phone-bold" width="20" height="20"></iconify-icon></button>
-                        `;
-                    }
-                }
-            ],
-            order: [
-                [0, 'asc'],
-                [3, 'desc']
-            ],
-            columnDefs: [{
-                targets: 0,
+        },
+        ajax: {
+            url: ajaxUrl,
+            type: 'POST',
+            data: function(d) {
+                d.startDate = startDateInput.value;
+                d.endDate = endDateInput.value;
+                d.unitFilter = unitFilter ? unitFilter.value : '';
+                d.search = { value: searchBox.value };
+            }
+        },
+        drawCallback: function() {
+            const info = this.api().page.info();
+            countLabel.textContent = info.recordsDisplay;
+            syncMeta();
+        },
+        columns: [
+            {
+                data: 'rank',
                 visible: false
-            }]
-        });
-
-        searchBox.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(function() {
-                dataTable.ajax.reload();
-            }, 500);
-        });
-
-        pageLength.addEventListener('change', function() {
-            dataTable.page.len(this.value).draw();
-        });
-
-        startDateInput.addEventListener('change', filterData);
-        endDateInput.addEventListener('change', filterData);
-        if (unitFilter) unitFilter.addEventListener('change', filterData);
-
-        // Cetak invoice/thermal dibuka di tab baru; kunci link yang diklik agar
-        // satu render tabel hanya mengirim satu permintaan cetak per tombol.
-        $(document).on('click', '.js-service-print', function(event) {
-            if (this.dataset.printing === '1') {
-                event.preventDefault();
-                return;
-            }
-
-            this.dataset.printing = '1';
-            this.classList.add('disabled');
-            this.setAttribute('aria-disabled', 'true');
-            this.setAttribute('aria-busy', 'true');
-            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>'
-                + (this.dataset.printMode === 'thermal' ? 'Membuka thermal...' : 'Membuka invoice...');
-        });
-
-        $(document).on('click', '.btn-wa', function() {
-            let nomor = $(this).data('nohp').toString().trim();
-            let nama = $(this).data('nama').toString().trim();
-
-            if (nomor.startsWith('0')) {
-                nomor = '62' + nomor.substring(1);
-            } else if (nomor.startsWith('+62')) {
-                nomor = nomor.substring(1);
-            }
-
-            const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent("Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama " + nama);
-            window.open(waUrl, '_blank');
-        });
-
-        $(document).on('click', '.toggle-prioritas-btn', function() {
-            const idservice = $(this).data('idservice');
-            const currentPrioritas = $(this).data('prioritas');
-            const newPrioritas = currentPrioritas == 1 ? 0 : 1;
-            const button = this;
-
-            fetch('<?= base_url('toggle_prioritas') ?>', {
-                    method: 'POST',
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "X-Requested-With": "XMLHttpRequest"
-                    },
-                    body: `idservice=${idservice}&prioritas=${newPrioritas}`
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === "success") {
-                        dataTable.ajax.reload(null, false);
-                    } else {
-                        alert("Gagal mengubah prioritas");
-                    }
-                })
-                .catch(err => console.error(err));
-        });
-
-        $(document).on('click', '.btn-bisa-diambil', function() {
-            const idservice = $(this).data('idservice');
-            const jumlahKerusakan = $(this).data('jumlah_kerusakan');
-            const jumlahSparepart = $(this).data('jumlah_sparepart');
-
-            $('#modal-bisa-diambil-idservice').val(idservice);
-
-            if (jumlahKerusakan == 0 || jumlahSparepart == 0) {
-                $('#modal-bisa-diambil-alert').html('<div class="alert alert-warning">Peringatan: Data kerusakan atau sparepart belum lengkap!</div>');
-            } else {
-                $('#modal-bisa-diambil-alert').html('');
-            }
-
-            $('#bisaDiambilModal').modal('show');
-        });
-
-        $(document).on('click', '.btn-sudah-diambil', function() {
-            const idservice = $(this).data('idservice');
-            const jumlahKerusakan = $(this).data('jumlah_kerusakan');
-            const jumlahSparepart = $(this).data('jumlah_sparepart');
-
-            $('#modal-sudah-diambil-idservice').val(idservice);
-
-            if (jumlahKerusakan == 0 || jumlahSparepart == 0) {
-                $('#modal-sudah-diambil-alert').html('<div class="alert alert-warning">Peringatan: Data kerusakan atau sparepart belum lengkap!</div>');
-            } else {
-                $('#modal-sudah-diambil-alert').html('');
-            }
-
-            $('#sudahDiambilModal').modal('show');
-        });
-
-        $(document).on('click', '.btn-dibatalkan', function() {
-            const idservice = $(this).data('idservice');
-            $('#modal-dibatalkan-idservice').val(idservice);
-            $('#DibatalkanModal').modal('show');
-        });
-
-        $(document).on('click', '.btn-status-modal', function() {
-            const idservice = $(this).data('idservice');
-            const currentStatus = $(this).data('status');
-
-            const modalHtml = `
-                <div class="modal fade" id="statusModal-${idservice}" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h4 class="modal-title">Ubah Status Proses</h4>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <form action="<?= base_url('update_status_proses') ?>" method="post">
-                                <div class="modal-body">
-                                    <input type="hidden" name="idservice" value="${idservice}">
-                                    <div class="row">
-                                        ${Object.entries(statusMap).map(([value, info]) => `
-                                            <div class="col-6 mb-2">
-                                                <input class="form-check-input" type="radio" name="status_proses" id="status${value}-${idservice}" value="${value}" ${value == currentStatus ? 'checked' : ''}>
-                                                <label class="form-check-label" for="status${value}-${idservice}">${info.text}</label>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                                    <button type="submit" class="btn btn-primary">Simpan</button>
-                                </div>
-                            </form>
+            },
+            {
+                data: 'prioritas',
+                render: function(data, type, row) {
+                    const on = Number(data) === 1;
+                    return `<button type="button" class="ps-star toggle-prioritas-btn${on ? ' is-on' : ''}"
+                        data-idservice="${Number(row.idservice)}" data-prioritas="${on ? 1 : 0}"
+                        aria-pressed="${on}" title="${on ? 'Batalkan prioritas' : 'Prioritaskan service'}"
+                        aria-label="${on ? 'Batalkan prioritas' : 'Prioritaskan service'}">
+                        <iconify-icon icon="${on ? 'solar:star-bold' : 'solar:star-linear'}" width="18" height="18"></iconify-icon>
+                    </button>`;
+                }
+            },
+            {
+                data: 'no_service',
+                render: function(data, type, row) {
+                    const masuk = formatDate(row.created_at);
+                    const jam = formatTime(row.created_at);
+                    const unit = row.nama_unit || ('Unit ' + (row.unit_idunit ?? '?'));
+                    return `<span class="ps-code">${escapeHtml(data || '-')}</span>
+                        <span class="ps-sub">Masuk ${masuk}${jam ? ' · ' + jam : ''}</span>
+                        <span class="ps-unit"><iconify-icon icon="solar:map-point-linear" width="12" height="12"></iconify-icon><span>${escapeHtml(unit)}</span></span>`;
+                }
+            },
+            {
+                data: 'nama_pelanggan',
+                render: function(data, type, row) {
+                    const nama = data || '-';
+                    const initial = String(nama).trim().charAt(0).toUpperCase() || '?';
+                    return `<div class="ps-person">
+                        <span class="ps-avatar" aria-hidden="true">${escapeHtml(initial)}</span>
+                        <div class="ps-person__body">
+                            <span class="ps-person__name">${escapeHtml(nama)}</span>
+                            <span class="ps-sub">${escapeHtml(row.no_hp || '-')}</span>
+                            <span class="ps-sub">${escapeHtml(row.tipe_hp || '-')}</span>
                         </div>
+                    </div>`;
+                }
+            },
+            {
+                data: 'lama_service_days',
+                render: function(data, type, row) {
+                    if (data === null || data === undefined || data === '') return '<span class="ps-sub">-</span>';
+                    const days = Number(data);
+                    return `<span class="ps-age" title="${escapeAttr(row.lama_service || '')}"><span class="ps-age__value">${days}</span><span class="ps-age__unit">hari</span></span>`;
+                }
+            },
+            {
+                data: 'tanggal_claim_garansi',
+                render: function(data, type, row) {
+                    return isWarranty(row)
+                        ? '<span class="ps-tag ps-tag--warranty"><iconify-icon icon="solar:shield-check-linear" width="14" height="14"></iconify-icon>Garansi</span>'
+                        : '<span class="ps-tag ps-tag--new">Baru</span>';
+                }
+            },
+            {
+                data: 'status_proses',
+                render: function(data, type, row) {
+                    const status = statusMap[data] || { text: 'Status Tidak Diketahui', variant: 'idle' };
+                    return `<button type="button" class="ps-status ps-status--${status.variant} btn-status-modal"
+                        data-idservice="${Number(row.idservice)}" data-status="${Number(data) || 0}"
+                        title="Ubah status proses" aria-label="Ubah status proses: ${escapeAttr(status.text)}">
+                        <span>${status.text}</span>
+                        <iconify-icon icon="solar:alt-arrow-down-linear" width="14" height="14"></iconify-icon>
+                    </button>`;
+                }
+            },
+            {
+                data: null,
+                orderable: false,
+                render: function(data, type, row) {
+                    const id = Number(row.idservice);
+                    const warranty = isWarranty(row);
+                    const incomplete = Number(row.jumlah_kerusakan) === 0 || Number(row.jumlah_sparepart) === 0;
+                    const warnTitle = incomplete ? 'Data kerusakan atau sparepart belum lengkap' : '';
+
+                    let editBtn;
+                    if (warranty) {
+                        editBtn = `<a href="${garansiUrl}/${id}" class="ps-btn ps-btn--sm ps-btn--icon ps-btn--soft" title="Edit service garansi" aria-label="Edit service garansi">
+                            <iconify-icon icon="solar:clapperboard-edit-broken" width="18" height="18"></iconify-icon>
+                        </a>`;
+                    } else if (Number(row.status_service) === 4) {
+                        editBtn = `<button type="button" class="ps-btn ps-btn--sm ps-btn--icon ps-btn--soft" disabled title="Service sudah selesai" aria-label="Edit service terkunci">
+                            <iconify-icon icon="solar:clapperboard-edit-broken" width="18" height="18"></iconify-icon>
+                        </button>`;
+                    } else {
+                        editBtn = `<a href="${detailUrl}/${id}?tab=sparepart" class="ps-btn ps-btn--sm ps-btn--icon ps-btn--soft" title="Edit kerusakan & sparepart" aria-label="Edit kerusakan dan sparepart">
+                            <iconify-icon icon="solar:clapperboard-edit-broken" width="18" height="18"></iconify-icon>
+                        </a>`;
+                    }
+
+                    const invoiceBtn = `<a href="${invoiceUrl}/${id}" target="_blank" rel="noopener noreferrer"
+                        class="ps-btn ps-btn--sm ps-btn--soft js-service-print" data-print-mode="invoice"
+                        title="Cetak nota (A4)" aria-label="Cetak nota">
+                        <iconify-icon icon="solar:document-text-linear" width="16" height="16"></iconify-icon>Nota
+                    </a>`;
+                    const thermalBtn = `<a href="${invoiceUrl}/${id}?mode=thermal" target="_blank" rel="noopener noreferrer"
+                        class="ps-btn ps-btn--sm ps-btn--soft js-service-print" data-print-mode="thermal"
+                        title="Cetak struk thermal" aria-label="Cetak struk thermal">
+                        <iconify-icon icon="solar:printer-minimalistic-broken" width="16" height="16"></iconify-icon>Struk
+                    </a>`;
+
+                    const waBtn = row.no_hp
+                        ? `<button type="button" class="ps-btn ps-btn--sm ps-btn--icon ps-btn--soft btn-wa"
+                            data-nohp="${escapeAttr(row.no_hp)}" data-nama="${escapeAttr(row.nama_pelanggan)}"
+                            title="Hubungi via WhatsApp" aria-label="Hubungi ${escapeAttr(row.nama_pelanggan)} via WhatsApp">
+                            <iconify-icon icon="solar:phone-bold" width="18" height="18"></iconify-icon>
+                        </button>`
+                        : `<button type="button" class="ps-btn ps-btn--sm ps-btn--icon ps-btn--soft" disabled title="Nomor HP tidak tersedia" aria-label="Nomor HP tidak tersedia">
+                            <iconify-icon icon="solar:phone-bold" width="18" height="18"></iconify-icon>
+                        </button>`;
+
+                    return `<div class="ps-actions">
+                        <div class="ps-actions__row">
+                            <button type="button" class="ps-btn ps-btn--sm ps-btn--action btn-bisa-diambil"
+                                data-idservice="${id}" data-jumlah_kerusakan="${Number(row.jumlah_kerusakan) || 0}" data-jumlah_sparepart="${Number(row.jumlah_sparepart) || 0}"
+                                ${warnTitle ? `title="${warnTitle}"` : ''}>
+                                ${incomplete ? '<span class="ps-alert-dot" aria-hidden="true"></span>' : ''}Bisa Diambil
+                            </button>
+                            <button type="button" class="ps-btn ps-btn--sm ps-btn--soft btn-sudah-diambil"
+                                data-idservice="${id}" data-jumlah_kerusakan="${Number(row.jumlah_kerusakan) || 0}" data-jumlah_sparepart="${Number(row.jumlah_sparepart) || 0}"
+                                ${warnTitle ? `title="${warnTitle}"` : ''}>Sudah Diambil</button>
+                            <button type="button" class="ps-btn ps-btn--sm ps-btn--danger btn-dibatalkan"
+                                data-idservice="${id}">Batalkan</button>
+                        </div>
+                        <div class="ps-actions__row">
+                            ${editBtn}
+                            ${invoiceBtn}
+                            ${thermalBtn}
+                            ${waBtn}
+                        </div>
+                    </div>`;
+                }
+            }
+        ],
+        columnDefs: [
+            { targets: 0, visible: false },
+            { targets: 1, createdCell: function(td) { td.setAttribute('data-label', 'Prioritas'); } },
+            { targets: 2, createdCell: function(td) { td.setAttribute('data-label', 'Service'); } },
+            { targets: 3, createdCell: function(td) { td.setAttribute('data-label', 'Pelanggan'); } },
+            { targets: 4, createdCell: function(td) { td.setAttribute('data-label', 'Lama'); } },
+            { targets: 5, createdCell: function(td) { td.setAttribute('data-label', 'Jenis'); } },
+            { targets: 6, createdCell: function(td) { td.setAttribute('data-label', 'Status proses'); } },
+            { targets: 7, createdCell: function(td) { td.setAttribute('data-label', 'Aksi'); } },
+            { targets: 7, orderable: false, searchable: false }
+        ]
+    });
+
+    syncMeta();
+
+    searchBox.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function() {
+            table.ajax.reload();
+        }, 400);
+    });
+
+    pageLength.addEventListener('change', function() {
+        table.page.len(Number(this.value)).draw();
+    });
+
+    function reload() {
+        syncMeta();
+        table.ajax.reload();
+    }
+
+    startDateInput.addEventListener('change', reload);
+    endDateInput.addEventListener('change', reload);
+    if (unitFilter) {
+        unitFilter.addEventListener('change', reload);
+    }
+
+    document.getElementById('resetBtn').addEventListener('click', function() {
+        const [start, end] = defaultRange();
+        startDateInput.value = start;
+        endDateInput.value = end;
+        searchBox.value = '';
+        if (unitFilter) unitFilter.value = '';
+        reload();
+    });
+
+    exportForm.addEventListener('submit', syncExport);
+
+    // Cetak invoice/thermal dibuka di tab baru; kunci link yang diklik agar
+    // satu render tabel hanya mengirim satu permintaan cetak per tombol.
+    $(document).on('click', '.js-service-print', function(event) {
+        if (this.dataset.printing === '1') {
+            event.preventDefault();
+            return;
+        }
+
+        this.dataset.printing = '1';
+        this.classList.add('is-loading');
+        this.setAttribute('aria-disabled', 'true');
+        this.setAttribute('aria-busy', 'true');
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
+            + (this.dataset.printMode === 'thermal' ? 'Struk' : 'Nota');
+    });
+
+    $(document).on('click', '.btn-wa', function() {
+        if (!this.dataset.nohp) return;
+
+        let nomor = this.dataset.nohp.trim();
+        const nama = (this.dataset.nama ?? '').trim();
+
+        if (nomor.startsWith('0')) {
+            nomor = '62' + nomor.substring(1);
+        } else if (nomor.startsWith('+62')) {
+            nomor = nomor.substring(1);
+        }
+
+        const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent('Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama ' + nama);
+        window.open(waUrl, '_blank');
+    });
+
+    $(document).on('click', '.toggle-prioritas-btn', function() {
+        const button = this;
+        const idservice = Number(this.dataset.idservice);
+        const next = Number(this.dataset.prioritas) === 1 ? 0 : 1;
+
+        button.disabled = true;
+        fetch(prioritasUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: `idservice=${idservice}&prioritas=${next}`
+            })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.status === 'success') {
+                    table.ajax.reload(null, false);
+                } else {
+                    alert('Gagal mengubah prioritas');
+                    button.disabled = false;
+                }
+            })
+            .catch((err) => {
+                console.error(err);
+                button.disabled = false;
+            });
+    });
+
+    $(document).on('click', '.btn-bisa-diambil', function() {
+        const incomplete = Number(this.dataset.jumlah_kerusakan) === 0 || Number(this.dataset.jumlah_sparepart) === 0;
+        $('#modal-bisa-diambil-idservice').val(this.dataset.idservice);
+        $('#modal-bisa-diambil-alert').html(incomplete
+            ? '<div class="alert">Peringatan: data kerusakan atau sparepart belum lengkap.</div>'
+            : '');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('bisaDiambilModal')).show();
+    });
+
+    $(document).on('click', '.btn-sudah-diambil', function() {
+        const incomplete = Number(this.dataset.jumlah_kerusakan) === 0 || Number(this.dataset.jumlah_sparepart) === 0;
+        $('#modal-sudah-diambil-idservice').val(this.dataset.idservice);
+        $('#modal-sudah-diambil-alert').html(incomplete
+            ? '<div class="alert">Peringatan: data kerusakan atau sparepart belum lengkap.</div>'
+            : '');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('sudahDiambilModal')).show();
+    });
+
+    $(document).on('click', '.btn-dibatalkan', function() {
+        $('#modal-dibatalkan-idservice').val(this.dataset.idservice);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('DibatalkanModal')).show();
+    });
+
+    $(document).on('click', '.btn-status-modal', function() {
+        const idservice = Number(this.dataset.idservice);
+        const currentStatus = Number(this.dataset.status);
+        const modalId = 'statusModal-' + idservice;
+
+        document.getElementById(modalId)?.remove();
+
+        const modalHtml = `
+            <div class="modal fade ps-modal" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}Label" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <div class="ps-modal__title">
+                                <span class="ps-modal__icon">
+                                    <iconify-icon icon="solar:refresh-circle-linear" width="22" height="22"></iconify-icon>
+                                </span>
+                                <div>
+                                    <h5 class="modal-title" id="${modalId}Label">Ubah Status Proses</h5>
+                                    <p>Pilih tahap pengerjaan service saat ini.</p>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                        </div>
+                        <form action="${statusUrl}" method="post">
+                            <div class="modal-body">
+                                <input type="hidden" name="idservice" value="${idservice}">
+                                <div class="ps-choice-grid" role="radiogroup" aria-label="Status proses">
+                                    ${Object.entries(statusMap).map(([value, info]) => `
+                                        <label class="ps-choice">
+                                            <input type="radio" name="status_proses" value="${value}" ${Number(value) === currentStatus ? 'checked' : ''}>
+                                            <span class="ps-choice__dot" style="color: var(--ps-${info.variant === 'idle' ? 'muted' : (info.variant === 'progress' ? 'accent-ink' : info.variant)})"></span>
+                                            <span>${info.text}</span>
+                                        </label>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="ps-btn ps-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                                <button type="submit" class="ps-btn ps-btn--primary">Simpan Status</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-            `;
+            </div>`;
 
-            $('body').append(modalHtml);
-            $(`#statusModal-${idservice}`).modal('show');
-            $(`#statusModal-${idservice}`).on('hidden.bs.modal', function() {
-                $(this).remove();
-            });
+        $('body').append(modalHtml);
+        const modalElement = document.getElementById(modalId);
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+        modalElement.addEventListener('hidden.bs.modal', function() {
+            this.remove();
         });
-    };
-
-    function filterData() {
-        dataTable.ajax.reload();
-        document.getElementById('exportStartDate').value = document.getElementById('startDate').value;
-        document.getElementById('exportEndDate').value = document.getElementById('endDate').value;
-    }
-
-    function resetFilter() {
-        const today = new Date();
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        document.getElementById('startDate').value = toDateInputValue(thirtyDaysAgo);
-        document.getElementById('endDate').value = toDateInputValue(today);
-        const uf = document.getElementById('unitFilter'); if (uf && !uf.disabled) uf.value = '';
-        document.getElementById('searchBox').value = '';
-        document.getElementById('exportStartDate').value = toDateInputValue(thirtyDaysAgo);
-        document.getElementById('exportEndDate').value = toDateInputValue(today);
-        dataTable.ajax.reload();
-    }
+    });
+});
 </script>

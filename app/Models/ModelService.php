@@ -825,17 +825,16 @@ class ModelService extends Model
 
     public function ProsesServiceAktifServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
     {
+        // Urutan mengikuti kolom tabel .ps-table di /proses_service:
+        // rank (tersembunyi), prioritas, service, pelanggan, lama, jenis, status.
         $allowedColumns = [
             0 => 'rank',
-            1 => 'service.no_service',
-            2 => 'service.prioritas',
-            3 => 'service.created_at',
-            4 => 'pelanggan.nama',
-            5 => 'service.no_hp',
-            6 => 'service.tipe_hp',
-            7 => 'service.unit_idunit',
-            8 => 'lama_service_days',
-            9 => 'service.status_proses'
+            1 => 'service.prioritas',
+            2 => 'service.no_service',
+            3 => 'pelanggan.nama',
+            4 => 'lama_service_days',
+            5 => 'service.tanggal_claim_garansi',
+            6 => 'service.status_proses'
         ];
 
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';

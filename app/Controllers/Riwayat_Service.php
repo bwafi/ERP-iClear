@@ -907,11 +907,20 @@ class Riwayat_Service extends BaseController
         $idJabatan = session()->get('ID_JABATAN');
         $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
 
+        // Hanya unit operasional yang boleh dipilih di filter role lintas unit.
+        $unitList = $isHO
+            ? array_values(array_filter(
+                $this->UnitModel->getUnit(),
+                static fn ($u) => (int) ($u->is_operational ?? 1) === 1
+            ))
+            : [];
+        usort($unitList, static fn ($a, $b) => strcmp((string) $a->NAMA_UNIT, (string) $b->NAMA_UNIT));
+
         $data =  array(
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
-            'unit' => $this->UnitModel->getUnit(),
+            'unit' => $unitList,
             'is_ho' => $isHO,
             'user_unit' => (int) session('ID_UNIT'),
             'body'  => 'riwayat/proses_service'

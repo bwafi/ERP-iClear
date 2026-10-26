@@ -112,6 +112,16 @@
 - **Modals:** detail uses a definition list; edit/delete keep the existing fields, routes, and role gates. Dynamic row values are escaped before injection.
 - **Rules:** layout full-width hanya untuk halaman ini (halaman lain tetap 1280px); one accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions/hover and disabled under `prefers-reduced-motion`.
 
+### Proses Service (`.ps-*`)
+- **Scope:** `app/Views/riwayat/proses_service.php` + `app/Views/riwayat/_proses_service_theme.php`; every selector lives under `.ps-page` / `.ps-modal` and derives from `--ps-*` tokens tied to the app theme. Modal status dirender di body, jadi token juga dipasang di `.ps-modal`. No new palette, font, or dependency.
+- **Layout:** full-width (`max-width: none`) page head (breadcrumb, title, count/unit/period chips) → data panel (search → filter band: unit, tanggal masuk, page size, reset, export → table → DataTables footer). Default period is 30 days; `?search=` dari halaman lain mengosongkan tanggal agar hasil lintas periode.
+- **Unit filter:** hanya role 0 (Finance) dan 1 (Admin Root) yang boleh memilih unit; role lain melihat unit terkunci dan tidak mengirim nilai unit. Endpoint AJAX tetap memaksa unit sesi untuk role terbatas.
+- **Table:** seven working columns — Prioritas, Service (no. service + tanggal masuk + unit), Pelanggan (avatar + nama + HP + tipe), Lama (hari), Jenis (Garansi/Baru), Status proses, Aksi. Default order `rank` (garansi → prioritas → tanggal masuk terbaru) dan mapping kolom server-side mengikuti urutan ini.
+- **Priority & status:** prioritas adalah tombol bintang dengan state terisi; status proses adalah badge yang bisa diklik untuk membuka modal radio 6 tahap (Belum Dicek, Sedang Dicek, Sedang Dikerjakan, Sedang Testing, Menunggu Konfirmasi, Menunggu Sparepart).
+- **Actions:** dua baris — lifecycle (Bisa Diambil / Sudah Diambil / Batalkan) dan tools (edit, Nota, Struk, WhatsApp). Dua tombol cetak diberi label teks dan ikon berbeda (dokumen vs printer thermal) supaya tidak tertukar. Data kerusakan/sparepart yang belum lengkap menandai tombol dengan titik amber dan peringatan di modal; semua nilai dinamis di-escape sebelum masuk atribut HTML.
+- **Responsive:** di bawah `1200px` tabel menjadi stacked cards dengan `data-label` (tabel tujuh kolom + aksi berlabel butuh ~1174px); filter menjadi dua kolom di bawah `991.98px` dan satu kolom di bawah `575.98px`.
+- **Rules:** route, field POST, query server-side, dan perilaku bisnis tidak berubah; satu aksen untuk aksi utama/fokus, tanpa gradien atau border kiri berwarna; muted text ≥4.5:1 di kedua tema; motion terbatas pada transisi kontrol dan dimatikan under `prefers-reduced-motion`.
+
 ### Detail Klaim Garansi (`.cg-*`)
 - **Scope:** `app/Views/transaksi/table_garansi/claim_detail.php` + `_claim_theme.php`; every selector lives under `.cg-page` / `.cg-modal` and derives from `--cg-*` tokens tied to the app theme. No new palette, font, or dependency.
 - **Layout:** hero (breadcrumb, back, service code, active-warranty/unit chips) → data service card (customer row, four-field grid, keluhan/keterangan notes) → damage card → numbered claim form (catatan → sparepart rusak → sparepart pengganti) → action bar. The action bar is sticky on desktop and static under `768px`.
