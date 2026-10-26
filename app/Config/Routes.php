@@ -161,6 +161,7 @@ $routes->post('proses_service/ajax', 'Riwayat_Service::proses_service_ajax', ['f
 $routes->get('dp_service', 'Riwayat_Service::dp_service', ['filter' => 'auth']);
 $routes->post('dp_service/ajax', 'Riwayat_Service::dp_service_ajax', ['filter' => 'auth']);
 $routes->post('dp_service/refund', 'Riwayat_Service::refund_dp_service', ['filter' => ['auth', 'csrf']]);
+$routes->post('dp_service/koreksi', 'Riwayat_Service::koreksi_dp_service', ['filter' => ['auth', 'csrf']]);
 $routes->post('service/toggle_prioritas', 'Riwayat_Service::togglePrioritas', ['filter' => 'auth']);
 $routes->post('update_status_proses', 'Riwayat_Service::update_status_proses', ['filter' => 'auth']);
 $routes->post('service/bisa_diambil', 'Riwayat_Service::update_bisa_diambil', ['filter' => 'auth']);

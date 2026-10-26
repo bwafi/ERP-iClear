@@ -510,6 +510,219 @@ class ServiceDpService
         }
     }
 
+    /**
+     * Koreksi salah catat DP (metode, rekening, nominal).
+     *
+     * Bukan kas masuk/keluar baru: baris ledger, jurnal DP, dan proyeksi
+     * `service.dp_bayar` diperbaiki dalam satu transaksi. Hanya Admin root.
+     *
+     * @param array{metode:string,jumlah:int,bank_idbank?:string|null,referensi?:string|null,alasan:string} $opts
+     * @return array{id:int,jumlah:int,metode:string}
+     */
+    public function koreksiDp(int $idDp, array $opts, int $inputBy, int $role): array
+    {
+        if ((int) $role !== 1) {
+            throw new \RuntimeException('Koreksi DP hanya untuk Admin Root.');
+        }
+
+        $alasan = trim((string) ($opts['alasan'] ?? ''));
+        if ($alasan === '' || mb_strlen($alasan) > 120) {
+            throw new \RuntimeException('Alasan koreksi wajib diisi (maksimal 120 karakter).');
+        }
+
+        $metode = strtolower(trim((string) ($opts['metode'] ?? '')));
+        $jumlah = (int) ($opts['jumlah'] ?? 0);
+        $bankId = $this->teksOpsional($opts['bank_idbank'] ?? null);
+        $referensi = $this->teksOpsional($opts['referensi'] ?? null);
+
+        if ($idDp <= 0) {
+            throw new \RuntimeException('DP tidak valid.');
+        }
+        if (! isset(self::TEMPLATE[$metode])) {
+            throw new \RuntimeException('Metode DP harus "tunai" atau "transfer".');
+        }
+        if ($jumlah <= 0) {
+            throw new \RuntimeException('Nominal DP harus lebih dari 0. Untuk menghapus DP, gunakan refund.');
+        }
+
+        $this->db->transBegin();
+
+        try {
+            $sql = $this->db->table('service_dp sd')
+                ->select('sd.*, s.no_service, s.unit_idunit, s.status_service, s.total_service, s.bayar_tunai')
+                ->join('service s', 's.idservice = sd.service_idservice')
+                ->where('sd.id', $idDp)
+                ->getCompiledSelect();
+            if (in_array(strtolower((string) $this->db->DBDriver), ['mysqli', 'postgre'], true)) {
+                $sql .= ' FOR UPDATE';
+            }
+            $dp = $this->db->query($sql)->getRow();
+
+            if (! $dp) {
+                throw new \RuntimeException('DP tidak ditemukan.');
+            }
+            if (strtolower(trim((string) $dp->status)) !== 'aktif') {
+                throw new \RuntimeException('DP sudah dibatalkan dan tidak bisa dikoreksi.');
+            }
+            if (! empty($dp->refund_idkas_keluar) || ! empty($dp->refund_at)) {
+                throw new \RuntimeException('DP sudah direfund dan tidak bisa dikoreksi.');
+            }
+
+            $idservice = (int) $dp->service_idservice;
+            $unitId = (int) $dp->unit_idunit;
+            $jumlahLama = (int) $dp->jumlah;
+            $nominalBerubah = $jumlah !== $jumlahLama;
+
+            if ($nominalBerubah && (int) $dp->status_service === 4) {
+                throw new \RuntimeException('Nominal DP tidak bisa diubah setelah service diambil; ubah metode/rekening saja.');
+            }
+
+            if ($metode === 'transfer') {
+                if ($bankId === null) {
+                    throw new \RuntimeException('DP transfer wajib menyertakan rekening bank.');
+                }
+                $validasiBank = (new BankRekeningValidator())->validateUntukUnit($bankId, $unitId, $role, false);
+                if (! $validasiBank['ok']) {
+                    throw new \RuntimeException('Rekening DP tidak dapat dipakai: ' . $validasiBank['alasan']);
+                }
+            } else {
+                $bankId = null;
+                $referensi = null;
+            }
+
+            // Jangan sampai koreksi menciptakan kelebihan bayar.
+            $totalTagihan = (int) ($dp->total_service ?? 0);
+            if ($totalTagihan > 0) {
+                $dpLain = max(0, $this->totalDpAktif($idservice) - $jumlahLama);
+                $bayarBank = 0;
+                if ($this->db->tableExists('pembayaran_bank')) {
+                    $rowBank = $this->db->table('pembayaran_bank')
+                        ->selectSum('jumlah', 'total')
+                        ->where('tabel_referensi', 'service_baru')
+                        ->where('id_referensi', $idservice)
+                        ->get()
+                        ->getRow();
+                    $bayarBank = (int) ($rowBank->total ?? 0);
+                }
+                $bayarLain = (int) ($dp->bayar_tunai ?? 0) + $bayarBank;
+                if ($dpLain + $jumlah + $bayarLain > $totalTagihan) {
+                    throw new \RuntimeException(
+                        'Nominal DP melebihi sisa tagihan (total Rp ' . number_format($totalTagihan, 0, ',', '.')
+                        . ', DP lain + pembayaran Rp ' . number_format($dpLain + $bayarLain, 0, ',', '.') . ').'
+                    );
+                }
+            }
+
+            $now = date('Y-m-d H:i:s');
+            $sebelum = [
+                'metode'      => (string) $dp->metode,
+                'jumlah'      => $jumlahLama,
+                'bank_idbank' => $dp->bank_idbank,
+                'referensi'   => $dp->referensi,
+            ];
+
+            $this->db->table('service_dp')->where('id', $idDp)->update([
+                'metode'      => $metode,
+                'bank_idbank' => $bankId,
+                'referensi'   => $referensi,
+                'jumlah'      => $jumlah,
+                'updated_at'  => $now,
+            ]);
+
+            $this->perbaikiJurnalKoreksi($idDp, $metode, $jumlah, $jumlahLama);
+
+            $total = $this->proyeksiDpBayar($idservice);
+
+            $this->db->table('service_dp_koreksi')->insert([
+                'service_dp_id' => $idDp,
+                'data_sebelum'  => json_encode($sebelum, JSON_UNESCAPED_UNICODE),
+                'data_sesudah'  => json_encode([
+                    'metode'      => $metode,
+                    'jumlah'      => $jumlah,
+                    'bank_idbank' => $bankId,
+                    'referensi'   => $referensi,
+                ], JSON_UNESCAPED_UNICODE),
+                'alasan'        => $alasan,
+                'oleh'          => $inputBy > 0 ? $inputBy : null,
+                'created_at'    => $now,
+            ]);
+
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException('Koreksi DP gagal disimpan.');
+            }
+            if (! $this->db->transCommit()) {
+                throw new \RuntimeException('Koreksi DP gagal di-commit.');
+            }
+
+            return ['id' => $idDp, 'jumlah' => $total, 'metode' => $metode];
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            throw $e;
+        }
+    }
+
+    /** Ganti akun & nominal dua baris jurnal DP tanpa mengubah tanggal aslinya. */
+    private function perbaikiJurnalKoreksi(int $idDp, string $metode, int $jumlahBaru, int $jumlahLama): void
+    {
+        $rows = $this->db->table('jurnal')
+            ->where('tabel_referensi', self::TABEL_REFERENSI)
+            ->where('id_referensi', (string) $idDp)
+            ->orderBy('idjurnal', 'ASC')
+            ->get()
+            ->getResult();
+
+        $debetRow = null;
+        $kreditRow = null;
+        $totalDebet = 0;
+        $totalKredit = 0;
+        foreach ($rows as $row) {
+            $totalDebet += (int) $row->debet;
+            $totalKredit += (int) $row->kredit;
+            if ((int) $row->debet > 0) {
+                $debetRow = $row;
+            }
+            if ((int) $row->kredit > 0) {
+                $kreditRow = $row;
+            }
+        }
+
+        if (count($rows) !== 2 || $debetRow === null || $kreditRow === null
+            || $totalDebet !== $jumlahLama || $totalKredit !== $jumlahLama) {
+            throw new \RuntimeException('Jurnal DP lama tidak sesuai nominal DP; koreksi dibatalkan.');
+        }
+
+        $template = $this->db->table('template_jurnal')
+            ->where('kode_template', self::TEMPLATE[$metode])
+            ->get()
+            ->getResult();
+
+        $templateDebet = null;
+        $templateKredit = null;
+        foreach ($template as $row) {
+            if ((string) $row->debet_kredit === 'debet') {
+                $templateDebet = $row;
+            } elseif ((string) $row->debet_kredit === 'kredit') {
+                $templateKredit = $row;
+            }
+        }
+        if ($templateDebet === null || $templateKredit === null) {
+            throw new \RuntimeException('Template jurnal DP tidak lengkap; koreksi dibatalkan.');
+        }
+
+        $this->db->table('jurnal')->where('idjurnal', $debetRow->idjurnal)->update([
+            'no_akun'   => $templateDebet->no_akun,
+            'nama_akun' => $templateDebet->nama_akun,
+            'debet'     => $jumlahBaru,
+            'kredit'    => 0,
+        ]);
+        $this->db->table('jurnal')->where('idjurnal', $kreditRow->idjurnal)->update([
+            'debet'  => 0,
+            'kredit' => $jumlahBaru,
+        ]);
+
+        $this->pastikanJurnalSeimbang($idDp, $jumlahBaru);
+    }
+
     /** Return seluruh detail Sparepart Keluar milik service via mekanisme bersama. */
     private function returSparepartService(int $serviceId): void
     {

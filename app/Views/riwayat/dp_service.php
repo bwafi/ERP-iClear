@@ -27,6 +27,7 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-lg-4">
             <?php $isHO = !empty($is_ho) && $is_ho; ?>
+            <?php $isAdminRoot = !empty($is_admin_root) && $is_admin_root; ?>
             <div class="row g-3 align-items-end">
                 <div class="col-sm-6 col-lg-2">
                     <label for="dpStartDate" class="form-label fw-semibold mb-2">Tanggal Awal</label>
@@ -161,6 +162,62 @@
         </div>
     </div>
 
+    <?php if ($isAdminRoot): ?>
+    <div class="modal fade" id="koreksiDpModal" tabindex="-1" aria-labelledby="koreksiDpModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form action="<?= base_url('dp_service/koreksi') ?>" method="post" id="koreksiDpForm">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="dp_id" id="koreksiDpId">
+                    <div class="modal-header">
+                        <div>
+                            <h5 class="modal-title fw-semibold" id="koreksiDpModalTitle">Koreksi DP Service</h5>
+                            <small class="text-muted" id="koreksiDpReference">-</small>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info py-2 px-3 mb-3" role="note">
+                            Koreksi hanya memperbaiki catatan DP dan jurnalnya; tidak membuat kas masuk/keluar baru.
+                            Kalau Tutup Kasir tanggal DP sudah tersimpan, angka closing lama tidak dihitung ulang.
+                        </div>
+                        <div class="mb-3">
+                            <label for="koreksiDpMetode" class="form-label fw-semibold">Metode</label>
+                            <select class="form-select" name="metode" id="koreksiDpMetode" required>
+                                <option value="tunai">Tunai</option>
+                                <option value="transfer">Transfer</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="koreksiDpJumlah" class="form-label fw-semibold">Nominal DP</label>
+                            <input type="text" class="form-control" name="jumlah" id="koreksiDpJumlah" inputmode="numeric" autocomplete="off" required>
+                        </div>
+                        <div class="mb-3 d-none" id="koreksiDpBankWrap">
+                            <label for="koreksiDpBank" class="form-label fw-semibold">Rekening Tujuan</label>
+                            <select class="form-select" name="bank_idbank" id="koreksiDpBank"></select>
+                        </div>
+                        <div class="mb-3 d-none" id="koreksiDpReferensiWrap">
+                            <label for="koreksiDpReferensi" class="form-label fw-semibold">Referensi Transfer</label>
+                            <input type="text" class="form-control" name="referensi" id="koreksiDpReferensi" maxlength="100" autocomplete="off">
+                        </div>
+                        <div>
+                            <label for="koreksiDpAlasan" class="form-label fw-semibold">Alasan Koreksi</label>
+                            <textarea class="form-control" name="alasan" id="koreksiDpAlasan" rows="3" maxlength="120" required placeholder="Contoh: salah pilih metode, harusnya transfer"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Kembali</button>
+                        <button type="submit" class="btn btn-warning" id="koreksiDpSubmit">
+                            <iconify-icon icon="solar:pen-bold" class="me-1" aria-hidden="true"></iconify-icon>
+                            Simpan Koreksi
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const startDate = document.getElementById('dpStartDate');
@@ -171,6 +228,7 @@
             const resetButton = document.getElementById('dpResetFilter');
             const refundForm = document.getElementById('refundDpForm');
             const refundSubmit = document.getElementById('refundDpSubmit');
+            const koreksiForm = document.getElementById('koreksiDpForm');
             const tableSelector = '#dpServiceTable';
 
             const toDateInputValue = (date) => {
@@ -272,6 +330,24 @@
                                 </a>`
                                 : '';
 
+                            const isAdminRoot = <?= $isAdminRoot ? 'true' : 'false' ?>;
+                            const dpBisaDikoreksi = isAdminRoot
+                                && String(row.status).toLowerCase() === 'aktif'
+                                && !Number(row.refund_idkas_keluar);
+                            const koreksiButton = dpBisaDikoreksi
+                                ? `<button type="button" class="btn btn-sm btn-outline-warning btn-koreksi-dp"
+                                    data-dp-id="${Number(row.id)}"
+                                    data-jumlah="${Number(row.jumlah) || 0}"
+                                    data-metode="${escapeHtml(row.metode)}"
+                                    data-bank-id="${escapeHtml(row.bank_idbank || '')}"
+                                    data-referensi="${escapeHtml(row.referensi || '')}"
+                                    data-unit="${Number(row.unit_idunit) || 0}"
+                                    data-kode="${escapeHtml(row.kode_dp)}"
+                                    data-bs-toggle="modal" data-bs-target="#koreksiDpModal">
+                                    <iconify-icon icon="solar:pen-bold" class="me-1" aria-hidden="true"></iconify-icon>Koreksi
+                                </button>`
+                                : '';
+
                             if (Number(row.refund_idkas_keluar)) {
                                 return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}<span class="text-success small">Kas keluar #${escapeHtml(row.refund_idkas_keluar)}</span></div>`;
                             }
@@ -279,16 +355,16 @@
                                 return prosesButton || '<span class="text-muted small">-</span>';
                             }
                             if (!<?= ! empty($dp_refund_siap) ? 'true' : 'false' ?>) {
-                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}<span class="text-muted small">Refund belum siap</span></div>`;
+                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}${koreksiButton}<span class="text-muted small">Refund belum siap</span></div>`;
                             }
                             if (![1, 2, 90].includes(Number(row.status_service))) {
-                                return '<span class="text-muted small">Service siap diambil/selesai</span>';
+                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${koreksiButton}<span class="text-muted small">Service siap diambil/selesai</span></div>`;
                             }
                             const sparepartBelumDiretur = Number(row.sparepart_belum_diretur) || 0;
                             if (sparepartBelumDiretur > 0 && Number(row.sparepart_retur_siap) !== 1) {
-                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}<span class="text-warning-emphasis small" title="Jalankan migrasi penghubung invoice service sebelum refund sparepart.">Skema retur perlu diperbarui</span></div>`;
+                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}${koreksiButton}<span class="text-warning-emphasis small" title="Jalankan migrasi penghubung invoice service sebelum refund sparepart.">Skema retur perlu diperbarui</span></div>`;
                             }
-                            return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}<button type="button" class="btn btn-sm btn-outline-danger btn-refund-dp"
+                            return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}${koreksiButton}<button type="button" class="btn btn-sm btn-outline-danger btn-refund-dp"
                                 data-dp-id="${Number(row.id)}"
                                 data-kode="${escapeHtml(row.kode_dp)}"
                                 data-service="${escapeHtml(row.no_service)}"
@@ -356,6 +432,47 @@
                 refundSubmit.disabled = true;
                 refundSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Memproses refund...';
             });
+
+            if (koreksiForm) {
+                const bankByUnit = <?= json_encode($bank_by_unit ?? [], JSON_UNESCAPED_UNICODE) ?>;
+                const koreksiSubmit = document.getElementById('koreksiDpSubmit');
+                const koreksiMetode = document.getElementById('koreksiDpMetode');
+                const koreksiJumlah = document.getElementById('koreksiDpJumlah');
+                const koreksiBank = document.getElementById('koreksiDpBank');
+                const koreksiBankWrap = document.getElementById('koreksiDpBankWrap');
+                const koreksiReferensi = document.getElementById('koreksiDpReferensi');
+                const koreksiReferensiWrap = document.getElementById('koreksiDpReferensiWrap');
+                const koreksiAlasan = document.getElementById('koreksiDpAlasan');
+
+                const toggleKoreksiBank = () => {
+                    const transfer = koreksiMetode.value === 'transfer';
+                    koreksiBankWrap.classList.toggle('d-none', !transfer);
+                    koreksiReferensiWrap.classList.toggle('d-none', !transfer);
+                    koreksiBank.required = transfer;
+                };
+                koreksiMetode.addEventListener('change', toggleKoreksiBank);
+
+                $(document).on('click', '.btn-koreksi-dp', function () {
+                    const button = this;
+                    document.getElementById('koreksiDpId').value = button.dataset.dpId || '';
+                    document.getElementById('koreksiDpReference').textContent = button.dataset.kode || '-';
+                    koreksiJumlah.value = new Intl.NumberFormat('id-ID').format(Number(button.dataset.jumlah) || 0);
+                    koreksiMetode.value = String(button.dataset.metode || 'tunai').toLowerCase();
+                    koreksiReferensi.value = button.dataset.referensi || '';
+                    koreksiAlasan.value = '';
+
+                    const bankList = bankByUnit[String(button.dataset.unit || '')] || [];
+                    koreksiBank.innerHTML = '<option value="">Pilih rekening</option>'
+                        + bankList.map((bank) => `<option value="${escapeHtml(bank.idbank)}">${escapeHtml(bank.nama)}</option>`).join('');
+                    koreksiBank.value = button.dataset.bankId || '';
+                    toggleKoreksiBank();
+                });
+
+                koreksiForm.addEventListener('submit', function () {
+                    koreksiSubmit.disabled = true;
+                    koreksiSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Menyimpan...';
+                });
+            }
         });
     </script>
 <?php endif; ?>

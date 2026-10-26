@@ -177,7 +177,7 @@ class ModelServiceDp extends Model
         }
 
         $builder = $this->db->table($this->table . ' sd')
-            ->select('sd.id, sd.kode_dp, sd.tanggal, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.status, sd.keterangan, s.idservice, s.no_service, s.status_service, s.tipe_hp, p.nama AS nama_pelanggan, u.NAMA_UNIT AS nama_unit, b.nama_bank, ' . implode(', ', $refundSelect))
+            ->select('sd.id, sd.kode_dp, sd.tanggal, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.status, sd.keterangan, s.idservice, s.no_service, s.status_service, s.unit_idunit, s.tipe_hp, p.nama AS nama_pelanggan, u.NAMA_UNIT AS nama_unit, b.nama_bank, ' . implode(', ', $refundSelect))
             ->select($sparepartPendingSelect, false)
             ->select(((int) $penjualanPunyaLinkService) . ' AS sparepart_retur_siap', false)
             ->join('service s', 's.idservice = sd.service_idservice')

@@ -982,10 +982,31 @@ class Riwayat_Service extends BaseController
     {
         $idJabatan = session()->get('ID_JABATAN');
         $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        $isAdminRoot = ((int) $idJabatan === 1);
+        $unitList = $this->UnitModel->getUnit();
+
+        // Rekening untuk modal koreksi, dibatasi ke scope tiap unit. Hanya
+        // Admin root yang bisa membuka modal, jadi hanya dia yang butuh daftar.
+        $bankByUnit = [];
+        if ($isAdminRoot) {
+            foreach ($unitList as $u) {
+                $bankByUnit[(int) $u->idunit] = array_map(static function ($bank) {
+                    $nama = trim((string) ($bank->nama_bank ?? ''));
+                    $norek = trim((string) ($bank->norek ?? ''));
+
+                    return [
+                        'idbank' => (string) $bank->idbank,
+                        'nama'   => $norek !== '' ? ($nama . ' - ' . $norek) : $nama,
+                    ];
+                }, $this->BankModel->getBankDalamScopeUnit((int) $u->idunit));
+            }
+        }
 
         return view('template', [
-            'unit'           => $this->UnitModel->getUnit(),
+            'unit'           => $unitList,
             'is_ho'          => $isHO,
+            'is_admin_root'  => $isAdminRoot,
+            'bank_by_unit'   => $bankByUnit,
             'user_unit'      => (int) session('ID_UNIT'),
             'dp_ledger_ada'  => $this->DpService->punyaTabelLedger(),
             'dp_refund_siap' => $this->DpService->refundSiap(),
@@ -1092,6 +1113,49 @@ class Riwayat_Service extends BaseController
             );
         } catch (\Throwable $e) {
             log_message('error', 'Refund DP service #' . $idDp . ' gagal: ' . $e->getMessage());
+            session()->setFlashdata('gagal', $e->getMessage());
+        }
+
+        return redirect()->to(base_url('dp_service'));
+    }
+
+    /** Koreksi salah catat DP service — hanya Admin Root. */
+    public function koreksi_dp_service()
+    {
+        if ((int) session('ID_JABATAN') !== 1) {
+            session()->setFlashdata('gagal', 'Hanya Admin Root yang boleh mengoreksi DP.');
+
+            return redirect()->to(base_url('dp_service'));
+        }
+
+        $rawId = $this->request->getPost('dp_id');
+        $idDp = is_scalar($rawId) ? (int) $rawId : 0;
+        $rawJumlah = $this->request->getPost('jumlah');
+        $metode = $this->request->getPost('metode');
+        $bankId = $this->request->getPost('bank_idbank');
+        $referensi = $this->request->getPost('referensi');
+        $alasan = $this->request->getPost('alasan');
+
+        try {
+            $hasil = $this->DpService->koreksiDp(
+                $idDp,
+                [
+                    'metode'      => is_string($metode) ? $metode : '',
+                    'jumlah'      => is_scalar($rawJumlah) ? $this->rupiahToInt((string) $rawJumlah) : 0,
+                    'bank_idbank' => is_string($bankId) ? $bankId : null,
+                    'referensi'   => is_string($referensi) ? $referensi : null,
+                    'alasan'      => is_string($alasan) ? $alasan : '',
+                ],
+                (int) session('ID_AKUN'),
+                (int) session('ID_JABATAN')
+            );
+
+            session()->setFlashdata(
+                'sukses',
+                'DP berhasil dikoreksi menjadi ' . $hasil['metode'] . ' Rp ' . number_format($hasil['jumlah'], 0, ',', '.') . '.'
+            );
+        } catch (\Throwable $e) {
+            log_message('error', 'Koreksi DP service #' . $idDp . ' gagal: ' . $e->getMessage());
             session()->setFlashdata('gagal', $e->getMessage());
         }
 

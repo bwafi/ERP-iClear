@@ -43,6 +43,12 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - Riwayat garansi: `Riwayat_Service::index2`, `riwayat_service_garansi/export2`; `Status_Service::index/{id}`.
 ### 4.6 DP & Refund
 - `dp_service` + `dp_service_ajax`; `refund_dp_service` (`ServiceDpService`); `DP_SERVICE_MENU` migration.
+- **Koreksi DP salah catat**: `Riwayat_Service::koreksi_dp_service` (POST `dp_service/koreksi`, filter `['auth','csrf']`) → `ServiceDpService::koreksiDp()`. Hanya **Admin Root** (`ID_JABATAN = 1`); role lain tidak melihat tombol "Koreksi" dan ditolak server.
+  - Yang bisa dikoreksi: `metode` (`tunai`/`transfer`), `bank_idbank` + `referensi` (wajib saat transfer, dikosongkan saat tunai), dan `jumlah` (> 0). Tanggal DP tidak diubah.
+  - Bukan kas masuk/keluar baru. Dalam satu transaksi: update `service_dp`, perbaiki dua baris jurnal DP yang ada (akun debit Kas Besar `1010101000` ↔ Kas di Bank `1010102000`, nominal debit/kredit disesuaikan; tanggal jurnal tetap), lalu hitung ulang proyeksi `service.dp_bayar` lewat `proyeksiDpBayar()`.
+  - Jejak audit wajib: tabel `service_dp_koreksi` menyimpan `data_sebelum`, `data_sesudah` (JSON), `alasan` (wajib, maks 120 karakter), `oleh`, `created_at`.
+  - Ditolak bila DP tidak `aktif`, sudah direfund (`refund_idkas_keluar`/`refund_at` terisi), rekening di luar scope unit, atau jurnal DP lama tidak sesuai nominal DP. Nominal tidak boleh diubah setelah service diambil (`status_service = 4`); metode/rekening masih boleh. Nominal juga tidak boleh membuat total DP + pembayaran non-DP melebihi `service.total_service`.
+  - Koreksi tetap boleh walau Tutup Kasir tanggal DP sudah tersimpan; angka closing lama **tidak** dihitung ulang (koreksi Tutup Kasir adalah fitur terpisah). Untuk menghapus DP sepenuhnya, gunakan Refund, bukan nominal 0.
 ### 4.7 Lainnya
 - `Expired_service::index/export/expired_proses`, `Fee_Service::index`, `NotifikasiService::index`, `RiwayatLabaService::index/export`.
 ### 4.8 Refund Uang Service Garansi
@@ -75,6 +81,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 ## 6. Acceptance Criteria
 - [ ] Intake service menolak transaksi aktif kedua; memaksa pelanggan.
 - [ ] DP tersimpan ke ledger `service_dp` + jurnal; refund DP berfungsi.
+- [ ] Admin Root bisa mengoreksi metode/rekening/nominal DP salah catat; role lain ditolak; jurnal, proyeksi `dp_bayar`, dan audit ikut konsisten.
 - [ ] Sparepart terpotong dari stok dan mencatat garansi.
 - [ ] Alur proses→bisa diambil→diambil→dibatalkan berjalan dengan status yang konsisten.
 - [ ] Klaim garansi tercatat & bisa dilihat riwayatnya.
@@ -88,6 +95,8 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 ## 8. Status & Tandai
 - ✅ Terverifikasi: guard transaksi aktif, DP ledger, garansi sparepart, route NET dinonaktifkan, klaim garansi.
 - ✅ Refund klaim garansi: tunai/bank, keputusan kondisi sparepart per baris, kunci sekali refund, dan guard retur supplier. — `GaransiRefundService`; test `GaransiRefundServiceTest`, `GaransiServiceViewTest`, `ReturBarangRusakTest`.
+- ✅ Koreksi DP salah catat: Admin Root saja, jurnal DP diperbaiki in-place, audit `service_dp_koreksi`, nominal terkunci setelah service diambil. — `ServiceDpService::koreksiDp`; test `ServiceDpKoreksiTest`.
+- ⚠️ Koreksi DP tidak menghitung ulang Tutup Kasir yang sudah tersimpan; koreksi Tutup Kasir belum tersedia.
 - ⚠️ Gap tinggi:
   1. `cancel_service` tidak menghapus invoice/detail/pembayaran sparepart → invoice yatim & stok tetap terpotong. — SV-01
   2. Route `service_kerusakan`/`service_sparepart` menunjuk method yang tidak ada. — SV-02
