@@ -855,13 +855,22 @@ class TutupKasir extends BaseController
         // ============================
         // HO SALARY DISTRIBUTION
         // ============================
-        // Agregat gaji HO hanya untuk role lintas cabang (issue #23). Staf
-        // cabang tidak boleh menerimanya, jadi tidak dihitung sama sekali
-        // untuk mereka — hitungannya juga mahal (±650 ms).
-        $hoDistribution = null;
-        if (self::bolehLihatPanelHo((int) $id_jabatan)) {
-            $hoDistribution = (new \App\Services\Payroll\HoSalaryDistributionService())
-                ->calculateDistribution($bulanStr, (string)$tahun);
+        // Selalu dihitung karena laba bersih mengurangi bagian gaji HO unit ini.
+        // Panel agregatnya tetap hanya untuk role lintas cabang (issue #23): yang
+        // dikirim ke mereka `ho_distribution`, role lain hanya `ho_unit_share`
+        // supaya laba bersih unit yang sama tidak berbeda antar role.
+        $hoDistribution = (new \App\Services\Payroll\HoSalaryDistributionService())
+            ->calculateDistribution($bulanStr, (string)$tahun);
+
+        $hoUnitShare = null;
+        foreach ($hoDistribution['per_unit'] ?? [] as $u) {
+            if ((int) $u['idunit'] === $unit) {
+                $hoUnitShare = $u;
+                break;
+            }
+        }
+        if (!self::bolehLihatPanelHo((int) $id_jabatan)) {
+            $hoDistribution = null;
         }
 
         // ==========================
@@ -980,6 +989,7 @@ class TutupKasir extends BaseController
             'selisih_omset'     => $selisih_omset,
             // HO Salary Distribution
             'ho_distribution' => $hoDistribution,
+            'ho_unit_share'   => $hoUnitShare,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }

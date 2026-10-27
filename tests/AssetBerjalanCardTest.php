@@ -23,7 +23,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     /**
      * @param int $unit unit terpilih
      */
-    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null): string
+    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null): string
     {
         $vars = [
             'boleh_pilih_unit' => true,
@@ -44,6 +44,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
             'totalGajiUnit'    => $gaji,
             'gaji_detail'      => $gajiDetail,
             'ho_distribution'  => $hoDistribution,
+            'ho_unit_share'    => $hoUnitShare,
         ];
 
         $r = service('renderer');
@@ -215,14 +216,98 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         }
     }
 
-    /** Lembar posisi: satu persamaan 4 kolom, bukan tumpukan kartu metrik. */
+    /** Lembar posisi: 4 pengurang + satu bar hasil, bukan tumpukan kartu metrik. */
     public function testLembarPosisiMenampilkanPersamaanDanLabaBersih(): void
     {
         $html = $this->render(5, 100000000, 20000000, 10000000, null, $this->hoDistribution(true));
 
-        $this->assertSame(4, substr_count($html, 'class="posisi-cell'), 'persamaan harus 4 kolom');
+        $this->assertSame(5, substr_count($html, 'class="posisi-cell'), 'persamaan harus 5 sel');
         $this->assertStringContainsString('Laba Bersih', $html);
-        $this->assertStringContainsString('Rp 70.000.000', $html, 'laba bersih = omset - biaya - gaji');
+        $this->assertStringContainsString('Gaji HO', $html);
+        $this->assertStringContainsString('Rp 70.000.000', $html, 'tanpa bagian HO: laba = omset - biaya - gaji');
+    }
+
+    /** @return array<string,mixed> bagian HO untuk satu unit */
+    private function shareUnit(int $idunit, float $perkiraan, float $dipotong = 0.0): array
+    {
+        return [
+            'idunit'            => $idunit,
+            'nama'              => 'ICLEAR Genteng',
+            'jenis'             => 'franchise',
+            'is_trial'          => 0,
+            'non_spv_perkiraan' => $perkiraan,
+            'spv_perkiraan'     => 0.0,
+            'non_spv_dipotong'  => $dipotong,
+            'spv_dipotong'      => 0.0,
+            'total_perkiraan'   => $perkiraan,
+            'total_dipotong'    => $dipotong,
+            'catatan'           => '-',
+        ];
+    }
+
+    /** Gaji HO (perkiraan) mengurangi laba bersih; Hak Cabang & Tagihan Center ikut. */
+    public function testLabaBersihDikurangiGajiHoDanTurunanIkut(): void
+    {
+        $dist = $this->hoDistribution(true);
+        $dist['per_unit'][] = $this->shareUnit(5, 5000000.0);
+
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, $dist);
+
+        // laba = 100jt - 20jt - 10jt - 5jt = 65jt
+        $this->assertSame('65.000.000', $this->kartu($html, 'Laba Bersih'));
+        $this->assertSame('5.000.000', $this->kartu($html, 'Gaji HO'));
+        $this->assertSame('39.000.000', $this->kartu($html, 'Hak Cabang'), '60% x 65jt');
+        $this->assertSame('26.000.000', $this->kartu($html, 'Tagihan Center'), '40% x 65jt');
+    }
+
+    /** Nominal payroll yang sudah dipotong menggantikan perkiraan, bukan ditambahkan. */
+    public function testNominalPayrollMenggantikanPerkiraan(): void
+    {
+        $dist = $this->hoDistribution(true);
+        $dist['per_unit'][] = $this->shareUnit(5, 5000000.0, 3000000.0);
+
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, $dist);
+
+        // 100jt - 20jt - 10jt - 3jt (payroll), bukan 5jt (perkiraan) atau 8jt.
+        $this->assertSame('3.000.000', $this->kartu($html, 'Gaji HO'));
+        $this->assertSame('67.000.000', $this->kartu($html, 'Laba Bersih'));
+        $this->assertStringContainsString('data-basis="payroll"', $html);
+        $this->assertStringContainsString('Sudah dipotong payroll unit ini', $html);
+    }
+
+    /** Belum ada potongan payroll: pakai perkiraan dan sebut itu perkiraan. */
+    public function testTanpaPotonganPayrollMemakaiPerkiraan(): void
+    {
+        $dist = $this->hoDistribution(true);
+        $dist['per_unit'][] = $this->shareUnit(5, 5000000.0);
+
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, $dist);
+
+        $this->assertSame('5.000.000', $this->kartu($html, 'Gaji HO'));
+        $this->assertStringContainsString('data-basis="perkiraan"', $html);
+        $this->assertStringContainsString('belum dipotong payroll', $html);
+    }
+
+    /** Tanggungan unit 4 juga memakai laba setelah gaji HO. */
+    public function testTanggunganUnit4IkutSetelahGajiHo(): void
+    {
+        $dist = $this->hoDistribution(true);
+        $dist['per_unit'][] = $this->shareUnit(4, 5000000.0);
+
+        $html = $this->render(4, 100000000, 20000000, 10000000, null, $dist);
+
+        $this->assertSame('13.000.000', $this->kartu($html, 'Total Tanggungan Asset'), '20% x 65jt');
+        $this->assertSame('39.000.000', $this->kartu($html, 'Hak Cabang'));
+    }
+
+    /** Staf cabang tidak menerima panel HO, tapi laba bersihnya tetap sama. */
+    public function testTanpaPanelHoBagianUnitTetapMengurangiLaba(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, null, $this->shareUnit(5, 5000000.0));
+
+        $this->assertSame('65.000.000', $this->kartu($html, 'Laba Bersih'));
+        $this->assertSame('39.000.000', $this->kartu($html, 'Hak Cabang'));
+        $this->assertStringNotContainsString('Beban Head Office', $html, 'panel HO tidak boleh bocor');
     }
 
     /** @return array<string,mixed> */
@@ -296,7 +381,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
                 "{$id} tidak sesuai"
             );
         }
-        $this->assertStringContainsString('Angka ini belum masuk ke Total Gaji dan Laba Bersih', $html);
+        $this->assertStringContainsString('yang mengurangi Laba Bersih', $html);
         $this->assertStringContainsString('ho-row-active', $html);
         $this->assertStringContainsString('Unit ini', $html);
     }

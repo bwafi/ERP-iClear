@@ -287,8 +287,17 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('Beban Head Office', $html);
     }
 
-    /** Rincian HO per unit tidak dibatasi role; SPV tetap hanya membuka unit wilayahnya. */
-    public function testRincianHoPerUnitDirenderUntukSpv(): void
+    /** Staf cabang tidak menerima panel HO, tapi pengurang Gaji HO tetap tampil. */
+    public function testStafCabangTetapMelihatSelGajiHo(): void
+    {
+        $this->sesi(100, 3, 41); // Kepala Toko, bukan role lintas cabang
+        $html = $this->halaman('?bulan=10&tahun=2026');
+
+        $this->assertStringContainsString('Gaji HO', $html, 'laba bersih harus memakai pengurang yang sama');
+        $this->assertStringNotContainsString('Beban Head Office', $html, 'panel agregat HO tidak boleh bocor');
+    }
+
+    /** Rincian HO per unit tidak dibatasi role; SPV tetap hanya membuka unit wilayahnya. */    public function testRincianHoPerUnitDirenderUntukSpv(): void
     {
         $this->sesi(49, 50, 40); // SPV wilayah 1 & 3
         $html = $this->halaman('?unit=3&bulan=9&tahun=2026');

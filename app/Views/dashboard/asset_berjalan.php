@@ -42,23 +42,32 @@ foreach (($list_unit ?? []) as $u) {
 // ---------------------------------------------------------------
 // Kalkulasi nilai metrik (formula bisnis — jangan diubah).
 // ---------------------------------------------------------------
+// Bagian gaji HO unit ini ikut mengurangi laba bersih. Nominal yang sudah
+// benar-benar dipotong payroll menang; selama belum ada, dipakai perkiraan.
+// Controller mengirimnya terpisah dari panel HO supaya staf cabang memakai
+// angka yang sama walau panelnya tidak dirender untuk mereka.
+$hoUnitShare = $ho_unit_share ?? null;
+if ($hoUnitShare === null) {
+    foreach (($ho_distribution['per_unit'] ?? []) as $u) {
+        if ((int) ($u['idunit'] ?? 0) === (int) $selected_unit) {
+            $hoUnitShare = $u;
+            break;
+        }
+    }
+}
+$hoDipotongPayroll = (float) ($hoUnitShare['total_dipotong'] ?? 0);
+$hoPotongan = $hoDipotongPayroll > 0
+    ? $hoDipotongPayroll
+    : (float) ($hoUnitShare['total_perkiraan'] ?? 0);
+
+$profitNett = $omset_bulan - $pengeluaran - $totalGajiUnit - $hoPotongan;
+
+// Turunan memakai laba bersih setelah gaji HO, satu basis angka.
 $tanggunganAsset = 0;
 if ($selected_unit == 4) {
-    $tanggunganAsset = (($omset_bulan - $pengeluaran - $totalGajiUnit) * 20 / 100);
+    $tanggunganAsset = $profitNett * 20 / 100;
 } elseif (in_array($selected_unit, [1, 2])) {
     $tanggunganAsset = $hariDalamBulan * 355000;
-}
-
-$profitNett = $omset_bulan - $pengeluaran - $totalGajiUnit;
-
-// Bagian gaji HO untuk unit yang sedang dibuka (hanya tersedia bila
-// controller mengirim rincian per unit).
-$hoUnitShare = null;
-foreach (($ho_distribution['per_unit'] ?? []) as $u) {
-    if ((int) ($u['idunit'] ?? 0) === (int) $selected_unit) {
-        $hoUnitShare = $u;
-        break;
-    }
 }
 
 $hakCabang = 0;
@@ -336,7 +345,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         }
     }
 
-    /* Lembar posisi: satu baris persamaan + satu strip kewajiban. */
+    /* Lembar posisi: satu baris pengurang + satu strip kewajiban. */
     .posisi-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -350,10 +359,13 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         padding-left: 0;
         border-left: 0;
     }
-    .posisi-cell:last-child {
+    .posisi-cell:nth-child(4) {
         padding-right: 0;
     }
+    /* Hasil jadi bar penutup selebar persamaan di atasnya. */
     .posisi-cell.posisi-hasil {
+        grid-column: 1 / -1;
+        margin-top: 1rem;
         padding: 1rem 1.25rem;
         border: 1px solid var(--bs-border-color);
         border-radius: .85rem;
@@ -825,13 +837,13 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 <div class="d-flex align-items-end justify-content-between mb-2">
     <div>
         <h5 class="fw-bold text-dark mb-0">Posisi unit</h5>
-        <small class="text-muted">Omset dikurangi biaya terkontrol dan gaji bulan ini</small>
+        <small class="text-muted">Omset dikurangi biaya terkontrol, gaji unit, dan gaji HO</small>
     </div>
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3 p-md-4">
-        <div class="posisi-grid" role="group" aria-label="Rumus laba bersih: omset dikurangi biaya terkontrol dikurangi total gaji">
+        <div class="posisi-grid" role="group" aria-label="Rumus laba bersih: omset dikurangi biaya terkontrol, total gaji, dan gaji HO">
             <!-- Omset -->
             <div class="posisi-cell">
                 <h6 class="posisi-label">Omset Bulan Ini</h6>
@@ -917,6 +929,25 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <?php endif; ?>
             </div>
 
+            <!-- Gaji HO (perkiraan bagian unit ini) -->
+            <div class="posisi-cell">
+                <h6 class="posisi-label">Gaji HO</h6>
+                <div class="posisi-value-row">
+                    <span class="posisi-op" aria-hidden="true">&minus;</span>
+                    <span class="posisi-value metric-figure text-danger" id="posisiHoPotongan"
+                          data-basis="<?= $hoDipotongPayroll > 0 ? 'payroll' : ($hoPotongan > 0 ? 'perkiraan' : 'nihil') ?>">Rp <?= number_format($hoPotongan, 0, ',', '.') ?></span>
+                </div>
+                <div class="posisi-note">
+                    <?php if ($hoDipotongPayroll > 0): ?>
+                        Sudah dipotong payroll unit ini
+                    <?php elseif ($hoPotongan > 0): ?>
+                        Perkiraan &mdash; belum dipotong payroll
+                    <?php else: ?>
+                        Unit ini tidak menanggung gaji HO
+                    <?php endif; ?>
+                </div>
+            </div>
+
             <!-- Hasil -->
             <div class="posisi-cell posisi-hasil">
                 <h6 class="posisi-label">Laba Bersih</h6>
@@ -924,7 +955,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     <span class="posisi-op" aria-hidden="true">=</span>
                     <span class="posisi-value metric-figure <?= $profitNett >= 0 ? 'text-success' : 'text-danger' ?>">Rp <?= number_format($profitNett, 0, ',', '.') ?></span>
                 </div>
-                <div class="posisi-note">Dasar Hak Cabang &amp; Tagihan Center</div>
+                <div class="posisi-note">Setelah gaji HO &middot; dasar Hak Cabang &amp; Tagihan Center</div>
             </div>
         </div>
     </div>
@@ -1027,7 +1058,11 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                         <div class="ho-unit-share-foot">
                             <span class="ho-unit-share-note">
                                 <iconify-icon icon="solar:info-circle-bold-duotone" class="align-middle"></iconify-icon>
-                                Angka ini belum masuk ke Total Gaji dan Laba Bersih unit di halaman ini.
+                                <?php if ($hoDipotongPayroll > 0): ?>
+                                    Nominal yang sudah dipotong payroll inilah yang mengurangi Laba Bersih.
+                                <?php else: ?>
+                                    Perkiraan ini yang mengurangi Laba Bersih, dan akan diganti nominal payroll begitu sudah dipotong.
+                                <?php endif; ?>
                             </span>
                             <button type="button" class="btn btn-sm btn-light border fw-semibold d-inline-flex align-items-center gap-1"
                                 data-bs-toggle="collapse" data-bs-target="#hoRincianUnit" aria-expanded="false" aria-controls="hoRincianUnit">
@@ -1106,7 +1141,8 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
     <span>
         <strong class="text-dark">Total Tanggungan Asset</strong> — unit 4 = 20% laba; unit 1 &amp; 2 = jumlah hari bulan ini &times; Rp 355.000; unit franchise (3 &amp; 5) = Rp 0.
-        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Biaya Terkontrol &minus; Total Gaji) unit 3, 4, &amp; 5.
+        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Biaya Terkontrol &minus; Total Gaji &minus; Gaji HO) unit 3, 4, &amp; 5.
+        Gaji HO memakai nominal yang sudah dipotong payroll unit ini; selama belum ada, dipakai perkiraan bagian unit.
         <br>
         <strong class="text-dark">Batas 6%</strong> hanya peringatan — transaksi tetap tercatat dan tidak dibatalkan.
     </span>
