@@ -41,7 +41,7 @@ class TutupKasir extends BaseController
      *
      * @return array{list_unit: array, unit: int, id_jabatan: int, boleh_pilih_unit: bool}
      */
-    private function resolveUnitScope(array $roleTambahan = []): array
+    private function resolveUnitScope(array $roleTambahan = [], bool $batasiSpv = false): array
     {
         $id_jabatan = (int) session()->get('ID_JABATAN');
         $id_akun    = (int) session()->get('ID_AKUN');
@@ -59,7 +59,19 @@ class TutupKasir extends BaseController
 
         $bolehPilihUnit = in_array($id_jabatan, array_merge([0, 1, 2, 34, 40], $roleTambahan), true);
 
-        if ($bolehPilihUnit && $id_jabatan === 2 && $direkturUnits !== null) {
+        if ($batasiSpv && $id_jabatan === 40) {
+            // SPV hanya membuka unit wilayahnya (spv_units); unit lain jatuh
+            // ke wilayah pertama. Fallback service: unit sendiri.
+            $allowedIds = (new \App\Services\Finance\FinanceScopeService())->allowedUnitIds();
+            $list_unit  = $allowedIds === []
+                ? []
+                : $unitQuery()->whereIn('idunit', $allowedIds)->orderBy('idunit', 'ASC')->get()->getResultArray();
+            $availableIds = array_map(static fn ($u) => (int) $u['idunit'], $list_unit);
+            $requested    = (int) ($this->request->getGet('unit') ?: 0);
+            $unit         = in_array($requested, $availableIds, true)
+                ? $requested
+                : (int) ($availableIds[0] ?? session()->get('ID_UNIT'));
+        } elseif ($bolehPilihUnit && $id_jabatan === 2 && $direkturUnits !== null) {
             // Direktur terbatas: daftar unit + validasi ?unit= terhadap daftarnya.
             $allowedIds = $direkturUnits;
             $list_unit  = $unitQuery()->whereIn('idunit', $allowedIds)->orderBy('idunit', 'ASC')->get()->getResultArray();
@@ -813,7 +825,7 @@ class TutupKasir extends BaseController
 
     public function assetberjalan()
     {
-        $scope = $this->resolveUnitScope();
+        $scope = $this->resolveUnitScope([], true);
         $list_unit      = $scope['list_unit'];
         $unit           = $scope['unit'];
         $id_jabatan     = $scope['id_jabatan'];
@@ -978,7 +990,7 @@ class TutupKasir extends BaseController
      */
     public function detailPengeluaran()
     {
-        $scope = $this->resolveUnitScope();
+        $scope = $this->resolveUnitScope([], true);
 
         // resolveUnitScope() sudah mem-fallback unit di luar izin; kalau hasilnya
         // beda dengan yang diminta, berarti user tidak berhak atas unit itu.

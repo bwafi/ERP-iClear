@@ -23,7 +23,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     /**
      * @param int $unit unit terpilih
      */
-    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null): string
+    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null): string
     {
         $vars = [
             'boleh_pilih_unit' => true,
@@ -43,6 +43,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
             'pengeluaran'      => $pengeluaran,
             'totalGajiUnit'    => $gaji,
             'gaji_detail'      => $gajiDetail,
+            'ho_distribution'  => $hoDistribution,
         ];
 
         $r = service('renderer');
@@ -160,6 +161,25 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $this->assertSame($this->kartu($html, 'Total Gaji'), $m[1], 'total rincian harus sama dengan kartu');
     }
 
+    /** Ringkasan modal menjumlah komponen, bukan menampilkan angka baru. */
+    public function testRingkasanRincianGajiMenjumlahKomponen(): void
+    {
+        $html = $this->render(1, 100000000, 20000000, 3000000, $this->detailContoh());
+
+        foreach ([
+            'gajiSummaryTotal'     => '3.000.000',
+            'gajiSummaryPokok'     => '1.500.000',
+            'gajiSummaryTunjangan' => '1.350.000',
+            'gajiSummaryTambahan'  => '150.000',
+        ] as $id => $nominal) {
+            $this->assertMatchesRegularExpression(
+                '#id="' . $id . '"[^>]*>\s*Rp\s+' . preg_quote($nominal, '#') . '#',
+                $html,
+                "ringkasan {$id} tidak sesuai"
+            );
+        }
+    }
+
     public function testHanyaAdminRootFinanceManagerYangBolehLihatRincian(): void
     {
         foreach ([0, 1, 34] as $jabatan) {
@@ -193,5 +213,91 @@ class AssetBerjalanCardTest extends CIUnitTestCase
                 "jabatan {$jabatan} tidak boleh melihat panel gaji HO"
             );
         }
+    }
+
+    /** Lembar posisi: satu persamaan 4 kolom, bukan tumpukan kartu metrik. */
+    public function testLembarPosisiMenampilkanPersamaanDanLabaBersih(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, $this->hoDistribution(true));
+
+        $this->assertSame(4, substr_count($html, 'class="posisi-cell'), 'persamaan harus 4 kolom');
+        $this->assertStringContainsString('Laba Bersih', $html);
+        $this->assertStringContainsString('Rp 70.000.000', $html, 'laba bersih = omset - biaya - gaji');
+    }
+
+    /** @return array<string,mixed> */
+    private function hoDistribution(bool $denganPerUnit): array
+    {
+        $dist = [
+            'divisor'              => 3,
+            'pribadi_count'        => 1,
+            'franchise_count'      => 2,
+            'total_perkiraan'      => 6000.0,
+            'total_dipotong'       => 6000.0,
+            'per_employee_share'   => 1000.0,
+            'per_employee_actual'  => 1000.0,
+            'employees'            => [[]],
+        ];
+
+        if ($denganPerUnit) {
+            $dist['per_unit'] = [[
+                'idunit'            => 1,
+                'nama'              => 'ICLEAR Probolinggo',
+                'jenis'             => 'pribadi',
+                'is_trial'          => 0,
+                'non_spv_perkiraan' => 1000.0,
+                'spv_perkiraan'     => 500.0,
+                'non_spv_dipotong'  => 1000.0,
+                'spv_dipotong'      => 500.0,
+                'total_perkiraan'   => 1500.0,
+                'total_dipotong'    => 1500.0,
+                'catatan'           => '-',
+            ]];
+        }
+
+        return $dist;
+    }
+
+    public function testTabelRincianHoDirenderBilaDataPerUnitAda(): void
+    {
+        $html = $this->render(1, 0, 0, 0, null, $this->hoDistribution(true));
+
+        $this->assertStringContainsString('Beban Head Office', $html);
+        $this->assertStringContainsString('Lihat rincian per unit', $html);
+        $this->assertStringContainsString('SPV Wilayah', $html);
+        $this->assertStringContainsString('ICLEAR Probolinggo', $html);
+        $this->assertStringContainsString('1.500', $html, 'total per unit harus tampil');
+        $this->assertStringContainsString('class="collapse mt-3" id="hoRincianUnit"', $html, 'rincian harus terlipat secara default');
+    }
+
+    public function testTabelRincianHoTidakDirenderTanpaDataPerUnit(): void
+    {
+        $html = $this->render(1, 0, 0, 0, null, $this->hoDistribution(false));
+
+        $this->assertStringNotContainsString('hoRincianUnit', $html);
+        $this->assertStringContainsString('Beban Head Office', $html, 'ringkasan tetap tampil');
+    }
+
+    /** Bagian unit ini harus menjawab nominal unit terpilih, bukan cuma total global. */
+    public function testBagianUnitIniMenampilkanNominalUnitTerpilih(): void
+    {
+        $html = $this->render(1, 0, 0, 0, null, $this->hoDistribution(true));
+
+        $this->assertStringContainsString('Bagian gaji HO unit ini', $html);
+        foreach ([
+            'hoUnitShareTotal'    => '1.500',
+            'hoUnitShareNonSpv'   => '1.000',
+            'hoUnitShareSpv'      => '500',
+            'hoUnitShareDipotong' => '1.500',
+        ] as $id => $nominal) {
+            $this->assertMatchesRegularExpression(
+                '#id="' . $id . '"[^>]*>\s*Rp\s+' . preg_quote($nominal, '#') . '#',
+                $html,
+                "{$id} tidak sesuai"
+            );
+        }
+        $this->assertStringContainsString('Angka ini belum masuk ke Total Gaji dan Laba Bersih', $html);
+        $this->assertStringContainsString('ho-row-active', $html);
+        $this->assertStringContainsString('Unit ini', $html);
     }
 }

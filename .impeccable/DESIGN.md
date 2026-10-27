@@ -63,25 +63,33 @@ Route names, field names, multi-position insert, single-position update, unit lo
 
 ---
 
-## /asset_berjalan — Monthly report deck (omset_bulanan language)
+## /asset_berjalan — Lembar Posisi Unit
 
-Status: redesigned 2026-10-15 to share the `/omset_bulanan` report language (page header + breadcrumb · period navigation bar · filter toolbar · tinted metric grid). Brief: `.impeccable/surfaces/dashboard-asset-berjalan.md` (seed `b777bde7`). Scope: `app/Views/dashboard/asset_berjalan.php` only — no controller, route, or formula change.
+Status: redesigned 2026-10-27 as one unit sheet instead of a metric-card deck. Brief: `.impeccable/surfaces/dashboard-asset-berjalan.md` (composition A, seed `d08adaa1`). Scope: `app/Views/dashboard/asset_berjalan.php` plus the HO per-unit payload already delivered by `HoSalaryDistributionService` / `TutupKasir` — no route, formula, or role-gate change.
 
 ### Composition
-- **Masthead** (title + subtitle + breadcrumb) → **period navigation bar** (prev month · current-month pill · next month; the hero) → **filter toolbar** (`unit` / `bulan` / `tahun` GET selects, authorized roles only) → **6-metric report grid** → **formula note** → **HO salary distribution panel**.
-- The 6 committed metrics sit in a 3×2 grid (`col-md-6 col-lg-4`): row 1 is the P&L read (Omset · Pengeluaran · Total Gaji); row 2 is the distribution read (Total Tanggungan Asset · Hak Cabang · Tagihan Center).
-- Cards reuse `/omset_bulanan`'s tinted-tile pattern verbatim: `card border shadow-none h-100 bg-{semantic}-subtle bg-opacity-10 border-{semantic}-subtle`, a tinted uppercase `<h6>` label, a large `tabular-nums` Rupiah value, a tinted icon tile, and a one-line muted note.
+- **Unit masthead**: unit name + jenis/trial badge + period pill + prev/next month, with the existing `unit` / `bulan` / `tahun` GET filter fused into the same card.
+- **One equation card** (`.posisi-grid`, 4 columns ≥1200px, 2×2 below, one column ≤575px): `Omset − Biaya Terkontrol − Total Gaji = Laba Bersih`. Operators sit inline before each value, not as separate grid cells, so the row still reads correctly when stacked. The result cell is tinted (`--bs-tertiary-bg`) and only it gets the full border/radius.
+- **One obligation strip**: Tanggungan · Hak Cabang · Tagihan Center in a single card with cell dividers, not three equal cards.
+- **Beban Head Office** below the obligations: a compact summary (divisor rule, total perkiraan vs dipotong, selected-unit share) and a per-unit table inside a Bootstrap collapse, closed by default. The table folds perkiraan and dipotong into each money cell, four columns total.
+- **Selected unit's HO share is its own block.** A primary-tinted panel states "Bagian gaji HO unit ini" with the unit name, a large estimated amount, then Non-SPV / SPV wilayah / already-deducted payroll facts, and the explicit note that the amount is not yet in Total Gaji or Laba Bersih. The selected row is tinted and badged "Unit ini" in the expanded table.
+- **Rincian Total Gaji** is a payroll register inside the modal: unit/period hero, a four-cell summary (total, gaji pokok, tunjangan, insentif & lembur), one row per karyawan with component columns, and a total footer. Rows become labelled cards below `768px`; the modal is only rendered when `gaji_detail` exists.
+- The formula note closes the page as footnote-level context.
 
 ### Decisions worth keeping
-- **`<h6>` card titles are a test contract, not a style choice.** `tests/AssetBerjalanCardTest.php` matches `<h6[^>]*>Total Tanggungan Asset</h6>` etc. followed by the Rupiah figure — the titles must stay literal (`Hak Cabang`, *not* `Hak Cabang (60%)`; the 60/40 split moved into the note).
-- **Label hues use the readable emphasis variants** (`text-warning-emphasis`, `text-info-emphasis`) where the base `text-*` would fail on the tint; `text-success` / `text-danger` / `text-primary` match `/omset_bulanan`'s own use.
-- **Optional controller vars are null-guarded** (`$pertumbuhan_omset ?? null`) so the view stays warning-free when rendered in isolation by the test, which does not pass the trend fields.
+- **`<h6>` labels are a test contract.** `tests/AssetBerjalanCardTest.php` and `tests/AssetBerjalanFilterTest.php` match `<h6[^>]*>Total Tanggungan Asset</h6>` etc. followed by the Rupiah figure. Keep the literal titles and put the operator glyph outside the `<h6>`.
+- **The equation's second operand is the 6% pool, not all cash-out.** `$pengeluaran` is the controlled-cost pool used by the existing laba formula; `$pengeluaran_full` (outside 6%) is displayed separately with "tidak dikurangkan di laba bersih." Do not merge the two numbers.
+- **HO detail is no longer role-gated per unit.** `per_unit`/`unit_detail` are always sent with the panel; the view only renders the table when the array is non-empty. Panel visibility itself still follows `TutupKasir::bolehLihatPanelHo()` (0/1/2/34/40). The selected unit's share is shown only alongside that table.
+- **SPV page scope is server-side.** On `/asset_berjalan`, role 40 can only open units in `spv_units` (fallback: own unit); an out-of-scope `?unit=` falls back to the first allowed unit. The HO per-unit table remains global.
+- **"Bagian unit ini" is labelled as not included in Total Gaji.** The existing laba formula does not subtract HO payroll; the line says so explicitly instead of implying it was already deducted.
+- **Modal gaji: `<td class="... rincian-gaji-total">Rp …</td>` is a test contract.** The total footer must keep that cell and Rupiah prefix. The four summary figures (`gajiSummaryTotal`, `gajiSummaryPokok`, `gajiSummaryTunjangan`, `gajiSummaryTambahan`) are derived sums of the same `gaji_detail` rows, not new backend data.
+- Optional controller vars stay null-guarded; `$ho_distribution` may arrive as `null` for branch staff.
 
 ### Preserved exactly
-Formulas verbatim — Tanggungan: unit 4 = 20% laba, units 1 & 2 = `hari × 355.000`, franchise (3 & 5) = 0; Hak Cabang = 60% and Tagihan Center = 40% of laba for units 3/4/5. Role gating via `boleh_pilih_unit` (with the same jabatan fallback), month/unit GET params, and the HO distribution panel.
+Formulas verbatim — Tanggungan: unit 4 = 20% laba, units 1 & 2 = `hari × 355.000`, franchise (3 & 5) = 0; Hak Cabang = 60% and Tagihan Center = 40% of laba for units 3/4/5. Role gating, GET month/unit params, expense-detail modal triggers (`data-kelompok="terkontrol"` / `"kebutuhan"`), salary-detail modal, and DataTables server-side endpoint.
 
 ### Verification
-`php -l` clean. `tests/AssetBerjalanCardTest.php` 5/5 PASS (units 2/3/4/5 formulas + the unit-5 no-warning render); an isolated render with the HO panel emits no PHP notices. Detector: disabled in this repo. No new rasters this pass — the build environment has no headless browser (earlier `.impeccable/review/desktop.png` / `mobile.png` predate this change), so geometry/contrast sign-off is pending a browser pass.
+`php -l` clean on view and tests. `AssetBerjalanCardTest` 15/15 PASS (93 assertions) including the 4-cell equation, collapsed HO table, selected-unit HO share, and payroll-register summary checks; `AssetBerjalanFilterTest` 17/17 PASS (59 assertions) including unrestricted per-unit HO detail for SPV and SPV wilayah-only page scope; `HoSalaryDistributionSpvTest` 2/2 and `HoSalaryDistributionCacheTest` 3/3 PASS. Isolated render parsed with DOMDocument: 0 HTML errors, 0 duplicate IDs, `collapse` present without `show`. Impeccable detector: `[]`. No new rasters — the build environment has no headless browser; geometry/contrast sign-off still needs a browser pass.
 ---
 
 ## /finance/rekonsiliasi — Day-index + day-detail console

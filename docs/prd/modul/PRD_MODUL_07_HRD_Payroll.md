@@ -48,6 +48,7 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 9. `PenilaianKPI::attendance_save()` memakai `target_id` dari POST tanpa `EvaluatorAuthorizationService`/scope; `attendance_input` hanya memfilter daftar. — `PenilaianKPI.php` (PR-07)
 10. [🔶] Incentive grup/member/rule dikelola terpisah (`ModelIncentive*` + `IncentiveCalculationService`); integrasi ke payroll belum diverifikasi di dokumen ini.
 11. [⚠️] Alur detail absensi (validasi jarak/radius lokasi, status kehadiran, approval) belum diverifikasi penuh di dokumen ini (belum baca penuh `Absensi.php` & `RiwayatPresensi.php`).
+12. [✅] Distribusi gaji HO di `/asset_berjalan`: pool non-SPV dibagi global (pribadi = 1 bagian, franchise = 1/unit, trial = 0); gaji SPV (jabatan 40) hanya dibebankan ke unit wilayahnya (`spv_units`) yang non-trial. Rincian per unit tidak dibatasi role tambahan; visibilitas panel tetap mengikuti role lintas cabang. Detail aturan: PRD-05 butir 16. — `HoSalaryDistributionService::alokasiKeUnit`; `tests/HoSalaryDistributionSpvTest.php`
 
 ## 6. Acceptance Criteria
 - [ ] Pegawai dapat absen masuk/pulang (normal & manual); riwayat tercatat.
@@ -70,5 +71,5 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
   4. `updateRegister` mengabaikan lock file. — PR-04
   5. `slip_gaji`/`gaji` dapat diakses semua user login; `attendance_save` tanpa otorisasi evaluator. — PR-06/PR-07
   6. `lockPayroll`/`unlockPayroll` tanpa guard role. — PR-08
-- ⚠️ Belum diverifikasi penuh: detail absensi & approval, struktur komponen gaji, distribusi HO, incentive.
-- Test: `PayrollGeneratorUnitTest`, `PayrollRunSummaryTest`, `HoSalaryDistributionCacheTest`, `DetailAbsenPegawaiTanpaWeightTest`, `ManagerKpiTest`. Tidak ada test untuk scope view, bayar ulang, lock `updateRegister`, dan otorisasi slip/attendance.
+- ⚠️ Belum diverifikasi penuh: detail absensi & approval, struktur komponen gaji, incentive.
+- Test: `PayrollGeneratorUnitTest`, `PayrollRunSummaryTest`, `HoSalaryDistributionCacheTest`, `HoSalaryDistributionSpvTest`, `DetailAbsenPegawaiTanpaWeightTest`, `ManagerKpiTest`. Tidak ada test untuk scope view, bayar ulang, lock `updateRegister`, dan otorisasi slip/attendance.

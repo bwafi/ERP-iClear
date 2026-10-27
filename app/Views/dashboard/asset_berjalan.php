@@ -28,9 +28,13 @@ $labelSebelum   = ($namaBulan[$bulanSebelum] ?? '-') . ' ' . $tahunSebelum;
 $pertumbuhanOmset = $pertumbuhan_omset ?? null;
 
 $namaUnitAktif = '';
+$jenisUnitAktif = '';
+$isTrialUnitAktif = false;
 foreach (($list_unit ?? []) as $u) {
     if ((int) ($u['idunit'] ?? 0) === (int) $selected_unit) {
         $namaUnitAktif = (string) ($u['NAMA_UNIT'] ?? '');
+        $jenisUnitAktif = (string) ($u['jenis'] ?? '');
+        $isTrialUnitAktif = (int) ($u['is_trial'] ?? 0) === 1;
         break;
     }
 }
@@ -46,6 +50,16 @@ if ($selected_unit == 4) {
 }
 
 $profitNett = $omset_bulan - $pengeluaran - $totalGajiUnit;
+
+// Bagian gaji HO untuk unit yang sedang dibuka (hanya tersedia bila
+// controller mengirim rincian per unit).
+$hoUnitShare = null;
+foreach (($ho_distribution['per_unit'] ?? []) as $u) {
+    if ((int) ($u['idunit'] ?? 0) === (int) $selected_unit) {
+        $hoUnitShare = $u;
+        break;
+    }
+}
 
 $hakCabang = 0;
 $tagihanCenter = 0;
@@ -321,14 +335,401 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             border-left: 0;
         }
     }
+
+    /* Lembar posisi: satu baris persamaan + satu strip kewajiban. */
+    .posisi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .posisi-cell {
+        min-width: 0;
+        padding: 1rem 1.25rem;
+        border-left: 1px solid var(--bs-border-color);
+    }
+    .posisi-cell:first-child {
+        padding-left: 0;
+        border-left: 0;
+    }
+    .posisi-cell:last-child {
+        padding-right: 0;
+    }
+    .posisi-cell.posisi-hasil {
+        padding: 1rem 1.25rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: .85rem;
+        background: var(--bs-tertiary-bg);
+    }
+    .posisi-label {
+        margin-bottom: .35rem;
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+    .posisi-value-row {
+        display: flex;
+        align-items: baseline;
+        gap: .3rem;
+        min-width: 0;
+    }
+    .posisi-op {
+        flex-shrink: 0;
+        font-size: 1.2rem;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--bs-secondary-color);
+    }
+    .posisi-value {
+        font-size: clamp(1.1rem, 1.6vw, 1.55rem);
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .posisi-note {
+        margin-top: .35rem;
+        font-size: .78rem;
+        color: var(--bs-secondary-color);
+    }
+    @media (max-width: 1199.98px) {
+        .posisi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .posisi-cell:nth-child(odd) {
+            padding-left: 0;
+            border-left: 0;
+        }
+        .posisi-cell:nth-child(even) {
+            padding-right: 0;
+        }
+        .posisi-cell:nth-child(n+3) {
+            padding-top: 1rem;
+            border-top: 1px solid var(--bs-border-color);
+        }
+        .posisi-cell.posisi-hasil {
+            padding: 1rem;
+        }
+    }
+    @media (max-width: 575.98px) {
+        .posisi-grid {
+            grid-template-columns: 1fr;
+        }
+        .posisi-cell {
+            padding: 1rem 0 0;
+            border-left: 0;
+            border-top: 1px solid var(--bs-border-color);
+        }
+        .posisi-cell:first-child {
+            padding-top: 0;
+            border-top: 0;
+        }
+        .posisi-cell.posisi-hasil {
+            padding: 1rem;
+        }
+    }
+    .kewajiban-cell {
+        padding: 1.25rem;
+    }
+    @media (min-width: 768px) {
+        .kewajiban-cell + .kewajiban-cell {
+            border-left: 1px solid var(--bs-border-color);
+        }
+    }
+    @media (max-width: 767.98px) {
+        .kewajiban-cell + .kewajiban-cell {
+            border-top: 1px solid var(--bs-border-color);
+        }
+    }
+    .ho-table thead th {
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    .ho-table td {
+        vertical-align: top;
+    }
+    .ho-table tbody tr.ho-row-active > td {
+        background: var(--bs-primary-bg-subtle);
+    }
+    .ho-unit-share {
+        margin-top: 1rem;
+        padding: 1rem 1.1rem;
+        border: 1px solid var(--bs-primary-border-subtle);
+        border-radius: .9rem;
+        background: var(--bs-primary-bg-subtle);
+    }
+    .ho-unit-share-label {
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-primary-text-emphasis);
+    }
+    .ho-unit-share-amount {
+        margin-top: .15rem;
+        font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+        font-weight: 700;
+        line-height: 1.15;
+        color: var(--bs-emphasis-color);
+    }
+    .ho-unit-share-sub {
+        margin-top: .15rem;
+        font-size: .8rem;
+        color: var(--bs-body-color);
+    }
+    .ho-unit-share-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .75rem;
+        margin-top: .85rem;
+        padding-top: .85rem;
+        border-top: 1px solid var(--bs-primary-border-subtle);
+    }
+    .ho-unit-share-fact span {
+        display: block;
+        font-size: .7rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-primary-text-emphasis);
+    }
+    .ho-unit-share-fact strong {
+        font-size: .9rem;
+        font-weight: 700;
+        color: var(--bs-body-color);
+    }
+    .ho-unit-share-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-top: .85rem;
+    }
+    .ho-unit-share-note {
+        font-size: .78rem;
+        color: var(--bs-body-color);
+    }
+    @media (max-width: 767.98px) {
+        .ho-unit-share-grid {
+            grid-template-columns: 1fr;
+            gap: .5rem;
+        }
+        .ho-unit-share-foot .btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    <?php if (isset($gaji_detail)): ?>
+    /* Rincian gaji: register payroll di dalam modal, bukan tabel admin polos. */
+    #modalRincianGaji .gaji-hero {
+        background: var(--bs-danger-bg-subtle);
+        border-bottom: 1px solid var(--bs-danger-border-subtle);
+    }
+    #modalRincianGaji .gaji-hero-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-danger-border-subtle);
+        color: var(--bs-danger-text-emphasis);
+    }
+    #modalRincianGaji .gaji-hero-meta {
+        color: var(--bs-emphasis-color);
+    }
+    #modalRincianGaji .gaji-summary {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr 1fr 1fr;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    #modalRincianGaji .gaji-summary > div {
+        padding: .85rem 1rem;
+        min-width: 0;
+    }
+    #modalRincianGaji .gaji-summary > div + div {
+        border-left: 1px solid var(--bs-border-color);
+    }
+    #modalRincianGaji .gaji-summary-label,
+    #modalRincianGaji .gaji-section-label {
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color);
+    }
+    #modalRincianGaji .gaji-summary-value {
+        font-size: clamp(.95rem, 2.2vw, 1.25rem);
+        font-weight: 700;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+    #modalRincianGaji .gaji-summary-value.is-total {
+        color: var(--bs-danger-text-emphasis);
+    }
+    #modalRincianGaji .gaji-table {
+        margin-bottom: 0;
+    }
+    #modalRincianGaji .gaji-table thead th {
+        padding: .6rem .5rem;
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        color: var(--bs-secondary-color);
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    #modalRincianGaji .gaji-table tbody td {
+        padding: .7rem .5rem;
+        vertical-align: middle;
+        border-color: var(--bs-border-color);
+    }
+    #modalRincianGaji .gaji-table tbody tr:hover {
+        background: var(--bs-tertiary-bg);
+    }
+    #modalRincianGaji .gaji-person-name {
+        font-weight: 600;
+        color: var(--bs-body-color);
+    }
+    #modalRincianGaji .gaji-person-role {
+        margin-top: .1rem;
+        font-size: .75rem;
+        color: var(--bs-secondary-color);
+    }
+    #modalRincianGaji .gaji-amount {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -.01em;
+        white-space: nowrap;
+    }
+    #modalRincianGaji .gaji-table tbody td.gaji-total {
+        font-weight: 700;
+        color: var(--bs-danger-text-emphasis);
+        border-left: 1px solid var(--bs-border-color);
+    }
+    #modalRincianGaji .gaji-table tfoot td {
+        padding: .8rem .5rem;
+        background: var(--bs-tertiary-bg);
+        border-top: 1px solid var(--bs-border-color);
+    }
+    #modalRincianGaji .gaji-grand-total {
+        font-weight: 700;
+        color: var(--bs-danger-text-emphasis);
+    }
+    #modalRincianGaji .gaji-note {
+        font-size: .78rem;
+        color: var(--bs-secondary-color);
+    }
+    #modalRincianGaji .gaji-empty {
+        padding: 2.5rem 1rem;
+        text-align: center;
+    }
+    #modalRincianGaji .gaji-empty-icon {
+        color: var(--bs-secondary-color);
+    }
+    @media (max-width: 767.98px) {
+        #modalRincianGaji .gaji-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        #modalRincianGaji .gaji-summary > div:nth-child(odd) {
+            border-left: 0;
+        }
+        #modalRincianGaji .gaji-summary > div:nth-child(n+3) {
+            border-top: 1px solid var(--bs-border-color);
+        }
+        #modalRincianGaji .gaji-table thead {
+            display: none;
+        }
+        #modalRincianGaji .gaji-table,
+        #modalRincianGaji .gaji-table tbody,
+        #modalRincianGaji .gaji-table tfoot,
+        #modalRincianGaji .gaji-table tr,
+        #modalRincianGaji .gaji-table td {
+            display: block;
+            width: 100%;
+        }
+        #modalRincianGaji .gaji-table tbody tr {
+            margin-bottom: .65rem;
+            padding: .85rem;
+            border: 1px solid var(--bs-border-color);
+            border-radius: .8rem;
+            background: var(--bs-body-bg);
+        }
+        #modalRincianGaji .gaji-table tbody td {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: .28rem 0;
+            border: 0;
+            text-align: right;
+        }
+        #modalRincianGaji .gaji-table tbody td::before {
+            content: attr(data-label);
+            font-size: .78rem;
+            font-weight: 600;
+            color: var(--bs-secondary-color);
+        }
+        #modalRincianGaji .gaji-table tbody td:first-child {
+            display: block;
+            margin-bottom: .35rem;
+            padding-bottom: .55rem;
+            border-bottom: 1px solid var(--bs-border-color);
+            text-align: left;
+        }
+        #modalRincianGaji .gaji-table tbody td:first-child::before {
+            display: none;
+        }
+        #modalRincianGaji .gaji-table tbody td.gaji-total {
+            margin-top: .35rem;
+            padding-top: .55rem;
+            border-top: 1px solid var(--bs-border-color);
+            border-left: 0;
+        }
+        #modalRincianGaji .gaji-table tfoot tr {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: .85rem;
+            border: 1px solid var(--bs-border-color);
+            border-radius: .8rem;
+            background: var(--bs-tertiary-bg);
+        }
+        #modalRincianGaji .gaji-table tfoot td {
+            padding: 0;
+            background: transparent;
+            border: 0;
+        }
+        #modalRincianGaji .gaji-table tfoot td[colspan] {
+            text-align: left;
+        }
+    }
+    @media (max-width: 575.98px) {
+        #modalRincianGaji .gaji-summary {
+            grid-template-columns: 1fr;
+        }
+        #modalRincianGaji .gaji-summary > div + div {
+            border-left: 0;
+            border-top: 1px solid var(--bs-border-color);
+        }
+    }
+    <?php endif; ?>
 </style>
 
-<!-- Page Toolbar -->
+<!-- Lembar posisi unit: header, persamaan, kewajiban -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3 p-md-4">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
             <div>
-                <nav aria-label="breadcrumb" class="mb-1">
+                <nav aria-label="breadcrumb" class="mb-2">
                     <ol class="breadcrumb mb-0 fs-2">
                         <li class="breadcrumb-item">
                             <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a>
@@ -336,8 +737,18 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                         <li class="breadcrumb-item text-primary fw-medium active" aria-current="page">Asset Berjalan</li>
                     </ol>
                 </nav>
-                <h4 class="fw-bold mb-0 text-dark">Asset Berjalan</h4>
-                <small class="text-muted">Ringkasan omset, biaya, dan pembagian hasil per cabang</small>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <h4 class="fw-bold mb-0 text-dark">
+                        <?= esc($namaUnitAktif !== '' ? $namaUnitAktif : ('Unit ' . $selected_unit)) ?>
+                    </h4>
+                    <?php if ($jenisUnitAktif !== ''): ?>
+                        <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill px-3 py-2"><?= esc(ucfirst($jenisUnitAktif)) ?></span>
+                    <?php endif; ?>
+                    <?php if ($isTrialUnitAktif): ?>
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill px-3 py-2">Trial</span>
+                    <?php endif; ?>
+                </div>
+                <small class="text-muted">Ringkasan omset, biaya, dan pembagian hasil unit</small>
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -374,7 +785,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 
         <?php if ($bolehPilihUnit): ?>
             <form method="GET" class="row g-2 align-items-end mt-3 pt-3 border-top">
-                <div class="col-12 col-md-5">
+                <div class="col-12 col-md-4">
                     <label for="filterUnit" class="form-label fs-2 fw-semibold text-muted mb-1">Unit cabang</label>
                     <select id="filterUnit" name="unit" class="form-select" onchange="this.form.submit()">
                         <?php foreach ($list_unit as $u): ?>
@@ -400,7 +811,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                         <?php endfor; ?>
                     </select>
                 </div>
-                <div class="col-12 col-md-2 d-grid">
+                <div class="col-12 col-md-3 d-grid">
                     <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-1">
                         <iconify-icon icon="solar:filter-bold-duotone" class="align-middle"></iconify-icon>
                         Tampilkan
@@ -413,27 +824,22 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 
 <div class="d-flex align-items-end justify-content-between mb-2">
     <div>
-        <h5 class="fw-bold text-dark mb-0">Ringkasan</h5>
-        <small class="text-muted">Periode <?= esc($periodeLabelId) ?></small>
+        <h5 class="fw-bold text-dark mb-0">Posisi unit</h5>
+        <small class="text-muted">Omset dikurangi biaya terkontrol dan gaji bulan ini</small>
     </div>
 </div>
 
-<div class="row g-3 mb-4">
-    <!-- Omset Bulan Ini -->
-    <div class="col-md-6 col-xl-3">
-        <div class="card border shadow-none h-100 bg-success-subtle bg-opacity-10 border-success-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-success fw-bold d-block mb-1">Omset Bulan Ini</h6>
-                        <h3 class="fw-bold mb-0 text-success metric-figure">Rp <?= number_format($omset_bulan ?? 0, 0, ',', '.') ?></h3>
-                    </div>
-                    <div class="p-3 bg-success-subtle rounded-3 text-success d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:chart-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-3 p-md-4">
+        <div class="posisi-grid" role="group" aria-label="Rumus laba bersih: omset dikurangi biaya terkontrol dikurangi total gaji">
+            <!-- Omset -->
+            <div class="posisi-cell">
+                <h6 class="posisi-label">Omset Bulan Ini</h6>
+                <div class="posisi-value-row">
+                    <span class="posisi-value metric-figure text-success">Rp <?= number_format($omset_bulan ?? 0, 0, ',', '.') ?></span>
                 </div>
-                <small class="text-muted">
-                    Periode <?= esc($periodeLabelId) ?>
+                <div class="posisi-note">
+                    vs <?= esc($labelSebelum) ?>
                     <?php if ($pertumbuhanOmset !== null): ?>
                         &middot;
                         <?php if ($pertumbuhanOmset > 0): ?>
@@ -444,93 +850,81 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                             <span class="text-muted">&plusmn;0%</span>
                         <?php endif; ?>
                     <?php endif; ?>
-                </small>
-            </div>
-        </div>
-    </div>
-
-    <!-- Biaya Terkontrol (Maks 6%) -->
-    <div class="col-md-6 col-xl-3">
-        <div class="card border shadow-none h-100 bg-warning-subtle bg-opacity-10 border-warning-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-warning-emphasis fw-bold d-block mb-1">Biaya Terkontrol (Maks 6%)</h6>
-                        <h3 class="fw-bold mb-0 text-warning-emphasis metric-figure">Rp <?= number_format($pengeluaran ?? 0, 0, ',', '.') ?></h3>
-                    </div>
-                    <div class="p-3 bg-warning-subtle rounded-3 text-warning-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:card-send-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
                 </div>
-                <small class="text-muted">Realisasi biaya operasional kecil unit periode ini</small>
+            </div>
+
+            <!-- Biaya terkontrol (yang dikurangkan dari laba) -->
+            <div class="posisi-cell">
+                <h6 class="posisi-label">Biaya Terkontrol (Maks 6%)</h6>
+                <div class="posisi-value-row">
+                    <span class="posisi-op" aria-hidden="true">&minus;</span>
+                    <span class="posisi-value metric-figure text-warning-emphasis">Rp <?= number_format($pengeluaran ?? 0, 0, ',', '.') ?></span>
+                </div>
                 <div class="progress mt-2" style="height: 6px;" role="progressbar"
                     aria-label="Rasio biaya terkontrol terhadap batas 6%"
                     aria-valuenow="<?= (int) round(min(100, $rasioBiayaTerkontrol)) ?>"
                     aria-valuemin="0" aria-valuemax="100">
                     <div class="progress-bar bg-<?= $warnaBiayaTerkontrol ?>" style="width: <?= number_format(min(100, $rasioBiayaTerkontrol), 1, '.', '') ?>%"></div>
                 </div>
-                <small class="text-<?= $warnaBiayaTerkontrol ?> fw-semibold d-block mt-1">
-                    <?= number_format($rasioBiayaTerkontrol, 1, ',', '.') ?>% dari batas — <?= $statusBiayaTerkontrol ?>
-                </small>
+                <div class="posisi-note">
+                    <span class="text-<?= $warnaBiayaTerkontrol ?> fw-semibold">
+                        <?= number_format($rasioBiayaTerkontrol, 1, ',', '.') ?>% dari batas — <?= $statusBiayaTerkontrol ?>
+                    </span>
+                </div>
                 <button type="button"
-                    class="btn btn-sm btn-outline-warning fw-semibold mt-3 align-self-start d-inline-flex align-items-center gap-1"
+                    class="btn btn-sm btn-outline-warning fw-semibold mt-2 d-inline-flex align-items-center gap-1"
                     data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
                     data-kelompok="terkontrol" data-judul="Biaya Terkontrol (Maks 6%)"
-                    data-warna="warning" data-icon="solar:card-send-bold-duotone">
+                    data-warna="warning" data-icon="solar:card-send-bold-duotone"
+                    aria-label="Detail biaya terkontrol 6%">
                     <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
                     Detail
                 </button>
-            </div>
-        </div>
-    </div>
 
-    <!-- Biaya Kebutuhan (Di Luar 6%) -->
-    <div class="col-md-6 col-xl-3">
-        <div class="card border shadow-none h-100 bg-secondary-subtle bg-opacity-10 border-secondary-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-secondary-emphasis fw-bold d-block mb-1">Biaya Kebutuhan (Di Luar 6%)</h6>
-                        <h3 class="fw-bold mb-0 text-secondary-emphasis metric-figure">Rp <?= number_format($pengeluaran_full ?? 0, 0, ',', '.') ?></h3>
+                <!-- Biaya di luar 6%: informasi, tidak dikurangkan di rumus laba -->
+                <div class="mt-3 pt-3 border-top">
+                    <h6 class="posisi-label mb-1">Biaya Kebutuhan (Di Luar 6%)</h6>
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <span class="fs-2 fw-semibold metric-figure text-secondary-emphasis">Rp <?= number_format($pengeluaran_full ?? 0, 0, ',', '.') ?></span>
+                        <button type="button"
+                            class="btn btn-sm btn-outline-secondary fw-semibold d-inline-flex align-items-center gap-1"
+                            data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
+                            data-kelompok="kebutuhan" data-judul="Biaya Kebutuhan (Di Luar 6%)"
+                            data-warna="secondary" data-icon="solar:wallet-money-bold-duotone"
+                            aria-label="Detail biaya kebutuhan di luar 6%">
+                            <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                            Detail
+                        </button>
                     </div>
-                    <div class="p-3 bg-secondary-subtle rounded-3 text-secondary-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:wallet-money-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
+                    <div class="fs-2 text-muted mt-1">Ditampilkan terpisah, tidak dikurangkan di laba bersih.</div>
                 </div>
-                <small class="text-muted">Seluruh kas keluar di luar biaya terkontrol (termasuk HPP, SDM, sewa, cicilan)</small>
-                <button type="button"
-                    class="btn btn-sm btn-outline-secondary fw-semibold mt-3 align-self-start d-inline-flex align-items-center gap-1"
-                    data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
-                    data-kelompok="kebutuhan" data-judul="Biaya Kebutuhan (Di Luar 6%)"
-                    data-warna="secondary" data-icon="solar:wallet-money-bold-duotone">
-                    <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
-                    Detail
-                </button>
             </div>
-        </div>
-    </div>
 
-    <!-- Total Gaji -->
-    <div class="col-md-6 col-xl-3">
-        <div class="card border shadow-none h-100 bg-danger-subtle bg-opacity-10 border-danger-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-danger fw-bold d-block mb-1">Total Gaji</h6>
-                        <h3 class="fw-bold mb-0 text-danger metric-figure">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></h3>
-                    </div>
-                    <div class="p-3 bg-danger-subtle rounded-3 text-danger d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:hand-money-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
+            <!-- Total gaji unit -->
+            <div class="posisi-cell">
+                <h6 class="posisi-label">Total Gaji</h6>
+                <div class="posisi-value-row">
+                    <span class="posisi-op" aria-hidden="true">&minus;</span>
+                    <span class="posisi-value metric-figure text-danger">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></span>
                 </div>
-                <small class="text-muted">Beban gaji karyawan cabang</small>
+                <div class="posisi-note">Beban gaji karyawan cabang</div>
                 <?php if (isset($gaji_detail)): ?>
-                    <button type="button" class="btn btn-sm bg-danger-subtle text-danger fw-semibold mt-2 align-self-start"
+                    <button type="button" class="btn btn-sm btn-outline-danger fw-semibold mt-2 d-inline-flex align-items-center gap-1"
                             data-bs-toggle="modal" data-bs-target="#modalRincianGaji">
                         <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
                         Lihat rincian
                     </button>
                 <?php endif; ?>
+            </div>
+
+            <!-- Hasil -->
+            <div class="posisi-cell posisi-hasil">
+                <h6 class="posisi-label">Laba Bersih</h6>
+                <div class="posisi-value-row">
+                    <span class="posisi-op" aria-hidden="true">=</span>
+                    <span class="posisi-value metric-figure <?= $profitNett >= 0 ? 'text-success' : 'text-danger' ?>">Rp <?= number_format($profitNett, 0, ',', '.') ?></span>
+                </div>
+                <div class="posisi-note">Dasar Hak Cabang &amp; Tagihan Center</div>
             </div>
         </div>
     </div>
@@ -538,125 +932,185 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 
 <div class="d-flex align-items-end justify-content-between mb-2">
     <div>
-        <h5 class="fw-bold text-dark mb-0">Pembagian Hasil</h5>
+        <h5 class="fw-bold text-dark mb-0">Kewajiban &amp; bagi hasil</h5>
         <small class="text-muted">Dihitung dari laba bersih periode ini</small>
     </div>
 </div>
 
-<div class="row g-3 mb-4">
-    <!-- Total Tanggungan Asset -->
-    <div class="col-md-4">
-        <div class="card border shadow-none h-100 bg-primary-subtle bg-opacity-10 border-primary-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-primary fw-bold d-block mb-1">Total Tanggungan Asset</h6>
-                        <h3 class="fw-bold mb-0 text-primary metric-figure">Rp <?= number_format($tanggunganAsset, 0, ',', '.') ?></h3>
-                    </div>
-                    <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:vault-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
-                </div>
-                <small class="text-muted">Alokasi tanggungan asset berjalan</small>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="row g-0">
+        <!-- Total Tanggungan Asset -->
+        <div class="col-md-4 kewajiban-cell">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <iconify-icon icon="solar:vault-bold-duotone" class="fs-5 text-primary"></iconify-icon>
+                <h6 class="text-uppercase fs-2 text-primary fw-bold mb-0">Total Tanggungan Asset</h6>
             </div>
+            <div class="fs-4 fw-bold text-primary metric-figure">Rp <?= number_format($tanggunganAsset, 0, ',', '.') ?></div>
+            <small class="text-muted">Alokasi tanggungan asset berjalan</small>
         </div>
-    </div>
 
-    <!-- Hak Cabang -->
-    <div class="col-md-4">
-        <div class="card border shadow-none h-100 bg-info-subtle bg-opacity-10 border-info-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-info-emphasis fw-bold d-block mb-1">Hak Cabang</h6>
-                        <h3 class="fw-bold mb-0 text-info-emphasis metric-figure">Rp <?= number_format($hakCabang, 0, ',', '.') ?></h3>
-                    </div>
-                    <div class="p-3 bg-info-subtle rounded-3 text-info-emphasis d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:shop-2-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
-                </div>
-                <small class="text-muted">Bagian 60% untuk pengelola cabang</small>
+        <!-- Hak Cabang -->
+        <div class="col-md-4 kewajiban-cell">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <iconify-icon icon="solar:shop-2-bold-duotone" class="fs-5 text-info-emphasis"></iconify-icon>
+                <h6 class="text-uppercase fs-2 text-info-emphasis fw-bold mb-0">Hak Cabang</h6>
             </div>
+            <div class="fs-4 fw-bold text-info-emphasis metric-figure">Rp <?= number_format($hakCabang, 0, ',', '.') ?></div>
+            <small class="text-muted">Bagian 60% untuk pengelola cabang</small>
         </div>
-    </div>
 
-    <!-- Tagihan Center -->
-    <div class="col-md-4">
-        <div class="card border shadow-none h-100 bg-primary-subtle bg-opacity-10 border-primary-subtle">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                        <h6 class="text-uppercase fs-2 text-primary fw-bold d-block mb-1">Tagihan Center</h6>
-                        <h3 class="fw-bold mb-0 text-primary metric-figure">Rp <?= number_format($tagihanCenter, 0, ',', '.') ?></h3>
-                    </div>
-                    <div class="p-3 bg-primary-subtle rounded-3 text-primary d-flex align-items-center justify-content-center flex-shrink-0">
-                        <iconify-icon icon="solar:buildings-3-bold-duotone" width="28" height="28"></iconify-icon>
-                    </div>
-                </div>
-                <small class="text-muted">Kewajiban penyetoran 40% ke Head Office</small>
+        <!-- Tagihan Center -->
+        <div class="col-md-4 kewajiban-cell">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <iconify-icon icon="solar:buildings-3-bold-duotone" class="fs-5 text-primary"></iconify-icon>
+                <h6 class="text-uppercase fs-2 text-primary fw-bold mb-0">Tagihan Center</h6>
             </div>
+            <div class="fs-4 fw-bold text-primary metric-figure">Rp <?= number_format($tagihanCenter, 0, ',', '.') ?></div>
+            <small class="text-muted">Kewajiban penyetoran 40% ke Head Office</small>
         </div>
     </div>
 </div>
 
+<?php if (!empty($ho_distribution) && $ho_distribution['divisor'] > 0): ?>
+    <!-- Beban Head Office: ringkas, rincian per unit bisa dibuka -->
+    <div class="d-flex align-items-end justify-content-between mb-2">
+        <div>
+            <h5 class="fw-bold text-dark mb-0">Beban Head Office</h5>
+            <small class="text-muted">Pembagian gaji HO ke unit, terpisah dari gaji cabang</small>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div style="max-width: 62ch;">
+                    <p class="fs-2 text-muted mb-0">
+                        Pool non-SPV dibagi <strong class="text-dark"><?= (int) $ho_distribution['divisor'] ?> bagian</strong>
+                        (<?= (int) $ho_distribution['pribadi_count'] ?> pribadi + <?= (int) $ho_distribution['franchise_count'] ?> franchise non-trial).
+                        Gaji SPV hanya dibebankan ke unit wilayahnya yang non-trial.
+                    </p>
+                </div>
+                <div class="text-md-end">
+                    <div class="fs-2 text-uppercase fw-semibold text-muted">Total gaji HO &middot; perkiraan</div>
+                    <div class="posisi-value metric-figure text-dark">Rp <?= number_format($ho_distribution['total_perkiraan'] ?? 0, 0, ',', '.') ?></div>
+                    <div class="fs-2 text-muted mt-1">
+                        Dipotong payroll: <span class="fw-semibold text-success metric-figure">Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?></span>
+                        &middot; <?= count($ho_distribution['employees'] ?? []) ?> karyawan
+                    </div>
+                </div>
+            </div>
+
+            <?php if (!empty($ho_distribution['per_unit'])): ?>
+                <?php if ($hoUnitShare !== null): ?>
+                    <div class="ho-unit-share">
+                        <div class="ho-unit-share-label">Bagian gaji HO unit ini</div>
+                        <div class="ho-unit-share-amount metric-figure" id="hoUnitShareTotal">
+                            Rp <?= number_format($hoUnitShare['total_perkiraan'], 0, ',', '.') ?>
+                        </div>
+                        <div class="ho-unit-share-sub">
+                            Perkiraan beban gaji HO untuk <?= esc($namaUnitAktif ?: ('Unit ' . $selected_unit)) ?>
+                        </div>
+                        <div class="ho-unit-share-grid">
+                            <div class="ho-unit-share-fact">
+                                <span>Non-SPV</span>
+                                <strong class="metric-figure" id="hoUnitShareNonSpv">Rp <?= number_format($hoUnitShare['non_spv_perkiraan'], 0, ',', '.') ?></strong>
+                            </div>
+                            <div class="ho-unit-share-fact">
+                                <span>SPV wilayah</span>
+                                <strong class="metric-figure" id="hoUnitShareSpv">Rp <?= number_format($hoUnitShare['spv_perkiraan'], 0, ',', '.') ?></strong>
+                            </div>
+                            <div class="ho-unit-share-fact">
+                                <span>Sudah dipotong payroll</span>
+                                <strong class="metric-figure" id="hoUnitShareDipotong">Rp <?= number_format($hoUnitShare['total_dipotong'], 0, ',', '.') ?></strong>
+                            </div>
+                        </div>
+                        <div class="ho-unit-share-foot">
+                            <span class="ho-unit-share-note">
+                                <iconify-icon icon="solar:info-circle-bold-duotone" class="align-middle"></iconify-icon>
+                                Angka ini belum masuk ke Total Gaji dan Laba Bersih unit di halaman ini.
+                            </span>
+                            <button type="button" class="btn btn-sm btn-light border fw-semibold d-inline-flex align-items-center gap-1"
+                                data-bs-toggle="collapse" data-bs-target="#hoRincianUnit" aria-expanded="false" aria-controls="hoRincianUnit">
+                                <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                                Lihat rincian per unit
+                            </button>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top">
+                        <div class="fs-2 text-muted">Unit ini tidak termasuk pembagian gaji HO.</div>
+                        <button type="button" class="btn btn-sm btn-light border fw-semibold d-inline-flex align-items-center gap-1"
+                            data-bs-toggle="collapse" data-bs-target="#hoRincianUnit" aria-expanded="false" aria-controls="hoRincianUnit">
+                            <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                            Lihat rincian per unit
+                        </button>
+                    </div>
+                <?php endif; ?>
+
+                <div class="collapse mt-3" id="hoRincianUnit">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0 ho-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Unit</th>
+                                    <th scope="col" class="text-end">Non-SPV</th>
+                                    <th scope="col" class="text-end">SPV Wilayah</th>
+                                    <th scope="col" class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($ho_distribution['per_unit'] as $u): ?>
+                                    <tr class="<?= (int) $u['idunit'] === (int) $selected_unit ? 'ho-row-active' : '' ?>">
+                                        <td>
+                                            <div class="fw-semibold text-dark"><?= esc($u['nama']) ?></div>
+                                            <div class="fs-2 text-muted d-flex flex-wrap align-items-center gap-1 mt-1">
+                                                <?php if ((int) $u['idunit'] === (int) $selected_unit): ?>
+                                                    <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">Unit ini</span>
+                                                <?php endif; ?>
+                                                <span class="badge bg-<?= $u['jenis'] === 'pribadi' ? 'info-subtle text-info-emphasis' : ($u['jenis'] === 'franchise' ? 'warning-subtle text-warning-emphasis' : 'secondary-subtle text-secondary-emphasis') ?>">
+                                                    <?= esc($u['jenis'] ?: '-') ?>
+                                                </span>
+                                                <?php if (!empty($u['is_trial'])): ?>
+                                                    <span class="badge bg-secondary-subtle text-secondary-emphasis">Trial</span>
+                                                <?php endif; ?>
+                                                <?php if (!empty($u['catatan']) && $u['catatan'] !== '-'): ?>
+                                                    <span><?= esc($u['catatan']) ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        <td class="text-end text-nowrap">
+                                            <div class="metric-figure fw-semibold">Rp <?= number_format($u['non_spv_perkiraan'], 0, ',', '.') ?></div>
+                                            <div class="fs-2 text-muted metric-figure">dipotong Rp <?= number_format($u['non_spv_dipotong'], 0, ',', '.') ?></div>
+                                        </td>
+                                        <td class="text-end text-nowrap">
+                                            <div class="metric-figure fw-semibold">Rp <?= number_format($u['spv_perkiraan'], 0, ',', '.') ?></div>
+                                            <div class="fs-2 text-muted metric-figure">dipotong Rp <?= number_format($u['spv_dipotong'], 0, ',', '.') ?></div>
+                                        </td>
+                                        <td class="text-end text-nowrap">
+                                            <div class="metric-figure fw-bold text-dark">Rp <?= number_format($u['total_perkiraan'], 0, ',', '.') ?></div>
+                                            <div class="fs-2 text-muted metric-figure">dipotong Rp <?= number_format($u['total_dipotong'], 0, ',', '.') ?></div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Formula & Context Note -->
-<div class="alert alert-light border mb-4 d-flex align-items-start gap-2 py-3 px-3 text-muted fs-2">
+<div class="alert alert-light border mb-0 d-flex align-items-start gap-2 py-3 px-3 text-muted fs-2">
     <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
     <span>
         <strong class="text-dark">Total Tanggungan Asset</strong> — unit 4 = 20% laba; unit 1 &amp; 2 = jumlah hari bulan ini &times; Rp 355.000; unit franchise (3 &amp; 5) = Rp 0.
-        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Pengeluaran &minus; Total Gaji) unit 3, 4, &amp; 5.
+        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Biaya Terkontrol &minus; Total Gaji) unit 3, 4, &amp; 5.
         <br>
         <strong class="text-dark">Batas 6%</strong> hanya peringatan — transaksi tetap tercatat dan tidak dibatalkan.
     </span>
 </div>
-
-<!-- Head Office (HO) Salary Distribution Panel -->
-<?php if (!empty($ho_distribution) && $ho_distribution['divisor'] > 0): ?>
-    <div class="card border-0 shadow-sm mb-4 overflow-hidden">
-        <!-- Panel Header -->
-        <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
-            <div>
-                <h5 class="fw-bold text-dark mb-0">Pembagian Gaji Head Office (HO)</h5>
-                <span class="fs-2 text-muted">
-                    Aturan Pembagi: <strong><?= $ho_distribution['divisor'] ?> bagian</strong>
-                    (Pribadi: <?= $ho_distribution['pribadi_count'] ?>, Franchise: <?= $ho_distribution['franchise_count'] ?>)
-                </span>
-            </div>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="badge bg-light text-dark border px-3 py-2 fw-medium">
-                    Perkiraan: <strong class="text-primary ms-1">Rp <?= number_format($ho_distribution['total_perkiraan'] ?? 0, 0, ',', '.') ?></strong>
-                </span>
-                <span class="badge bg-light text-dark border px-3 py-2 fw-medium">
-                    Dipotong: <strong class="text-success ms-1">Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?></strong>
-                </span>
-            </div>
-        </div>
-
-        <div class="card-body p-4">
-            <!-- Metric Summary Cards -->
-            <div class="row g-3">
-                <div class="col-6 col-md-4">
-                    <div class="p-3 rounded-3 bg-light-subtle border">
-                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Per Unit (Perkiraan)</span>
-                        <h5 class="fw-bold text-primary metric-figure mb-0">Rp <?= number_format($ho_distribution['per_employee_share'] ?? 0, 0, ',', '.') ?></h5>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="p-3 rounded-3 bg-light-subtle border">
-                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Per Unit (Dipotong)</span>
-                        <h5 class="fw-bold text-success metric-figure mb-0">Rp <?= number_format($ho_distribution['per_employee_actual'] ?? 0, 0, ',', '.') ?></h5>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="p-3 rounded-3 bg-light-subtle border">
-                        <span class="fs-2 text-muted fw-semibold d-block mb-1">Total Karyawan HO</span>
-                        <h5 class="fw-bold text-dark metric-figure mb-0"><?= count($ho_distribution['employees'] ?? []) ?> <span class="fs-2 fw-normal text-muted">Orang</span></h5>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
 
 <!-- Detail Pengeluaran: data baru diambil saat tombol Detail diklik -->
 <div class="modal fade" id="modalDetailPengeluaran" tabindex="-1" aria-labelledby="detailPengeluaranTitle" aria-hidden="true"
@@ -926,52 +1380,105 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 </script>
 
 <?php if (isset($gaji_detail)): ?>
-<!-- Rincian Total Gaji: hanya dikirim controller untuk Admin root (1), Finance (0), Manager (34) -->
-<div class="modal fade" id="modalRincianGaji" tabindex="-1" aria-hidden="true">
+<?php
+$gajiRows = $gaji_detail ?? [];
+$gajiPokokTotal = 0.0;
+$gajiTunjanganTotal = 0.0;
+$gajiTambahanTotal = 0.0;
+foreach ($gajiRows as $gajiRow) {
+    $gajiPokokTotal += (float) ($gajiRow['gaji_pokok'] ?? 0);
+    $gajiTunjanganTotal += (float) ($gajiRow['tunjangan_kinerja'] ?? 0)
+        + (float) ($gajiRow['tunjangan_absen'] ?? 0)
+        + (float) ($gajiRow['tunjangan_penempatan'] ?? 0);
+    $gajiTambahanTotal += (float) ($gajiRow['insentif'] ?? 0)
+        + (float) ($gajiRow['lembur'] ?? 0);
+}
+?>
+<!-- Rincian Total Gaji: register payroll unit, terpisah dari distribusi gaji HO. -->
+<div class="modal fade" id="modalRincianGaji" tabindex="-1" aria-labelledby="gajiRincianTitle" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Rincian Total Gaji</h5>
+        <div class="modal-content border-0 shadow-lg overflow-hidden">
+            <div class="modal-header gaji-hero align-items-start gap-3">
+                <div class="gaji-hero-icon">
+                    <iconify-icon icon="solar:wallet-money-bold-duotone" width="24" height="24"></iconify-icon>
+                </div>
+                <div class="flex-grow-1">
+                    <h5 class="modal-title mb-1" id="gajiRincianTitle">Rincian Total Gaji</h5>
+                    <small class="gaji-hero-meta">
+                        <?= esc($namaUnitAktif ?: ('Unit ' . $selected_unit)) ?> &middot; <?= esc($periodeLabelId) ?>
+                    </small>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
-            <div class="modal-body">
-                <?php if ($gaji_detail === []): ?>
-                    <p class="text-muted mb-0">Tidak ada data.</p>
+
+            <?php if ($gajiRows !== []): ?>
+                <div class="gaji-summary">
+                    <div>
+                        <div class="gaji-summary-label">Total gaji unit</div>
+                        <div class="gaji-summary-value metric-figure is-total" id="gajiSummaryTotal">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></div>
+                    </div>
+                    <div>
+                        <div class="gaji-summary-label">Gaji pokok</div>
+                        <div class="gaji-summary-value metric-figure" id="gajiSummaryPokok">Rp <?= number_format($gajiPokokTotal, 0, ',', '.') ?></div>
+                    </div>
+                    <div>
+                        <div class="gaji-summary-label">Tunjangan</div>
+                        <div class="gaji-summary-value metric-figure" id="gajiSummaryTunjangan">Rp <?= number_format($gajiTunjanganTotal, 0, ',', '.') ?></div>
+                    </div>
+                    <div>
+                        <div class="gaji-summary-label">Insentif &amp; lembur</div>
+                        <div class="gaji-summary-value metric-figure" id="gajiSummaryTambahan">Rp <?= number_format($gajiTambahanTotal, 0, ',', '.') ?></div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <div class="modal-body pt-0">
+                <?php if ($gajiRows === []): ?>
+                    <div class="gaji-empty">
+                        <iconify-icon icon="solar:wallet-money-bold-duotone" width="32" height="32" class="gaji-empty-icon"></iconify-icon>
+                        <div class="fw-semibold text-body mt-2">Belum ada rincian gaji</div>
+                        <div class="gaji-note">Tidak ada data gaji unit pada periode ini.</div>
+                    </div>
                 <?php else: ?>
+                    <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-1 px-1 pt-3 pb-1">
+                        <span class="gaji-section-label">Rincian per karyawan</span>
+                        <span class="gaji-note"><?= count($gajiRows) ?> karyawan &middot; belum termasuk distribusi gaji HO</span>
+                    </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover align-middle mb-0">
-                            <thead class="table-light">
+                        <table class="table align-middle gaji-table">
+                            <thead>
                                 <tr>
-                                    <th>Nama</th>
-                                    <th>Jabatan</th>
-                                    <th class="text-end">Gaji Pokok</th>
-                                    <th class="text-end">T. Kinerja</th>
-                                    <th class="text-end">T. Absen</th>
-                                    <th class="text-end">T. Penempatan</th>
+                                    <th>Karyawan</th>
+                                    <th class="text-end">Gaji pokok</th>
+                                    <th class="text-end">T. kinerja</th>
+                                    <th class="text-end">T. absen</th>
+                                    <th class="text-end">T. penempatan</th>
                                     <th class="text-end">Insentif</th>
                                     <th class="text-end">Lembur</th>
                                     <th class="text-end">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($gaji_detail as $d): ?>
+                                <?php foreach ($gajiRows as $d): ?>
                                     <tr>
-                                        <td><?= esc($d['nama']) ?></td>
-                                        <td><?= esc($d['jabatan']) ?></td>
-                                        <td class="text-end"><?= number_format($d['gaji_pokok'], 0, ',', '.') ?></td>
-                                        <td class="text-end"><?= number_format($d['tunjangan_kinerja'], 0, ',', '.') ?></td>
-                                        <td class="text-end"><?= number_format($d['tunjangan_absen'], 0, ',', '.') ?></td>
-                                        <td class="text-end"><?= number_format($d['tunjangan_penempatan'], 0, ',', '.') ?></td>
-                                        <td class="text-end"><?= number_format($d['insentif'], 0, ',', '.') ?></td>
-                                        <td class="text-end"><?= number_format($d['lembur'] ?? 0, 0, ',', '.') ?></td>
-                                        <td class="text-end fw-semibold"><?= number_format($d['total'], 0, ',', '.') ?></td>
+                                        <td data-label="Karyawan">
+                                            <div class="gaji-person-name"><?= esc($d['nama']) ?></div>
+                                            <div class="gaji-person-role"><?= esc($d['jabatan'] ?? '') ?></div>
+                                        </td>
+                                        <td data-label="Gaji pokok" class="text-end gaji-amount">Rp <?= number_format($d['gaji_pokok'], 0, ',', '.') ?></td>
+                                        <td data-label="T. kinerja" class="text-end gaji-amount">Rp <?= number_format($d['tunjangan_kinerja'], 0, ',', '.') ?></td>
+                                        <td data-label="T. absen" class="text-end gaji-amount">Rp <?= number_format($d['tunjangan_absen'], 0, ',', '.') ?></td>
+                                        <td data-label="T. penempatan" class="text-end gaji-amount">Rp <?= number_format($d['tunjangan_penempatan'], 0, ',', '.') ?></td>
+                                        <td data-label="Insentif" class="text-end gaji-amount">Rp <?= number_format($d['insentif'], 0, ',', '.') ?></td>
+                                        <td data-label="Lembur" class="text-end gaji-amount">Rp <?= number_format($d['lembur'] ?? 0, 0, ',', '.') ?></td>
+                                        <td data-label="Total" class="text-end gaji-amount gaji-total">Rp <?= number_format($d['total'], 0, ',', '.') ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                             <tfoot>
-                                <tr class="fw-bold table-light">
-                                    <td colspan="8" class="text-end">Total</td>
-                                    <td class="text-end rincian-gaji-total">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></td>
+                                <tr>
+                                    <td colspan="7" class="text-end">Total gaji unit</td>
+                                    <td class="text-end gaji-amount gaji-grand-total rincian-gaji-total">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></td>
                                 </tr>
                             </tfoot>
                         </table>

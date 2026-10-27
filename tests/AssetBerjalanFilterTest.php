@@ -41,6 +41,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         foreach ([
             'unit', 'akun', 'jabatan', 'menu',
+            'spv_units',
             'stok_barang', 'service', 'pelanggan',
             'penjualan', 'detail_penjualan', 'barang',
             'kas_keluar', 'kategori_kas',
@@ -55,6 +56,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         $q('CREATE TABLE unit (idunit INTEGER PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL, KABUPATEN_UNIT TEXT NULL, jenis TEXT NULL, is_trial INT NULL, is_operational INT NULL)');
         $q('CREATE TABLE akun (ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL, NAMA_AKUN TEXT NULL, ROLES TEXT NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL, STATUS_PEGAWAI INT NULL, deleted TEXT NULL)');
+        $q('CREATE TABLE spv_units (spv_id INT NULL, unit_id INT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
         $q('CREATE TABLE menu (
                 idmenu INTEGER PRIMARY KEY AUTO_INCREMENT, urutan INT NULL,
@@ -145,13 +147,16 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $q("INSERT INTO unit (idunit, NAMA_UNIT, LOGO, KABUPATEN_UNIT, jenis, is_trial, is_operational) VALUES
             (1, 'ICLEAR Probolinggo', 'logo.png', 'Probolinggo', 'pribadi', 0, 1),
             (3, 'ICLEAR Banyuwangi', 'logo.png', 'Banyuwangi', 'franchise', 0, 1),
+            (4, 'ICLEAR Pandaan', 'logo.png', 'Pasuruan', 'franchise', 0, 1),
             (50, 'Head Office', 'logo.png', 'Banyuwangi', 'Kantor', 0, 0)");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES
-            (0, 'Finance', '[]'), (41, 'Kepala Toko', '[]')");
+            (0, 'Finance', '[]'), (40, 'SPV', '[]'), (41, 'Kepala Toko', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ALAMAT, TERIMA_GAJI, STATUS_PEGAWAI, deleted) VALUES
             (44, 50, 0, 'Ira Kurniawati', 'Jalan Test', 0, 1, NULL),
+            (49, 50, 40, 'SPV Wilayah', 'Jalan Test', 0, 1, NULL),
             (100, 3, 41, 'Kepala Toko', 'Jalan Test', 1, 1, NULL),
             (101, 3, 41, 'Sudah Resign', 'Jalan Test', 1, 0, NULL)");
+        $q("INSERT INTO spv_units (spv_id, unit_id) VALUES (49,1),(49,3)");
         // Struktur sengaja beda dari hardcode legacy (1.500.000) supaya test
         // bisa membedakan mesin gaji payroll dari blok lama.
         $q("INSERT INTO salary_components (id, code, name, type, is_active) VALUES
@@ -254,11 +259,11 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         // Rincian harus memuat lembur, kalau tidak kolom-kolomnya tidak
         // menjumlah ke Total dan Finance membacanya sebagai selisih.
         $this->assertStringContainsString('<th class="text-end">Lembur</th>', $html);
-        $this->assertStringContainsString('>100.000<', $html);
+        $this->assertStringContainsString('Rp 100.000', $html);
     }
 
     /**
-     * Panel "Pembagian Gaji Head Office" hanya untuk role lintas cabang.
+     * Panel "Beban Head Office" hanya untuk role lintas cabang.
      * Staf cabang (mis. Teknisi) yang membuka URL langsung tidak boleh
      * menerima total gaji HO.
      */
@@ -267,7 +272,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->sesi(100, 3, 36); // Teknisi unit 3
         $html = $this->halaman('?bulan=9&tahun=2026');
 
-        $this->assertStringNotContainsString('Pembagian Gaji Head Office', $html);
+        $this->assertStringNotContainsString('Beban Head Office', $html);
 
         // Total gaji unit sendiri tetap boleh dilihat staf cabang.
         $this->assertSame('2.450.000', $this->kartu($html, 'Total Gaji'));
@@ -279,7 +284,32 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->sesi(44, 50, 0); // Finance
         $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
 
-        $this->assertStringContainsString('Pembagian Gaji Head Office', $html);
+        $this->assertStringContainsString('Beban Head Office', $html);
+    }
+
+    /** Rincian HO per unit tidak dibatasi role; SPV tetap hanya membuka unit wilayahnya. */
+    public function testRincianHoPerUnitDirenderUntukSpv(): void
+    {
+        $this->sesi(49, 50, 40); // SPV wilayah 1 & 3
+        $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
+
+        $this->assertMatchesRegularExpression('#<h4[^>]*>\s*ICLEAR Banyuwangi\s*</h4>#', $html);
+        $this->assertStringContainsString('Beban Head Office', $html);
+        $this->assertStringContainsString('Lihat rincian per unit', $html);
+    }
+
+    /** SPV tidak bisa membuka unit di luar spv_units; fallback ke wilayah pertama. */
+    public function testSpvHanyaBisaMembukaUnitWilayahnya(): void
+    {
+        $this->sesi(49, 50, 40);
+
+        $luar = $this->halaman('?unit=4&bulan=9&tahun=2026');
+        $this->assertMatchesRegularExpression('#<h4[^>]*>\s*ICLEAR Probolinggo\s*</h4>#', $luar);
+
+        preg_match('#<select id="filterUnit".*?</select>#s', $luar, $m);
+        $this->assertStringContainsString('ICLEAR Probolinggo', $m[0]);
+        $this->assertStringContainsString('ICLEAR Banyuwangi', $m[0]);
+        $this->assertStringNotContainsString('ICLEAR Pandaan', $m[0]);
     }
 
     /**
