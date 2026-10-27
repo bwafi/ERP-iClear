@@ -34,6 +34,7 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
             created_at DATETIME NULL,
             tanggal_selesai DATETIME NULL,
             no_hp VARCHAR(32) NULL,
+            tipe_hp VARCHAR(100) NULL,
             alamat TEXT NULL,
             garansi_hari INT NULL DEFAULT 0,
             tanggal_claim_garansi DATETIME NULL,
@@ -65,9 +66,9 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
             ['id_pelanggan' => 2, 'nama' => 'Bima', 'alamat' => 'Alamat Pelanggan Dua', 'kecamatan' => 'Kecamatan Dua', 'kabupaten' => 'Kabupaten Dua'],
         ]);
         $this->db->table('service')->insertBatch([
-            ['idservice' => 1, 'no_service' => 'SRV-001', 'created_at' => '2026-09-01 10:00:00', 'tanggal_selesai' => '2026-09-20 10:00:00', 'no_hp' => '0811', 'alamat' => 'Alamat Service Satu', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
-            ['idservice' => 2, 'no_service' => 'SRV-002', 'created_at' => '2026-09-02 10:00:00', 'tanggal_selesai' => '2026-10-02 10:00:00', 'no_hp' => '0822', 'alamat' => '', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
-            ['idservice' => 3, 'no_service' => 'SRV-003', 'created_at' => '2026-09-03 10:00:00', 'tanggal_selesai' => '2026-09-21 10:00:00', 'no_hp' => '0833', 'alamat' => 'Alamat C', 'garansi_hari' => 0, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 1, 'no_service' => 'SRV-001', 'created_at' => '2026-09-01 10:00:00', 'tanggal_selesai' => '2026-09-20 10:00:00', 'no_hp' => '0811', 'tipe_hp' => 'iPhone 13', 'alamat' => 'Alamat Service Satu', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
+            ['idservice' => 2, 'no_service' => 'SRV-002', 'created_at' => '2026-09-02 10:00:00', 'tanggal_selesai' => '2026-10-02 10:00:00', 'no_hp' => '0822', 'tipe_hp' => 'Samsung A54', 'alamat' => '', 'garansi_hari' => 30, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 2, 'pelanggan_id_pelanggan' => 2],
+            ['idservice' => 3, 'no_service' => 'SRV-003', 'created_at' => '2026-09-03 10:00:00', 'tanggal_selesai' => '2026-09-21 10:00:00', 'no_hp' => '0833', 'tipe_hp' => 'Xiaomi Redmi', 'alamat' => 'Alamat C', 'garansi_hari' => 0, 'tanggal_claim_garansi' => null, 'status_service' => 4, 'unit_idunit' => 1, 'pelanggan_id_pelanggan' => 1],
         ]);
     }
 
@@ -101,6 +102,7 @@ final class ModelServiceGaransiListingTest extends CIUnitTestCase
         $this->assertSame('Unit Satu', $hasil['data'][0]->nama_unit);
         $this->assertSame('Kecamatan Satu', $hasil['data'][0]->kecamatan);
         $this->assertSame('Kabupaten Satu', $hasil['data'][0]->kabupaten);
+        $this->assertSame('iPhone 13', $hasil['data'][0]->tipe_hp);
     }
 
     public function testLokasiMemakaiKecamatanKabupatenDanIkutDicari(): void

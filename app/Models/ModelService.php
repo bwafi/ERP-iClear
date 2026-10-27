@@ -422,6 +422,7 @@ class ModelService extends Model
                 service.created_at,
                 service.tanggal_selesai,
                 service.no_hp,
+                service.tipe_hp,
                 pelanggan.kecamatan,
                 pelanggan.kabupaten,
                 service.garansi_hari,

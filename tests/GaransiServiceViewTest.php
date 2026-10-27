@@ -26,6 +26,7 @@ final class GaransiServiceViewTest extends CIUnitTestCase
         $this->assertStringContainsString('serverSide: true', $html);
         $this->assertStringContainsString('garansi_service/ajax', $html);
         $this->assertStringContainsString('id="modalRiwayatKlaim"', $html);
+        $this->assertStringContainsString('row.tipe_hp', $html);
         $this->assertStringContainsString('id="exportForm"', $html);
         $this->assertStringContainsString('name="sumber" value="garansi"', $html);
         $this->assertStringContainsString('claim_garansi/detail', $html);

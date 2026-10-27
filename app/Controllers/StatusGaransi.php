@@ -155,6 +155,7 @@ class StatusGaransi extends BaseController
             $row->no_service = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->no_service ?? '')));
             $row->nama_pelanggan = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->nama_pelanggan ?? '')));
             $row->no_hp = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->no_hp ?? '')));
+            $row->tipe_hp = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->tipe_hp ?? '')));
             $row->kecamatan = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->kecamatan ?? '')));
             $row->kabupaten = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->kabupaten ?? '')));
             $row->nama_unit = str_replace(['`', '$'], ['&#96;', '&#36;'], esc((string) ($row->nama_unit ?? '')));

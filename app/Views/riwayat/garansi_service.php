@@ -312,6 +312,7 @@ $(function() {
                         <div class="rsg-person__body">
                             <span class="rsg-person__name">${nama}</span>
                             <span class="rsg-sub">${row.no_hp || '-'}</span>
+                            <span class="rsg-sub">${row.tipe_hp || '-'}</span>
                             ${lokasi ? `<span class="rsg-sub rsg-address" title="${lokasi}">${lokasi}</span>` : ''}
                         </div>
                     </div>`;
