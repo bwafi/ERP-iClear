@@ -60,6 +60,9 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 12. **Aset tidak memakai role/scope**, unit dari POST, insert aset + riwayat penyusutan tidak atomik, `update_asset` mengabaikan `asset_code`/`nilai_perolehan`/`nilai_sekarang`, `GET penyusutan_cronjob` tanpa auth, dan `pulihkan_asset/{id}` hanya `auth` + GET (tanpa CSRF/role). — `Asset.php:54,89,140,172,190,267`; `Routes.php:484-488,580` (FN-06)
 13. **`GET /kas_masuk` dan `GET /kategori_kas` tanpa filter auth.** — `Routes.php:416,431` (FN-01)
 14. **`laba_service`/`fee_service` memakai typo `['fileter'=>'auth']`**, bukan `filter`; proteksi auth tidak berlaku/route dapat error. — `Routes.php:336-340` (FN-08)
+15. ✅ **Klasifikasi 6% punya satu sumber.** `Config\Finance::$kategoriBiayaTerkontrol` (`[1,2,3,4,5,18]`) dipakai `/kas_keluar` dan `/asset_berjalan`. Endpoint `kas_keluar/datatables` memfilter `kategori_mode=enam|luar` di server (`whereIn`/`whereNotIn`), dan ringkasan `Total / Masuk 6% / Di luar 6%` mengikuti filter tanggal, unit, dan pencarian — bukan mode kategori yang sedang dipilih. — `Config/Finance.php`; `ModelKasKeluar::applyKasKeluarFilter/summaryKasKeluarFiltered`; `tests/KasKeluarUnitFilterTest.php`
+
+**Catatan UI `/kas_keluar`:** input dan edit dibuka di modal di atas daftar; satu kartu transaksi = satu baris `kas_keluar`. Simpan yang ditolak mengembalikan isian lewat flashdata `kk_old`, dan hanya badge "6%" yang diwarnai — bukan seluruh nama kategori.
 
 ## 6. Acceptance Criteria
 - [ ] Insert/update/delete kas keluar & masuk atomik & konsisten dengan ledger & jurnal.

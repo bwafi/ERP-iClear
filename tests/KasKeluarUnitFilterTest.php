@@ -93,7 +93,8 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN) VALUES
             (1, 1, 1, 'Admin Root'), (200, 2, 35, 'Kasir B'), (201, 2, 40, 'SPV')");
         $q("INSERT INTO spv_units (spv_id, unit_id) VALUES (201,1),(201,2)");
-        $q("INSERT INTO kategori_kas (idkategori_kas, kategori) VALUES (1,'Operasional')");
+        $q("INSERT INTO kategori_kas (idkategori_kas, kategori) VALUES
+            (1,'Operasional'),(6,'Lain-lain'),(18,'Lainnya(Termasuk 6%)')");
         $q("INSERT INTO no_akun (no_akun, nama_akun) VALUES ('1010101','Kas')");
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, idunit, jenis)
             VALUES
@@ -140,7 +141,108 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
         return $m[0];
     }
 
+    /**
+     * Form input harus menunjukkan kategori mana yang masuk batas 6% dan mana
+     * yang di luar. Daftarnya sama dengan Config\Finance::$kategoriBiayaTerkontrol
+     * yang dipakai /asset_berjalan.
+     */
+    public function testKategoriMenandaiBatasEnamPersen(): void
+    {
+        $this->sesi(1, 1, 1);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('kas_keluar')->getBody();
+
+        $this->assertMatchesRegularExpression('#<select[^>]*id="kkEditKategori".*?</select>#s', $html);
+        preg_match('#<select[^>]*id="kkEditKategori".*?</select>#s', $html, $m);
+
+        $this->assertStringContainsString('Operasional · 6%', $m[0]);
+        $this->assertStringContainsString('Lainnya(Termasuk 6%) · 6%', $m[0]);
+        $this->assertStringContainsString('>Lain-lain</option>', $m[0], 'Kategori di luar 6% tampil polos tanpa penanda');
+        $this->assertStringNotContainsString('di luar 6%', $m[0]);
+        $this->assertStringContainsString('.kk-kat-enam', $html, 'Hanya badge 6% yang punya warna sendiri');
+        $this->assertStringContainsString('templateResult: formatKategori', $html);
+
+        $this->assertStringContainsString('id="kkHanya6"', $html, 'Checkbox filter 6% harus tersedia');
+        $this->assertStringContainsString('"enam":true', $html, 'Daftar kategori JS harus membawa penanda 6%');
+    }
+
+    /** Daftar memakai modal input dan filter kategori, bukan dua deck. */
+    public function testDaftarMemakaiModalDanFilterKategori(): void
+    {
+        $this->sesi(1, 1, 1);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('kas_keluar')->getBody();
+
+        $this->assertStringContainsString('id="kkSheet"', $html);
+        $this->assertMatchesRegularExpression('#class="modal fade kk-modal"#', $html);
+        $this->assertStringContainsString('modal-dialog-scrollable', $html);
+        $this->assertStringNotContainsString('class="offcanvas offcanvas-end kk-sheet"', $html, 'Input tidak lagi di sheet samping');
+        $this->assertStringContainsString('name="kkKatMode"', $html);
+        $this->assertStringContainsString('id="kkSumEnam"', $html);
+        $this->assertStringContainsString('id="kkOpenSheet"', $html);
+        $this->assertStringNotContainsString('id="kkComposer"', $html, 'Composer lama harus sudah hilang');
+    }
+
+    /**
+     * Filter 6% harus bekerja di server, bukan hanya menyembunyikan baris di
+     * klien. Ringkasan tetap membandingkan kedua sisi saat salah satu difilter.
+     */
+    public function testFilterKategoriEnamDanLuar(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $this->db->query(
+            "INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, idunit, jenis)
+             VALUES ('2026-10-05',6,'di luar 6%',500,1,'debet')"
+        );
+
+        $enam = $this->datatable('draw=1&start=0&length=25&kategori_mode=enam');
+        $this->assertSame(4, $enam['recordsFiltered'], 'Hanya kategori 1,2,3,4,5,18 yang masuk 6%');
+        $this->assertSame(10000.0, (float) $enam['sumTotal']);
+        $this->assertSame(10000.0, (float) $enam['sumEnam']);
+        $this->assertSame(500.0, (float) $enam['sumLuar']);
+        $this->assertSame(4, $enam['countEnam']);
+        $this->assertSame(1, $enam['countLuar']);
+        foreach ($enam['data'] as $row) {
+            $this->assertTrue($row['enam']);
+        }
+
+        $luar = $this->datatable('draw=1&start=0&length=25&kategori_mode=luar');
+        $this->assertSame(1, $luar['recordsFiltered']);
+        $this->assertSame(500.0, (float) $luar['sumTotal']);
+        $this->assertSame('Lain-lain', $luar['data'][0]['kategori']);
+        $this->assertFalse($luar['data'][0]['enam']);
+
+        $semua = $this->datatable('draw=1&start=0&length=25&kategori_mode=');
+        $this->assertSame(5, $semua['recordsFiltered']);
+        $this->assertSame(10500.0, (float) $semua['sumTotal']);
+    }
+
+    /** Simpan yang ditolak harus menyimpan isian untuk dibuka lagi. */
+    public function testSimpanTanpaAkunMengembalikanIsian(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'Pembelian ATK',
+            'unit_idunit' => 1,
+        ]);
+        $this->assertSame(302, $res->response()->getStatusCode());
+
+        $old = session()->getFlashdata('kk_old');
+        $this->assertIsArray($old);
+        $this->assertSame('2026-10-09', $old['tanggal']);
+        $this->assertSame('Pembelian ATK', $old['deskripsi']);
+        $this->assertSame(1, $old['unit_idunit']);
+        $this->assertSame('Minimal satu baris akun wajib diisi.', session()->getFlashdata('gagal'));
+    }
+
     public function testKasirTidakBisaMemfilterUnitLain(): void
+
     {
         $this->sesi(200, 2, 35);
         $json = $this->datatable('draw=1&start=0&length=25&unit_id=1');

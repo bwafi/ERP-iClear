@@ -1,10 +1,11 @@
 <?php
 /**
- * Kas Keluar — two-deck console.
+ * Kas Keluar — ledger-first.
  *
- * Deck 1 (composer): formulir input kas keluar, terlipat jadi satu baris dan
- * terbuka di tempat — ledger di bawahnya tidak pernah hilang. Deck 2 (ledger):
- * bilah perintah berisi pencarian, filter, dan tabel.
+ * Daftar transaksi mengisi halaman; input dan edit dibuka di modal supaya
+ * daftar tidak pernah terdorong atau ditinggalkan. Setiap
+ * baris rincian akun adalah satu transaksi kas keluar — bentuk yang memang
+ * disimpan backend — jadi ditampilkan sebagai kartu, bukan tabel.
  *
  * Aturan yang dijaga: nama field, route, logika bisnis, dan gating jabatan
  * tidak berubah. Yang berubah hanya susunan, hierarki, dan cara mencari.
@@ -17,6 +18,21 @@ $unitFilter = $unit_filter ?? [];
 $canFilterUnit = $can_filter_unit ?? false;
 $showAllUnits = $show_all_units ?? false;
 $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
+// Kategori 6% berasal dari Config\Finance (sumber yang sama dengan
+// /asset_berjalan). Label opsi sudah di-escape di sini supaya aman saat
+// disusun ulang lewat innerHTML di JS.
+$kategoriTerkontrol = array_map('intval', $kategori_terkontrol ?? []);
+$kategoriOpsi = array_map(static function ($kat) use ($kategoriTerkontrol): array {
+    $id = (int) $kat->idkategori_kas;
+    return [
+        'id'   => $id,
+        'nama' => esc($kat->kategori),
+        'enam' => in_array($id, $kategoriTerkontrol, true),
+    ];
+}, $kategori_kas);
+// Isian yang gagal disimpan dikirim balik oleh controller supaya modal bisa
+// dibuka lagi dengan nilai yang sama — bukan halaman kosong.
+$oldInput = $old_input ?? null;
 ?>
 <style>
     .kk-scope {
@@ -105,31 +121,6 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         margin-top: 1rem;
     }
 
-    /* ── Composer deck ────────────────────────────────────────── */
-    .kk-composer-bar {
-        display: flex;
-        align-items: center;
-        gap: .875rem;
-        width: 100%;
-        min-height: 60px;
-        padding: .75rem 1rem;
-        background: none;
-        border: 0;
-        border-radius: var(--kk-r);
-        color: inherit;
-        text-align: left;
-        transition: background-color .18s ease;
-    }
-
-    .kk-composer-bar:hover {
-        background: var(--kk-raise);
-    }
-
-    .kk-composer-bar:focus-visible {
-        outline: 2px solid var(--bs-primary);
-        outline-offset: -2px;
-    }
-
     .kk-tile {
         display: grid;
         place-items: center;
@@ -141,94 +132,125 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         color: var(--bs-primary);
     }
 
-    .kk-composer-label {
-        flex: 1 1 auto;
-        min-width: 0;
+    .kk-masthead-side {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .75rem 1.25rem;
     }
 
-    .kk-composer-label strong {
-        display: block;
-        font-size: .9375rem;
+    /* ── Modal input/edit ─────────────────────────────────────── */
+    /* Modal, bukan sheet samping: formulirnya pendek, dan daftar di belakang
+       tidak ikut bergeser maupun kehilangan posisi gulir. */
+    .kk-modal .modal-dialog {
+        max-width: 640px;
+    }
+
+    .kk-modal .modal-content {
+        background: var(--kk-surface);
+        border: 0;
+        border-radius: var(--kk-r);
+    }
+
+    .kk-modal .modal-header {
+        align-items: flex-start;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--kk-line);
+    }
+
+    .kk-modal .modal-title {
+        font-size: 1.0625rem;
         font-weight: 600;
-        color: var(--kk-ink);
+        line-height: 1.25;
+        margin: 0;
     }
 
-    .kk-composer-sub {
+    .kk-modal-sub {
         display: block;
         font-size: .8125rem;
+        font-weight: 400;
         color: var(--kk-ink-3);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        margin-top: .1875rem;
     }
 
-    .kk-composer-live {
-        flex: 0 0 auto;
-        text-align: right;
-        font-size: .8125rem;
-        color: var(--kk-ink-3);
+    .kk-modal .modal-body {
+        padding: 1.25rem;
     }
 
-    .kk-composer-live b {
-        display: block;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--kk-ink);
+    .kk-modal form>*+* {
+        margin-top: 1rem;
     }
 
-    .kk-composer-caret {
-        transition: transform .22s cubic-bezier(.2, .8, .3, 1);
-    }
-
-    .kk-composer[data-open="true"] .kk-composer-caret {
-        transform: rotate(180deg);
-    }
-
-    /* Lipat / buka. Badan deck yang tertutup harus benar-benar keluar dari
-       flow: kalau hanya dipipihkan, tabel rincian akun di dalamnya tetap lifeless
-       dan melebarkan dokumen, bukan menggulir di dalam deck. */
-    .kk-composer-body {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        /* Tabel rincian akun 7 kolom melebihi lebar ponsel. `.table-responsive`
-           menggulirkan tabelnya sendiri, tapi tanpa containment overflow-nya
-           tetap merambat ke atas sampai seluruh halaman bisa digeser sideways
-           begitu composer dibuka. */
-        contain: paint;
-    }
-
-    .kk-composer[data-open="false"] .kk-composer-body {
-        display: none;
-    }
-
-    /* Satu momen gerak saat deck terbuka, bukan animasi bertubi. */
-    .kk-composer[data-open="true"] .kk-composer-inner {
-        animation: kk-deck-in .22s cubic-bezier(.2, .8, .3, 1) both;
-    }
-
-    @keyframes kk-deck-in {
-        from {
-            opacity: 0;
-            transform: translateY(-.375rem);
-        }
-
-        to {
-            opacity: 1;
-            transform: none;
-        }
-    }
-
-    .kk-composer-body>div {
-        min-width: 0;
-    }
-
-    .kk-composer-inner {
-        padding: 0 1rem 1rem;
+    /* Tombol simpan selalu terlihat walau isian transaksi memanjang. */
+    .kk-modal-foot {
+        position: sticky;
+        bottom: 0;
+        margin: 1.25rem -1.25rem -1.25rem;
+        padding: 1rem 1.25rem;
+        background: var(--kk-surface);
         border-top: 1px solid var(--kk-line);
     }
 
-    .kk-composer-inner>* {
-        margin-top: 1rem;
+    .kk-draft-split {
+        display: block;
+        font-size: .75rem;
+        color: var(--kk-ink-3);
+        margin-top: .125rem;
+    }
+
+    .kk-draft-split b {
+        font-weight: 600;
+        color: color-mix(in srgb, var(--bs-success) 60%, var(--kk-ink));
+    }
+
+    /* Satu kartu = satu transaksi kas keluar. Kartu vertikal, bukan tabel
+       delapan kolom yang harus digeser ke samping di ponsel. */
+    .kk-tx {
+        padding: .875rem;
+        border: 1px solid var(--kk-line);
+        border-radius: 12px;
+        background: var(--kk-raise);
+    }
+
+    .kk-tx+.kk-tx {
+        margin-top: .75rem;
+    }
+
+    .kk-tx-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        margin-bottom: .75rem;
+    }
+
+    .kk-tx-head span {
+        font-size: .6875rem;
+        font-weight: 600;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        color: var(--kk-ink-3);
+    }
+
+    .kk-tx-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+    }
+
+    .kk-tx-grid .is-full {
+        grid-column: 1 / -1;
+    }
+
+    .kk-tx .form-control,
+    .kk-tx .form-select {
+        font-size: .875rem;
+    }
+
+    @media (max-width: 575.98px) {
+        .kk-tx-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
     }
 
     .kk-field-label {
@@ -241,15 +263,13 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         margin-bottom: .375rem;
     }
 
-    /* Jarak ke atas bukan kosmetik: baris input di atasnya (`.row g-3`) berakhir
-       tepat di sisi subhead, dan kolom paling lebar di baris itu adalah input
-       Deskripsi — jadi tombol "Tambah Baris" duduk persis di bawahnya. Tanpa
-       margin ini keduanya menempel, apalagi setelah tombol dibuat lebih tinggi. */
+    /* Pemisah antara data transaksi dan rincian akun di dalam modal. */
     .kk-subhead {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 1rem;
+        gap: .75rem;
         margin-top: 1.25rem;
     }
 
@@ -257,29 +277,25 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         margin: 0;
     }
 
-    .kk-pos-table {
-        --bs-table-bg: transparent;
-    }
-
-    .kk-pos-table th {
-        font-size: .6875rem;
+    /* Hanya badge "6%" yang berwarna, bukan seluruh nama kategori. Warna
+       dicampur ke warna teks supaya tetap terbaca di tema terang dan gelap. */
+    .kk-kat-enam {
+        color: color-mix(in srgb, var(--bs-success) 60%, var(--kk-ink));
         font-weight: 600;
-        letter-spacing: .03em;
-        text-transform: uppercase;
-        border-bottom: 1px solid var(--kk-line);
-        padding: .5rem .5rem;
-        white-space: nowrap;
     }
 
-    .kk-pos-table td {
-        padding: .375rem .5rem;
-        vertical-align: middle;
-        border-bottom: 1px solid var(--kk-line);
+    .kk-tag-enam {
+        background: var(--bs-success-bg-subtle);
+        color: color-mix(in srgb, var(--bs-success) 60%, var(--kk-ink));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bs-success) 35%, transparent);
     }
 
-    .kk-pos-table .form-control,
-    .kk-pos-table .form-select {
-        font-size: .8125rem;
+    .kk-kat-cell {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .25rem;
+        max-width: 100%;
     }
 
     /* Panah select2 No. Akun / No. Rekening jatuh di luar kotaknya.
@@ -415,6 +431,15 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         font-size: .8125rem;
     }
 
+    /* Tombol radio filter setinggi input di sebelahnya, supaya label-labelnya
+       tetap sebaris. */
+    .kk-filter .btn-group .btn {
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        font-size: .8125rem;
+    }
+
     .kk-cmdbar-actions {
         display: flex;
         gap: .5rem;
@@ -426,6 +451,65 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         display: inline-flex;
         align-items: center;
         gap: .375rem;
+    }
+
+    /* ── Ringkasan 6% ─────────────────────────────────────────── */
+    /* Rekonsiliasi cepat: berapa yang masuk hitungan Biaya Terkontrol dan
+       berapa yang tidak, untuk filter yang sedang aktif. */
+    .kk-sum {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border-bottom: 1px solid var(--kk-line);
+    }
+
+    .kk-sum-cell {
+        min-width: 0;
+        padding: .875rem 1rem;
+    }
+
+    .kk-sum-cell+.kk-sum-cell {
+        border-left: 1px solid var(--kk-line);
+    }
+
+    .kk-sum-cell span {
+        display: block;
+        font-size: .6875rem;
+        font-weight: 600;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        color: var(--kk-ink-3);
+    }
+
+    .kk-sum-cell b {
+        display: block;
+        margin-top: .125rem;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--kk-ink);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .kk-sum-cell small {
+        display: block;
+        margin-top: .125rem;
+        font-size: .75rem;
+        color: var(--kk-ink-3);
+    }
+
+    .kk-sum-cell.is-enam b {
+        color: color-mix(in srgb, var(--bs-success) 60%, var(--kk-ink));
+    }
+
+    .kk-dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        margin-right: .375rem;
+        border-radius: 50%;
+        background: var(--bs-success);
+        vertical-align: middle;
     }
 
     /* ── Chip filter aktif ────────────────────────────────────── */
@@ -583,40 +667,28 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         margin-top: .125rem;
     }
 
-    .kk-c-id {
-        width: 84px;
-    }
-
-    .kk-c-date {
-        width: 116px;
+    .kk-c-tgl {
+        width: 142px;
     }
 
     .kk-c-kat {
-        width: 150px;
+        width: 168px;
+    }
+
+    /* Keterangan menyerap sisa lebar; batas minimum menjaga kolom lain tidak
+       terdorong saat deskripsi panjang. */
+    .kk-c-ket {
+        width: auto;
+        min-width: 220px;
     }
 
     .kk-c-akun {
         width: 150px;
     }
 
-    /* Deskripsi isinya paling bebas, jadi lebarnya dibatasi eksplisit. Tanpa
-       ini tabel auto-layout mengikuti isi terpanjang dan kolom ini ikut menarik
-       seluruh tabel jadi jauh lebih lebar dari wadahnya. */
-    .kk-c-desc {
-        width: 280px;
-    }
-
-    .kk-c-penerima {
-        width: 190px;
-    }
-
     .kk-c-jumlah {
         width: 150px;
         text-align: right;
-    }
-
-    .kk-c-jenis {
-        width: 104px;
     }
 
     .kk-c-aksi {
@@ -629,12 +701,6 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
-    }
-
-    .kk-table td.kk-c-id .kk-line1 {
-        font-family: var(--kk-mono);
-        font-variant-numeric: tabular-nums;
-        color: var(--kk-ink-2);
     }
 
     .kk-clip {
@@ -720,13 +786,6 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bs-warning) 55%, transparent);
     }
 
-    .kk-pos-kosong {
-        background: transparent;
-        color: var(--kk-ink-3);
-        box-shadow: none;
-        padding-left: 0;
-    }
-
     .kk-rowbtn {
         display: inline-grid;
         place-items: center;
@@ -765,10 +824,6 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         font-variant-numeric: tabular-nums;
         text-align: right;
         white-space: nowrap;
-    }
-
-    .kk-scope .kk-table tfoot .kk-foot-count {
-        font-variant-numeric: tabular-nums;
     }
 
     /* Tema aplikasi memaksa warna sel tabel di dark mode dengan `!important`
@@ -956,15 +1011,13 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             text-align: left;
         }
 
-        .kk-table td.kk-c-desc,
-        .kk-table td.kk-c-penerima,
+        .kk-table td.kk-c-ket,
         .kk-table td.kk-c-akun {
             flex-direction: column;
             align-items: flex-end;
         }
 
-        .kk-table td.kk-c-desc::before,
-        .kk-table td.kk-c-penerima::before,
+        .kk-table td.kk-c-ket::before,
         .kk-table td.kk-c-akun::before {
             align-self: flex-start;
         }
@@ -983,18 +1036,11 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             display: none;
         }
 
-        .kk-table td.kk-c-id .kk-line1 {
-            color: var(--kk-ink);
-        }
-
-        .kk-c-id,
-        .kk-c-date,
+        .kk-c-tgl,
         .kk-c-kat,
+        .kk-c-ket,
         .kk-c-akun,
-        .kk-c-desc,
-        .kk-c-penerima,
         .kk-c-jumlah,
-        .kk-c-jenis,
         .kk-c-aksi {
             width: auto;
         }
@@ -1010,12 +1056,25 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             justify-content: space-between;
             border: 0;
         }
+
+        /* Tiga nominal Rupiah tidak muat sejajar di ponsel; total jadi baris
+           sendiri, 6% dan di luar 6% berbagi satu baris. */
+        .kk-sum {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .kk-sum-cell:first-child {
+            grid-column: 1 / -1;
+            border-bottom: 1px solid var(--kk-line);
+        }
+
+        .kk-sum-cell:nth-child(2) {
+            border-left: 0;
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {
 
-        .kk-composer[data-open="true"] .kk-composer-inner,
-        .kk-composer-caret,
         .kk-rowbtn,
         .kk-tip {
             transition: none;
@@ -1033,6 +1092,13 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         </div>
     <?php endif; ?>
 
+    <?php if (session("gagal")): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <?= esc(session("gagal")) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+        </div>
+    <?php endif; ?>
+
     <!-- ── Masthead ─────────────────────────────────────────────── -->
     <header class="kk-masthead">
         <div>
@@ -1044,152 +1110,150 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             </nav>
             <h1>Kas Keluar</h1>
         </div>
-        <div class="kk-scope-readout" id="kkScope"></div>
+        <div class="kk-masthead-side">
+            <div class="kk-scope-readout" id="kkScope"></div>
+            <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" id="kkOpenSheet">
+                <iconify-icon icon="solar:add-circle-linear" width="18" height="18" aria-hidden="true"></iconify-icon>
+                <span>Input Kas Keluar</span>
+            </button>
+        </div>
     </header>
 
-    <!-- ── Deck 1 · Composer ────────────────────────────────────── -->
-    <section class="kk-deck kk-composer" id="kkComposer" data-open="false" aria-labelledby="kkComposerTitle">
-        <button type="button" class="kk-composer-bar" id="kkComposerToggle" aria-expanded="false" aria-controls="kkComposerBody">
-            <span class="kk-tile" aria-hidden="true">
-                <iconify-icon icon="solar:wallet-money-line-duotone" width="20" height="20"></iconify-icon>
-            </span>
-            <span class="kk-composer-label">
-                <strong id="kkComposerTitle">Input Kas Keluar</strong>
-                <span class="kk-composer-sub" id="kkComposerSub">Belum ada draf — isi tanggal, unit, lalu tambah baris akun</span>
-            </span>
-            <span class="kk-composer-live" id="kkComposerLive" hidden>
-                <b class="kk-num" id="kkComposerLiveTotal">Rp 0</b>
-                <span id="kkComposerLiveMeta"></span>
-            </span>
-            <span class="btn btn-primary" id="kkComposerCta">Input</span>
-            <iconify-icon class="kk-composer-caret text-secondary" icon="solar:alt-arrow-down-linear" width="18" height="18" aria-hidden="true"></iconify-icon>
-        </button>
+    <!-- Modal input/edit: daftar tetap di belakang, posisi gulir tidak hilang
+         saat satu baris dikoreksi. -->
+    <div class="modal fade kk-modal" id="kkSheet" tabindex="-1" aria-labelledby="kkSheetTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="kkSheetTitle">
+                        <span id="kkSheetTitleText">Input Kas Keluar</span>
+                        <span class="kk-modal-sub" id="kkSheetSub">Satu transaksi, satu baris rincian akun</span>
+                    </h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
 
-        <div class="kk-composer-body" id="kkComposerBody">
-            <div>
-                <div class="kk-composer-inner">
-
-                    <!-- Form input: route insert_kas_keluar, banyak baris akun -->
-                    <form action="<?= base_url("insert_kas_keluar") ?>" method="post" id="kkFormInsert" novalidate>
-                        <div class="row g-3">
-                            <div class="col-12 col-md-3">
-                                <label class="kk-field-label" for="kkTanggal">Tanggal</label>
-                                <input type="date" class="form-control" name="tanggal" id="kkTanggal" required>
-                            </div>
-                            <div class="col-12 col-md-3">
-                                <label class="kk-field-label" for="kkUnit">Unit</label>
-                                <select class="form-select" name="unit_idunit" id="kkUnit" required>
-                                    <option value="">Pilih Unit</option>
-                                    <?php foreach ($unit as $u): ?>
-                                        <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <div class="form-text" id="kkUnitHint" hidden>Unit mengikuti akun yang login</div>
-                            </div>
-                            <div class="col-12 col-md-6">
-                                <label class="kk-field-label" for="kkDeskripsi">Deskripsi</label>
-                                <input type="text" class="form-control" name="deskripsi" id="kkDeskripsi"
-                                    placeholder="contoh: Pembelian ATK" maxlength="255">
-                            </div>
+                <!-- Form input: route insert_kas_keluar, banyak baris akun -->
+                <form action="<?= base_url("insert_kas_keluar") ?>" method="post" id="kkFormInsert" novalidate>
+                    <div class="kk-tx-grid">
+                        <div>
+                            <label class="kk-field-label" for="kkTanggal">Tanggal</label>
+                            <input type="date" class="form-control" name="tanggal" id="kkTanggal" required>
                         </div>
+                        <div>
+                            <label class="kk-field-label" for="kkUnit">Unit</label>
+                            <select class="form-select" name="unit_idunit" id="kkUnit" required>
+                                <option value="">Pilih Unit</option>
+                                <?php foreach ($unit as $u): ?>
+                                    <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text" id="kkUnitHint" hidden>Unit mengikuti akun yang login</div>
+                        </div>
+                        <div class="is-full">
+                            <label class="kk-field-label" for="kkDeskripsi">Deskripsi</label>
+                            <input type="text" class="form-control" name="deskripsi" id="kkDeskripsi"
+                                placeholder="contoh: Pembelian ATK" maxlength="255">
+                        </div>
+                    </div>
 
-                        <div class="kk-subhead">
-                            <span class="kk-field-label" id="kkPosLabel">Rincian Akun</span>
+                    <div class="kk-subhead">
+                        <span class="kk-field-label" id="kkPosLabel">Transaksi</span>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" id="kkHanya6">
+                                <label class="form-check-label small" for="kkHanya6"
+                                    title="Tampilkan hanya kategori yang masuk hitungan Biaya Terkontrol (maks 6% omset)">Hanya kategori 6%</label>
+                            </div>
                             <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 px-3 py-2" id="kkAddPosisi">
                                 <iconify-icon icon="solar:add-circle-linear" width="16" height="16" aria-hidden="true"></iconify-icon>
-                                <span>Tambah Baris</span>
+                                <span>Tambah transaksi</span>
                             </button>
                         </div>
+                    </div>
 
-                        <div class="table-responsive">
-                            <table class="table kk-pos-table" aria-labelledby="kkPosLabel">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">No. Akun</th>
-                                        <th scope="col">Kategori</th>
-                                        <th scope="col">Sumber Dana</th>
-                                        <th scope="col">No. Rekening</th>
-                                        <th scope="col">Penerima</th>
-                                        <th scope="col">Debet/Kredit</th>
-                                        <th scope="col" class="text-end">Jumlah</th>
-                                        <th scope="col"><span class="visually-hidden">Hapus</span></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="kkPosisiBody"></tbody>
-                            </table>
-                        </div>
+                    <div id="kkPosisiBody" aria-labelledby="kkPosLabel"></div>
 
+                    <p class="kk-note">
+                        <iconify-icon icon="solar:info-circle-linear" width="16" height="16" class="flex-shrink-0 mt-1" aria-hidden="true"></iconify-icon>
+                        <span>Kategori bertanda <b class="kk-kat-enam">6%</b> masuk hitungan <b>Biaya Terkontrol (maks 6% omset)</b> di /asset_berjalan. Batas ini peringatan, transaksi tetap tersimpan.</span>
+                    </p>
+
+                    <div class="kk-modal-foot">
                         <div class="kk-total-line">
                             <span>Total draf</span>
                             <b class="kk-num" id="kkDraftTotal">Rp 0</b>
                         </div>
-
-                        <div class="d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-outline-secondary" data-kk-fold>Batal</button>
+                        <span class="kk-draft-split" id="kkDraftSplit">6% Rp 0 · Lain Rp 0</span>
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <button type="button" class="btn btn-outline-secondary" id="kkInsertBatal">Batal</button>
                             <button type="submit" class="btn btn-primary">Simpan Kas Keluar</button>
                         </div>
-                    </form>
+                    </div>
+                </form>
 
-                    <!-- Form edit: route update_kas_keluar, satu baris (bentuk yang
-                         benar-benar diterima route ini) -->
-                    <form action="<?= base_url("update_kas_keluar") ?>" method="post" id="kkFormEdit" hidden>
-                        <input type="hidden" name="idkas_keluar" id="kkEditId">
-                        <input type="hidden" name="idunit" id="kkEditUnit">
-                        <div class="row g-3">
-                            <div class="col-12 col-md-3">
-                                <label class="kk-field-label" for="kkEditTanggal">Tanggal</label>
-                                <input type="date" class="form-control" name="tanggal" id="kkEditTanggal" required>
-                            </div>
-                            <div class="col-12 col-md-4">
-                                <label class="kk-field-label" for="kkEditKategori">Kategori</label>
-                                <select class="form-select" name="kategori_idkategori" id="kkEditKategori" required>
-                                    <option value="">Pilih Kategori</option>
-                                    <?php foreach ($kategori_kas as $kat): ?>
-                                        <option value="<?= (int) $kat->idkategori_kas ?>"><?= esc($kat->kategori) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-12 col-md-5">
-                                <label class="kk-field-label" for="kkEditPenerima">Penerima / Rekening</label>
-                                <select class="form-select" name="penerima" id="kkEditPenerima">
-                                    <option value="">— Tidak ada rekening —</option>
-                                </select>
-                            </div>
-                            <div class="col-12 col-md-8">
-                                <label class="kk-field-label" for="kkEditDeskripsi">Deskripsi</label>
-                                <input type="text" class="form-control" name="deskripsi" id="kkEditDeskripsi" maxlength="255" required>
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="kk-field-label" for="kkEditPosisi">Debet/Kredit</label>
-                                <select class="form-select" name="posisi_drk" id="kkEditPosisi">
-                                    <option value="debet">Debet</option>
-                                    <option value="kredit">Kredit</option>
-                                </select>
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="kk-field-label" for="kkEditJumlah">Jumlah</label>
-                                <input type="text" class="form-control text-end kk-num" name="jumlah" id="kkEditJumlah"
-                                    inputmode="numeric" required>
-                            </div>
+                <!-- Form edit: route update_kas_keluar, satu baris (bentuk yang
+                     benar-benar diterima route ini) -->
+                <form action="<?= base_url("update_kas_keluar") ?>" method="post" id="kkFormEdit" hidden>
+                    <input type="hidden" name="idkas_keluar" id="kkEditId">
+                    <input type="hidden" name="idunit" id="kkEditUnit">
+                    <div class="kk-tx-grid">
+                        <div>
+                            <label class="kk-field-label" for="kkEditTanggal">Tanggal</label>
+                            <input type="date" class="form-control" name="tanggal" id="kkEditTanggal" required>
                         </div>
+                        <div>
+                            <label class="kk-field-label" for="kkEditPosisi">Debet/Kredit</label>
+                            <select class="form-select" name="posisi_drk" id="kkEditPosisi">
+                                <option value="debet">Debet</option>
+                                <option value="kredit">Kredit</option>
+                            </select>
+                        </div>
+                        <div class="is-full">
+                            <label class="kk-field-label" for="kkEditKategori">Kategori</label>
+                            <select class="form-select" name="kategori_idkategori" id="kkEditKategori" required>
+                                <option value="">Pilih Kategori</option>
+                                <?php foreach ($kategoriOpsi as $kat): ?>
+                                    <option value="<?= (int) $kat['id'] ?>"><?= $kat['nama'] ?><?= $kat['enam'] ? ' · 6%' : '' ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="is-full">
+                            <label class="kk-field-label" for="kkEditPenerima">Penerima / Rekening</label>
+                            <select class="form-select" name="penerima" id="kkEditPenerima">
+                                <option value="">— Tidak ada rekening —</option>
+                            </select>
+                        </div>
+                        <div class="is-full">
+                            <label class="kk-field-label" for="kkEditDeskripsi">Deskripsi</label>
+                            <input type="text" class="form-control" name="deskripsi" id="kkEditDeskripsi" maxlength="255" required>
+                        </div>
+                        <div class="is-full">
+                            <label class="kk-field-label" for="kkEditJumlah">Jumlah</label>
+                            <input type="text" class="form-control text-end kk-num" name="jumlah" id="kkEditJumlah"
+                                inputmode="numeric" required>
+                        </div>
+                    </div>
 
-                        <p class="kk-note">
-                            <iconify-icon icon="solar:info-circle-linear" width="16" height="16" class="flex-shrink-0 mt-1" aria-hidden="true"></iconify-icon>
-                            <span>Mode edit mengubah tanggal, kategori, deskripsi, jumlah, penerima, dan debet/kredit. Unit dan No. Akun tetap seperti saat transaksi dibuat.</span>
-                        </p>
+                    <p class="kk-note">
+                        <iconify-icon icon="solar:info-circle-linear" width="16" height="16" class="flex-shrink-0 mt-1" aria-hidden="true"></iconify-icon>
+                        <span>Mode edit mengubah tanggal, kategori, deskripsi, jumlah, penerima, dan debet/kredit. Unit dan No. Akun tetap seperti saat transaksi dibuat.</span>
+                    </p>
 
+                    <div class="kk-modal-foot">
                         <div class="d-flex justify-content-end gap-2">
                             <button type="button" class="btn btn-outline-secondary" id="kkEditBatal">Batal</button>
                             <button type="submit" class="btn btn-primary">Update</button>
                         </div>
-                    </form>
+                    </div>
+                </form>
 
                 </div>
             </div>
         </div>
-    </section>
+    </div>
 
-    <!-- ── Deck 2 · Ledger ──────────────────────────────────────── -->
+    <!-- ── Ledger ──────────────────────────────────────────────── -->
     <section class="kk-deck" aria-labelledby="kkLedgerTitle">
         <h2 class="visually-hidden" id="kkLedgerTitle">Daftar kas keluar</h2>
 
@@ -1227,14 +1291,19 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
                 </select>
             </div>
 
-            <div class="kk-cmdbar-actions">
-                <div class="dropdown">
-                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="kkKolomBtn">
-                        <iconify-icon icon="solar:eye-linear" width="18" height="18" aria-hidden="true"></iconify-icon>
-                        <span>Kolom</span>
-                    </button>
-                    <div class="dropdown-menu dropdown-menu-end p-2" aria-labelledby="kkKolomBtn" style="min-width: 210px;"></div>
+            <div class="kk-filter">
+                <span class="kk-field-label" id="kkKatModeLabel">Kategori</span>
+                <div class="btn-group btn-group-sm" role="group" aria-labelledby="kkKatModeLabel">
+                    <input type="radio" class="btn-check" name="kkKatMode" id="kkKatAll" value="" checked>
+                    <label class="btn btn-outline-secondary" for="kkKatAll">Semua</label>
+                    <input type="radio" class="btn-check" name="kkKatMode" id="kkKatEnam" value="enam">
+                    <label class="btn btn-outline-secondary" for="kkKatEnam" title="Hanya kategori yang masuk Biaya Terkontrol 6%">6%</label>
+                    <input type="radio" class="btn-check" name="kkKatMode" id="kkKatLuar" value="luar">
+                    <label class="btn btn-outline-secondary" for="kkKatLuar">Di luar 6%</label>
                 </div>
+            </div>
+
+            <div class="kk-cmdbar-actions">
                 <form action="<?= base_url("export_kas_keluar") ?>" method="post" id="kkExportForm">
                     <input type="hidden" name="tanggal_awal" id="kkExpStart">
                     <input type="hidden" name="tanggal_akhir" id="kkExpEnd">
@@ -1248,6 +1317,23 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             </div>
         </div>
 
+        <div class="kk-sum">
+            <div class="kk-sum-cell">
+                <span>Total terfilter</span>
+                <b class="kk-num" id="kkSumTotal">Rp 0</b>
+            </div>
+            <div class="kk-sum-cell is-enam">
+                <span><i class="kk-dot" aria-hidden="true"></i>Masuk 6%</span>
+                <b class="kk-num" id="kkSumEnam">Rp 0</b>
+                <small id="kkSumEnamN">0 transaksi</small>
+            </div>
+            <div class="kk-sum-cell">
+                <span>Di luar 6%</span>
+                <b class="kk-num" id="kkSumLuar">Rp 0</b>
+                <small id="kkSumLuarN">0 transaksi</small>
+            </div>
+        </div>
+
         <div class="kk-chips" id="kkChips"></div>
 
         <div class="kk-idhit" id="kkIdHit" hidden></div>
@@ -1256,15 +1342,11 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             <table class="table kk-table" id="table_kas_keluar" style="width: 100%">
                 <thead>
                     <tr>
-                        <th scope="col" class="kk-c-id">ID</th>
-                        <th scope="col" class="kk-c-date">Tanggal</th>
-                        <th scope="col" class="kk-c-unit" data-col="unit">Unit</th>
+                        <th scope="col" class="kk-c-tgl">Tanggal</th>
                         <th scope="col" class="kk-c-kat">Kategori</th>
-                        <th scope="col" class="kk-c-akun" data-col="no_akun">No. Akun</th>
-                        <th scope="col" class="kk-c-desc">Deskripsi</th>
-                        <th scope="col" class="kk-c-penerima">Penerima</th>
+                        <th scope="col" class="kk-c-ket">Keterangan</th>
+                        <th scope="col" class="kk-c-akun">No. Akun</th>
                         <th scope="col" class="kk-c-jumlah">Jumlah</th>
-                        <th scope="col" class="kk-c-jenis">Debet/Kredit</th>
                         <?php if ($canAct): ?>
                             <th scope="col" class="kk-c-aksi"><span class="visually-hidden">Aksi</span></th>
                         <?php endif; ?>
@@ -1273,12 +1355,13 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
                 <tbody></tbody>
                 <tfoot>
                     <tr>
-                        <?php // Baris kaki harus penjumlah persis sama dengan jumlah kolom
-                        // ledger: label menutup ID..Penerima, nominal duduk di bawah
-                        // Jumlah, lalu hitungan grabs Debet/Kredit + Aksi. ?>
-                        <td colspan="7" class="text-end" id="kkFootLabel">Total</td>
+                        <?php // Jumlah kolom ledger harus cocok dengan kaki tabel:
+                        // label menutup Tanggal..No. Akun, nominal di bawah Jumlah. ?>
+                        <td colspan="4" class="text-end" id="kkFootLabel">Total</td>
                         <td class="kk-foot-total" id="kkFootTotal">Rp 0</td>
-                        <td colspan="<?= $canAct ? 2 : 1 ?>" class="kk-foot-count text-secondary" id="kkFootCount"></td>
+                        <?php if ($canAct): ?>
+                            <td></td>
+                        <?php endif; ?>
                     </tr>
                 </tfoot>
             </table>
@@ -1290,7 +1373,10 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             </span>
             <h3 id="kkEmptyTitle">Belum ada kas keluar yang cocok</h3>
             <p id="kkEmptyText">Coba longgarkan filter tanggal, atau pakai ID untuk melompat ke satu transaksi tertentu.</p>
-            <button type="button" class="btn btn-outline-secondary" id="kkEmptyReset">Bersihkan semua filter</button>
+            <div class="d-flex justify-content-center gap-2 mt-3">
+                <button type="button" class="btn btn-primary mt-0" id="kkEmptyInput">Input Kas Keluar</button>
+                <button type="button" class="btn btn-outline-secondary mt-0" id="kkEmptyReset">Bersihkan filter</button>
+            </div>
         </div>
 
         <div class="kk-pager">
@@ -1348,7 +1434,43 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
 
         // ── Option lists, dipakai untuk baris rincian akun ──────────
         const AKUN_OPTIONS = `<option value="">-- Pilih No. Akun --</option><?php foreach ($no_akun as $a): ?><option value="<?= esc($a->no_akun) ?>"><?= esc($a->no_akun) ?> &mdash; <?= esc($a->nama_akun) ?></option><?php endforeach; ?>`;
-        const KAT_OPTIONS = `<option value="">-- Pilih Kategori --</option><?php foreach ($kategori_kas as $kat): ?><option value="<?= (int) $kat->idkategori_kas ?>"><?= esc($kat->kategori) ?></option><?php endforeach; ?>`;
+        const KATEGORI = <?= json_encode($kategoriOpsi, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        // Isian yang ditolak server, dikirim balik lewat flashdata. Null kalau
+        // halaman dibuka normal.
+        const OLD_INPUT = <?= json_encode($oldInput, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+        // Penanda "6%" dan filter checkbox memakai daftar yang sama dengan
+        // Config\Finance, jadi form input tidak bisa berbeda dari kartu
+        // Biaya Terkontrol di /asset_berjalan.
+        function kategoriOptions(hanya6) {
+            let html = '<option value="">-- Pilih Kategori --</option>';
+            KATEGORI.forEach(function (k) {
+                if (hanya6 && !k.enam) return;
+                html += '<option value="' + k.id + '">' + k.nama + (k.enam ? ' · 6%' : '') + '</option>';
+            });
+            return html;
+        }
+
+        // Select2 dipakai supaya hanya badge "6%" yang berwarna: <option>
+        // native tidak bisa mewarnai sebagian teks.
+        function formatKategori(k) {
+            if (!k.id || k.loading) return k.text;
+            const akhiran = ' · 6%';
+            if (k.text.slice(-akhiran.length) !== akhiran) return k.text;
+            const wrap = $('<span>').text(k.text.slice(0, -akhiran.length) + ' ');
+            wrap.append($('<span>', { class: 'kk-kat-enam', text: '6%' }));
+            return wrap;
+        }
+
+        function initKategoriSelect($sel) {
+            $sel.select2({
+                dropdownParent: byId('#kkSheet'),
+                width: '100%',
+                dropdownAutoWidth: true,
+                templateResult: formatKategori,
+                templateSelection: formatKategori
+            });
+        }
         const BANK_BY_UNIT = <?= json_encode(array_map(static function ($list) {
             return array_map(static function ($b) {
                 return [
@@ -1408,16 +1530,14 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         }
 
         // ── Kolom ledger ───────────────────────────────────────────
+        // Enam kolom: ID, Unit, dan Penerima tidak lagi berdiri sendiri —
+        // ID+unit menempel pada tanggal, penerima+rekening pada keterangan.
         const COLS = [
-            { key: 'id', label: 'ID', cls: 'kk-c-id', orderable: true },
-            { key: 'tanggal', label: 'Tanggal', cls: 'kk-c-date', orderable: true },
-            { key: 'unit', label: 'Unit', cls: 'kk-c-unit', orderable: true, toggle: true },
+            { key: 'tanggal', label: 'Tanggal', cls: 'kk-c-tgl', orderable: true },
             { key: 'kategori', label: 'Kategori', cls: 'kk-c-kat', orderable: true },
-            { key: 'no_akun', label: 'No. Akun', cls: 'kk-c-akun', orderable: true, toggle: true },
-            { key: 'deskripsi', label: 'Deskripsi', cls: 'kk-c-desc', orderable: true },
-            { key: 'penerima', label: 'Penerima', cls: 'kk-c-penerima', orderable: true },
-            { key: 'jumlah', label: 'Jumlah', cls: 'kk-c-jumlah', orderable: true },
-            { key: 'jenis', label: 'Debet/Kredit', cls: 'kk-c-jenis', orderable: true }
+            { key: 'deskripsi', label: 'Keterangan', cls: 'kk-c-ket', orderable: true },
+            { key: 'no_akun', label: 'No. Akun', cls: 'kk-c-akun', orderable: true },
+            { key: 'jumlah', label: 'Jumlah', cls: 'kk-c-jumlah', orderable: true }
         ];
         if (CAN_ACT) {
             COLS.push({ key: 'aksi', label: '', cls: 'kk-c-aksi', orderable: false, searchable: false });
@@ -1447,30 +1567,42 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             return q !== '' && !forceTextSearch && /^\d+$/.test(q);
         }
 
-        // ── Composer ───────────────────────────────────────────────
-        const composer = byId('#kkComposer');
-        const toggle = document.getElementById('kkComposerToggle');
-        const title = document.getElementById('kkComposerTitle');
-        const sub = document.getElementById('kkComposerSub');
-        const live = document.getElementById('kkComposerLive');
-        const liveTotal = document.getElementById('kkComposerLiveTotal');
-        const liveMeta = document.getElementById('kkComposerLiveMeta');
-        const cta = document.getElementById('kkComposerCta');
+        // Filter kategori untuk daftar: '', 'enam', atau 'luar'.
+        function katMode() {
+            const el = document.querySelector('input[name="kkKatMode"]:checked');
+            return el ? el.value : '';
+        }
+
+        // ── Modal input/edit ───────────────────────────────────────
+        const sheetEl = byId('#kkSheet');
+        const sheetTitle = byId('#kkSheetTitleText');
+        const sheetSub = byId('#kkSheetSub');
         const formInsert = document.getElementById('kkFormInsert');
         const formEdit = document.getElementById('kkFormEdit');
         const posBody = document.getElementById('kkPosisiBody');
         const draftTotal = document.getElementById('kkDraftTotal');
+        const draftSplit = document.getElementById('kkDraftSplit');
 
         let posisiIndex = 0;
         let composerMode = 'insert';
+        let sheetInstance = null;
 
-        function setComposerOpen(open) {
-            composer.dataset.open = open ? 'true' : 'false';
-            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            if (open) {
-                const first = composer.querySelector('input:not([type=hidden]), select, textarea');
-                if (first) setTimeout(() => first.focus(), 180);
-            }
+        function openSheet() {
+            if (!sheetInstance) sheetInstance = bootstrap.Modal.getOrCreateInstance(sheetEl);
+            sheetInstance.show();
+        }
+
+        function closeSheet() {
+            if (sheetInstance) sheetInstance.hide();
+        }
+
+        // Nilai select diisi lewat Select2 bila sudah aktif, supaya tampilan
+        // dan nilai form tidak berbeda.
+        function setVal(sel, value) {
+            const $sel = $(sel);
+            const v = value === undefined || value === null ? '' : String(value);
+            if ($sel.data('select2')) $sel.val(v).trigger('change');
+            else sel.value = v;
         }
 
         function rupiahInput(input) {
@@ -1488,77 +1620,120 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             });
         }
 
-        function addPosisi() {
-            const row = document.createElement('tr');
+        function renumberTx() {
+            posBody.querySelectorAll('.kk-tx').forEach(function (card, i) {
+                const no = card.querySelector('.kk-tx-no');
+                if (no) no.textContent = String(i + 1);
+            });
+        }
+
+        // Satu kartu = satu record kas_keluar (bentuk yang disimpan backend).
+        // `data` hanya dipakai saat mengembalikan isian yang gagal disimpan.
+        function addPosisi(data) {
+            const card = document.createElement('div');
             const i = posisiIndex++;
-            row.innerHTML =
-                '<td><select class="form-select kk-pos-no" name="akun[' + i + '][no_akun]" required>' + AKUN_OPTIONS + '</select></td>' +
-                '<td><select class="form-select kk-pos-kat" name="akun[' + i + '][kategori_idkategori]" required>' + KAT_OPTIONS + '</select></td>' +
-                '<td><select class="form-select kk-pos-sumber" name="akun[' + i + '][jenis_transaksi]">' +
-                '<option value="cash" selected>Kas</option><option value="bank">Bank</option></select></td>' +
-                '<td><select class="form-select kk-pos-rek" name="akun[' + i + '][no_rekening]" disabled>' + bankOptions(unitTerpilih(), '') + '</select></td>' +
-                '<td><input type="text" class="form-control kk-pos-penerima" name="akun[' + i + '][penerima]" placeholder="Nama penerima" maxlength="255"></td>' +
-                '<td><select class="form-select kk-pos-posisi" name="akun[' + i + '][posisi_drk]">' +
-                '<option value="debet" selected>Debet</option><option value="kredit">Kredit</option></select></td>' +
-                '<td><input type="text" class="form-control text-end kk-num kk-pos-jumlah" name="akun[' + i + '][jumlah]" inputmode="numeric" placeholder="0" required></td>' +
-                '<td class="text-end"><button type="button" class="kk-rowbtn is-danger kk-pos-hapus" title="Hapus baris" aria-label="Hapus baris akun">' +
-                '<iconify-icon icon="solar:trash-bin-minimalistic-linear" width="16" height="16"></iconify-icon></button></td>';
+            card.className = 'kk-tx';
+            card.innerHTML =
+                '<div class="kk-tx-head">' +
+                '<span>Transaksi <b class="kk-tx-no"></b></span>' +
+                '<button type="button" class="kk-rowbtn is-danger kk-pos-hapus" title="Hapus transaksi" aria-label="Hapus transaksi">' +
+                '<iconify-icon icon="solar:trash-bin-minimalistic-linear" width="16" height="16"></iconify-icon></button>' +
+                '</div>' +
+                '<div class="kk-tx-grid">' +
+                '<div class="is-full"><label class="kk-field-label" for="kkPosNo' + i + '">No. Akun</label>' +
+                '<select class="form-select kk-pos-no" id="kkPosNo' + i + '" name="akun[' + i + '][no_akun]" required>' + AKUN_OPTIONS + '</select></div>' +
+                '<div class="is-full"><label class="kk-field-label" for="kkPosKat' + i + '">Kategori</label>' +
+                '<select class="form-select kk-pos-kat" id="kkPosKat' + i + '" name="akun[' + i + '][kategori_idkategori]" required>' + kategoriOptions(byId('#kkHanya6').checked) + '</select></div>' +
+                '<div><label class="kk-field-label" for="kkPosSumber' + i + '">Sumber dana</label>' +
+                '<select class="form-select kk-pos-sumber" id="kkPosSumber' + i + '" name="akun[' + i + '][jenis_transaksi]">' +
+                '<option value="cash" selected>Kas</option><option value="bank">Bank</option></select></div>' +
+                '<div><label class="kk-field-label" for="kkPosRek' + i + '">No. Rekening</label>' +
+                '<select class="form-select kk-pos-rek" id="kkPosRek' + i + '" name="akun[' + i + '][no_rekening]" disabled>' + bankOptions(unitTerpilih(), '') + '</select></div>' +
+                '<div><label class="kk-field-label" for="kkPosPenerima' + i + '">Penerima</label>' +
+                '<input type="text" class="form-control kk-pos-penerima" id="kkPosPenerima' + i + '" name="akun[' + i + '][penerima]" placeholder="Nama penerima" maxlength="255"></div>' +
+                '<div><label class="kk-field-label" for="kkPosPosisi' + i + '">Debet/Kredit</label>' +
+                '<select class="form-select kk-pos-posisi" id="kkPosPosisi' + i + '" name="akun[' + i + '][posisi_drk]">' +
+                '<option value="debet" selected>Debet</option><option value="kredit">Kredit</option></select></div>' +
+                '<div class="is-full"><label class="kk-field-label" for="kkPosJumlah' + i + '">Jumlah</label>' +
+                '<input type="text" class="form-control text-end kk-num kk-pos-jumlah" id="kkPosJumlah' + i + '" name="akun[' + i + '][jumlah]" inputmode="numeric" placeholder="0" required></div>' +
+                '</div>';
 
-            posBody.appendChild(row);
+            posBody.appendChild(card);
 
-            const $sumber = row.querySelector('.kk-pos-sumber');
-            const $rek = row.querySelector('.kk-pos-rek');
-            $sumber.addEventListener('change', function () {
+            const sumber = card.querySelector('.kk-pos-sumber');
+            const rek = card.querySelector('.kk-pos-rek');
+            sumber.addEventListener('change', function () {
                 const isBank = this.value === 'bank';
-                $rek.disabled = !isBank;
-                if (!isBank) {
-                    $($rek).val('').trigger('change');
-                }
+                rek.disabled = !isBank;
+                if (!isBank) setVal(rek, '');
             });
 
-            $(row).find('.kk-pos-no').select2({
-                dropdownParent: byId('#kkComposer'),
+            $(card).find('.kk-pos-no').select2({
+                dropdownParent: sheetEl,
                 width: '100%',
                 dropdownAutoWidth: true,
                 placeholder: 'Cari akun (mis. Piutang)',
                 allowClear: true
             });
-            $(row).find('.kk-pos-rek').select2({
-                dropdownParent: byId('#kkComposer'),
+            $(card).find('.kk-pos-rek').select2({
+                dropdownParent: sheetEl,
                 width: '100%',
                 dropdownAutoWidth: true,
                 placeholder: 'Pilih rekening',
                 allowClear: true
             });
+            initKategoriSelect($(card).find('.kk-pos-kat'));
 
-            rupiahInput(row.querySelector('.kk-pos-jumlah'));
-            row.querySelector('.kk-pos-hapus').addEventListener('click', function () {
-                row.remove();
+            rupiahInput(card.querySelector('.kk-pos-jumlah'));
+            card.querySelector('.kk-pos-hapus').addEventListener('click', function () {
+                card.remove();
+                renumberTx();
                 updateDraftTotal();
             });
 
+            if (data) {
+                setVal(card.querySelector('.kk-pos-no'), data.no_akun);
+                setVal(card.querySelector('.kk-pos-kat'), data.kategori_idkategori);
+                setVal(card.querySelector('.kk-pos-penerima'), data.penerima);
+                setVal(card.querySelector('.kk-pos-posisi'), data.posisi_drk || 'debet');
+                const jml = digitsOnly(data.jumlah);
+                card.querySelector('.kk-pos-jumlah').value = jml ? Number(jml).toLocaleString('id-ID') : '';
+
+                const sumberVal = data.jenis_transaksi === 'bank' ? 'bank' : 'cash';
+                sumber.value = sumberVal;
+                rek.disabled = sumberVal !== 'bank';
+                if (sumberVal === 'bank') {
+                    rek.innerHTML = bankOptions(unitTerpilih(), data.no_rekening);
+                    $(rek).val(String(data.no_rekening || '')).trigger('change');
+                }
+            }
+
+            renumberTx();
             updateDraftTotal();
         }
 
         function updateDraftTotal() {
             let total = 0;
+            let enam = 0;
             let n = 0;
-            document.querySelectorAll('#kkPosisiBody .kk-pos-jumlah').forEach(function (input) {
-                const v = parseInt(digitsOnly(input.value) || '0', 10);
-                if (v > 0) {
-                    total += v;
-                    n++;
+            posBody.querySelectorAll('.kk-tx').forEach(function (card) {
+                const v = parseInt(digitsOnly(card.querySelector('.kk-pos-jumlah').value) || '0', 10);
+                if (v <= 0) return;
+                total += v;
+                n++;
+                const kat = card.querySelector('.kk-pos-kat').value;
+                if (KATEGORI.some(function (k) {
+                    return String(k.id) === kat && k.enam;
+                })) {
+                    enam += v;
                 }
             });
-            draftTotal.textContent = rupiah(total);
-            liveTotal.textContent = rupiah(total);
-            liveMeta.textContent = n + ' baris' + (n === 1 ? '' : ' akun');
 
-            const tgl = byId('#kkTanggal').value;
-            sub.textContent = (n === 0)
-                ? 'Belum ada draf — isi tanggal, unit, lalu tambah baris akun'
-                : (tgl ? tanggalPendek(tgl) : 'Tanggal belum diisi') + ' · ' + n + ' baris akun';
-            live.hidden = n === 0;
+            draftTotal.textContent = rupiah(total);
+            draftSplit.textContent = '6% ' + rupiah(enam) + ' · Lain ' + rupiah(total - enam);
+            sheetSub.textContent = n === 0
+                ? 'Satu transaksi, satu baris rincian akun'
+                : n + ' transaksi · total ' + rupiah(total);
         }
 
         // Unit terkunci mengikuti akun login, seperti sebelumnya. Harus dipanggil
@@ -1577,9 +1752,16 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         function resetComposer() {
             composerMode = 'insert';
             posisiIndex = 0;
+            delete formInsert.dataset.terkirim;
+            delete formEdit.dataset.terkirim;
+            bukaKunciSubmit(formInsert);
+            bukaKunciSubmit(formEdit);
             formInsert.reset();
             applyUnitDefault();
             formEdit.reset();
+            if ($('#kkEditKategori').data('select2')) {
+                $('#kkEditKategori').val('').trigger('change');
+            }
             posBody.innerHTML = '';
             // Default ke hari ini, seperti alur input sebelumnya. Tanggal disusun
             // dari jam lokal supaya tidak pernah bergeser sehari karena zona waktu.
@@ -1587,8 +1769,7 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             byId('#kkTanggal').value = now.getFullYear() + '-' +
                 String(now.getMonth() + 1).padStart(2, '0') + '-' +
                 String(now.getDate()).padStart(2, '0');
-            title.textContent = 'Input Kas Keluar';
-            cta.textContent = 'Input';
+            sheetTitle.textContent = 'Input Kas Keluar';
             formInsert.hidden = false;
             formEdit.hidden = true;
             addPosisi();
@@ -1597,16 +1778,13 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
 
         function openEdit(row) {
             composerMode = 'edit';
-            title.textContent = 'Edit Kas Keluar #' + row.id;
-            cta.textContent = 'Edit';
+            sheetTitle.textContent = 'Edit Kas Keluar #' + row.id;
+            sheetSub.textContent = tanggalPendek(row.tanggal) + ' · ' + (row.deskripsi || 'tanpa deskripsi');
             formInsert.hidden = true;
             formEdit.hidden = false;
-            live.hidden = true;
-            sub.textContent = tanggalPendek(row.tanggal) + ' · ' + (row.deskripsi || 'tanpa deskripsi');
 
             byId('#kkEditId').value = row.id;
             byId('#kkEditTanggal').value = row.tanggal;
-            byId('#kkEditKategori').value = row.kategori_id || '';
             byId('#kkEditDeskripsi').value = row.deskripsi;
             byId('#kkEditJumlah').value = digitsOnly(String(Math.round(Number(row.jumlah) || 0)));
             byId('#kkEditUnit').value = row.idunit || '';
@@ -1617,28 +1795,51 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             );
             byId('#kkEditPenerima').value = row.idbank || '';
             byId('#kkEditPosisi').value = (row.jenis || 'debet').toLowerCase();
-            setComposerOpen(true);
+            openSheet();
+
+            // Select2 baru dipasang saat form benar-benar dipakai, supaya
+            // lebarnya tidak terkunci nol.
+            if (!byId('#kkEditKategori').dataset.s2) {
+                initKategoriSelect($('#kkEditKategori'));
+                byId('#kkEditKategori').dataset.s2 = '1';
+            }
+            $('#kkEditKategori').val(row.kategori_id || '').trigger('change');
         }
 
-        toggle.addEventListener('click', function () {
-            if (composerMode === 'edit') {
-                setComposerOpen(false);
-                return;
-            }
-            const opening = composer.dataset.open !== 'true';
-            setComposerOpen(opening);
-            if (opening && posBody.children.length === 0) {
-                addPosisi();
-            }
+        byId('#kkOpenSheet').addEventListener('click', function () {
+            if (composerMode === 'edit') resetComposer();
+            openSheet();
         });
 
-        document.querySelectorAll('[data-kk-fold]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                setComposerOpen(false);
+        byId('#kkEmptyInput').addEventListener('click', function () {
+            openSheet();
+        });
+
+        byId('#kkInsertBatal').addEventListener('click', function () {
+            resetComposer();
+            closeSheet();
+        });
+
+        byId('#kkAddPosisi').addEventListener('click', function () { addPosisi(); });
+
+        // Filter kategori 6%: saat dicentang, opsi di setiap baris dibangun
+        // ulang tanpa kategori lain. Nilai yang sudah dipilih tetap
+        // dipertahankan bila masih termasuk daftar.
+        byId('#kkHanya6').addEventListener('change', function () {
+            const hanya6 = this.checked;
+            posBody.querySelectorAll('.kk-pos-kat').forEach(function (sel) {
+                const $sel = $(sel);
+                const nilai = sel.value;
+                if ($sel.data('select2')) $sel.select2('destroy');
+                sel.innerHTML = kategoriOptions(hanya6);
+                if (nilai && KATEGORI.some(function (k) {
+                    return String(k.id) === nilai && (!hanya6 || k.enam);
+                })) {
+                    sel.value = nilai;
+                }
+                initKategoriSelect($sel);
             });
         });
-
-        byId('#kkAddPosisi').addEventListener('click', addPosisi);
 
         // Rekening yang ditawarkan harus ikut unit yang dipilih. Untuk role
         // yang boleh memilih unit, daftar di baris yang sudah ada dibangun ulang.
@@ -1669,7 +1870,7 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
 
         byId('#kkEditBatal').addEventListener('click', function () {
             resetComposer();
-            setComposerOpen(false);
+            closeSheet();
         });
         byId('#kkTanggal').addEventListener('change', updateDraftTotal);
 
@@ -1753,35 +1954,89 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             });
         }
 
+        // Double-submit guard: satu klik = satu POST. Tanpa ini klik ganda
+        // pada tombol simpan mengirim dua request dan membuat baris dobel.
+        // shortcut: hanya di sisi klien; pasang idempotency key di server
+        // kalau duplikat masih muncul dari retry jaringan.
+        function kunciSubmit(form, label) {
+            const btn = form.querySelector('button[type="submit"]');
+            if (!btn) return;
+            btn.dataset.label = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>' + label;
+        }
+
+        function bukaKunciSubmit(form) {
+            const btn = form.querySelector('button[type="submit"]');
+            if (!btn) return;
+            btn.disabled = false;
+            if (btn.dataset.label) btn.innerHTML = btn.dataset.label;
+        }
+
         // Bersihkan format ribuan dan pastikan unit terkunci tetap terkirim.
         formInsert.addEventListener('submit', function (e) {
+            if (formInsert.dataset.terkirim === '1') {
+                e.preventDefault();
+                return;
+            }
+
             const u = byId('#kkUnit');
             if (u.disabled) u.disabled = false;
 
             // Satu transaksi harus punya minimal satu baris akun. Baris akun
             // bisa saja semuanya dihapus, dan tanpa penjaga ini form tetap terkirim.
-            const rows = posBody.querySelectorAll('tr').length;
+            const rows = posBody.querySelectorAll('.kk-tx').length;
             if (rows === 0) {
                 e.preventDefault();
-                posBody.closest('.kk-pos-table').closest('div').scrollIntoView({ block: 'center' });
                 addPosisi();
-                byId('#kkPosisiBody').querySelector('.kk-pos-no').focus();
+                posBody.querySelector('.kk-pos-no').focus();
                 return;
             }
 
             document.querySelectorAll('#kkPosisiBody .kk-pos-jumlah').forEach(function (input) {
                 input.value = digitsOnly(input.value) || '0';
             });
+
+            formInsert.dataset.terkirim = '1';
+            kunciSubmit(formInsert, 'Menyimpan...');
         });
-        formEdit.addEventListener('submit', function () {
+        formEdit.addEventListener('submit', function (e) {
+            if (formEdit.dataset.terkirim === '1') {
+                e.preventDefault();
+                return;
+            }
             byId('#kkEditJumlah').value = digitsOnly(byId('#kkEditJumlah').value) || '0';
+            formEdit.dataset.terkirim = '1';
+            kunciSubmit(formEdit, 'Menyimpan...');
         });
 
         resetComposer();
 
+        // Isian yang ditolak server dibuka lagi lengkap, bukan halaman kosong.
+        if (OLD_INPUT && OLD_INPUT.akun && OLD_INPUT.akun.length) {
+            byId('#kkTanggal').value = OLD_INPUT.tanggal || byId('#kkTanggal').value;
+            byId('#kkDeskripsi').value = OLD_INPUT.deskripsi || '';
+            if (OLD_INPUT.unit_idunit) {
+                const u = byId('#kkUnit');
+                u.value = String(OLD_INPUT.unit_idunit);
+                $(u).trigger('change');
+            }
+            posBody.innerHTML = '';
+            posisiIndex = 0;
+            OLD_INPUT.akun.forEach(function (a) {
+                addPosisi(a);
+            });
+            updateDraftTotal();
+            openSheet();
+        }
+
         // ── Kolom tabel: pembentuk sel ────────────────────────────
-        function cellId(row) {
-            return el('span', 'kk-line1', '#' + row.id);
+        function cellTanggal(row) {
+            const frag = document.createDocumentFragment();
+            frag.appendChild(el('span', 'kk-line1 kk-num', tanggalPendek(row.tanggal)));
+            frag.appendChild(el('span', 'kk-line2 kk-mono',
+                '#' + row.id + (SHOW_ALL_UNITS && row.unit ? ' · ' + row.unit : '')));
+            return frag;
         }
 
         function cellTwo(main, sub, subMono) {
@@ -1797,24 +2052,46 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
 
         function cellKategori(row) {
             if (!row.kategori) return el('span', 'kk-line2', '—');
+            const wrap = el('span', 'kk-kat-cell');
             const tag = el('span', 'kk-tag', row.kategori);
             tag.title = row.kategori;
-            return tag;
+            wrap.appendChild(tag);
+            if (row.enam) {
+                const badge = el('span', 'kk-tag kk-tag-enam', '6%');
+                badge.title = 'Masuk hitungan Biaya Terkontrol (maks 6% omset)';
+                wrap.appendChild(badge);
+            }
+            return wrap;
+        }
+
+        function cellKeterangan(row) {
+            const frag = document.createDocumentFragment();
+            // Tanpa `title`: tooltip kk-tip menggantikannya, dan `title` akan
+            // tampil dua kali kalau keduanya menyala.
+            frag.appendChild(el('span', 'kk-desc', row.deskripsi || '—'));
+            const sub = [];
+            if (row.penerima && row.penerima !== '—') sub.push(row.penerima);
+            if (row.nama_bank) sub.push(row.nama_bank + ' · ' + row.norek);
+            if (sub.length) {
+                frag.appendChild(el('span', 'kk-line2 kk-clip', sub.join(' · ')));
+            }
+            return frag;
+        }
+
+        function cellAkun(row) {
+            return cellTwo(row.no_akun || '—', row.nama_akun, true);
         }
 
         function cellJumlah(row) {
-            return el('span', 'kk-amount', rupiah(row.jumlah));
-        }
-
-        function cellJenis(row) {
+            const frag = document.createDocumentFragment();
+            frag.appendChild(el('span', 'kk-amount', rupiah(row.jumlah)));
             const v = String(row.jenis || '').toLowerCase();
             if (v === 'debet' || v === 'kredit') {
-                const tag = el('span', 'kk-tag ' + (v === 'debet' ? 'kk-pos-debet' : 'kk-pos-kredit'), v === 'debet' ? 'Debet' : 'Kredit');
-                return tag;
+                const tag = el('span', 'kk-tag mt-1 ' + (v === 'debet' ? 'kk-pos-debet' : 'kk-pos-kredit'),
+                    v === 'debet' ? 'Debet' : 'Kredit');
+                frag.appendChild(tag);
             }
-            const tag = el('span', 'kk-tag kk-pos-kosong', '—');
-            tag.title = 'Baris ini tidak diisi pada transaksi ini';
-            return tag;
+            return frag;
         }
 
         function cellAksi(row) {
@@ -1870,19 +2147,11 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         }
 
         const RENDER = {
-            id: cellId,
-            tanggal: (row) => el('span', 'kk-line1 kk-num', tanggalPendek(row.tanggal)),
-            unit: (row) => el('span', 'kk-clip', row.unit || '—'),
+            tanggal: cellTanggal,
             kategori: cellKategori,
-            no_akun: (row) => cellTwo(row.no_akun || '—', row.nama_akun, true),
-            deskripsi: (row) => {
-                // Tanpa `title`: tooltip kk-tip menggantikannya, dan `title`
-                // akan tampil dua kali kalau keduanya menyala.
-                return el('span', 'kk-desc', row.deskripsi || '—');
-            },
-            penerima: (row) => cellTwo(row.penerima || '—', row.nama_bank ? (row.nama_bank + ' · ' + row.norek) : '', true),
+            deskripsi: cellKeterangan,
+            no_akun: cellAkun,
             jumlah: cellJumlah,
-            jenis: cellJenis,
             aksi: cellAksi
         };
 
@@ -1898,9 +2167,10 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
                     d.tanggal_akhir = end.value;
                     d.unit_id = unit.value;
                     d.search_mode = forceTextSearch ? 'text' : 'auto';
+                    d.kategori_mode = katMode();
                 }
             },
-            order: [[1, 'desc']],
+            order: [[0, 'desc']],
             columns: COLS.map(function (c) {
                 return {
                     // Kolom Aksi tidak punya field di payload, jadi `data` kosong;
@@ -1941,12 +2211,13 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
                 // Total di kaki tabel: dari SELURUH baris terfilter, bukan
                 // penjumlahan halaman ini saja.
                 byId('#kkFootTotal').textContent = rupiah(json.sumTotal || 0);
-                byId('#kkFootCount').textContent = (json.recordsFiltered || 0) + ' transaksi';
 
                 const isFiltered = (json.recordsFiltered || 0) !== (json.recordsTotal || 0);
                 byId('#kkFootLabel').textContent = isFiltered
                     ? 'Total hasil filter'
                     : 'Total';
+
+                renderSummary(json);
 
                 // Pager dirakit sendiri supaya seqaras dengan deck ini.
                 renderPager(api, json);
@@ -2105,6 +2376,20 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             });
         }
 
+        // Ringkasan 6%: angka Total mengikuti filter kategori yang aktif (sama
+        // dengan kaki tabel), sedangkan Masuk 6% / Di luar 6% tetap mengukur
+        // cakupan filter tanggal/unit/pencarian — supaya pembandingnya tidak
+        // ikut jadi nol saat salah satu sisi difilter.
+        function renderSummary(json) {
+            const enam = Number(json.sumEnam) || 0;
+            const luar = Number(json.sumLuar) || 0;
+            byId('#kkSumTotal').textContent = rupiah(Number(json.sumTotal) || 0);
+            byId('#kkSumEnam').textContent = rupiah(enam);
+            byId('#kkSumLuar').textContent = rupiah(luar);
+            byId('#kkSumEnamN').textContent = (Number(json.countEnam) || 0) + ' transaksi';
+            byId('#kkSumLuarN').textContent = (Number(json.countLuar) || 0) + ' transaksi';
+        }
+
         // ── Jawaban pencarian ID ───────────────────────────────────
         function renderIdHit(json) {
             idHit.hidden = true;
@@ -2182,46 +2467,6 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             });
         }
 
-        // ── Kolom toggle ───────────────────────────────────────────
-        (function buildColumnToggle() {
-            const menu = document.getElementById('kkKolomBtn').nextElementSibling;
-            if (!menu) return;
-            let stored = {};
-            try {
-                stored = JSON.parse(localStorage.getItem('kkColumns') || '{}');
-            } catch (e) { /* storage tidak tersedia */ }
-
-            COLS.forEach(function (c, i) {
-                if (!c.toggle) return;
-                const id = 'kkCol' + i;
-                const wrap = document.createElement('div');
-                wrap.className = 'form-check';
-                const input = document.createElement('input');
-                input.className = 'form-check-input';
-                input.type = 'checkbox';
-                input.id = id;
-                input.checked = stored[c.key] === undefined ? true : !!stored[c.key];
-                const label = document.createElement('label');
-                label.className = 'form-check-label';
-                label.setAttribute('for', id);
-                label.textContent = c.label;
-                input.addEventListener('change', function () {
-                    dt.column(i).visible(this.checked);
-                    const map = {};
-                    COLS.forEach(function (cc, ii) {
-                        if (cc.toggle) map[cc.key] = dt.column(ii).visible();
-                    });
-                    try {
-                        localStorage.setItem('kkColumns', JSON.stringify(map));
-                    } catch (e) { /* storage tidak tersedia */ }
-                });
-                wrap.appendChild(input);
-                wrap.appendChild(label);
-                menu.appendChild(wrap);
-                if (!input.checked) dt.column(i).visible(false);
-            });
-        })();
-
         // ── Pencarian: satu input, dua mode ────────────────────────
         let searchTimer = null;
         search.addEventListener('input', function () {
@@ -2256,6 +2501,9 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
         start.addEventListener('change', function () { dt.page(0).draw(false); });
         end.addEventListener('change', function () { dt.page(0).draw(false); });
         unit.addEventListener('change', function () { dt.page(0).draw(false); });
+        document.querySelectorAll('input[name="kkKatMode"]').forEach(function (radio) {
+            radio.addEventListener('change', function () { dt.page(0).draw(false); });
+        });
 
         function resetAll() {
             search.value = '';
@@ -2263,6 +2511,7 @@ $defaultFilterUnit = (int) ($default_filter_unit ?? 0);
             start.value = '';
             end.value = '';
             unit.value = SHOW_ALL_UNITS ? '' : String(DEFAULT_FILTER_UNIT);
+            byId('#kkKatAll').checked = true;
             forceTextSearch = false;
             targetId = null;
             dt.search('').page(0).draw(false);

@@ -143,6 +143,16 @@ class Finance extends BaseConfig
     public string $kasBankPeriodeMulaiDate = '2026-10-10';
 
     /**
+     * Kategori kas keluar yang dihitung sebagai Biaya Terkontrol (batas 6%
+     * omset) di /asset_berjalan. Dipakai juga oleh /kas_keluar supaya penanda
+     * kategori di form input tidak pernah beda dengan laporan.
+     *
+     * 1 OPERASIONAL, 2 ATK, 3 MAINTENANCE, 4 TRANSPORT, 5 KONSUMSI,
+     * 18 Lainnya(Termasuk 6%).
+     */
+    public array $kategoriBiayaTerkontrol = [1, 2, 3, 4, 5, 18];
+
+    /**
      * ID_JABATAN yang boleh mengisi (input) Dashboard Finance.
      */
     public array $financeInputRoles = [0, 1, 2, 34];

@@ -87,8 +87,21 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * baris yang tidak pernah dimaksud, sementara `idkas_keluar = 3` memakai
      * indeks dan selesai seketika.
      */
-    private function applyKasKeluarFilter($builder, string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false)
+    private function applyKasKeluarFilter($builder, string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null)
     {
+        // Kategori 6% = Biaya Terkontrol, sumbernya sama dengan /asset_berjalan.
+        if ($kategoriMode === 'enam' || $kategoriMode === 'luar') {
+            $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
+            if ($terkontrol === []) {
+                if ($kategoriMode === 'enam') {
+                    $builder->where('1 = 0', null, false);
+                }
+            } elseif ($kategoriMode === 'enam') {
+                $builder->whereIn('kas_keluar.kategori_idkategori', $terkontrol);
+            } else {
+                $builder->whereNotIn('kas_keluar.kategori_idkategori', $terkontrol);
+            }
+        }
         if ($search !== '') {
             if ($idExact) {
                 $builder->where('kas_keluar.idkas_keluar', (int)$search);
@@ -126,10 +139,10 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
     }
 
     /** Jumlah baris setelah filter untuk DataTables. */
-    public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): int
+    public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): int
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
         return $builder->countAllResults();
     }
 
@@ -138,14 +151,51 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * Dipakai supaya angka "Total" di kaki tabel tidak berbeda dengan yang
      * dibaca pengguna dari hasil filter.
      */
-    public function sumKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): float
+    public function sumKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): float
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
 
         $row = $builder->select('COALESCE(SUM(kas_keluar.jumlah), 0) AS total', true)->first();
 
         return (float)($row->total ?? 0);
+    }
+
+    /**
+     * Pecahan 6% vs di luar 6% untuk filter yang aktif (pencarian, tanggal,
+     * unit). Mode kategori sengaja TIDAK ikut: angkanya dipakai sebagai
+     * pembanding, jadi harus tetap terlihat saat salah satu sisi difilter.
+     *
+     * @return array{total: float, enam: float, luar: float, n_enam: int, n_luar: int}
+     */
+    public function summaryKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): array
+    {
+        $builder = $this->baseKasKeluarQuery();
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
+
+        $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
+        $in = $terkontrol === [] ? 'NULL' : implode(',', $terkontrol);
+
+        $row = $builder->select(
+            'COALESCE(SUM(kas_keluar.jumlah), 0) AS total,
+             COALESCE(SUM(CASE WHEN kas_keluar.kategori_idkategori IN (' . $in . ') THEN kas_keluar.jumlah ELSE 0 END), 0) AS enam,
+             COALESCE(SUM(CASE WHEN kas_keluar.kategori_idkategori IN (' . $in . ') THEN 1 ELSE 0 END), 0) AS n_enam,
+             COUNT(*) AS n_total',
+            false
+        )->first();
+
+        $total = (float)($row->total ?? 0);
+        $enam = (float)($row->enam ?? 0);
+        $nEnam = (int)($row->n_enam ?? 0);
+        $nTotal = (int)($row->n_total ?? 0);
+
+        return [
+            'total' => $total,
+            'enam' => $enam,
+            'luar' => $total - $enam,
+            'n_enam' => $nEnam,
+            'n_luar' => $nTotal - $nEnam,
+        ];
     }
 
     /** Satu baris berdasarkan ID kas keluar,abaikan filter periode/unit. */
@@ -161,19 +211,19 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * Dipakai untuk memberi tahu "ID ada, tapi di luar filter" alih-alih
      * diam-diam mengembalikan nol baris.
      */
-    public function isKasKeluarInScope(int $id, ?string $startDate = null, ?string $endDate = null, ?int $unitId = null): bool
+    public function isKasKeluarInScope(int $id, ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, ?string $kategoriMode = null): bool
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, (string)$id, $startDate, $endDate, $unitId, true);
+        $this->applyKasKeluarFilter($builder, (string)$id, $startDate, $endDate, $unitId, true, $kategoriMode);
 
         return $builder->countAllResults() > 0;
     }
 
     /** Baris data untuk DataTables server-side. */
-    public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): array
+    public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): array
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
+        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
 
         $safeOrderCols = [
             'kas_keluar.tanggal',

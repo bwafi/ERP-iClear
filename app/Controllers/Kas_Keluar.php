@@ -143,6 +143,7 @@ class Kas_Keluar extends BaseController
         $data = [
             'akun' => $akun,
             'kategori_kas' => $this->KategoriKasModel->getKategoriKas(),
+            'kategori_terkontrol' => config(\Config\Finance::class)->kategoriBiayaTerkontrol,
             'no_akun' =>  $this->NoAkunModel->getAkun(),
             'bank' => $bankPerUnit[$loginUnit] ?? [],
             'bank_per_unit' => $bankPerUnit,
@@ -153,6 +154,9 @@ class Kas_Keluar extends BaseController
             'can_filter_unit' => $bebasPilihUnit || count($unitFilterIds) > 1,
             'show_all_units' => $bebasPilihUnit,
             'default_filter_unit' => $bebasPilihUnit ? 0 : (int) ($unitFilterIds[0] ?? $loginUnit),
+            // Isian dari percobaan simpan yang ditolak, supaya sheet bisa
+            // dibuka lagi dengan nilai yang sama.
+            'old_input' => session()->getFlashdata('kk_old'),
             'body' => 'jurnal/kas_keluar'
         ];
 
@@ -174,16 +178,12 @@ class Kas_Keluar extends BaseController
         $orderDir    = isset($order[0]['dir']) ? strtoupper($order[0]['dir']) : 'DESC';
 
         $columnMap = [
-            0 => 'kas_keluar.idkas_keluar',
-            1 => 'kas_keluar.tanggal',
-            2 => 'unit.NAMA_UNIT',
-            3 => 'kategori_kas.kategori',
-            4 => 'no_akun.no_akun',
-            5 => 'kas_keluar.deskripsi',
-            6 => 'kas_keluar.penerima',
-            7 => 'kas_keluar.jumlah',
-            8 => 'kas_keluar.jenis',
-            9 => null, // aksi — tidak urutkan
+            0 => 'kas_keluar.tanggal',
+            1 => 'kategori_kas.kategori',
+            2 => 'kas_keluar.deskripsi',
+            3 => 'no_akun.no_akun',
+            4 => 'kas_keluar.jumlah',
+            5 => null, // aksi — tidak urutkan
         ];
         $orderCol = $columnMap[$orderColIdx] ?? 'kas_keluar.tanggal';
 
@@ -200,6 +200,12 @@ class Kas_Keluar extends BaseController
         $searchMode = (string)$this->request->getGet('search_mode');
         $idExact    = ($search !== '' && $searchMode !== 'text' && ctype_digit($search));
 
+        // Filter kategori: '', 'enam', atau 'luar' (lihat kkKatMode di view).
+        $kategoriMode = (string)$this->request->getGet('kategori_mode');
+        if (!in_array($kategoriMode, ['enam', 'luar'], true)) {
+            $kategoriMode = null;
+        }
+
         // recordsTotal adalah "semua baris yang boleh dilihat user", bukan
         // seluruh perusahaan: role terbatas tidak boleh membaca hitungan unit
         // lain lewat angka ini.
@@ -211,9 +217,18 @@ class Kas_Keluar extends BaseController
             $startDate ?: null,
             $endDate ?: null,
             $unitId ?: null,
-            $idExact
+            $idExact,
+            $kategoriMode
         );
         $sumTotal = $this->KasKeluarModel->sumKasKeluarFiltered(
+            $search,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null,
+            $idExact,
+            $kategoriMode
+        );
+        $summary  = $this->KasKeluarModel->summaryKasKeluarFiltered(
             $search,
             $startDate ?: null,
             $endDate ?: null,
@@ -229,7 +244,8 @@ class Kas_Keluar extends BaseController
             $startDate ?: null,
             $endDate ?: null,
             $unitId ?: null,
-            $idExact
+            $idExact,
+            $kategoriMode
         );
 
         // Resolusi ID dijawab terpisah dari isi tabel, supaya "ID ada tapi di
@@ -255,7 +271,8 @@ class Kas_Keluar extends BaseController
                         (int)$search,
                         $startDate ?: null,
                         $endDate ?: null,
-                        $unitId ?: null
+                        $unitId ?: null,
+                        $kategoriMode
                     ),
                 ];
             }
@@ -264,6 +281,7 @@ class Kas_Keluar extends BaseController
         // Nilai dikembalikan terpisah, tanpa HTML: sel disusun di tampilan agar
         // escaping dan pemotongan teks punya satu tempat yang jelas.
         $data = [];
+        $kategoriTerkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
         foreach ($rows as $r) {
             $data[] = [
                 'id'        => (int)$r->idkas_keluar,
@@ -273,6 +291,8 @@ class Kas_Keluar extends BaseController
                 'nama_akun' => trim((string)($r->nama_akun ?? '')),
                 'kategori'  => (string)($r->kategori ?? ''),
                 'kategori_id' => (int)($r->kategori_idkategori ?? 0),
+                // Ditandai di server supaya definisi 6% tetap satu sumber.
+                'enam'      => in_array((int)($r->kategori_idkategori ?? 0), $kategoriTerkontrol, true),
                 // idbank DISERTAKAN sebagai string. Column ini VARCHAR dan
                 // nilainya bisa 'BNI-001' atau ' 15 ', jadi (int) di sini
                 // mengubah rekening non-numerik jadi 0 — barisnya lalu tampil
@@ -298,6 +318,10 @@ class Kas_Keluar extends BaseController
             'recordsTotal'    => $total,
             'recordsFiltered' => $filtered,
             'sumTotal'        => $sumTotal,
+            'sumEnam'         => $summary['enam'],
+            'sumLuar'         => $summary['luar'],
+            'countEnam'       => $summary['n_enam'],
+            'countLuar'       => $summary['n_luar'],
             'isIdQuery'       => $idExact,
             'idHit'           => $idHit,
             'data'            => $data,
@@ -326,6 +350,25 @@ class Kas_Keluar extends BaseController
         return $mentah;
     }
 
+    /**
+     * Tolak simpan kas keluar: tampilkan pesan dan buka lagi isian yang sudah
+     * diketik. Tanpa ini, satu rekening yang salah menghapus seluruh draf.
+     */
+    private function gagalInsert(string $pesan)
+    {
+        session()->setFlashdata('gagal', $pesan);
+
+        $akun = $this->request->getPost('akun');
+        session()->setFlashdata('kk_old', [
+            'tanggal' => (string) $this->request->getPost('tanggal'),
+            'deskripsi' => (string) $this->request->getPost('deskripsi'),
+            'unit_idunit' => (int) $this->request->getPost('unit_idunit'),
+            'akun' => is_array($akun) ? array_values($akun) : [],
+        ]);
+
+        return redirect()->to(base_url('/kas_keluar'));
+    }
+
     public function insert_kas_keluar()
     {
         $tanggal = $this->request->getPost('tanggal');
@@ -339,16 +382,14 @@ class Kas_Keluar extends BaseController
             $idunit = (int) session('ID_UNIT');
         }
         if ($idunit <= 0) {
-            session()->setFlashdata('error', 'Unit wajib diisi.');
-            return redirect()->to(base_url('/kas_keluar'));
+            return $this->gagalInsert('Unit wajib diisi.');
         }
 
         $akunData = $this->request->getPost('akun');
 
         // Prospek harus punya minimal satu baris akun.
         if (!is_array($akunData) || empty($akunData)) {
-            session()->setFlashdata('error', 'Minimal satu baris akun wajib diisi.');
-            return redirect()->to(base_url('/kas_keluar'));
+            return $this->gagalInsert('Minimal satu baris akun wajib diisi.');
         }
 
         // Simpan source + posting ledger + jurnal dalam SATU transaksi.
@@ -456,21 +497,16 @@ class Kas_Keluar extends BaseController
             $db->transRollback();
             log_message('error', 'KasBank: kas keluar dibatalkan karena posting ledger gagal: ' . $e->getAlasan());
 
-            session()->setFlashdata('gagal', $e->getMessage());
-
-            return redirect()->to(base_url('/kas_keluar'));
+            return $this->gagalInsert($e->getMessage());
         } catch (\Throwable $e) {
             $db->transRollback();
             log_message('error', 'KasBank: gagal menyimpan kas keluar: ' . $e->getMessage());
 
-            session()->setFlashdata('gagal', 'Gagal menyimpan data kas keluar.');
-
-            return redirect()->to(base_url('/kas_keluar'));
+            return $this->gagalInsert('Gagal menyimpan data kas keluar.');
         }
 
         if ($db->transStatus() === false) {
-            session()->setFlashdata('gagal', 'Gagal menyimpan data kas keluar.');
-            return redirect()->to(base_url('/kas_keluar'));
+            return $this->gagalInsert('Gagal menyimpan data kas keluar.');
         }
 
         session()->setFlashdata('sukses', 'Data kas keluar berhasil disimpan.');

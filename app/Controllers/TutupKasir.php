@@ -7,9 +7,6 @@ use CodeIgniter\Controller;
 
 class TutupKasir extends BaseController
 {
-    /** Kategori biaya terkontrol (maks 6% omset). */
-    private const KATEGORI_TERKONTROL = [1, 2, 3, 4, 5, 18];
-
     protected $db;
     protected $TutupKasir;
 
@@ -17,6 +14,12 @@ class TutupKasir extends BaseController
     {
         $this->db = \Config\Database::connect();
         $this->TutupKasir = new ModelTutupKasir();
+    }
+
+    /** Kategori biaya terkontrol (maks 6% omset). Sumber: Config\Finance. */
+    private function kategoriTerkontrol(): array
+    {
+        return config(\Config\Finance::class)->kategoriBiayaTerkontrol;
     }
 
     /**
@@ -921,7 +924,7 @@ class TutupKasir extends BaseController
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
-            ->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL)
+            ->whereIn('kas_keluar.kategori_idkategori', $this->kategoriTerkontrol())
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -932,7 +935,7 @@ class TutupKasir extends BaseController
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
             ->where('kas_keluar.idunit', $unit)
-            ->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL)
+            ->whereNotIn('kas_keluar.kategori_idkategori', $this->kategoriTerkontrol())
             ->get()
             ->getRow()
             ->total ?? 0;
@@ -1008,6 +1011,7 @@ class TutupKasir extends BaseController
 
         // Filter kategori (single pilih). 0 / kosong = tanpa filter.
         $kategoriFilter = (int) ($this->request->getGet('kategori') ?? 0);
+        $kategoriTerkontrol = $this->kategoriTerkontrol();
 
         $order   = $this->request->getGet('order');
         $order   = is_array($order) ? ($order[0] ?? []) : [];
@@ -1024,15 +1028,15 @@ class TutupKasir extends BaseController
         // $denganKategori=false untuk chip kategori: chip harus tetap lengkap
         // walau tabel sedang difilter, supaya user bisa ganti kategori langsung.
         // $denganCari=false untuk recordsTotal: itu total kelompok, bukan hasil cari.
-        $saring = function ($builder, bool $denganKategori = true, bool $denganCari = true) use ($bulan, $tahun, $unit, $kelompok, $search, $kategoriFilter): void {
+        $saring = function ($builder, bool $denganKategori = true, bool $denganCari = true) use ($bulan, $tahun, $unit, $kelompok, $search, $kategoriFilter, $kategoriTerkontrol): void {
             $builder->where('MONTH(kas_keluar.tanggal)', $bulan)
                 ->where('YEAR(kas_keluar.tanggal)', $tahun)
                 ->where('kas_keluar.idunit', $unit);
 
             if ($kelompok === 'terkontrol') {
-                $builder->whereIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+                $builder->whereIn('kas_keluar.kategori_idkategori', $kategoriTerkontrol);
             } else {
-                $builder->whereNotIn('kas_keluar.kategori_idkategori', self::KATEGORI_TERKONTROL);
+                $builder->whereNotIn('kas_keluar.kategori_idkategori', $kategoriTerkontrol);
             }
 
             if ($denganKategori && $kategoriFilter > 0) {
