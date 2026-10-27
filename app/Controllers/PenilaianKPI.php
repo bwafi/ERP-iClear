@@ -1568,6 +1568,7 @@ class PenilaianKPI extends BaseController
         // SALARY COMPOSITION — SalaryCalculationService (context penilaian_kinerja)
         // =========================================================
         $periodDate = "$tahun-$bulan-15";
+        $extras = $this->salaryExtras((int) $selected_karyawan, (string) $bulan, (string) $tahun);
         $salaryService = new \App\Services\Payroll\SalaryCalculationService();
         $result = $salaryService->calculateSalary(
             (int) $selected_karyawan,
@@ -1580,8 +1581,8 @@ class PenilaianKPI extends BaseController
             ],
             $kpi['akun']->tunjangan_penempatan,
             $kpi['insentif'],
-            0.0,
-            0.0,
+            $extras['lembur'],
+            $extras['bon'],
             $periodDate
         );
 
@@ -1612,7 +1613,10 @@ class PenilaianKPI extends BaseController
             'insentif'             => $result['incentive'],
             'tunjangan_penempatan' => $kpi['akun'],
             'gaji_pokok'           => $compByCode['GAJI_POKOK'] ?? $kpi['gaji_pokok'],
-            'gaji'                 => $result['total_gaji'],
+            'gaji'                 => (float) $result['total_gaji'] - $extras['kasbon'],
+            'lembur'               => $extras['lembur'],
+            'bon'                  => $extras['bon'],
+            'kasbon'               => $extras['kasbon'],
             'bulan'                => $bulan,
             'tahun'                => $tahun,
             'body'                 => 'penilaian/penilaian_kinerja'
@@ -2138,6 +2142,47 @@ class PenilaianKPI extends BaseController
             ->with('success', $message);
     }
 
+    /**
+     * Lembur & bon dari kas_keluar (kategori 10) + sisa kasbon pegawai.
+     * Dipakai bersama oleh slip gaji dan estimasi THP di /penilaian_kinerja
+     * supaya kedua halaman memakai angka yang sama.
+     *
+     * @return array{bon: float, lembur: float, kasbon: int}
+     */
+    private function salaryExtras(
+        int $employeeId,
+        ?string $bulan,
+        ?string $tahun
+    ): array {
+        $startMonth = (($tahun ?: date('Y')) . '-' . str_pad((string) ($bulan ?: date('m')), 2, '0', STR_PAD_LEFT) . '-01');
+        $endMonth = date('Y-m-t', strtotime($startMonth));
+
+        $sum = function (string $kata) use ($employeeId, $startMonth, $endMonth): float {
+            return (float) ($this->db->table('kas_keluar kk')
+                ->selectSum('kk.jumlah', 'total')
+                ->where('kk.kategori_idkategori', 10)
+                ->where('kk.penerima', $employeeId)
+                ->where('kk.tanggal >=', $startMonth)
+                ->where('kk.tanggal <=', $endMonth)
+                ->like('kk.deskripsi', $kata)
+                ->get()
+                ->getRow()
+                ->total ?? 0);
+        };
+
+        try {
+            $kasbon = (new \App\Services\Finance\HutangPiutangService())->getSisaKasbonPegawai($employeeId);
+        } catch (\Throwable $e) {
+            $kasbon = 0;
+        }
+
+        return [
+            'bon' => $sum('bon'),
+            'lembur' => $sum('lembur'),
+            'kasbon' => $kasbon,
+        ];
+    }
+
     public function slip_gaji($idakun)
     {
         $awal_bulan = date('01 m');
@@ -2170,30 +2215,10 @@ class PenilaianKPI extends BaseController
         // BON & LEMBUR — source existing (kas_keluar, kategori 10)
         // difilter sesuai bulan & tahun yang dipilih pada slip gaji
         // =========================================================
-        $startMonth = (($tahun ?: date('Y')) . '-' . str_pad((string) ($bulan ?: date('m')), 2, '0', STR_PAD_LEFT) . '-01');
-        $endMonth   = date('Y-m-t', strtotime($startMonth));
-
-        $bon = $this->db->table('kas_keluar kk')
-            ->selectSum('kk.jumlah', 'total_bon')
-            ->where('kk.kategori_idkategori', 10)
-            ->where('kk.penerima', $idakun)
-            ->where('kk.tanggal >=', $startMonth)
-            ->where('kk.tanggal <=', $endMonth)
-            ->like('kk.deskripsi', 'bon')
-            ->get()
-            ->getRow()
-            ->total_bon ?? 0;
-
-        $lembur = $this->db->table('kas_keluar kk')
-            ->selectSum('kk.jumlah', 'total_bon')
-            ->where('kk.kategori_idkategori', 10)
-            ->where('kk.penerima', $idakun)
-            ->where('kk.tanggal >=', $startMonth)
-            ->where('kk.tanggal <=', $endMonth)
-            ->like('kk.deskripsi', 'lembur')
-            ->get()
-            ->getRow()
-            ->total_bon ?? 0;
+        $extras = $this->salaryExtras((int) $idakun, $bulan, $tahun);
+        $bon = $extras['bon'];
+        $lembur = $extras['lembur'];
+        $kasbon = $extras['kasbon'];
 
         // =========================================================
         // SALARY COMPOSITION — SalaryCalculationService (context slip_gaji)
@@ -2225,13 +2250,6 @@ class PenilaianKPI extends BaseController
         // View slip_gaji menghitung TOTAL(A)=gaji+lembur dan BERSIH=gaji+lembur-bon.
         // Maka gaji yang dikirim = total_gaji - lembur + bon (basis tanpa bon/lembur).
         $gaji = (float) $result['total_gaji'] - (float) $result['lembur'] + (float) $result['bon'];
-
-        // Kasbon aktif pegawai (modul Hutang Piutang) — ditampilkan sebagai potongan.
-        try {
-            $kasbon = (new \App\Services\Finance\HutangPiutangService())->getSisaKasbonPegawai((int) $idakun);
-        } catch (\Throwable $e) {
-            $kasbon = 0;
-        }
 
         return view('cetak/slip_gaji', [
             'pegawai'              => $kpi['karyawan'],

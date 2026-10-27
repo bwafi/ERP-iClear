@@ -53,6 +53,18 @@ class KpiCalculationService
      */
     public const HO_UNIT_NAME = "Head Office";
 
+    /** Unit Head Office. */
+    public const HO_UNIT_ID = 50;
+
+    /** Unit ICLEAR Probolinggo. */
+    public const PROBOLINGGO_UNIT_ID = 1;
+
+    /** Aturan insentif HO & Probolinggo berlaku mulai periode ini. */
+    public const INCENTIVE_RULE_V2_START = "2026-10-01";
+
+    /** Jabatan staff toko yang ikut pool insentif Probolinggo. */
+    private const STORE_POSITION_IDS = [35, 36, 41, 42];
+
     protected $componentModel;
     protected $targetModel;
     protected $weightModel;
@@ -863,10 +875,11 @@ class KpiCalculationService
      */
     public function branchUnits(): array
     {
-        static $cache = null;
+        $key = \App\Libraries\ReadCache::kunci("branch_units");
+        static $memo = [];
 
-        if ($cache !== null) {
-            return $cache;
+        if (isset($memo[$key])) {
+            return $memo[$key];
         }
 
         $rows = \Config\Database::connect()
@@ -886,7 +899,7 @@ class KpiCalculationService
             ];
         }
 
-        return $cache;
+        return $memo[$key] = $cache;
     }
 
     public function calculateAchievement($actualValue, $targetValue)
@@ -1150,6 +1163,23 @@ class KpiCalculationService
         $groupModel = new \App\Models\ModelIncentiveGroup();
         $ruleModel = new \App\Models\ModelIncentiveRule();
         $omsetCalc = new OmsetTokoCalculator();
+        $date = $date ?? date("Y-m-d");
+
+        // Aturan baru Oktober 2026: HO & Probolinggo TIDAK lagi memakai
+        // incentive_members (membership lama menempatkan sebagian HO di unit 1).
+        if ($date >= self::INCENTIVE_RULE_V2_START) {
+            if ($unit === self::HO_UNIT_ID) {
+                return $this->hoPoolIncentive($employeeId, $month, $year, $date);
+            }
+            if ($unit === self::PROBOLINGGO_UNIT_ID) {
+                return $this->probolinggoPoolIncentive(
+                    $employeeId,
+                    $month,
+                    $year,
+                    $date,
+                );
+            }
+        }
 
         $member = $memberModel
             ->where("employee_id", $employeeId)
@@ -1164,7 +1194,6 @@ class KpiCalculationService
             return 0.0;
         }
 
-        $date = $date ?? date("Y-m-d");
         $rule = $ruleModel
             ->where("incentive_group_id", $group->id)
             ->where("effective_from <=", $date)
@@ -1249,6 +1278,124 @@ class KpiCalculationService
 
         // Rule diwarisi: pool = rate% × omset, dibagi rata ke anggota.
         return ($rate * $omsetToko) / $memberCount;
+    }
+
+    /**
+     * Insentif HO (Oktober 2026+).
+     *
+     * Pool = 1% × gross profit tiap cabang yang mencapai target OMSET_TOKO,
+     * dibagi rata ke seluruh karyawan HO aktif yang menerima gaji.
+     */
+    private function hoPoolIncentive(
+        int $employeeId,
+        string $month,
+        string $year,
+        string $date
+    ): float {
+        $ids = $this->activePaidEmployeeIds(self::HO_UNIT_ID);
+        if (!$ids || !in_array($employeeId, $ids, true)) {
+            return 0.0;
+        }
+
+        $component = $this->componentModel->where("code", "OMSET_TOKO")->first();
+        if (!$component) {
+            return 0.0;
+        }
+
+        $omsetCalc = new OmsetTokoCalculator();
+        $pool = 0.0;
+        foreach ($this->branchUnits() as $branch) {
+            $branchUnit = (int) $branch["unit"];
+            $actual = $omsetCalc->calculate(0, $branchUnit, $month, $year);
+            $target = $this->targetModel->getTargetByKpiAndUnit(
+                (int) $component->id,
+                $branchUnit,
+                "default",
+                $date,
+            );
+
+            if ($target && $actual >= (float) $target->target_value) {
+                $pool += $actual * 0.01;
+            }
+        }
+
+        return $pool / count($ids);
+    }
+
+    /**
+     * Insentif Probolinggo (Oktober 2026+).
+     *
+     * Pool = 3% × gross profit unit 1 bila target OMSET_TOKO tercapai, dibagi
+     * rata ke staff toko aktif yang menerima gaji (KT, teknisi, admin, CS).
+     */
+    private function probolinggoPoolIncentive(
+        int $employeeId,
+        string $month,
+        string $year,
+        string $date
+    ): float {
+        $ids = $this->activePaidEmployeeIds(
+            self::PROBOLINGGO_UNIT_ID,
+            self::STORE_POSITION_IDS,
+        );
+        if (!$ids || !in_array($employeeId, $ids, true)) {
+            return 0.0;
+        }
+
+        $component = $this->componentModel->where("code", "OMSET_TOKO")->first();
+        if (!$component) {
+            return 0.0;
+        }
+
+        $actual = (new OmsetTokoCalculator())->calculate(
+            0,
+            self::PROBOLINGGO_UNIT_ID,
+            $month,
+            $year,
+        );
+        $target = $this->targetModel->getTargetByKpiAndUnit(
+            (int) $component->id,
+            self::PROBOLINGGO_UNIT_ID,
+            "default",
+            $date,
+        );
+
+        if (!$target || $actual < (float) $target->target_value) {
+            return 0.0;
+        }
+
+        return ($actual * 0.03) / count($ids);
+    }
+
+    /**
+     * ID akun aktif & menerima gaji pada satu unit, opsional filter jabatan.
+     *
+     * @param list<int>|null $positions
+     * @return list<int>
+     */
+    private function activePaidEmployeeIds(
+        int $unitId,
+        ?array $positions = null
+    ): array {
+        $builder = \Config\Database::connect()
+            ->table("akun")
+            ->select("ID_AKUN")
+            ->where("ID_UNIT", $unitId)
+            ->where("STATUS_PEGAWAI", 1)
+            ->where("TERIMA_GAJI", 1)
+            ->groupStart()
+            ->where("deleted", null)
+            ->orWhere("deleted", 0)
+            ->groupEnd();
+
+        if ($positions !== null) {
+            $builder->whereIn("ID_JABATAN", $positions);
+        }
+
+        return array_map(
+            "intval",
+            array_column($builder->get()->getResultArray(), "ID_AKUN"),
+        );
     }
 
     /**

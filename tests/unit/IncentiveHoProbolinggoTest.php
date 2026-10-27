@@ -1,0 +1,232 @@
+<?php
+
+namespace Tests\unit;
+
+use App\Services\Kpi\KpiCalculationService;
+use CodeIgniter\Test\CIUnitTestCase;
+
+/**
+ * Regresi insentif Oktober 2026:
+ * - HO (unit 50): pool 1% × gross profit tiap cabang yang capai target,
+ *   dibagi rata karyawan HO aktif yang menerima gaji.
+ * - Probolinggo (unit 1): pool 3% × gross profit bila target capai,
+ *   dibagi rata staff toko (KT, teknisi, admin, CS).
+ * - Periode sebelum Oktober 2026 tetap memakai incentive_members lama.
+ *
+ * @internal
+ */
+final class IncentiveHoProbolinggoTest extends CIUnitTestCase
+{
+    private const BULAN = '10';
+    private const TAHUN = '2026';
+    private const TANGGAL = '2026-10-15';
+
+    private const HO_A = 701;
+    private const HO_B = 702;
+    private const HO_NONAKTIF = 703;
+    private const HO_TANPA_GAJI = 704;
+    private const PROB_KT = 801;
+    private const PROB_TEK_A = 802;
+    private const PROB_TEK_B = 803;
+    private const PROB_CS = 804;
+    private const PROB_DIREKTUR = 805;
+
+    /** @var \CodeIgniter\Database\BaseConnection */
+    protected $db;
+
+    private string $prefixAsli = '';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->db = \Config\Database::connect();
+        $this->prefixAsli = (string) $this->db->DBPrefix;
+        $this->db->setPrefix('');
+
+        $this->buatSkema();
+        $this->sebarData();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->db->setPrefix($this->prefixAsli);
+        parent::tearDown();
+    }
+
+    private function buatSkema(): void
+    {
+        $q = fn (string $sql) => $this->db->query($sql);
+
+        foreach ([
+            'unit', 'akun', 'kpi_components', 'kpi_targets', 'penjualan',
+            'detail_penjualan', 'service',
+            'incentive_groups', 'incentive_members', 'incentive_rules',
+        ] as $tabel) {
+            $q('DROP TABLE IF EXISTS ' . $tabel);
+        }
+
+        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT VARCHAR(100) NULL)');
+        $q('CREATE TABLE akun (
+                ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
+                NAMA_AKUN VARCHAR(150) NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL,
+                STATUS_PEGAWAI INT NULL, deleted INT NULL)');
+        $q('CREATE TABLE kpi_components (
+                id INT PRIMARY KEY, code VARCHAR(50) NULL, name VARCHAR(150) NULL)');
+        $q('CREATE TABLE kpi_targets (
+                id INT PRIMARY KEY AUTO_INCREMENT, kpi_component_id INT NULL,
+                unit_id INT NULL, position_id INT NULL, context VARCHAR(30) NULL,
+                target_value DECIMAL(15,2) NULL, effective_from DATE NULL,
+                effective_to DATE NULL)');
+        $q('CREATE TABLE penjualan (
+                idpenjualan INT PRIMARY KEY AUTO_INCREMENT, unit_idunit INT NULL,
+                tanggal DATE NULL)');
+        $q('CREATE TABLE detail_penjualan (
+                iddetail_penjualan INT PRIMARY KEY AUTO_INCREMENT,
+                penjualan_idpenjualan INT NULL, sub_total REAL NULL,
+                hpp_penjualan REAL NULL)');
+        $q('CREATE TABLE service (
+                idservice INT PRIMARY KEY AUTO_INCREMENT, unit_idunit INT NULL,
+                service_by INT NULL, refund_garansi_jumlah REAL NULL,
+                refund_garansi_tanggal DATE NULL)');
+        $q('CREATE TABLE incentive_groups (
+                id INT PRIMARY KEY, code VARCHAR(50) NULL, is_active INT NULL)');
+        $q('CREATE TABLE incentive_members (
+                id INT PRIMARY KEY AUTO_INCREMENT, incentive_group_id INT NULL,
+                employee_id INT NULL, unit_id INT NULL, effective_from DATE NULL,
+                effective_to DATE NULL, is_active INT NULL)');
+        $q('CREATE TABLE incentive_rules (
+                id INT PRIMARY KEY AUTO_INCREMENT, incentive_group_id INT NULL,
+                kpi_component_id INT NULL, base_value REAL NULL,
+                division_method VARCHAR(30) NULL, minimum_achievement REAL NULL,
+                effective_from DATE NULL, effective_to DATE NULL)');
+    }
+
+    private function sebarData(): void
+    {
+        $this->db->table('unit')->insertBatch([
+            ['idunit' => 1, 'NAMA_UNIT' => 'ICLEAR Probolinggo'],
+            ['idunit' => 2, 'NAMA_UNIT' => 'ICLEAR Jember'],
+            ['idunit' => 5, 'NAMA_UNIT' => 'ICLEAR Genteng'],
+            ['idunit' => 50, 'NAMA_UNIT' => 'Head Office'],
+        ]);
+
+        $this->db->table('kpi_components')->insert([
+            'id' => 1, 'code' => 'OMSET_TOKO', 'name' => 'Omset Toko',
+        ]);
+        $this->db->table('kpi_targets')->insertBatch([
+            ['kpi_component_id' => 1, 'unit_id' => 1, 'context' => 'default', 'target_value' => 50000000, 'effective_from' => '2024-01-01'],
+            ['kpi_component_id' => 1, 'unit_id' => 2, 'context' => 'default', 'target_value' => 50000000, 'effective_from' => '2024-01-01'],
+            ['kpi_component_id' => 1, 'unit_id' => 5, 'context' => 'default', 'target_value' => 35000000, 'effective_from' => '2024-01-01'],
+        ]);
+
+        $this->db->table('akun')->insertBatch([
+            ['ID_AKUN' => self::HO_A, 'ID_UNIT' => 50, 'ID_JABATAN' => 41, 'NAMA_AKUN' => 'HO A', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::HO_B, 'ID_UNIT' => 50, 'ID_JABATAN' => 40, 'NAMA_AKUN' => 'HO B', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => 0],
+            ['ID_AKUN' => self::HO_NONAKTIF, 'ID_UNIT' => 50, 'ID_JABATAN' => 41, 'NAMA_AKUN' => 'HO Nonaktif', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 0, 'deleted' => null],
+            ['ID_AKUN' => self::HO_TANPA_GAJI, 'ID_UNIT' => 50, 'ID_JABATAN' => 41, 'NAMA_AKUN' => 'HO Tanpa Gaji', 'TERIMA_GAJI' => 0, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::PROB_KT, 'ID_UNIT' => 1, 'ID_JABATAN' => 41, 'NAMA_AKUN' => 'KT Probolinggo', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::PROB_TEK_A, 'ID_UNIT' => 1, 'ID_JABATAN' => 36, 'NAMA_AKUN' => 'Teknisi A', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::PROB_TEK_B, 'ID_UNIT' => 1, 'ID_JABATAN' => 36, 'NAMA_AKUN' => 'Teknisi B', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::PROB_CS, 'ID_UNIT' => 1, 'ID_JABATAN' => 42, 'NAMA_AKUN' => 'CS Probolinggo', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::PROB_DIREKTUR, 'ID_UNIT' => 1, 'ID_JABATAN' => 1, 'NAMA_AKUN' => 'Direktur', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+        ]);
+
+        // Oktober 2026: unit 1 = 60jt (capai), unit 2 = 40jt (tidak capai),
+        // unit 5 trial = 70jt (capai, tetap masuk pool HO).
+        $this->sebarOmset(1, '2026-10-05', 80000000, 20000000);
+        $this->sebarOmset(2, '2026-10-06', 50000000, 10000000);
+        $this->sebarOmset(5, '2026-10-07', 90000000, 20000000);
+
+        // September 2026 utk jalur lama (membership).
+        $this->sebarOmset(1, '2026-09-05', 12000000, 2000000);
+
+        $this->db->table('incentive_groups')->insert([
+            'id' => 1, 'code' => 'KEPALA_TOKO', 'is_active' => 1,
+        ]);
+        $this->db->table('incentive_members')->insert([
+            'incentive_group_id' => 1, 'employee_id' => self::PROB_KT,
+            'unit_id' => 1, 'effective_from' => '2024-01-01',
+            'effective_to' => null, 'is_active' => 1,
+        ]);
+        $this->db->table('incentive_rules')->insert([
+            'incentive_group_id' => 1, 'kpi_component_id' => 1,
+            'base_value' => 1, 'division_method' => 'per_member',
+            'minimum_achievement' => 0, 'effective_from' => '2024-01-01',
+            'effective_to' => null,
+        ]);
+    }
+
+    private function sebarOmset(int $unitId, string $tanggal, float $subTotal, float $hpp): void
+    {
+        $this->db->table('penjualan')->insert([
+            'unit_idunit' => $unitId, 'tanggal' => $tanggal,
+        ]);
+        $penjualanId = $this->db->insertID();
+
+        $this->db->table('detail_penjualan')->insert([
+            'penjualan_idpenjualan' => $penjualanId,
+            'sub_total' => $subTotal,
+            'hpp_penjualan' => $hpp,
+        ]);
+    }
+
+    private function insentif(int $employeeId, int $unitId, string $bulan = self::BULAN): float
+    {
+        return (new KpiCalculationService())->computeIncentive(
+            $employeeId,
+            $unitId,
+            $bulan,
+            self::TAHUN,
+            sprintf('%s-%s-15', self::TAHUN, $bulan),
+        );
+    }
+
+    public function testHoMemakaiPoolCabangCapaiTargetDibagiHeadcount(): void
+    {
+        // Pool = 1% × (60jt unit 1 + 70jt unit 5 trial) = 1,3jt;
+        // 2 karyawan HO aktif → 650rb. Unit 2 (40jt < 50jt) tidak masuk.
+        $this->assertSame(650000.0, $this->insentif(self::HO_A, 50));
+        $this->assertSame(650000.0, $this->insentif(self::HO_B, 50));
+    }
+
+    public function testHoNonaktifDanTanpaGajiTidakDapat(): void
+    {
+        $this->assertSame(0.0, $this->insentif(self::HO_NONAKTIF, 50));
+        $this->assertSame(0.0, $this->insentif(self::HO_TANPA_GAJI, 50));
+    }
+
+    public function testHoDapatNolBilaTidakAdaCabangCapaiTarget(): void
+    {
+        // November: tanpa penjualan → semua cabang di bawah target.
+        $this->assertSame(
+            0.0,
+            $this->insentif(self::HO_A, 50, '11'),
+        );
+    }
+
+    public function testProbolinggoMemakaiPoolTigaPersenDibagiEmpatStaffToko(): void
+    {
+        // Pool = 3% × 60jt = 1,8jt; 4 staff toko (KT, 2 teknisi, CS) → 450rb.
+        foreach ([self::PROB_KT, self::PROB_TEK_A, self::PROB_TEK_B, self::PROB_CS] as $id) {
+            $this->assertSame(450000.0, $this->insentif($id, 1), 'akun ' . $id);
+        }
+    }
+
+    public function testProbolinggoJabatanDiLuarStaffTokoTidakDapat(): void
+    {
+        $this->assertSame(0.0, $this->insentif(self::PROB_DIREKTUR, 1));
+    }
+
+    public function testProbolinggoNolBilaTargetTidakCapai(): void
+    {
+        // November: tanpa penjualan → 0 < target 50jt.
+        $this->assertSame(0.0, $this->insentif(self::PROB_KT, 1, '11'));
+    }
+
+    public function testSeptemberMasihMemakaiAturanMembershipLama(): void
+    {
+        // September unit 1 = 10jt, rule lama per_member 1% → 100rb.
+        $this->assertSame(100000.0, $this->insentif(self::PROB_KT, 1, '09'));
+    }
+}

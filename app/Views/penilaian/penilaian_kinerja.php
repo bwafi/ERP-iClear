@@ -464,13 +464,29 @@
     </div>
 </div>
 
+<!-- RINCIAN LEMBUR & POTONGAN -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-3">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <span class="small text-muted d-block mb-1">Lembur</span>
+                <h6 class="fw-bold text-success mb-0">+ Rp <?= number_format($lembur, 0, ',', '.') ?></h6>
+            </div>
+            <div class="col-md-6">
+                <span class="small text-muted d-block mb-1">Potongan Pegawai</span>
+                <h6 class="fw-bold text-danger mb-1">− Rp <?= number_format($bon + $kasbon, 0, ',', '.') ?></h6>
+                <small class="text-muted d-block">Bon Rp <?= number_format($bon, 0, ',', '.') ?> · Kasbon Rp <?= number_format($kasbon, 0, ',', '.') ?></small>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- TOTAL & ACTIONS HERO CARD -->
 <div class="card border-0 shadow-sm rounded-4 text-white mb-4" style="background: linear-gradient(135deg, #198754 100%, #157347 0%);">
     <div class="card-body p-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
         <div>
             <span class="badge bg-white bg-opacity-25 px-3 py-1 rounded-pill small mb-2 d-inline-block">Take Home Pay (Estimasi)</span>
             <h1 class="fw-bold text-white mb-1 display-6">Rp <?= number_format($gaji, 0, ',', '.') ?></h1>
-            <p class="text-white-50 small mb-0"><i class="fa fa-info-circle me-1"></i> Belum termasuk komponen komisi & insentif tambahan</p>
         </div>
         <div class="d-flex align-items-center gap-2">
             <a href="<?= base_url('penilaian/slip_gaji/' . $selected_karyawan . '?bulan=' . $bulan . '&tahun=' . $tahun) ?>"

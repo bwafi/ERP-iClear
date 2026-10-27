@@ -12,6 +12,10 @@
 | Insentif Kepala Toko | **1% × omset toko PER ANGGOTA** (tidak dibagi jumlah anggota) | `division_method = 'per_member'` di `incentive_rules`; anggota dari `incentive_members` (group+unit+periode) | Owner |
 | Insentif Digital Division | pool = 1% × omset toko | dinamis dari `incentive_members` | Owner |
 | Basic compute (DIGITAL_DIVISION) | individual = pool / member_count | — | Owner |
+| Insentif HO (Oktober 2026+) | pool = Σ (1% × gross profit cabang yang capai target `OMSET_TOKO`); individual = pool / jumlah karyawan HO aktif `TERIMA_GAJI=1` | unit 50 | Owner |
+| Insentif Probolinggo (Oktober 2026+) | pool = 3% × gross profit unit 1 bila target `OMSET_TOKO` capai; individual = pool / jumlah staff toko aktif `TERIMA_GAJI=1` (jabatan 35/36/41/42) | unit 1 | Owner |
+
+Aturan Oktober 2026 menggantikan seluruh insentif lama untuk unit 50 (termasuk SPV & Digital Division) dan insentif Kepala Toko unit 1. Periode sebelum Oktober 2026 tetap memakai `incentive_members`. Unit cabang lain tidak berubah.
 
 Saat ini:
 - KEPALA_TOKO → Kepala Toko + Teknisi + Admin; **setiap anggota dapat 1% × omset unit**
