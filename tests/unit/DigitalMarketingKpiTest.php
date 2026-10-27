@@ -9,7 +9,7 @@ use App\Services\Konten\MultimediaKpiService;
  *
  * Rumus di DigitalMarketingKpiService dipisah ke static pure method agar bisa
  * diuji lintas environment SQL. Berikut verifikasi boundary requirement:
- *   - Omzet Global: threshold Target Toko (floor) → Target HO (100%).
+ *   - Omzet Global: proporsional terhadap Target HO, capai target = 100.
  *   - Leads & Kualitas: AVERAGE(achievement jumlah leads, ratio qualified),
  *     cap 100, data absent = 0 (bukan 100). Biasanya lead dicatat 0.
  *   - Conversion: target % di kpi_targets (default 30), lead 0 → null.
@@ -24,29 +24,22 @@ final class DigitalMarketingKpiTest extends CIUnitTestCase
 {
     // ── Omzet Global ───────────────────────────────────────────────
 
-    public function testOmzetGlobalBelowTokoTargetIsZero(): void
+    public function testOmzetGlobalProportionalToTarget(): void
     {
-        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(90_000_000, 100_000_000, 200_000_000));
-        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(0, 100_000_000, 200_000_000));
+        $this->assertSame(50.0, DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 200_000_000));
+        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(0, 200_000_000));
+        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(-10_000_000, 200_000_000));
     }
 
-    public function testOmzetGlobalAtOrAboveTargetHoIsHundred(): void
+    public function testOmzetGlobalAtOrAboveTargetIsHundred(): void
     {
-        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(200_000_000, 100_000_000, 200_000_000));
-        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(250_000_000, 100_000_000, 200_000_000));
-    }
-
-    public function testOmzetGlobalLinearBetweenTokoAndTargetHo(): void
-    {
-        // 150jt dari range 100–200jt → 50%.
-        $this->assertSame(50.0, DigitalMarketingKpiService::scoreOmzetGlobal(150_000_000, 100_000_000, 200_000_000));
-        // 150jt dari range 120–160jt → 75%.
-        $this->assertSame(75.0, DigitalMarketingKpiService::scoreOmzetGlobal(150_000_000, 120_000_000, 160_000_000));
+        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(200_000_000, 200_000_000));
+        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(250_000_000, 200_000_000));
     }
 
     public function testOmzetGlobalInvalidTargetReturnsNull(): void
     {
-        $this->assertNull(DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 10_000_000, 0.0));
+        $this->assertNull(DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 0.0));
     }
 
     // ── Leads & Kualitas Leads ─────────────────────────────────────

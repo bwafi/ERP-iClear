@@ -179,7 +179,7 @@ Rute non-modul relevan: `POST /api/kommo/webhook` → `KommoWebhook::handle` (ba
 - Ads cost KPI = Σ `amount` `marketing_ads_performance` (period). ✅ `MarketingKpiService::adsCost`
 - CPL = ads cost / paid lead; ROAS = revenue / ads cost; Conversion = customer/lead. ✅ `MarketingKpiService`
 - KPI Digital Marketing (43) 7 komponen bobot total 100: OMZET_GLOBAL 50, LEADS_QUALITY 15, CONVERSION 10, CPL 10, CAMPAIGN_PERFORMANCE 5, REPORTING 5, IMPROVEMENT 5. ✅ `DigitalMarketingKpiService::BOBOT` (diverifikasi `testWeightsSumExactlyHundred`)
-- Omzet Global: skor 0 di bawah Target Toko (Σ target OMSET_TOKO×? floor), 100 di atas Target HO (Σ target OMSET_CABANG), linear antara. ✅ `DigitalMarketingKpiService::scoreOmzetGlobal/omzetTargets`
+- Omzet Global: skor proporsional `actual / Target HO × 100` (cap 100); capai Target HO = 100. ✅ `DigitalMarketingKpiService::scoreOmzetGlobal/omzetTarget`
 - LEADS_QUALITY = avg(achievement volume, achievement kualitas), cap 100; data absent leads → 0 (bukan 100). ✅ `DigitalMarketingKpiService::leadsScore`
 - Data kosong per komponen → null (dikecualikan dari total), kecuali LEADS dengan data nyata 0 → 0. ✅ `DigitalMarketingKpiService` (komentar class)
 - Target default: lead 60/bulan, customer 20, conversion 30%, CPL 250.000, omzet 300.000.000, ROAS 1.5 (legacy `MarketingKpiService`); target komponen divisi diambil dari `kpi_targets` (fallback unit 50, lalu unit NULL default). ✅ `MarketingKpiService::TARGET_*`, `DigitalMarketingKpiService::divTarget`

@@ -47,6 +47,7 @@ Mengelola template KPI, penilaian kinerja, evaluasi KPI otomatis dari data opera
 10. `attendance_save` **tidak** memakai `EvaluatorAuthorizationService`/scope; `target_id` dari POST dan `AttendanceInputService` tidak memeriksa hak evaluator. — `PenilaianKPI.php:2432`; `AttendanceInputService` (PR-07/KPI-04)
 11. [🔶] Istilah “omzet” pada sebagian komponen KPI (`OMZET_TOKO`/`OMZET_WILAYAH`/`OMZET_GLOBAL`) dihitung dari **gross profit** (`SUM(sub_total - hpp_penjualan)`), bukan omzet penjualan. Perlu konfirmasi definisi bisnis. — `OmsetTokoCalculator`; `ManagerKpiService` (KPI-06)
 12. Refund uang service garansi (`dp_bayar + bayar`) mengurangi KPI Omset Toko, Omset Cabang, dan Omset Teknisi sebesar `service.refund_garansi_jumlah` pada bulan `service.refund_garansi_tanggal` (bukan bulan klaim/service). HPP sparepart rusak tetap mengurangi Omset Teknisi lewat `hpp_omset_garansi`/`tanggal_hpp_klaim`. — `ModelRefundGaransiLoss`; `OmsetTokoCalculator`, `OmsetCabangCalculator`, `OmsetTeknisiCalculator`, `OmsetDailyCalculator`; test `GaransiRefundKpiTest`.
+13. `OMZET_GLOBAL` (Manager 34 & Kepala Divisi 43, bobot 50) memakai skor proporsional `min(actual / Σ target OMSET_CABANG posisi 40 unit 1–5 × 100, 100)`; capai target = 100, target ≤ 0 → null. Threshold Target Toko/Target HO tidak dipakai lagi. — `DigitalMarketingKpiService::scoreOmzetGlobal/omzetTarget`
 
 ## 6. Acceptance Criteria
 - [ ] Template KPI & penilaian dapat dikelola.
