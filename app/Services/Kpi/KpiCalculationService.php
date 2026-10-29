@@ -998,26 +998,31 @@ class KpiCalculationService
                 "ho" => $item["ho"] ?? null,
                 "cabang" => $item["cabang"] ?? null,
                 "format" =>
-                    $item["code"] === "FIN_KESEHATAN_UANG"
-                        ? "health"
-                        : ($item["code"] === "FIN_AKURASI"
-                            ? "accuracy"
-                            : ($item["code"] === "FIN_CASH_FLOW"
-                                ? "cashflow"
-                                : (in_array(
-                                    $item["code"],
-                                    [
-                                        "OMSET_TOKO",
-                                        "OMSET_CABANG",
-                                        "OMSET_TEKNISI",
-                                        "OPERASIONAL",
-                                        "OMZET_WILAYAH",
-                                        "TARGET_CABANG",
-                                    ],
-                                    true,
-                                )
-                                    ? "currency"
-                                    : "number"))),
+                    in_array($item["code"], ["CONVERSION", "CAMPAIGN_PERFORMANCE", "REPORTING"], true)
+                        ? "percent"
+                        : ($item["code"] === "FIN_KESEHATAN_UANG"
+                            ? "health"
+                            : ($item["code"] === "FIN_AKURASI"
+                                ? "accuracy"
+                                : ($item["code"] === "FIN_CASH_FLOW"
+                                    ? "cashflow"
+                                    : (in_array(
+                                        $item["code"],
+                                        [
+                                            "OMSET_TOKO",
+                                            "OMSET_CABANG",
+                                            "OMSET_TEKNISI",
+                                            "OPERASIONAL",
+                                            "OMZET_WILAYAH",
+                                            "TARGET_CABANG",
+                                            "OMZET_GLOBAL",
+                                            "CPL",
+                                            "BUDGETING",
+                                        ],
+                                        true,
+                                    )
+                                        ? "currency"
+                                        : "number")))),
             ];
         }
 

@@ -527,6 +527,7 @@
                                 <td class="py-3">
                                     <span class="fw-bold text-dark d-block mb-1"><?= $kpi['nama'] ?></span>
                                     <?php $isCurrency = ($kpi['format'] ?? 'currency') === 'currency'; ?>
+                                    <?php $isPercent = ($kpi['format'] ?? 'currency') === 'percent'; ?>
                                     <?php if (!empty($kpi['cabang'])): ?>
                                         <?php if (($kpi['format'] ?? 'currency') === 'health'): ?>
                                             <?= view('penilaian/_kesehatan_uang', [
@@ -569,7 +570,7 @@
                                 <td class="text-center"><span class="badge bg-light text-secondary border px-2 py-1"><?= $kpi['bobot'] ?>%</span></td>
                                 <td class="text-nowrap">
                                     <?php if ($kpi['target'] !== null): ?>
-                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['target'], 0, ',', '.') ?></span>
+                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['target'], $isPercent ? 2 : 0, ',', '.') ?><?= $isPercent ? '%' : '' ?></span>
                                         <?php if ($isCurrency): ?>
                                             <?php if (!empty($kpi['ho'])): ?>
                                                 <span class="badge bg-info-subtle text-info ms-1">HO</span>
@@ -588,7 +589,7 @@
                                 </td>
                                 <td class="text-nowrap">
                                     <?php if ($kpi['actual'] !== null): ?>
-                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['actual'], 0, ',', '.') ?></span>
+                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['actual'], $isPercent ? 2 : 0, ',', '.') ?><?= $isPercent ? '%' : '' ?></span>
                                     <?php elseif ($kpi['reached'] !== null): ?>
                                         <span class="fw-medium text-dark"><?= $kpi['reached'] ?> Cabang</span>
                                     <?php else: ?>
