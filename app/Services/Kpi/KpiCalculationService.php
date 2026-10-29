@@ -1276,6 +1276,23 @@ class KpiCalculationService
             return 0.0;
         }
 
+        // Pengecualian rate per karyawan per bulan (mis. masa training).
+        // Hanya untuk grup non-SPV; rate 0 = tidak dapat insentif bulan itu.
+        $overrideRate = null;
+        if ($group->code !== "SPV") {
+            $override = (new \App\Models\ModelIncentiveOverride())->forPeriod(
+                $employeeId,
+                $unit,
+                sprintf("%04d-%02d", (int) $year, (int) $month),
+            );
+            if ($override) {
+                $overrideRate = (float) $override->rate;
+                if ($overrideRate <= 0) {
+                    return 0.0;
+                }
+            }
+        }
+
         // =========================================================
         // SPECIAL: SPV (0.5% per branch meeting target)
         // =========================================================
@@ -1343,10 +1360,14 @@ class KpiCalculationService
         // lama (3% pool / member_count) agar unit dengan <3 anggota tidak
         // mendapat 1,5% dan unit dengan >3 anggota tidak mendapat 0,75%.
         if ($group->code === "KEPALA_TOKO") {
-            return 0.01 * $omsetToko;
+            $rate = $overrideRate !== null ? $overrideRate / 100.0 : 0.01;
+
+            return $rate * $omsetToko;
         }
 
-        $rate = (float) $rule->base_value / 100.0;
+        $rate = $overrideRate !== null
+            ? $overrideRate / 100.0
+            : (float) $rule->base_value / 100.0;
 
         // NEW RULE (KEPALA_TOKO, division_method = 'per_member'):
         // setiap anggota menerima rate% × omset, TIDAK dibagi jumlah anggota.

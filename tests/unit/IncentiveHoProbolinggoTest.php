@@ -67,6 +67,7 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
             'unit', 'akun', 'kpi_components', 'kpi_targets', 'penjualan',
             'detail_penjualan', 'service',
             'incentive_groups', 'incentive_members', 'incentive_rules',
+            'incentive_overrides',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -108,6 +109,11 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
                 calculation_type VARCHAR(30) NULL, base_value REAL NULL,
                 division_method VARCHAR(30) NULL, minimum_achievement REAL NULL,
                 effective_from DATE NULL, effective_to DATE NULL,
+                created_at DATETIME NULL, updated_at DATETIME NULL)');
+        $q('CREATE TABLE incentive_overrides (
+                id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
+                unit_id INT NULL, period CHAR(7) NULL, rate DECIMAL(5,2) NULL,
+                reason VARCHAR(255) NULL, created_by INT NULL,
                 created_at DATETIME NULL, updated_at DATETIME NULL)');
     }
 
