@@ -62,6 +62,12 @@ class KpiCalculationService
     /** Aturan insentif HO & Probolinggo berlaku mulai periode ini. */
     public const INCENTIVE_RULE_V2_START = "2026-10-01";
 
+    /**
+     * Target OMSET_TEKNISI otomatis = target OMSET_TOKO unit ÷ 2 mulai periode
+     * ini. Periode sebelumnya tetap memakai target OMSET_TEKNISI di kpi_targets.
+     */
+    public const TEKNISI_TARGET_FROM = "2026-10-01";
+
     /** Jabatan staff toko yang ikut pool insentif Probolinggo. */
     private const STORE_POSITION_IDS = [35, 36, 41, 42];
 
@@ -320,8 +326,15 @@ class KpiCalculationService
                 } elseif ($component->code === "OMSET_TEKNISI") {
                     // OMSET TEKNISI: realisasi HANYA omzet service yg dikerjakan teknisi
                     // (OmsetTeknisiCalculator: service.service_by, status selesai, bulan tsb).
+                    // Target mulai 2026-10 = target OMSET_TOKO unit ÷ 2 (asumsi 2 teknisi
+                    // per cabang); periode sebelumnya memakai target di kpi_targets.
                     // Threshold tanpa tier: actual < target → 0; actual ≥ target → 100 (cap).
-                    $targetValue = (float) $target->target_value;
+                    $targetValue = $this->omsetTeknisiTarget(
+                        (int) $omsetUnitId,
+                        $context,
+                        $date,
+                        (float) $target->target_value,
+                    );
                     $achievement =
                         $actualValue >= $targetValue
                             ? $this->scoreService()->achievementScore(
@@ -581,11 +594,21 @@ class KpiCalculationService
                 isset($target)
             ) {
                 // Non-SPV: target biasa dari kpi_targets (non HO).
+                $effectiveTargetValue = (float) $target->target_value;
+                if ($component->code === "OMSET_TEKNISI") {
+                    // Samakan target tampilan dengan target skor (toko ÷ 2).
+                    $effectiveTargetValue = $this->omsetTeknisiTarget(
+                        (int) $omsetUnitId,
+                        $context,
+                        $date,
+                        $effectiveTargetValue,
+                    );
+                }
                 $targetInfo = [
-                    "target" => (float) $target->target_value,
+                    "target" => $effectiveTargetValue,
                     "actual" => (float) $actualValue,
                     "shortfall" => max(
-                        (float) $target->target_value - (float) $actualValue,
+                        $effectiveTargetValue - (float) $actualValue,
                         0.0,
                     ),
                     "ho" => false,
@@ -803,6 +826,48 @@ class KpiCalculationService
         }
 
         return $unitId;
+    }
+
+    /**
+     * Target OMSET_TEKNISI untuk periode aktif: target OMSET_TOKO unit ÷ 2.
+     * Sebelum TEKNISI_TARGET_FROM (atau bila target toko tidak ada) memakai
+     * target di kpi_targets agar skor periode lama tidak berubah.
+     */
+    protected function omsetTeknisiTarget(
+        int $unitId,
+        string $context,
+        ?string $date,
+        float $fallback
+    ): float {
+        $date = $date ?? date("Y-m-d");
+        if ($date < self::TEKNISI_TARGET_FROM) {
+            return $fallback;
+        }
+
+        $toko = $this->componentModel->getByCode("OMSET_TOKO");
+        if (!$toko) {
+            return $fallback;
+        }
+
+        $target = $this->targetModel->getTargetByKpiAndUnit(
+            (int) $toko->id,
+            $unitId,
+            $context,
+            $date,
+        );
+
+        return self::teknisiTargetFromToko(
+            $target ? (float) $target->target_value : null,
+            $fallback,
+        );
+    }
+
+    /** Target teknisi = target toko ÷ 2; target toko kosong → fallback. */
+    public static function teknisiTargetFromToko(?float $tokoTarget, float $fallback): float
+    {
+        return $tokoTarget !== null && $tokoTarget > 0
+            ? round($tokoTarget / 2, 2)
+            : $fallback;
     }
 
     /**

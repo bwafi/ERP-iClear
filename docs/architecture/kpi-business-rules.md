@@ -102,7 +102,7 @@ Context `gaji` memakai `customer` polos.
 | Jabatan | KPI (bobot) | Absen (bobot) |
 |---|---|---|
 | 35 Admin | Omset 70, Tutup Kasir 10, Stok Opname 10, Absensi 10 | 40/20/20/20 |
-| 36 Teknisi | Omset 70, Omset Teknisi 15 (=omset), Customer 15 | 40/20/20/20 |
+| 36 Teknisi | Omset 70, Omset Teknisi 15 (=omset), Customer 15. Target Omset Teknisi = target Omset Toko unit ÷ 2 sejak 2026-10; periode sebelumnya memakai `kpi_targets` | 40/20/20/20 |
 | 41 Kepala Toko | Omset 70, Customer 10, Tutup Kasir 10, Opname 10 | 40/20/20/20 |
 | 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | 40/20/20/20 |
 | 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 40/20/20/20 |
