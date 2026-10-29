@@ -73,11 +73,15 @@ if ($selected_unit == 4) {
     $tanggunganAsset = $hariDalamBulan * 355000;
 }
 
+// Bagi hasil memakai sisa setelah Tanggungan Asset, supaya 20% + 60% + 40%
+// tidak melebihi laba bersih.
+$dasarBagiHasil = $profitNett - $tanggunganAsset;
+
 $hakCabang = 0;
 $tagihanCenter = 0;
 if (in_array($selected_unit, [3, 4, 5])) {
-    $hakCabang = 0.60 * $profitNett;
-    $tagihanCenter = 0.40 * $profitNett;
+    $hakCabang = 0.60 * $dasarBagiHasil;
+    $tagihanCenter = 0.40 * $dasarBagiHasil;
 }
 
 // Rasio realisasi biaya terkontrol terhadap batas 6% omset. Batas 0 (belum
@@ -977,7 +981,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     <span class="posisi-op" aria-hidden="true">=</span>
                     <span class="posisi-value metric-figure <?= $profitNett >= 0 ? 'text-success' : 'text-danger' ?>">Rp <?= number_format($profitNett, 0, ',', '.') ?></span>
                 </div>
-                <div class="posisi-note">Setelah gaji HO &middot; dasar Hak Cabang &amp; Tagihan Center</div>
+                <div class="posisi-note">Setelah gaji HO &middot; sebelum Tanggungan Asset</div>
             </div>
         </div>
     </div>
@@ -986,7 +990,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 <div class="d-flex align-items-end justify-content-between mb-2">
     <div>
         <h5 class="fw-bold text-dark mb-0">Kewajiban &amp; bagi hasil</h5>
-        <small class="text-muted">Dihitung dari laba bersih periode ini</small>
+        <small class="text-muted">Tanggungan dari laba bersih; Hak Cabang &amp; Tagihan Center dari sisa setelah tanggungan</small>
     </div>
 </div>
 
@@ -1163,7 +1167,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
     <span>
         <strong class="text-dark">Total Tanggungan Asset</strong> — unit 4 = 20% laba; unit 1 &amp; 2 = jumlah hari bulan ini &times; Rp 355.000; unit franchise (3 &amp; 5) = Rp 0.
-        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Biaya Terkontrol &minus; Biaya Iklan/SDM/Lain-lain &minus; Total Gaji &minus; Gaji HO) unit 3, 4, &amp; 5.
+        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari sisa laba bersih setelah dikurangi Total Tanggungan Asset (Omset &minus; Biaya Terkontrol &minus; Biaya Iklan/SDM/Lain-lain &minus; Total Gaji &minus; Gaji HO &minus; Tanggungan Asset) unit 3, 4, &amp; 5.
         Gaji HO memakai nominal yang sudah dipotong payroll unit ini; selama belum ada, dipakai perkiraan bagian unit.
         <br>
         <strong class="text-dark">Batas 6%</strong> hanya peringatan — transaksi tetap tercatat dan tidak dibatalkan.

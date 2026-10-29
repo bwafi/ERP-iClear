@@ -92,8 +92,9 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $html = $this->render(4, 100000000, 20000000, 10000000);
 
         $this->assertSame('14.000.000', $this->kartu($html, 'Total Tanggungan Asset'), 'Pandaan tanggungan 20% x 70jt');
-        $this->assertSame('42.000.000', $this->kartu($html, 'Hak Cabang'));
-        $this->assertSame('28.000.000', $this->kartu($html, 'Tagihan Center'));
+        // Bagi hasil dari sisa setelah tanggungan: 70jt - 14jt = 56jt.
+        $this->assertSame('33.600.000', $this->kartu($html, 'Hak Cabang'), '60% x 56jt');
+        $this->assertSame('22.400.000', $this->kartu($html, 'Tagihan Center'), '40% x 56jt');
     }
 
     public function testUnit2TetapPribadiJember(): void
@@ -308,8 +309,10 @@ class AssetBerjalanCardTest extends CIUnitTestCase
 
         $html = $this->render(4, 100000000, 20000000, 10000000, null, $dist);
 
+        // laba = 100jt - 20jt - 10jt - 5jt = 65jt; tanggungan 20% = 13jt.
         $this->assertSame('13.000.000', $this->kartu($html, 'Total Tanggungan Asset'), '20% x 65jt');
-        $this->assertSame('39.000.000', $this->kartu($html, 'Hak Cabang'));
+        $this->assertSame('31.200.000', $this->kartu($html, 'Hak Cabang'), '60% x (65jt - 13jt)');
+        $this->assertSame('20.800.000', $this->kartu($html, 'Tagihan Center'), '40% x (65jt - 13jt)');
     }
 
     /** Staf cabang tidak menerima panel HO, tapi laba bersihnya tetap sama. */
