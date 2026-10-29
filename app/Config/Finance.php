@@ -153,6 +153,15 @@ class Finance extends BaseConfig
     public array $kategoriBiayaTerkontrol = [1, 2, 3, 4, 5, 18];
 
     /**
+     * Kategori kas keluar di luar 6% yang tetap mengurangi Laba Bersih di
+     * /asset_berjalan. Baris kategori SDM (10) yang deskripsinya mengandung
+     * "lembur" dikecualikan karena lembur sudah masuk Total Gaji.
+     *
+     * 6 LAIN-LAIN, 9 IKLAN ADS, 10 SDM.
+     */
+    public array $kategoriBiayaLain = [6, 9, 10];
+
+    /**
      * ID_JABATAN yang boleh mengisi (input) Dashboard Finance.
      */
     public array $financeInputRoles = [0, 1, 2, 34];

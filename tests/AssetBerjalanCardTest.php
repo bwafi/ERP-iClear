@@ -23,7 +23,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     /**
      * @param int $unit unit terpilih
      */
-    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null): string
+    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null, float $biayaLain = 0.0): string
     {
         $vars = [
             'boleh_pilih_unit' => true,
@@ -41,6 +41,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
             'hariDalamBulan'   => 31,
             'omset_bulan'      => $omset,
             'pengeluaran'      => $pengeluaran,
+            'biaya_lain'       => $biayaLain,
             'totalGajiUnit'    => $gaji,
             'gaji_detail'      => $gajiDetail,
             'ho_distribution'  => $hoDistribution,
@@ -216,15 +217,26 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         }
     }
 
-    /** Lembar posisi: 4 pengurang + satu bar hasil, bukan tumpukan kartu metrik. */
+    /** Lembar posisi: 5 pengurang + satu bar hasil, bukan tumpukan kartu metrik. */
     public function testLembarPosisiMenampilkanPersamaanDanLabaBersih(): void
     {
         $html = $this->render(5, 100000000, 20000000, 10000000, null, $this->hoDistribution(true));
 
-        $this->assertSame(5, substr_count($html, 'class="posisi-cell'), 'persamaan harus 5 sel');
+        $this->assertSame(6, substr_count($html, 'class="posisi-cell'), 'persamaan harus 6 sel');
         $this->assertStringContainsString('Laba Bersih', $html);
         $this->assertStringContainsString('Gaji HO', $html);
         $this->assertStringContainsString('Rp 70.000.000', $html, 'tanpa bagian HO: laba = omset - biaya - gaji');
+    }
+
+    /** Biaya iklan/SDM/lain-lain ikut mengurangi laba bersih dan turunannya. */
+    public function testLabaBersihDikurangiBiayaIklanSdmLainLain(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, null, null, 5000000);
+
+        $this->assertSame('5.000.000', $this->kartu($html, 'Biaya Iklan, SDM &amp; Lain-lain'));
+        // laba = 100jt - 20jt - 10jt - 5jt = 65jt
+        $this->assertSame('65.000.000', $this->kartu($html, 'Laba Bersih'));
+        $this->assertSame('39.000.000', $this->kartu($html, 'Hak Cabang'), '60% x 65jt');
     }
 
     /** @return array<string,mixed> bagian HO untuk satu unit */

@@ -60,7 +60,10 @@ $hoPotongan = $hoDipotongPayroll > 0
     ? $hoDipotongPayroll
     : (float) ($hoUnitShare['total_perkiraan'] ?? 0);
 
-$profitNett = $omset_bulan - $pengeluaran - $totalGajiUnit - $hoPotongan;
+// Iklan Ads + SDM (tanpa lembur) + Lain-lain, di luar batas 6%.
+$biayaLain = (float) ($biaya_lain ?? 0);
+
+$profitNett = $omset_bulan - $pengeluaran - $biayaLain - $totalGajiUnit - $hoPotongan;
 
 // Turunan memakai laba bersih setelah gaji HO, satu basis angka.
 $tanggunganAsset = 0;
@@ -348,7 +351,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     /* Lembar posisi: satu baris pengurang + satu strip kewajiban. */
     .posisi-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
     }
     .posisi-cell {
         min-width: 0;
@@ -359,7 +362,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         padding-left: 0;
         border-left: 0;
     }
-    .posisi-cell:nth-child(4) {
+    .posisi-cell:nth-child(5) {
         padding-right: 0;
     }
     /* Hasil jadi bar penutup selebar persamaan di atasnya. */
@@ -837,13 +840,13 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 <div class="d-flex align-items-end justify-content-between mb-2">
     <div>
         <h5 class="fw-bold text-dark mb-0">Posisi unit</h5>
-        <small class="text-muted">Omset dikurangi biaya terkontrol, gaji unit, dan gaji HO</small>
+        <small class="text-muted">Omset dikurangi biaya terkontrol, biaya iklan/SDM/lain-lain, gaji unit, dan gaji HO</small>
     </div>
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3 p-md-4">
-        <div class="posisi-grid" role="group" aria-label="Rumus laba bersih: omset dikurangi biaya terkontrol, total gaji, dan gaji HO">
+        <div class="posisi-grid" role="group" aria-label="Rumus laba bersih: omset dikurangi biaya terkontrol, biaya iklan/SDM/lain-lain, total gaji, dan gaji HO">
             <!-- Omset -->
             <div class="posisi-cell">
                 <h6 class="posisi-label">Omset Bulan Ini</h6>
@@ -908,8 +911,18 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                             Detail
                         </button>
                     </div>
-                    <div class="fs-2 text-muted mt-1">Ditampilkan terpisah, tidak dikurangkan di laba bersih.</div>
+                    <div class="fs-2 text-muted mt-1">Ditampilkan terpisah; hanya Iklan Ads, SDM (tanpa lembur), dan Lain-lain yang ikut mengurangi laba.</div>
                 </div>
+            </div>
+
+            <!-- Biaya di luar 6% yang tetap mengurangi laba -->
+            <div class="posisi-cell">
+                <h6 class="posisi-label">Biaya Iklan, SDM &amp; Lain-lain</h6>
+                <div class="posisi-value-row">
+                    <span class="posisi-op" aria-hidden="true">&minus;</span>
+                    <span class="posisi-value metric-figure text-warning-emphasis">Rp <?= number_format($biayaLain, 0, ',', '.') ?></span>
+                </div>
+                <div class="posisi-note">Iklan Ads + SDM (tanpa lembur) + Lain-lain</div>
             </div>
 
             <!-- Total gaji unit -->
@@ -1141,7 +1154,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
     <span>
         <strong class="text-dark">Total Tanggungan Asset</strong> — unit 4 = 20% laba; unit 1 &amp; 2 = jumlah hari bulan ini &times; Rp 355.000; unit franchise (3 &amp; 5) = Rp 0.
-        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Biaya Terkontrol &minus; Total Gaji &minus; Gaji HO) unit 3, 4, &amp; 5.
+        <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari laba bersih (Omset &minus; Biaya Terkontrol &minus; Biaya Iklan/SDM/Lain-lain &minus; Total Gaji &minus; Gaji HO) unit 3, 4, &amp; 5.
         Gaji HO memakai nominal yang sudah dipotong payroll unit ini; selama belum ada, dipakai perkiraan bagian unit.
         <br>
         <strong class="text-dark">Batas 6%</strong> hanya peringatan — transaksi tetap tercatat dan tidak dibatalkan.

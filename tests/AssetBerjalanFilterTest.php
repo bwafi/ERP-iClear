@@ -195,6 +195,9 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $q("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit) VALUES (4,'SLL-4','2026-07-15 10:00:00',1)");
         $q("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES (4,NULL,12000000,2000000)");
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, jumlah, idunit) VALUES ('2026-07-10',1,550000,1)");
+        // Biaya lain yang tetap mengurangi laba: Iklan Ads + SDM non-lembur.
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, idunit) VALUES ('2026-07-11',9,'Iklan Juli',100000,1)");
+        $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, idunit) VALUES ('2026-07-12',10,'GAJI JULI',200000,1)");
     }
 
     private function sesi(int $akun, int $unit, int $jabatan): void
@@ -332,6 +335,24 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         // 2.207.580 (kategori 1) + 300.000 (kategori 18); 500.000 kategori 6 dan 700.000 kategori 11 tidak ikut.
         $this->assertSame('2.507.580', $this->kartu($html, 'Biaya Terkontrol (Maks 6%)'));
+    }
+
+    /** Biaya di luar 6% yang mengurangi laba: Lain-lain, Iklan Ads, SDM tanpa lembur. */
+    public function testBiayaLainMengurangiLabaBersih(): void
+    {
+        $this->sesi(44, 50, 0);
+
+        // Oktober unit 3: kategori 6 (500rb) masuk; kategori 11 & HPP tidak.
+        $oktober = $this->halaman('?unit=3&bulan=10&tahun=2026');
+        $this->assertSame('500.000', $this->kartu($oktober, 'Biaya Iklan, SDM &amp; Lain-lain'));
+
+        // September unit 3: hanya lembur kategori 10 -> dikecualikan.
+        $september = $this->halaman('?unit=3&bulan=9&tahun=2026');
+        $this->assertSame('0', $this->kartu($september, 'Biaya Iklan, SDM &amp; Lain-lain'));
+
+        // Juli unit 1: Iklan Ads 100rb + SDM non-lembur 200rb.
+        $juli = $this->halaman('?unit=1&bulan=7&tahun=2026');
+        $this->assertSame('300.000', $this->kartu($juli, 'Biaya Iklan, SDM &amp; Lain-lain'));
     }
 
     /** Status rasio: melebihi, hampir mencapai, atau aman. */

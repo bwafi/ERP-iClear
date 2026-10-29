@@ -22,6 +22,12 @@ class TutupKasir extends BaseController
         return config(\Config\Finance::class)->kategoriBiayaTerkontrol;
     }
 
+    /** Kategori biaya lain yang juga mengurangi laba bersih. Sumber: Config\Finance. */
+    private function kategoriBiayaLain(): array
+    {
+        return config(\Config\Finance::class)->kategoriBiayaLain;
+    }
+
     /**
      * Resolusi daftar unit + unit aktif untuk laporan lintas cabang
      * (/omset_bulanan & /asset_berjalan).
@@ -961,6 +967,25 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
+        // Biaya di luar 6% yang tetap mengurangi laba bersih: Lain-lain, Iklan
+        // Ads, dan SDM tanpa lembur (lembur sudah dihitung di Total Gaji).
+        $biayaLain = $this->db->table('kas_keluar')
+            ->selectSum('kas_keluar.jumlah', 'total')
+            ->where('MONTH(kas_keluar.tanggal)', $bulan)
+            ->where('YEAR(kas_keluar.tanggal)', $tahun)
+            ->where('kas_keluar.idunit', $unit)
+            ->whereIn('kas_keluar.kategori_idkategori', $this->kategoriBiayaLain())
+            ->groupStart()
+                ->where('kas_keluar.kategori_idkategori !=', 10)
+                ->orGroupStart()
+                    ->where('kas_keluar.kategori_idkategori', 10)
+                    ->notLike('kas_keluar.deskripsi', 'lembur')
+                ->groupEnd()
+            ->groupEnd()
+            ->get()
+            ->getRow()
+            ->total ?? 0;
+
         // Jumlah hari pada bulan terpilih, dipakai view untuk "Total Tanggungan Asset".
         $hariDalamBulan = (int) date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
 
@@ -978,6 +1003,7 @@ class TutupKasir extends BaseController
             'tahunSebelum'   => $tahunSebelum,
             'pengeluaran'     => $pengeluaran,
             'pengeluaran_full' => $pengeluaranFull,
+            'biaya_lain'      => $biayaLain,
             'totalGajiUnit'  => $totalGajiUnit,
             // Rincian per pegawai hanya untuk yang berhak; null = tidak dikirim
             // sama sekali, jadi tidak ada datanya di HTML.
