@@ -1015,7 +1015,9 @@ class PenilaianKPI extends BaseController
                 ->getResultArray();
 
             if (!empty($mappings)) {
-                return array_column($mappings, 'unit_id');
+                // intval: filterBranches memakai in_array strict, sedangkan
+                // hasil query MySQL berupa string.
+                return array_map('intval', array_column($mappings, 'unit_id'));
             }
 
             // Fallback ke ID_UNIT untuk backward compatibility
@@ -1522,27 +1524,46 @@ class PenilaianKPI extends BaseController
         $idJabatan = (int) session()->get('ID_JABATAN');
         $idUnit    = (int) session()->get('ID_UNIT');
         $idAkun    = (int) session()->get('ID_AKUN');
+        $isSpv     = $idJabatan === 40;
 
         // Direktur (jabatan 2) adalah investor: hanya boleh melihat area (unit)
         // yang dipegangnya — mis. Alfarizki = Banyuwangi + Genteng. Direktur
         // yang belum dipetakan tetap terkunci ke unit sesinya.
-        $areaUnits = ($idJabatan === 2)
-            ? (\App\Services\DirekturUnitScopeService::unitsFor($idAkun) ?? [$idUnit])
-            : null;
+        // SPV (jabatan 40) melihat wilayah binaannya (spv_units) + diri sendiri.
+        if ($idJabatan === 2) {
+            $areaUnits = \App\Services\DirekturUnitScopeService::unitsFor($idAkun) ?? [$idUnit];
+        } elseif ($isSpv) {
+            $areaUnits = $this->getScopeUnits($idJabatan, $idUnit, $idAkun);
+        } else {
+            $areaUnits = null;
+        }
 
-        $listBuilder = $this->db->table('akun')
-            ->where('STATUS_PEGAWAI', 1)
-            ->where('TERIMA_GAJI', 1);
+        $listBuilder = $this->db->table('akun')->where('STATUS_PEGAWAI', 1);
 
-        if ($areaUnits !== null) {
-            $listBuilder->whereIn('ID_UNIT', $areaUnits);
+        if ($isSpv) {
+            // SPV selalu bisa melihat KPI dirinya sendiri, walau tidak
+            // menerima gaji (TERIMA_GAJI = 0).
+            $listBuilder->groupStart()
+                ->where('TERIMA_GAJI', 1)
+                ->orWhere('ID_AKUN', $idAkun)
+                ->groupEnd();
+            $listBuilder->groupStart()
+                ->whereIn('ID_UNIT', $areaUnits)
+                ->orWhere('ID_AKUN', $idAkun)
+                ->groupEnd();
+        } else {
+            $listBuilder->where('TERIMA_GAJI', 1);
+
+            if ($areaUnits !== null) {
+                $listBuilder->whereIn('ID_UNIT', $areaUnits);
+            }
         }
 
         $list_karyawan = $listBuilder->get()->getResultArray();
 
         $selected_karyawan = $this->request->getGet('karyawan');
 
-        // Direktur: pilihan karyawan di luar area tidak boleh dilihat.
+        // Direktur/SPV: pilihan karyawan di luar area tidak boleh dilihat.
         if ($areaUnits !== null) {
             $allowedIds = array_map(static fn ($k) => (int) $k['ID_AKUN'], $list_karyawan);
             if ($selected_karyawan && ! in_array((int) $selected_karyawan, $allowedIds, true)) {
@@ -1552,6 +1573,29 @@ class PenilaianKPI extends BaseController
 
         if (!$selected_karyawan && !empty($list_karyawan)) {
             $selected_karyawan = $list_karyawan[0]['ID_AKUN'];
+        }
+
+        // SPV boleh melihat gaji hanya saat membuka KPI dirinya sendiri.
+        $showGaji = ! $isSpv || (int) $selected_karyawan === $idAkun;
+
+        // Wilayah SPV bisa kosong setelah difilter: tampilkan halaman kosong,
+        // jangan hitung KPI untuk ID 0.
+        if (! $selected_karyawan) {
+            return view('template', [
+                'list_karyawan'     => $list_karyawan,
+                'selected_karyawan' => null,
+                'karyawan'          => [],
+                'detail_kpi'        => [],
+                'detail_absen'      => [],
+                'aktual_omset_unit' => [],
+                'omset_cabang'      => [],
+                'omset_global'      => 0,
+                'skor_total'        => 0,
+                'bulan'             => $bulan,
+                'tahun'             => $tahun,
+                'show_gaji'         => $showGaji,
+                'body'              => 'penilaian/penilaian_kinerja',
+            ]);
         }
 
         // =========================================================
@@ -1564,41 +1608,14 @@ class PenilaianKPI extends BaseController
         $detailKpiSorted = $kpi['detail_kpi'] ?? [];
         usort($detailKpiSorted, static fn ($a, $b) => (float)($b['bobot'] ?? 0) <=> (float)($a['bobot'] ?? 0));
 
-        // =========================================================
-        // SALARY COMPOSITION — SalaryCalculationService (context penilaian_kinerja)
-        // =========================================================
-        $periodDate = "$tahun-$bulan-15";
-        $extras = $this->salaryExtras((int) $selected_karyawan, (string) $bulan, (string) $tahun);
-        $salaryService = new \App\Services\Payroll\SalaryCalculationService();
-        $result = $salaryService->calculateSalary(
-            (int) $selected_karyawan,
-            $kpi['jabatan'],
-            $kpi['unit'],
-            'penilaian_kinerja',
-            [
-                'TUNJANGAN_KINERJA' => $kpi['skor_total'],
-                'TUNJANGAN_ABSEN'   => $kpi['skor_total2'],
-            ],
-            $kpi['akun']->tunjangan_penempatan,
-            $kpi['insentif'],
-            $extras['lembur'],
-            $extras['bon'],
-            $periodDate
-        );
-
-        $compByCode = [];
-        foreach (($result['components'] ?? []) as $comp) {
-            $compByCode[$comp['component_code']] = (float) $comp['amount'];
-        }
-
-        // Rincian omset per cabang. Direktur (investor) hanya melihat cabang
-        // milik areanya; "Omset Global" tetap total seluruh cabang (metrik
-        // perusahaan) sehingga dihitung dari daftar penuh.
+        // Rincian omset per cabang. Direktur (investor) & SPV hanya melihat
+        // omset cabang wilayahnya sendiri; role lintas unit melihat semua.
+        // "Omset Global" tetap total seluruh cabang.
         $omsetCabangAll = $kpi['omset_cabang'] ?? [];
         $omsetCabang    = \App\Services\DirekturUnitScopeService::filterBranches($omsetCabangAll, $areaUnits);
         $omsetGlobal    = array_sum(array_column($omsetCabangAll, 'omset'));
 
-        return view('template', [
+        $viewData = [
             'list_karyawan'        => $list_karyawan,
             'selected_karyawan'    => $selected_karyawan,
             'karyawan'             => $kpi['karyawan'],
@@ -1608,21 +1625,58 @@ class PenilaianKPI extends BaseController
             'omset_cabang'         => $omsetCabang,
             'omset_global'         => $omsetGlobal,
             'skor_total'           => $kpi['skor_total'],
-            'tunjangan_kinerja'    => $compByCode['TUNJANGAN_KINERJA'] ?? 0,
-            'tunjangan_absen'      => $compByCode['TUNJANGAN_ABSEN'] ?? 0,
-            'insentif'             => $result['incentive'],
-            'tunjangan_penempatan' => $kpi['akun'],
-            'gaji_pokok'           => $compByCode['GAJI_POKOK'] ?? $kpi['gaji_pokok'],
-            'gaji'                 => (float) $result['total_gaji'] - $extras['kasbon'] - $extras['potongan'] + $extras['bonus'],
-            'lembur'               => $extras['lembur'],
-            'bon'                  => $extras['bon'],
-            'kasbon'               => $extras['kasbon'],
-            'potongan'             => $extras['potongan'],
-            'bonus'                => $extras['bonus'],
             'bulan'                => $bulan,
             'tahun'                => $tahun,
+            'show_gaji'            => $showGaji,
             'body'                 => 'penilaian/penilaian_kinerja'
-        ]);
+        ];
+
+        // Komposisi gaji tidak dihitung/dikirim saat viewer tidak berhak
+        // melihatnya (SPV yang membuka KPI karyawan lain).
+        if ($showGaji) {
+            // =========================================================
+            // SALARY COMPOSITION — SalaryCalculationService (context penilaian_kinerja)
+            // =========================================================
+            $periodDate = "$tahun-$bulan-15";
+            $extras = $this->salaryExtras((int) $selected_karyawan, (string) $bulan, (string) $tahun);
+            $salaryService = new \App\Services\Payroll\SalaryCalculationService();
+            $result = $salaryService->calculateSalary(
+                (int) $selected_karyawan,
+                $kpi['jabatan'],
+                $kpi['unit'],
+                'penilaian_kinerja',
+                [
+                    'TUNJANGAN_KINERJA' => $kpi['skor_total'],
+                    'TUNJANGAN_ABSEN'   => $kpi['skor_total2'],
+                ],
+                $kpi['akun']->tunjangan_penempatan,
+                $kpi['insentif'],
+                $extras['lembur'],
+                $extras['bon'],
+                $periodDate
+            );
+
+            $compByCode = [];
+            foreach (($result['components'] ?? []) as $comp) {
+                $compByCode[$comp['component_code']] = (float) $comp['amount'];
+            }
+
+            $viewData += [
+                'tunjangan_kinerja'    => $compByCode['TUNJANGAN_KINERJA'] ?? 0,
+                'tunjangan_absen'      => $compByCode['TUNJANGAN_ABSEN'] ?? 0,
+                'insentif'             => $result['incentive'],
+                'tunjangan_penempatan' => $kpi['akun'],
+                'gaji_pokok'           => $compByCode['GAJI_POKOK'] ?? $kpi['gaji_pokok'],
+                'gaji'                 => (float) $result['total_gaji'] - $extras['kasbon'] - $extras['potongan'] + $extras['bonus'],
+                'lembur'               => $extras['lembur'],
+                'bon'                  => $extras['bon'],
+                'kasbon'               => $extras['kasbon'],
+                'potongan'             => $extras['potongan'],
+                'bonus'                => $extras['bonus'],
+            ];
+        }
+
+        return view('template', $viewData);
     }
 
     public function penilaian_absen()
@@ -2200,6 +2254,14 @@ class PenilaianKPI extends BaseController
 
     public function slip_gaji($idakun)
     {
+        // SPV hanya boleh mencetak slip dirinya sendiri; slip karyawan lain
+        // tidak boleh diakses lewat URL langsung.
+        if ((int) session()->get('ID_JABATAN') === 40
+            && (int) session()->get('ID_AKUN') !== (int) $idakun) {
+            return redirect()->to(base_url('penilaian_kinerja'))
+                ->with('error', 'SPV hanya dapat mengakses slip gaji sendiri.');
+        }
+
         $awal_bulan = date('01 m');
         $akhir_bulan = date('t m Y');
 
@@ -2292,6 +2354,12 @@ class PenilaianKPI extends BaseController
 
     public function gaji()
     {
+        // Halaman payroll lintas karyawan tidak untuk SPV.
+        if ((int) session()->get('ID_JABATAN') === 40) {
+            return redirect()->to(base_url('penilaian_kinerja'))
+                ->with('error', 'SPV tidak memiliki akses ke halaman gaji.');
+        }
+
         $bulan = $this->request->getGet('bulan') ?? date('m');
         $tahun = $this->request->getGet('tahun') ?? date('Y');
 

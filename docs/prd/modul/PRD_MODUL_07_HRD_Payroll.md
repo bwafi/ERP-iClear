@@ -44,7 +44,7 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 5. Bayar → settle kasbon pegawai (idempotent per payroll); `total_bersih = total - potongan_kasbon`. **Pembayaran ulang tidak ditolak dan menimpa `potongan_kasbon` menjadi 0.** — `Payroll::bayar`; `HutangPiutangService::settleKasbonFromPayroll` (PR-03)
 6. `Payroll::index` menampilkan payroll seluruh unit; `FinanceScopeService` hanya dipakai untuk `can_input` di view, bukan filter query. — `Payroll.php:85-220` (PR-01)
 7. `Payroll::insert/update/delete` tidak memakai `canInput`/scope dan mengambil `idunit` dari POST. — `Payroll.php` (PR-02)
-8. `PenilaianKPI::slip_gaji($idakun)` tidak membatasi siapa yang meminta; `gaji()` menampilkan semua karyawan `TERIMA_GAJI=1`; route hanya `auth`. — `PenilaianKPI.php` (PR-06)
+8. `PenilaianKPI::slip_gaji($idakun)` tidak membatasi siapa yang meminta; `gaji()` menampilkan semua karyawan `TERIMA_GAJI=1`; route hanya `auth`. **Pengecualian sejak 2026-10-29:** SPV (40) dialihkan dari `/gaji` dan hanya boleh membuka slip ID sendiri; gaji sendiri tetap terlihat di `/penilaian_kinerja` saat membuka KPI sendiri. Karyawan lain tetap tanpa guard. — `PenilaianKPI.php` (PR-06); `tests/PenilaianThpMatchesSlipTest.php`
 9. `PenilaianKPI::attendance_save()` memakai `target_id` dari POST tanpa `EvaluatorAuthorizationService`/scope; `attendance_input` hanya memfilter daftar. — `PenilaianKPI.php` (PR-07)
 10. [✅] Insentif Oktober 2026+: unit 50 memakai pool HO (1% × gross profit cabang yang capai target, dibagi karyawan HO aktif `TERIMA_GAJI=1`); unit 1 memakai pool Probolinggo (3% × gross profit bila target capai, dibagi staff toko aktif jabatan 35/36/41/42 `TERIMA_GAJI=1`). Keduanya melewati `incentive_members`; periode sebelum Oktober 2026 tetap memakai aturan lama. — `KpiCalculationService::computeIncentive`; `tests/unit/IncentiveHoProbolinggoTest.php`
 11. [⚠️] Alur detail absensi (validasi jarak/radius lokasi, status kehadiran, approval) belum diverifikasi penuh di dokumen ini (belum baca penuh `Absensi.php` & `RiwayatPresensi.php`).
@@ -72,7 +72,7 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
   2. CRUD legacy payroll tanpa role/scope; `idunit` dari POST. — PR-02
   3. `bayar` ulang menimpa `potongan_kasbon` menjadi 0. — PR-03
   4. `updateRegister` mengabaikan lock file. — PR-04
-  5. `slip_gaji`/`gaji` dapat diakses semua user login; `attendance_save` tanpa otorisasi evaluator. — PR-06/PR-07
+  5. `slip_gaji`/`gaji` dapat diakses semua user login **kecuali SPV (40)**: `/gaji` dialihkan, slip karyawan lain ditolak, slip sendiri tetap boleh. `attendance_save` tanpa otorisasi evaluator. — PR-06/PR-07
   6. `lockPayroll`/`unlockPayroll` tanpa guard role. — PR-08
 - ⚠️ Belum diverifikasi penuh: detail absensi & approval, struktur komponen gaji, rule insentif unit cabang selain HO/Probolinggo.
 - Test: `PayrollGeneratorUnitTest`, `PayrollRunSummaryTest`, `HoSalaryDistributionCacheTest`, `HoSalaryDistributionSpvTest`, `DetailAbsenPegawaiTanpaWeightTest`, `ManagerKpiTest`, `unit/IncentiveHoProbolinggoTest`, `PenilaianThpMatchesSlipTest`. Tidak ada test untuk scope view, bayar ulang, lock `updateRegister`, dan otorisasi slip/attendance.

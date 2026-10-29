@@ -292,6 +292,8 @@
     }
 </style>
 
+<?php $show_gaji = $show_gaji ?? true; ?>
+
 <div class="card border-0 bg-white shadow-sm mb-4 rounded-4">
     <div class="card-body d-flex align-items-center p-4">
         <div class="d-flex align-items-center gap-3">
@@ -299,7 +301,7 @@
                 <i class="fa fa-chart-line fa-lg"></i>
             </div>
             <div>
-                <h4 class="fw-bold text-dark mb-1">Penilaian Kinerja & Penggajian</h4>
+                <h4 class="fw-bold text-dark mb-1">Penilaian Kinerja<?= $show_gaji ? ' & Penggajian' : '' ?></h4>
                 <nav aria-label="breadcrumb">
                     <ol class="breadcrumb mb-0 small">
                         <li class="breadcrumb-item">
@@ -402,7 +404,7 @@
 
 <!-- FINANCIAL SUMMARY SECTION -->
 <div class="d-flex align-items-center justify-content-between mb-3">
-    <h6 class="fw-bold text-dark mb-0">Ringkasan Penghasilan & Skor</h6>
+    <h6 class="fw-bold text-dark mb-0"><?= $show_gaji ? 'Ringkasan Penghasilan & Skor' : 'Skor Kinerja' ?></h6>
 </div>
 <div class="row g-3 mb-4">
     <!-- Skor Kinerja -->
@@ -417,6 +419,7 @@
             </div>
         </div>
     </div>
+    <?php if ($show_gaji): ?>
     <!-- Gaji Pokok -->
     <div class="col-xl-2 col-md-4 col-sm-6">
         <div class="card border-0 shadow-sm h-100 rounded-4 bg-white">
@@ -462,8 +465,10 @@
             </div>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
+<?php if ($show_gaji): ?>
 <!-- RINCIAN LEMBUR & POTONGAN -->
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-3">
@@ -500,6 +505,7 @@
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- KPI DETAILS TABLE -->
 <div class="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">

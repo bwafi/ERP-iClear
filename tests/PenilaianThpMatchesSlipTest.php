@@ -20,6 +20,12 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
 
     private const PEGAWAI = 900;
     private const UNIT = 91;
+    private const UNIT_LAIN = 92;
+    private const UNIT_KOSONG = 93;
+    private const SPV = 901;
+    private const SPV_KOSONG = 904;
+    private const PEGAWAI_WILAYAH = 902;
+    private const PEGAWAI_LUAR = 903;
 
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
@@ -151,21 +157,65 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
 
     private function sebarData(): void
     {
-        $this->db->table('unit')->insert([
-            'idunit' => self::UNIT, 'NAMA_UNIT' => 'ICLEAR Unit Test',
-            'LOGO' => 'logo.png', 'JALAN_UNIT' => 'Jl. Test',
-            'KABUPATEN_UNIT' => 'Banyuwangi', 'jenis' => 'pribadi',
-            'is_trial' => 0, 'is_operational' => 1,
+        $this->db->table('unit')->insertBatch([
+            [
+                'idunit' => self::UNIT, 'NAMA_UNIT' => 'ICLEAR Unit Test',
+                'LOGO' => 'logo.png', 'JALAN_UNIT' => 'Jl. Test',
+                'KABUPATEN_UNIT' => 'Banyuwangi', 'jenis' => 'pribadi',
+                'is_trial' => 0, 'is_operational' => 1,
+            ],
+            [
+                'idunit' => self::UNIT_LAIN, 'NAMA_UNIT' => 'ICLEAR Unit Lain',
+                'LOGO' => 'logo.png', 'JALAN_UNIT' => 'Jl. Lain',
+                'KABUPATEN_UNIT' => 'Jember', 'jenis' => 'pribadi',
+                'is_trial' => 0, 'is_operational' => 1,
+            ],
+            [
+                'idunit' => self::UNIT_KOSONG, 'NAMA_UNIT' => 'ICLEAR Unit Kosong',
+                'LOGO' => 'logo.png', 'JALAN_UNIT' => 'Jl. Kosong',
+                'KABUPATEN_UNIT' => 'Situbondo', 'jenis' => 'pribadi',
+                'is_trial' => 0, 'is_operational' => 1,
+            ],
         ]);
-        $this->db->table('jabatan')->insert([
-            'ID_JABATAN' => 41, 'NAMA_JABATAN' => 'Kepala Toko',
-            'ROLES_JABATAN' => '[]',
+        $this->db->table('jabatan')->insertBatch([
+            ['ID_JABATAN' => 40, 'NAMA_JABATAN' => 'SPV', 'ROLES_JABATAN' => '[]'],
+            ['ID_JABATAN' => 41, 'NAMA_JABATAN' => 'Kepala Toko', 'ROLES_JABATAN' => '[]'],
         ]);
-        $this->db->table('akun')->insert([
-            'ID_AKUN' => self::PEGAWAI, 'ID_UNIT' => self::UNIT,
-            'ID_JABATAN' => 41, 'NAMA_AKUN' => 'Pegawai Test',
-            'NOID' => 'NIP-900', 'ROLES' => '[]', 'ALAMAT' => 'Probolinggo',
-            'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+        $this->db->table('akun')->insertBatch([
+            [
+                'ID_AKUN' => self::PEGAWAI, 'ID_UNIT' => self::UNIT,
+                'ID_JABATAN' => 41, 'NAMA_AKUN' => 'Pegawai Test',
+                'NOID' => 'NIP-900', 'ROLES' => '[]', 'ALAMAT' => 'Probolinggo',
+                'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+            ],
+            [
+                'ID_AKUN' => self::SPV, 'ID_UNIT' => self::UNIT,
+                'ID_JABATAN' => 40, 'NAMA_AKUN' => 'SPV Test',
+                'NOID' => 'NIP-901', 'ROLES' => '[]', 'ALAMAT' => 'Probolinggo',
+                'TERIMA_GAJI' => 0, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+            ],
+            [
+                'ID_AKUN' => self::PEGAWAI_WILAYAH, 'ID_UNIT' => self::UNIT,
+                'ID_JABATAN' => 41, 'NAMA_AKUN' => 'Karyawan Wilayah',
+                'NOID' => 'NIP-902', 'ROLES' => '[]', 'ALAMAT' => 'Probolinggo',
+                'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+            ],
+            [
+                'ID_AKUN' => self::PEGAWAI_LUAR, 'ID_UNIT' => self::UNIT_LAIN,
+                'ID_JABATAN' => 41, 'NAMA_AKUN' => 'Karyawan Unit Lain',
+                'NOID' => 'NIP-903', 'ROLES' => '[]', 'ALAMAT' => 'Jember',
+                'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+            ],
+            [
+                'ID_AKUN' => self::SPV_KOSONG, 'ID_UNIT' => self::UNIT_KOSONG,
+                'ID_JABATAN' => 40, 'NAMA_AKUN' => 'SPV Tanpa Karyawan',
+                'NOID' => 'NIP-904', 'ROLES' => '[]', 'ALAMAT' => 'Situbondo',
+                'TERIMA_GAJI' => 0, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+            ],
+        ]);
+        $this->db->table('spv_units')->insertBatch([
+            ['spv_id' => self::SPV, 'unit_id' => self::UNIT],
+            ['spv_id' => self::SPV_KOSONG, 'unit_id' => self::UNIT_KOSONG],
         ]);
         $this->db->table('menu')->insert([
             'idmenu' => 1, 'urutan' => 1, 'nama_menu' => 'Dashboard',
@@ -197,15 +247,15 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
         ]);
     }
 
-    private function sesi(): void
+    private function sesi(int $idAkun = self::PEGAWAI, int $idJabatan = 41, int $idUnit = self::UNIT): void
     {
         $this->withSession([
             'logged_in'    => true,
-            'ID_AKUN'      => self::PEGAWAI,
-            'ID_UNIT'      => self::UNIT,
-            'ID_JABATAN'   => 41,
+            'ID_AKUN'      => $idAkun,
+            'ID_UNIT'      => $idUnit,
+            'ID_JABATAN'   => $idJabatan,
             'NAMA'         => 'Tester',
-            'NAMA_JABATAN' => 'Kepala Toko',
+            'NAMA_JABATAN' => $idJabatan === 40 ? 'SPV' : 'Kepala Toko',
             'EMAIL'        => 'tester@example.com',
         ]);
     }
@@ -266,5 +316,70 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
             $html,
             'rincian bon, kasbon & potongan harus terlihat',
         );
+    }
+
+    public function testSpvHanyaMelihatWilayahDanTanpaAngkaGaji(): void
+    {
+        $this->sesi(self::SPV, 40, self::UNIT);
+
+        // Minta karyawan unit lain: harus jatuh ke karyawan wilayah SPV.
+        $html = (string) $this->get(
+            'penilaian_kinerja?bulan=10&tahun=2026&karyawan=' . self::PEGAWAI_LUAR,
+        )->getBody();
+
+        $this->assertStringContainsString('value="' . self::PEGAWAI . '" selected', $html);
+        $this->assertStringNotContainsString('value="' . self::PEGAWAI_LUAR . '"', $html);
+        $this->assertStringNotContainsString('Karyawan Unit Lain', $html);
+        $this->assertStringContainsString('Rincian Omset Cabang', $html);
+        $this->assertStringContainsString('ICLEAR Unit Test', $html, 'omset wilayah sendiri harus tampil');
+        $this->assertStringNotContainsString('ICLEAR Unit Lain', $html, 'omset cabang luar wilayah bocor');
+
+        $this->assertStringContainsString('Skor Kinerja', $html);
+        $this->assertStringContainsString('Detail Penilaian Kinerja (KPI)', $html);
+        $this->assertStringNotContainsString('Gaji Pokok', $html);
+        $this->assertStringNotContainsString('Tunj. Kinerja', $html);
+        $this->assertStringNotContainsString('Take Home Pay', $html);
+        $this->assertStringNotContainsString('Cetak Slip Gaji', $html);
+    }
+
+    public function testSpvMelihatGajiSaatKpiSendiri(): void
+    {
+        $this->sesi(self::SPV, 40, self::UNIT);
+
+        $html = (string) $this->get(
+            'penilaian_kinerja?bulan=10&tahun=2026&karyawan=' . self::SPV,
+        )->getBody();
+
+        $this->assertStringContainsString('value="' . self::SPV . '" selected', $html);
+        $this->assertStringContainsString('Skor Kinerja', $html);
+        $this->assertStringContainsString('Gaji Pokok', $html);
+        $this->assertStringContainsString('Take Home Pay (Estimasi)', $html);
+        $this->assertStringContainsString('Cetak Slip Gaji Resmi', $html);
+    }
+
+    public function testSpvTanpaKaryawanTetapMelihatKpiSendiri(): void
+    {
+        $this->sesi(self::SPV_KOSONG, 40, self::UNIT_KOSONG);
+
+        $html = (string) $this->get('penilaian_kinerja?bulan=10&tahun=2026')->getBody();
+
+        // Diri sendiri tetap masuk daftar walau wilayah binaan kosong.
+        $this->assertStringContainsString('value="' . self::SPV_KOSONG . '" selected', $html);
+        $this->assertStringContainsString('Take Home Pay (Estimasi)', $html);
+    }
+
+    public function testSpvDitolakDariHalamanGajiDanSlipKaryawanLain(): void
+    {
+        $this->sesi(self::SPV, 40, self::UNIT);
+
+        $this->get('gaji')->assertRedirectTo(base_url('penilaian_kinerja'));
+
+        $this->get(
+            'penilaian/slip_gaji/' . self::PEGAWAI_WILAYAH . '?bulan=10&tahun=2026',
+        )->assertRedirectTo(base_url('penilaian_kinerja'));
+
+        $this->get(
+            'penilaian/slip_gaji/' . self::SPV . '?bulan=10&tahun=2026',
+        )->assertStatus(200);
     }
 }
