@@ -320,6 +320,199 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
         $this->assertSame('Minimal satu baris akun wajib diisi.', session()->getFlashdata('gagal'));
     }
 
+    /** Baris akun kosong tidak boleh tersimpan sebagai kas keluar. */
+    public function testSimpanDenganBarisAkunKosongDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $sebelum = (int) $this->db->table('kas_keluar')->countAllResults();
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'Kosong',
+            'unit_idunit' => 1,
+            'akun' => [[
+                'no_akun' => '',
+                'kategori_idkategori' => '0',
+                'jumlah' => '0',
+                'posisi_drk' => 'debet',
+                'penerima' => '',
+                'no_rekening' => '',
+            ]],
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('No. Akun', (string) session()->getFlashdata('gagal'));
+        $this->assertSame($sebelum, (int) $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testSimpanDenganNoAkunTidakTerdaftarDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $sebelum = (int) $this->db->table('kas_keluar')->countAllResults();
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'Akun asing',
+            'unit_idunit' => 1,
+            'akun' => [[
+                'no_akun' => '9-9999',
+                'kategori_idkategori' => '1',
+                'jumlah' => '5000',
+                'posisi_drk' => 'debet',
+            ]],
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('tidak terdaftar', (string) session()->getFlashdata('gagal'));
+        $this->assertSame($sebelum, (int) $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testSimpanTanpaKategoriDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $sebelum = (int) $this->db->table('kas_keluar')->countAllResults();
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'Tanpa kategori',
+            'unit_idunit' => 1,
+            'akun' => [[
+                'no_akun' => '1010101',
+                'kategori_idkategori' => '0',
+                'jumlah' => '5000',
+                'posisi_drk' => 'debet',
+            ]],
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('Kategori', (string) session()->getFlashdata('gagal'));
+        $this->assertSame($sebelum, (int) $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testSimpanDenganJumlahNolDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $sebelum = (int) $this->db->table('kas_keluar')->countAllResults();
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'Jumlah nol',
+            'unit_idunit' => 1,
+            'akun' => [[
+                'no_akun' => '1010101',
+                'kategori_idkategori' => '1',
+                'jumlah' => '0',
+                'posisi_drk' => 'debet',
+            ]],
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('Jumlah', (string) session()->getFlashdata('gagal'));
+        $this->assertSame($sebelum, (int) $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testSimpanTanpaTanggalDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $sebelum = (int) $this->db->table('kas_keluar')->countAllResults();
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '',
+            'deskripsi' => 'Tanpa tanggal',
+            'unit_idunit' => 1,
+            'akun' => [[
+                'no_akun' => '1010101',
+                'kategori_idkategori' => '1',
+                'jumlah' => '5000',
+                'posisi_drk' => 'debet',
+            ]],
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('Tanggal', (string) session()->getFlashdata('gagal'));
+        $this->assertSame($sebelum, (int) $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testSimpanDenganTanggalTidakValidDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $sebelum = (int) $this->db->table('kas_keluar')->countAllResults();
+
+        $res = $this->post('insert_kas_keluar', [
+            'tanggal' => '2026-13-99',
+            'deskripsi' => 'Tanggal salah',
+            'unit_idunit' => 1,
+            'akun' => [[
+                'no_akun' => '1010101',
+                'kategori_idkategori' => '1',
+                'jumlah' => '5000',
+                'posisi_drk' => 'debet',
+            ]],
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('Tanggal', (string) session()->getFlashdata('gagal'));
+        $this->assertSame($sebelum, (int) $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testUpdateTanpaKategoriDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO kas_keluar
+            (idkas_keluar, tanggal, kategori_idkategori, deskripsi, jumlah, idunit, jenis, no_akun)
+            VALUES (900, '2026-10-09', 1, 'lama', 5000, 1, 'debet', '1010101')");
+
+        $res = $this->post('update_kas_keluar', [
+            'idkas_keluar' => 900,
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'diubah',
+            'kategori_idkategori' => '0',
+            'jumlah' => '5000',
+            'penerima' => '',
+            'idunit' => 1,
+            'posisi_drk' => 'debet',
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('Kategori', (string) session()->getFlashdata('gagal'));
+        $row = $this->db->table('kas_keluar')->where('idkas_keluar', 900)->get()->getRow();
+        $this->assertSame(1, (int) $row->kategori_idkategori);
+        $this->assertSame('lama', $row->deskripsi);
+    }
+
+    public function testUpdateDenganJumlahNolDitolak(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO kas_keluar
+            (idkas_keluar, tanggal, kategori_idkategori, deskripsi, jumlah, idunit, jenis, no_akun)
+            VALUES (901, '2026-10-09', 1, 'lama', 5000, 1, 'debet', '1010101')");
+
+        $res = $this->post('update_kas_keluar', [
+            'idkas_keluar' => 901,
+            'tanggal' => '2026-10-09',
+            'deskripsi' => 'diubah',
+            'kategori_idkategori' => '1',
+            'jumlah' => '0',
+            'penerima' => '',
+            'idunit' => 1,
+            'posisi_drk' => 'debet',
+        ]);
+
+        $this->assertSame(302, $res->response()->getStatusCode());
+        $this->assertStringContainsString('Jumlah', (string) session()->getFlashdata('gagal'));
+        $row = $this->db->table('kas_keluar')->where('idkas_keluar', 901)->get()->getRow();
+        $this->assertSame(5000.0, (float) $row->jumlah);
+        $this->assertSame('lama', $row->deskripsi);
+    }
+
     public function testKasirTidakBisaMemfilterUnitLain(): void
 
     {

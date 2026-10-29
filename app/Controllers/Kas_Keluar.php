@@ -374,6 +374,38 @@ class Kas_Keluar extends BaseController
         return redirect()->to(base_url('/kas_keluar'));
     }
 
+    private function tanggalValid($tanggal): bool
+    {
+        $s = trim((string) $tanggal);
+        if ($s === '') {
+            return false;
+        }
+
+        $d = \DateTimeImmutable::createFromFormat('!Y-m-d', $s);
+
+        return $d !== false && $d->format('Y-m-d') === $s;
+    }
+
+    /** @return string|null pesan gagal, null bila baris siap disimpan */
+    private function validasiBarisAkun(array $data, int $baris): ?string
+    {
+        $noAkun = trim((string) ($data['no_akun'] ?? ''));
+        if ($noAkun === '') {
+            return 'No. Akun pada transaksi ' . $baris . ' wajib dipilih.';
+        }
+        if (! $this->NoAkunModel->getByNoAkun($noAkun)) {
+            return 'No. Akun "' . $noAkun . '" pada transaksi ' . $baris . ' tidak terdaftar.';
+        }
+        if ((int) ($data['kategori_idkategori'] ?? 0) <= 0) {
+            return 'Kategori pada transaksi ' . $baris . ' wajib dipilih.';
+        }
+        if ((float) ($data['jumlah'] ?? 0) <= 0) {
+            return 'Jumlah pada transaksi ' . $baris . ' harus lebih dari 0.';
+        }
+
+        return null;
+    }
+
     public function insert_kas_keluar()
     {
         $tanggal = $this->request->getPost('tanggal');
@@ -395,6 +427,18 @@ class Kas_Keluar extends BaseController
         // Prospek harus punya minimal satu baris akun.
         if (!is_array($akunData) || empty($akunData)) {
             return $this->gagalInsert('Minimal satu baris akun wajib diisi.');
+        }
+
+        if (! $this->tanggalValid($tanggal)) {
+            return $this->gagalInsert('Tanggal wajib diisi dengan format yang benar.');
+        }
+
+        // Baris kosong tidak boleh lolos hanya karena jumlah barisnya ada.
+        foreach ($akunData as $i => $baris) {
+            $pesan = $this->validasiBarisAkun((array) $baris, $i + 1);
+            if ($pesan !== null) {
+                return $this->gagalInsert($pesan);
+            }
         }
 
         // Simpan source + posting ledger + jurnal dalam SATU transaksi.
@@ -529,6 +573,22 @@ class Kas_Keluar extends BaseController
         $jumlah = $this->request->getPost('jumlah');
         $penerima = $this->request->getPost('penerima'); //idbank
         $idunit   = (int) ($this->request->getPost('idunit') ?? session('ID_UNIT'));
+
+        if (! $this->tanggalValid($tanggal)) {
+            session()->setFlashdata('gagal', 'Tanggal wajib diisi dengan format yang benar.');
+
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+        if ((int) $kategori_idkategori <= 0) {
+            session()->setFlashdata('gagal', 'Kategori wajib dipilih.');
+
+            return redirect()->to(base_url('/kas_keluar'));
+        }
+        if ((float) $jumlah <= 0) {
+            session()->setFlashdata('gagal', 'Jumlah harus lebih dari 0.');
+
+            return redirect()->to(base_url('/kas_keluar'));
+        }
 
         // Sama seperti create: idbank harus terdaftar DAN terpetakan ke akun
         // BANK aktif, DAN unit-nya berhak memakai rekening itu. Versi lama
