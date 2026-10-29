@@ -225,9 +225,9 @@ class MarketingKpiService
     /**
      * Ringkasan 7 KPI Divisi Digital Marketing utk dashboard — delegate ke
      * DigitalMarketingKpiService (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/
-     * CAMPAIGN_PERFORMANCE/REPORTING/IMPROVEMENT, bobot & target dari DB).
+     * CAMPAIGN_PERFORMANCE/REPORTING/BUDGETING, bobot & target dari DB).
      *
-     * @param int|null $employeeId ID_AKUN utk KPI Improvement (Kepala Divisi).
+     * @param int|null $employeeId ID_AKUN utk KPI Improvement (periode sebelum Oktober 2026).
      */
     public function monthlySummary(int $month, int $year, ?int $employeeId = null, int $unitId = 50): array
     {

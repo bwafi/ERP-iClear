@@ -1,6 +1,6 @@
 # KPI Engine Architecture
 
-**Tanggal:** 28 Agustus 2026 (diperbarui 2026-10-26)
+**Tanggal:** 28 Agustus 2026 (diperbarui 2026-10-29)
 **Branch:** `refactor/kpi-incentive-engine`
 **Status:** Dokumen historis + catatan implementasi aktual. Service layer sudah dibangun; **`KpiCalculationService` sudah dipakai controller/payroll aktif**. Bagian “legacy” di bawah dipertahankan sebagai rekaman refactor.
 
@@ -13,11 +13,11 @@
 Memindahkan business logic perhitungan KPI/insentif/gaji dari Controller ke Service layer,
 **tanpa mengubah hasil perhitungan** sistem lama.
 
-Sistem KPI periode berjalan **tetap** menggunakan tabel existing:
-`template_kpi`, `template_penilaian`, `penilaian`, `penilaian_detail`, `penilaian_kpi`.
-
-Tabel konfigurasi baru (`kpi_components`, `kpi_weights`, dst.) disiapkan untuk tahap berikutnya,
-**bukan** sebagai source of truth periode berjalan.
+Engine KPI periode berjalan adalah `KpiCalculationService`. Konfigurasi komponen/bobot/target
+dibaca dari `kpi_components`, `kpi_weights`, dan `kpi_targets`; skor absensi dari
+`kpi_evaluations`. Tabel lama (`template_kpi`, `template_penilaian`, `penilaian`,
+`penilaian_detail`, `penilaian_kpi`) tetap ada untuk data historis dan input manual yang
+belum dimigrasi.
 
 ---
 
@@ -186,7 +186,6 @@ Dibandingkan untuk 19 karyawan × 3 context (gaji, penilaian_kinerja, slip_gaji)
 
 ## 7. Migrasi Konfigurasi (Tahap Lanjut)
 
-- `kpi_components`, `kpi_weights`, `kpi_targets`, `kpi_evaluations` sudah dibuat & di-seed
-  sebagai baseline konfigurasi (nilai diambil dari controller existing).
-- **Belum** dijadikan source of truth periode berjalan.
+- `kpi_components`, `kpi_weights`, `kpi_targets`, `kpi_evaluations` sudah dibuat, di-seed, dan
+  dipakai `KpiCalculationService` sebagai konfigurasi aktif periode berjalan.
 - Bobot per jabatan sudah divalidasi = 100 (grup kpi & absen).

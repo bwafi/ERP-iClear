@@ -1,6 +1,7 @@
 # KPI Business Rules
 
 **Tanggal:** 28 Agustus 2026
+**Diperbarui:** 29 Oktober 2026 — KPI Kepala Divisi (43) disinkronkan dengan implementasi aktif.
 **Status:** Status per rule ditandai (CONFIRMED / DARI SISTEM LAMA / UNKNOWN)
 
 ---
@@ -19,9 +20,32 @@ Aturan Oktober 2026 menggantikan seluruh insentif lama untuk unit 50 (termasuk S
 
 Saat ini:
 - KEPALA_TOKO → Kepala Toko + Teknisi + Admin; **setiap anggota dapat 1% × omset unit**
-- DIGITAL_DIVISION → 4 member (Pengiklan + IT + Multimedia + CS); 1% pool dibagi rata
+- DIGITAL_DIVISION → 4 member (Kepala Divisi/43 + IT + Multimedia + CS); 1% pool dibagi rata
 
 > Syarat `minimum_achievement` (harus capai target omset) tetap berlaku untuk KEPALA_TOKO.
+
+---
+
+## 1a. KPI Aktif — Kepala Divisi / Digital Marketing (43)
+
+Berlaku untuk jabatan **43 "Kepala Divisi"** (unit HO 50). Engine: `KpiCalculationService` → `DigitalMarketingKpiService`. Bobot dibaca dari `kpi_weights` posisi 43, group `kpi`; total 100.
+
+| Komponen | Bobot | Rumus ringkas | Sumber data |
+|---|---:|---|---|
+| `OMZET_GLOBAL` | 50 | `min(actual / Σ target OMSET_CABANG posisi 40 unit 1–5 × 100, 100)`; target ≤ 0 → null | Penjualan unit 1–5 (gross profit) |
+| `LEADS_QUALITY` | 15 | rata-rata `min(leads / 3.000 × 100, 100)` dan `min(qualified / leads × 100, 100)`; leads 0 → 0 | `marketing_ads_performance` |
+| `CONVERSION` | 10 | `min((closing CS / lead CS × 100) / 30% × 100, 100)`; lead 0 → null | Rekap harian CS + prospek closing |
+| `CPL` | 10 | rata-rata `min(250.000 / CPL Datang × 100, 100)` dan `min(250.000 / CPL Closing × 100, 100)`; penyebut 0 → null | Budget ads, datang & closing CS |
+| `CAMPAIGN_PERFORMANCE` | 5 | `ads dengan campaign valid / total ads × 100`; total ads 0 → null | Ads + campaign |
+| `REPORTING` | 5 | `campaign done / total campaign × 100`; total campaign 0 → null | `marketing_campaigns` |
+| `BUDGETING` | 5 | belanja iklan ≤ **Rp15.000.000/bulan** → 100; **di atas batas → 0**; tanpa data ads → null | `marketing_ads_performance` (spend + PPN) |
+
+- **Target efektif saat ini:** `LEADS_QUALITY` 3.000 leads/bulan, `CONVERSION` 30%, `CPL` ≤ Rp250.000, `BUDGETING` ≤ Rp15.000.000. `CAMPAIGN_PERFORMANCE` dan `REPORTING` dinilai terhadap 100%.
+- **Berlaku sejak 2026-10-01.** `BUDGETING` menggantikan `IMPROVEMENT` (5) yang bobotnya ditutup per 2026-09-30; periode sebelum Oktober 2026 tetap memakai `IMPROVEMENT` agar skor historis tidak berubah. Multimedia (44) tetap memakai `IMPROVEMENT`.
+- Target komponen dibaca dari `kpi_targets` dengan `position_id = 43`; service memakai fallback hardcode hanya bila baris target tidak ada.
+- **Komponen absensi** (group `absen`, bukan 7 KPI): Kehadiran 40, Kebersihan 20, Seragam 20, Kepatuhan SOP 20. Kehadiran dinilai Finance; Kebersihan/Seragam/SOP dinilai Manager. Skor ini masuk `skor_total2` → tunjangan absen maksimum Rp250.000.
+- **Tunjangan kinerja** maksimum jabatan 43 = **Rp1.500.000** (`salary_structures`, `percent_of_kpi`). Insentif terpisah dari KPI; untuk unit 50 sejak Oktober 2026 mengikuti aturan **Insentif HO** di §1.
+- "Omzet" pada `OMZET_GLOBAL` dihitung dari **gross profit** (`SUM(sub_total - hpp_penjualan)`), bukan omzet penjualan. Definisi ini masih perlu konfirmasi bisnis (KPI-06).
 
 ---
 
@@ -82,7 +106,7 @@ Context `gaji` memakai `customer` polos.
 | 41 Kepala Toko | Omset 70, Customer 10, Tutup Kasir 10, Opname 10 | 40/20/20/20 |
 | 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | 40/20/20/20 |
 | 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 40/20/20/20 |
-| 43 Pengiklan | gaji: Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 | 40/20/20/20 |
+| 43 Kepala Divisi (legacy "Pengiklan") | **Legacy:** Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 — **bukan KPI aktif**; lihat §1a | 40/20/20/20 |
 | 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 40/20/20/20 |
 | 45 IT | Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20 | 40/20/20/20 |
 | 46 PIC (non-gaji) | Budget Toko 20, Budget Global 30, Omset Cabang 50 | 40/20/20/20 |
@@ -109,7 +133,7 @@ Context `gaji` memakai `customer` polos.
 |---|---|---|---|
 | 41 KT | 850k | 250k max | 350k jika bukan kota unit |
 | 40 SPV | 1.25jt | 250k | 350k |
-| 43 Pengiklan | 1jt | 250k | 350k |
+| 43 Kepala Divisi (legacy "Pengiklan") | 1jt (legacy; aktif **1,5jt** — lihat §1a) | 250k | 350k |
 | 46 PIC (non-gaji) | 850k | 250k | 350k |
 | 35 Admin unit 1 | 850k | 250k | 350k |
 | 35 Admin unit lain | 250k | 250k | 350k |

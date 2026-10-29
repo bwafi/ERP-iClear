@@ -72,6 +72,7 @@ $statIcons = [
     'CPL'                  => ['solar:wallet-bold', 'warning'],
     'CAMPAIGN_PERFORMANCE' => ['solar:chart-2-bold', 'secondary'],
     'REPORTING'            => ['solar:document-text-bold', 'dark'],
+    'BUDGETING'            => ['solar:wallet-money-bold', 'danger'],
     'IMPROVEMENT'          => ['solar:chart-up-bold', 'danger'],
 ];
 $omzetGlobalItem = null;

@@ -1,5 +1,7 @@
 # KPI/Incentive Database Schema Implementation Summary
 
+> **Historis.** Dokumen ini merangkum implementasi 2026-08-28. Aturan KPI yang berlaku sekarang ada di [`kpi-business-rules.md`](kpi-business-rules.md) dan [`kpi-engine.md`](kpi-engine.md). Angka jabatan 43 ("Pengiklan") di bawah tidak lagi aktif.
+
 **Project:** ERP System KPI Refactoring  
 **Date:** 2026-08-28  
 **Status:** Ready for Implementation  

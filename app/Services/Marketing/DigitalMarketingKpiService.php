@@ -25,7 +25,11 @@ use App\Services\Konten\MultimediaKpiService;
  *   CPL                  10  Budget Ads (data Performa Ads) / Datang & Closing CS
  *   CAMPAIGN_PERFORMANCE  5  Ads ber-campaign valid / total ads.
  *   REPORTING             5  Campaign selesai (done) / total campaign.
- *   IMPROVEMENT           5  Reuse MultimediaKpiService::improvementResult.
+ *   BUDGETING             5  Belanja iklan ≤ batas bulanan (Rp15jt, kpi_targets)
+ *                             → 100; di atas batas → 0. Tanpa data → null.
+ *
+ * IMPROVEMENT (5) hanya berlaku untuk periode sebelum 2026-10-01 (lihat
+ * HISTORICAL_CODES); mulai Oktober 2026 diganti BUDGETING.
  *
  * Seluruh komponen memakai periode KPI yang sama (month/year). Data kosong
  * mengikuti pola existing: null → dikecualikan dari total (bukan 0/100 palsu);
@@ -40,8 +44,11 @@ class DigitalMarketingKpiService
         'CPL',
         'CAMPAIGN_PERFORMANCE',
         'REPORTING',
-        'IMPROVEMENT',
+        'BUDGETING',
     ];
+
+    /** Komponen yang bobotnya sudah ditutup tapi masih dihitung untuk periode lama. */
+    public const HISTORICAL_CODES = ['IMPROVEMENT'];
 
     public const BOBOT = [
         'OMZET_GLOBAL'         => 50,
@@ -50,8 +57,11 @@ class DigitalMarketingKpiService
         'CPL'                  => 10,
         'CAMPAIGN_PERFORMANCE' => 5,
         'REPORTING'            => 5,
-        'IMPROVEMENT'          => 5,
+        'BUDGETING'            => 5,
     ];
+
+    /** Jabatan pemilik KPI ini — dipakai saat membaca target di kpi_targets. */
+    public const POSITION_ID = 43;
 
     /** Cabang dengan data omzet ERP (penjualan) — semua cabang operasional, kecuali HO. */
     public const SALES_UNITS = [1, 2, 3, 4, 5];
@@ -150,19 +160,57 @@ class DigitalMarketingKpiService
         return round(min(100.0, $done / $totalCampaign * 100), 4);
     }
 
+    /**
+     * BUDGETING: belanja ≤ batas = 100; lewat batas = 0 (bukan proporsional).
+     * Tanpa data iklan (null) atau batas tidak valid → null.
+     */
+    public static function budgetingScore(?float $actual, float $limit): ?float
+    {
+        if ($actual === null || $limit <= 0) {
+            return null;
+        }
+
+        return $actual <= $limit ? 100.0 : 0.0;
+    }
+
+    /**
+     * Komponen + bobot yang berlaku pada periode. BUDGETING menggantikan
+     * IMPROVEMENT mulai 2026-10; periode sebelumnya tetap IMPROVEMENT.
+     */
+    public static function weightsFor(int $month, int $year): array
+    {
+        $weights = self::BOBOT;
+        if ($year < 2026 || ($year === 2026 && $month < 10)) {
+            unset($weights['BUDGETING']);
+            $weights['IMPROVEMENT'] = 5;
+        }
+
+        return $weights;
+    }
+
     // ── Data operasional ───────────────────────────────────────────
 
-    /** Total biaya iklan (Spending + PPN) dalam periode — Performa Ads. */
-    public function adsBudget(int $month, int $year): float
+    /**
+     * Total biaya iklan (Spending + PPN) periode; null bila belum ada baris
+     * Performa Ads — supaya "belum diisi" tidak terbaca sebagai belanja 0.
+     */
+    public function adsSpendOrNull(int $month, int $year): ?float
     {
         $row = $this->db->query(
-            "SELECT COALESCE(SUM(COALESCE(amount,0) + COALESCE(amount,0) * COALESCE(ppn,0) / 100), 0) AS t
+            "SELECT COUNT(*) AS n,
+                    COALESCE(SUM(COALESCE(amount,0) + COALESCE(amount,0) * COALESCE(ppn,0) / 100), 0) AS t
              FROM marketing_ads_performance
              WHERE period_month = ? AND period_year = ?",
             [$month, $year]
         )->getRow();
 
-        return round((float)$row->t, 2);
+        return (int)$row->n > 0 ? round((float)$row->t, 2) : null;
+    }
+
+    /** Total biaya iklan (Spending + PPN) dalam periode — Performa Ads. */
+    public function adsBudget(int $month, int $year): float
+    {
+        return $this->adsSpendOrNull($month, $year) ?? 0.0;
     }
 
     /** Leads dari Performa Ads (Hasil) dalam periode. */
@@ -256,9 +304,9 @@ class DigitalMarketingKpiService
         if (!$comp) {
             return null;
         }
-        $target = $this->targetModel->getTargetByKpiAndUnit((int)$comp->id, $unitId, $context, $date);
+        $target = $this->targetModel->getTargetByKpiAndUnit((int)$comp->id, $unitId, $context, $date, self::POSITION_ID);
         if (!$target) {
-            $target = $this->targetModel->getTargetByKpiAndUnit((int)$comp->id, 50, $context, $date);
+            $target = $this->targetModel->getTargetByKpiAndUnit((int)$comp->id, 50, $context, $date, self::POSITION_ID);
         }
         if (!$target) {
             $target = $this->db->query(
@@ -397,6 +445,17 @@ class DigitalMarketingKpiService
                     'source'      => 'Campaign selesai / total campaign',
                 ];
 
+            case 'BUDGETING':
+                $actual = $this->adsSpendOrNull($month, $year);
+                $limit  = $this->divTarget('BUDGETING', $unitId, $context, $date) ?? 15000000;
+                return [
+                    'achievement' => self::budgetingScore($actual, $limit),
+                    'target'      => $limit,
+                    'actual'      => $actual,
+                    'shortfall'   => $actual === null ? null : round(max($actual - $limit, 0), 2),
+                    'source'      => 'Budget Performa Ads (spend + PPN) / batas bulanan',
+                ];
+
             case 'IMPROVEMENT':
                 $res = (new MultimediaKpiService())->improvementResult($employeeId, $month, $year);
                 return [
@@ -420,8 +479,9 @@ class DigitalMarketingKpiService
     public function monthlySummary(int $month, int $year, ?int $employeeId = null, int $unitId = 50): array
     {
         $context = 'default';
+        $weights = self::weightsFor($month, $year);
         $codeToData = [];
-        foreach (self::CODES as $code) {
+        foreach (array_keys($weights) as $code) {
             $codeToData[$code] = $this->componentData($code, $employeeId ?? 0, $unitId, $month, $year, $context);
         }
 
@@ -432,17 +492,18 @@ class DigitalMarketingKpiService
             'CPL'                  => ['Cost Per Lead', fn($d) => $d['actual'] === null ? 'N/A' : 'Rp ' . number_format((float)$d['actual'], 0, ',', '.')],
             'CAMPAIGN_PERFORMANCE' => ['Campaign Performance', fn($d) => $d['actual'] === null ? 'N/A' : number_format((float)$d['actual'], 2, ',', '.') . '%'],
             'REPORTING'            => ['Reporting', fn($d) => $d['actual'] === null ? 'N/A' : number_format((float)$d['actual'], 2, ',', '.') . '%'],
+            'BUDGETING'            => ['Budgeting Iklan', fn($d) => $d['actual'] === null ? 'N/A' : 'Rp ' . number_format((float)$d['actual'], 0, ',', '.')],
             'IMPROVEMENT'          => ['Improvement', fn($d) => number_format((float)$d['actual'], 0, ',', '.') . ' disetujui'],
         ];
 
         $items = [];
-        foreach (self::CODES as $code) {
+        foreach (array_keys($weights) as $code) {
             $d     = $codeToData[$code];
             $label = $labels[$code];
             $items[] = [
                 'key'           => $code,
                 'name'          => $label[0],
-                'bobot'         => self::BOBOT[$code],
+                'bobot'         => $weights[$code],
                 'target_label'  => $this->targetLabel($code, $d['target']),
                 'actual_label'  => $label[1]($d),
                 'achievement'   => $d['achievement'] === null ? null : round((float)$d['achievement'], 2),
@@ -454,7 +515,7 @@ class DigitalMarketingKpiService
             'items'     => $items,
             'cost'      => ['ads_cost' => $this->adsBudget($month, $year), 'paid_lead' => $this->adsLeads($month, $year)],
             'channel'   => ['rows' => [], 'kpi_achievement' => null, 'kpi_metrics' => 0],
-            'weightsum' => array_sum(self::BOBOT),
+            'weightsum' => array_sum($weights),
         ];
     }
 
@@ -475,6 +536,8 @@ class DigitalMarketingKpiService
             case 'CAMPAIGN_PERFORMANCE':
             case 'REPORTING':
                 return '100%';
+            case 'BUDGETING':
+                return '≤ Rp ' . number_format((float)$target, 0, ',', '.');
             case 'IMPROVEMENT':
                 return number_format((float)$target, 0, ',', '.') . ' improvement/bulan';
         }

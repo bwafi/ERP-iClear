@@ -17,8 +17,10 @@ use App\Services\Konten\MultimediaKpiService;
  *     average Datang & Closing; tanpa dividen ke nol → null.
  *   - Campaign Performance = ads ber-campaign valid / total ads; Reporting =
  *     campaign Selesai (done) / total campaign. Ratio cap 100; total 0 → null.
+ *   - Budgeting: belanja iklan ≤ batas bulanan (Rp15jt) → 100, lewat → 0,
+ *     tanpa data → null. Menggantikan Improvement (5) sejak Oktober 2026.
  *   - Bobot: total 100.
- *   - Improvement: mekanisme Multimedia (di-reuse, bukan formula sendiri).
+ *   - Improvement: mekanisme Multimedia (di-reuse) — kini hanya jabatan 44.
  */
 final class DigitalMarketingKpiTest extends CIUnitTestCase
 {
@@ -149,6 +151,28 @@ final class DigitalMarketingKpiTest extends CIUnitTestCase
         $this->assertSame(0.0, DigitalMarketingKpiService::reportingScore(3, 0));
     }
 
+    // ── Budgeting ──────────────────────────────────────────────────
+
+    public function testBudgetingAtOrUnderLimitIsHundred(): void
+    {
+        $this->assertSame(100.0, DigitalMarketingKpiService::budgetingScore(15_000_000, 15_000_000));
+        $this->assertSame(100.0, DigitalMarketingKpiService::budgetingScore(0, 15_000_000));
+        $this->assertSame(100.0, DigitalMarketingKpiService::budgetingScore(14_999_999, 15_000_000));
+    }
+
+    public function testBudgetingOverLimitIsZero(): void
+    {
+        $this->assertSame(0.0, DigitalMarketingKpiService::budgetingScore(15_000_001, 15_000_000));
+        $this->assertSame(0.0, DigitalMarketingKpiService::budgetingScore(20_000_000, 15_000_000));
+    }
+
+    public function testBudgetingWithoutAdsDataIsNull(): void
+    {
+        $this->assertNull(DigitalMarketingKpiService::budgetingScore(null, 15_000_000));
+        // Batas belum dikonfigurasi → null, bukan 0.
+        $this->assertNull(DigitalMarketingKpiService::budgetingScore(1_000_000, 0));
+    }
+
     // ── Bobot & struktur ───────────────────────────────────────────
 
     public function testWeightsSumExactlyHundred(): void
@@ -156,6 +180,21 @@ final class DigitalMarketingKpiTest extends CIUnitTestCase
         $this->assertSame(100.0, (float)array_sum(DigitalMarketingKpiService::BOBOT));
         $this->assertSame(7, count(DigitalMarketingKpiService::CODES));
         $this->assertCount(count(DigitalMarketingKpiService::BOBOT), DigitalMarketingKpiService::CODES);
+        $this->assertSame(5.0, (float)DigitalMarketingKpiService::BOBOT['BUDGETING']);
+        $this->assertNotContains('IMPROVEMENT', DigitalMarketingKpiService::CODES);
+    }
+
+    public function testWeightsSwitchFromImprovementToBudgetingInOctober2026(): void
+    {
+        $september = DigitalMarketingKpiService::weightsFor(9, 2026);
+        $this->assertSame(5.0, (float)$september['IMPROVEMENT']);
+        $this->assertArrayNotHasKey('BUDGETING', $september);
+        $this->assertSame(100.0, (float)array_sum($september));
+
+        $october = DigitalMarketingKpiService::weightsFor(10, 2026);
+        $this->assertSame(5.0, (float)$october['BUDGETING']);
+        $this->assertArrayNotHasKey('IMPROVEMENT', $october);
+        $this->assertSame(100.0, (float)array_sum($october));
     }
 
     public function testOmzetGlobalWeightIsHalf(): void

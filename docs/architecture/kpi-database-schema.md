@@ -1,5 +1,7 @@
 # KPI/Incentive Database Schema Design
 
+> **Historis.** Dokumen ini adalah rekaman desain 2026-08-28. Aturan KPI yang berlaku sekarang ada di [`kpi-business-rules.md`](kpi-business-rules.md) dan [`kpi-engine.md`](kpi-engine.md). Angka jabatan 43 ("Pengiklan") di bawah tidak lagi aktif; KPI aktifnya ada di `kpi-business-rules.md` §1a.
+
 **Date:** 2026-08-28  
 **Status:** Comprehensive Analysis & Design  
 **Scope:** Configurable KPI, incentive rules, and salary components system

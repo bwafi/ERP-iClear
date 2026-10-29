@@ -202,13 +202,13 @@ class KpiCalculationService
                     $date,
                 );
                 // ==== DIGITAL MARKETING / KEPALA DIVISI (jabatan 43): 7 KPI Digital Marketing
-                // (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/CAMPAIGN_PERFORMANCE/REPORTING/IMPROVEMENT) ====
+                // (OMZET_GLOBAL/LEADS_QUALITY/CONVERSION/CPL/CAMPAIGN_PERFORMANCE/REPORTING/BUDGETING)
+                // + IMPROVEMENT untuk periode sebelum bobotnya diganti Budgeting (2026-10-01) ====
             } elseif (
                 $positionId === 43 &&
-                in_array(
-                    $component->code,
-                    DigitalMarketingKpiService::CODES,
-                    true,
+                (
+                    in_array($component->code, DigitalMarketingKpiService::CODES, true) ||
+                    in_array($component->code, DigitalMarketingKpiService::HISTORICAL_CODES, true)
                 )
             ) {
                 $digitalData = $this->digitalMarketingService()->componentData(
