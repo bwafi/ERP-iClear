@@ -468,14 +468,18 @@
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-3">
         <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <span class="small text-muted d-block mb-1">Lembur</span>
                 <h6 class="fw-bold text-success mb-0">+ Rp <?= number_format($lembur, 0, ',', '.') ?></h6>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
+                <span class="small text-muted d-block mb-1">Bonus</span>
+                <h6 class="fw-bold text-success mb-0">+ Rp <?= number_format($bonus, 0, ',', '.') ?></h6>
+            </div>
+            <div class="col-md-4">
                 <span class="small text-muted d-block mb-1">Potongan Pegawai</span>
-                <h6 class="fw-bold text-danger mb-1">− Rp <?= number_format($bon + $kasbon, 0, ',', '.') ?></h6>
-                <small class="text-muted d-block">Bon Rp <?= number_format($bon, 0, ',', '.') ?> · Kasbon Rp <?= number_format($kasbon, 0, ',', '.') ?></small>
+                <h6 class="fw-bold text-danger mb-1">− Rp <?= number_format($bon + $kasbon + $potongan, 0, ',', '.') ?></h6>
+                <small class="text-muted d-block">Bon Rp <?= number_format($bon, 0, ',', '.') ?> · Kasbon Rp <?= number_format($kasbon, 0, ',', '.') ?><?= $potongan > 0 ? ' · Potongan Rp ' . number_format($potongan, 0, ',', '.') : '' ?></small>
             </div>
         </div>
     </div>

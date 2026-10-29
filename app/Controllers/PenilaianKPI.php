@@ -1613,10 +1613,12 @@ class PenilaianKPI extends BaseController
             'insentif'             => $result['incentive'],
             'tunjangan_penempatan' => $kpi['akun'],
             'gaji_pokok'           => $compByCode['GAJI_POKOK'] ?? $kpi['gaji_pokok'],
-            'gaji'                 => (float) $result['total_gaji'] - $extras['kasbon'],
+            'gaji'                 => (float) $result['total_gaji'] - $extras['kasbon'] - $extras['potongan'] + $extras['bonus'],
             'lembur'               => $extras['lembur'],
             'bon'                  => $extras['bon'],
             'kasbon'               => $extras['kasbon'],
+            'potongan'             => $extras['potongan'],
+            'bonus'                => $extras['bonus'],
             'bulan'                => $bulan,
             'tahun'                => $tahun,
             'body'                 => 'penilaian/penilaian_kinerja'
@@ -2147,7 +2149,7 @@ class PenilaianKPI extends BaseController
      * Dipakai bersama oleh slip gaji dan estimasi THP di /penilaian_kinerja
      * supaya kedua halaman memakai angka yang sama.
      *
-     * @return array{bon: float, lembur: float, kasbon: int}
+     * @return array{bon: float, lembur: float, kasbon: int, potongan: float, bonus: float}
      */
     private function salaryExtras(
         int $employeeId,
@@ -2176,10 +2178,23 @@ class PenilaianKPI extends BaseController
             $kasbon = 0;
         }
 
+        // Penyesuaian manual (SP / bonus kinerja) untuk periode yang sama.
+        $period = ($tahun ?: date('Y')) . '-' . str_pad((string) ($bulan ?: date('m')), 2, '0', STR_PAD_LEFT);
+        try {
+            $adjustmentModel = new \App\Models\ModelPayrollAdjustment();
+            $potongan = $adjustmentModel->totalForPeriod($employeeId, $period, \App\Models\ModelPayrollAdjustment::POTONGAN);
+            $bonus = $adjustmentModel->totalForPeriod($employeeId, $period, \App\Models\ModelPayrollAdjustment::BONUS);
+        } catch (\Throwable $e) {
+            $potongan = 0;
+            $bonus = 0;
+        }
+
         return [
             'bon' => $sum('bon'),
             'lembur' => $sum('lembur'),
             'kasbon' => $kasbon,
+            'potongan' => $potongan,
+            'bonus' => $bonus,
         ];
     }
 
@@ -2219,6 +2234,8 @@ class PenilaianKPI extends BaseController
         $bon = $extras['bon'];
         $lembur = $extras['lembur'];
         $kasbon = $extras['kasbon'];
+        $potongan = $extras['potongan'];
+        $bonus = $extras['bonus'];
 
         // =========================================================
         // SALARY COMPOSITION — SalaryCalculationService (context slip_gaji)
@@ -2263,6 +2280,8 @@ class PenilaianKPI extends BaseController
             'gaji'                 => $gaji,
             'bon'                  => $bon,
             'kasbon'               => $kasbon,
+            'potongan'             => $potongan,
+            'bonus'                => $bonus,
             'lembur'               => $lembur,
             'bulan'                => $bulan,
             'tahun'                => $tahun,

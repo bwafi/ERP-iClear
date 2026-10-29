@@ -48,6 +48,7 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
         $q = fn (string $sql) => $this->db->query($sql);
 
         foreach ([
+            'payroll_adjustment',
             'unit', 'akun', 'jabatan', 'menu', 'spv_units',
             'stok_barang', 'penjualan', 'detail_penjualan', 'service', 'pelanggan',
             'kas_keluar', 'kategori_kas', 'hutang_piutang',
@@ -112,6 +113,11 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
                 incentive_group_id INT NULL, unit_id INT NULL,
                 effective_from TEXT NULL, effective_to TEXT NULL,
                 is_active INT NULL)');
+        $q('CREATE TABLE payroll_adjustment (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
+                unit_id INT NULL, period CHAR(7) NULL, jenis VARCHAR(20) NULL,
+                jumlah REAL NULL, keterangan TEXT NULL, created_by INT NULL,
+                created_at TEXT NULL, updated_at TEXT NULL)');
         $q('CREATE TABLE salary_components (
                 id INT PRIMARY KEY, code TEXT NULL, name TEXT NULL,
                 type TEXT NULL, is_active INT NULL)');
@@ -185,6 +191,10 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
             'pihak_tipe' => 'pegawai', 'pihak_id' => self::PEGAWAI,
             'status' => 'belum', 'sisa' => 25000, 'unit_id' => self::UNIT,
         ]);
+        $this->db->table('payroll_adjustment')->insertBatch([
+            ['employee_id' => self::PEGAWAI, 'unit_id' => self::UNIT, 'period' => '2026-10', 'jenis' => 'potongan', 'jumlah' => 700000, 'keterangan' => 'SP1', 'created_by' => self::PEGAWAI],
+            ['employee_id' => self::PEGAWAI, 'unit_id' => self::UNIT, 'period' => '2026-10', 'jenis' => 'bonus', 'jumlah' => 200000, 'keterangan' => 'Bonus kinerja', 'created_by' => self::PEGAWAI],
+        ]);
     }
 
     private function sesi(): void
@@ -230,26 +240,31 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
             'PENERIMAAN BERSIH (A-B)',
         );
 
-        // 1.000.000 pokok + 350.000 penempatan + 100.000 lembur
-        // - 40.000 bon - 25.000 kasbon.
-        $this->assertSame(1385000, $bersih, 'patokan slip berubah');
+        // 1.000.000 pokok + 350.000 penempatan + 100.000 lembur + 200.000 bonus
+        // - 40.000 bon - 25.000 kasbon - 700.000 potongan SP.
+        $this->assertSame(885000, $bersih, 'patokan slip berubah');
         $this->assertSame($bersih, $estimasi, 'estimasi THP harus sama dengan slip');
 
-        // Rincian potongan: satu angka gabungan, detail bon & kasbon tetap terlihat.
+        // Rincian: lembur & bonus masuk, potongan digabung dengan detailnya.
         $this->assertSame(100000, $this->angka(
             $html,
             '/Lembur<\/span>\s*<h6[^>]*>\s*\+\s*Rp\s*([\d.]+)/s',
             'Rincian Lembur',
         ));
-        $this->assertSame(65000, $this->angka(
+        $this->assertSame(200000, $this->angka(
+            $html,
+            '/Bonus<\/span>\s*<h6[^>]*>\s*\+\s*Rp\s*([\d.]+)/s',
+            'Rincian Bonus',
+        ));
+        $this->assertSame(765000, $this->angka(
             $html,
             '/Potongan Pegawai<\/span>\s*<h6[^>]*>\s*[−-]\s*Rp\s*([\d.]+)/su',
             'Potongan Pegawai',
         ));
         $this->assertMatchesRegularExpression(
-            '/Bon Rp 40\.000 · Kasbon Rp 25\.000/',
+            '/Bon Rp 40\.000 · Kasbon Rp 25\.000 · Potongan Rp 700\.000/',
             $html,
-            'rincian bon & kasbon harus tetap terlihat',
+            'rincian bon, kasbon & potongan harus terlihat',
         );
     }
 }

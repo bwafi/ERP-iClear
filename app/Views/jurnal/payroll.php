@@ -287,7 +287,18 @@ $fmtTanggal = static function ($value): string {
                                     <span class="pay-badge <?= $isPaid ? 'pay-badge--paid' : 'pay-badge--plan' ?>"><?= $isPaid ? 'Dibayar' : 'Rencana' ?></span>
                                     <span class="pay-timing <?= $timingClass ?>"><?= $timingLabel ?></span>
                                 </td>
-                                <td class="pay-amount" data-label="Total"><?= $fmtRupiah($row->total ?? 0) ?></td>
+                                <td class="pay-amount" data-label="Total">
+                                    <?= $fmtRupiah($row->total ?? 0) ?>
+                                    <?php $adj = $adjustment_map[(int) ($row->pegawai_id ?? 0)] ?? []; ?>
+                                    <?php $pot = $adj['potongan'] ?? null; ?>
+                                    <?php $bonus = $adj['bonus'] ?? null; ?>
+                                    <?php if ($bonus && (float) $bonus->jumlah > 0): ?>
+                                        <span class="pay-date-sub text-success">+ <?= $fmtRupiah($bonus->jumlah) ?><?= $bonus->keterangan ? ' · ' . esc($bonus->keterangan) : '' ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($pot && (float) $pot->jumlah > 0): ?>
+                                        <span class="pay-date-sub">− <?= $fmtRupiah($pot->jumlah) ?><?= $pot->keterangan ? ' · ' . esc($pot->keterangan) : '' ?></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="pay-cell-note" data-label="Catatan">
                                     <?php if (($row->sumber ?? 'manual') === 'auto'): ?>
                                         <span class="pay-src">Auto</span>
@@ -308,6 +319,10 @@ $fmtTanggal = static function ($value): string {
                                                 data-total="<?= esc($row->total ?? 0) ?>"
                                                 data-due="<?= esc($row->due_date ?? '') ?>"
                                                 data-notes="<?= esc($row->notes ?? '') ?>"
+                                                data-potongan="<?= esc($pot->jumlah ?? 0) ?>"
+                                                data-potongan-keterangan="<?= esc($pot->keterangan ?? '') ?>"
+                                                data-bonus="<?= esc($bonus->jumlah ?? 0) ?>"
+                                                data-bonus-keterangan="<?= esc($bonus->keterangan ?? '') ?>"
                                                 aria-label="Koreksi payroll <?= esc($row->NAMA_AKUN ?? '') ?>"
                                                 title="Koreksi payroll">
                                                 <i class="ti ti-pencil" aria-hidden="true"></i>
@@ -553,6 +568,32 @@ $fmtTanggal = static function ($value): string {
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Jatuh Tempo</label>
                         <input type="date" class="form-control" name="due_date" id="edit_register_due" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Potongan Gaji <small class="text-muted fw-normal">(SP/dll, opsional)</small></label>
+                        <div class="input-group">
+                            <span class="input-group-text">Rp</span>
+                            <input type="text" class="form-control currency-input" name="potongan" id="edit_register_potongan" inputmode="numeric" autocomplete="off" placeholder="0">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Keterangan Potongan</label>
+                        <input type="text" class="form-control" name="potongan_keterangan" id="edit_register_potongan_keterangan" maxlength="255" placeholder="mis. SP1 - telat berulang">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bonus Gaji <small class="text-muted fw-normal">(bonus kinerja/dll, opsional)</small></label>
+                        <div class="input-group">
+                            <span class="input-group-text">Rp</span>
+                            <input type="text" class="form-control currency-input" name="bonus" id="edit_register_bonus" inputmode="numeric" autocomplete="off" placeholder="0">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Keterangan Bonus</label>
+                        <input type="text" class="form-control" name="bonus_keterangan" id="edit_register_bonus_keterangan" maxlength="255" placeholder="mis. Bonus kinerja Oktober">
                     </div>
 
                     <div class="mb-3">
@@ -886,6 +927,12 @@ $fmtTanggal = static function ($value): string {
             $('#edit_register_total').val(totalVal === 0 ? '' : formatRupiah(totalVal, ''));
             $('#edit_register_due').val(btn.data('due'));
             $('#edit_register_notes').val(btn.data('notes') || '');
+            const potVal = parseInt(btn.data('potongan'), 10) || 0;
+            $('#edit_register_potongan').val(potVal === 0 ? '' : formatRupiah(potVal, ''));
+            $('#edit_register_potongan_keterangan').val(btn.data('potongan-keterangan') || '');
+            const bonusVal = parseInt(btn.data('bonus'), 10) || 0;
+            $('#edit_register_bonus').val(bonusVal === 0 ? '' : formatRupiah(bonusVal, ''));
+            $('#edit_register_bonus_keterangan').val(btn.data('bonus-keterangan') || '');
         });
 
         // Aksi bonus / lembur

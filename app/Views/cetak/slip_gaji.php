@@ -240,10 +240,15 @@
                 <td>Rp<?= number_format($lembur ?? 0,0,',','.') ?></td>
             </tr>
 
+            <tr>
+                <td>Bonus</td>
+                <td>Rp<?= number_format($bonus ?? 0,0,',','.') ?></td>
+            </tr>
+
             <tr class="total">
                 <td>TOTAL (A)</td>
                 <td>
-                    Rp<?= number_format($gaji + $lembur,0,',','.') ?>
+                    Rp<?= number_format($gaji + $lembur + ($bonus ?? 0),0,',','.') ?>
                 </td>
             </tr>
 
@@ -269,10 +274,15 @@
                     <td>Rp<?= number_format($kasbon ?? 0,0,',','.') ?></td>
                 </tr>
 
+                <tr>
+                    <td>Potongan</td>
+                    <td>Rp<?= number_format($potongan ?? 0,0,',','.') ?></td>
+                </tr>
+
                 <tr class="total">
                 <td>TOTAL (B)</td>
                 <td>
-                    Rp<?= number_format(($bon ?? 0) + ($kasbon ?? 0),0,',','.') ?>
+                    Rp<?= number_format(($bon ?? 0) + ($kasbon ?? 0) + ($potongan ?? 0),0,',','.') ?>
                 </td>
             </tr>
 
@@ -294,7 +304,7 @@
                     </td>
 
                     <td class="netto" align="right">
-                        Rp<?= number_format($gaji + $lembur - ($bon ?? 0) - ($kasbon ?? 0),0,',','.') ?>
+                        Rp<?= number_format($gaji + $lembur + ($bonus ?? 0) - ($bon ?? 0) - ($kasbon ?? 0) - ($potongan ?? 0),0,',','.') ?>
                     </td>
                 </tr>
             </table>

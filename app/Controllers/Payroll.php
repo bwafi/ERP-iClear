@@ -115,6 +115,15 @@ class Payroll extends BaseController
             ->get()
             ->getResult();
 
+        // Penyesuaian manual bulan terpilih (potongan SP / bonus).
+        // Mode "semua" tidak menampilkannya karena satu baris bisa dari bulan lain.
+        $adjustmentMap = [];
+        if (!$showAll) {
+            foreach ($this->db->table('payroll_adjustment')->where('period', $bulan)->get()->getResult() as $p) {
+                $adjustmentMap[(int) $p->employee_id][$p->jenis] = $p;
+            }
+        }
+
         // --- Ringkasan KPI per unit (hanya saat bulan dipilih) ---
         $payrollSummary = [];
         if (!$showAll) {
@@ -209,6 +218,7 @@ class Payroll extends BaseController
             'payrollLocks'  => $payrollLocks,
             'payrollItems'  => $payrollItems,
             'payrollSummary' => array_values($payrollSummary),
+            'adjustment_map' => $adjustmentMap,
             'payrollRun'    => $runSummary['run'],
             'payrollTotals' => $runSummary['totals'],
             'bonusCount'    => $runSummary['run']['bonus']['count'],
@@ -478,6 +488,38 @@ class Payroll extends BaseController
             'notes'    => $notes,
         ]);
 
+        // Penyesuaian manual (potongan SP / bonus) untuk bulan
+        // berjalan. Satu baris per karyawan per periode per jenis; nominal 0
+        // menghapus baris jenis tersebut.
+        $period = substr($dueDate, 0, 7);
+        $adjustmentModel = new \App\Models\ModelPayrollAdjustment();
+
+        foreach (['potongan', 'bonus'] as $jenis) {
+            $jumlah = (int) preg_replace('/[^0-9]/', '', (string) ($this->request->getPost($jenis) ?? ''));
+            $keterangan = trim((string) ($this->request->getPost($jenis . '_keterangan') ?? ''));
+            $existing = $adjustmentModel->forPeriod((int) $row->pegawai_id, $period, $jenis);
+
+            if ($jumlah > 0) {
+                $data = [
+                    'unit_id'    => (int) $row->unit_id,
+                    'jumlah'     => $jumlah,
+                    'keterangan' => $keterangan !== '' ? $keterangan : null,
+                    'created_by' => (int) session('ID_AKUN'),
+                ];
+                if ($existing) {
+                    $adjustmentModel->update($existing->id, $data);
+                } else {
+                    $adjustmentModel->insert($data + [
+                        'employee_id' => (int) $row->pegawai_id,
+                        'period'      => $period,
+                        'jenis'       => $jenis,
+                    ]);
+                }
+            } elseif ($existing) {
+                $adjustmentModel->delete($existing->id);
+            }
+        }
+
         return redirect()->back()->with('sukses', 'Perubahan payroll tersimpan.');
     }
 
@@ -559,14 +601,34 @@ class Payroll extends BaseController
         }
 
         $totalBersih = (int) ($row->total ?? 0) - $potonganKasbon;
+        $potonganLain = 0;
+        $bonusLain = 0;
+        try {
+            $period = substr((string) $row->due_date, 0, 7);
+            $adjustmentModel = new \App\Models\ModelPayrollAdjustment();
+            $potonganLain = (int) $adjustmentModel->totalForPeriod((int) $row->pegawai_id, $period, \App\Models\ModelPayrollAdjustment::POTONGAN);
+            $bonusLain = (int) $adjustmentModel->totalForPeriod((int) $row->pegawai_id, $period, \App\Models\ModelPayrollAdjustment::BONUS);
+        } catch (\Throwable $e) {
+            log_message('error', 'Penyesuaian payroll #' . $id . ' gagal dibaca: ' . $e->getMessage());
+        }
+
+        $totalBersih = max(0, $totalBersih - $potonganLain + $bonusLain);
         $model->update($id, [
             'potongan_kasbon' => $potonganKasbon,
+            'potongan_lain'   => $potonganLain,
+            'bonus_lain'      => $bonusLain,
             'total_bersih'    => $totalBersih,
         ]);
 
         $pesan = 'Payroll ditandai sudah dibayar (' . $paidDate . ').';
         if ($potonganKasbon > 0) {
             $pesan .= ' Potongan kasbon: Rp ' . number_format($potonganKasbon, 0, ',', '.') . '.';
+        }
+        if ($potonganLain > 0) {
+            $pesan .= ' Potongan lain: Rp ' . number_format($potonganLain, 0, ',', '.') . '.';
+        }
+        if ($bonusLain > 0) {
+            $pesan .= ' Bonus: Rp ' . number_format($bonusLain, 0, ',', '.') . '.';
         }
 
         return redirect()->back()->with('sukses', $pesan);

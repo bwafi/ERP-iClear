@@ -17,6 +17,8 @@ class ModelFinancePayroll extends Model
         'status',
         'total',
         'potongan_kasbon',
+        'potongan_lain',
+        'bonus_lain',
         'total_bersih',
         'notes',
         'created_by',
