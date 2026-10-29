@@ -1007,7 +1007,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         <!-- Total Tanggungan Asset -->
         <div class="col-md-4 kewajiban-cell">
             <div class="d-flex align-items-center gap-2 mb-1">
-                <iconify-icon icon="solar:vault-bold-duotone" class="fs-5 text-primary"></iconify-icon>
+                <iconify-icon icon="solar:safe-2-bold-duotone" class="fs-5 text-primary"></iconify-icon>
                 <h6 class="text-uppercase fs-2 text-primary fw-bold mb-0">Total Tanggungan Asset</h6>
             </div>
             <div class="fs-4 fw-bold text-primary metric-figure">Rp <?= number_format($tanggunganAsset, 0, ',', '.') ?></div>

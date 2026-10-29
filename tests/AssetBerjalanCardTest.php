@@ -87,6 +87,22 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $this->assertSame('28.000.000', $this->kartu($html, 'Tagihan Center'));
     }
 
+    /**
+     * Ikon sel Total Tanggungan Asset harus nama yang benar-benar ada di set
+     * Iconify Solar. `solar:vault-bold-duotone` tidak ada, sehingga sel tampil
+     * tanpa ikon.
+     */
+    public function testIkonTotalTanggunganAssetMemakaiNamaSolarYangValid(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000);
+
+        $this->assertMatchesRegularExpression(
+            '#<iconify-icon icon="solar:safe-2-bold-duotone"[^>]*>\s*</iconify-icon>\s*<h6[^>]*>Total Tanggungan Asset</h6>#s',
+            $html
+        );
+        $this->assertStringNotContainsString('solar:vault-bold-duotone', $html);
+    }
+
     public function testUnit4TetapFranchisePandaan(): void
     {
         $html = $this->render(4, 100000000, 20000000, 10000000);
