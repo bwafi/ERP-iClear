@@ -1268,6 +1268,14 @@ class KpiCalculationService
             return 0.0;
         }
 
+        // KEPALA_TOKO: business rule 1% × omset per anggota, tidak dibagi
+        // jumlah anggota dan tidak boleh lebih. Guard ini menjaga data rule
+        // lama (3% pool / member_count) agar unit dengan <3 anggota tidak
+        // mendapat 1,5% dan unit dengan >3 anggota tidak mendapat 0,75%.
+        if ($group->code === "KEPALA_TOKO") {
+            return 0.01 * $omsetToko;
+        }
+
         $rate = (float) $rule->base_value / 100.0;
 
         // NEW RULE (KEPALA_TOKO, division_method = 'per_member'):

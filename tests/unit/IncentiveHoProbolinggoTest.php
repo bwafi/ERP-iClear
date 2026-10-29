@@ -2,6 +2,7 @@
 
 namespace Tests\unit;
 
+use App\Services\Incentive\IncentiveCalculationService;
 use App\Services\Kpi\KpiCalculationService;
 use CodeIgniter\Test\CIUnitTestCase;
 
@@ -30,6 +31,10 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
     private const PROB_TEK_B = 803;
     private const PROB_CS = 804;
     private const PROB_DIREKTUR = 805;
+    private const GENTENG_A = 901;
+    private const GENTENG_B = 902;
+    private const GENTENG_C = 903;
+    private const GENTENG_D = 904;
 
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
@@ -90,16 +95,20 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
                 service_by INT NULL, refund_garansi_jumlah REAL NULL,
                 refund_garansi_tanggal DATE NULL)');
         $q('CREATE TABLE incentive_groups (
-                id INT PRIMARY KEY, code VARCHAR(50) NULL, is_active INT NULL)');
+                id INT PRIMARY KEY, code VARCHAR(50) NULL, name VARCHAR(255) NULL,
+                description TEXT NULL, is_active INT NULL, effective_from DATE NULL,
+                effective_to DATE NULL, created_at DATETIME NULL, updated_at DATETIME NULL)');
         $q('CREATE TABLE incentive_members (
                 id INT PRIMARY KEY AUTO_INCREMENT, incentive_group_id INT NULL,
                 employee_id INT NULL, unit_id INT NULL, effective_from DATE NULL,
                 effective_to DATE NULL, is_active INT NULL)');
         $q('CREATE TABLE incentive_rules (
                 id INT PRIMARY KEY AUTO_INCREMENT, incentive_group_id INT NULL,
-                kpi_component_id INT NULL, base_value REAL NULL,
+                kpi_component_id INT NULL, incentive_name VARCHAR(255) NULL,
+                calculation_type VARCHAR(30) NULL, base_value REAL NULL,
                 division_method VARCHAR(30) NULL, minimum_achievement REAL NULL,
-                effective_from DATE NULL, effective_to DATE NULL)');
+                effective_from DATE NULL, effective_to DATE NULL,
+                created_at DATETIME NULL, updated_at DATETIME NULL)');
     }
 
     private function sebarData(): void
@@ -130,6 +139,10 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
             ['ID_AKUN' => self::PROB_TEK_B, 'ID_UNIT' => 1, 'ID_JABATAN' => 36, 'NAMA_AKUN' => 'Teknisi B', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
             ['ID_AKUN' => self::PROB_CS, 'ID_UNIT' => 1, 'ID_JABATAN' => 42, 'NAMA_AKUN' => 'CS Probolinggo', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
             ['ID_AKUN' => self::PROB_DIREKTUR, 'ID_UNIT' => 1, 'ID_JABATAN' => 1, 'NAMA_AKUN' => 'Direktur', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::GENTENG_A, 'ID_UNIT' => 5, 'ID_JABATAN' => 36, 'NAMA_AKUN' => 'Genteng A', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::GENTENG_B, 'ID_UNIT' => 5, 'ID_JABATAN' => 41, 'NAMA_AKUN' => 'Genteng B', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::GENTENG_C, 'ID_UNIT' => 5, 'ID_JABATAN' => 36, 'NAMA_AKUN' => 'Genteng C', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+            ['ID_AKUN' => self::GENTENG_D, 'ID_UNIT' => 5, 'ID_JABATAN' => 35, 'NAMA_AKUN' => 'Genteng D', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
         ]);
 
         // Oktober 2026: unit 1 = 60jt (capai), unit 2 = 40jt (tidak capai),
@@ -228,5 +241,74 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
     {
         // September unit 1 = 10jt, rule lama per_member 1% → 100rb.
         $this->assertSame(100000.0, $this->insentif(self::PROB_KT, 1, '09'));
+    }
+
+    public function testGentengDuaAnggotaTetapSatuPersenPerAnggota(): void
+    {
+        // Simulasikan rule lama yang belum termigrasi: 3% pool / member_count.
+        $this->pakaiRuleLamaKepalaToko();
+        $this->tambahAnggotaGenteng([self::GENTENG_A, self::GENTENG_B]);
+
+        // Omset unit 5 = 70jt. 1% per anggota = 700rb (bukan 3%/2 = 1,05jt).
+        $this->assertSame(700000.0, $this->insentif(self::GENTENG_A, 5));
+        $this->assertSame(700000.0, $this->insentif(self::GENTENG_B, 5));
+    }
+
+    public function testGentengEmpatAnggotaTetapSatuPersenPerAnggota(): void
+    {
+        $this->pakaiRuleLamaKepalaToko();
+        $this->tambahAnggotaGenteng([
+            self::GENTENG_A, self::GENTENG_B, self::GENTENG_C, self::GENTENG_D,
+        ]);
+
+        // 3%/4 = 0,75% (525rb) tidak boleh; aturan final tetap 1% (700rb).
+        foreach ([self::GENTENG_A, self::GENTENG_B, self::GENTENG_C, self::GENTENG_D] as $id) {
+            $this->assertSame(700000.0, $this->insentif($id, 5), 'akun ' . $id);
+        }
+    }
+
+    public function testServiceInsentifGentengDuaAnggotaSatuPersen(): void
+    {
+        $this->pakaiRuleLamaKepalaToko();
+        $this->tambahAnggotaGenteng([self::GENTENG_A, self::GENTENG_B]);
+
+        $hasil = (new IncentiveCalculationService())->calculateGroupIncentive(
+            'KEPALA_TOKO',
+            5,
+            70000000,
+            100,
+            self::TANGGAL,
+        );
+
+        $this->assertTrue($hasil['success']);
+        $this->assertSame(700000.0, $hasil['incentive_amount']);
+        $this->assertSame(1400000.0, $hasil['pool_amount']);
+    }
+
+    private function pakaiRuleLamaKepalaToko(): void
+    {
+        $this->db->table('incentive_rules')
+            ->where('incentive_group_id', 1)
+            ->update([
+                'base_value' => 3.0,
+                'division_method' => 'member_count',
+            ]);
+    }
+
+    private function tambahAnggotaGenteng(array $employeeIds): void
+    {
+        $rows = [];
+        foreach ($employeeIds as $id) {
+            $rows[] = [
+                'incentive_group_id' => 1,
+                'employee_id' => $id,
+                'unit_id' => 5,
+                'effective_from' => '2024-01-01',
+                'effective_to' => null,
+                'is_active' => 1,
+            ];
+        }
+
+        $this->db->table('incentive_members')->insertBatch($rows);
     }
 }

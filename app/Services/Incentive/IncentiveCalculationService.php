@@ -86,7 +86,14 @@ class IncentiveCalculationService
             ]);
         }
 
-        if ($divisionMethod === 'per_member') {
+        if ($groupCode === 'KEPALA_TOKO') {
+            // Business rule: 1% × omset per anggota, tepat dan tidak lebih.
+            // Menjaga rule lama (3% pool / member_count) agar unit dengan
+            // <3 anggota tidak dapat 1,5% dan unit dengan >3 anggota tidak
+            // dapat 0,75%.
+            $individual = 0.01 * $omsetToko;
+            $poolAmount = $individual * $memberCount;
+        } elseif ($divisionMethod === 'per_member') {
             // NEW RULE (KEPALA_TOKO): setiap anggota menerima rate% × omset,
             // TIDAK dibagi jumlah anggota.
             $individual = ($ratePercent / 100) * $omsetToko;
