@@ -29,6 +29,24 @@ class TutupKasir extends BaseController
     }
 
     /**
+     * Batasi query kas_keluar ke biaya lain yang mengurangi laba: Lain-lain,
+     * Iklan Ads, dan SDM tanpa baris lembur (lembur sudah di Total Gaji).
+     *
+     * @param \CodeIgniter\Database\BaseBuilder $builder
+     */
+    private function saringBiayaLain($builder): void
+    {
+        $builder->whereIn('kas_keluar.kategori_idkategori', $this->kategoriBiayaLain())
+            ->groupStart()
+                ->where('kas_keluar.kategori_idkategori !=', 10)
+                ->orGroupStart()
+                    ->where('kas_keluar.kategori_idkategori', 10)
+                    ->notLike('kas_keluar.deskripsi', 'lembur')
+                ->groupEnd()
+            ->groupEnd();
+    }
+
+    /**
      * Resolusi daftar unit + unit aktif untuk laporan lintas cabang
      * (/omset_bulanan & /asset_berjalan).
      *
@@ -969,22 +987,13 @@ class TutupKasir extends BaseController
 
         // Biaya di luar 6% yang tetap mengurangi laba bersih: Lain-lain, Iklan
         // Ads, dan SDM tanpa lembur (lembur sudah dihitung di Total Gaji).
-        $biayaLain = $this->db->table('kas_keluar')
+        $queryBiayaLain = $this->db->table('kas_keluar')
             ->selectSum('kas_keluar.jumlah', 'total')
             ->where('MONTH(kas_keluar.tanggal)', $bulan)
             ->where('YEAR(kas_keluar.tanggal)', $tahun)
-            ->where('kas_keluar.idunit', $unit)
-            ->whereIn('kas_keluar.kategori_idkategori', $this->kategoriBiayaLain())
-            ->groupStart()
-                ->where('kas_keluar.kategori_idkategori !=', 10)
-                ->orGroupStart()
-                    ->where('kas_keluar.kategori_idkategori', 10)
-                    ->notLike('kas_keluar.deskripsi', 'lembur')
-                ->groupEnd()
-            ->groupEnd()
-            ->get()
-            ->getRow()
-            ->total ?? 0;
+            ->where('kas_keluar.idunit', $unit);
+        $this->saringBiayaLain($queryBiayaLain);
+        $biayaLain = $queryBiayaLain->get()->getRow()->total ?? 0;
 
         // Jumlah hari pada bulan terpilih, dipakai view untuk "Total Tanggungan Asset".
         $hariDalamBulan = (int) date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
@@ -1021,8 +1030,8 @@ class TutupKasir extends BaseController
     }
 
     /**
-     * Detail pengeluaran untuk kartu Biaya Terkontrol / Biaya Kebutuhan.
-     * Dimuat hanya saat tombol Detail diklik (bukan saat halaman dibuka).
+     * Detail pengeluaran untuk kartu Biaya Terkontrol / Biaya Kebutuhan /
+     * Biaya Iklan, SDM & Lain-lain. Dimuat hanya saat tombol Detail diklik.
      */
     public function detailPengeluaran()
     {
@@ -1036,7 +1045,7 @@ class TutupKasir extends BaseController
         }
 
         $kelompok = (string) $this->request->getGet('kelompok');
-        if (! in_array($kelompok, ['terkontrol', 'kebutuhan'], true)) {
+        if (! in_array($kelompok, ['terkontrol', 'kebutuhan', 'lain'], true)) {
             return $this->response->setStatusCode(400)->setJSON(['error' => 'Kelompok tidak dikenal']);
         }
 
@@ -1083,6 +1092,8 @@ class TutupKasir extends BaseController
 
             if ($kelompok === 'terkontrol') {
                 $builder->whereIn('kas_keluar.kategori_idkategori', $kategoriTerkontrol);
+            } elseif ($kelompok === 'lain') {
+                $this->saringBiayaLain($builder);
             } else {
                 $builder->whereNotIn('kas_keluar.kategori_idkategori', $kategoriTerkontrol);
             }

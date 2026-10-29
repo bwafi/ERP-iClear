@@ -416,6 +416,28 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertSame([6, 7, 11], $kategori);
     }
 
+    /** Detail biaya lain = Lain-lain + Iklan Ads + SDM tanpa lembur; total = angka sel. */
+    public function testDetailBiayaLainSamaDenganSel(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        // Oktober unit 3: hanya kategori 6 (Rp 500.000) yang masuk bucket ini.
+        $res = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=10&tahun=2026&kelompok=lain');
+        $res->assertStatus(200);
+        $json = json_decode((string) $res->getJSON(), true);
+
+        $this->assertSame(500000.0, (float) $json['total']);
+        $this->assertSame([6], array_map('intval', array_column($json['data'], 'kategori_idkategori')));
+
+        // September unit 3: hanya lembur kategori 10 -> dikecualikan.
+        $september = $this->get('asset_berjalan/detail-pengeluaran?unit=3&bulan=9&tahun=2026&kelompok=lain');
+        $september->assertStatus(200);
+        $json2 = json_decode((string) $september->getJSON(), true);
+        $this->assertSame(0.0, (float) $json2['total']);
+        $this->assertCount(0, $json2['data']);
+    }
+
     /** Server-side: hanya satu halaman baris yang dikirim, agregat tetap dari seluruh hasil filter. */
     public function testDetailServerSideHanyaKirimSatuHalaman(): void
     {
@@ -496,6 +518,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         $this->assertStringContainsString('data-kelompok="terkontrol"', $html);
         $this->assertStringContainsString('data-kelompok="kebutuhan"', $html);
+        $this->assertStringContainsString('data-kelompok="lain"', $html);
         $this->assertStringContainsString('id="modalDetailPengeluaran"', $html);
         $this->assertStringContainsString('id="detailPengeluaranSummary"', $html);
         $this->assertStringContainsString('id="detailPengeluaranKategori"', $html);

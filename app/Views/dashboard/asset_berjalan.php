@@ -923,6 +923,15 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     <span class="posisi-value metric-figure text-warning-emphasis">Rp <?= number_format($biayaLain, 0, ',', '.') ?></span>
                 </div>
                 <div class="posisi-note">Iklan Ads + SDM (tanpa lembur) + Lain-lain</div>
+                <button type="button"
+                    class="btn btn-sm btn-outline-warning fw-semibold mt-2 d-inline-flex align-items-center gap-1"
+                    data-bs-toggle="modal" data-bs-target="#modalDetailPengeluaran"
+                    data-kelompok="lain" data-judul="Biaya Iklan, SDM &amp; Lain-lain"
+                    data-warna="warning" data-icon="solar:megaphone-bold-duotone"
+                    aria-label="Detail biaya iklan, SDM, dan lain-lain">
+                    <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                    Detail
+                </button>
             </div>
 
             <!-- Total gaji unit -->
