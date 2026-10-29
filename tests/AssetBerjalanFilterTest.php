@@ -101,8 +101,9 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
                 id INTEGER PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
                 incentive_group_id INT NULL, is_active INT NULL)');
         $q('CREATE TABLE finance_payroll (
-                id INTEGER PRIMARY KEY AUTO_INCREMENT, pegawai_id INT NULL, total REAL NULL,
-                potongan_kasbon REAL NULL, total_bersih REAL NULL, status TEXT NULL, due_date TEXT NULL)');
+                id INTEGER PRIMARY KEY AUTO_INCREMENT, pegawai_id INT NULL, unit_id INT NULL,
+                total REAL NULL, potongan_kasbon REAL NULL, potongan_lain REAL NULL,
+                bonus_lain REAL NULL, total_bersih REAL NULL, status TEXT NULL, due_date TEXT NULL)');
         $q('CREATE TABLE stok_opname_periode (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT, unit_idunit INT NULL, tanggal TEXT NULL,
                 status TEXT NULL, terisi_barang INT NULL, total_barang INT NULL)');
@@ -263,6 +264,80 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         // menjumlah ke Total dan Finance membacanya sebagai selisih.
         $this->assertStringContainsString('<th class="text-end">Lembur</th>', $html);
         $this->assertStringContainsString('Rp 100.000', $html);
+    }
+
+    /**
+     * Payroll yang sudah dibayar memakai total bersih aktual (setelah potongan
+     * dan bonus), bukan perkiraan mesin. Baris pegawai yang sudah tidak aktif
+     * tetap ikut karena uangnya benar-benar sudah dibayar.
+     */
+    public function testPayrollDibayarMenggantikanPerkiraanGaji(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $this->db->table('finance_payroll')->insertBatch([
+            [
+                'pegawai_id' => 100, 'unit_id' => 3, 'due_date' => '2026-09-30',
+                'status' => 'dibayar', 'total' => 2450000,
+                'potongan_kasbon' => 100000, 'potongan_lain' => 50000, 'bonus_lain' => 0,
+                'total_bersih' => 2300000,
+            ],
+            [
+                'pegawai_id' => 101, 'unit_id' => 3, 'due_date' => '2026-09-30',
+                'status' => 'dibayar', 'total' => 500000,
+                'potongan_kasbon' => 0, 'potongan_lain' => 0, 'bonus_lain' => 0,
+                'total_bersih' => 500000,
+            ],
+        ]);
+
+        $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
+
+        // 2.300.000 (pegawai 100, total bersih) + 500.000 (pegawai 101, sudah
+        // resign tapi gajinya sudah dibayar).
+        $this->assertSame('2.800.000', $this->kartu($html, 'Total Gaji'));
+        $this->assertStringContainsString('Rp 2.300.000', $html);
+        $this->assertStringContainsString('Aktual payroll', $html);
+        $this->assertStringContainsString('Dari payroll yang sudah dibayar', $html);
+    }
+
+    /** Payroll yang belum dibayar tidak menimpa perkiraan mesin. */
+    public function testPayrollBelumDibayarTetapMemakaiPerkiraan(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $this->db->table('finance_payroll')->insert([
+            'pegawai_id' => 100, 'unit_id' => 3, 'due_date' => '2026-09-30',
+            'status' => 'rencana', 'total' => 2450000,
+            'potongan_kasbon' => 0, 'potongan_lain' => 0, 'bonus_lain' => 0,
+            'total_bersih' => 0,
+        ]);
+
+        $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
+
+        $this->assertSame('2.450.000', $this->kartu($html, 'Total Gaji'));
+        $this->assertStringContainsString('Perkiraan', $html);
+        $this->assertStringNotContainsString('Aktual payroll', $html);
+    }
+
+    /** Pembayaran sebagian: yang sudah dibayar aktual, sisanya tetap perkiraan. */
+    public function testPayrollDibayarSebagianMenambahkanSisaPerkiraan(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $this->db->table('finance_payroll')->insert([
+            'pegawai_id' => 100, 'unit_id' => 3, 'due_date' => '2026-09-30',
+            'status' => 'dibayar', 'total' => 1000000, 'potongan_kasbon' => 50000,
+            'potongan_lain' => 0, 'bonus_lain' => 0, 'total_bersih' => 950000,
+        ]);
+
+        $html = $this->halaman('?unit=3&bulan=9&tahun=2026');
+
+        // 950.000 dibayar + (2.450.000 - 1.000.000) sisa perkiraan.
+        $this->assertSame('2.400.000', $this->kartu($html, 'Total Gaji'));
+        $this->assertStringContainsString('Sebagian dari payroll dibayar', $html);
     }
 
     /**

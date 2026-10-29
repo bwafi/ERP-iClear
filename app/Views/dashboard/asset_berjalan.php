@@ -945,7 +945,15 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     <span class="posisi-op" aria-hidden="true">&minus;</span>
                     <span class="posisi-value metric-figure text-danger">Rp <?= number_format($totalGajiUnit ?? 0, 0, ',', '.') ?></span>
                 </div>
-                <div class="posisi-note">Beban gaji karyawan cabang</div>
+                <div class="posisi-note">
+                    <?php if (($gaji_sumber ?? 'perkiraan') === 'payroll'): ?>
+                        Dari payroll yang sudah dibayar
+                    <?php elseif (($gaji_sumber ?? 'perkiraan') === 'sebagian'): ?>
+                        Sebagian dari payroll dibayar, sisanya perkiraan
+                    <?php else: ?>
+                        Perkiraan &mdash; payroll belum dibayar
+                    <?php endif; ?>
+                </div>
                 <?php if (isset($gaji_detail)): ?>
                     <button type="button" class="btn btn-sm btn-outline-danger fw-semibold mt-2 d-inline-flex align-items-center gap-1"
                             data-bs-toggle="modal" data-bs-target="#modalRincianGaji">
@@ -1447,7 +1455,11 @@ $gajiRows = $gaji_detail ?? [];
 $gajiPokokTotal = 0.0;
 $gajiTunjanganTotal = 0.0;
 $gajiTambahanTotal = 0.0;
+$adaGajiAktual = false;
 foreach ($gajiRows as $gajiRow) {
+    if (!empty($gajiRow['dibayar'])) {
+        $adaGajiAktual = true;
+    }
     $gajiPokokTotal += (float) ($gajiRow['gaji_pokok'] ?? 0);
     $gajiTunjanganTotal += (float) ($gajiRow['tunjangan_kinerja'] ?? 0)
         + (float) ($gajiRow['tunjangan_absen'] ?? 0)
@@ -1504,7 +1516,7 @@ foreach ($gajiRows as $gajiRow) {
                 <?php else: ?>
                     <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-1 px-1 pt-3 pb-1">
                         <span class="gaji-section-label">Rincian per karyawan</span>
-                        <span class="gaji-note"><?= count($gajiRows) ?> karyawan &middot; belum termasuk distribusi gaji HO</span>
+                        <span class="gaji-note"><?= count($gajiRows) ?> karyawan &middot; belum termasuk distribusi gaji HO<?= $adaGajiAktual ? ' &middot; baris "Aktual payroll" memakai total bersih setelah potongan/bonus' : '' ?></span>
                     </div>
                     <div class="table-responsive">
                         <table class="table align-middle gaji-table">
@@ -1524,7 +1536,12 @@ foreach ($gajiRows as $gajiRow) {
                                 <?php foreach ($gajiRows as $d): ?>
                                     <tr>
                                         <td data-label="Karyawan">
-                                            <div class="gaji-person-name"><?= esc($d['nama']) ?></div>
+                                            <div class="gaji-person-name">
+                                                <?= esc($d['nama']) ?>
+                                                <?php if (!empty($d['dibayar'])): ?>
+                                                    <span class="badge bg-success-subtle text-success-emphasis fw-semibold ms-1">Aktual payroll</span>
+                                                <?php endif; ?>
+                                            </div>
                                             <div class="gaji-person-role"><?= esc($d['jabatan'] ?? '') ?></div>
                                         </td>
                                         <td data-label="Gaji pokok" class="text-end gaji-amount">Rp <?= number_format($d['gaji_pokok'], 0, ',', '.') ?></td>

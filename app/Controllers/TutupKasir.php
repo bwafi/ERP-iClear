@@ -942,15 +942,14 @@ class TutupKasir extends BaseController
         );
 
         // Mesin yang sama dengan payroll (KPI + salary_structures + lembur),
-        // bukan rumus legacy. Catatan: angka dihitung dari data saat ini,
-        // jadi bisa beda dengan baris finance_payroll yang dibuat lebih dulu.
+        // bukan rumus legacy. Ini perkiraan; baris payroll yang sudah dibayar
+        // menggantikannya di bawah supaya laba memakai uang yang benar-benar keluar.
         $gajiUnit = (new \App\Services\Payroll\PayrollGenerator())
             ->hitungGajiUnit($bulanStr, (int) $unit);
 
         foreach ($gajiUnit as $row) {
-            $totalGajiUnit += $row['total'];
-
             $gajiDetail[] = [
+                'id_akun'              => $row['id_akun'],
                 'nama'                 => $row['nama'],
                 'jabatan'              => $namaJabatan[$row['jabatan_id']] ?? ('#' . $row['jabatan_id']),
                 'gaji_pokok'           => $row['gaji_pokok'],
@@ -961,6 +960,75 @@ class TutupKasir extends BaseController
                 'lembur'               => $row['lembur'],
                 'total'                => $row['total'],
             ];
+        }
+
+        // Payroll berstatus dibayar = angka final: total bersih per pegawai
+        // (sudah termasuk potongan kasbon/lain dan bonus). Bisa lebih dari satu
+        // baris per pegawai, jadi nominalnya dijumlah. Sisa yang belum dibayar
+        // tetap memakai perkiraan mesin.
+        $payrollDibayar = [];
+        $rowsDibayar = $this->db->table('finance_payroll fp')
+            ->select('fp.pegawai_id, fp.total, fp.total_bersih, a.NAMA_AKUN, a.ID_JABATAN')
+            ->join('akun a', 'a.ID_AKUN = fp.pegawai_id', 'left')
+            ->where('fp.unit_id', $unit)
+            ->where('fp.status', 'dibayar')
+            ->where('fp.due_date >=', $bulanStr . '-01')
+            ->where('fp.due_date <=', date('Y-m-t', strtotime($bulanStr . '-01')))
+            ->get()
+            ->getResult();
+
+        foreach ($rowsDibayar as $p) {
+            $id = (int) $p->pegawai_id;
+            // Baris lama bisa punya total_bersih 0 karena kolomnya belum diisi
+            // saat dibayar; pakai total bruto supaya gaji tidak hilang.
+            $bersih = (float) $p->total_bersih > 0 ? (float) $p->total_bersih : (float) $p->total;
+
+            $payrollDibayar[$id] ??= [
+                'nama'    => (string) ($p->NAMA_AKUN ?? ('#' . $id)),
+                'jabatan' => $namaJabatan[(int) ($p->ID_JABATAN ?? 0)] ?? ('#' . (int) ($p->ID_JABATAN ?? 0)),
+                'total'   => 0.0,
+                'bersih'  => 0.0,
+            ];
+            $payrollDibayar[$id]['total']  += (float) $p->total;
+            $payrollDibayar[$id]['bersih'] += $bersih;
+        }
+
+        $sisaPerkiraan = 0.0;
+        foreach ($gajiDetail as $i => $d) {
+            $id = (int) $d['id_akun'];
+            if (!isset($payrollDibayar[$id])) {
+                $sisaPerkiraan += (float) $d['total'];
+                continue;
+            }
+
+            $sisa = max(0, (float) $d['total'] - $payrollDibayar[$id]['total']);
+            $sisaPerkiraan += $sisa;
+            $gajiDetail[$i]['total']   = $payrollDibayar[$id]['bersih'] + $sisa;
+            $gajiDetail[$i]['dibayar'] = true;
+            unset($payrollDibayar[$id]);
+        }
+
+        // Pegawai yang sudah tidak aktif tetap dibayar; jangan hilangkan dari laba.
+        foreach ($payrollDibayar as $p) {
+            $gajiDetail[] = [
+                'id_akun'              => 0,
+                'nama'                 => $p['nama'],
+                'jabatan'              => $p['jabatan'],
+                'gaji_pokok'           => 0,
+                'tunjangan_kinerja'    => 0,
+                'tunjangan_absen'      => 0,
+                'tunjangan_penempatan' => 0,
+                'insentif'             => 0,
+                'lembur'               => 0,
+                'total'                => $p['bersih'],
+                'dibayar'              => true,
+            ];
+        }
+
+        $totalGajiUnit = array_sum(array_column($gajiDetail, 'total'));
+        $gajiSumber = 'perkiraan';
+        if ($rowsDibayar !== []) {
+            $gajiSumber = $sisaPerkiraan > 0.005 ? 'sebagian' : 'payroll';
         }
 
         $pengeluaran = $this->db->table('kas_keluar')
@@ -1014,6 +1082,7 @@ class TutupKasir extends BaseController
             'pengeluaran_full' => $pengeluaranFull,
             'biaya_lain'      => $biayaLain,
             'totalGajiUnit'  => $totalGajiUnit,
+            'gaji_sumber'    => $gajiSumber,
             // Rincian per pegawai hanya untuk yang berhak; null = tidak dikirim
             // sama sekali, jadi tidak ada datanya di HTML.
             'gaji_detail'    => self::bolehLihatRincianGaji((int) session('ID_JABATAN')) ? $gajiDetail : null,
