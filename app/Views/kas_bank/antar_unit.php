@@ -398,6 +398,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                 <option value="<?= (int) $h->id ?>"
                                     data-kode="<?= esc($h->kode ?? '') ?>"
                                     data-lawan="<?= esc($unitMap[(int)($h->lawan_unit_id ?? 0)] ?? 'U' . $h->lawan_unit_id) ?>"
+                                    data-lawan-id="<?= (int)($h->lawan_unit_id ?? 0) ?>"
                                     data-unit="<?= esc($unitMap[(int)($h->unit_id ?? 0)] ?? '') ?>"
                                     data-sisa="<?= $sisa ?>"
                                     data-total="<?= (int)($h->total ?? 0) ?>"
@@ -440,7 +441,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
                                 </select>
                             </div>
                         </div>
-                        <?php if (empty($akun_pengirim ?? []) && empty($akun_penerima ?? [])) : ?>
+                        <?php if (empty($akun_pengirim ?? [])) : ?>
                             <div class="kb-helper text-warning-emphasis">
                                 <iconify-icon icon="bi:exclamation-triangle-fill" class="fs-7"></iconify-icon>
                                 Belum ada rekening yang bisa dipilih<?= (count($unit ?? []) > 1 && !($unit_terpilih ?? 0)) ? ' — pilih <strong>Unit Transaksi</strong> di atas terlebih dahulu' : '' ?>.
@@ -851,6 +852,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
 <script>
     (function() {
         const detailMap = <?= json_encode($detail_mutasi_map ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        const akunPenerimaUnits = <?= json_encode($akun_penerima_unit_map ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
         const selHP = document.getElementById('hp_hutang');
         const selFrom = document.getElementById('akun_pengirim');
@@ -929,9 +931,24 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
             }
         }
 
+        // "Dibayar KE" = rekening unit lawan (berpiutang). Rekening yang tidak
+        // menjadi hak unit lawan disembunyikan; tanpa peta (render lama) semua
+        // opsi dibiarkan tampil.
+        function filterPenerima(lawanId) {
+            Array.from(selTo.options).forEach(o => {
+                if (!o.value) return;
+                const units = akunPenerimaUnits[o.value];
+                const hide = lawanId > 0 && Array.isArray(units) && units.length > 0 && units.indexOf(lawanId) === -1;
+                o.hidden = hide;
+                o.disabled = hide;
+                if (hide && o.selected) selTo.value = '';
+            });
+        }
+
         function renderPreview() {
             const opt = selHP.options[selHP.selectedIndex];
             if (!opt || !opt.value) {
+                filterPenerima(0);
                 pvEmpty.style.display = '';
                 pvBody.style.display = 'none';
                 pvSub.textContent = 'Pilih hutang — detail & barang mutasi muncul di sini';
@@ -947,6 +964,7 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
             const status = opt.dataset.status || '';
             const kode = opt.dataset.kode || opt.textContent.trim().slice(0, 24);
             const lawan = opt.dataset.lawan || '-';
+            const lawanId = parseInt(opt.dataset.lawanId || '0', 10);
             const unit = opt.dataset.unit || '';
             const jtempo = opt.dataset.jtempo || '-';
             const sumber = opt.dataset.sumber || '0';
@@ -977,6 +995,8 @@ $unitNamaTerpilih = (($unit_terpilih ?? 0) ? ($unitMap[(int)($unit_terpilih ?? 0
             };
 
             if (!inpJumlah.value) inpJumlah.value = sisa.toLocaleString('id-ID');
+
+            filterPenerima(lawanId);
 
             const det = detailMap[sumber] || detailMap[parseInt(sumber, 10)] || null;
             pvItems.innerHTML = '';

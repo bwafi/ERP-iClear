@@ -2034,8 +2034,11 @@ $oldInput = $old_input ?? null;
         function cellTanggal(row) {
             const frag = document.createDocumentFragment();
             frag.appendChild(el('span', 'kk-line1 kk-num', tanggalPendek(row.tanggal)));
+            // Baris antar unit tidak punya idkas_keluar; kode transfernya yang
+            // jadi rujukan supaya tidak tertukar dengan id kas keluar lain.
+            const kode = row.readonly ? (row.ref || 'antar-unit') : ('#' + row.id);
             frag.appendChild(el('span', 'kk-line2 kk-mono',
-                '#' + row.id + (SHOW_ALL_UNITS && row.unit ? ' · ' + row.unit : '')));
+                kode + (SHOW_ALL_UNITS && row.unit ? ' · ' + row.unit : '')));
             return frag;
         }
 
@@ -2051,6 +2054,11 @@ $oldInput = $old_input ?? null;
         }
 
         function cellKategori(row) {
+            if (row.readonly) {
+                const tag = el('span', 'kk-tag', 'Antar Unit');
+                tag.title = 'Pelunasan hutang antar unit — dicatat di Kas & Bank, tidak bisa diedit dari sini';
+                return tag;
+            }
             if (!row.kategori) return el('span', 'kk-line2', '—');
             const wrap = el('span', 'kk-kat-cell');
             const tag = el('span', 'kk-tag', row.kategori);
@@ -2096,6 +2104,18 @@ $oldInput = $old_input ?? null;
 
         function cellAksi(row) {
             const wrap = el('div', 'd-flex justify-content-end gap-1');
+
+            // Baris antar unit berasal dari ledger Kas & Bank. Edit/hapus di
+            // sini akan menyasar idkas_keluar yang berbeda, jadi hanya diberi
+            // penanda dan tidak ada tombol.
+            if (row.readonly) {
+                const lock = el('span', 'kk-rowbtn', '');
+                lock.title = 'Read-only: pelunasan antar unit dikelola di Kas & Bank';
+                lock.setAttribute('aria-label', lock.title);
+                lock.innerHTML = '<iconify-icon icon="solar:lock-keyhole-minimalistic-linear" width="16" height="16"></iconify-icon>';
+                wrap.appendChild(lock);
+                return wrap;
+            }
 
             const edit = document.createElement('button');
             edit.type = 'button';

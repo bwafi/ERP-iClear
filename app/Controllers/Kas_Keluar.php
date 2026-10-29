@@ -285,6 +285,11 @@ class Kas_Keluar extends BaseController
         foreach ($rows as $r) {
             $data[] = [
                 'id'        => (int)$r->idkas_keluar,
+                // Baris pelunasan antar unit berasal dari transaksi_kas_bank,
+                // bukan kas_keluar: tampil read-only dan dirujuk lewat kode
+                // transfer, bukan idkas_keluar.
+                'readonly'  => (int)($r->is_readonly ?? 0) === 1,
+                'ref'       => (string)($r->ref_kode ?? ''),
                 'tanggal'   => (string)$r->tanggal,
                 'unit'      => (string)($r->NAMA_UNIT ?? ''),
                 'no_akun'   => (string)($r->no_akun ?? ''),

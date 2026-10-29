@@ -395,6 +395,31 @@ class KasBankScopeService
     }
 
     /**
+     * Boleh dipakai sebagai rekening TUJUAN pelunasan antar unit?
+     *
+     * Sama dengan aturan tujuan biasa, TANPA menuntut unit penerima ada di
+     * user scope. Pelunasan antar unit memang mengirim dana ke unit lawan;
+     * admin cabang hanya berwenang atas unit pembayar, sedangkan rekening
+     * tujuan tetap harus rekening yang menjadi hak unit BERPIUTANG.
+     *
+     * @param object|array $akun
+     */
+    public function canReceiveAsCreditor($akun, int $unitId): bool
+    {
+        if ($unitId <= 0) {
+            return false;
+        }
+
+        $akun = (object) (array) $akun;
+
+        if ($this->accountKind($akun) === self::KIND_FINANCE_HO) {
+            return $this->unitPunyaRekeningOperasional($unitId);
+        }
+
+        return $this->isUnitEntitled($akun, $unitId);
+    }
+
+    /**
      * Akses efektif dua arah (source DAN destination) — dipakai untuk menyaring
      * daftar rekening form supaya yang tampil hanya rekening yang benar-benar
      * bisa dipakai pada unit tersebut.

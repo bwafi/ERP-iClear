@@ -132,18 +132,143 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
         }
     }
 
+    // =================================================================
+    // DAFTAR GABUNGAN (kas_keluar + pelunasan antar unit)
+    //
+    // Pelunasan hutang antar unit tidak disalin ke `kas_keluar` — uangnya
+    // sudah tercatat sekali di `transaksi_kas_bank` (leg KELUAR + MASUK).
+    // Menyalinnya ke `kas_keluar` akan membuat posting keluar dua kali.
+    // Karena itu daftar di /kas_keluar membaca KEDUA sumber sekaligus:
+    // baris antar unit tampil read-only (is_readonly = 1) dan tidak bisa
+    // diedit/dihapus dari halaman ini.
+    //
+    // Leg yang ditampilkan hanya:
+    //   - arah KELUAR (sisi unit pembayar, uang keluar dari rekeningnya)
+    //   - rekening fisik BERBEDA (sumber_tipe bukan 'antar_unit_atribusi'),
+    //     karena pelunasan pada rekening yang sama hanya menggeser hak unit:
+    //     tidak ada uang yang keluar dan tidak boleh menambah total kas keluar.
+    // =================================================================
+
+    private function unionSumber(): string
+    {
+        return "(
+            SELECT k.idkas_keluar AS idkas_keluar, k.tanggal AS tanggal,
+                   k.kategori_idkategori AS kategori_idkategori, k.deskripsi AS deskripsi,
+                   k.jumlah AS jumlah, k.penerima AS penerima, k.idunit AS idunit,
+                   k.idbank AS idbank, k.jenis AS jenis, k.no_akun AS no_akun,
+                   0 AS is_readonly, '' AS ref_kode
+            FROM kas_keluar k
+            UNION ALL
+            SELECT NULL, t.tanggal, NULL,
+                   -- Arah selalu tampil: unit pembayar -> unit berpiutang.
+                   -- Unit berpiutang diambil dari leg MASUK ber-transfer_ref
+                   -- sama (satu baris per ref, jadi tidak menggandakan hasil).
+                   CONCAT('Pelunasan antar unit ',
+                          COALESCE(ua.NAMA_UNIT, CONCAT('unit ', t.unit_id)), ' → ',
+                          COALESCE(ut.NAMA_UNIT, 'unit lawan'),
+                          IF(TRIM(COALESCE(t.keterangan, '')) = '', '',
+                             CONCAT(' — ', TRIM(t.keterangan)))),
+                   t.jumlah, NULL, t.unit_id,
+                   a.bank_idbank, 'antar_unit', NULL, 1, COALESCE(t.transfer_ref, '')
+            FROM transaksi_kas_bank t
+            LEFT JOIN akun_kas_bank a ON a.idakun_kas_bank = t.akun_kas_bank_id
+            LEFT JOIN unit ua ON ua.idunit = t.unit_id
+            LEFT JOIN (
+                SELECT transfer_ref, MIN(unit_id) AS unit_id
+                FROM transaksi_kas_bank
+                WHERE arah = 'MASUK' AND jenis = 'PEMBAYARAN_ANTAR_UNIT'
+                  AND transfer_ref IS NOT NULL
+                GROUP BY transfer_ref
+            ) tm ON tm.transfer_ref = t.transfer_ref
+            LEFT JOIN unit ut ON ut.idunit = tm.unit_id
+            WHERE t.jenis = 'PEMBAYARAN_ANTAR_UNIT' AND t.arah = 'KELUAR'
+              AND (t.sumber_tipe IS NULL OR t.sumber_tipe <> 'antar_unit_atribusi')
+        ) u";
+    }
+
+    private function unionFrom(): string
+    {
+        return ' FROM ' . $this->unionSumber()
+            . ' LEFT JOIN kategori_kas ON kategori_kas.idkategori_kas = u.kategori_idkategori'
+            . ' LEFT JOIN bank ON bank.idbank = u.idbank'
+            . ' LEFT JOIN unit ON unit.idunit = u.idunit'
+            . ' LEFT JOIN no_akun ON no_akun.no_akun = u.no_akun'
+            . ' LEFT JOIN akun ON akun.ID_AKUN = u.penerima';
+    }
+
+    /**
+     * WHERE + binding untuk daftar gabungan.
+     *
+     * @return array{0:string, 1:array<int, mixed>}
+     */
+    private function unionWhere(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): array
+    {
+        $where = [];
+        $binds = [];
+
+        if ($kategoriMode === 'enam' || $kategoriMode === 'luar') {
+            $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
+            if ($terkontrol === []) {
+                if ($kategoriMode === 'enam') {
+                    $where[] = '1 = 0';
+                }
+            } else {
+                $where[] = 'u.kategori_idkategori ' . ($kategoriMode === 'enam' ? 'IN' : 'NOT IN')
+                    . ' (' . implode(',', $terkontrol) . ')';
+            }
+        }
+
+        if ($search !== '') {
+            if ($idExact) {
+                // Baris antar unit tidak punya idkas_keluar; mencocokkan id
+                // angka ke idtransaksi bisa menunjuk transaksi yang salah.
+                $where[] = 'u.is_readonly = 0 AND u.idkas_keluar = ?';
+                $binds[] = (int) $search;
+            } else {
+                $like = '%' . $this->db->escapeLikeString($search) . '%';
+                // escapeLikeString() memakai '!' sebagai escape char, jadi
+                // klausa LIKE wajib menyebutkannya; tanpa itu '%' yang sudah
+                // di-escape dibaca sebagai wildcard biasa.
+                $where[] = "(no_akun.no_akun LIKE ? ESCAPE '!' OR no_akun.nama_akun LIKE ? ESCAPE '!'"
+                    . " OR kategori_kas.kategori LIKE ? ESCAPE '!' OR u.deskripsi LIKE ? ESCAPE '!'"
+                    . " OR bank.nama_bank LIKE ? ESCAPE '!' OR bank.norek LIKE ? ESCAPE '!'"
+                    . " OR unit.NAMA_UNIT LIKE ? ESCAPE '!' OR u.penerima LIKE ? ESCAPE '!'"
+                    . " OR akun.NAMA_AKUN LIKE ? ESCAPE '!')";
+                $binds = array_merge($binds, array_fill(0, 9, $like));
+            }
+        }
+
+        if (!empty($startDate)) {
+            $where[] = 'u.tanggal >= ?';
+            $binds[] = $startDate;
+        }
+        if (!empty($endDate)) {
+            $where[] = 'u.tanggal <= ?';
+            $binds[] = $endDate;
+        }
+        if ($unitId !== null && $unitId > 0) {
+            $where[] = 'u.idunit = ?';
+            $binds[] = $unitId;
+        }
+
+        return [$where === [] ? '' : ' WHERE ' . implode(' AND ', $where), $binds];
+    }
+
     /** Jumlah total baris (tanpa filter) untuk DataTables. */
     public function countAllKasKeluar(): int
     {
-        return $this->baseKasKeluarQuery()->countAllResults();
+        $row = $this->db->query('SELECT COUNT(*) AS total FROM ' . $this->unionSumber())->getRow();
+
+        return (int) ($row->total ?? 0);
     }
 
     /** Jumlah baris setelah filter untuk DataTables. */
     public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): int
     {
-        $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
-        return $builder->countAllResults();
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
+        $row = $this->db->query('SELECT COUNT(*) AS total' . $this->unionFrom() . $where, $binds)->getRow();
+
+        return (int) ($row->total ?? 0);
     }
 
     /**
@@ -153,10 +278,11 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      */
     public function sumKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): float
     {
-        $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
-
-        $row = $builder->select('COALESCE(SUM(kas_keluar.jumlah), 0) AS total', true)->first();
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
+        $row = $this->db->query(
+            'SELECT COALESCE(SUM(u.jumlah), 0) AS total' . $this->unionFrom() . $where,
+            $binds
+        )->getRow();
 
         return (float)($row->total ?? 0);
     }
@@ -170,19 +296,19 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      */
     public function summaryKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): array
     {
-        $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact);
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact);
 
         $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
         $in = $terkontrol === [] ? 'NULL' : implode(',', $terkontrol);
 
-        $row = $builder->select(
-            'COALESCE(SUM(kas_keluar.jumlah), 0) AS total,
-             COALESCE(SUM(CASE WHEN kas_keluar.kategori_idkategori IN (' . $in . ') THEN kas_keluar.jumlah ELSE 0 END), 0) AS enam,
-             COALESCE(SUM(CASE WHEN kas_keluar.kategori_idkategori IN (' . $in . ') THEN 1 ELSE 0 END), 0) AS n_enam,
-             COUNT(*) AS n_total',
-            false
-        )->first();
+        $row = $this->db->query(
+            'SELECT COALESCE(SUM(u.jumlah), 0) AS total,
+                    COALESCE(SUM(CASE WHEN u.kategori_idkategori IN (' . $in . ') THEN u.jumlah ELSE 0 END), 0) AS enam,
+                    COALESCE(SUM(CASE WHEN u.kategori_idkategori IN (' . $in . ') THEN 1 ELSE 0 END), 0) AS n_enam,
+                    COUNT(*) AS n_total'
+            . $this->unionFrom() . $where,
+            $binds
+        )->getRow();
 
         $total = (float)($row->total ?? 0);
         $enam = (float)($row->enam ?? 0);
@@ -222,9 +348,6 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
     /** Baris data untuk DataTables server-side. */
     public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): array
     {
-        $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, $search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
-
         $safeOrderCols = [
             'kas_keluar.tanggal',
             'unit.NAMA_UNIT',
@@ -238,11 +361,21 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
             'kas_keluar.jenis',
         ];
         $orderCol = in_array($orderCol, $safeOrderCols, true) ? $orderCol : 'kas_keluar.tanggal';
+        // Kolom kas_keluar.* kini dibaca dari alias gabungan `u`.
+        $orderCol = (string) preg_replace('/^kas_keluar\./', 'u.', $orderCol);
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        $builder->orderBy($orderCol, $orderDir)
-            ->orderBy('kas_keluar.idkas_keluar', 'DESC');
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
 
-return $builder->limit($length, max(0, $start))->get()->getResult();
+        // $length/$start sudah int; jangan di-bind supaya LIMIT tidak dikirim
+        // sebagai string.
+        $sql = 'SELECT u.*, kategori_kas.kategori, bank.nama_bank, bank.norek,
+                       unit.NAMA_UNIT, no_akun.nama_akun, akun.NAMA_AKUN AS penerima_akun'
+            . $this->unionFrom() . $where
+            . ' ORDER BY ' . $orderCol . ' ' . $orderDir
+            . ', u.tanggal DESC, u.is_readonly ASC, u.idkas_keluar DESC'
+            . ' LIMIT ' . max(0, $length) . ' OFFSET ' . max(0, $start);
+
+        return $this->db->query($sql, $binds)->getResult();
     }
 }

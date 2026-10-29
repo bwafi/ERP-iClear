@@ -333,16 +333,20 @@ class KasBankControllerTest extends CIUnitTestCase
      * bukan null konsolidasi — itu syarat agar `canUseAsDestination()`
      * mengizinkan rekening Finance/HO sebagai tujuan.
      */
-    private function sesiAdminCabang(): void
+    private function sesiAdminCabang(?string $tok = null): void
     {
         $this->db->query("INSERT INTO db_akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN)
             VALUES (44, 1, 35, 'Admin Cabang')");
-        $this->withSession([
+        $data = [
             'logged_in'  => true,
             'ID_AKUN'    => 44,
             'ID_UNIT'    => 1,
             'ID_JABATAN' => 35,
-        ]);
+        ];
+        if ($tok !== null) {
+            $data['kb_submit_' . $tok] = time();
+        }
+        $this->withSession($data);
     }
 
     /**
@@ -553,6 +557,88 @@ class KasBankControllerTest extends CIUnitTestCase
 
         $r->assertStatus(302);
         $this->assertStringNotContainsString('contoh.test', (string) $r->getRedirectUrl());
+    }
+
+    /**
+     * "Dibayar KE" harus berisi rekening unit BERPIUTANG (lawan hutang),
+     * bukan rekening unit yang sedang dipilih. Hutang 901 milik Unit A
+     * dengan lawan Unit B; bank Unit B (akun 4) wajib muncul sebagai tujuan.
+     */
+    public function testAntarUnitDibayarKeMenampilkanRekeningUnitLawan(): void
+    {
+        $this->sesi();
+
+        $html = (string) $this->get('kas_bank/antar-unit?unit_id=1')->getBody();
+
+        preg_match('#<select name="akun_penerima_id".*?</select>#s', $html, $m);
+        $terima = $m[0] ?? '';
+        $this->assertNotSame('', $terima, 'dropdown Dibayar KE harus ada');
+        $this->assertStringContainsString(
+            'value="4"',
+            $terima,
+            'BNI Unit B harus bisa dipilih sebagai tujuan pelunasan hutang Unit A'
+        );
+    }
+
+    /**
+     * Admin cabang hanya berwenang atas unit pembayar. Pelunasan ke rekening
+     * unit lawan (di luar scope-nya) harus tetap bisa: dropdown menawarkan
+     * rekening lawan dan POST tidak ditolak guard user scope penerima.
+     */
+    public function testAdminCabangBisaMelunasiKeRekeningUnitLawanDiLuarScope(): void
+    {
+        $tok = 'tok-but-admin-cabang';
+        $this->sesiAdminCabang($tok);
+
+        $this->db->query("INSERT INTO db_opening_kas
+            (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan)
+            VALUES (1, 1, '$this->tglCutoff', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
+
+        $html = (string) $this->get('kas_bank/antar-unit?unit_id=1')->getBody();
+        $this->assertContains(
+            4,
+            $this->opsiDropdown($html, 'akun_penerima_id'),
+            'Bank Unit B harus tampil sebagai tujuan walau di luar scope admin cabang'
+        );
+
+        $r = $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '1',
+            'akun_penerima_id'  => '4',
+            'jumlah'            => '200000',
+            'tanggal'           => $this->tglMulai,
+            'submit_token'      => $tok,
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame(300000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
+        $this->assertSame(300000, (int) $this->model(ModelHutangPiutang::class)->find(902)->sisa);
+    }
+
+    /**
+     * Kebebasan memilih rekening lawan TIDAK berarti rekening sembarang:
+     * rekening milik unit pembayar sendiri tetap ditolak sebagai tujuan.
+     */
+    public function testAdminCabangTidakBolehMelunasiKeRekeningSembarang(): void
+    {
+        $tok = 'tok-but-admin-cabang-neg';
+        $this->sesiAdminCabang($tok);
+
+        $this->db->query("INSERT INTO db_opening_kas
+            (akun_kas_bank_id, unit_id, tanggal, opening, real_cash, selisih, status, keterangan)
+            VALUES (1, 1, '$this->tglCutoff', 500000, 500000, 0, 'TERVERIFIKASI', 'Opening laci Unit A')");
+
+        $this->post('kas_bank/antar-unit/save', [
+            'hutang_piutang_id' => '901',
+            'akun_pengirim_id'  => '1',
+            'akun_penerima_id'  => '6', // BCA Unit A — bukan rekening unit lawan
+            'jumlah'            => '200000',
+            'tanggal'           => $this->tglMulai,
+            'submit_token'      => $tok,
+        ]);
+
+        $this->assertStringContainsString('bukan rekening tujuan yang sah', $this->flashGagal());
+        $this->assertSame(500000, (int) $this->model(ModelHutangPiutang::class)->find(901)->sisa);
     }
 
     public function testDetailHpMutasiUnitMenyediakanFormPelunasanLangsung(): void
@@ -1718,9 +1804,9 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
     /**
      * Form bayar antar unit punya dua dropdown rekening yang dihasilkan
-     * `canUseAsSource()` / `canUseAsDestination()`, keduanya MENOLAK
+     * `canUseAsSource()` / `canUseAsDestination()`; daftar SUMBER MENOLAK
      * `unitId = null`. Karena itu, untuk pengguna lintas unit yang belum
-     * memilih unit (konsolidasi), daftar rekening selalu kosong.
+     * memilih unit (konsolidasi), rekening sumber selalu kosong.
      *
      * Dulu halaman ini satu-satunya di modul Kas & Bank tanpa pemilih unit,
      * sehingga user lintas unit tidak punya jalan keluar: "Bayar DARI" dan
@@ -1748,8 +1834,9 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'Tanpa unit leg tidak ada satu pun rekening sumber yang sah'
         );
 
-        // Setelah unit dipilih: kedua dropdown terisi dan hanya memuat
-        // rekening unit itu (shared baru ikut bila ada baris alokasi).
+        // Setelah unit dipilih: rekening SUMBER milik unit itu, sedangkan
+        // rekening TUJUAN mengikuti unit BERPIUTANG (lawan hutang) — hutang
+        // 901 unit 1 berlawan dengan unit 2, jadi yang tampil rekening unit 2.
         $htmlUnit1 = (string) $this->get('kas_bank/antar-unit?unit_id=1')->getBody();
 
         $this->assertMatchesRegularExpression(
@@ -1758,12 +1845,15 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             'Unit yang dipilih harus ter-selected di pemilih unit'
         );
 
-        foreach (['akun_pengirim_id', 'akun_penerima_id'] as $select) {
-            $opsi = $this->opsiDropdown($htmlUnit1, $select);
-            $this->assertContains(1, $opsi, "KAS Unit A wajib ada di {$select}");
-            $this->assertContains(6, $opsi, "BANK Unit A wajib ada di {$select}");
-            $this->assertNotContains(3, $opsi, "Rekening Unit B tidak boleh ada di {$select}");
-        }
+        $sumber = $this->opsiDropdown($htmlUnit1, 'akun_pengirim_id');
+        $this->assertContains(1, $sumber, 'KAS Unit A wajib ada di akun_pengirim_id');
+        $this->assertContains(6, $sumber, 'BANK Unit A wajib ada di akun_pengirim_id');
+        $this->assertNotContains(3, $sumber, 'Rekening Unit B tidak boleh jadi sumber');
+
+        $tujuan = $this->opsiDropdown($htmlUnit1, 'akun_penerima_id');
+        $this->assertContains(3, $tujuan, 'Rekening Unit B (berpiutang) wajib jadi tujuan');
+        $this->assertContains(4, $tujuan, 'Bank Unit B (berpiutang) wajib jadi tujuan');
+        $this->assertNotContains(6, $tujuan, 'Rekening unit pembayar tidak boleh jadi tujuan');
     }
 
     /**

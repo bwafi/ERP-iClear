@@ -57,6 +57,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 11. `Piutang::bayar_piutang` (legacy) mengambil `sisa` dari POST, menyimpan `pembayaran_piutang`, memperbarui `piutang.sisa_hutang` dengan nilai itu, memakai `if ($sisa >= 0) 0 else 1` sehingga status Lunas tidak pernah tercapai, dan tidak membuat jurnal/ledger kas. — `Piutang.php:153-190` (HP-02/SL-06)
 12. `syncFromPiutangLegacy` hanya menyinkronkan projection; tidak memperbaiki pembayaran legacy di atas. — `HutangPiutangService`
 13. Ubah jatuh tempo hanya Admin Root; projection/legacy ditolak; baris lunas tetap bisa diubah; pasangan `mutasi_unit` selalu diubah bersama. — `HutangPiutang::ubahJatuhTempo`, `HutangPiutangService::ubahJatuhTempo`
+14. ✅ Form pelunasan antar unit di detail H/P memakai aturan rekening yang sama dengan Kas & Bank: sumber = rekening unit penghutang, tujuan = rekening hak unit berpiutang (boleh di luar scope user). Pelunasan yang tersimpan tetap satu catatan di ledger `transaksi_kas_bank`; leg KELUAR-nya tampil read-only di `/kas_keluar` (PRD 05 BR 19), jadi tidak perlu input Kas Keluar terpisah dan tidak terjadi dobel. — `HutangPiutang::antarUnitPaymentData`; `KasBankScopeService::canReceiveAsCreditor`
 
 ## 6. Acceptance Criteria
 - [ ] Buat hutang/piutang authoritative tersimpan; jenis manual divalidasi.

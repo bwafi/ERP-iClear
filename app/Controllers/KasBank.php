@@ -233,6 +233,20 @@ class KasBank extends BaseController
     }
 
     /**
+     * Rekening tujuan pelunasan antar unit = rekening yang menjadi hak unit
+     * BERPIUTANG (lawan hutang). Tidak memakai user scope penerima karena
+     * admin cabang hanya berwenang atas unit pembayar; account scope unit
+     * lawan tetap ditegakkan lewat canReceiveAsCreditor().
+     */
+    private function akunPenerimaUnit(int $unitId): array
+    {
+        return array_values(array_filter(
+            $this->AkunScope->akunTerlihat([$unitId], $unitId, true),
+            fn ($a) => $this->AkunScope->canReceiveAsCreditor($a, $unitId)
+        ));
+    }
+
+    /**
      * Boleh dikelola/diedit di halaman master? Rekening non-shared hanya bila
      * unit pemiliknya dalam user scope. Rekening shared boleh bila ada alokasi
      * ke unit dalam scope, ATAU belum punya alokasi sama sekali (kalau tidak,
@@ -2429,6 +2443,26 @@ class KasBank extends BaseController
         $hp = $this->HPModel->getHutangPiutangUnit($unitTerpilih > 0 ? $unitTerpilih : null, 'hutang');
         $piutang = $this->HPModel->getHutangPiutangUnit($unitTerpilih > 0 ? $unitTerpilih : null, 'piutang');
 
+        // "Dibayar KE" mengikuti unit BERPIUTANG tiap hutang, bukan rekening
+        // unit yang sedang dipilih. Halaman tetap menampilkan satu dropdown;
+        // view menyaring opsinya lewat `akun_penerima_unit_map` saat hutang
+        // dipilih, dan server memvalidasi ulang dengan aturan yang sama.
+        $akunPenerima = [];
+        $penerimaUnitMap = [];
+        $unitPenerima = [];
+        foreach ($hp as $row) {
+            $uid = (int) ($row->lawan_unit_id ?? 0);
+            if ($uid <= 0 || isset($unitPenerima[$uid])) {
+                continue;
+            }
+            $unitPenerima[$uid] = true;
+            foreach ($this->akunPenerimaUnit($uid) as $a) {
+                $akunId = (int) $a->idakun_kas_bank;
+                $akunPenerima[$akunId] = $a;
+                $penerimaUnitMap[$akunId][] = $uid;
+            }
+        }
+
         // Detail barang mutasi untuk H/P yang bersumber dari mutasi stok
         // (bukti H/P = list barang yang dikirim).
         $detailMutasiMap = [];
@@ -2472,7 +2506,8 @@ class KasBank extends BaseController
             'akun_kas_bank'    => $this->akunAktifUntuk($unitTerpilih),
             'can_transaksi'    => $this->bisaTransaksi(),
             'akun_pengirim'    => $this->akunSumberUntuk($unitTerpilih),
-            'akun_penerima'    => $this->akunTujuanUntuk($unitTerpilih),
+            'akun_penerima'    => array_values($akunPenerima),
+            'akun_penerima_unit_map' => $penerimaUnitMap,
             'hp_hutang'        => $hp,
             'hp_piutang'       => $piutang,
             'detail_mutasi_map'=> $detailMutasiMap,
@@ -2605,29 +2640,33 @@ class KasBank extends BaseController
         }
 
         // Rekening pengirim harus berarah-SUMBER atas unit yang punya hutang,
-        // rekening penerima berarah-TUJUAN atas unit yang berpiutang.
-// Finance/HO sebagai pengirim -> hanya ROOT / Finance.
+        // rekening penerima harus rekening yang menjadi hak unit BERPIUTANG.
+        // Finance/HO sebagai pengirim -> hanya ROOT / Finance.
         //   Finance/HO sebagai penerima   -> unit yang punya rekening
         //   operasional sendiri (bukan semua unit).
         //   Rekening non-shared milik unit lain DITOLAK; rekening shared harus
         //   dialokasikan ke unit tsb lebih dulu.
+        //
+        // User scope TIDAK dituntut untuk unit penerima: pelunasan antar unit
+        // memang mengirim dana ke unit lawan, dan admin cabang hanya berwenang
+        // atas unit pembayar (dicek di bawah). Kalau penerima ikut dituntut,
+        // admin cabang tidak akan pernah bisa melunasi hutangnya.
         $role = (int) session('ID_JABATAN');
 
         if (!$this->AkunScope->canUseAsSource($akunKirim, (int)$hp->unit_id, $role)) {
             return $this->gagal('Akun pengirim ditolak. '
                 . $this->alasanRekeningDitolak($akunKirim, (int)$hp->unit_id, 'source', $role));
         }
-        if (!$this->AkunScope->canUseAsDestination($akunTerima, (int)$piutang->unit_id, $role)) {
-            return $this->gagal('Akun penerima ditolak. '
-                . $this->alasanRekeningDitolak($akunTerima, (int)$piutang->unit_id, 'destination', $role));
+        if (!$this->AkunScope->canReceiveAsCreditor($akunTerima, (int)$piutang->unit_id)) {
+            return $this->gagal('Akun penerima ditolak. Rekening "' . ($akunTerima->nama_akun ?? '')
+                . '" bukan rekening tujuan yang sah untuk unit ' . (int)$piutang->unit_id . '.');
         }
 
-        // User scope: unit yang punya hutang/piutang WAJIB dalam cakupan user.
-        // Tanpa ini admin cabang bisa menyelesaikan hutang unit lain, dan leg
-        // kasnya ter-stamp ke unit yang bukan haknya.
-        if (!$this->AkunScope->userBolehUnit((int)$hp->unit_id)
-            || !$this->AkunScope->userBolehUnit((int)$piutang->unit_id)) {
-            return $this->gagal('Hutang antar unit ini involve unit di luar cakupan Anda.');
+        // User scope: unit yang PUNYA HUTANG wajib dalam cakupan user. Tanpa
+        // ini admin cabang bisa menyelesaikan hutang unit lain, dan leg kasnya
+        // ter-stamp ke unit yang bukan haknya.
+        if (!$this->AkunScope->userBolehUnit((int)$hp->unit_id)) {
+            return $this->gagal('Hutang antar unit ini bukan milik unit dalam cakupan Anda.');
         }
 
         // ---- GUARD SALDO & BASELINE ----

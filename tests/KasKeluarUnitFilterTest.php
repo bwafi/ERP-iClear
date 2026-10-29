@@ -42,6 +42,7 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
         foreach ([
             'kas_keluar', 'kategori_kas', 'no_akun', 'bank', 'unit', 'akun',
             'spv_units', 'akun_kas_bank', 'alokasi_saldo_kas_bank',
+            'transaksi_kas_bank',
             'stok_barang', 'service', 'pelanggan', 'jabatan', 'menu',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
@@ -64,6 +65,14 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
                 status TEXT NULL, is_shared INT NULL, is_finance_ho INT NULL,
                 bank_idbank TEXT NULL, no_akun_coa TEXT NULL, nama_akun TEXT NULL)');
         $q('CREATE TABLE alokasi_saldo_kas_bank (akun_kas_bank_id INT NULL, unit_id INT NULL)');
+        // Sumber baris read-only "Antar Unit" di daftar kas keluar.
+        $q('CREATE TABLE transaksi_kas_bank (
+                idtransaksi INTEGER PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
+                unit_id INT NULL, akun_kas_bank_id INT NULL, jenis TEXT NULL,
+                arah TEXT NULL, jumlah REAL NULL, akun_tujuan_id INT NULL,
+                transfer_ref TEXT NULL, submission_key TEXT NULL, sumber_tipe TEXT NULL,
+                sumber_id INT NULL, keterangan TEXT NULL, bukti TEXT NULL,
+                input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
         // BaseController selalu memuat notifikasi stok & service.
         $q('CREATE TABLE stok_barang (
                 idbarang INT PRIMARY KEY, id_unit INT NULL, stok_akhir REAL NULL,
@@ -218,6 +227,76 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
         $semua = $this->datatable('draw=1&start=0&length=25&kategori_mode=');
         $this->assertSame(5, $semua['recordsFiltered']);
         $this->assertSame(10500.0, (float) $semua['sumTotal']);
+    }
+
+    /**
+     * Pelunasan antar unit tidak disalin ke kas_keluar (posting keluar jadi
+     * dobel), jadi daftar kas keluar membaca leg KELUAR-nya dari
+     * transaksi_kas_bank sebagai baris read-only.
+     *
+     * Yang TIDAK boleh ikut: leg MASUK, dan leg atribusi (rekening fisik sama,
+     * uang tidak keluar).
+     */
+    public function testPelunasanAntarUnitTampilReadOnlyDiKasKeluar(): void
+    {
+        $this->sesi(200, 2, 35);
+        $this->db->setPrefix('');
+
+        $this->db->query("INSERT INTO bank (idbank, nama_bank, atas_nama, norek)
+            VALUES ('BCA-2','BCA','PT CV','0393778773')");
+        $this->db->query("INSERT INTO akun_kas_bank
+            (idakun_kas_bank, unit_id, tipe, status, is_shared, is_finance_ho, bank_idbank, nama_akun)
+            VALUES (61, 2, 'BANK', 'aktif', 0, 0, 'BCA-2', 'BCA Unit B')");
+        $this->db->query("INSERT INTO transaksi_kas_bank
+            (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, akun_tujuan_id,
+             transfer_ref, sumber_tipe, keterangan)
+            VALUES
+            ('2026-10-06', 2, 61, 'PEMBAYARAN_ANTAR_UNIT', 'KELUAR', 1500, 12, 'BUT-1', NULL, ''),
+            ('2026-10-06', 1, 12, 'PEMBAYARAN_ANTAR_UNIT', 'MASUK', 1500, 61, 'BUT-1', 'antar_unit', 'Pantulan masuk'),
+            ('2026-10-06', 2, 61, 'PEMBAYARAN_ANTAR_UNIT', 'KELUAR', 900, 61, 'BUT-2', 'antar_unit_atribusi', 'Mutasi hak')");
+
+        $json = $this->datatable('draw=1&start=0&length=25');
+
+        $this->assertSame(3, $json['recordsFiltered'], '2 kas keluar unit 2 + 1 leg KELUAR antar unit');
+        $this->assertSame(6500.0, (float) $json['sumTotal'], 'Leg KELUAR ikut total, leg MASUK/atribusi tidak');
+
+        $readonly = array_values(array_filter($json['data'], static fn ($r) => $r['readonly'] === true));
+        $this->assertCount(1, $readonly);
+        $this->assertSame('BUT-1', $readonly[0]['ref']);
+        $this->assertSame('Pelunasan antar unit Unit B → Unit A', $readonly[0]['deskripsi'],
+            'Arah pelunasan harus menyebut unit asal -> unit tujuan');
+        $this->assertSame(1500.0, (float) $readonly[0]['jumlah']);
+        $this->assertSame('BCA-2', $readonly[0]['idbank']);
+        $this->assertSame('BCA', $readonly[0]['nama_bank']);
+        $this->assertSame(2, (int) $readonly[0]['idunit']);
+        $this->assertSame(0, (int) $readonly[0]['id'], 'Leg antar unit tidak membawa idkas_keluar');
+
+        // Pencarian ID angka tidak boleh menyambar idtransaksi (#1 = kas
+        // keluar unit lain, leg antar unit juga #1).
+        $cari = $this->datatable('draw=1&start=0&length=25&search%5Bvalue%5D=1&search_mode=auto');
+        $this->assertNull($cari['idHit']);
+        $this->assertSame(0, $cari['recordsFiltered']);
+
+        // Pencarian teks tetap mencakup keterangan leg antar unit...
+        $teks = $this->datatable('draw=1&start=0&length=25&search%5Bvalue%5D=Pelunasan');
+        $this->assertSame(1, $teks['recordsFiltered']);
+        $this->assertSame(1500.0, (float) $teks['sumTotal']);
+
+        // ...dan wildcard LIKE dari input user di-escape, bukan dieksekusi.
+        $wildcard = $this->datatable('draw=1&start=0&length=25&search%5Bvalue%5D=%25');
+        $this->assertSame(0, $wildcard['recordsFiltered']);
+    }
+
+    /** Baris antar unit tidak menawarkan tombol edit/hapus. */
+    public function testBarisAntarUnitTanpaTombolEditHapus(): void
+    {
+        $this->sesi(200, 2, 35);
+        $this->db->setPrefix('');
+
+        $html = (string) $this->get('kas_keluar')->getBody();
+
+        $this->assertStringContainsString('Read-only: pelunasan antar unit dikelola di Kas & Bank', $html);
+        $this->assertStringContainsString('if (row.readonly)', $html, 'Sel aksi harus bercabang untuk baris read-only');
     }
 
     /** Simpan yang ditolak harus menyimpan isian untuk dibuka lagi. */

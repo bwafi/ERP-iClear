@@ -253,14 +253,18 @@ class HutangPiutang extends BaseController
         $scope     = new KasBankScopeService();
         $userUnits = $this->allowedUnitIds();
         $role      = (int) session('ID_JABATAN');
+        $unitHutang = (int) $hp->unit_id;
+        $unitPiutang = (int) $piutang->unit_id;
 
         $akunPengirim = array_values(array_filter(
-            $scope->akunTerlihat($userUnits, (int) $hp->unit_id, true),
-            fn ($a) => $scope->canUseAsSource($a, (int) $hp->unit_id, $role)
+            $scope->akunTerlihat($userUnits, $unitHutang, true),
+            fn ($a) => $scope->canUseAsSource($a, $unitHutang, $role)
         ));
+        // Rekening tujuan = hak unit BERPIUTANG; user scope penerima tidak
+        // dituntut supaya admin cabang bisa melunasi ke unit lawan.
         $akunPenerima = array_values(array_filter(
-            $scope->akunTerlihat($userUnits, (int) $piutang->unit_id, true),
-            fn ($a) => $scope->canUseAsDestination($a, (int) $piutang->unit_id, $role)
+            $scope->akunTerlihat([$unitPiutang], $unitPiutang, true),
+            fn ($a) => $scope->canReceiveAsCreditor($a, $unitPiutang)
         ));
 
         $token = bin2hex(random_bytes(16));
