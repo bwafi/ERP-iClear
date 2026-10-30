@@ -7,7 +7,7 @@ namespace App\Services\Kpi;
  *
  *   OMZET_GLOBAL           50  rumus sama Kepala Divisi (43)
  *   FIN_KESEHATAN_UANG     15  nilai Finance apa adanya
- *   TARGET_CABANG          10  versi semua cabang
+ *   TARGET_CABANG          10  versi semua cabang non-trial
  *   EFEKTIVITAS_ORGANISASI 10  rata-rata KPI SPV (40)
  *   SDM_LEADERSHIP          5  rata-rata KPI bawahan (40/43/45/0)
  *   IMPROVEMENT_PERUSAHAAN  5  input manual bulanan
@@ -198,7 +198,8 @@ class ManagerKpiService
     }
 
     /**
-     * Pencapaian Cabang = cabang tercapai ÷ total cabang (SEMUA cabang) × 100.
+     * Pencapaian Cabang = cabang tercapai ÷ total cabang (non-trial) × 100.
+     * Unit trial tidak ikut karena omzetnya belum operasional penuh.
      * Cabang tercapai bila omset >= target HO (OMSET_CABANG position_id 40).
      * Cabang tanpa target tidak dihitung; tanpa target sama sekali → null.
      */
@@ -209,7 +210,7 @@ class ManagerKpiService
             return ['achievement' => null, 'target' => null, 'actual' => null, 'shortfall' => null, 'unit_count' => null, 'reached' => null, 'cabang' => null, 'source' => ''];
         }
 
-        $units   = (new KpiCalculationService())->branchUnits();
+        $units   = (new KpiCalculationService())->omsetBranchUnits();
         $omset   = new OmsetCabangCalculator();
         $reached = 0;
         $n       = 0;

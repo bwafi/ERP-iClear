@@ -127,6 +127,25 @@ class SupervisorKpiService
     /* ════════════════════ 1. OMZET WILAYAH ════════════════════ */
 
     /**
+     * Scope unit untuk komponen berbasis omzet.
+     *
+     * Unit trial (`is_trial = 1`) belum operasional penuh sehingga omzetnya
+     * tidak ikut KPI omzet SPV. Komponen non-omzet tetap memakai scopeUnits()
+     * supaya tim unit trial tetap dinilai.
+     *
+     * @return int[]
+     */
+    private function omsetUnits(int $supervisorId, int $fallbackUnit): array
+    {
+        $trial = KpiCalculationService::trialUnitIds();
+
+        return array_values(array_filter(
+            $this->scopeUnits($supervisorId, $fallbackUnit),
+            static fn (int $unit): bool => ! in_array($unit, $trial, true),
+        ));
+    }
+
+    /**
      * Achievement omzet agregat SPV (seluruh cabang dalam scope).
      *
      * Target per cabang = target HO dari kpi_targets (position_id=40).
@@ -137,7 +156,7 @@ class SupervisorKpiService
      */
     public function omzetWilayah(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
     {
-        $units = $this->scopeUnits($supervisorId, $ownUnit);
+        $units = $this->omsetUnits($supervisorId, $ownUnit);
         if (empty($units)) {
             return null;
         }
@@ -185,7 +204,7 @@ class SupervisorKpiService
      */
     public function targetCabang(int $supervisorId, int $ownUnit, int $month, int $year, string $targetContext, ?string $date): ?float
     {
-        $units = $this->scopeUnits($supervisorId, $ownUnit);
+        $units = $this->omsetUnits($supervisorId, $ownUnit);
         if (empty($units)) {
             return null;
         }
@@ -224,7 +243,7 @@ class SupervisorKpiService
      */
     public function omzetDetail(int $supervisorId, int $fallbackUnit, int $month, int $year, string $targetContext, ?string $date = null): ?array
     {
-        $units = $this->scopeUnits($supervisorId, $fallbackUnit);
+        $units = $this->omsetUnits($supervisorId, $fallbackUnit);
         if (empty($units)) {
             return null;
         }

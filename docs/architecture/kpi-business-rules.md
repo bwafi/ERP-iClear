@@ -32,7 +32,7 @@ Berlaku untuk jabatan **43 "Kepala Divisi"** (unit HO 50). Engine: `KpiCalculati
 
 | Komponen | Bobot | Rumus ringkas | Sumber data |
 |---|---:|---|---|
-| `OMZET_GLOBAL` | 50 | `min(actual / Σ target OMSET_CABANG posisi 40 unit 1–5 × 100, 100)`; target ≤ 0 → null | Penjualan unit 1–5 (gross profit) |
+| `OMZET_GLOBAL` | 50 | `min(actual / Σ target OMSET_CABANG posisi 40 unit non-trial × 100, 100)`; target ≤ 0 → null | Penjualan unit non-trial (gross profit) |
 | `LEADS_QUALITY` | 15 | rata-rata `min(leads / 3.000 × 100, 100)` dan `min(qualified / leads × 100, 100)`; leads 0 → 0 | `marketing_ads_performance` |
 | `CONVERSION` | 10 | `min((closing CS / lead CS × 100) / 30% × 100, 100)`; lead 0 → null | Rekap harian CS + prospek closing |
 | `CPL` | 10 | rata-rata `min(250.000 / CPL Datang × 100, 100)` dan `min(250.000 / CPL Closing × 100, 100)`; penyebut 0 → null | Budget ads, datang & closing CS |
@@ -46,6 +46,7 @@ Berlaku untuk jabatan **43 "Kepala Divisi"** (unit HO 50). Engine: `KpiCalculati
 - **Komponen absensi** (group `absen`, bukan 7 KPI): Kehadiran 80, Kebersihan 5, Seragam 10, Kepatuhan SOP 5. Kehadiran dinilai Finance; Kebersihan/Seragam/SOP dinilai Manager. Skor ini masuk `skor_total2` → tunjangan absen maksimum Rp250.000.
 - **Tunjangan kinerja** maksimum jabatan 43 = **Rp1.500.000** (`salary_structures`, `percent_of_kpi`). Insentif terpisah dari KPI; untuk unit 50 sejak Oktober 2026 mengikuti aturan **Insentif HO** di §1.
 - "Omzet" pada `OMZET_GLOBAL` dihitung dari **gross profit** (`SUM(sub_total - hpp_penjualan)`), bukan omzet penjualan. Definisi ini masih perlu konfirmasi bisnis (KPI-06).
+- **Unit trial (`unit.is_trial = 1`) tidak ikut komponen omzet lintas cabang**: `OMZET_GLOBAL` (Kadiv 43 & Manager 34), `TARGET_CABANG` Manager, serta `OMZET_WILAYAH`/`TARGET_CABANG` SPV. Komponen non-omzet dan KPI karyawan unit trial sendiri tetap dihitung. — `KpiCalculationService::omsetBranchUnits/trialUnitIds`; test `KpiOmsetTrialUnitTest`
 
 ---
 
@@ -115,8 +116,8 @@ Context `gaji` memakai `customer` polos.
 
 | Komponen | Sumber data | Status |
 |---|---|---|
-| OMZET_WILAYAH | `SUM(actual omset cabang) / SUM(target omset cabang) × 100`, target dari `kpi_targets` (`OMSET_CABANG`) | config DB + calculator existing |
-| TARGET_CABANG | avg `(actual/target) × 100` per cabang; target dari `kpi_targets` (`OMSET_CABANG`) | config DB + calculator existing |
+| OMZET_WILAYAH | `SUM(actual omset cabang) / SUM(target omset cabang) × 100`, target dari `kpi_targets` (`OMSET_CABANG`); unit trial tidak dihitung | config DB + calculator existing |
+| TARGET_CABANG | avg `(actual/target) × 100` per cabang; target dari `kpi_targets` (`OMSET_CABANG`); unit trial tidak dihitung | config DB + calculator existing |
 | PRODUKTIVITAS_CABANG | unique customer bulan berjalan / bulan sebelumnya × 100; sumber `penjualan.id_pelanggan` | config DB + calculator existing |
 | SOP | avg nilai KPI "Kepatuhan SOP" Kepala Toko (sudah dihitung sistem); **bukan** checklist SOP baru | ambil nilai existing (kpi_evaluations) |
 | KINERJA_KEPALA_TOKO | avg total KPI Kepala Toko (tanpa absensi/kedisiplinan); ambil dari `KpiCalculationService` | ambil nilai existing |

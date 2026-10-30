@@ -967,6 +967,48 @@ class KpiCalculationService
         return $memo[$key] = $cache;
     }
 
+    /**
+     * Unit cabang untuk komponen berbasis OMZET lintas cabang.
+     *
+     * Unit trial (`unit.is_trial = 1`) belum operasional penuh, jadi omzetnya
+     * tidak boleh masuk KPI omzet HO. KPI karyawan unit trial sendiri tetap
+     * dihitung lewat unit penempatannya.
+     *
+     * @return list<array{unit:int, nama:string}>
+     */
+    public function omsetBranchUnits(): array
+    {
+        $trial = self::trialUnitIds();
+
+        return array_values(array_filter(
+            $this->branchUnits(),
+            static fn (array $branch): bool => ! in_array((int) $branch["unit"], $trial, true),
+        ));
+    }
+
+    /**
+     * ID unit yang ditandai trial di master `unit`.
+     *
+     * @return int[]
+     */
+    public static function trialUnitIds(): array
+    {
+        $key = \App\Libraries\ReadCache::kunci("trial_unit_ids");
+        static $memo = [];
+
+        if (! array_key_exists($key, $memo)) {
+            $rows = \Config\Database::connect()
+                ->table("unit")
+                ->select("idunit")
+                ->where("is_trial", 1)
+                ->get()
+                ->getResultArray();
+            $memo[$key] = array_map("intval", array_column($rows, "idunit"));
+        }
+
+        return $memo[$key];
+    }
+
     public function calculateAchievement($actualValue, $targetValue)
     {
         return $this->scoreService()->achievementScore(

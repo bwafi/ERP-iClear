@@ -63,9 +63,6 @@ class DigitalMarketingKpiService
     /** Jabatan pemilik KPI ini — dipakai saat membaca target di kpi_targets. */
     public const POSITION_ID = 43;
 
-    /** Cabang dengan data omzet ERP (penjualan) — semua cabang operasional, kecuali HO. */
-    public const SALES_UNITS = [1, 2, 3, 4, 5];
-
     private $db;
     private $targetModel;
 
@@ -327,7 +324,21 @@ class DigitalMarketingKpiService
     }
 
     /**
-     * Target omzet global = SUM(target_value OMSET_CABANG position_id=40) unit 1–5.
+     * Unit cabang untuk komponen omzet global: non-HO dan non-trial.
+     * Unit trial belum operasional penuh, jadi omzetnya tidak masuk KPI HO.
+     *
+     * @return int[]
+     */
+    private function salesUnits(): array
+    {
+        return array_map(
+            static fn (array $branch): int => (int) $branch['unit'],
+            (new \App\Services\Kpi\KpiCalculationService())->omsetBranchUnits(),
+        );
+    }
+
+    /**
+     * Target omzet global = SUM(target_value OMSET_CABANG position_id=40) unit non-trial.
      */
     public function omzetTarget(string $context, ?string $date): float
     {
@@ -337,7 +348,7 @@ class DigitalMarketingKpiService
         }
 
         $target = 0.0;
-        foreach (self::SALES_UNITS as $unit) {
+        foreach ($this->salesUnits() as $unit) {
             $row = $this->targetModel->getTargetByKpiAndUnit((int)$cabangComp->id, $unit, $context, $date, 40);
             if ($row) {
                 $target += (float)$row->target_value;
@@ -363,7 +374,7 @@ class DigitalMarketingKpiService
             case 'OMZET_GLOBAL':
                 $omset   = new OmsetTokoCalculator();
                 $actual  = 0.0;
-                foreach (self::SALES_UNITS as $unit) {
+                foreach ($this->salesUnits() as $unit) {
                     $actual += (float)$omset->calculate(0, $unit, $month, $year);
                 }
                 $target = $this->omzetTarget($context, $date);
