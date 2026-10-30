@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Database\Migrations\AddGaransiServiceRefund;
+use App\Database\Migrations\AddRefundGaransiOmset;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
 
@@ -150,6 +151,32 @@ final class RefundGaransiMigrationTest extends CIUnitTestCase
 
         $this->assertTrue($this->db->fieldExists('refund_garansi_at', 'service'));
         $this->assertTrue($this->db->fieldExists('jumlah_refund_garansi', 'service_sparepart'));
+    }
+
+    public function testMigrasiPorsiOmsetMengisiRefundLamaDenganNominalPenuh(): void
+    {
+        $this->migrasi()->up();
+        $this->db->query("UPDATE service
+            SET refund_garansi_at = '2026-10-20 10:00:00', refund_garansi_jumlah = 4000
+            WHERE idservice = 1");
+
+        $path = APPPATH . 'Database/Migrations/2026-10-30-000300_AddRefundGaransiOmset.php';
+        if (! file_exists($path)) {
+            $this->fail('Migrasi AddRefundGaransiOmset belum ada.');
+        }
+
+        require_once $path;
+        (new AddRefundGaransiOmset(Database::forge('tests')))->up();
+
+        $ada = $this->db->query(
+            "SELECT COUNT(*) AS jumlah FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'service'
+                AND COLUMN_NAME = 'refund_garansi_omset'"
+        )->getRow();
+        $this->assertSame(1, (int) $ada->jumlah);
+
+        $service = $this->db->table('service')->where('idservice', 1)->get()->getRow();
+        $this->assertSame(4000, (int) $service->refund_garansi_omset);
     }
 
     public function testMigrasiMenyiapkanTemplateJurnalRefund(): void

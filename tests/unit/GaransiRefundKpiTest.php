@@ -57,7 +57,8 @@ final class GaransiRefundKpiTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE service (
             idservice INT PRIMARY KEY, no_service VARCHAR(40) NULL, unit_idunit INT NULL, service_by INT NULL,
             status_service INT NULL, tanggal_selesai DATETIME NULL, harus_dibayar DECIMAL(15,2) NULL,
-            refund_garansi_tanggal DATE NULL, refund_garansi_jumlah INT NOT NULL DEFAULT 0)');
+            refund_garansi_tanggal DATE NULL, refund_garansi_jumlah INT NOT NULL DEFAULT 0,
+            refund_garansi_omset INT NOT NULL DEFAULT 0)');
         $this->db->query('CREATE TABLE service_sparepart (
             idservice_sparepart INT AUTO_INCREMENT PRIMARY KEY, service_idservice INT NULL,
             barang_idbarang INT NULL, unit_idunit INT NULL, jumlah DECIMAL(15,2) NULL DEFAULT 0,
@@ -94,6 +95,7 @@ final class GaransiRefundKpiTest extends CIUnitTestCase
             'harus_dibayar' => 500000,
             'refund_garansi_tanggal' => $refundOktober > 0 ? '2026-10-25' : null,
             'refund_garansi_jumlah' => $refundOktober,
+            'refund_garansi_omset' => $refundOktober,
         ]);
 
         if ($refundNovember > 0) {
@@ -106,6 +108,7 @@ final class GaransiRefundKpiTest extends CIUnitTestCase
                 'harus_dibayar' => 0,
                 'refund_garansi_tanggal' => '2026-11-02',
                 'refund_garansi_jumlah' => $refundNovember,
+                'refund_garansi_omset' => $refundNovember,
             ]);
         }
 
@@ -156,6 +159,16 @@ final class GaransiRefundKpiTest extends CIUnitTestCase
         $this->assertSame(700000.0, (new OmsetTokoCalculator())->calculate(7, 204, 10, 2026));
         $this->assertSame(700000.0, (new OmsetCabangCalculator())->calculate(7, 204, 10, 2026));
         $this->assertSame(390000.0, (new OmsetTeknisiCalculator())->calculate(7, 204, 10, 2026));
+    }
+
+    public function testOmsetHanyaDikurangiPorsiGrossProfit(): void
+    {
+        $this->seed(206, 100000);
+        $this->db->table('service')->where('idservice', 206)->update(['refund_garansi_omset' => 30000]);
+
+        // Kas refund 100.000, tetapi omset hanya turun 30.000 (porsi gross profit).
+        $this->assertSame(770000.0, (new OmsetTokoCalculator())->calculate(7, 206, 10, 2026));
+        $this->assertSame(770000.0, (new OmsetCabangCalculator())->calculate(7, 206, 10, 2026));
     }
 
     public function testOmzetHarianIkutBerkurang(): void

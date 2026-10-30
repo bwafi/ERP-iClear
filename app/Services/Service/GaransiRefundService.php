@@ -50,7 +50,7 @@ class GaransiRefundService
         foreach ([
             'refund_garansi_idkas_keluar', 'refund_garansi_tanggal', 'refund_garansi_metode',
             'refund_garansi_idbank', 'refund_garansi_referensi', 'refund_garansi_alasan',
-            'refund_garansi_jumlah', 'refund_garansi_by', 'refund_garansi_at',
+            'refund_garansi_jumlah', 'refund_garansi_omset', 'refund_garansi_by', 'refund_garansi_at',
         ] as $field) {
             if (! $this->db->fieldExists($field, 'service')) {
                 return false;
@@ -239,6 +239,27 @@ class GaransiRefundService
                 throw new \RuntimeException('Kondisi sparepart tidak sesuai dengan daftar sparepart service.');
             }
 
+            // Porsi omset = gross profit yang dulu masuk saat sparepart dijual.
+            // Barang baik kembali ke stok, jadi HPP-nya ikut dibalik; barang
+            // rusak tidak kembali, jadi HPP tetap menjadi beban.
+            $omsetRefund = 0;
+            foreach ($barisRefund as $item) {
+                $qtyNormal = (int) $item['qty_normal'];
+                if ($qtyNormal <= 0) {
+                    continue;
+                }
+
+                $baris   = $item['row'];
+                $revenue = (int) ($baris->sub_total ?? 0);
+                if ($revenue === 0) {
+                    $revenue = (int) ($baris->harga_penjualan ?? 0) * $qtyNormal
+                        - (int) ($baris->diskon_penjualan ?? 0);
+                }
+
+                $hpp = (int) ($baris->hpp_penjualan ?? 0) * $qtyNormal;
+                $omsetRefund += $item['kondisi'] === 'baik' ? $revenue - $hpp : $revenue;
+            }
+
             $kategoriRefund = $this->db->table('kategori_kas')
                 ->where('kategori', 'REFUND')
                 ->where('jenis_kas', 'kas_keluar')
@@ -362,6 +383,7 @@ class GaransiRefundService
                     'refund_garansi_referensi'    => $metode === 'bank' ? $referensi : null,
                     'refund_garansi_alasan'       => $alasan,
                     'refund_garansi_jumlah'       => $jumlah,
+                    'refund_garansi_omset'        => $omsetRefund,
                     'refund_garansi_by'           => $inputBy > 0 ? $inputBy : null,
                     'refund_garansi_at'           => $waktu,
                 ]);

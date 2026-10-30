@@ -20,12 +20,12 @@ tanpa mengubah data klaim lama.
   boleh direfund; klaim tidak menghalangi.
 - Pilih kondisi tiap sparepart service, baik sparepart normal maupun pengganti:
   `baik` (kembali ke stok akhir) atau `rusak` (masuk riwayat barang rusak klaim).
-- Sparepart rusak mengurangi omset pada tanggal refund lewat mekanisme
-  `hpp_omset_garansi` + `tanggal_hpp_klaim` yang sudah ada, termasuk
-  `status_retur = tidak_bisa` supaya `ModelHppKlaimLoss` membacanya.
+- Sparepart rusak tetap mencatat `hpp_omset_garansi` + `tanggal_hpp_klaim`
+  (termasuk `status_retur = tidak_bisa`) untuk loss HPP pengganti; porsi omset
+  refund untuk barang rusak sebesar harga jualnya karena HPP tidak kembali.
 - Refund tunai/bank tercatat sebagai kas keluar + jurnal seimbang.
 - Refund mengurangi KPI Omset Toko, Omset Cabang, dan Omset Teknisi sebesar
-  nominal refund pada bulan refund.
+  porsi gross profit pada bulan refund; nominal kas penuh hanya mengurangi kas.
 - Refund hanya sekali per service dan aman dari request bersamaan.
 - Setelah refund, data klaim dan retur sparepart service itu dikunci.
 
@@ -110,28 +110,32 @@ kali.
 ### Dampak KPI
 
 Refund adalah pengembalian uang, jadi KPI omset harus ikut turun pada bulan
-refund, bukan bulan service selesai.
+refund, bukan bulan service selesai. Yang mengurangi omset hanya porsi gross
+profit; nominal kas penuh tetap mengurangi kas/bank.
 
 - Sumber angka: `service.refund_garansi_tanggal` dan
-  `service.refund_garansi_jumlah`, difilter `unit_idunit` dan/atau `service_by`.
+  `service.refund_garansi_omset`, difilter `unit_idunit` dan/atau `service_by`.
+  Nominal kas penuh tetap di `service.refund_garansi_jumlah`.
 - Model baru `ModelRefundGaransiLoss::getTotal($start, $end, $unitId, $teknisiId)`
-  menjumlahkan refund pada rentang tanggal refund.
+  menjumlahkan porsi omset refund pada rentang tanggal refund.
 - Pengurang diterapkan di:
   - `OmsetTokoCalculator` (KPI Omset Toko),
   - `OmsetCabangCalculator` (KPI Omset Cabang/SPV/Manager),
   - `OmsetTeknisiCalculator` (KPI Omset Teknisi, difilter `service_by`),
   - `OmsetDailyCalculator` (Finance KPI dan omset harian ERP),
   - query `omset_hari_ini` di `TutupKasir`.
-- Sparepart `baik`: pengurang hanya nominal refund.
-- Sparepart `rusak`: nominal refund **ditambah** HPP loss yang sudah ada
-  (`hpp_omset_garansi`), karena barang tidak kembali ke stok. HPP klaim tetap
-  hanya mengurangi Omset Teknisi (perilaku `ModelHppKlaimLoss` yang sudah ada);
-  nominal refund yang mengurangi Toko/Cabang/Teknisi.
+- Sparepart `baik`: pengurang omset = `sub_total - (hpp_penjualan × qty)`,
+  yaitu gross profit yang dulu masuk omset; HPP ikut dibalik karena barang
+  kembali ke stok.
+- Sparepart `rusak`: pengurang omset = `sub_total`, karena HPP tidak kembali
+  dan tetap menjadi beban. Untuk sparepart pengganti rusak, HPP loss tetap
+  dicatat di `hpp_omset_garansi`/`tanggal_hpp_klaim` dan hanya mengurangi
+  Omset Teknisi (perilaku `ModelHppKlaimLoss` yang sudah ada).
 - `/omset_bulanan`: angka omset bulanan, pembanding, grafik, dan Detail Omset
-  Harian dikurangi refund pada tanggal refund (sumber
+  Harian dikurangi porsi gross profit refund pada tanggal refund (sumber
   `ModelRefundGaransiLoss::getByDateRange`), konsisten dengan `omset_hari_ini`.
-  Arus kas tidak diubah: `kas_keluar` refund sudah mengurangi net kas pada
-  tanggal refund. Jangan menambah pengurang kedua di jalur kas.
+  Arus kas tidak diubah: `kas_keluar` refund sudah mengurangi net kas sebesar
+  nominal penuh pada tanggal refund. Jangan menambah pengurang kedua di jalur kas.
 - Laba Rugi tidak diubah pada iterasi ini. Dashboard Finance memakai
   `OmsetDailyCalculator` yang sama, jadi kartu omzet hariannya ikut berkurang
   pada tanggal refund; jangan menambah pengurang refund kedua di Dashboard.

@@ -18,7 +18,7 @@
 
 Aturan Oktober 2026 menggantikan seluruh insentif lama untuk unit 50 (termasuk SPV & Digital Division) dan insentif Kepala Toko unit 1. Periode sebelum Oktober 2026 tetap memakai `incentive_members`. Unit cabang lain tidak berubah.
 
-- **Basis insentif HO = gross profit** (`SUM(sub_total - hpp_penjualan)` − refund garansi), sama dengan sumber "Rincian Omset Cabang" di `/penilaian_kinerja`. Sumber: `OmsetTokoCalculator`. Target cabang tetap `OMSET_TOKO` (position_id NULL) dan tidak diubah.
+- **Basis insentif HO = gross profit** (`SUM(sub_total - hpp_penjualan)` − porsi gross profit refund garansi `refund_garansi_omset`), sama dengan sumber "Rincian Omset Cabang" di `/penilaian_kinerja`. Nominal kas refund penuh tidak mengurangi omset, hanya kas/bank. Sumber: `OmsetTokoCalculator`. Target cabang tetap `OMSET_TOKO` (position_id NULL) dan tidak diubah.
 - **Unit trial (`unit.is_trial = 1`) tidak ikut insentif HO**: pool cabang dan pool global sama-sama memakai daftar `omsetBranchUnits()`. — `KpiCalculationService::hoPoolIncentive`; `tests/unit/IncentiveHoOmzetTest.php`
 
 Saat ini:

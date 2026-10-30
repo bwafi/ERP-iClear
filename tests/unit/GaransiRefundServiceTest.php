@@ -106,6 +106,7 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
             refund_garansi_referensi VARCHAR(100) NULL,
             refund_garansi_alasan VARCHAR(255) NULL,
             refund_garansi_jumlah INT NOT NULL DEFAULT 0,
+            refund_garansi_omset INT NOT NULL DEFAULT 0,
             refund_garansi_by INT NULL,
             refund_garansi_at DATETIME NULL) ENGINE=InnoDB');
         $q('CREATE TABLE db_service_sparepart (
@@ -115,6 +116,10 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
             unit_idunit INT NULL,
             jumlah INT NOT NULL DEFAULT 0,
             satuan_jual VARCHAR(225) NULL,
+            sub_total INT NOT NULL DEFAULT 0,
+            harga_penjualan INT NOT NULL DEFAULT 0,
+            diskon_penjualan INT NOT NULL DEFAULT 0,
+            hpp_penjualan INT NOT NULL DEFAULT 0,
             jumlah_tambahan_garansi INT NOT NULL DEFAULT 0,
             hpp_penjualan_garansi INT NOT NULL DEFAULT 0,
             status_retur VARCHAR(20) NULL,
@@ -262,6 +267,7 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
 
         $service = $this->db->table('service')->where('idservice', 1)->get()->getRow();
         $this->assertSame(500000, (int) $service->refund_garansi_jumlah);
+        $this->assertSame(0, (int) $service->refund_garansi_omset);
         $this->assertSame('tunai', $service->refund_garansi_metode);
         $this->assertSame(date('Y-m-d'), $service->refund_garansi_tanggal);
         $this->assertNotNull($service->refund_garansi_at);
@@ -273,6 +279,65 @@ final class GaransiRefundServiceTest extends CIUnitTestCase
         $this->assertSame(0, (int) $sparepart->hpp_omset_garansi);
 
         $this->assertSame(0, $this->db->table('barang_rusak_claim')->countAllResults());
+    }
+
+    public function testRefundOmsetMemakaiGrossProfitBarangBaik(): void
+    {
+        $idSparepart = $this->seedServiceNormal(2, 'SRV-002');
+
+        $hasil = (new GaransiRefundService())->refund(2, 'tunai', null, null, 'Batal', [$idSparepart => 'baik'], 43, 1);
+
+        $this->assertSame(500000, $hasil['jumlah']);
+        $service = $this->db->table('service')->where('idservice', 2)->get()->getRow();
+        $this->assertSame(500000, (int) $service->refund_garansi_jumlah);
+        // Harga jual 500.000 - HPP 2 x 100.000 = gross profit 300.000.
+        $this->assertSame(300000, (int) $service->refund_garansi_omset);
+    }
+
+    public function testRefundOmsetBarangRusakTidakMengurangiHpp(): void
+    {
+        $idSparepart = $this->seedServiceNormal(3, 'SRV-003');
+
+        (new GaransiRefundService())->refund(3, 'tunai', null, null, 'Barang rusak', [$idSparepart => 'rusak'], 43, 1);
+
+        $service = $this->db->table('service')->where('idservice', 3)->get()->getRow();
+        $this->assertSame(500000, (int) $service->refund_garansi_jumlah);
+        // Barang tidak kembali ke stok: HPP tetap beban, jadi omset turun penuh.
+        $this->assertSame(500000, (int) $service->refund_garansi_omset);
+    }
+
+    private function seedServiceNormal(int $idservice, string $noService): int
+    {
+        $this->db->table('service')->insert([
+            'idservice'              => $idservice,
+            'no_service'             => $noService,
+            'pelanggan_id_pelanggan' => 1,
+            'unit_idunit'            => 1,
+            'status_service'         => 4,
+            'tanggal_selesai'        => date('Y-m-d H:i:s'),
+            'garansi_hari'           => 7,
+            'dp_bayar'               => 100000,
+            'bayar'                  => 400000,
+            'service_by'             => 7,
+        ]);
+
+        $this->db->table('service_sparepart')->insert([
+            'service_idservice'       => $idservice,
+            'barang_idbarang'         => 10,
+            'unit_idunit'             => 1,
+            'jumlah'                  => 2,
+            'sub_total'               => 500000,
+            'harga_penjualan'         => 250000,
+            'diskon_penjualan'        => 0,
+            'hpp_penjualan'           => 100000,
+            'jumlah_tambahan_garansi' => 0,
+            'hpp_penjualan_garansi'   => 0,
+            'status_retur'            => 'bisa',
+            'hpp_omset_garansi'       => 0,
+            'jumlah_refund_garansi'   => 0,
+        ]);
+
+        return (int) $this->db->insertID();
     }
 
     private function harapGagal(callable $aksi, string $pesan = ''): void

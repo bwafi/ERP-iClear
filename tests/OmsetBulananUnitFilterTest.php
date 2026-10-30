@@ -85,7 +85,8 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
                 tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
                 tipe_hp TEXT NULL, created_at TEXT NULL,
                 no_service TEXT NULL, service_by INT NULL,
-                refund_garansi_tanggal TEXT NULL, refund_garansi_jumlah INT NULL DEFAULT 0)');
+                refund_garansi_tanggal TEXT NULL, refund_garansi_jumlah INT NULL DEFAULT 0,
+                refund_garansi_omset INT NULL DEFAULT 0)');
         $q('CREATE TABLE service_sparepart (
                 idservice_sparepart INTEGER PRIMARY KEY AUTO_INCREMENT,
                 service_idservice INT NULL, barang_idbarang INT NULL,
@@ -277,9 +278,9 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
             (9002, NULL, 300000, 100000)");
         $this->db->query("INSERT INTO service
             (idservice, status_service, unit_idunit, tanggal_selesai, created_at, no_service, service_by,
-             refund_garansi_tanggal, refund_garansi_jumlah)
+             refund_garansi_tanggal, refund_garansi_jumlah, refund_garansi_omset)
             VALUES (9002, 4, 1, '2024-12-20 10:00:00', '2024-12-20 09:00:00', 'SRV-PEMBANDING', 43,
-                    '2024-12-20', 100000)");
+                    '2024-12-20', 100000, 100000)");
 
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=1&bulan=2&tahun=2025');
@@ -330,9 +331,9 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $this->db->setPrefix('');
         $this->db->query("INSERT INTO service
             (idservice, status_service, unit_idunit, tanggal_selesai, created_at, no_service, service_by,
-             refund_garansi_tanggal, refund_garansi_jumlah)
+             refund_garansi_tanggal, refund_garansi_jumlah, refund_garansi_omset)
             VALUES (9002, 4, 1, '2026-10-20 10:00:00', '2026-10-20 09:00:00', 'SRV-REFUND', 43,
-                    '2026-10-15', 300000)");
+                    '2026-10-15', 300000, 120000)");
         $this->db->query("INSERT INTO penjualan
             (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan)
             VALUES (9102, 'INV-REFUND', '2026-10-15 10:00:00', 1, NULL)");
@@ -343,8 +344,8 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $this->sesi(44, 50, 0);
         $html = $this->halaman('?unit=1&bulan=10&tahun=2026');
 
-        // Penjualan 1.000.000 - HPP 200.000 - refund 300.000 = 500.000.
-        $this->assertStringContainsString('Rp 500.000', $html);
-        $this->assertStringContainsString('total: 500000', $html);
+        // Penjualan 1.000.000 - HPP 200.000 - gross profit refund 120.000 = 680.000.
+        $this->assertStringContainsString('Rp 680.000', $html);
+        $this->assertStringContainsString('total: 680000', $html);
     }
 }

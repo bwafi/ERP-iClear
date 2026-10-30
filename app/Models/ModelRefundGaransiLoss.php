@@ -5,8 +5,10 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Sumber pengurang omset dari refund pembayaran klaim garansi.
+ * Sumber pengurang omset dari porsi gross profit refund klaim garansi.
  *
+ * Nominal kas refund tetap di `refund_garansi_jumlah`; omset hanya dikurangi
+ * sebesar `refund_garansi_omset` supaya sama dengan saat penjualan masuk.
  * Periode selalu `refund_garansi_tanggal`, bukan tanggal klaim/service.
  */
 class ModelRefundGaransiLoss extends Model
@@ -17,12 +19,13 @@ class ModelRefundGaransiLoss extends Model
 
     public function getTotal(string $start, string $end, ?int $unitId = null, ?int $teknisiId = null): int
     {
-        if (! $this->kolomAda()) {
+        $kolom = $this->kolomNilai();
+        if ($kolom === null) {
             return 0;
         }
 
         $row = $this->baseQuery($unitId, $teknisiId)
-            ->selectSum('refund_garansi_jumlah', 'total')
+            ->selectSum($kolom, 'total')
             ->where('refund_garansi_tanggal >=', $start)
             ->where('refund_garansi_tanggal <=', $end)
             ->get()
@@ -36,12 +39,13 @@ class ModelRefundGaransiLoss extends Model
      */
     public function getByDateRange(string $start, string $end, ?int $unitId = null): array
     {
-        if (! $this->kolomAda()) {
+        $kolom = $this->kolomNilai();
+        if ($kolom === null) {
             return [];
         }
 
         $rows = $this->baseQuery($unitId)
-            ->select('refund_garansi_tanggal AS tanggal, SUM(refund_garansi_jumlah) AS total')
+            ->select("refund_garansi_tanggal AS tanggal, SUM({$kolom}) AS total", false)
             ->where('refund_garansi_tanggal >=', $start)
             ->where('refund_garansi_tanggal <=', $end)
             ->groupBy('refund_garansi_tanggal')
@@ -57,14 +61,27 @@ class ModelRefundGaransiLoss extends Model
         return $map;
     }
 
-    private function kolomAda(): bool
+    /** Kolom porsi omset; fallback nominal penuh bila migrasi belum jalan. */
+    private function kolomNilai(): ?string
+    {
+        if (! $this->kolomAda('refund_garansi_tanggal')) {
+            return null;
+        }
+        if ($this->kolomAda('refund_garansi_omset')) {
+            return 'refund_garansi_omset';
+        }
+
+        return $this->kolomAda('refund_garansi_jumlah') ? 'refund_garansi_jumlah' : null;
+    }
+
+    private function kolomAda(string $kolom): bool
     {
         // fieldExists() memakai cache metadata koneksi, jadi tidak akurat saat
         // skema berubah di proses yang sama (mis. test).
         $row = $this->db->query(
             'SELECT COUNT(*) AS jumlah FROM information_schema.COLUMNS
               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
-            [$this->db->prefixTable('service'), 'refund_garansi_tanggal']
+            [$this->db->prefixTable('service'), $kolom]
         )->getRow();
 
         return (int) ($row->jumlah ?? 0) > 0;
