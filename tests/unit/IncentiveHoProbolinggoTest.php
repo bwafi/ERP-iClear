@@ -8,8 +8,9 @@ use CodeIgniter\Test\CIUnitTestCase;
 
 /**
  * Regresi insentif Oktober 2026:
- * - HO (unit 50): pool 1% × gross profit tiap cabang yang capai target,
- *   dibagi rata karyawan HO aktif yang menerima gaji.
+ * - HO (unit 50): pool cabang = rate × gross profit cabang yang capai target
+ *   (1% bila < 3 cabang capai, 1,5% bila ≥ 3), ditambah pool global 1,5% bila
+ *   target global capai; dibagi rata karyawan HO aktif yang menerima gaji.
  * - Probolinggo (unit 1): pool 3% × gross profit bila target capai,
  *   dibagi rata staff toko (KT, teknisi, admin, CS).
  * - Periode sebelum Oktober 2026 tetap memakai incentive_members lama.
@@ -72,7 +73,7 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
-        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT VARCHAR(100) NULL)');
+        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT VARCHAR(100) NULL, is_trial INT NULL)');
         $q('CREATE TABLE akun (
                 ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
                 NAMA_AKUN VARCHAR(150) NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL,
@@ -86,7 +87,7 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
                 effective_to DATE NULL)');
         $q('CREATE TABLE penjualan (
                 idpenjualan INT PRIMARY KEY AUTO_INCREMENT, unit_idunit INT NULL,
-                tanggal DATE NULL)');
+                tanggal DATE NULL, total_penjualan DECIMAL(15,2) NULL)');
         $q('CREATE TABLE detail_penjualan (
                 iddetail_penjualan INT PRIMARY KEY AUTO_INCREMENT,
                 penjualan_idpenjualan INT NULL, sub_total REAL NULL,
@@ -120,10 +121,10 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
     private function sebarData(): void
     {
         $this->db->table('unit')->insertBatch([
-            ['idunit' => 1, 'NAMA_UNIT' => 'ICLEAR Probolinggo'],
-            ['idunit' => 2, 'NAMA_UNIT' => 'ICLEAR Jember'],
-            ['idunit' => 5, 'NAMA_UNIT' => 'ICLEAR Genteng'],
-            ['idunit' => 50, 'NAMA_UNIT' => 'Head Office'],
+            ['idunit' => 1, 'NAMA_UNIT' => 'ICLEAR Probolinggo', 'is_trial' => 0],
+            ['idunit' => 2, 'NAMA_UNIT' => 'ICLEAR Jember', 'is_trial' => 0],
+            ['idunit' => 5, 'NAMA_UNIT' => 'ICLEAR Genteng', 'is_trial' => 1],
+            ['idunit' => 50, 'NAMA_UNIT' => 'Head Office', 'is_trial' => 0],
         ]);
 
         $this->db->table('kpi_components')->insert([
@@ -151,8 +152,9 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
             ['ID_AKUN' => self::GENTENG_D, 'ID_UNIT' => 5, 'ID_JABATAN' => 35, 'NAMA_AKUN' => 'Genteng D', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
         ]);
 
-        // Oktober 2026: unit 1 = 60jt (capai), unit 2 = 40jt (tidak capai),
-        // unit 5 trial = 70jt (capai, tetap masuk pool HO).
+        // Oktober 2026 (omzet = GP = sub_total - hpp):
+        // unit 1 = 60jt (capai), unit 2 = 40jt (tidak capai),
+        // unit 5 trial = 70jt (tidak masuk pool HO).
         $this->sebarOmset(1, '2026-10-05', 80000000, 20000000);
         $this->sebarOmset(2, '2026-10-06', 50000000, 10000000);
         $this->sebarOmset(5, '2026-10-07', 90000000, 20000000);
@@ -180,6 +182,7 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
     {
         $this->db->table('penjualan')->insert([
             'unit_idunit' => $unitId, 'tanggal' => $tanggal,
+            'total_penjualan' => $subTotal,
         ]);
         $penjualanId = $this->db->insertID();
 
@@ -203,10 +206,12 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
 
     public function testHoMemakaiPoolCabangCapaiTargetDibagiHeadcount(): void
     {
-        // Pool = 1% × (60jt unit 1 + 70jt unit 5 trial) = 1,3jt;
-        // 2 karyawan HO aktif → 650rb. Unit 2 (40jt < 50jt) tidak masuk.
-        $this->assertSame(650000.0, $this->insentif(self::HO_A, 50));
-        $this->assertSame(650000.0, $this->insentif(self::HO_B, 50));
+        // Hanya 1 cabang non-trial capai (unit 1 = 60jt) → rate 1%;
+        // pool cabang = 1% × 60jt = 600rb. Global: omzet unit 1+2 = 100jt
+        // ≥ Σ target toko 100jt → pool global = 1,5% × 100jt = 1,5jt.
+        // Total 2,1jt; 2 karyawan HO aktif → 1,05jt.
+        $this->assertSame(1050000.0, $this->insentif(self::HO_A, 50));
+        $this->assertSame(1050000.0, $this->insentif(self::HO_B, 50));
     }
 
     public function testHoNonaktifDanTanpaGajiTidakDapat(): void

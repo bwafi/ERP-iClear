@@ -1424,8 +1424,16 @@ class KpiCalculationService
     /**
      * Insentif HO (Oktober 2026+).
      *
-     * Pool = 1% × gross profit tiap cabang yang mencapai target OMSET_TOKO,
-     * dibagi rata ke seluruh karyawan HO aktif yang menerima gaji.
+     * Basis omzet = gross profit (`SUM(sub_total - hpp_penjualan)`), sama dengan
+     * calculator OMSET_TOKO / Rincian Omset Cabang di /penilaian_kinerja:
+     *   - Pool cabang = rate × Σ omzet cabang yang mencapai target OMSET_TOKO.
+     *     rate = 1,5% bila ≥ 3 cabang capai, selain itu 1% — satu rate untuk
+     *     semua cabang yang capai (bukan 1% + 1,5%).
+     *   - Pool global = 1,5% × Σ omzet semua cabang non-trial bila Σ omzet
+     *     tersebut ≥ Σ target OMSET_TOKO cabang non-trial (target toko, bukan
+     *     target HO).
+     *   - Unit trial (`unit.is_trial = 1`) tidak ikut pool cabang maupun global.
+     *   - Dibagi rata ke seluruh karyawan HO aktif yang menerima gaji.
      */
     private function hoPoolIncentive(
         int $employeeId,
@@ -1444,10 +1452,13 @@ class KpiCalculationService
         }
 
         $omsetCalc = new OmsetTokoCalculator();
-        $pool = 0.0;
-        foreach ($this->branchUnits() as $branch) {
+        $reached = [];
+        $globalActual = 0.0;
+        $globalTarget = 0.0;
+        foreach ($this->omsetBranchUnits() as $branch) {
             $branchUnit = (int) $branch["unit"];
             $actual = $omsetCalc->calculate(0, $branchUnit, $month, $year);
+            $globalActual += $actual;
             $target = $this->targetModel->getTargetByKpiAndUnit(
                 (int) $component->id,
                 $branchUnit,
@@ -1455,9 +1466,22 @@ class KpiCalculationService
                 $date,
             );
 
-            if ($target && $actual >= (float) $target->target_value) {
-                $pool += $actual * 0.01;
+            if (!$target || (float) $target->target_value <= 0) {
+                continue;
             }
+
+            $targetValue = (float) $target->target_value;
+            $globalTarget += $targetValue;
+            if ($actual >= $targetValue) {
+                $reached[] = $actual;
+            }
+        }
+
+        $rate = count($reached) >= 3 ? 0.015 : 0.01;
+        $pool = array_sum($reached) * $rate;
+
+        if ($globalTarget > 0 && $globalActual >= $globalTarget) {
+            $pool += $globalActual * 0.015;
         }
 
         return $pool / count($ids);

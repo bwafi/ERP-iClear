@@ -13,10 +13,13 @@
 | Insentif Kepala Toko | **1% × omset toko PER ANGGOTA** (tidak dibagi jumlah anggota) | `division_method = 'per_member'` di `incentive_rules`; anggota dari `incentive_members` (group+unit+periode) | Owner |
 | Insentif Digital Division | pool = 1% × omset toko | dinamis dari `incentive_members` | Owner |
 | Basic compute (DIGITAL_DIVISION) | individual = pool / member_count | — | Owner |
-| Insentif HO (Oktober 2026+) | pool = Σ (1% × gross profit cabang yang capai target `OMSET_TOKO`); individual = pool / jumlah karyawan HO aktif `TERIMA_GAJI=1` | unit 50 | Owner |
+| Insentif HO (Oktober 2026+) | pool = pool cabang + pool global. Pool cabang = rate × Σ **gross profit** (`SUM(sub_total - hpp_penjualan)`) cabang yang capai target `OMSET_TOKO`, rate **1%** bila < 3 cabang capai dan **1,5%** bila ≥ 3 (satu rate untuk semua cabang yang capai, bukan 1% + 1,5%). Pool global = **1,5% × omzet global** bila Σ omzet global ≥ Σ target `OMSET_TOKO` unit non-trial (target toko, bukan target HO). individual = pool / jumlah karyawan HO aktif `TERIMA_GAJI=1` | unit 50 | Owner |
 | Insentif Probolinggo (Oktober 2026+) | pool = 3% × gross profit unit 1 bila target `OMSET_TOKO` capai; individual = pool / jumlah staff toko aktif `TERIMA_GAJI=1` (jabatan 35/36/41/42) | unit 1 | Owner |
 
 Aturan Oktober 2026 menggantikan seluruh insentif lama untuk unit 50 (termasuk SPV & Digital Division) dan insentif Kepala Toko unit 1. Periode sebelum Oktober 2026 tetap memakai `incentive_members`. Unit cabang lain tidak berubah.
+
+- **Basis insentif HO = gross profit** (`SUM(sub_total - hpp_penjualan)` − refund garansi), sama dengan sumber "Rincian Omset Cabang" di `/penilaian_kinerja`. Sumber: `OmsetTokoCalculator`. Target cabang tetap `OMSET_TOKO` (position_id NULL) dan tidak diubah.
+- **Unit trial (`unit.is_trial = 1`) tidak ikut insentif HO**: pool cabang dan pool global sama-sama memakai daftar `omsetBranchUnits()`. — `KpiCalculationService::hoPoolIncentive`; `tests/unit/IncentiveHoOmzetTest.php`
 
 Saat ini:
 - KEPALA_TOKO → Kepala Toko + Teknisi + Admin; **setiap anggota dapat 1% × omset unit**
