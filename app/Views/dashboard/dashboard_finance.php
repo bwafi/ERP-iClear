@@ -906,16 +906,21 @@
                     ?>
                     <div class="alert alert-light border small mb-3">
                         <strong>Rumus:</strong>
-                        rasio = (uang masuk tunai + transfer) / (HPP + kas keluar + payroll) x 100;
+                        rasio = (saldo kas + bank per akhir bulan) / (kas keluar operasional + payroll) x 100;
                         skor kategori = min((rasio / <?= number_format((float) ($ksd['target_rasio'] ?? 120), 0, ',', '.') ?>%) x 100, 100);
                         kontribusi KPI = skor kategori x <strong><?= $ksWeight ?>%</strong>.
-                        Uang masuk = penjualan + service (definisi Tutup Kasir/Cash Flow); periode = bulan penuh.
+                        Saldo = posisi unit di rekening Kas &amp; Bank (termasuk porsi rekening bersama); biaya = bulan penuh.
                     </div>
 
                     <?php if ($ksStatus === 'kebutuhan_nol'): ?>
                         <div class="alert alert-warning mb-3">
                             <strong>Kebutuhan operasional nol / negatif.</strong>
                             Rasio tidak dapat dihitung (tidak ada pembagian dengan nol) sehingga skor kategori kosong.
+                        </div>
+                    <?php elseif ($ksStatus === 'saldo_belum_tersedia'): ?>
+                        <div class="alert alert-warning mb-3">
+                            <strong>Saldo Kas &amp; Bank belum tersedia.</strong>
+                            Periode ini berada sebelum ledger Kas &amp; Bank dimulai, jadi rasio tidak dihitung.
                         </div>
                     <?php elseif ($ksStatus === 'fallback_manual'): ?>
                         <div class="alert alert-info mb-3">
@@ -931,7 +936,7 @@
                                     <h4 class="text-white mb-0">
                                         <?= $ksd['rasio'] !== null ? number_format((float) $ksd['rasio'], 2, ',', '.') . '%' : '—' ?>
                                     </h4>
-                                    <small class="text-white-50">masuk / keluar</small>
+                                    <small class="text-white-50">saldo / biaya</small>
                                 </div>
                             </div>
                         </div>
@@ -971,18 +976,18 @@
                     <div class="row g-3">
                         <div class="col-lg-6">
                             <div class="card h-100">
-                                <div class="card-header bg-white fw-semibold small">Uang Masuk (periode <?= esc($ksd['periode_mulai'] ?? '—') ?> s/d <?= esc($ksd['periode_akhir'] ?? '—') ?>)</div>
+                                <div class="card-header bg-white fw-semibold small">Saldo Kas &amp; Bank (per <?= esc($ksd['tanggal_saldo'] ?? '—') ?>)</div>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-bordered mb-0">
                                         <tbody>
-                                            <tr><td>Tunai (penjualan + service)</td><td class="text-end">Rp <?= number_format((float) ($ksd['masuk_tunai'] ?? 0), 0, ',', '.') ?></td></tr>
-                                            <tr><td>Transfer (penjualan + service)</td><td class="text-end">Rp <?= number_format((float) ($ksd['masuk_transfer'] ?? 0), 0, ',', '.') ?></td></tr>
-                                            <tr class="table-light fw-semibold"><td>Total Uang Masuk</td><td class="text-end">Rp <?= number_format((float) ($ksd['total_masuk'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr><td>Tunai (laci kas)</td><td class="text-end">Rp <?= number_format((float) ($ksd['saldo_tunai'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr><td>Bank (rekening)</td><td class="text-end">Rp <?= number_format((float) ($ksd['saldo_bank'] ?? 0), 0, ',', '.') ?></td></tr>
+                                            <tr class="table-light fw-semibold"><td>Total Saldo</td><td class="text-end">Rp <?= number_format((float) ($ksd['total_saldo'] ?? 0), 0, ',', '.') ?></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
                                 <div class="card-footer bg-white small text-muted">
-                                    Definisi sama dengan KPI Net Cash Flow: penjualan + service selesai, tunai + transfer.
+                                    Posisi unit di Kas &amp; Bank, termasuk porsi rekening bersama. Rekening Finance/HO tidak dihitung.
                                 </div>
                             </div>
                         </div>
@@ -992,7 +997,6 @@
                                 <div class="table-responsive">
                                     <table class="table table-sm table-bordered mb-0">
                                         <tbody>
-                                            <tr><td>HPP (harga pokok penjualan)</td><td class="text-end">Rp <?= number_format((float) ($ksd['hpp'] ?? 0), 0, ',', '.') ?></td></tr>
                                             <tr><td>Kas Keluar Operasional</td><td class="text-end">Rp <?= number_format((float) ($ksd['kas_keluar'] ?? 0), 0, ',', '.') ?></td></tr>
                                             <tr><td>Payroll</td><td class="text-end">Rp <?= number_format((float) ($ksd['payroll'] ?? 0), 0, ',', '.') ?></td></tr>
                                             <tr class="table-light fw-semibold"><td>Total Uang Keluar</td><td class="text-end">Rp <?= number_format((float) ($ksd['total_keluar'] ?? 0), 0, ',', '.') ?></td></tr>
@@ -1001,9 +1005,12 @@
                                 </div>
                                 <?php $ex = $ksd['kas_keluar_excluded'] ?? []; ?>
                                 <div class="card-footer bg-white small text-muted">
-                                    Dikecualikan dari operasional (agar tidak dobel):
+                                    HPP tidak dihitung. Dikecualikan dari kas keluar operasional:
                                     HPP Rp <?= number_format((float) ($ex['hpp'] ?? 0), 0, ',', '.') ?>,
-                                    SDM Rp <?= number_format((float) ($ex['sdm'] ?? 0), 0, ',', '.') ?>.
+                                    SDM Rp <?= number_format((float) ($ex['sdm'] ?? 0), 0, ',', '.') ?>,
+                                    Beban Cabang Rp <?= number_format((float) ($ex['beban_cabang'] ?? 0), 0, ',', '.') ?>,
+                                    Tempo Rp <?= number_format((float) ($ex['tempo'] ?? 0), 0, ',', '.') ?>,
+                                    Kasbon Rp <?= number_format((float) ($ex['kasbon'] ?? 0), 0, ',', '.') ?>.
                                     Transfer internal tidak dihitung sebagai pengeluaran operasional.
                                 </div>
                             </div>

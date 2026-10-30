@@ -10,18 +10,19 @@ use Config\Database;
 /**
  * KPI Kesehatan Uang per Cabang — sisi DATABASE.
  *
- * Keputusan bisnis 2026-10-15: rasio memakai ARUS KAS bulan itu
- * (uang masuk / uang keluar), BUKAN lagi saldo rekening.
+ * Keputusan bisnis 2026-10-30: pembilang memakai SALDO kas + bank per akhir
+ * bulan, bukan uang diterima. Penyebut tetap biaya bulan itu.
  *
  * Fokus pengujian (bagian yang tidak bisa diuji murni):
- *  - periode = BULAN PENUH (1 s/d akhir bulan), tidak dibatasi cut-off;
- *  - uang masuk = penjualan + service (tunai + transfer), definisi sama
- *    dengan KPI Cash Flow / Tutup Kasir;
- *  - pencegahan perhitungan ganda: kategori `HPP` dan `SDM` pada `kas_keluar`
- *    dikeluarkan dari komponen "Kas Keluar operasional";
- *  - HPP dihitung dari harga pokok penjualan (`hpp_penjualan x jumlah`) dan
- *    tidak mencampur unit lain;
- *  - uang keluar nol tidak pernah menghasilkan skor otomatis.
+ *  - periode biaya = BULAN PENUH (1 s/d akhir bulan), tidak dibatasi cut-off;
+ *  - kategori `HPP`, `SDM`, `BEBAN CABANG`, `TEMPO`, dan `KASBON` pada
+ *    `kas_keluar` dikeluarkan dari komponen "Kas Keluar operasional";
+ *  - HPP penjualan TIDAK dipakai sebagai komponen biaya (keputusan bisnis
+ *    2026-10-30); method `hpp()` dipertahankan untuk verifikasi memo/query;
+ *  - payroll diambil dari register per unit.
+ *
+ * Formula saldo/rasio diuji tanpa database di
+ * `tests/unit/KesehatanUangCalculatorTest.php`.
  *
  * @internal
  */
@@ -112,7 +113,8 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
     private function seedDasar(): void
     {
         $this->q("INSERT INTO db_kategori_kas (idkategori_kas, kategori) VALUES
-            (1,'OPERASIONAL'), (7,'HPP'), (10,'SDM')");
+            (1,'OPERASIONAL'), (7,'HPP'), (10,'SDM'),
+            (11,'BEBAN CABANG'), (12,'TEMPO'), (19,'Kasbon')");
     }
 
     private function calc(): KesehatanUangCalculator
@@ -120,102 +122,73 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
         return new KesehatanUangCalculator();
     }
 
-    // ── Uang masuk: penjualan + service (tunai + transfer) ─────────
+    // ── Biaya = bulan penuh (tidak dibatasi cut-off) ───────────────
 
-    public function testUangMasukMenjumlahkanPenjualanTunaiTransferDanService(): void
-    {
-        // Penjualan normal: tunai 5jt, transfer 3jt.
-        $this->q("INSERT INTO db_penjualan (idpenjualan, unit_idunit, tanggal, bayar_tunai, bayar_bank, kode_invoice)
-                  VALUES (1, 1, '{$this->tglData}', 5000000, 3000000, 'SLL-1')");
-        // Penjualan ber-kode 'srv' harus dikecualikan.
-        $this->q("INSERT INTO db_penjualan (idpenjualan, unit_idunit, tanggal, bayar_tunai, bayar_bank, kode_invoice)
-                  VALUES (2, 1, '{$this->tglData}', 9000000, 9000000, 'srv-1')");
-        // Service selesai (status 4): tunai 2jt, residual transfer (4jt-2jt).
-        $this->q("INSERT INTO db_service (idservice, unit_idunit, tanggal_selesai, status_service, bayar_tunai, harus_dibayar)
-                  VALUES (1, 1, '{$this->tglData}', 4, 2000000, 4000000)");
-        // Service belum selesai (status 2) harus dikecualikan.
-        $this->q("INSERT INTO db_service (idservice, unit_idunit, tanggal_selesai, status_service, bayar_tunai, harus_dibayar)
-                  VALUES (2, 1, '{$this->tglData}', 2, 7000000, 7000000)");
-        // Service unit lain tidak boleh ikut.
-        $this->q("INSERT INTO db_service (idservice, unit_idunit, tanggal_selesai, status_service, bayar_tunai, harus_dibayar)
-                  VALUES (3, 2, '{$this->tglData}', 4, 0, 8000000)");
-
-        $masuk = $this->calc()->uangMasuk(1, $this->dari, $this->sampai);
-
-        // Tunai: 5jt (penjualan) + 2jt (service) = 7jt.
-        $this->assertSame(7000000, $masuk['tunai']);
-        // Transfer: 3jt (penjualan) + 2jt (service) = 5jt.
-        $this->assertSame(5000000, $masuk['transfer']);
-        $this->assertSame(12000000, $masuk['total']);
-    }
-
-    // ── Formula penuh dari data DB (tepat 120%) ────────────────────
-
-    public function testPerhitunganPenuhTepatSeratusDuaPuluhPersen(): void
-    {
-        // Masuk 60jt (tunai 20jt + transfer 40jt).
-        $this->q("INSERT INTO db_penjualan (idpenjualan, unit_idunit, tanggal, bayar_tunai, bayar_bank, kode_invoice)
-                  VALUES (1, 1, '{$this->tglData}', 20000000, 40000000, 'SLL-1')");
-        // HPP 20jt (10.000 x 2.000 unit), operasional 20jt, payroll 10jt = 50jt.
-        $this->q("INSERT INTO db_detail_penjualan (penjualan_idpenjualan, unit_idunit, jumlah, sub_total, hpp_penjualan)
-                  VALUES (1, 1, 2000, 50000000, 10000)");
-        $this->q("INSERT INTO db_kas_keluar (tanggal, deskripsi, jumlah, idunit, idbank, kategori_idkategori)
-                  VALUES ('{$this->tglData}', 'Listrik', 20000000, 1, NULL, 1)");
-        $this->q("INSERT INTO db_finance_payroll (unit_id, due_date, total)
-                  VALUES (1, '{$this->sampai}', 10000000)");
-
-        $hasil = $this->calc()->calculate(1, $this->bulan, $this->tahun);
-
-        $this->assertSame('ok', $hasil['status']);
-        $this->assertSame(60000000, $hasil['detail']['total_masuk']);
-        $this->assertSame(20000000, $hasil['detail']['hpp']);
-        $this->assertSame(20000000, $hasil['detail']['kas_keluar']);
-        $this->assertSame(10000000, $hasil['detail']['payroll']);
-        $this->assertSame(50000000, $hasil['detail']['total_keluar']);
-        $this->assertSame(120.0, $hasil['detail']['rasio']);
-        $this->assertSame(100.0, $hasil['score']);
-    }
-
-    // ── Periode bulan penuh (tidak dibatasi cut-off) ───────────────
-
-    public function testPeriodeBulanPenuhTermasukTanggalSebelumCutoff(): void
+    public function testHppDanPayrollMenghitungTanggalSatuBulan(): void
     {
         // Tanggal 1 bulan berjalan (sebelum periodeMulaiDate/cut-off) tetap
-        // harus ikut karena KPI ini memakai bulan penuh.
+        // harus ikut karena periode biaya memakai bulan penuh.
         $this->q("INSERT INTO db_penjualan (idpenjualan, unit_idunit, tanggal, bayar_tunai, bayar_bank, kode_invoice)
-                  VALUES (1, 1, '{$this->tglAwalBulan}', 1000000, 0, 'SLL-1')");
+                  VALUES (1, 1, '{$this->tglAwalBulan}', 0, 0, 'SLL-1')");
+        $this->q("INSERT INTO db_detail_penjualan (penjualan_idpenjualan, unit_idunit, jumlah, sub_total, hpp_penjualan)
+                  VALUES (1, 1, 2, 10000, 1500000)");
+        $this->q("INSERT INTO db_finance_payroll (unit_id, due_date, total)
+                  VALUES (1, '{$this->tglAwalBulan}', 2500000)");
 
-        $hasil = $this->calc()->calculate(1, $this->bulan, $this->tahun);
+        $calc = $this->calc();
 
-        $this->assertSame($this->dari, $hasil['detail']['periode_mulai']);
-        $this->assertSame($this->sampai, $hasil['detail']['periode_akhir']);
-        $this->assertSame(1000000, $hasil['detail']['total_masuk']);
+        $this->assertSame(3000000, $calc->hpp(1, $this->dari, $this->sampai));
+        $this->assertSame(2500000, $calc->payroll(1, $this->dari, $this->sampai));
+    }
+
+    public function testBulanSebelumLedgerKasBankTidakMengarangSaldo(): void
+    {
+        // Saldo baru sah sejak ledger Kas & Bank dimulai. Bulan sebelumnya
+        // tidak boleh memakai statement lama sebagai saldo bulan itu.
+        $tgl   = date('Y-m-d', strtotime(FinanceScopeService::kasBankPeriodeMulaiDate() . ' -3 months'));
+        $bulan = (int) date('n', strtotime($tgl));
+        $tahun = (int) date('Y', strtotime($tgl));
+
+        $this->q("INSERT INTO db_kas_keluar (tanggal, deskripsi, jumlah, idunit, idbank, kategori_idkategori)
+                  VALUES ('{$tgl}', 'Listrik', 1000000, 1, NULL, 1)");
+
+        $hasil = $this->calc()->calculate(1, $bulan, $tahun);
+
+        $this->assertSame('saldo_belum_tersedia', $hasil['status']);
+        $this->assertNull($hasil['score']);
+        $this->assertFalse($hasil['detail']['saldo_tersedia']);
     }
 
     // ── Pencegahan perhitungan ganda ───────────────────────────────
 
-    public function testKasKeluarKategoriHppDanSdmDikecualikan(): void
+    public function testKasKeluarKategoriYangDikecualikan(): void
     {
         $this->q("INSERT INTO db_kas_keluar (tanggal, deskripsi, jumlah, idunit, idbank, kategori_idkategori) VALUES
-            ('{$this->tglData}', 'Beli stok',   999000000, 1, NULL, 7),
-            ('{$this->tglData}', 'Gaji & komisi',888000000, 1, NULL, 10),
+            ('{$this->tglData}', 'Beli stok',    999000000, 1, NULL, 7),
+            ('{$this->tglData}', 'Gaji & komisi', 888000000, 1, NULL, 10),
+            ('{$this->tglData}', 'Beban cabang',  70000000, 1, NULL, 11),
+            ('{$this->tglData}', 'Tempo supplier',66000000, 1, NULL, 12),
+            ('{$this->tglData}', 'Kasbon pegawai',  400000, 1, NULL, 19),
             ('{$this->tglData}', 'Listrik',         5000000, 1, NULL, 1),
             ('{$this->tglData}', 'ATK unit lain',  77000000, 2, NULL, 1)");
 
         $calc = $this->calc();
 
-        // Hanya kategori non-HPP/non-SDM milik unit 1 yang dihitung.
+        // Hanya kategori di luar HPP/SDM/BEBAN CABANG/TEMPO/KASBON unit 1.
         $this->assertSame(5000000, $calc->kasKeluarOperasional(1, $this->dari, $this->sampai));
 
         $dikecualikan = $calc->kasKeluarDikecualikan(1, $this->dari, $this->sampai);
         $this->assertSame(999000000, $dikecualikan['hpp']);
         $this->assertSame(888000000, $dikecualikan['sdm']);
+        $this->assertSame(70000000, $dikecualikan['beban_cabang']);
+        $this->assertSame(66000000, $dikecualikan['tempo']);
+        $this->assertSame(400000, $dikecualikan['kasbon']);
     }
 
     public function testPerhitunganTidakMenghitungHppDuaKali(): void
     {
         // HPP dari penjualan = 20jt. Di kas_keluar juga ada kategori HPP 999jt;
-        // yang terakhir HARUS dikecualikan dari uang keluar.
+        // yang terakhir HARUS dikecualikan dari komponen biaya.
         $this->q("INSERT INTO db_penjualan (idpenjualan, unit_idunit, tanggal, bayar_tunai, bayar_bank, kode_invoice)
                   VALUES (2, 1, '{$this->tglData}', 0, 0, 'SLL-2')");
         $this->q("INSERT INTO db_detail_penjualan (penjualan_idpenjualan, unit_idunit, jumlah, sub_total, hpp_penjualan)
@@ -223,11 +196,10 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
         $this->q("INSERT INTO db_kas_keluar (tanggal, deskripsi, jumlah, idunit, idbank, kategori_idkategori)
                   VALUES ('{$this->tglData}', 'Beli stok', 999000000, 1, NULL, 7)");
 
-        $hasil = $this->calc()->calculate(1, $this->bulan, $this->tahun);
+        $calc = $this->calc();
 
-        $this->assertSame(20000000, $hasil['detail']['hpp']);
-        $this->assertSame(0, $hasil['detail']['kas_keluar']);
-        $this->assertSame(20000000, $hasil['detail']['total_keluar']);
+        $this->assertSame(20000000, $calc->hpp(1, $this->dari, $this->sampai));
+        $this->assertSame(0, $calc->kasKeluarOperasional(1, $this->dari, $this->sampai));
     }
 
     public function testHppPakaiJumlahDanTidakMencampurUnitLain(): void
@@ -253,21 +225,5 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
 
         $this->assertSame(5000000, $this->calc()->payroll(1, $this->dari, $this->sampai));
         $this->assertSame(12000000, $this->calc()->payroll(2, $this->dari, $this->sampai));
-    }
-
-    // ── Uang keluar nol ────────────────────────────────────────────
-
-    public function testUangKeluarNolTidakMenghasilkanSkorOtomatis(): void
-    {
-        // Ada uang masuk 10jt tetapi tidak ada HPP/operasional/payroll.
-        $this->q("INSERT INTO db_penjualan (idpenjualan, unit_idunit, tanggal, bayar_tunai, bayar_bank, kode_invoice)
-                  VALUES (1, 1, '{$this->tglData}', 10000000, 0, 'SLL-1')");
-
-        $hasil = $this->calc()->calculate(1, $this->bulan, $this->tahun);
-
-        $this->assertSame('kebutuhan_nol', $hasil['status']);
-        $this->assertNull($hasil['score']);
-        $this->assertNull($hasil['detail']['rasio']);
-        $this->assertSame(0, $hasil['detail']['total_keluar']);
     }
 }

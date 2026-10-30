@@ -233,9 +233,9 @@ class FinanceKpiService
      * mengulang query per cabang.
      *
      * @return array<int,array{unit:int,nama:string,target_rasio:float,rasio:?float,
-     *   skor:?float,kontribusi:?float,masuk:int,masuk_tunai:int,masuk_transfer:int,
-     *   keluar:int,hpp:int,kas_keluar:int,payroll:int,target_masuk:int,
-     *   selisih_masuk:int,status:string,reached:bool,shortfall:?float}>
+     *   skor:?float,kontribusi:?float,saldo:int,saldo_tunai:int,saldo_bank:int,
+     *   keluar:int,kas_keluar:int,payroll:int,target_saldo:int,
+     *   selisih_saldo:int,status:string,reached:bool,shortfall:?float}>
      */
     public function kesehatanUangBreakdown(int $month, int $year): array
     {
@@ -254,11 +254,11 @@ class FinanceKpiService
             $d    = $detail['detail'] ?? [];
             $skor = $detail['score'] ?? null;
 
-            $masuk       = (int) ($d['total_masuk'] ?? 0);
+            $saldo       = (int) ($d['total_saldo'] ?? 0);
             $keluar      = (int) ($d['total_keluar'] ?? 0);
             $targetRasio = (float) ($d['target_rasio'] ?? 120);
-            // Uang masuk minimal agar rasio menyentuh target: keluar x target%.
-            $targetMasuk = (int) round($keluar * $targetRasio / 100);
+            // Saldo minimal agar rasio menyentuh target: keluar x target%.
+            $targetSaldo = (int) round($keluar * $targetRasio / 100);
 
             $out[] = [
                 'unit'           => $unit,
@@ -267,16 +267,15 @@ class FinanceKpiService
                 'rasio'          => $d['rasio'] ?? null,
                 'skor'           => $skor,
                 'kontribusi'     => $d['kontribusi'] ?? null,
-                'masuk'          => $masuk,
-                'masuk_tunai'    => (int) ($d['masuk_tunai'] ?? 0),
-                'masuk_transfer' => (int) ($d['masuk_transfer'] ?? 0),
+                'saldo'          => $saldo,
+                'saldo_tunai'    => (int) ($d['saldo_tunai'] ?? 0),
+                'saldo_bank'     => (int) ($d['saldo_bank'] ?? 0),
                 'keluar'         => $keluar,
-                'hpp'            => (int) ($d['hpp'] ?? 0),
                 'kas_keluar'     => (int) ($d['kas_keluar'] ?? 0),
                 'payroll'        => (int) ($d['payroll'] ?? 0),
-                'target_masuk'   => $targetMasuk,
-                // Positif = uang masuk kurang dari target; negatif = berlebih.
-                'selisih_masuk'  => $targetMasuk - $masuk,
+                'target_saldo'   => $targetSaldo,
+                // Positif = saldo kurang dari target; negatif = berlebih.
+                'selisih_saldo'  => $targetSaldo - $saldo,
                 'status'         => (string) ($detail['status'] ?? ''),
                 'reached'        => $skor !== null && (float) $skor >= 100.0,
                 'shortfall'      => $skor === null ? null : round(max(100.0 - (float) $skor, 0), 2),

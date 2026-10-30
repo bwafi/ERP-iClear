@@ -31,6 +31,9 @@ use Config\Finance;
  * Net Cash Flow  = Penerimaan - Kas Keluar
  * Cash Flow %    = Net Cash Flow / Penerimaan x 100
  * Score          = (CF% / target 20%) x 100, maks 100, min 0.
+ *
+ * Periode = BULAN PENUH (tanggal 1 s/d akhir bulan), sama dengan Kesehatan
+ * Uang dan Tutup Kasir. Tidak memakai cut-off ledger.
  */
 class CashFlowCalculator implements FinanceCalculatorInterface
 {
@@ -51,12 +54,11 @@ class CashFlowCalculator implements FinanceCalculatorInterface
     {
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
-        $cutoff = FinanceScopeService::periodeMulaiDate();
 
-        $penjualan = $this->sumPenjualan($unitId, $startDate, $endDate, $cutoff);
-        $service = $this->sumService($unitId, $startDate, $endDate, $cutoff);
+        $penjualan = $this->sumPenjualan($unitId, $startDate, $endDate);
+        $service = $this->sumService($unitId, $startDate, $endDate);
         $penerimaan = $penjualan + $service;
-        $kasKeluar = $this->sumKasKeluar($unitId, $startDate, $endDate, $cutoff);
+        $kasKeluar = $this->sumKasKeluar($unitId, $startDate, $endDate);
 
         $net = $penerimaan - $kasKeluar;
         $target = (float) $this->config->cashFlowTargetPercent;
@@ -96,9 +98,7 @@ class CashFlowCalculator implements FinanceCalculatorInterface
         $startDate = sprintf('%04d-%02d-01', $year, $month);
         $endDate = date('Y-m-t', strtotime($startDate));
 
-        $cutoff = FinanceScopeService::periodeMulaiDate();
-        $dari   = max($startDate, $cutoff);
-        $harian = $this->src->harianRange($unitId, $dari, $endDate);
+        $harian = $this->src->harianRange($unitId, $startDate, $endDate);
 
         // Masuk = kas + transfer (penjualan + service), keluar = seluruh
         // kas_keluar. Split cash/transfer tidak perlu di sini karena KPI ini
@@ -140,28 +140,21 @@ class CashFlowCalculator implements FinanceCalculatorInterface
 
     /**
      * Penerimaan penjualan = kas + transfer penjualan dalam rentang.
-     *
-     * Cut-off periode aktif diterapkan sebagai batas bawah (`max`), sama
-     * seperti sebelumnya — angka sebelum 2026-10-06 tidak masuk KPI.
      */
-    private function sumPenjualan(int $unitId, string $startDate, string $endDate, string $cutoff): float
+    private function sumPenjualan(int $unitId, string $startDate, string $endDate): float
     {
-        $dari = max($startDate, $cutoff);
-
-        return (float) $this->src->cashPenjualanRange($unitId, $dari, $endDate)
-            + (float) $this->src->transferPenjualanRange($unitId, $dari, $endDate);
+        return (float) $this->src->cashPenjualanRange($unitId, $startDate, $endDate)
+            + (float) $this->src->transferPenjualanRange($unitId, $startDate, $endDate);
     }
 
     /**
      * Penerimaan service = kas + residual transfer, per tanggal_selesai,
      * hanya service berstatus 4 (selesai).
      */
-    private function sumService(int $unitId, string $startDate, string $endDate, string $cutoff): float
+    private function sumService(int $unitId, string $startDate, string $endDate): float
     {
-        $dari = max($startDate, $cutoff);
-
-        return (float) $this->src->cashServiceRange($unitId, $dari, $endDate)
-            + (float) $this->src->transferServiceRange($unitId, $dari, $endDate);
+        return (float) $this->src->cashServiceRange($unitId, $startDate, $endDate)
+            + (float) $this->src->transferServiceRange($unitId, $startDate, $endDate);
     }
 
     /**
@@ -170,11 +163,9 @@ class CashFlowCalculator implements FinanceCalculatorInterface
      * Tidak lagi menyaring baris "kas awal": TutupKasir menjumlahkan utuh,
      * jadi penyaringan di sini membuat KPI berbeda dari tutup kasir.
      */
-    private function sumKasKeluar(int $unitId, string $startDate, string $endDate, string $cutoff): float
+    private function sumKasKeluar(int $unitId, string $startDate, string $endDate): float
     {
-        $dari = max($startDate, $cutoff);
-
-        return (float) $this->src->kasKeluarCashRange($unitId, $dari, $endDate)
-            + (float) $this->src->kasKeluarTransferRange($unitId, $dari, $endDate);
+        return (float) $this->src->kasKeluarCashRange($unitId, $startDate, $endDate)
+            + (float) $this->src->kasKeluarTransferRange($unitId, $startDate, $endDate);
     }
 }

@@ -16,7 +16,7 @@ class Finance extends BaseConfig
      * Bobot tiap KPI (dalam %).
      */
     public array $kpiWeights = [
-        'kesehatan_uang' => 30, // Auto (rasio saldo vs kebutuhan 30 hari) + fallback manual
+        'kesehatan_uang' => 30, // Auto (saldo kas+bank vs biaya sebulan) + fallback manual
         'akurasi'        => 20, // Auto (rekonsiliasi harian: hari terverifikasi tanpa selisih)
         'cash_flow'      => 15, // Auto
         'hutang_piutang' => 10, // Auto (Fase 2)
@@ -55,9 +55,9 @@ class Finance extends BaseConfig
     /**
      * Target rasio kesehatan uang (%). Score = (rasio / target) x 100, maks 100.
      *
-     * rasio = uang masuk bulan itu / uang keluar bulan itu x 100 (arus kas
-     * bulan penuh). Target 120% berarti uang masuk harus menutup 1,2x uang
-     * keluar (HPP + kas keluar operasional + payroll).
+     * rasio = saldo kas + bank per akhir bulan / biaya bulan itu x 100 (biaya
+     * bulan penuh). Target 120% berarti saldo harus menutup 1,2x biaya
+     * sebulan (kas keluar operasional + payroll; HPP tidak dihitung).
      */
     public float $kesehatanUangTargetPercent = 120.0;
 
@@ -104,8 +104,9 @@ class Finance extends BaseConfig
      * tepat pada tanggal cut-off (5 Okt) juga legacy karena tanggal itu
      * hanya baseline statement.
      *
-     * Cut-off 5 Okt → periode ledger mulai 6 Okt. KPI Keuangan/Cash Flow/
-     * Hutang-Piutang yang berbasis periodeMulaiDate otomatis mulai 6 Okt.
+     * Cut-off 5 Okt → periode ledger mulai 6 Okt. Hutang-Piutang/Piutang/
+     * Mutasi yang berbasis periodeMulaiDate otomatis mulai 6 Okt. KPI Net
+     * Cash Flow dan Kesehatan Uang memakai bulan penuh, bukan batas ini.
      *
      * Harus = cutoffDate + 1 hari. Nilai ini tidak di-hardcode di tempat lain:
      * semua pemakai filtering memanggil FinanceScopeService::periodeMulaiDate().
@@ -138,7 +139,7 @@ class Finance extends BaseConfig
      * berjalan. Saldo berjalan = opening(7 Okt) + net movement sejak 8 Okt.
      *
      * Harus = $kasBankCutoffDate + 1 hari. TIDAK menggantikan $periodeMulaiDate:
-     * KPI/Hutang-Piutang tetap memakai $periodeMulaiDate.
+     * Piutang/Hutang/Mutasi tetap memakai $periodeMulaiDate.
      */
     public string $kasBankPeriodeMulaiDate = '2026-10-10';
 

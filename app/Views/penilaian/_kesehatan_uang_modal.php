@@ -1,7 +1,7 @@
 <?php
 /**
  * Modal rincian KPI "Kesehatan Uang per Cabang" — versi lengkap (nominal
- * kas masuk, uang keluar, rasio, skor, kontribusi, status tiap cabang).
+ * saldo kas & bank, biaya, rasio, skor, kontribusi, status tiap cabang).
  *
  * Variabel:
  *   $cabang  array<int,array<string,mixed>>  hasil FinanceKpiService::kesehatanUangBreakdown()
@@ -16,9 +16,9 @@ $periode = $periode ?? '';
 $scored    = array_values(array_filter($cabang, static fn ($c) => ($c['skor'] ?? null) !== null));
 $avgSkor   = $scored ? array_sum(array_column($scored, 'skor')) / count($scored) : null;
 $reached   = count(array_filter($cabang, static fn ($c) => !empty($c['reached'])));
-$sumMasuk  = array_sum(array_column($cabang, 'masuk'));
+$sumSaldo  = array_sum(array_column($cabang, 'saldo'));
 $sumKeluar = array_sum(array_column($cabang, 'keluar'));
-$ratioAgg  = $sumKeluar > 0 ? $sumMasuk / $sumKeluar * 100 : null;
+$ratioAgg  = $sumKeluar > 0 ? $sumSaldo / $sumKeluar * 100 : null;
 $target    = (float) ($cabang[0]['target_rasio'] ?? 120);
 
 $rp = static fn ($n): string => 'Rp ' . number_format((float) $n, 0, ',', '.');
@@ -43,8 +43,8 @@ $pct = static fn ($rasio, float $target): float => ($rasio !== null && $target >
             <div class="modal-body">
                 <div class="ku-stats">
                     <div class="ku-stat">
-                        <div class="ku-stat__label">Uang Masuk</div>
-                        <div class="ku-stat__value"><?= $rp($sumMasuk) ?></div>
+                        <div class="ku-stat__label">Saldo Kas &amp; Bank</div>
+                        <div class="ku-stat__value"><?= $rp($sumSaldo) ?></div>
                     </div>
                     <div class="ku-stat">
                         <div class="ku-stat__label">Uang Keluar</div>
@@ -65,7 +65,7 @@ $pct = static fn ($rasio, float $target): float => ($rasio !== null && $target >
                         <thead>
                             <tr>
                                 <th class="ps-3">Cabang</th>
-                                <th class="text-end">Uang Masuk</th>
+                                <th class="text-end">Saldo Kas &amp; Bank</th>
                                 <th class="text-end">Uang Keluar</th>
                                 <th style="min-width:8.5rem;">Rasio / <?= number_format($target, 0, ',', '.') ?>%</th>
                                 <th class="text-end">Skor</th>
@@ -77,12 +77,12 @@ $pct = static fn ($rasio, float $target): float => ($rasio !== null && $target >
                             <?php foreach ($cabang as $cb): ?>
                                 <?php
                                 $status  = (string) ($cb['status'] ?? '');
-                                $nol     = $status === 'kebutuhan_nol';
+                                $tanpaSkor = in_array($status, ['kebutuhan_nol', 'saldo_belum_tersedia'], true);
                                 $rasio   = $cb['rasio'] ?? null;
                                 $skor    = $cb['skor'] ?? null;
                                 $reachedCb = !empty($cb['reached']);
 
-                                if ($nol) {
+                                if ($tanpaSkor) {
                                     $tone = 'muted';
                                 } elseif ($reachedCb) {
                                     $tone = 'ok';
@@ -102,7 +102,7 @@ $pct = static fn ($rasio, float $target): float => ($rasio !== null && $target >
                                             <?php endif; ?>
                                         </div>
                                     </td>
-                                    <td class="text-end"><?= $rp($cb['masuk'] ?? 0) ?></td>
+                                    <td class="text-end"><?= $rp($cb['saldo'] ?? 0) ?></td>
                                     <td class="text-end"><?= $rp($cb['keluar'] ?? 0) ?></td>
                                     <td>
                                         <div class="ku-ratio">
@@ -113,8 +113,10 @@ $pct = static fn ($rasio, float $target): float => ($rasio !== null && $target >
                                     <td class="text-end fw-bold"><?= $skor !== null ? number_format((float) $skor, 2, ',', '.') : '—' ?></td>
                                     <td class="text-end"><?= ($cb['kontribusi'] ?? null) !== null ? number_format((float) $cb['kontribusi'], 2, ',', '.') : '—' ?></td>
                                     <td class="pe-3 text-center">
-                                        <?php if ($nol): ?>
+                                        <?php if ($status === 'kebutuhan_nol'): ?>
                                             <span class="badge rounded-pill bg-secondary-subtle text-secondary">Kebutuhan nol</span>
+                                        <?php elseif ($status === 'saldo_belum_tersedia'): ?>
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary">Saldo belum tersedia</span>
                                         <?php elseif ($reachedCb): ?>
                                             <span class="badge rounded-pill bg-success-subtle text-success">Tercapai</span>
                                         <?php else: ?>
@@ -130,8 +132,8 @@ $pct = static fn ($rasio, float $target): float => ($rasio !== null && $target >
 
             <div class="modal-footer ku-modal__foot">
                 <span>
-                    Rasio = (uang masuk tunai + transfer) ÷ (HPP + kas keluar + payroll) × 100.
-                    Uang masuk mengikuti definisi Tutup Kasir/Cash Flow; periode dihitung satu bulan penuh.
+                    Rasio = (saldo kas + bank per akhir bulan) ÷ (kas keluar operasional + payroll) × 100.
+                    Saldo mengikuti posisi Kas &amp; Bank per unit; biaya dihitung satu bulan penuh; HPP tidak dihitung.
                 </span>
             </div>
         </div>

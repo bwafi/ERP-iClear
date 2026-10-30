@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\ModelAkunKasBank;
 use CodeIgniter\Database\ConnectionInterface;
 use Config\Database;
 use Config\Finance;
@@ -9,19 +10,22 @@ use Config\Finance;
 /**
  * KPI Kesehatan Uang per Cabang (FIN_KESEHATAN_UANG) — bobot 30%.
  *
- * RASIO = uang masuk bulan itu / uang keluar bulan itu x 100
+ * RASIO = saldo kas & bank akhir bulan / biaya bulan itu x 100
  * SKOR  = min((rasio / target 120%) x 100, 100)
  *
- * Definisi yang dijaga (keputusan bisnis 2026-10-15: ARUS KAS bulan itu,
- * bukan lagi saldo rekening):
- *  - Uang masuk = penerimaan periode = penjualan (tunai + transfer) +
- *    service selesai (tunai + residual transfer). Definisi PERSIS sama
- *    dengan KPI Cash Flow (TutupKasirSourceDefinition) — satu sumber angka,
- *    bukan query tulis ulang.
- *  - Uang keluar = HPP (harga pokok penjualan) + Kas Keluar operasional +
- *    Payroll pada periode yang sama.
- *  - Periode = BULAN PENUH (tanggal 1 s/d akhir bulan evaluasi), tanpa batas
- *    cut-off, supaya "arus kas bulan itu" utuh.
+ * Definisi yang dijaga (keputusan bisnis 2026-10-30: SALDO, bukan uang
+ * diterima):
+ *  - Saldo = posisi unit pada rekening KAS + BANK (termasuk porsi rekening
+ *    bersama) per akhir bulan evaluasi, dari KasBankCutoffService::posisiUnit.
+ *    Sumber yang sama dengan halaman Kas & Bank; rekening Finance/HO tidak ikut.
+ *  - Biaya = Kas Keluar operasional + Payroll pada periode yang sama. HPP
+ *    penjualan TIDAK dihitung (keputusan bisnis 2026-10-30); kategori `HPP`
+ *    dan `SDM` di `kas_keluar` juga dikecualikan agar tidak dobel dengan
+ *    pembelian stok dan register payroll.
+ *    Rasio berarti "saldo cukup untuk berapa bulan biaya"; target 120% =
+ *    saldo >= 1,2x biaya sebulan.
+ *  - Periode biaya = BULAN PENUH (tanggal 1 s/d akhir bulan evaluasi), tanpa
+ *    batas cut-off, supaya biaya bulan itu utuh.
  *  - Transfer internal (Setor/Tarik, Pindah Saldo, pelunasan H/P antar unit)
  *    TIDAK dihitung sebagai pengeluaran operasional: angka kas keluar diambil
  *    dari tabel `kas_keluar` (definisi TutupKasirSourceDefinition), bukan dari
@@ -35,6 +39,8 @@ use Config\Finance;
  * Keamanan data:
  *  - Uang keluar nol / negatif -> status 'kebutuhan_nol', SKOR null. Tidak ada
  *    pembagian dengan nol.
+ *  - Periode sebelum ledger Kas & Bank dimulai -> status 'saldo_belum_tersedia',
+ *    SKOR null (tidak mengarang saldo dari statement lama).
  */
 class KesehatanUangCalculator implements FinanceCalculatorInterface
 {
@@ -44,10 +50,14 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     /** Kategori kas_keluar yang dikeluarkan dari "Kas Keluar operasional". */
     public const KATEGORI_HPP = 'HPP';
     public const KATEGORI_SDM = 'SDM';
+    public const KATEGORI_BEBAN_CABANG = 'BEBAN CABANG';
+    public const KATEGORI_TEMPO = 'TEMPO';
+    public const KATEGORI_KASBON = 'KASBON';
 
     protected ?ConnectionInterface $db = null;
-    protected TutupKasirSourceDefinition $src;
     protected Finance $config;
+    protected ?KasBankCutoffService $kasBank = null;
+    protected ?ModelAkunKasBank $akunKasBank = null;
 
     /**
      * Cache per-request: komponen ini diminta berkali-kali dalam satu
@@ -56,10 +66,14 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
      */
     private static $memo = [];
 
-    public function __construct(?TutupKasirSourceDefinition $src = null, ?Finance $config = null)
-    {
-        $this->src    = $src ?? new TutupKasirSourceDefinition();
-        $this->config = $config ?? new Finance();
+    public function __construct(
+        ?Finance $config = null,
+        ?KasBankCutoffService $kasBank = null,
+        ?ModelAkunKasBank $akunKasBank = null
+    ) {
+        $this->config      = $config ?? new Finance();
+        $this->kasBank     = $kasBank;
+        $this->akunKasBank = $akunKasBank;
     }
 
     /**
@@ -77,16 +91,27 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
 
     public function calculate(int $unitId, int $month, int $year): array
     {
-        // BULAN PENUH: arus kas periode bulan evaluasi, tanpa batas cut-off.
-        $dari   = sprintf('%04d-%02d-01', $year, $month);
-        $sampai = date('Y-m-t', strtotime($dari));
+        // BULAN PENUH untuk biaya; saldo diambil per akhir bulan (atau hari
+        // ini kalau bulan evaluasi belum selesai).
+        $dari         = sprintf('%04d-%02d-01', $year, $month);
+        $sampai       = date('Y-m-t', strtotime($dari));
+        $tanggalSaldo = min($sampai, date('Y-m-d'));
+
+        // Saldo hanya sah sejak ledger Kas & Bank dimulai. Bulan sebelumnya
+        // tidak punya baseline, jadi jangan menampilkan angka statement lama
+        // sebagai saldo bulan itu.
+        $saldoTersedia = $sampai >= FinanceScopeService::kasBankPeriodeMulaiDate();
+        $saldo = $saldoTersedia
+            ? $this->saldoKasBank($unitId, $tanggalSaldo)
+            : ['tunai' => 0, 'bank' => 0, 'total' => 0];
 
         return $this->assemble([
             'unit_id'              => $unitId,
             'periode_mulai'        => $dari,
             'periode_akhir'        => $sampai,
-            'masuk'                => $this->uangMasuk($unitId, $dari, $sampai),
-            'hpp'                  => $this->hpp($unitId, $dari, $sampai),
+            'tanggal_saldo'        => $tanggalSaldo,
+            'saldo_tersedia'       => $saldoTersedia,
+            'saldo'                => $saldo,
             'kas_keluar'           => $this->kasKeluarOperasional($unitId, $dari, $sampai),
             'payroll'              => $this->payroll($unitId, $dari, $sampai),
             'kas_keluar_excluded'  => $this->kasKeluarDikecualikan($unitId, $dari, $sampai),
@@ -100,20 +125,20 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
      *
      * @param array{
      *   unit_id?:int, periode_mulai?:string, periode_akhir?:string,
-     *   masuk:array{tunai?:int,transfer?:int,total?:int},
-     *   hpp:int, kas_keluar:int, payroll:int,
+     *   tanggal_saldo?:string, saldo_tersedia?:bool,
+     *   saldo:array{tunai?:int,bank?:int,total?:int},
+     *   kas_keluar:int, payroll:int,
      *   kas_keluar_excluded?:array
      * } $in
      */
     public function assemble(array $in): array
     {
-        $masukTunai    = (int) ($in['masuk']['tunai'] ?? 0);
-        $masukTransfer = (int) ($in['masuk']['transfer'] ?? 0);
-        $masuk         = (int) ($in['masuk']['total'] ?? ($masukTunai + $masukTransfer));
-        $hpp           = (int) ($in['hpp'] ?? 0);
+        $saldoTunai    = (int) ($in['saldo']['tunai'] ?? 0);
+        $saldoBank     = (int) ($in['saldo']['bank'] ?? 0);
+        $saldo         = (int) ($in['saldo']['total'] ?? ($saldoTunai + $saldoBank));
         $kasKeluar     = (int) ($in['kas_keluar'] ?? 0);
         $payroll       = (int) ($in['payroll'] ?? 0);
-        $keluar        = $hpp + $kasKeluar + $payroll;
+        $keluar        = $kasKeluar + $payroll;
         $target        = (float) ($this->config->kesehatanUangTargetPercent ?? self::TARGET_RASIO_DEFAULT);
         $bobot         = (float) ($this->config->kpiWeights['kesehatan_uang'] ?? 30);
 
@@ -121,12 +146,14 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
         $skor  = null;
         $status = 'ok';
 
-        if ($keluar <= 0) {
+        if (! ($in['saldo_tersedia'] ?? true)) {
+            // Baseline Kas & Bank belum ada untuk periode ini.
+            $status = 'saldo_belum_tersedia';
+        } elseif ($keluar <= 0) {
             // Tidak ada pembagian dengan nol.
             $status = 'kebutuhan_nol';
-            $skor   = null;
         } else {
-            $rasio = round(($masuk / $keluar) * 100, 2);
+            $rasio = round(($saldo / $keluar) * 100, 2);
             $skor  = self::skorKategori($rasio, $target);
         }
 
@@ -137,10 +164,11 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
                 'unit_id'             => (int) ($in['unit_id'] ?? 0),
                 'periode_mulai'       => $in['periode_mulai'] ?? null,
                 'periode_akhir'       => $in['periode_akhir'] ?? null,
-                'masuk_tunai'         => $masukTunai,
-                'masuk_transfer'      => $masukTransfer,
-                'total_masuk'         => $masuk,
-                'hpp'                 => $hpp,
+                'tanggal_saldo'       => $in['tanggal_saldo'] ?? null,
+                'saldo_tersedia'      => (bool) ($in['saldo_tersedia'] ?? true),
+                'saldo_tunai'         => $saldoTunai,
+                'saldo_bank'          => $saldoBank,
+                'total_saldo'         => $saldo,
                 'kas_keluar'          => $kasKeluar,
                 'payroll'             => $payroll,
                 'total_keluar'        => $keluar,
@@ -173,31 +201,51 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Uang masuk periode = penjualan (tunai + transfer) + service selesai
-     * (tunai + residual transfer).
+     * Saldo unit per tanggal = posisi pada rekening KAS + BANK.
      *
-     * Definisi PERSIS sama dengan KPI Cash Flow supaya satu sumber angka
-     * (TutupKasirSourceDefinition), bukan query yang ditulis ulang.
+     * Memakai KasBankCutoffService::posisiUnit supaya rekening bersama ikut
+     * porsi unit (alokasi + movement), bukan saldo fisik seluruh rekening.
+     * Rekening Finance/HO tidak punya unit pemilik dan otomatis 0.
      *
-     * @return array{tunai:int,transfer:int,total:int}
+     * @return array{tunai:int,bank:int,total:int}
      */
-    public function uangMasuk(int $unitId, string $dari, string $sampai): array
+    public function saldoKasBank(int $unitId, string $sampai): array
     {
-        $tunai = $this->src->cashPenjualanRange($unitId, $dari, $sampai)
-            + $this->src->cashServiceRange($unitId, $dari, $sampai);
+        $tunai = 0;
+        $bank  = 0;
 
-        $transfer = $this->src->transferPenjualanRange($unitId, $dari, $sampai)
-            + $this->src->transferServiceRange($unitId, $dari, $sampai);
+        foreach ($this->akunKasBank()->getDalamScopeUnit([$unitId]) as $akun) {
+            $posisi = (int) $this->kasBank()->posisiUnit((int) $akun->idakun_kas_bank, $unitId, $sampai);
+
+            if (strtoupper((string) ($akun->tipe ?? '')) === TutupKasirSourceDefinition::TIPE_KAS) {
+                $tunai += $posisi;
+            } else {
+                $bank += $posisi;
+            }
+        }
 
         return [
-            'tunai'    => $tunai,
-            'transfer' => $transfer,
-            'total'    => $tunai + $transfer,
+            'tunai' => $tunai,
+            'bank'  => $bank,
+            'total' => $tunai + $bank,
         ];
+    }
+
+    protected function kasBank(): KasBankCutoffService
+    {
+        return $this->kasBank ??= new KasBankCutoffService();
+    }
+
+    protected function akunKasBank(): ModelAkunKasBank
+    {
+        return $this->akunKasBank ??= new ModelAkunKasBank();
     }
 
     /**
      * HPP = harga pokok penjualan periode = SUM(hpp_penjualan x jumlah).
+     *
+     * Tidak lagi dipakai sebagai komponen Kesehatan Uang (keputusan bisnis
+     * 2026-10-30); dipertahankan untuk verifikasi memo/query.
      *
      * Definisi baris sama dengan LabaRugi/OmsetCabangCalculator; `jumlah`
      * dikalikan karena `hpp_penjualan` adalah HPP per unit.
@@ -224,11 +272,12 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     /**
      * Kas Keluar operasional = kas_keluar di luar kategori HPP dan SDM.
      *
-     * Kategori HPP sudah menjadi komponen HPP; kategori SDM sudah menjadi
-     * komponen Payroll. Mengeluarkan keduanya mencegah biaya dihitung dua
-     * kali. Tabel `kas_keluar` tidak pernah memuat transfer internal
-     * (Setor/Tarik, Pindah Saldo, pelunasan H/P antar unit hidup di
-     * `transaksi_kas_bank`), jadi arus internal tidak ikut terhitung.
+     * Kategori HPP (pembelian stok), SDM, BEBAN CABANG, TEMPO, dan KASBON
+     * sengaja tidak dihitung sebagai komponen Kesehatan Uang; SDM sudah
+     * diwakili register Payroll, sedangkan TEMPO adalah utang dagang. Tabel
+     * `kas_keluar` tidak pernah memuat transfer internal (Setor/Tarik, Pindah
+     * Saldo, pelunasan H/P antar unit hidup di `transaksi_kas_bank`), jadi
+     * arus internal tidak ikut terhitung.
      */
     public function kasKeluarOperasional(int $unitId, string $dari, string $sampai): int
     {
@@ -245,7 +294,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             ->where('DATE(kk.tanggal) <=', $sampai)
             ->groupStart()
                 ->where('kat.kategori IS NULL', null, false)
-                ->orWhereNotIn('kat.kategori', [self::KATEGORI_HPP, self::KATEGORI_SDM])
+                ->orWhereNotIn('kat.kategori', self::kategoriDikecualikan())
             ->groupEnd()
             ->get()
             ->getRow();
@@ -254,10 +303,10 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Nominal kas_keluar kategori HPP & SDM yang SENGAJA dikeluarkan dari
-     * komponen operasional (untuk transparansi/rincian di UI).
+     * Nominal kas_keluar kategori HPP, SDM, BEBAN CABANG, TEMPO & KASBON yang
+     * SENGAJA dikeluarkan dari komponen operasional (untuk transparansi di UI).
      *
-     * @return array{hpp:int,sdm:int}
+     * @return array{hpp:int,sdm:int,beban_cabang:int,tempo:int,kasbon:int}
      */
     public function kasKeluarDikecualikan(int $unitId, string $dari, string $sampai): array
     {
@@ -272,21 +321,40 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             ->where('kk.idunit', $unitId)
             ->where('DATE(kk.tanggal) >=', $dari)
             ->where('DATE(kk.tanggal) <=', $sampai)
-            ->whereIn('kat.kategori', [self::KATEGORI_HPP, self::KATEGORI_SDM])
+            ->whereIn('kat.kategori', self::kategoriDikecualikan())
             ->groupBy('kat.kategori')
             ->get()
             ->getResultArray();
 
-        $out = ['hpp' => 0, 'sdm' => 0];
+        $out = ['hpp' => 0, 'sdm' => 0, 'beban_cabang' => 0, 'tempo' => 0, 'kasbon' => 0];
         foreach ($rows as $r) {
-            if (strtoupper((string) $r['kategori']) === self::KATEGORI_HPP) {
+            $kategori = strtoupper((string) $r['kategori']);
+            if ($kategori === self::KATEGORI_HPP) {
                 $out['hpp'] = (int) $r['total'];
-            } elseif (strtoupper((string) $r['kategori']) === self::KATEGORI_SDM) {
+            } elseif ($kategori === self::KATEGORI_SDM) {
                 $out['sdm'] = (int) $r['total'];
+            } elseif ($kategori === self::KATEGORI_BEBAN_CABANG) {
+                $out['beban_cabang'] = (int) $r['total'];
+            } elseif ($kategori === self::KATEGORI_TEMPO) {
+                $out['tempo'] = (int) $r['total'];
+            } elseif ($kategori === self::KATEGORI_KASBON) {
+                $out['kasbon'] = (int) $r['total'];
             }
         }
 
         return self::$memo[$key] = $out;
+    }
+
+    /** @return array<int,string> */
+    private static function kategoriDikecualikan(): array
+    {
+        return [
+            self::KATEGORI_HPP,
+            self::KATEGORI_SDM,
+            self::KATEGORI_BEBAN_CABANG,
+            self::KATEGORI_TEMPO,
+            self::KATEGORI_KASBON,
+        ];
     }
 
     /**
