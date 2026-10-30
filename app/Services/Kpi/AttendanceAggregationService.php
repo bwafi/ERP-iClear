@@ -12,10 +12,10 @@ class AttendanceAggregationService
      * Attendance component codes with their weights
      */
     private const ATTENDANCE_COMPONENTS = [
-        'KEHADIRAN'     => ['weight' => 40, 'name' => 'Kehadiran'],
-        'KEBERSIHAN'    => ['weight' => 20, 'name' => 'Kebersihan'],
-        'SERAGAM'       => ['weight' => 20, 'name' => 'Seragam'],
-        'KEPATUHAN_SOP' => ['weight' => 20, 'name' => 'Kepatuhan SOP'],
+        'KEHADIRAN'     => ['weight' => 80, 'name' => 'Kehadiran'],
+        'KEBERSIHAN'    => ['weight' => 5,  'name' => 'Kebersihan'],
+        'SERAGAM'       => ['weight' => 10, 'name' => 'Seragam'],
+        'KEPATUHAN_SOP' => ['weight' => 5,  'name' => 'Kepatuhan SOP'],
     ];
 
     private const CAP = 100;
@@ -271,8 +271,7 @@ class AttendanceAggregationService
      * juga dipakai menghitung skor absen — BUKAN dari kpi_weights. Dengan
      * begitu pegawai yang tidak punya mapping bobot absen (mis. jabatan
      * Finance/0) tetap menampilkan rincian komponen, sementara pegawai yang
-     * sudah punya mapping (35–45) tidak berubah karena bobotnya memang
-     * 40/20/20/20 dan urutannya sama.
+     * sudah punya mapping (35–45) memakai bobot yang sama: 80/5/10/5.
      *
      * @param array $attendance hasil calculateMonthlyAttendance()
      * @return list<array{nama:string,bobot:float,nilai:float}>
@@ -455,26 +454,23 @@ class AttendanceAggregationService
         $results = [
             'KEHADIRAN' => [
                 'normalized' => round($spvKehadiran, 4),
-                'weighted' => round(($spvKehadiran / 100.0) * 40, 4),
+                'weighted' => round(($spvKehadiran / 100.0) * self::ATTENDANCE_COMPONENTS['KEHADIRAN']['weight'], 4),
             ],
             'KEBERSIHAN' => [
                 'normalized' => round($kebersihan, 4),
-                'weighted' => round(($kebersihan / 100.0) * 20, 4),
+                'weighted' => round(($kebersihan / 100.0) * self::ATTENDANCE_COMPONENTS['KEBERSIHAN']['weight'], 4),
             ],
             'SERAGAM' => [
                 'normalized' => round($seragam, 4),
-                'weighted' => round(($seragam / 100.0) * 20, 4),
+                'weighted' => round(($seragam / 100.0) * self::ATTENDANCE_COMPONENTS['SERAGAM']['weight'], 4),
             ],
             'KEPATUHAN_SOP' => [
                 'normalized' => round($sop, 4),
-                'weighted' => round(($sop / 100.0) * 20, 4),
+                'weighted' => round(($sop / 100.0) * self::ATTENDANCE_COMPONENTS['KEPATUHAN_SOP']['weight'], 4),
             ],
         ];
         
-        $attendanceScore = $results['KEHADIRAN']['weighted'] + 
-                          $results['KEBERSIHAN']['weighted'] + 
-                          $results['SERAGAM']['weighted'] + 
-                          $results['KEPATUHAN_SOP']['weighted'];
+        $attendanceScore = array_sum(array_column($results, 'weighted'));
         
         $attendanceScore = min($attendanceScore, 100.0);
         

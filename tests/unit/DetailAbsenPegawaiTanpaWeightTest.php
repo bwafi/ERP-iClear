@@ -16,7 +16,7 @@ use CodeIgniter\Test\CIUnitTestCase;
  * (skor_total2) tetap terhitung dari kpi_evaluations.
  *
  * Perbaikan: detail_absen dibangun dari komponen yang SUDAH dihitung
- * AttendanceAggregationService (bobot tunggal 40/20/20/20) via
+ * AttendanceAggregationService (bobot tunggal 80/5/10/5) via
  * detailRows(), bukan lagi dari kpi_weights.
  *
  * @internal
@@ -120,21 +120,25 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
         ]);
 
         // Ira = Finance (jabatan 0, unit 50) — TANPA baris kpi_weights.
-        // Anggun = jabatan 35 (unit 3) — punya bobot absen 40/20/20/20.
+        // Anggun = jabatan 35 (unit 3) — punya bobot absen 80/5/10/5.
+        // SPV = jabatan 40; KT = 41 dan Kadiv = 43 untuk fallback absen SPV.
         $this->db->table('akun')->insertBatch([
             ['ID_AKUN' => 44, 'ID_JABATAN' => 0,  'ID_UNIT' => 50, 'STATUS_PEGAWAI' => 1, 'NAMA_AKUN' => 'Ira Kurniawati', 'ALAMAT' => 'Probolinggo'],
             ['ID_AKUN' => 61, 'ID_JABATAN' => 35, 'ID_UNIT' => 3,  'STATUS_PEGAWAI' => 1, 'NAMA_AKUN' => 'Anggun', 'ALAMAT' => 'Jember'],
+            ['ID_AKUN' => 49, 'ID_JABATAN' => 40, 'ID_UNIT' => 1,  'STATUS_PEGAWAI' => 1, 'NAMA_AKUN' => 'SPV', 'ALAMAT' => 'Probolinggo'],
+            ['ID_AKUN' => 50, 'ID_JABATAN' => 41, 'ID_UNIT' => 1,  'STATUS_PEGAWAI' => 1, 'NAMA_AKUN' => 'Kepala Toko', 'ALAMAT' => 'Probolinggo'],
+            ['ID_AKUN' => 51, 'ID_JABATAN' => 43, 'ID_UNIT' => 1,  'STATUS_PEGAWAI' => 1, 'NAMA_AKUN' => 'Kepala Divisi', 'ALAMAT' => 'Probolinggo'],
         ]);
 
         $this->db->table('kpi_weights')->insertBatch([
-            ['kpi_component_id' => 9,  'position_id' => 35, 'weight' => 40, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
-            ['kpi_component_id' => 10, 'position_id' => 35, 'weight' => 20, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
-            ['kpi_component_id' => 11, 'position_id' => 35, 'weight' => 20, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
-            ['kpi_component_id' => 12, 'position_id' => 35, 'weight' => 20, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
+            ['kpi_component_id' => 9,  'position_id' => 35, 'weight' => 80, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
+            ['kpi_component_id' => 10, 'position_id' => 35, 'weight' => 5,  'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
+            ['kpi_component_id' => 11, 'position_id' => 35, 'weight' => 10, 'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
+            ['kpi_component_id' => 12, 'position_id' => 35, 'weight' => 5,  'weight_group' => 'absen', 'effective_from' => '2024-01-01', 'effective_to' => null],
         ]);
 
         // Hari kerja efektif: 1..10 (10 hari); sisanya OFF (11..30).
-        foreach ([44, 61] as $employeeId) {
+        foreach ([44, 61, 49, 50, 51] as $employeeId) {
             $offs = [];
             for ($day = 11; $day <= 30; $day++) {
                 $offs[] = [
@@ -153,6 +157,12 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
 
         // Anggun: Kehadiran raw 4 (→ 80), sisanya raw 5 (→ 100).
         $this->sebarEvaluasi(61, ['KEHADIRAN' => 4, 'KEBERSIHAN' => 5, 'SERAGAM' => 5, 'KEPATUHAN_SOP' => 5]);
+
+        // SPV: Kehadiran sendiri 100. Non-kehadiran fallback rata-rata KT & Kadiv;
+        // Kebersihan KT/Kadiv raw 2,5 (→ 50) supaya perbedaan bobot terlihat.
+        $this->sebarEvaluasi(49, ['KEHADIRAN' => 5]);
+        $this->sebarEvaluasi(50, ['KEBERSIHAN' => 2.5, 'SERAGAM' => 5, 'KEPATUHAN_SOP' => 5]);
+        $this->sebarEvaluasi(51, ['KEBERSIHAN' => 2.5, 'SERAGAM' => 5, 'KEPATUHAN_SOP' => 5]);
     }
 
     private function sebarEvaluasi(int $employeeId, array $rawByCode): void
@@ -208,7 +218,7 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
             ['Kehadiran', 'Kebersihan', 'Seragam', 'Kepatuhan SOP'],
             array_column($rows, 'nama')
         );
-        $this->assertSame([40.0, 20.0, 20.0, 20.0], array_column($rows, 'bobot'));
+        $this->assertSame([80.0, 5.0, 10.0, 5.0], array_column($rows, 'bobot'));
         $this->assertSame([100.0, 100.0, 100.0, 100.0], array_column($rows, 'nilai'));
     }
 
@@ -233,7 +243,7 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
             ['Kehadiran', 'Kebersihan', 'Seragam', 'Kepatuhan SOP'],
             array_column($rows, 'nama')
         );
-        $this->assertSame([40.0, 20.0, 20.0, 20.0], array_column($rows, 'bobot'));
+        $this->assertSame([80.0, 5.0, 10.0, 5.0], array_column($rows, 'bobot'));
         $this->assertSame([80.0, 100.0, 100.0, 100.0], array_column($rows, 'nilai'));
     }
 
@@ -241,8 +251,8 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
     {
         $attendance = $this->hitung(61, 3);
 
-        // 80×0.4 + 100×0.2 + 100×0.2 + 100×0.2 = 92.
-        $this->assertSame(92.0, (float) $attendance['attendance_score']);
+        // 80×0.8 + 100×0.05 + 100×0.10 + 100×0.05 = 84.
+        $this->assertSame(84.0, (float) $attendance['attendance_score']);
     }
 
     /**
@@ -273,6 +283,20 @@ final class DetailAbsenPegawaiTanpaWeightTest extends CIUnitTestCase
         }
 
         $this->assertSame($lama, AttendanceAggregationService::detailRows($attendance));
+    }
+
+    // ── SPV (40): bobot baru juga dipakai jalur calculateSPVAttendance ──
+
+    public function testBobotAbsenBaruBerlakuUntukSPV(): void
+    {
+        $attendance = $this->hitung(49, 1);
+
+        $rows = AttendanceAggregationService::detailRows($attendance);
+
+        $this->assertSame([80.0, 5.0, 10.0, 5.0], array_column($rows, 'bobot'));
+        $this->assertSame([100.0, 50.0, 100.0, 100.0], array_column($rows, 'nilai'));
+        // 100×0.8 + 50×0.05 + 100×0.10 + 100×0.05 = 97,5.
+        $this->assertSame(97.5, (float) $attendance['attendance_score']);
     }
 
     // ── Kontrak format & kontrol skor ───────────────────────────────

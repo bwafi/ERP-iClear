@@ -700,7 +700,7 @@ class KpiCalculationService
         $scoreService = $this->scoreService();
 
         // Attendance monthly (group 'absen') — SUMBER: kpi_evaluations.raw_score.
-        // skor_total2 = attendance_score (weighted 40/20/20/20, capped 100).
+        // skor_total2 = attendance_score (weighted 80/5/10/5, capped 100).
         // TIDAK memakai AVG / normalized_score per-event.
         $attendance = $this->attendanceAggregationService->calculateMonthlyAttendance(
             $employeeId,
@@ -1093,7 +1093,7 @@ class KpiCalculationService
 
         // Build detail_absen for views: list of ['nama','bobot','nilai'].
         // Sumber tunggal: komponen absen yang SUDAH dihitung
-        // AttendanceAggregationService (bobot 40/20/20/20) — TIDAK lagi
+        // AttendanceAggregationService (bobot 80/5/10/5) — TIDAK lagi
         // membaca kpi_weights, supaya pegawai tanpa mapping bobot absen
         // (mis. jabatan Finance/0) tetap menampilkan rincian.
         $detailAbsen = AttendanceAggregationService::detailRows(

@@ -139,7 +139,7 @@ created_on, update_on       - Timestamps
   - IT (ID 45): Omset 30%, Bug Minor 10%, Operasional 25%, Ecommerce 15%, Fitur 20%
 
 - Level 2: Behavioral grading (per position)
-  - Kehadiran 40%, Kebersihan 20%, Seragam 20%, Kepatuhan SOP 20%
+  - Kehadiran 80%, Kebersihan 5%, Seragam 10%, Kepatuhan SOP 5%
 
 **Issues:**
 - Weights hardcoded in controller (switch-case on jabatan ID)

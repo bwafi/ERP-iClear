@@ -83,7 +83,8 @@ foreach ($codes as $c) {
     ok("Bobot komponen {$c} terpasang di jabatan 40", isset($weightMap[$c]), var_export($weightMap[$c] ?? null, true));
 }
 
-// Grup absen SPV = 40/20/20/20 (Detail Absensi tampil seperti team)
+// Grup absen SPV di kpi_weights (legacy; tampilan Detail Absensi memakai
+// ATTENDANCE_COMPONENTS di AttendanceAggregationService)
 $absenRows = $db->query(
     "SELECT c.code, w.weight FROM kpi_weights w
      JOIN kpi_components c ON c.id = w.kpi_component_id
@@ -287,15 +288,15 @@ ok('skor_total = Σ (nilai×bobot/100)', near($kpi['skor_total'], round($weighte
 ok('Detail nilai Omzet Wilayah cocok', near($detail['Omzet Wilayah'], $ow), var_export($detail['Omzet Wilayah'], true));
 ok('Detail nilai Customer Satisfaction = 92', near($detail['Customer Satisfaction'], 92), var_export($detail['Customer Satisfaction'], true));
 
-// Detail Absensi SPV ikut tampil (bobot sama dgn team)
+// Detail Absensi SPV ikut tampil dengan bobot ATTENDANCE_COMPONENTS
 $detailAbsen = array_column($kpi['detail_absen'] ?? [], 'bobot', 'nama');
 ok('Detail Absensi SPV = 4 kriteria', count($kpi['detail_absen'] ?? []) === 4, json_encode($kpi['detail_absen'] ?? []));
 $absenWeightsOk =
-    near($detailAbsen['Kehadiran'] ?? null, 40)
-    && near($detailAbsen['Kebersihan'] ?? null, 20)
-    && near($detailAbsen['Seragam'] ?? null, 20)
-    && near($detailAbsen['Kepatuhan SOP'] ?? null, 20);
-ok('Detail Absensi SPV bobot = 40/20/20/20', $absenWeightsOk, json_encode($detailAbsen));
+    near($detailAbsen['Kehadiran'] ?? null, 80)
+    && near($detailAbsen['Kebersihan'] ?? null, 5)
+    && near($detailAbsen['Seragam'] ?? null, 10)
+    && near($detailAbsen['Kepatuhan SOP'] ?? null, 5);
+ok('Detail Absensi SPV bobot = 80/5/10/5', $absenWeightsOk, json_encode($detailAbsen));
 
 // ── 5b. Regression: target HO +7jt/cabang, cap ≤100, salary 1.5jt, insentif 0 ──
 $compIdOmset = (int)$db->query("SELECT id FROM kpi_components WHERE code = 'OMSET_CABANG'")->getRow()->id;

@@ -43,7 +43,7 @@ Berlaku untuk jabatan **43 "Kepala Divisi"** (unit HO 50). Engine: `KpiCalculati
 - **Target efektif saat ini:** `LEADS_QUALITY` 3.000 leads/bulan, `CONVERSION` 30%, `CPL` ≤ Rp250.000, `BUDGETING` ≤ Rp15.000.000. `CAMPAIGN_PERFORMANCE` dan `REPORTING` dinilai terhadap 100%.
 - **Berlaku sejak 2026-10-01.** `BUDGETING` menggantikan `IMPROVEMENT` (5) yang bobotnya ditutup per 2026-09-30; periode sebelum Oktober 2026 tetap memakai `IMPROVEMENT` agar skor historis tidak berubah. Multimedia (44) tetap memakai `IMPROVEMENT`.
 - Target komponen dibaca dari `kpi_targets` dengan `position_id = 43`; service memakai fallback hardcode hanya bila baris target tidak ada.
-- **Komponen absensi** (group `absen`, bukan 7 KPI): Kehadiran 40, Kebersihan 20, Seragam 20, Kepatuhan SOP 20. Kehadiran dinilai Finance; Kebersihan/Seragam/SOP dinilai Manager. Skor ini masuk `skor_total2` → tunjangan absen maksimum Rp250.000.
+- **Komponen absensi** (group `absen`, bukan 7 KPI): Kehadiran 80, Kebersihan 5, Seragam 10, Kepatuhan SOP 5. Kehadiran dinilai Finance; Kebersihan/Seragam/SOP dinilai Manager. Skor ini masuk `skor_total2` → tunjangan absen maksimum Rp250.000.
 - **Tunjangan kinerja** maksimum jabatan 43 = **Rp1.500.000** (`salary_structures`, `percent_of_kpi`). Insentif terpisah dari KPI; untuk unit 50 sejak Oktober 2026 mengikuti aturan **Insentif HO** di §1.
 - "Omzet" pada `OMZET_GLOBAL` dihitung dari **gross profit** (`SUM(sub_total - hpp_penjualan)`), bukan omzet penjualan. Definisi ini masih perlu konfirmasi bisnis (KPI-06).
 
@@ -101,15 +101,15 @@ Context `gaji` memakai `customer` polos.
 
 | Jabatan | KPI (bobot) | Absen (bobot) |
 |---|---|---|
-| 35 Admin | Omset 70, Tutup Kasir 10, Stok Opname 10, Absensi 10 | 40/20/20/20 |
-| 36 Teknisi | Omset 70, Omset Teknisi 15 (=omset), Customer 15. Target Omset Teknisi = target Omset Toko unit ÷ 2 sejak 2026-10; periode sebelumnya memakai `kpi_targets` | 40/20/20/20 |
-| 41 Kepala Toko | Omset 70, Customer 10, Tutup Kasir 10, Opname 10 | 40/20/20/20 |
-| 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | 40/20/20/20 |
-| 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 40/20/20/20 |
-| 43 Kepala Divisi (legacy "Pengiklan") | **Legacy:** Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 — **bukan KPI aktif**; lihat §1a | 40/20/20/20 |
-| 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 40/20/20/20 |
-| 45 IT | Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20 | 40/20/20/20 |
-| 46 PIC (non-gaji) | Budget Toko 20, Budget Global 30, Omset Cabang 50 | 40/20/20/20 |
+| 35 Admin | Omset 70, Tutup Kasir 10, Stok Opname 10, Absensi 10 | 80/5/10/5 |
+| 36 Teknisi | Omset 70, Omset Teknisi 15 (=omset), Customer 15. Target Omset Teknisi = target Omset Toko unit ÷ 2 sejak 2026-10; periode sebelumnya memakai `kpi_targets` | 80/5/10/5 |
+| 41 Kepala Toko | Omset 70, Customer 10, Tutup Kasir 10, Opname 10 | 80/5/10/5 |
+| 40 SPV | Area Supervisor: Omzet Wilayah 20, Target Cabang 15, Produktivitas Cabang 15, SOP 15, Kinerja Kepala Toko 15, Kedisiplinan Team 10, Customer Satisfaction 10 | 80/5/10/5 |
+| 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 80/5/10/5 |
+| 43 Kepala Divisi (legacy "Pengiklan") | **Legacy:** Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 — **bukan KPI aktif**; lihat §1a | 80/5/10/5 |
+| 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 80/5/10/5 |
+| 45 IT | Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20 | 80/5/10/5 |
+| 46 PIC (non-gaji) | Budget Toko 20, Budget Global 30, Omset Cabang 50 | 80/5/10/5 |
 
 ### Area Supervisor (SPV) — KPI Kini (Kode 40)
 
@@ -124,7 +124,7 @@ Context `gaji` memakai `customer` polos.
 | CUSTOMER_SATISFACTION | manual input 0–100 per bulan; disimpan di `kpi_evaluations` (saat ini); siap migrasi ke `GOOGLE_BUSINESS_PROFILE` | input manual / siap dikembangkan |
 
 - Bobot total kpi-group = 100% (`kpi_weights.weight_group = 'kpi'`).
-- Grup absen (`weight_group = 'absen'`) SPV = 40/20/20/20 (Kehadiran/Kebersihan/Seragam/Kepatuhan SOP) — SAMA dengan team, agar Detail Absensi tampil di kartu KPI. Nilai per-kriteria tetap dari `AttendanceAggregationService::calculateSPVAttendance` (kehadiran SPV sendiri + rata-rata KT/Kadiv), bukan memengaruhi 7 komponen KPI.
+- Detail Absensi memakai bobot dari `AttendanceAggregationService::ATTENDANCE_COMPONENTS` = 80/5/10/5 (Kehadiran/Kebersihan/Seragam/Kepatuhan SOP), bukan dari `kpi_weights`. Nilai per-kriteria tetap dari `AttendanceAggregationService::calculateSPVAttendance` (kehadiran SPV sendiri + rata-rata KT/Kadiv), bukan memengaruhi 7 komponen KPI.
 - Scope area = `spv_units (spv_id = ID_AKUN)` → daftar unit cabang, fallback unit sendiri jika tidak ada mapping.
 
 ### Tunjangan
