@@ -497,7 +497,7 @@ $fmtTanggal = static function ($value): string {
 <div class="modal fade" id="generate-payroll-modal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('payroll/generate') ?>" method="post">
+            <form action="<?= base_url('payroll/generate') ?>" method="post" id="generate-payroll-form">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Susun Payroll Otomatis</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -535,7 +535,7 @@ $fmtTanggal = static function ($value): string {
                 </div>
                 <div class="modal-footer border-top bg-light-subtle">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary px-4">Proses Susun</button>
+                    <button type="submit" class="btn btn-primary px-4" id="generate-payroll-submit">Proses Susun</button>
                 </div>
             </form>
         </div>
@@ -909,6 +909,17 @@ $fmtTanggal = static function ($value): string {
             if (unitId) {
                 $('#input_unit').val(String(unitId));
             }
+        });
+
+        // Susun payroll bisa lama; kunci tombol supaya tidak terkirim berkali-kali.
+        $('#generate-payroll-form').on('submit', function () {
+            const btn = $('#generate-payroll-submit');
+            if (btn.prop('disabled')) {
+                return false;
+            }
+            btn.prop('disabled', true).html(
+                '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Menyusun...'
+            );
         });
 
         // Aksi payroll

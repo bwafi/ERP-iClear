@@ -247,4 +247,31 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         $row = $this->db->table('finance_payroll')->where('id', 1)->get()->getRow();
         $this->assertSame(100, (int) $row->total, 'nilai lama tetap');
     }
+
+    /** Draft lama akun TERIMA_GAJI=0 dibersihkan; riwayat dibayar tetap. */
+    public function testGenerateMenghapusDraftAkunTidakDigaji(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES
+            (1, 3, 503, '2026-09-30', 'rencana', 100, 'draft lama', 'auto', '2026-09-01', '2026-09-01'),
+            (2, 3, 503, '2026-09-30', 'dibayar', 200, 'sudah dibayar', 'auto', '2026-09-01', '2026-09-01')");
+
+        $hasil = (new PayrollGenerator())->generate('2026-09', [
+            'unit_ids' => [3],
+            'overwrite' => true,
+        ]);
+
+        $this->assertSame(1, $hasil['dihapus'], 'hanya draft rencana yang dihapus');
+        $this->assertSame(
+            0,
+            $this->db->table('finance_payroll')->where('id', 1)->countAllResults(),
+            'draft rencana akun tidak digaji hilang'
+        );
+
+        $row = $this->db->table('finance_payroll')->where('id', 2)->get()->getRow();
+        $this->assertNotNull($row, 'riwayat yang sudah dibayar tidak boleh dihapus');
+        $this->assertSame('dibayar', $row->status);
+        $this->assertSame(200, (int) $row->total);
+    }
 }

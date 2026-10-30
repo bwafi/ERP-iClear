@@ -37,7 +37,10 @@ use App\Services\Kpi\KpiCalculationService;
  *   - tidak membuat baris untuk karyawan yang structure gaji-nya kosong;
  *     mereka dilaporkan sebagai dilewati supaya bisa ditangani manual.
  *   - tidak membuat baris untuk akun yang tidak menerima gaji
- *     (kolom akun.TERIMA_GAJI = 0, mis. Admin Root dan Direktur).
+ *     (kolom akun.TERIMA_GAJI = 0, mis. Admin Root dan Direktur). Saat
+ *     overwrite, draft 'rencana' lama milik akun itu ikut dihapus supaya
+ *     tidak tertinggal sebagai baris "auto" yang sudah tidak relevan;
+ *     baris 'dibayar' tetap disimpan.
  *
  * CATATAN SOAL LEMBUR
  * -------------------
@@ -111,6 +114,7 @@ class PayrollGenerator
             'updated'         => 0,
             'skipped'         => 0,
             'dikecualikan'    => 0,
+            'dihapus'         => 0,
             'total_nominal'   => 0,
             'updated_nominal' => 0,
             'errors'          => [],
@@ -126,6 +130,20 @@ class PayrollGenerator
             // yang sudah pernah dibuat.
             if ((int) ($karyawan['TERIMA_GAJI'] ?? 1) === 0) {
                 $hasil['dikecualikan']++;
+
+                // Draft lama dari sebelum akun ditandai tidak digaji tidak
+                // boleh tertinggal; hanya 'rencana' yang dihapus, riwayat
+                // 'dibayar' tetap utuh.
+                if ($overwrite) {
+                    $this->db->table('finance_payroll')
+                        ->where('pegawai_id', $id)
+                        ->where('due_date >=', $from)
+                        ->where('due_date <=', $to)
+                        ->where('status', 'rencana')
+                        ->delete();
+                    $hasil['dihapus'] += $this->db->affectedRows();
+                }
+
                 $hasil['rows'][] = [
                     'nama'   => (string) $karyawan['NAMA_AKUN'],
                     'unit'   => (int) $karyawan['ID_UNIT'],

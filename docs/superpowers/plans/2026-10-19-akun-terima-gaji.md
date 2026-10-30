@@ -23,7 +23,7 @@
 
 Kondisi yang harus tetap benar walau tidak semua punya test otomatis — cek saat review:
 
-1. **Akun `TERIMA_GAJI = 0` yang sudah punya baris `finance_payroll` lama** — baris lama tetap tampil di register `/payroll` (tidak dihapus). Ini sengaja; flag hanya menghentikan pembuatan baris baru. (tidak ada test)
+1. **Akun `TERIMA_GAJI = 0` yang sudah punya baris `finance_payroll` lama** — **Revisi 2026-10-30:** draft `rencana` lama dihapus saat Susun Otomatis (overwrite); baris `dibayar` tetap tampil di register `/payroll`. — `tests/PayrollGeneratorUnitTest.php::testGenerateMenghapusDraftAkunTidakDigaji`
 2. **Direktur hilang dari daftar `/gaji`** — perubahan perilaku yang disetujui. (Task 4, dicek manual)
 3. **Akun `TERIMA_GAJI = 0` dibuka langsung** di `/gaji` (diri sendiri) atau `/penilaian/slip_gaji/{id}` — tetap menampilkan slip. Batas lingkup yang disetujui. (tidak ada test)
 4. **Checkbox tidak dicentang saat simpan** — harus tersimpan `0`, bukan `NULL`. (Task 2)

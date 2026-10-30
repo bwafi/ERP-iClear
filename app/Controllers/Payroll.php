@@ -416,6 +416,10 @@ class Payroll extends BaseController
             );
         }
 
+        if (($hasil['dihapus'] ?? 0) > 0) {
+            $pesan .= sprintf(', %d draft lama akun tidak digaji dihapus', $hasil['dihapus']);
+        }
+
         if ($hasil['errors'] !== []) {
             $nama = array_slice(array_column($hasil['errors'], 'nama'), 0, 3);
             $pesan .= sprintf(

@@ -48,7 +48,7 @@ dan dipakai seragam di semua perhitungan gaji.
 **Non-goals**
 
 - Tidak mengubah rumus gaji, tunjangan, insentif, atau KPI.
-- Tidak menghapus/mengubah baris `finance_payroll` yang sudah ada.
+- Tidak menghapus/mengubah baris `finance_payroll` yang sudah ada. **Revisi 2026-10-30:** draft `rencana` milik akun `TERIMA_GAJI=0` dihapus saat Susun Otomatis; baris `dibayar` tetap tidak diubah.
 - Tidak menambah halaman/route baru.
 - Tidak memperbaiki filter lain yang sudah ada (mis. `STATUS_PEGAWAI`,
   `deleted`) — filter itu dibiarkan seperti sekarang di tiap tempat.
