@@ -309,6 +309,17 @@
                 </tr>
             </table>
 
+            <?php if (trim($bonus_keterangan ?? '') !== '' || trim($potongan_keterangan ?? '') !== ''): ?>
+                <div class="note">
+                    <?php if (trim($bonus_keterangan ?? '') !== ''): ?>
+                        <div>Bonus: <?= esc($bonus_keterangan) ?></div>
+                    <?php endif; ?>
+                    <?php if (trim($potongan_keterangan ?? '') !== ''): ?>
+                        <div>Potongan: <?= esc($potongan_keterangan) ?></div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
             <!-- TTD -->
             <div class="signature">
 

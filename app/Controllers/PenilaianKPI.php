@@ -2234,10 +2234,14 @@ class PenilaianKPI extends BaseController
 
         // Penyesuaian manual (SP / bonus kinerja) untuk periode yang sama.
         $period = ($tahun ?: date('Y')) . '-' . str_pad((string) ($bulan ?: date('m')), 2, '0', STR_PAD_LEFT);
+        $potonganKeterangan = '';
+        $bonusKeterangan = '';
         try {
             $adjustmentModel = new \App\Models\ModelPayrollAdjustment();
             $potongan = $adjustmentModel->totalForPeriod($employeeId, $period, \App\Models\ModelPayrollAdjustment::POTONGAN);
             $bonus = $adjustmentModel->totalForPeriod($employeeId, $period, \App\Models\ModelPayrollAdjustment::BONUS);
+            $potonganKeterangan = (string) ($adjustmentModel->forPeriod($employeeId, $period, \App\Models\ModelPayrollAdjustment::POTONGAN)->keterangan ?? '');
+            $bonusKeterangan = (string) ($adjustmentModel->forPeriod($employeeId, $period, \App\Models\ModelPayrollAdjustment::BONUS)->keterangan ?? '');
         } catch (\Throwable $e) {
             $potongan = 0;
             $bonus = 0;
@@ -2249,6 +2253,8 @@ class PenilaianKPI extends BaseController
             'kasbon' => $kasbon,
             'potongan' => $potongan,
             'bonus' => $bonus,
+            'potongan_keterangan' => $potonganKeterangan,
+            'bonus_keterangan' => $bonusKeterangan,
         ];
     }
 
@@ -2344,6 +2350,8 @@ class PenilaianKPI extends BaseController
             'kasbon'               => $kasbon,
             'potongan'             => $potongan,
             'bonus'                => $bonus,
+            'potongan_keterangan'  => $extras['potongan_keterangan'],
+            'bonus_keterangan'     => $extras['bonus_keterangan'],
             'lembur'               => $lembur,
             'bulan'                => $bulan,
             'tahun'                => $tahun,

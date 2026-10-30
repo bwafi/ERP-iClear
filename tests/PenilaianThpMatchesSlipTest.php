@@ -295,6 +295,10 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
         $this->assertSame(885000, $bersih, 'patokan slip berubah');
         $this->assertSame($bersih, $estimasi, 'estimasi THP harus sama dengan slip');
 
+        // Keterangan potongan/bonus dari halaman payroll ikut tercetak.
+        $this->assertStringContainsString('Bonus: Bonus kinerja', $slip);
+        $this->assertStringContainsString('Potongan: SP1', $slip);
+
         // Rincian: lembur & bonus masuk, potongan digabung dengan detailnya.
         $this->assertSame(100000, $this->angka(
             $html,
