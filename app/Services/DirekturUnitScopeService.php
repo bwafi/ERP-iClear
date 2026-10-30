@@ -14,7 +14,8 @@ namespace App\Services;
  *
  * Direktur yang belum dipetakan TIDAK dibatasi oleh service ini (null); tiap
  * pemanggil yang memutuskan fallback-nya — /omset_bulanan memperlakukannya
- * lintas unit, sedangkan penilaian kinerja tetap mengunci ke unit sesinya.
+ * lintas unit, sedangkan penilaian kinerja dan /asset_berjalan mengunci ke
+ * unit sesinya (lihat assetBerjalanUnits()).
  */
 class DirekturUnitScopeService
 {
@@ -37,6 +38,22 @@ class DirekturUnitScopeService
     public static function unitsFor(int $idAkun): ?array
     {
         return self::UNIT_MAP[$idAkun] ?? null;
+    }
+
+    /**
+     * Unit yang boleh dibuka Direktur di /asset_berjalan.
+     *
+     * Selalu terbatas: peta direktur, atau unit akun sendiri bila belum
+     * dipetakan. Tidak pernah "semua unit".
+     *
+     * @return int[]
+     */
+    public static function assetBerjalanUnits(?array $mapped, int $sessionUnit): array
+    {
+        return array_values(array_filter(
+            array_map('intval', $mapped ?? [$sessionUnit]),
+            static fn (int $unit): bool => $unit > 0
+        ));
     }
 
     /**

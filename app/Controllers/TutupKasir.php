@@ -65,7 +65,7 @@ class TutupKasir extends BaseController
      *
      * @return array{list_unit: array, unit: int, id_jabatan: int, boleh_pilih_unit: bool}
      */
-    private function resolveUnitScope(array $roleTambahan = [], bool $batasiSpv = false): array
+    private function resolveUnitScope(array $roleTambahan = [], bool $batasiSpv = false, bool $kunciDirektur = false): array
     {
         $id_jabatan = (int) session()->get('ID_JABATAN');
         $id_akun    = (int) session()->get('ID_AKUN');
@@ -95,14 +95,18 @@ class TutupKasir extends BaseController
             $unit         = in_array($requested, $availableIds, true)
                 ? $requested
                 : (int) ($availableIds[0] ?? session()->get('ID_UNIT'));
-        } elseif ($bolehPilihUnit && $id_jabatan === 2 && $direkturUnits !== null) {
+        } elseif ($bolehPilihUnit && $id_jabatan === 2 && ($direkturUnits !== null || $kunciDirektur)) {
             // Direktur terbatas: daftar unit + validasi ?unit= terhadap daftarnya.
-            $allowedIds = $direkturUnits;
+            // Halaman yang meminta $kunciDirektur tidak pernah terbuka ke semua
+            // unit; direktur tanpa peta jatuh ke unit akunnya sendiri.
+            $allowedIds = $kunciDirektur
+                ? \App\Services\DirekturUnitScopeService::assetBerjalanUnits($direkturUnits, (int) session()->get('ID_UNIT'))
+                : $direkturUnits;
             $list_unit  = $unitQuery()->whereIn('idunit', $allowedIds)->orderBy('idunit', 'ASC')->get()->getResultArray();
 
             $unit = (int) ($this->request->getGet('unit') ?: 0);
             if (! in_array($unit, $allowedIds, true)) {
-                $unit = $allowedIds[0];
+                $unit = (int) ($allowedIds[0] ?? session()->get('ID_UNIT'));
             }
         } elseif ($bolehPilihUnit) {
             // Lintas unit: boleh memilih unit mana pun (Head Office dikecualikan).
@@ -849,7 +853,8 @@ class TutupKasir extends BaseController
 
     public function assetberjalan()
     {
-        $scope = $this->resolveUnitScope([], true);
+        // Direktur (jabatan 2) hanya membuka unit yang dipetakan / unit akunnya.
+        $scope = $this->resolveUnitScope([], true, true);
         $list_unit      = $scope['list_unit'];
         $unit           = $scope['unit'];
         $id_jabatan     = $scope['id_jabatan'];
@@ -1170,7 +1175,7 @@ class TutupKasir extends BaseController
      */
     public function detailPengeluaran()
     {
-        $scope = $this->resolveUnitScope([], true);
+        $scope = $this->resolveUnitScope([], true, true);
 
         // resolveUnitScope() sudah mem-fallback unit di luar izin; kalau hasilnya
         // beda dengan yang diminta, berarti user tidak berhak atas unit itu.

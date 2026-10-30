@@ -590,6 +590,59 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             ->assertStatus(403);
     }
 
+    private function tambahDirektur(): void
+    {
+        $q = function (string $sql): void { $this->db->query($sql); };
+
+        $q("INSERT INTO unit (idunit, NAMA_UNIT, LOGO, KABUPATEN_UNIT, jenis, is_trial, is_operational, tanggungan) VALUES
+            (5, 'ICLEAR Genteng', 'logo.png', 'Banyuwangi', 'franchise', 0, 1, 0)");
+        $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES (2, 'Direktur', '[]')");
+        $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ALAMAT, TERIMA_GAJI, STATUS_PEGAWAI, deleted) VALUES
+            (46, 3, 2, 'Direktur Terpetakan', 'Jalan Test', 0, 1, NULL),
+            (99, 5, 2, 'Direktur Tanpa Peta', 'Jalan Test', 0, 1, NULL)");
+    }
+
+    /** Direktur terpetakan hanya membuka area peta; ?unit= lain jatuh ke unit pertama. */
+    public function testDirekturHanyaBisaMembukaUnitPeta(): void
+    {
+        $this->tambahDirektur();
+        $this->sesi(46, 3, 2); // Wahid: Banyuwangi (3) + Genteng (5)
+
+        $html = $this->halaman('?unit=4&bulan=9&tahun=2026');
+        $this->assertMatchesRegularExpression('#<h4[^>]*>\s*ICLEAR Banyuwangi\s*</h4>#', $html);
+
+        preg_match('#<select id="filterUnit".*?</select>#s', $html, $m);
+        $this->assertStringContainsString('ICLEAR Banyuwangi', $m[0]);
+        $this->assertStringContainsString('ICLEAR Genteng', $m[0]);
+        $this->assertStringNotContainsString('ICLEAR Pandaan', $m[0]);
+        $this->assertStringNotContainsString('ICLEAR Probolinggo', $m[0]);
+    }
+
+    /** Direktur tanpa peta dikunci ke unit akunnya, bukan semua unit. */
+    public function testDirekturTanpaPetaHanyaMembukaUnitAkun(): void
+    {
+        $this->tambahDirektur();
+        $this->sesi(99, 5, 2);
+
+        $html = $this->halaman('?unit=4&bulan=9&tahun=2026');
+        $this->assertMatchesRegularExpression('#<h4[^>]*>\s*ICLEAR Genteng\s*</h4>#', $html);
+
+        preg_match('#<select id="filterUnit".*?</select>#s', $html, $m);
+        $this->assertStringContainsString('ICLEAR Genteng', $m[0]);
+        $this->assertStringNotContainsString('ICLEAR Pandaan', $m[0]);
+    }
+
+    /** Detail pengeluaran memakai batas unit yang sama untuk direktur. */
+    public function testDetailMenolakUnitDiLuarPetaDirektur(): void
+    {
+        $this->tambahDirektur();
+        $this->sesi(46, 3, 2);
+        $this->db->setPrefix('');
+
+        $this->get('asset_berjalan/detail-pengeluaran?unit=4&bulan=10&tahun=2026&kelompok=terkontrol')
+            ->assertStatus(403);
+    }
+
     /** Tombol detail ada, tapi tabel detail masih kosong saat halaman dimuat. */
     public function testHalamanPunyaTombolDetailTanpaMemuatData(): void
     {

@@ -50,4 +50,23 @@ class DirekturUnitScopeTest extends CIUnitTestCase
 
         $this->assertSame($cabang, DirekturUnitScopeService::filterBranches($cabang, null));
     }
+
+    // ── /asset_berjalan: direktur tidak pernah melihat semua unit ──
+
+    public function testAssetBerjalanUnitsIkutPetaDirektur(): void
+    {
+        $this->assertSame([3, 5], DirekturUnitScopeService::assetBerjalanUnits([3, 5], 3));
+        $this->assertSame([4], DirekturUnitScopeService::assetBerjalanUnits([4], 4));
+    }
+
+    public function testAssetBerjalanUnitsDirekturTanpaPetaHanyaUnitAkun(): void
+    {
+        // Tidak dipetakan -> unit akun sendiri, BUKAN null (semua unit).
+        $this->assertSame([1], DirekturUnitScopeService::assetBerjalanUnits(null, 1));
+    }
+
+    public function testAssetBerjalanUnitsUnitAkunKosongTidakMembukaSemua(): void
+    {
+        $this->assertSame([], DirekturUnitScopeService::assetBerjalanUnits(null, 0));
+    }
 }
