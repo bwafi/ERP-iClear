@@ -189,9 +189,29 @@ class KasKeluarUnitFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('modal-dialog-scrollable', $html);
         $this->assertStringNotContainsString('class="offcanvas offcanvas-end kk-sheet"', $html, 'Input tidak lagi di sheet samping');
         $this->assertStringContainsString('name="kkKatMode"', $html);
+        $this->assertStringContainsString('id="kkKategoriFilter"', $html, 'Filter kategori spesifik harus tersedia');
         $this->assertStringContainsString('id="kkSumEnam"', $html);
         $this->assertStringContainsString('id="kkOpenSheet"', $html);
         $this->assertStringNotContainsString('id="kkComposer"', $html, 'Composer lama harus sudah hilang');
+    }
+
+    /** Filter satu kategori tertentu harus menyaring jumlah dan total di server. */
+    public function testFilterKategoriSpesifik(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->db->setPrefix('');
+        $this->db->query(
+            "INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, idunit, jenis)
+             VALUES ('2026-10-05',6,'luar 6%',500,1,'debet')"
+        );
+
+        $json = $this->datatable('draw=1&start=0&length=25&kategori_id=6');
+        $this->assertSame(1, $json['recordsFiltered']);
+        $this->assertSame(500.0, (float) $json['sumTotal']);
+        $this->assertSame('Lain-lain', $json['data'][0]['kategori']);
+
+        $semua = $this->datatable('draw=1&start=0&length=25&kategori_id=0');
+        $this->assertSame(5, $semua['recordsFiltered'], 'ID kategori tidak valid diabaikan');
     }
 
     /**

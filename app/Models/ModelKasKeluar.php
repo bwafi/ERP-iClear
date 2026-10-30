@@ -87,8 +87,11 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * baris yang tidak pernah dimaksud, sementara `idkas_keluar = 3` memakai
      * indeks dan selesai seketika.
      */
-    private function applyKasKeluarFilter($builder, string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null)
+    private function applyKasKeluarFilter($builder, string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null, ?int $kategoriId = null)
     {
+        if ($kategoriId !== null && $kategoriId > 0) {
+            $builder->where('kas_keluar.kategori_idkategori', $kategoriId);
+        }
         // Kategori 6% = Biaya Terkontrol, sumbernya sama dengan /asset_berjalan.
         if ($kategoriMode === 'enam' || $kategoriMode === 'luar') {
             $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
@@ -201,10 +204,15 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      *
      * @return array{0:string, 1:array<int, mixed>}
      */
-    private function unionWhere(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): array
+    private function unionWhere(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null, ?int $kategoriId = null): array
     {
         $where = [];
         $binds = [];
+
+        if ($kategoriId !== null && $kategoriId > 0) {
+            $where[] = 'u.kategori_idkategori = ?';
+            $binds[] = $kategoriId;
+        }
 
         if ($kategoriMode === 'enam' || $kategoriMode === 'luar') {
             $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
@@ -263,9 +271,9 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
     }
 
     /** Jumlah baris setelah filter untuk DataTables. */
-    public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): int
+    public function countKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null, ?int $kategoriId = null): int
     {
-        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode, $kategoriId);
         $row = $this->db->query('SELECT COUNT(*) AS total' . $this->unionFrom() . $where, $binds)->getRow();
 
         return (int) ($row->total ?? 0);
@@ -276,9 +284,9 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * Dipakai supaya angka "Total" di kaki tabel tidak berbeda dengan yang
      * dibaca pengguna dari hasil filter.
      */
-    public function sumKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): float
+    public function sumKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null, ?int $kategoriId = null): float
     {
-        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode, $kategoriId);
         $row = $this->db->query(
             'SELECT COALESCE(SUM(u.jumlah), 0) AS total' . $this->unionFrom() . $where,
             $binds
@@ -289,14 +297,15 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
 
     /**
      * Pecahan 6% vs di luar 6% untuk filter yang aktif (pencarian, tanggal,
-     * unit). Mode kategori sengaja TIDAK ikut: angkanya dipakai sebagai
-     * pembanding, jadi harus tetap terlihat saat salah satu sisi difilter.
+     * unit, kategori spesifik). Mode kategori 6%/luar sengaja TIDAK ikut:
+     * angkanya dipakai sebagai pembanding, jadi harus tetap terlihat saat
+     * salah satu sisi difilter.
      *
      * @return array{total: float, enam: float, luar: float, n_enam: int, n_luar: int}
      */
-    public function summaryKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false): array
+    public function summaryKasKeluarFiltered(string $search = '', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?int $kategoriId = null): array
     {
-        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact);
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, null, $kategoriId);
 
         $terkontrol = array_map('intval', config(\Config\Finance::class)->kategoriBiayaTerkontrol ?? []);
         $in = $terkontrol === [] ? 'NULL' : implode(',', $terkontrol);
@@ -337,16 +346,16 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
      * Dipakai untuk memberi tahu "ID ada, tapi di luar filter" alih-alih
      * diam-diam mengembalikan nol baris.
      */
-    public function isKasKeluarInScope(int $id, ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, ?string $kategoriMode = null): bool
+    public function isKasKeluarInScope(int $id, ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, ?string $kategoriMode = null, ?int $kategoriId = null): bool
     {
         $builder = $this->baseKasKeluarQuery();
-        $this->applyKasKeluarFilter($builder, (string)$id, $startDate, $endDate, $unitId, true, $kategoriMode);
+        $this->applyKasKeluarFilter($builder, (string)$id, $startDate, $endDate, $unitId, true, $kategoriMode, $kategoriId);
 
         return $builder->countAllResults() > 0;
     }
 
     /** Baris data untuk DataTables server-side. */
-    public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null): array
+    public function getKasKeluarDataTable(int $length, int $start, string $search = '', ?string $orderCol = null, string $orderDir = 'DESC', ?string $startDate = null, ?string $endDate = null, ?int $unitId = null, bool $idExact = false, ?string $kategoriMode = null, ?int $kategoriId = null): array
     {
         $safeOrderCols = [
             'kas_keluar.tanggal',
@@ -365,7 +374,7 @@ public function getKasKeluarFiltered($tanggal_awal = null, $tanggal_akhir = null
         $orderCol = (string) preg_replace('/^kas_keluar\./', 'u.', $orderCol);
         $orderDir = strtoupper($orderDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode);
+        [$where, $binds] = $this->unionWhere($search, $startDate, $endDate, $unitId, $idExact, $kategoriMode, $kategoriId);
 
         // $length/$start sudah int; jangan di-bind supaya LIMIT tidak dikirim
         // sebagai string.

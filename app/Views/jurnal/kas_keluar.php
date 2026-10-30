@@ -1292,7 +1292,17 @@ $oldInput = $old_input ?? null;
             </div>
 
             <div class="kk-filter">
-                <span class="kk-field-label" id="kkKatModeLabel">Kategori</span>
+                <label class="kk-field-label" for="kkKategoriFilter">Kategori</label>
+                <select class="form-select" id="kkKategoriFilter" style="min-width: 170px">
+                    <option value="">Semua Kategori</option>
+                    <?php foreach ($kategoriOpsi as $kat): ?>
+                        <option value="<?= (int) $kat['id'] ?>"><?= $kat['nama'] ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="kk-filter">
+                <span class="kk-field-label" id="kkKatModeLabel">Batas 6%</span>
                 <div class="btn-group btn-group-sm" role="group" aria-labelledby="kkKatModeLabel">
                     <input type="radio" class="btn-check" name="kkKatMode" id="kkKatAll" value="" checked>
                     <label class="btn btn-outline-secondary" for="kkKatAll">Semua</label>
@@ -1553,6 +1563,7 @@ $oldInput = $old_input ?? null;
         const start = document.getElementById('kkStart');
         const end = document.getElementById('kkEnd');
         const unit = document.getElementById('kkUnitFilter');
+        const kategori = document.getElementById('kkKategoriFilter');
         // Role tanpa hak filter terkunci ke unitnya sendiri; SPV terkunci ke
         // unit binaan pertama (server juga memaksa ini).
         unit.disabled = !CAN_FILTER_UNIT;
@@ -2186,6 +2197,7 @@ $oldInput = $old_input ?? null;
                     d.tanggal_awal = start.value;
                     d.tanggal_akhir = end.value;
                     d.unit_id = unit.value;
+                    d.kategori_id = kategori.value;
                     d.search_mode = forceTextSearch ? 'text' : 'auto';
                     d.kategori_mode = katMode();
                 }
@@ -2366,6 +2378,12 @@ $oldInput = $old_input ?? null;
                     dt.draw(false);
                 }));
             }
+            if (kategori.value) {
+                chips.appendChild(chip('Kategori', kategori.options[kategori.selectedIndex].text, function () {
+                    kategori.value = '';
+                    dt.page(0).draw(false);
+                }));
+            }
             document.getElementById('kkResetFilter').hidden = (chips.children.length === 0);
         }
 
@@ -2385,6 +2403,9 @@ $oldInput = $old_input ?? null;
                 bits.push([document.createTextNode('Semua periode')]);
             }
             bits.push([document.createTextNode(unit.value ? unit.options[unit.selectedIndex].text : 'Semua unit')]);
+            if (kategori.value) {
+                bits.push([document.createTextNode(kategori.options[kategori.selectedIndex].text)]);
+            }
 
             bits.forEach(function (nodes, i) {
                 if (i > 0) {
@@ -2444,12 +2465,13 @@ $oldInput = $old_input ?? null;
                 idHit.appendChild(icon('solar:filter-linear'));
                 idHit.appendChild(el('span', 'kk-idhit-id', 'ID #' + hit.id));
                 idHit.appendChild(el('span', 'kk-idhit-what',
-                    'ada, tapi di luar filter tanggal/unit yang aktif'));
+                    'ada, tapi di luar filter tanggal/unit/kategori yang aktif'));
                 const btn = el('button', 'btn btn-sm btn-outline-secondary', 'Bersihkan filter');
                 btn.addEventListener('click', function () {
                     start.value = '';
                     end.value = '';
                     unit.value = SHOW_ALL_UNITS ? '' : String(DEFAULT_FILTER_UNIT);
+                    kategori.value = '';
                     dt.page(0).draw(false);
                 });
                 idHit.appendChild(btn);
@@ -2521,6 +2543,7 @@ $oldInput = $old_input ?? null;
         start.addEventListener('change', function () { dt.page(0).draw(false); });
         end.addEventListener('change', function () { dt.page(0).draw(false); });
         unit.addEventListener('change', function () { dt.page(0).draw(false); });
+        kategori.addEventListener('change', function () { dt.page(0).draw(false); });
         document.querySelectorAll('input[name="kkKatMode"]').forEach(function (radio) {
             radio.addEventListener('change', function () { dt.page(0).draw(false); });
         });
@@ -2531,6 +2554,7 @@ $oldInput = $old_input ?? null;
             start.value = '';
             end.value = '';
             unit.value = SHOW_ALL_UNITS ? '' : String(DEFAULT_FILTER_UNIT);
+            kategori.value = '';
             byId('#kkKatAll').checked = true;
             forceTextSearch = false;
             targetId = null;

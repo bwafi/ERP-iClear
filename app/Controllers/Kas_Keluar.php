@@ -206,6 +206,12 @@ class Kas_Keluar extends BaseController
             $kategoriMode = null;
         }
 
+        // Filter satu kategori tertentu dari master kategori_kas.
+        $kategoriId = (int)$this->request->getGet('kategori_id');
+        if ($kategoriId <= 0) {
+            $kategoriId = null;
+        }
+
         // recordsTotal adalah "semua baris yang boleh dilihat user", bukan
         // seluruh perusahaan: role terbatas tidak boleh membaca hitungan unit
         // lain lewat angka ini.
@@ -218,7 +224,8 @@ class Kas_Keluar extends BaseController
             $endDate ?: null,
             $unitId ?: null,
             $idExact,
-            $kategoriMode
+            $kategoriMode,
+            $kategoriId
         );
         $sumTotal = $this->KasKeluarModel->sumKasKeluarFiltered(
             $search,
@@ -226,14 +233,16 @@ class Kas_Keluar extends BaseController
             $endDate ?: null,
             $unitId ?: null,
             $idExact,
-            $kategoriMode
+            $kategoriMode,
+            $kategoriId
         );
         $summary  = $this->KasKeluarModel->summaryKasKeluarFiltered(
             $search,
             $startDate ?: null,
             $endDate ?: null,
             $unitId ?: null,
-            $idExact
+            $idExact,
+            $kategoriId
         );
         $rows     = $this->KasKeluarModel->getKasKeluarDataTable(
             $length,
@@ -245,7 +254,8 @@ class Kas_Keluar extends BaseController
             $endDate ?: null,
             $unitId ?: null,
             $idExact,
-            $kategoriMode
+            $kategoriMode,
+            $kategoriId
         );
 
         // Resolusi ID dijawab terpisah dari isi tabel, supaya "ID ada tapi di
@@ -272,7 +282,8 @@ class Kas_Keluar extends BaseController
                         $startDate ?: null,
                         $endDate ?: null,
                         $unitId ?: null,
-                        $kategoriMode
+                        $kategoriMode,
+                        $kategoriId
                     ),
                 ];
             }
