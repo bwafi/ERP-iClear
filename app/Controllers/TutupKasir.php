@@ -1066,6 +1066,66 @@ class TutupKasir extends BaseController
         // Jumlah hari pada bulan terpilih, dipakai view untuk "Total Tanggungan Asset".
         $hariDalamBulan = (int) date('t', mktime(0, 0, 0, $bulan, 1, $tahun));
 
+        // ---------------------------------------------------------------
+        // Tanggungan Asset franchise: satu baris per unit+bulan, dipotong
+        // dari saldo `unit.tanggungan`. Bulan berjalan diperbarui otomatis;
+        // bulan lain lewat tombol Simpan.
+        // ---------------------------------------------------------------
+        $hoDipotongPayroll = (float) ($hoUnitShare['total_dipotong'] ?? 0);
+        $hoPotongan = $hoDipotongPayroll > 0
+            ? $hoDipotongPayroll
+            : (float) ($hoUnitShare['total_perkiraan'] ?? 0);
+        $profitNett = $omset_bulan - $pengeluaran - $biayaLain - $totalGajiUnit - $hoPotongan;
+
+        $unitRow = $this->db->table('unit')
+            ->select('idunit, jenis, tanggungan')
+            ->where('idunit', $unit)
+            ->get()->getRow();
+        $isFranchise = strtolower((string) ($unitRow->jenis ?? '')) === 'franchise';
+        $tanggunganMentah = $isFranchise ? max(0.0, (float) $profitNett * 0.20) : 0.0;
+
+        $tanggunganService     = new \App\Services\Finance\TanggunganAssetService();
+        $tanggunganTersimpan   = null;
+        $bisaSimpanTanggungan  = false;
+        $sisaTanggungan        = (float) ($unitRow->tanggungan ?? 0);
+
+        if ($isFranchise) {
+            $mintaSimpan = $this->request->is('post')
+                && (int) $this->request->getPost('simpan_tanggungan') === 1;
+
+            // Bulan berjalan: satu baris yang ikut diperbarui sampai bulan
+            // berganti, supaya tidak terkunci di angka awal bulan.
+            if ($isBulanBerjalan && $sisaTanggungan > 0) {
+                $tanggunganService->simpan($unit, $bulanStr, $tanggunganMentah, true);
+            }
+
+            $tanggunganTersimpan = $tanggunganService->nominalTersimpan($unit, $bulanStr);
+            $sisaTanggungan      = $tanggunganService->sisa($unit);
+
+            // Bulan lain: hanya lewat tombol, dan tidak boleh menyisip ke
+            // masa depan. Redirect juga saat baris sudah ada supaya refresh
+            // tidak mengirim ulang form.
+            if ($mintaSimpan && $bulanStr <= date('Y-m')) {
+                if ($tanggunganTersimpan === null && $sisaTanggungan > 0) {
+                    $tanggunganService->simpan($unit, $bulanStr, $tanggunganMentah);
+                }
+
+                return redirect()->to(
+                    base_url('asset_berjalan?unit=' . $unit . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun)
+                );
+            }
+
+            $bisaSimpanTanggungan = $tanggunganTersimpan === null
+                && $bulanStr <= date('Y-m')
+                && $sisaTanggungan > 0;
+        }
+
+        // Franchise memakai angka tersimpan (atau perkiraan yang dibatasi
+        // sisa); unit pribadi tetap memakai rumus lama di view.
+        $tanggunganAsset = $isFranchise
+            ? (float) ($tanggunganTersimpan ?? min($tanggunganMentah, max(0.0, $sisaTanggungan)))
+            : null;
+
         return view('template', [
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
@@ -1094,6 +1154,12 @@ class TutupKasir extends BaseController
             // HO Salary Distribution
             'ho_distribution' => $hoDistribution,
             'ho_unit_share'   => $hoUnitShare,
+            // Satu sumber angka laba & tanggungan untuk view.
+            'profit_nett'     => $profitNett,
+            'tanggungan_asset' => $tanggunganAsset,
+            'tanggungan_tersimpan' => $tanggunganTersimpan !== null,
+            'bisa_simpan_tanggungan' => $bisaSimpanTanggungan,
+            'sisa_tanggungan' => $isFranchise ? $sisaTanggungan : null,
             'body'              => 'dashboard/asset_berjalan'
         ]);
     }

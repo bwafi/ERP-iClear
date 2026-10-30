@@ -667,6 +667,7 @@ $routes->get('omset_bulanan', 'TutupKasir::omsetbulanan',  ['filter' => 'auth'])
 $routes->get('omset_bulanan/arus_kas', 'TutupKasir::arusKasHarian', ['filter' => 'auth']);
 
 $routes->get('asset_berjalan', 'TutupKasir::assetberjalan',  ['filter' => 'auth']);
+$routes->post('asset_berjalan', 'TutupKasir::assetberjalan', ['filter' => ['auth', 'csrf']]);
 $routes->get('asset_berjalan/detail-pengeluaran', 'TutupKasir::detailPengeluaran', ['filter' => 'auth']);
 
 //nama handphone

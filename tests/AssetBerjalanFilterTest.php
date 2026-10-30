@@ -50,11 +50,16 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             'salary_components', 'salary_structures',
             'kpi_weights', 'kpi_components', 'kpi_targets', 'kpi_evaluations',
             'kpi_attendance_detail', 'kpi_attendance_off',
+            'tanggungan_asset_bulanan',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
-        $q('CREATE TABLE unit (idunit INTEGER PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL, KABUPATEN_UNIT TEXT NULL, jenis TEXT NULL, is_trial INT NULL, is_operational INT NULL)');
+        $q('CREATE TABLE unit (idunit INTEGER PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL, KABUPATEN_UNIT TEXT NULL, jenis TEXT NULL, is_trial INT NULL, is_operational INT NULL, tanggungan REAL NULL)');
+        $q('CREATE TABLE tanggungan_asset_bulanan (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT, unit_id INT NULL,
+                periode TEXT NULL, nominal REAL NULL, created_at TEXT NULL,
+                UNIQUE KEY uniq_tanggungan_asset_unit_periode (unit_id, periode))');
         $q('CREATE TABLE akun (ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL, NAMA_AKUN TEXT NULL, ROLES TEXT NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL, STATUS_PEGAWAI INT NULL, deleted TEXT NULL)');
         $q('CREATE TABLE spv_units (spv_id INT NULL, unit_id INT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
@@ -145,11 +150,11 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
     {
         $q = function (string $sql): void { $this->db->query($sql); };
 
-        $q("INSERT INTO unit (idunit, NAMA_UNIT, LOGO, KABUPATEN_UNIT, jenis, is_trial, is_operational) VALUES
-            (1, 'ICLEAR Probolinggo', 'logo.png', 'Probolinggo', 'pribadi', 0, 1),
-            (3, 'ICLEAR Banyuwangi', 'logo.png', 'Banyuwangi', 'franchise', 0, 1),
-            (4, 'ICLEAR Pandaan', 'logo.png', 'Pasuruan', 'franchise', 0, 1),
-            (50, 'Head Office', 'logo.png', 'Banyuwangi', 'Kantor', 0, 0)");
+        $q("INSERT INTO unit (idunit, NAMA_UNIT, LOGO, KABUPATEN_UNIT, jenis, is_trial, is_operational, tanggungan) VALUES
+            (1, 'ICLEAR Probolinggo', 'logo.png', 'Probolinggo', 'pribadi', 0, 1, 0),
+            (3, 'ICLEAR Banyuwangi', 'logo.png', 'Banyuwangi', 'franchise', 0, 1, 0),
+            (4, 'ICLEAR Pandaan', 'logo.png', 'Pasuruan', 'franchise', 0, 1, 0),
+            (50, 'Head Office', 'logo.png', 'Banyuwangi', 'Kantor', 0, 0, 0)");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES
             (0, 'Finance', '[]'), (40, 'SPV', '[]'), (41, 'Kepala Toko', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ALAMAT, TERIMA_GAJI, STATUS_PEGAWAI, deleted) VALUES
@@ -598,5 +603,104 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('id="detailPengeluaranSummary"', $html);
         $this->assertStringContainsString('id="detailPengeluaranKategori"', $html);
         $this->assertMatchesRegularExpression('#<tbody id="detailPengeluaranRows">\s*</tbody>#', $html);
+    }
+
+    /** POST dengan token CSRF valid, seperti pola test Kas & Bank. */
+    private function postCsrf(string $url, array $payload): void
+    {
+        $security = \Config\Services::security();
+        $security->generateHash();
+
+        $this->post($url, $payload + ['csrf_test_name' => $security->getHash()])->assertRedirect();
+    }
+
+    private function sisipOmsetUnit(int $idPenjualan, int $unit, string $tanggal, float $omset): void
+    {
+        $this->db->table('penjualan')->insert([
+            'idpenjualan'  => $idPenjualan,
+            'kode_invoice' => 'TG-' . $idPenjualan,
+            'tanggal'      => $tanggal,
+            'unit_idunit'  => $unit,
+        ]);
+        $this->db->table('detail_penjualan')->insert([
+            'penjualan_idpenjualan' => $idPenjualan,
+            'barang_idbarang'       => null,
+            'sub_total'             => $omset + 20000000,
+            'hpp_penjualan'         => 20000000,
+        ]);
+    }
+
+    private function barisTanggungan(int $unit, string $periode): ?object
+    {
+        return $this->db->table('tanggungan_asset_bulanan')
+            ->where(['unit_id' => $unit, 'periode' => $periode])
+            ->get()->getRow();
+    }
+
+    public function testBulanBerjalanMenyimpanTanggunganSekali(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+        $periode = date('Y-m');
+        $this->db->table('unit')->where('idunit', 4)->update(['tanggungan' => 80000000]);
+        $this->sisipOmsetUnit(900, 4, date('Y-m-15'), 80000000);
+
+        $url = '?unit=4&bulan=' . (int) date('m') . '&tahun=' . (int) date('Y');
+        $html = $this->halaman($url);
+
+        $row = $this->barisTanggungan(4, $periode);
+        $this->assertNotNull($row, 'Bulan berjalan harus langsung tersimpan');
+        $this->assertSame(16000000.0, (float) $row->nominal, '20% x laba 80jt');
+        $this->assertSame('16.000.000', $this->kartu($html, 'Total Tanggungan Asset'));
+        $this->assertSame(64000000.0, (float) $this->db->table('unit')->where('idunit', 4)->get()->getRow()->tanggungan);
+
+        // Buka ulang tidak boleh memotong dua kali.
+        $this->halaman($url);
+        $this->assertSame(1, $this->db->table('tanggungan_asset_bulanan')->where(['unit_id' => 4, 'periode' => $periode])->countAllResults());
+        $this->assertSame(64000000.0, (float) $this->db->table('unit')->where('idunit', 4)->get()->getRow()->tanggungan);
+    }
+
+    public function testBulanLampauDisimpanLewatTombol(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+        $ts      = strtotime('first day of last month');
+        $periode = date('Y-m', $ts);
+        $bulan   = (int) date('m', $ts);
+        $tahun   = (int) date('Y', $ts);
+
+        $this->db->table('unit')->where('idunit', 4)->update(['tanggungan' => 80000000]);
+        $this->sisipOmsetUnit(901, 4, date('Y-m-15', $ts), 80000000);
+
+        $url  = '?unit=4&bulan=' . $bulan . '&tahun=' . $tahun;
+        $html = $this->halaman($url);
+
+        $this->assertNull($this->barisTanggungan(4, $periode), 'Bulan lampau tidak boleh tersimpan otomatis');
+        $this->assertSame(80000000.0, (float) $this->db->table('unit')->where('idunit', 4)->get()->getRow()->tanggungan);
+        $this->assertSame('16.000.000', $this->kartu($html, 'Total Tanggungan Asset'));
+        $this->assertStringContainsString('name="simpan_tanggungan"', $html);
+
+        $this->postCsrf('asset_berjalan' . $url, ['simpan_tanggungan' => '1']);
+
+        $row = $this->barisTanggungan(4, $periode);
+        $this->assertNotNull($row);
+        $this->assertSame(16000000.0, (float) $row->nominal);
+        $this->assertSame(64000000.0, (float) $this->db->table('unit')->where('idunit', 4)->get()->getRow()->tanggungan);
+
+        $html = $this->halaman($url);
+        $this->assertStringContainsString('Tersimpan', $html);
+        $this->assertStringNotContainsString('name="simpan_tanggungan"', $html);
+    }
+
+    public function testUnitPribadiTidakMenyentuhTanggungan(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+        $this->db->table('unit')->where('idunit', 1)->update(['tanggungan' => 80000000]);
+
+        $this->halaman('?unit=1&bulan=' . (int) date('m') . '&tahun=' . (int) date('Y'));
+
+        $this->assertNull($this->barisTanggungan(1, date('Y-m')));
+        $this->assertSame(80000000.0, (float) $this->db->table('unit')->where('idunit', 1)->get()->getRow()->tanggungan);
     }
 }

@@ -63,14 +63,19 @@ $hoPotongan = $hoDipotongPayroll > 0
 // Iklan Ads + SDM (tanpa lembur) + Lain-lain, di luar batas 6%.
 $biayaLain = (float) ($biaya_lain ?? 0);
 
-$profitNett = $omset_bulan - $pengeluaran - $biayaLain - $totalGajiUnit - $hoPotongan;
+$profitNett = $profit_nett ?? ($omset_bulan - $pengeluaran - $biayaLain - $totalGajiUnit - $hoPotongan);
 
 // Turunan memakai laba bersih setelah gaji HO, satu basis angka.
-$tanggunganAsset = 0;
-if ($selected_unit == 4) {
-    $tanggunganAsset = $profitNett * 20 / 100;
-} elseif (in_array($selected_unit, [1, 2])) {
-    $tanggunganAsset = $hariDalamBulan * 355000;
+// Controller mengirim angka tersimpan untuk franchise; fallback lama dipakai
+// saat view dirender langsung oleh test.
+$tanggunganAsset = $tanggungan_asset ?? null;
+if ($tanggunganAsset === null) {
+    $tanggunganAsset = 0;
+    if ($selected_unit == 4) {
+        $tanggunganAsset = $profitNett * 20 / 100;
+    } elseif (in_array($selected_unit, [1, 2])) {
+        $tanggunganAsset = $hariDalamBulan * 355000;
+    }
 }
 
 // Bagi hasil memakai sisa setelah Tanggungan Asset, supaya 20% + 60% + 40%
@@ -1011,7 +1016,27 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <h6 class="text-uppercase fs-2 text-primary fw-bold mb-0">Total Tanggungan Asset</h6>
             </div>
             <div class="fs-4 fw-bold text-primary metric-figure">Rp <?= number_format($tanggunganAsset, 0, ',', '.') ?></div>
-            <small class="text-muted">Alokasi tanggungan asset berjalan</small>
+            <small class="text-muted d-block">Alokasi tanggungan asset berjalan</small>
+            <?php if (isset($sisa_tanggungan) && $sisa_tanggungan !== null): ?>
+                <div class="fs-2 text-muted mt-1">
+                    Sisa tanggungan:
+                    <span class="fw-semibold metric-figure">Rp <?= number_format((float) $sisa_tanggungan, 0, ',', '.') ?></span>
+                </div>
+            <?php endif; ?>
+            <?php if (!empty($tanggungan_tersimpan)): ?>
+                <div class="fs-2 text-success mt-1">
+                    Tersimpan untuk <?= esc($periodeLabelId) ?><?= !empty($isBulanBerjalan) ? ' (diperbarui otomatis)' : '' ?>
+                </div>
+            <?php elseif (!empty($bisa_simpan_tanggungan)): ?>
+                <form method="post"
+                      action="<?= base_url('asset_berjalan?unit=' . (int) $selected_unit . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun) ?>"
+                      class="mt-2">
+                    <?= csrf_field() ?>
+                    <button type="submit" name="simpan_tanggungan" value="1" class="btn btn-sm btn-primary">
+                        Simpan Tanggungan <?= esc($periodeLabelId) ?>
+                    </button>
+                </form>
+            <?php endif; ?>
         </div>
 
         <!-- Hak Cabang -->
@@ -1174,7 +1199,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 <div class="alert alert-light border mb-0 d-flex align-items-start gap-2 py-3 px-3 text-muted fs-2">
     <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
     <span>
-        <strong class="text-dark">Total Tanggungan Asset</strong> — unit 4 = 20% laba; unit 1 &amp; 2 = jumlah hari bulan ini &times; Rp 355.000; unit franchise (3 &amp; 5) = Rp 0.
+        <strong class="text-dark">Total Tanggungan Asset</strong> — unit franchise = 20% laba bersih, dipotong maksimal sebesar sisa tanggungan; setelah sisa 0, bulan berikutnya 0. Unit pribadi (1 &amp; 2) = jumlah hari bulan ini &times; Rp 355.000 dan tidak mengurangi saldo. Satu angka disimpan per unit per bulan; bulan berjalan tersimpan otomatis, bulan lain lewat tombol Simpan.
         <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari sisa laba bersih setelah dikurangi Total Tanggungan Asset (Omset &minus; Biaya Terkontrol &minus; Biaya Iklan/SDM/Lain-lain &minus; Total Gaji &minus; Gaji HO &minus; Tanggungan Asset) unit 3, 4, &amp; 5.
         Gaji HO memakai nominal yang sudah dipotong payroll unit ini; selama belum ada, dipakai perkiraan bagian unit.
         <br>
