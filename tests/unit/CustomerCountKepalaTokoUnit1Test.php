@@ -10,12 +10,12 @@ use CodeIgniter\Test\CIUnitTestCase;
  * Regresi: realisasi KPI Total Pelanggan (CUSTOMER_COUNT).
  *
  * Kepala Toko Unit 1 merangkap Admin dan tidak mengerjakan service sendiri,
- * sehingga realisasinya diambil dari akumulasi service para teknisi unit 1
- * (CustomerCalculator::handledByUnitTeknisi). Target TETAP target milik Kepala
- * Toko (target_value unit ÷ 2), bukan penjumlahan target kedua teknisi.
+ * sehingga realisasinya = seluruh pelanggan masuk unit (semua service +
+ * penjualan ber-id pelanggan), sama dengan "Total Pelanggan Masuk" di
+ * /omset_bulanan. Target TETAP target penuh unit.
  *
- * Teknisi dan Kepala Toko unit lain tidak boleh berubah: keduanya tetap dinilai
- * dari service yang mereka tangani sendiri (service_by).
+ * Teknisi dan Kepala Toko unit lain: service sendiri + pembagian penjualan.
+ * Penjualan dibagi dua tanpa angka .5; sisa 1 diberikan ke Kepala Toko.
  *
  * @internal
  */
@@ -179,11 +179,16 @@ final class CustomerCountKepalaTokoUnit1Test extends CIUnitTestCase
         $this->sebarService(self::TEK_A,    1, '2026-08-05', 20);
         $this->sebarService(self::TEK_B,    1, '2026-08-06', 10);
 
-        // Penjualan ber-id_pelanggan TIDAK boleh masuk realisasi KT unit 1
-        // (definisi: pelanggan SERVICE yang dikerjakan para teknisi).
+        // Penjualan ber-id_pelanggan ikut realisasi: dibagi 2, sisa ke KT.
+        // Baris id_pelanggan = 0 tidak boleh dihitung.
         $this->db->table('penjualan')->insertBatch([
             ['unit_idunit' => 1, 'tanggal' => '2026-09-10', 'id_pelanggan' => 9001],
             ['unit_idunit' => 1, 'tanggal' => '2026-09-11', 'id_pelanggan' => 9002],
+            ['unit_idunit' => 1, 'tanggal' => '2026-09-12', 'id_pelanggan' => 9003],
+            ['unit_idunit' => 1, 'tanggal' => '2026-09-13', 'id_pelanggan' => 0],
+            ['unit_idunit' => 2, 'tanggal' => '2026-09-10', 'id_pelanggan' => 9101],
+            ['unit_idunit' => 2, 'tanggal' => '2026-09-11', 'id_pelanggan' => 9102],
+            ['unit_idunit' => 2, 'tanggal' => '2026-09-12', 'id_pelanggan' => 9103],
         ]);
     }
 
@@ -223,22 +228,37 @@ final class CustomerCountKepalaTokoUnit1Test extends CIUnitTestCase
     {
         $calc = new CustomerCalculator();
 
-        // Unit 1: 60 + 50 = 110 (KT sendiri (7) & penjualan tidak ikut).
+        // Unit 1: 60 + 50 = 110 (KT sendiri (7) tidak ikut helper ini).
         $this->assertSame(110, $calc->handledByUnitTeknisi(1, 9, 2026));
         // Unit 2: hanya teknisi unit 2 (40), bukan KT-nya.
         $this->assertSame(40, $calc->handledByUnitTeknisi(2, 9, 2026));
     }
 
-    // ── Kepala Toko Unit 1: akumulasi teknisi, target tetap target KT ──
+    public function testSalesForUnitHanyaMenghitungPenjualanBerPelanggan(): void
+    {
+        $calc = new CustomerCalculator();
 
-    public function testKepalaTokoUnit1MemakaiAkumulasiTeknisiDanTargetPenuh(): void
+        $this->assertSame(3, $calc->salesForUnit(1, 9, 2026), 'id_pelanggan = 0 tidak dihitung.');
+        $this->assertSame(3, $calc->salesForUnit(2, 9, 2026));
+    }
+
+    public function testCalculateMenghitungTotalPelangganMasukUnit(): void
+    {
+        $calc = new CustomerCalculator();
+
+        // 60 + 50 + 7 service + 3 penjualan = 120.
+        $this->assertSame(120, $calc->calculate(self::KT_UNIT1, 1, 9, 2026));
+    }
+
+    // ── Kepala Toko Unit 1: total pelanggan masuk, target penuh ────
+
+    public function testKepalaTokoUnit1MemakaiTotalPelangganMasukDanTargetPenuh(): void
     {
         $item = $this->customerItem(self::KT_UNIT1, 1, self::BULAN);
 
-        $this->assertSame(110.0, (float) $item['actual'], 'Realisasi = Σ service dua teknisi (110), bukan service KT sendiri (7).');
+        $this->assertSame(120.0, (float) $item['actual'], 'Realisasi = semua service unit (117) + penjualan (3).');
         $this->assertSame(220.0, (float) $item['target'], 'Target KT unit 1 = nilai PENUH (220), BUKAN 220÷2.');
-        // Kalau target masih 110, 110 ≥ 110 → 100. Dengan target penuh, 110 < 220 → 0.
-        $this->assertSame(0.0, (float) $item['achievement'], '110 < target penuh 220 → 0.');
+        $this->assertSame(0.0, (float) $item['achievement'], '120 < target penuh 220 → 0.');
     }
 
     public function testKepalaTokoUnit1CapSeratus(): void
@@ -255,26 +275,40 @@ final class CustomerCountKepalaTokoUnit1Test extends CIUnitTestCase
         $item = $this->customerItem(self::KT_UNIT1, 1, '08');
 
         $this->assertSame(30.0, (float) $item['actual']);
-        $this->assertSame(0.0, (float) $item['achievement'], 'Σ teknisi < target → 0.');
+        $this->assertSame(0.0, (float) $item['achievement'], 'Total pelanggan masuk < target → 0.');
     }
 
-    // ── Regresi: teknisi & Kepala Toko unit lain tidak berubah ─────
+    // ── Teknisi: service sendiri + setengah penjualan ──────────────
 
-    public function testTeknisiTetapMemakaiServiceSendiri(): void
+    public function testTeknisiMendapatSetengahPenjualanTanpaPecahan(): void
     {
         $item = $this->customerItem(self::TEK_A, 1, self::BULAN);
 
-        $this->assertSame(60.0, (float) $item['actual'], 'Teknisi tetap dinilai dari service yang ia tangani sendiri.');
+        // 60 service + floor(3 ÷ 2) = 61.
+        $this->assertSame(61.0, (float) $item['actual'], '3 penjualan → 1 per teknisi, bukan 1,5.');
         $this->assertSame(110.0, (float) $item['target'], 'Target teknisi tetap 220 ÷ 2.');
         $this->assertSame(0.0, (float) $item['achievement']);
     }
 
-    public function testKepalaTokoUnitLainTetapMemakaiServiceSendiriDanTargetSeparuh(): void
+    // ── Kepala Toko unit lain: service sendiri + sisa penjualan ────
+
+    public function testKepalaTokoUnitLainMendapatSisaPenjualan(): void
     {
         $item = $this->customerItem(self::KT_UNIT2, 2, self::BULAN);
 
-        $this->assertSame(30.0, (float) $item['actual'], 'KT unit lain TIDAK memakai akumulasi teknisi (40).');
+        // 30 service + ceil(3 ÷ 2) = 32 (sisa 1 ke KT).
+        $this->assertSame(32.0, (float) $item['actual'], 'Sisa pembagian penjualan diberikan ke KT.');
         $this->assertSame(90.0, (float) $item['target'], 'Target KT unit lain tetap 180 ÷ 2.');
+        $this->assertSame(0.0, (float) $item['achievement']);
+    }
+
+    public function testTeknisiUnitLainMendapatSetengahPenjualan(): void
+    {
+        $item = $this->customerItem(self::TEK_UNIT2, 2, self::BULAN);
+
+        // 40 service + floor(3 ÷ 2) = 41.
+        $this->assertSame(41.0, (float) $item['actual']);
+        $this->assertSame(90.0, (float) $item['target']);
         $this->assertSame(0.0, (float) $item['achievement']);
     }
 }

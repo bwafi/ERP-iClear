@@ -1,7 +1,7 @@
 # KPI Business Rules
 
 **Tanggal:** 28 Agustus 2026
-**Diperbarui:** 29 Oktober 2026 — KPI Kepala Divisi (43) disinkronkan dengan implementasi aktif.
+**Diperbarui:** 30 Oktober 2026 — pembagian penjualan pada KPI Total Pelanggan teknisi/Kepala Toko.
 **Status:** Status per rule ditandai (CONFIRMED / DARI SISTEM LAMA / UNKNOWN)
 
 ---
@@ -114,6 +114,13 @@ Context `gaji` memakai `customer` polos.
 | 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 80/5/10/5 |
 | 45 IT | Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20 | 80/5/10/5 |
 | 46 PIC (non-gaji) | Budget Toko 20, Budget Global 30, Omset Cabang 50 | 80/5/10/5 |
+
+### Total Pelanggan (CUSTOMER_COUNT) — Teknisi & Kepala Toko
+
+- **Teknisi (36) & Kepala Toko (41) unit selain Probolinggo:** aktual = service yang ditangani sendiri (`service_by`) + pembagian penjualan unit ber-`id_pelanggan`. Penjualan dibagi 2 sebagai bilangan bulat: teknisi `floor`, Kepala Toko `ceil` (sisa 1 ke KT). Tidak ada angka .5.
+- **Kepala Toko Probolinggo (unit 1):** aktual = seluruh pelanggan masuk unit (semua service + penjualan ber-`id_pelanggan`), sama dengan "Total Pelanggan Masuk" di `/omset_bulanan`; target memakai nilai penuh unit.
+- **Target** teknisi & Kepala Toko unit lain = target pelanggan unit ÷ 2.
+- Sumber: `CustomerCalculator::calculate/salesForUnit/handledByTeknisi`; `KpiCalculationService::customerHandledActual/customerTarget`; test `CustomerCountKepalaTokoUnit1Test`.
 
 ### Area Supervisor (SPV) — KPI Kini (Kode 40)
 

@@ -10,15 +10,17 @@ namespace App\Services\Kpi;
  * (id_pelanggan, berdasarkan DATE(tanggal)).
  *
  * Untuk TEKNISI (36) & KEPALA TOKO (41), achievement memakai:
- *   - aktual = jumlah service yang pegawai tsb tangani (service_by, semua
- *     status, DATE(created_at)) pada unit & bulan tsb.
+ *   - aktual teknisi  = service yang ia tangani (service_by) + penjualan unit ÷ 2.
+ *   - aktual KT lain  = service yang ia tangani + sisa penjualan (ceil).
+ *   - aktual KT unit 1 = SELURUH pelanggan masuk unit (semua service +
+ *     penjualan ber-id pelanggan) karena KT merangkap Admin dan tidak
+ *     mengerjakan service; target memakai nilai PENUH (tidak ÷ 2).
  *   - target = kpi_targets.target_value (target pelanggan UNIT: BWI 220 /
  *     JBR 180 / BWI 350 / Pandaan 250) ÷ 2 — dibagi di kode, bukan di DB.
  *   - skor   = min(aktual ÷ target × 100, 100).
  *
- * Pengecualian: KEPALA TOKO unit 1 (merangkap Admin, tidak mengerjakan service)
- * memakai akumulasi service para teknisi unit tsb (handledByUnitTeknisi) dengan
- * target PENUH (tidak ÷ 2). Kepala Toko unit lain & teknisi tidak berubah.
+ * Pembagian penjualan memakai bilangan bulat: teknisi dapat floor(÷2), sisa 1
+ * diberikan ke Kepala Toko — tidak ada angka .5.
  */
 class CustomerCalculator implements KpiCalculatorInterface
 {
@@ -40,14 +42,25 @@ class CustomerCalculator implements KpiCalculatorInterface
             ->where('DATE(created_at) <=', $endDate)
             ->countAllResults();
 
-        $penjualan = (int) $db->table('penjualan')
+        return $service + $this->salesForUnit($unitId, $month, $year);
+    }
+
+    /**
+     * Penjualan unit per bulan yang punya id_pelanggan (definisi "pelanggan
+     * masuk" yang sama dengan /omset_bulanan).
+     */
+    public function salesForUnit($unitId, $month, $year): int
+    {
+        $startDate = sprintf('%04d-%02d-01', $year, $month);
+        $endDate   = date('Y-m-t', strtotime($startDate));
+
+        return (int) \Config\Database::connect()
+            ->table('penjualan')
             ->where('unit_idunit', $unitId)
             ->where('id_pelanggan IS NOT NULL AND id_pelanggan <> 0', null, false)
             ->where('DATE(tanggal) >=', $startDate)
             ->where('DATE(tanggal) <=', $endDate)
             ->countAllResults();
-
-        return $service + $penjualan;
     }
 
     /**

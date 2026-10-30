@@ -39,9 +39,9 @@ class KpiCalculationService
 
     /**
      * Unit 1 (ICLEAR Probolinggo): Kepala Toko-nya merangkap Admin dan tidak
-     * mengerjakan service sendiri. Realisasi Total Pelanggan-nya diambil dari
-     * akumulasi service para teknisi unit ini (CustomerCalculator::handledByUnitTeknisi),
-     * bukan dari service yang ia tangani sendiri.
+     * mengerjakan service sendiri. Realisasi Total Pelanggan-nya memakai
+     * seluruh pelanggan masuk unit (CustomerCalculator::calculate) — semua
+     * service + penjualan ber-id pelanggan — bukan service yang ia tangani.
      */
     public const KEPALA_TOKO_TEKNISI_UNIT_ID = 1;
 
@@ -871,12 +871,13 @@ class KpiCalculationService
     }
 
     /**
-     * Aktual Total Pelanggan untuk pegawai yang dinilai dari service yang
-     * DITANGANI (teknisi 36 & kepala toko 41), bukan total pelanggan unit.
+     * Aktual Total Pelanggan untuk teknisi (36) & kepala toko (41).
      *
      * Kepala Toko unit 1 (merangkap Admin, tidak mengerjakan service) memakai
-     * akumulasi service para teknisi unit tsb; teknisi dan Kepala Toko unit lain
-     * tetap memakai service yang ditangani sendiri.
+     * seluruh pelanggan masuk unit — semua service + penjualan ber-id pelanggan
+     * — agar sama dengan /omset_bulanan. Teknisi dan Kepala Toko unit lain
+     * memakai service yang ditangani sendiri + pembagian penjualan: teknisi
+     * floor(÷2), Kepala Toko sisanya (ceil), supaya tidak ada angka .5.
      */
     protected function customerHandledActual(
         int $positionId,
@@ -891,19 +892,27 @@ class KpiCalculationService
             $positionId === 41 &&
             $unitId === self::KEPALA_TOKO_TEKNISI_UNIT_ID
         ) {
-            return (float) $customerCalc->handledByUnitTeknisi(
+            return (float) $customerCalc->calculate(
+                $employeeId,
                 $unitId,
                 $month,
                 $year,
             );
         }
 
-        return (float) $customerCalc->handledByTeknisi(
+        $handled = (float) $customerCalc->handledByTeknisi(
             $employeeId,
             $unitId,
             $month,
             $year,
         );
+        $sales = $customerCalc->salesForUnit($unitId, $month, $year);
+
+        if ($positionId === 41) {
+            return $handled + (float) (int) ceil($sales / 2);
+        }
+
+        return $handled + (float) intdiv($sales, 2);
     }
 
     /**
