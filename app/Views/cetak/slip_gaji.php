@@ -324,7 +324,7 @@
             <div class="signature">
 
                 <p><?= date('d F Y') ?></p>
-                <p>Supervisor</p>
+                <p>Manager</p>
 
                 <br><br><br>
 
