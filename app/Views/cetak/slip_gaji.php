@@ -195,7 +195,7 @@
                 <tr>
                     <td>Status</td>
                     <td>:</td>
-                    <td>Kontrak</td>
+                    <td><?= (int) ($pegawai['JENIS_PEGAWAI'] ?? 0) === 2 ? 'Training' : 'Kontrak' ?></td>
                 </tr>
             </table>
 

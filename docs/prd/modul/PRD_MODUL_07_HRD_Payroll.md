@@ -57,6 +57,8 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 
 17. [✅] **Pegawai Probation** (`akun.JENIS_PEGAWAI = 2`) hanya mendapat **gaji pokok prorata**: `gaji pokok ÷ 30 × hari hadir`, maksimal 30 hari. Tunjangan absensi, tunjangan kinerja, penempatan, insentif, dan lembur tidak dihitung; bon tetap dikurangkan karena uang muka yang sudah diterima. Hari hadir = `COUNT(DISTINCT kpi_evaluations.evaluation_date)` komponen `KEHADIRAN` pada bulan payroll (izin/telat yang tetap tercatat hadir ikut dihitung; hari tanpa absensi tidak). Catatan payroll berbunyi `Probation: Gaji Pokok Rp X ÷ 30 × N hari hadir = Rp Y`. Pegawai probation juga dikeluarkan dari pembagi pool insentif HO/Probolinggo, sehingga porsinya tidak hangus dan tidak mengurangi bagian pegawai lain. Berlaku untuk `/payroll`, `/penilaian_kinerja`, `/gaji`, dan slip gaji karena semuanya memakai service yang sama. — `SalaryCalculationService::isProbation/countHariHadir/calculateProbationSalary`; `KpiCalculationService::activePaidEmployeeIds`; `PayrollGenerator::susunCatatan`; `tests/PayrollProbationSalaryTest.php`, `tests/unit/IncentiveHoProbolinggoTest.php`
 
+18. [✅] Status pada slip gaji cetak: `JENIS_PEGAWAI = 2` (probation) ditampilkan **Training**; selain itu tetap **Kontrak** (sesuai permintaan user, bukan label master "Pegawai Probation"). — `app/Views/cetak/slip_gaji.php`
+
 ## 6. Acceptance Criteria
 - [ ] Pegawai dapat absen masuk/pulang (normal & manual); riwayat tercatat.
 - [ ] Approval presensi mengubah status kehadiran.
