@@ -305,6 +305,61 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $this->assertStringContainsString('Sudah dipotong payroll unit ini', $html);
     }
 
+    /** Payroll sebagian: aktual menggantikan perkiraan milik karyawan yang sudah dibayar; karyawan lain tetap perkiraan. */
+    public function testBebanHoCampurAktualDanPerkiraan(): void
+    {
+        $dist = $this->hoDistribution(true);
+        $share = $this->shareUnit(5, 5000000.0, 1000000.0);
+        $share['total_dibebankan'] = 3000000.0;
+        $share['non_spv_dibebankan'] = 3000000.0;
+        $share['basis'] = 'sebagian';
+        $dist['per_unit'][] = $share;
+        $dist['total_dibebankan'] = 3000000.0;
+
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, $dist);
+
+        // 100jt - 20jt - 10jt - 3jt (campuran) = 67jt
+        $this->assertSame('3.000.000', $this->kartu($html, 'Gaji HO'));
+        $this->assertSame('67.000.000', $this->kartu($html, 'Laba Bersih'));
+        $this->assertStringContainsString('data-basis="sebagian"', $html);
+        $this->assertStringContainsString('Sebagian payroll sudah dibayar', $html);
+        // Total global ikut angka beban (aktual menggantikan perkiraan).
+        $this->assertMatchesRegularExpression(
+            '#Total gaji HO[^<]*</div>\s*<div[^>]*>\s*Rp\s*3\.000\.000#',
+            $html,
+            'total gaji HO harus memakai total_dibebankan'
+        );
+        // Panel memakai angka beban yang sama, bukan perkiraan murni.
+        $this->assertMatchesRegularExpression(
+            '#id="hoUnitShareTotal"[^>]*>\s*Rp\s+3\.000\.000#',
+            $html,
+            'panel Beban Head Office harus memakai total_dibebankan'
+        );
+        $this->assertStringContainsString('Beban gaji HO unit ini', $html);
+    }
+
+    public function testPanelMenampilkanPenempatanPusat(): void
+    {
+        $dist = $this->hoDistribution(true);
+        $share = $this->shareUnit(5, 4700000.0, 1200000.0);
+        $share['non_spv_dibebankan']  = 4650000.0;
+        $share['placement_dibebankan'] = 350000.0;
+        $share['total_dibebankan']    = 5000000.0;
+        $dist['per_unit'][] = $share;
+
+        $html = $this->render(5, 0, 0, 0, null, $dist);
+
+        $this->assertStringContainsString('Penempatan (pusat)', $html);
+        $this->assertMatchesRegularExpression(
+            '#id="hoUnitSharePlacement"[^>]*>\s*Rp\s+350\.000#',
+            $html
+        );
+        $this->assertMatchesRegularExpression(
+            '#id="hoUnitShareTotal"[^>]*>\s*Rp\s+5\.000\.000#',
+            $html
+        );
+    }
+
     /** Belum ada potongan payroll: pakai perkiraan dan sebut itu perkiraan. */
     public function testTanpaPotonganPayrollMemakaiPerkiraan(): void
     {
@@ -400,7 +455,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     {
         $html = $this->render(1, 0, 0, 0, null, $this->hoDistribution(true));
 
-        $this->assertStringContainsString('Bagian gaji HO unit ini', $html);
+        $this->assertStringContainsString('Beban gaji HO unit ini', $html);
         foreach ([
             'hoUnitShareTotal'    => '1.500',
             'hoUnitShareNonSpv'   => '1.000',

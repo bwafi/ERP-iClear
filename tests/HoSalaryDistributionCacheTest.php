@@ -59,6 +59,7 @@ class HoSalaryDistributionCacheTest extends CIUnitTestCase
         $hasil = (new HoSalaryDistributionService())->calculateDistribution($this->bulan);
 
         $this->assertSame(2, $hasil['divisor'], '1 unit pribadi + 1 unit franchise');
+        $this->assertSame(0.0, $hasil['total_dibebankan'], 'tanpa karyawan HO, beban 0 dan bukan perkiraan');
         $this->assertSame(
             $hasil,
             cache()->get(HoSalaryDistributionService::cacheKey($this->bulan)),

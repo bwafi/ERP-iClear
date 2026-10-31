@@ -55,10 +55,36 @@ if ($hoUnitShare === null) {
         }
     }
 }
+$hoDibebankan = (float) ($hoUnitShare['total_dibebankan'] ?? 0);
 $hoDipotongPayroll = (float) ($hoUnitShare['total_dipotong'] ?? 0);
-$hoPotongan = $hoDipotongPayroll > 0
-    ? $hoDipotongPayroll
-    : (float) ($hoUnitShare['total_perkiraan'] ?? 0);
+$hoPotongan = $hoDibebankan > 0
+    ? $hoDibebankan
+    : ($hoDipotongPayroll > 0
+        ? $hoDipotongPayroll
+        : (float) ($hoUnitShare['total_perkiraan'] ?? 0));
+$hoBasis = (string) ($hoUnitShare['basis'] ?? '');
+if ($hoBasis === '') {
+    $hoBasis = $hoDipotongPayroll > 0 ? 'payroll' : ($hoPotongan > 0 ? 'perkiraan' : 'nihil');
+}
+// Angka panel memakai dasar yang sama dengan laba/invoice: aktual
+// menggantikan perkiraan karyawan yang sudah dibayar.
+// Total yang ditanggung semua unit: aktual menggantikan perkiraan milik
+// karyawan yang sama. Cache lama tanpa kunci ini dihitung dari per unit.
+$hoTotalBeban = (float) ($ho_distribution['total_dibebankan'] ?? 0);
+if ($hoTotalBeban <= 0 && ! empty($ho_distribution['per_unit'])) {
+    foreach ($ho_distribution['per_unit'] as $u) {
+        $hoTotalBeban += (float) ($u['total_dibebankan'] ?? $u['total_perkiraan'] ?? 0);
+    }
+}
+$hoUnitPlacement = (float) ($hoUnitShare['placement_dibebankan'] ?? 0);
+$hoUnitNonSpv = (float) ($hoUnitShare['non_spv_dibebankan'] ?? 0);
+if ($hoUnitNonSpv <= 0) {
+    $hoUnitNonSpv = (float) ($hoUnitShare['non_spv_perkiraan'] ?? 0);
+}
+$hoUnitSpv = (float) ($hoUnitShare['spv_dibebankan'] ?? 0);
+if ($hoUnitSpv <= 0) {
+    $hoUnitSpv = (float) ($hoUnitShare['spv_perkiraan'] ?? 0);
+}
 
 // Iklan Ads + SDM (tanpa lembur) + Lain-lain, di luar batas 6%.
 $biayaLain = (float) ($biaya_lain ?? 0);
@@ -466,6 +492,9 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
             border-top: 1px solid var(--bs-border-color);
         }
     }
+    .ho-table {
+        --ho-table-muted: var(--bs-secondary-color);
+    }
     .ho-table thead th {
         font-size: .72rem;
         font-weight: 600;
@@ -473,80 +502,222 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
         text-transform: uppercase;
         color: var(--bs-secondary-color);
         border-bottom: 1px solid var(--bs-border-color);
+        white-space: nowrap;
     }
-    .ho-table td {
-        vertical-align: top;
+    .ho-table tbody td {
+        padding: .7rem .5rem;
+        vertical-align: middle;
+        border-color: var(--bs-border-color);
+    }
+    .ho-table tbody td:first-child {
+        padding-left: 0;
+    }
+    .ho-table tbody td:last-child {
+        padding-right: 0;
+    }
+    .ho-table .ho-unit-name {
+        font-weight: 600;
+        color: var(--bs-emphasis-color);
+    }
+    .ho-table .ho-unit-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .2rem;
+        font-size: .72rem;
+        color: var(--ho-table-muted);
+    }
+    .ho-table .ho-unit-meta .badge {
+        font-weight: 600;
+    }
+    .ho-table .ho-cell {
+        min-width: 0;
+        text-align: right;
+    }
+    .ho-table .ho-money {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .ho-table .ho-cell-sub {
+        display: block;
+        margin-top: .1rem;
+        font-size: .72rem;
+        font-weight: 400;
+        color: var(--ho-table-muted);
     }
     .ho-table tbody tr.ho-row-active > td {
         background: var(--bs-primary-bg-subtle);
     }
-    .ho-unit-share {
-        margin-top: 1rem;
-        padding: 1rem 1.1rem;
-        border: 1px solid var(--bs-primary-border-subtle);
-        border-radius: .9rem;
-        background: var(--bs-primary-bg-subtle);
+    @media (max-width: 767.98px) {
+        .ho-table thead {
+            display: none;
+        }
+        .ho-table,
+        .ho-table tbody,
+        .ho-table tr,
+        .ho-table td {
+            display: block;
+            width: 100%;
+        }
+        .ho-table tbody tr {
+            padding: .8rem 0;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        .ho-table tbody tr:last-child {
+            border-bottom: 0;
+        }
+        .ho-table tbody tr.ho-row-active {
+            padding-right: .6rem;
+            padding-left: .6rem;
+            border-radius: .5rem;
+        }
+        .ho-table tbody td {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: .18rem 0;
+            border: 0;
+            text-align: right !important;
+        }
+        .ho-table tbody td:first-child {
+            display: block;
+            margin-bottom: .35rem;
+            text-align: left !important;
+        }
+        .ho-table tbody td:not(:first-child)::before {
+            content: attr(data-label);
+            flex-shrink: 0;
+            font-size: .7rem;
+            font-weight: 600;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+            color: var(--ho-table-muted);
+            text-align: left;
+        }
+        .ho-table tbody tr.ho-row-active > td {
+            background: transparent;
+        }
     }
-    .ho-unit-share-label {
+    /* Beban HO: lembar ringkas, bukan kartu di dalam kartu. */
+    .ho-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        column-gap: 1.25rem;
+    }
+    .ho-panel-lead {
+        min-width: 0;
+        padding-right: 1.25rem;
+    }
+    .ho-panel-label,
+    .ho-panel-total-label {
         font-size: .72rem;
         font-weight: 700;
         letter-spacing: .04em;
         text-transform: uppercase;
-        color: var(--bs-primary-text-emphasis);
+        color: var(--bs-secondary-color);
     }
-    .ho-unit-share-amount {
-        margin-top: .15rem;
+    .ho-panel-amount {
+        margin-top: .2rem;
         font-size: clamp(1.35rem, 2.4vw, 1.8rem);
         font-weight: 700;
         line-height: 1.15;
         color: var(--bs-emphasis-color);
     }
-    .ho-unit-share-sub {
-        margin-top: .15rem;
+    .ho-panel-amount--muted {
+        color: var(--bs-secondary-color);
+    }
+    .ho-panel-sub {
+        margin: .2rem 0 0;
         font-size: .8rem;
-        color: var(--bs-body-color);
+        color: var(--bs-secondary-color);
     }
-    .ho-unit-share-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: .75rem;
-        margin-top: .85rem;
-        padding-top: .85rem;
-        border-top: 1px solid var(--bs-primary-border-subtle);
+    .ho-panel-facts {
+        margin: 0;
+        padding-left: 1.25rem;
+        border-left: 1px solid var(--bs-border-color);
     }
-    .ho-unit-share-fact span {
-        display: block;
-        font-size: .7rem;
+    .ho-panel-fact {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .3rem 0;
+    }
+    .ho-panel-fact + .ho-panel-fact {
+        border-top: 1px solid var(--bs-border-color);
+    }
+    .ho-panel-fact dt {
+        margin: 0;
+        font-size: .72rem;
         font-weight: 600;
-        letter-spacing: .04em;
+        letter-spacing: .03em;
         text-transform: uppercase;
-        color: var(--bs-primary-text-emphasis);
+        color: var(--bs-secondary-color);
     }
-    .ho-unit-share-fact strong {
+    .ho-panel-fact dd {
+        margin: 0;
         font-size: .9rem;
-        font-weight: 700;
+        font-weight: 600;
         color: var(--bs-body-color);
+        white-space: nowrap;
     }
-    .ho-unit-share-foot {
+    .ho-panel-fact--muted dt,
+    .ho-panel-fact--muted dd {
+        color: var(--bs-secondary-color);
+    }
+    .ho-panel-total {
+        grid-column: 1 / -1;
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: baseline;
         justify-content: space-between;
-        gap: .75rem;
-        margin-top: .85rem;
+        gap: .25rem 1rem;
+        margin-top: 1rem;
+        padding-top: .85rem;
+        border-top: 1px solid var(--bs-border-color);
     }
-    .ho-unit-share-note {
+    .ho-panel-total-value {
+        font-size: .9rem;
+        font-weight: 700;
+        color: var(--bs-emphasis-color);
+    }
+    .ho-panel-total-meta {
         font-size: .78rem;
-        color: var(--bs-body-color);
+        font-weight: 400;
+        color: var(--bs-secondary-color);
     }
-    @media (max-width: 767.98px) {
-        .ho-unit-share-grid {
+    .ho-panel-note {
+        margin: .85rem 0 0;
+        max-width: 75ch;
+        font-size: .78rem;
+        color: var(--bs-secondary-color);
+    }
+    @media (max-width: 991.98px) {
+        .ho-panel {
             grid-template-columns: 1fr;
-            gap: .5rem;
         }
-        .ho-unit-share-foot .btn {
-            width: 100%;
-            justify-content: center;
+        .ho-panel-lead {
+            padding-right: 0;
+        }
+        .ho-panel-facts {
+            margin-top: .85rem;
+            padding: .85rem 0 0;
+            border-left: 0;
+            border-top: 1px solid var(--bs-border-color);
+        }
+    }
+    @media (max-width: 575.98px) {
+        .ho-panel-total {
+            display: block;
+        }
+        .ho-panel-total-value {
+            margin-top: .2rem;
+        }
+        .ho-panel-total-meta {
+            display: block;
+            margin-top: .1rem;
         }
     }
 
@@ -979,16 +1150,18 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <?php endif; ?>
             </div>
 
-            <!-- Gaji HO (perkiraan bagian unit ini) -->
+            <!-- Gaji HO (beban bagian unit ini) -->
             <div class="posisi-cell">
                 <h6 class="posisi-label">Gaji HO</h6>
                 <div class="posisi-value-row">
                     <span class="posisi-op" aria-hidden="true">&minus;</span>
                     <span class="posisi-value metric-figure text-danger" id="posisiHoPotongan"
-                          data-basis="<?= $hoDipotongPayroll > 0 ? 'payroll' : ($hoPotongan > 0 ? 'perkiraan' : 'nihil') ?>">Rp <?= number_format($hoPotongan, 0, ',', '.') ?></span>
+                          data-basis="<?= esc($hoBasis) ?>">Rp <?= number_format($hoPotongan, 0, ',', '.') ?></span>
                 </div>
                 <div class="posisi-note">
-                    <?php if ($hoDipotongPayroll > 0): ?>
+                    <?php if ($hoBasis === 'sebagian'): ?>
+                        Sebagian payroll sudah dibayar, sisanya perkiraan
+                    <?php elseif ($hoBasis === 'payroll'): ?>
                         Sudah dipotong payroll unit ini
                     <?php elseif ($hoPotongan > 0): ?>
                         Perkiraan &mdash; belum dipotong payroll
@@ -1074,84 +1247,88 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
 
 <?php if (!empty($ho_distribution) && $ho_distribution['divisor'] > 0): ?>
     <!-- Beban Head Office: ringkas, rincian per unit bisa dibuka -->
-    <div class="d-flex align-items-end justify-content-between mb-2">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
         <div>
             <h5 class="fw-bold text-dark mb-0">Beban Head Office</h5>
-            <small class="text-muted">Pembagian gaji HO ke unit, terpisah dari gaji cabang</small>
+            <small class="text-muted">Gaji HO yang dibebankan ke unit, terpisah dari gaji cabang</small>
         </div>
+        <?php if (!empty($ho_distribution['per_unit'])): ?>
+            <button type="button" class="btn btn-sm btn-light border fw-semibold d-inline-flex align-items-center gap-1"
+                data-bs-toggle="collapse" data-bs-target="#hoRincianUnit" aria-expanded="false" aria-controls="hoRincianUnit">
+                <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
+                Lihat rincian per unit
+            </button>
+        <?php endif; ?>
     </div>
 
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-md-4">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div style="max-width: 62ch;">
-                    <p class="fs-2 text-muted mb-0">
-                        Pool non-SPV dibagi <strong class="text-dark"><?= (int) $ho_distribution['divisor'] ?> bagian</strong>
-                        (<?= (int) $ho_distribution['pribadi_count'] ?> pribadi + <?= (int) $ho_distribution['franchise_count'] ?> franchise non-trial).
-                        Gaji SPV hanya dibebankan ke unit wilayahnya yang non-trial.
-                    </p>
+            <div class="ho-panel">
+                <div class="ho-panel-lead">
+                    <div class="ho-panel-label">Beban gaji HO unit ini</div>
+                    <?php if ($hoUnitShare !== null): ?>
+                        <div class="ho-panel-amount metric-figure" id="hoUnitShareTotal">
+                            Rp <?= number_format($hoPotongan, 0, ',', '.') ?>
+                        </div>
+                        <p class="ho-panel-sub">
+                            <?= esc($namaUnitAktif ?: ('Unit ' . $selected_unit)) ?> &middot;
+                            aktual menggantikan perkiraan karyawan yang sudah dibayar
+                        </p>
+                    <?php else: ?>
+                        <div class="ho-panel-amount ho-panel-amount--muted">&ndash;</div>
+                        <p class="ho-panel-sub">Unit ini tidak termasuk pembagian gaji HO.</p>
+                    <?php endif; ?>
                 </div>
-                <div class="text-md-end">
-                    <div class="fs-2 text-uppercase fw-semibold text-muted">Total gaji HO &middot; perkiraan</div>
-                    <div class="posisi-value metric-figure text-dark">Rp <?= number_format($ho_distribution['total_perkiraan'] ?? 0, 0, ',', '.') ?></div>
-                    <div class="fs-2 text-muted mt-1">
-                        Dipotong payroll: <span class="fw-semibold text-success metric-figure">Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?></span>
-                        &middot; <?= count($ho_distribution['employees'] ?? []) ?> karyawan
+
+                <?php if ($hoUnitShare !== null): ?>
+                    <dl class="ho-panel-facts">
+                        <div class="ho-panel-fact">
+                            <dt>Non-SPV</dt>
+                            <dd class="metric-figure" id="hoUnitShareNonSpv">Rp <?= number_format($hoUnitNonSpv, 0, ',', '.') ?></dd>
+                        </div>
+                        <div class="ho-panel-fact">
+                            <dt>SPV wilayah</dt>
+                            <dd class="metric-figure" id="hoUnitShareSpv">Rp <?= number_format($hoUnitSpv, 0, ',', '.') ?></dd>
+                        </div>
+                        <?php if ($hoUnitPlacement > 0): ?>
+                            <div class="ho-panel-fact">
+                                <dt>Penempatan (pusat)</dt>
+                                <dd class="metric-figure" id="hoUnitSharePlacement">Rp <?= number_format($hoUnitPlacement, 0, ',', '.') ?></dd>
+                            </div>
+                        <?php endif; ?>
+                        <div class="ho-panel-fact ho-panel-fact--muted">
+                            <dt>Sudah dipotong payroll</dt>
+                            <dd class="metric-figure" id="hoUnitShareDipotong">Rp <?= number_format($hoUnitShare['total_dipotong'], 0, ',', '.') ?></dd>
+                        </div>
+                    </dl>
+                <?php endif; ?>
+
+                <div class="ho-panel-total">
+                    <div class="ho-panel-total-label">Total gaji HO &middot; semua unit</div>
+                    <div class="ho-panel-total-value metric-figure">
+                        Rp <?= number_format($hoTotalBeban, 0, ',', '.') ?>
+                        <span class="ho-panel-total-meta">
+                            &middot; dipotong Rp <?= number_format($ho_distribution['total_dipotong'] ?? 0, 0, ',', '.') ?>
+                            &middot; <?= count($ho_distribution['employees'] ?? []) ?> karyawan
+                        </span>
                     </div>
                 </div>
             </div>
 
-            <?php if (!empty($ho_distribution['per_unit'])): ?>
-                <?php if ($hoUnitShare !== null): ?>
-                    <div class="ho-unit-share">
-                        <div class="ho-unit-share-label">Bagian gaji HO unit ini</div>
-                        <div class="ho-unit-share-amount metric-figure" id="hoUnitShareTotal">
-                            Rp <?= number_format($hoUnitShare['total_perkiraan'], 0, ',', '.') ?>
-                        </div>
-                        <div class="ho-unit-share-sub">
-                            Perkiraan beban gaji HO untuk <?= esc($namaUnitAktif ?: ('Unit ' . $selected_unit)) ?>
-                        </div>
-                        <div class="ho-unit-share-grid">
-                            <div class="ho-unit-share-fact">
-                                <span>Non-SPV</span>
-                                <strong class="metric-figure" id="hoUnitShareNonSpv">Rp <?= number_format($hoUnitShare['non_spv_perkiraan'], 0, ',', '.') ?></strong>
-                            </div>
-                            <div class="ho-unit-share-fact">
-                                <span>SPV wilayah</span>
-                                <strong class="metric-figure" id="hoUnitShareSpv">Rp <?= number_format($hoUnitShare['spv_perkiraan'], 0, ',', '.') ?></strong>
-                            </div>
-                            <div class="ho-unit-share-fact">
-                                <span>Sudah dipotong payroll</span>
-                                <strong class="metric-figure" id="hoUnitShareDipotong">Rp <?= number_format($hoUnitShare['total_dipotong'], 0, ',', '.') ?></strong>
-                            </div>
-                        </div>
-                        <div class="ho-unit-share-foot">
-                            <span class="ho-unit-share-note">
-                                <iconify-icon icon="solar:info-circle-bold-duotone" class="align-middle"></iconify-icon>
-                                <?php if ($hoDipotongPayroll > 0): ?>
-                                    Nominal yang sudah dipotong payroll inilah yang mengurangi Laba Bersih.
-                                <?php else: ?>
-                                    Perkiraan ini yang mengurangi Laba Bersih, dan akan diganti nominal payroll begitu sudah dipotong.
-                                <?php endif; ?>
-                            </span>
-                            <button type="button" class="btn btn-sm btn-light border fw-semibold d-inline-flex align-items-center gap-1"
-                                data-bs-toggle="collapse" data-bs-target="#hoRincianUnit" aria-expanded="false" aria-controls="hoRincianUnit">
-                                <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
-                                Lihat rincian per unit
-                            </button>
-                        </div>
-                    </div>
-                <?php else: ?>
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top">
-                        <div class="fs-2 text-muted">Unit ini tidak termasuk pembagian gaji HO.</div>
-                        <button type="button" class="btn btn-sm btn-light border fw-semibold d-inline-flex align-items-center gap-1"
-                            data-bs-toggle="collapse" data-bs-target="#hoRincianUnit" aria-expanded="false" aria-controls="hoRincianUnit">
-                            <iconify-icon icon="solar:list-bold-duotone" class="align-middle"></iconify-icon>
-                            Lihat rincian per unit
-                        </button>
-                    </div>
-                <?php endif; ?>
+            <?php if ($hoUnitShare !== null): ?>
+                <p class="ho-panel-note">
+                    <iconify-icon icon="solar:info-circle-bold-duotone" class="align-middle"></iconify-icon>
+                    <?php if ($hoBasis === 'sebagian'): ?>
+                        Payroll yang sudah dibayar memakai aktual menggantikan perkiraannya; karyawan lain tetap perkiraan.
+                    <?php elseif ($hoBasis === 'payroll'): ?>
+                        Nominal yang sudah dipotong payroll inilah yang mengurangi Laba Bersih.
+                    <?php else: ?>
+                        Perkiraan ini yang mengurangi Laba Bersih, dan akan diganti nominal payroll begitu sudah dipotong.
+                    <?php endif; ?>
+                </p>
+            <?php endif; ?>
 
+            <?php if (!empty($ho_distribution['per_unit'])): ?>
                 <div class="collapse mt-3" id="hoRincianUnit">
                     <div class="table-responsive">
                         <table class="table table-sm table-hover align-middle mb-0 ho-table">
@@ -1165,10 +1342,25 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                             </thead>
                             <tbody>
                                 <?php foreach ($ho_distribution['per_unit'] as $u): ?>
+                                    <?php
+                                    $uNonSpv = (float) ($u['non_spv_dibebankan'] ?? 0);
+                                    if ($uNonSpv <= 0) {
+                                        $uNonSpv = (float) ($u['non_spv_perkiraan'] ?? 0);
+                                    }
+                                    $uSpv = (float) ($u['spv_dibebankan'] ?? 0);
+                                    if ($uSpv <= 0) {
+                                        $uSpv = (float) ($u['spv_perkiraan'] ?? 0);
+                                    }
+                                    $uTotal = (float) ($u['total_dibebankan'] ?? 0);
+                                    if ($uTotal <= 0) {
+                                        $uTotal = (float) ($u['total_perkiraan'] ?? 0);
+                                    }
+                                    $uPlacement = (float) ($u['placement_dibebankan'] ?? 0);
+                                    ?>
                                     <tr class="<?= (int) $u['idunit'] === (int) $selected_unit ? 'ho-row-active' : '' ?>">
-                                        <td>
-                                            <div class="fw-semibold text-dark"><?= esc($u['nama']) ?></div>
-                                            <div class="fs-2 text-muted d-flex flex-wrap align-items-center gap-1 mt-1">
+                                        <td data-label="Unit">
+                                            <div class="ho-unit-name"><?= esc($u['nama']) ?></div>
+                                            <div class="ho-unit-meta">
                                                 <?php if ((int) $u['idunit'] === (int) $selected_unit): ?>
                                                     <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">Unit ini</span>
                                                 <?php endif; ?>
@@ -1183,17 +1375,24 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                                                 <?php endif; ?>
                                             </div>
                                         </td>
-                                        <td class="text-end text-nowrap">
-                                            <div class="metric-figure fw-semibold">Rp <?= number_format($u['non_spv_perkiraan'], 0, ',', '.') ?></div>
-                                            <div class="fs-2 text-muted metric-figure">dipotong Rp <?= number_format($u['non_spv_dipotong'], 0, ',', '.') ?></div>
+                                        <td class="text-end" data-label="Non-SPV">
+                                            <div class="ho-cell">
+                                                <span class="ho-money fw-semibold">Rp <?= number_format($uNonSpv, 0, ',', '.') ?></span>
+                                            </div>
                                         </td>
-                                        <td class="text-end text-nowrap">
-                                            <div class="metric-figure fw-semibold">Rp <?= number_format($u['spv_perkiraan'], 0, ',', '.') ?></div>
-                                            <div class="fs-2 text-muted metric-figure">dipotong Rp <?= number_format($u['spv_dipotong'], 0, ',', '.') ?></div>
+                                        <td class="text-end" data-label="SPV Wilayah">
+                                            <div class="ho-cell">
+                                                <span class="ho-money fw-semibold">Rp <?= number_format($uSpv, 0, ',', '.') ?></span>
+                                            </div>
                                         </td>
-                                        <td class="text-end text-nowrap">
-                                            <div class="metric-figure fw-bold text-dark">Rp <?= number_format($u['total_perkiraan'], 0, ',', '.') ?></div>
-                                            <div class="fs-2 text-muted metric-figure">dipotong Rp <?= number_format($u['total_dipotong'], 0, ',', '.') ?></div>
+                                        <td class="text-end" data-label="Total">
+                                            <div class="ho-cell">
+                                                <span class="ho-money fw-bold text-dark">Rp <?= number_format($uTotal, 0, ',', '.') ?></span>
+                                                <?php if ($uPlacement > 0): ?>
+                                                    <span class="ho-cell-sub">termasuk penempatan Rp <?= number_format($uPlacement, 0, ',', '.') ?></span>
+                                                <?php endif; ?>
+                                                <span class="ho-cell-sub">dipotong Rp <?= number_format($u['total_dipotong'], 0, ',', '.') ?></span>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -1212,7 +1411,7 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
     <span>
         <strong class="text-dark">Total Tanggungan Asset</strong> — unit franchise = 20% laba bersih, dipotong maksimal sebesar sisa tanggungan; setelah sisa 0, bulan berikutnya 0. Unit pribadi (1 &amp; 2) = jumlah hari bulan ini &times; Rp 355.000 dan tidak mengurangi saldo. Satu angka disimpan per unit per bulan; bulan berjalan tersimpan otomatis, bulan lain lewat tombol Simpan.
         <strong class="text-dark">Hak Cabang (60%)</strong> dan <strong class="text-dark">Tagihan Center (40%)</strong> dihitung dari sisa laba bersih setelah dikurangi Total Tanggungan Asset (Omset &minus; Biaya Terkontrol &minus; Biaya Iklan/SDM/Lain-lain &minus; Total Gaji &minus; Gaji HO &minus; Tanggungan Asset) unit 3, 4, &amp; 5.
-        Gaji HO memakai nominal yang sudah dipotong payroll unit ini; selama belum ada, dipakai perkiraan bagian unit.
+        Gaji HO memakai nominal aktual menggantikan perkiraan untuk karyawan yang sudah dibayar; tunjangan penempatan HO dibebankan ke unit pusat.
         <br>
         <strong class="text-dark">Batas 6%</strong> hanya peringatan — transaksi tetap tercatat dan tidak dibatalkan.
     </span>

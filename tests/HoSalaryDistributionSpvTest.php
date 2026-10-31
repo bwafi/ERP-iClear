@@ -93,6 +93,66 @@ class HoSalaryDistributionSpvTest extends CIUnitTestCase
         $this->assertEqualsWithDelta(600.0, $total, 0.001);
     }
 
+    public function testBebanUnitMemakaiAktualUntukYangSudahDibayar(): void
+    {
+        $units = [
+            $this->unit(1, 'Probolinggo', 'pribadi'),
+            $this->unit(3, 'Banyuwangi', 'franchise'),
+        ];
+
+        $employees = [
+            // Sudah dibayar: aktual (termasuk bonus) yang dibebankan.
+            ['id' => 41, 'jabatan' => 0, 'perkiraan_gaji' => 300.0, 'gaji_dipotong' => 360.0, 'gaji_dibebankan' => 360.0],
+            // Belum dibayar: tetap perkiraan.
+            ['id' => 44, 'jabatan' => 0, 'perkiraan_gaji' => 150.0, 'gaji_dipotong' => 0.0, 'gaji_dibebankan' => 150.0],
+        ];
+
+        $hasil = HoSalaryDistributionService::alokasiKeUnit($units, $employees);
+        $unit = $this->perUnit($hasil);
+
+        // Pembagi 2 (1 pribadi + 1 franchise): (360 + 150) / 2 = 255.
+        $this->assertEqualsWithDelta(255.0, $unit[1]['non_spv_dibebankan'], 0.001);
+        $this->assertEqualsWithDelta(255.0, $unit[3]['non_spv_dibebankan'], 0.001);
+        $this->assertEqualsWithDelta(255.0, $unit[1]['total_dibebankan'], 0.001);
+        $this->assertEqualsWithDelta(255.0, $unit[3]['total_dibebankan'], 0.001);
+        $this->assertSame('sebagian', $unit[1]['basis']);
+        $this->assertSame('sebagian', $unit[3]['basis']);
+    }
+
+    public function testTunjanganPenempatanDibebankanPenuhKePusat(): void
+    {
+        $units = [
+            $this->unit(1, 'Probolinggo', 'pribadi'),
+            $this->unit(3, 'Banyuwangi', 'franchise'),
+        ];
+        $employees = [[
+            'id' => 41, 'jabatan' => 0,
+            'perkiraan_gaji' => 300.0, 'gaji_dipotong' => 0.0,
+            'gaji_dibebankan' => 300.0, 'placement' => 100.0,
+        ]];
+
+        $hasil = HoSalaryDistributionService::alokasiKeUnit($units, $employees);
+        $unit = $this->perUnit($hasil);
+
+        $this->assertSame(1, $hasil['pribadi_unit_id']);
+        // Basis (300 - 100) / 2 = 100; pusat + penempatan 100.
+        $this->assertEqualsWithDelta(200.0, $unit[1]['total_perkiraan'], 0.001);
+        $this->assertEqualsWithDelta(100.0, $unit[3]['total_perkiraan'], 0.001);
+        $this->assertEqualsWithDelta(100.0, $unit[1]['placement_perkiraan'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $unit[3]['placement_perkiraan'], 0.001);
+        $this->assertEqualsWithDelta(300.0, array_sum(array_column($unit, 'total_perkiraan')), 0.001);
+
+        // Sudah dibayar (aktual 500 termasuk penempatan 100): pusat 300, cabang 200.
+        $employees[0]['gaji_dipotong']    = 500.0;
+        $employees[0]['gaji_dibebankan']  = 500.0;
+        $unit = $this->perUnit(HoSalaryDistributionService::alokasiKeUnit($units, $employees));
+
+        $this->assertEqualsWithDelta(300.0, $unit[1]['total_dibebankan'], 0.001);
+        $this->assertEqualsWithDelta(200.0, $unit[3]['total_dibebankan'], 0.001);
+        $this->assertEqualsWithDelta(100.0, $unit[1]['placement_dibebankan'], 0.001);
+        $this->assertEqualsWithDelta(500.0, array_sum(array_column($unit, 'total_dibebankan')), 0.001);
+    }
+
     public function testSpvTanpaWilayahTetapDibagiGlobal(): void
     {
         $units = [

@@ -149,6 +149,17 @@
 - **Cash-flow label:** the double-rule total is `Arus kas operasional` (pemasukan − pengeluaran) and carries the note that internal transfers and inter-branch settlements are excluded; never label it as the sum of every row above it.
 - **Rules:** routes, controller data, filters, role/unit scope, and money semantics are unchanged. Do not add a second accent, colored left borders, or a card shadow inside `.kbx`.
 
+### Invoice Internal (cetak/PDF)
+- **Scope:** `app/Views/cetak/invoice_internal.php`, dirender mPDF untuk `asset_berjalan?...&invoice=1`. Dokumen cetak, bukan halaman web.
+- **Layout:** masthead (wordmark serif + judul Invoice + nomor) → hairline navy → ditagihkan kepada + metadata → ledger rincian tanpa kotak → total di atas rule penuh → pembayaran → tanda tangan. Tidak ada header tabel gelap, border luar tabel, atau blok abu-abu.
+- **Type:** DejaVu Serif untuk wordmark/judul, DejaVu Sans Condensed untuk body dan angka; nominal rata kanan, tebal, dan memakai `Rp` bertitik.
+- **Color:** navy `#0f2a43` untuk ink utama, `#5b6672` untuk label, hairline `#cfd8e3`/`#e3e8ee`. Tanpa gradien atau isian latar dekoratif.
+- **Royalti:** ditampilkan langsung sebagai nominal, tanpa rincian turunan omset/biaya.
+- **Gaji Cabang:** halaman 1 hanya menampilkan total + catatan rincian ada di halaman berikutnya; matriks komponennya ada di halaman 2 sebagai section pertama (Gaji Pokok, Tunj. Kinerja, Tunj. Absensi, Tunj. Penempatan, Insentif, Lembur, Penyesuaian, Jumlah).
+- **Gaji HO:** halaman 1 hanya menampilkan total Gaji HO + catatan rincian ada di halaman berikutnya. Halaman 2 (hanya bila ada rincian gaji) adalah lampiran matriks dengan urutan section: gaji karyawan cabang lalu gaji HO: baris = karyawan, kolom = komponen, sel kosong "–", dan baris Jumlah = total. Tunj. Penempatan HO hanya muncul di unit pusat (Probolinggo), tidak di cabang. Karyawan yang sudah dibayar memakai nominal aktual (termasuk bonus/potongan) dan selisihnya masuk "Penyesuaian"; karyawan lain tetap perkiraan (aktual menggantikan, bukan ditambahkan).
+- **Tanda tangan:** label Finance/Manager, garis tanda tangan, lalu nama penanda tangan di bawah garis. Nama diambil dari akun aktif jabatan Finance (0) dan Manager (34), bukan hardcode.
+- **mPDF constraints:** hanya tabel/block; hindari flex/grid. Garis tanda tangan memakai sel tabel dengan `height` + `border-bottom`, bukan div kosong. Untuk blok tanda tangan, pakai selector kelas tunggal (descendant selector pada blok itu tidak diterapkan mPDF).
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.

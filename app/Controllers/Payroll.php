@@ -624,6 +624,12 @@ class Payroll extends BaseController
             'total_bersih'    => $totalBersih,
         ]);
 
+        // Distribusi gaji HO di-cache per periode; tanpa ini panel dan invoice
+        // masih memakai snapshot sebelum pembayaran sampai TTL 5 menit habis.
+        \App\Services\Payroll\HoSalaryDistributionService::invalidateCache(
+            substr((string) $row->due_date, 0, 7)
+        );
+
         $pesan = 'Payroll ditandai sudah dibayar (' . $paidDate . ').';
         if ($potonganKasbon > 0) {
             $pesan .= ' Potongan kasbon: Rp ' . number_format($potonganKasbon, 0, ',', '.') . '.';

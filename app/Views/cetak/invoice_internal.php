@@ -16,12 +16,10 @@ $tanggalLabel = $tanggalTs
     ? date('d', $tanggalTs) . ' ' . ($namaBulan[(int) date('n', $tanggalTs)] ?? '-') . ' ' . date('Y', $tanggalTs)
     : (string) ($invoice_date ?? '-');
 
-$royalti          = (int) round($royalti ?? 0);
-$gajiCabangTotal  = (int) round($gaji_cabang_total ?? 0);
-$hoTotal          = (int) round($ho_total ?? 0);
-$total            = $royalti + $gajiCabangTotal + $hoTotal;
-$profitNett       = (int) round($profit_nett ?? 0);
-$tanggunganAsset  = (int) round($tanggungan_asset ?? 0);
+$royalti         = (int) round($royalti ?? 0);
+$gajiCabangTotal = (int) round($gaji_cabang_total ?? 0);
+$hoTotal         = (int) round($ho_total ?? 0);
+$total           = $royalti + $gajiCabangTotal + $hoTotal;
 
 $rp = static function ($angka): string {
     return 'Rp ' . number_format((int) $angka, 0, ',', '.');
@@ -34,325 +32,569 @@ $rp = static function ($angka): string {
     <title>Invoice Internal</title>
     <style>
         body {
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 10pt;
-            color: #1e293b;
+            font-family: 'dejavusanscondensed', Helvetica, Arial, sans-serif;
+            font-size: 9.5pt;
+            color: #102a43;
             margin: 0;
-        }
-        .accent {
-            height: 4px;
-            background: #0f2a43;
-            margin-bottom: 16px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
         }
-        .header td {
+        .muted {
+            color: #5b6672;
+        }
+
+        /* Masthead */
+        .masthead td {
             vertical-align: top;
+            padding: 0;
         }
-        .company {
-            font-size: 15pt;
+        .brand-name {
+            font-family: 'dejavusanscondensed', Helvetica, Arial, sans-serif;
+            font-size: 14pt;
             font-weight: bold;
+            letter-spacing: .01em;
             color: #0f2a43;
-            letter-spacing: .3px;
         }
-        .addr {
-            color: #64748b;
-            font-size: 8.5pt;
-            line-height: 1.45;
+        .brand-meta {
+            margin-top: 4px;
+            font-size: 8pt;
+            line-height: 1.5;
+            color: #5b6672;
         }
         .doc {
             text-align: right;
         }
+        .doc-kicker {
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: #5b6672;
+        }
         .doc-title {
+            margin-top: 2px;
+            font-family: 'dejavusanscondensed', Helvetica, Arial, sans-serif;
+            font-size: 27pt;
+            line-height: .95;
+            color: #0f2a43;
+        }
+        .doc-no {
+            margin-top: 5px;
+            font-size: 8.5pt;
+            color: #102a43;
+        }
+        .masthead-rule {
+            margin-top: 14px;
+            border-top: 2px solid #0f2a43;
+        }
+
+        /* Billed-to and document meta */
+        .lede {
+            margin-top: 14px;
+        }
+        .lede td {
+            vertical-align: top;
+            padding: 0;
+        }
+        .lede .billed {
+            width: 58%;
+            padding-right: 18px;
+        }
+        .lede .meta {
+            width: 42%;
+        }
+        .eyebrow {
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: #5b6672;
+        }
+        .unit-name {
+            margin-top: 5px;
+            font-size: 13pt;
+            font-weight: bold;
+            color: #0f2a43;
+        }
+        .unit-addr {
+            margin-top: 3px;
+            font-size: 8.5pt;
+            line-height: 1.5;
+            color: #5b6672;
+        }
+        .meta table td {
+            padding: 2.5px 0;
+            font-size: 8.5pt;
+            vertical-align: top;
+        }
+        .meta .k {
+            width: 36%;
+            color: #5b6672;
+        }
+        .meta .v {
+            text-align: right;
+            color: #102a43;
+        }
+
+        /* Section head */
+        .section {
+            margin-top: 22px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #cfd8e3;
+        }
+        .section td {
+            vertical-align: bottom;
+            padding: 0;
+        }
+        .section-title {
+            font-size: 8pt;
+            font-weight: bold;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: #0f2a43;
+        }
+        .section-note {
+            text-align: right;
+            font-size: 8pt;
+            color: #5b6672;
+        }
+
+        /* Items */
+        .items {
+            margin-top: 0;
+            table-layout: fixed;
+        }
+        .items thead th {
+            padding: 7px 4px;
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            text-align: left;
+            color: #5b6672;
+            border-bottom: 1px solid #cfd8e3;
+        }
+        .items tbody td {
+            padding: 12px 4px;
+            vertical-align: top;
+            border-bottom: 1px solid #e3e8ee;
+            page-break-inside: avoid;
+        }
+        .items .no {
+            width: 6%;
+            font-size: 8pt;
+            color: #5b6672;
+        }
+        .items .comp {
+            width: 25%;
+            font-size: 10pt;
+            font-weight: bold;
+            color: #102a43;
+        }
+        .items .desc {
+            width: 47%;
+            color: #5b6672;
+            line-height: 1.5;
+            font-size: 8.5pt;
+        }
+        .items .col-desc {
+            width: 47%;
+        }
+        .items .amt {
+            width: 22%;
+            text-align: right;
+            white-space: nowrap;
+            font-size: 10.5pt;
+            font-weight: bold;
+            color: #0f2a43;
+        }
+
+        /* Lampiran rincian gaji (halaman 2) */
+        .gaji-matrix {
+            margin-top: 12px;
+        }
+        .gaji-matrix th {
+            font-size: 7.5pt;
+            font-weight: bold;
+            color: #5b6672;
+            text-align: right;
+            padding: 7px 5px;
+            border-bottom: 1px solid #0f2a43;
+        }
+        .gaji-matrix td {
+            font-size: 8pt;
+            text-align: right;
+            padding: 6px 5px;
+            border-bottom: 1px solid #e3e8ee;
+            white-space: nowrap;
+            color: #102a43;
+        }
+        .gaji-matrix .col-nama,
+        .gaji-matrix .col-jumlah {
+            text-align: left;
+        }
+        .gaji-matrix .col-jumlah {
+            text-align: right;
+            font-weight: bold;
+        }
+        .gaji-matrix td.col-nama {
+            white-space: normal;
+            font-weight: bold;
+        }
+        .gaji-matrix tfoot td {
+            border-top: 2px solid #0f2a43;
+            border-bottom: none;
+            font-weight: bold;
+            color: #0f2a43;
+        }
+        .gaji-matrix .nol {
+            color: #b0b8c1;
+        }
+        .gaji-note {
+            margin-top: 10px;
+            font-size: 7.5pt;
+            line-height: 1.55;
+            color: #5b6672;
+        }
+        .empty-note {
+            color: #5b6672;
+        }
+
+        /* Total */
+        .total {
+            margin-top: 4px;
+            border-top: 2px solid #0f2a43;
+            padding-top: 10px;
+        }
+        .total td {
+            vertical-align: top;
+            padding: 0;
+        }
+        .total .words {
+            width: 58%;
+            padding-right: 18px;
+            font-size: 8.5pt;
+            line-height: 1.55;
+            color: #5b6672;
+        }
+        .total .words strong {
+            color: #102a43;
+        }
+        .total .sum {
+            width: 42%;
+            text-align: right;
+        }
+        .total .sum-label {
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: #5b6672;
+        }
+        .total .sum-value {
+            margin-top: 2px;
             font-size: 17pt;
             font-weight: bold;
             color: #0f2a43;
-            letter-spacing: .5px;
         }
-        .doc-no {
-            color: #64748b;
-            font-size: 9pt;
-            margin-top: 3px;
-        }
-        .rule {
-            border-top: 1px solid #cbd5e1;
-            margin: 14px 0;
-        }
-        .meta td {
-            padding: 2px 0;
-            vertical-align: top;
-            font-size: 9.5pt;
-        }
-        .meta .k {
-            width: 26%;
-            color: #64748b;
-        }
-        .meta .v {
-            width: 34%;
-            color: #0f172a;
-        }
-        .section {
-            margin-top: 18px;
-            font-size: 9pt;
-            font-weight: bold;
-            color: #0f2a43;
-            text-transform: uppercase;
-            letter-spacing: .5px;
-        }
-        .items {
-            margin-top: 6px;
-            border: 1px solid #cbd5e1;
-        }
-        .items th {
-            background: #0f2a43;
-            color: #ffffff;
-            font-size: 9pt;
-            text-align: left;
-            padding: 7px 8px;
-            border: 1px solid #0f2a43;
-        }
-        .items td {
-            padding: 8px;
-            border: 1px solid #e2e8f0;
-            vertical-align: top;
-            font-size: 9.5pt;
-        }
-        .items .no {
-            width: 5%;
-            text-align: center;
-        }
-        .items .amt {
-            width: 19%;
-            text-align: right;
-            white-space: nowrap;
-        }
-        .items .comp {
-            width: 24%;
-        }
-        .items td.comp {
-            font-weight: bold;
-            color: #0f172a;
-        }
-        .desc {
-            color: #475569;
-            line-height: 1.45;
-        }
-        .calc {
-            margin-top: 3px;
-            color: #94a3b8;
-            font-size: 8pt;
-        }
-        .sub {
-            margin-top: 2px;
-        }
-        .sub td {
-            border: none;
-            padding: 1px 0;
-            font-size: 9pt;
-            color: #334155;
-        }
-        .sub .sub-amt {
-            text-align: right;
-            white-space: nowrap;
-        }
-        .items tfoot td {
-            background: #f1f5f9;
-            font-weight: bold;
-            font-size: 10pt;
-            color: #0f2a43;
-            padding: 10px 8px;
-            border: 1px solid #cbd5e1;
-        }
-        .terbilang {
-            margin-top: 10px;
-            padding: 9px 11px;
-            background: #f8fafc;
-            border-left: 3px solid #0f2a43;
-            font-size: 9pt;
-            color: #334155;
-        }
+
+        /* Payment */
         .pay {
-            margin-top: 18px;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 10px;
+            margin-top: 24px;
         }
         .pay td {
             vertical-align: top;
-            font-size: 9.5pt;
+            padding: 0;
         }
-        .pay .pay-title {
-            width: 26%;
-            color: #64748b;
+        .pay .pay-label {
+            width: 22%;
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: #5b6672;
+            padding-top: 3px;
+        }
+        .pay .bank-name {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #0f2a43;
+        }
+        .pay .bank-account {
+            margin-top: 2px;
+            font-size: 10.5pt;
+            color: #102a43;
+        }
+        .pay .bank-owner {
+            margin-top: 2px;
+            font-size: 8.5pt;
+            color: #5b6672;
         }
         .note {
-            margin-top: 8px;
-            font-size: 8.5pt;
-            color: #64748b;
-            line-height: 1.5;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid #e3e8ee;
+            font-size: 8pt;
+            line-height: 1.55;
+            color: #5b6672;
         }
+
+        /* Signatures */
         .sign {
+            width: 100%;
             margin-top: 34px;
-            text-align: center;
-            page-break-inside: avoid;
+            border-collapse: collapse;
         }
-        .sign td {
-            width: 50%;
-            font-size: 9.5pt;
-            color: #334155;
+        .sign-cell {
+            width: 60mm;
+            vertical-align: top;
+            padding: 0;
         }
-        .sign .space {
-            height: 52px;
+        .sign-gap {
+            width: 30mm;
         }
-        .sign .line {
-            display: inline-block;
-            border-top: 1px solid #475569;
-            padding-top: 3px;
-            min-width: 150px;
-            color: #0f172a;
+        .sign-role {
+            font-size: 7pt;
             font-weight: bold;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: #5b6672;
         }
+        .sign-line {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .sign-line-cell {
+            height: 40px;
+            border-bottom: 1px solid #7b8794;
+            padding: 0;
+            font-size: 8.5pt;
+        }
+        .sign-name {
+            margin-top: 4px;
+            font-size: 8.5pt;
+            color: #102a43;
+        }
+
         .foot {
-            margin-top: 18px;
-            font-size: 7.5pt;
-            color: #94a3b8;
-            text-align: center;
+            margin-top: 22px;
+            padding-top: 8px;
+            border-top: 1px solid #e3e8ee;
+            font-size: 7pt;
+            color: #5b6672;
+        }
+        .foot .right {
+            text-align: right;
         }
     </style>
 </head>
 <body>
-    <div class="accent"></div>
-
-    <table class="header">
+    <table class="masthead">
         <tr>
             <td>
-                <div class="company"><?= esc($nama_usaha ?? 'CV. ICLEAR DIGITAL SOLUSI') ?></div>
-                <div class="addr"><?= esc($alamat_usaha ?? '') ?></div>
-                <div class="addr">Telp. <?= esc($telp_usaha ?? '-') ?></div>
+                <div class="brand-name"><?= esc($nama_usaha ?? 'CV. ICLEAR DIGITAL SOLUSI') ?></div>
+                <div class="brand-meta">
+                    <?= esc($alamat_usaha ?? '') ?>
+                    <?php if (!empty($telp_usaha)): ?>
+                        <br>Telp. <?= esc($telp_usaha) ?>
+                    <?php endif; ?>
+                </div>
             </td>
             <td class="doc">
-                <div class="doc-title">INVOICE INTERNAL</div>
+                <div class="doc-kicker">Tagihan Internal</div>
+                <div class="doc-title">Invoice</div>
                 <div class="doc-no">No. <?= esc($invoice_no ?? '-') ?></div>
             </td>
         </tr>
     </table>
+    <div class="masthead-rule"></div>
 
-    <div class="rule"></div>
-
-    <table class="meta">
+    <table class="lede">
         <tr>
-            <td class="k">Periode</td>
-            <td class="v">: <?= esc($periodeLabel) ?></td>
-            <td class="k">Tanggal Invoice</td>
-            <td class="v">: <?= esc($tanggalLabel) ?></td>
-        </tr>
-        <tr>
-            <td class="k">Ditagihkan kepada</td>
-            <td class="v" colspan="3">
-                : <strong><?= esc($unit_nama ?? '-') ?></strong>
+            <td class="billed">
+                <div class="eyebrow">Ditagihkan kepada</div>
+                <div class="unit-name"><?= esc($unit_nama ?? '-') ?></div>
                 <?php if (!empty($unit_alamat)): ?>
-                    <br><span class="addr"><?= esc($unit_alamat) ?></span>
+                    <div class="unit-addr"><?= esc($unit_alamat) ?></div>
                 <?php endif; ?>
+            </td>
+            <td class="meta">
+                <table>
+                    <tr>
+                        <td class="k">Periode</td>
+                        <td class="v"><?= esc($periodeLabel) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="k">Tanggal invoice</td>
+                        <td class="v"><?= esc($tanggalLabel) ?></td>
+                    </tr>
+                </table>
             </td>
         </tr>
     </table>
 
-    <div class="section">Rincian Tagihan</div>
+    <table class="section">
+        <tr>
+            <td class="section-title">Rincian Tagihan</td>
+            <td class="section-note">3 komponen</td>
+        </tr>
+    </table>
 
     <table class="items">
         <thead>
             <tr>
                 <th class="no">No</th>
                 <th class="comp">Komponen</th>
-                <th>Keterangan</th>
+                <th class="col-desc">Keterangan</th>
                 <th class="amt">Jumlah</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td class="no">1</td>
+                <td class="no">01</td>
                 <td class="comp">Royalti Perusahaan</td>
-                <td class="desc">
-                    Tagihan Center 40% dari laba bersih setelah tanggungan asset.
-                    <div class="calc">
-                        Laba bersih <?= $rp($profitNett) ?>
-                        &middot; Tanggungan asset <?= $rp($tanggunganAsset) ?>
-                    </div>
-                </td>
+                <td class="desc"></td>
                 <td class="amt"><?= $rp($royalti) ?></td>
             </tr>
             <tr>
-                <td class="no">2</td>
+                <td class="no">02</td>
                 <td class="comp">Gaji Karyawan Cabang</td>
                 <td class="desc">
                     <?php if (!empty($gaji_cabang)): ?>
-                        <table class="sub">
-                            <?php foreach ($gaji_cabang as $gaji): ?>
-                                <tr>
-                                    <td><?= esc($gaji['nama'] ?? '-') ?></td>
-                                    <td class="sub-amt"><?= $rp($gaji['nominal'] ?? 0) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </table>
+                        <span class="empty-note">Rincian per karyawan di halaman berikutnya.</span>
                     <?php else: ?>
-                        Tidak ada gaji karyawan cabang pada periode ini.
+                        <span class="empty-note">Tidak ada gaji karyawan cabang pada periode ini.</span>
                     <?php endif; ?>
                 </td>
                 <td class="amt"><?= $rp($gajiCabangTotal) ?></td>
             </tr>
             <tr>
-                <td class="no">3</td>
+                <td class="no">03</td>
                 <td class="comp">Gaji Head Office</td>
                 <td class="desc">
                     <?php if (!empty($ho_employees)): ?>
-                        <table class="sub">
-                            <?php foreach ($ho_employees as $ho): ?>
-                                <tr>
-                                    <td><?= esc($ho['nama'] ?? '-') ?></td>
-                                    <td class="sub-amt"><?= $rp($ho['nominal'] ?? 0) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </table>
+                        <span class="empty-note">Rincian per karyawan di halaman berikutnya.</span>
+                    <?php elseif (!empty($unit_trial)): ?>
+                        <span class="empty-note">Unit trial &mdash; tidak menanggung gaji HO.</span>
                     <?php else: ?>
-                        Bagian gaji Head Office untuk unit ini.
+                        <span class="empty-note">Bagian gaji Head Office untuk unit ini.</span>
                     <?php endif; ?>
                 </td>
                 <td class="amt"><?= $rp($hoTotal) ?></td>
             </tr>
         </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="3">TOTAL TAGIHAN</td>
-                <td class="amt"><?= $rp($total) ?></td>
-            </tr>
-        </tfoot>
     </table>
 
-    <div class="terbilang">
-        <strong>Terbilang:</strong> <?= esc(terbilang_rupiah($total)) ?>
-    </div>
-
-    <table class="pay">
+    <table class="total">
         <tr>
-            <td class="pay-title">Pembayaran</td>
-            <td>
-                <strong><?= esc($bank['nama'] ?? '-') ?></strong>
-                &middot; <?= esc($bank['norek'] ?? '-') ?><br>
-                a.n. <?= esc($bank['atas_nama'] ?? '-') ?>
+            <td class="words">
+                <strong>Terbilang:</strong> <?= esc(terbilang_rupiah($total)) ?>
+            </td>
+            <td class="sum">
+                <div class="sum-label">Total Tagihan</div>
+                <div class="sum-value"><?= $rp($total) ?></div>
             </td>
         </tr>
     </table>
 
-    <div class="note"><?= esc($catatan ?? '') ?></div>
-
-    <table class="sign">
+    <table class="pay">
         <tr>
-            <td>Finance<div class="space"></div><span class="line">(____________________)</span></td>
-            <td>Manager<div class="space"></div><span class="line">(____________________)</span></td>
+            <td class="pay-label">Pembayaran</td>
+            <td>
+                <div class="bank-name"><?= esc($bank['nama'] ?? '-') ?></div>
+                <div class="bank-account"><?= esc($bank['norek'] ?? '-') ?></div>
+                <div class="bank-owner">a.n. <?= esc($bank['atas_nama'] ?? '-') ?></div>
+            </td>
         </tr>
     </table>
 
-    <div class="foot">Dokumen ini dibuat otomatis oleh ERP iClear.</div>
+    <?php if (!empty($catatan)): ?>
+        <div class="note"><?= esc($catatan) ?></div>
+    <?php endif; ?>
+
+    <table class="sign">
+        <tr>
+            <td class="sign-cell">
+                <div class="sign-role">Finance</div>
+                <table class="sign-line"><tr><td class="sign-line-cell">&nbsp;</td></tr></table>
+                <div class="sign-name"><?= esc($finance_nama ?? '') ?></div>
+            </td>
+            <td class="sign-gap"></td>
+            <td class="sign-cell">
+                <div class="sign-role">Manager</div>
+                <table class="sign-line"><tr><td class="sign-line-cell">&nbsp;</td></tr></table>
+                <div class="sign-name"><?= esc($manager_nama ?? '') ?></div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="foot">
+        <tr>
+            <td>Dokumen ini dibuat otomatis oleh ERP iClear.</td>
+            <td class="right"><?= esc($invoice_no ?? '') ?></td>
+        </tr>
+    </table>
+
+    <?php if (!empty($gaji_cabang) || !empty($ho_employees)): ?>
+        <pagebreak />
+
+        <table class="masthead">
+            <tr>
+                <td>
+                    <div class="brand-name"><?= esc($nama_usaha ?? 'CV. ICLEAR DIGITAL SOLUSI') ?></div>
+                    <div class="brand-meta">
+                        <?= esc($alamat_usaha ?? '') ?>
+                        <?php if (!empty($telp_usaha)): ?>
+                            <br>Telp. <?= esc($telp_usaha) ?>
+                        <?php endif; ?>
+                    </div>
+                </td>
+                <td class="doc">
+                    <div class="doc-kicker">Lampiran Invoice</div>
+                    <div class="doc-title">Rincian Gaji</div>
+                    <div class="doc-no">No. <?= esc($invoice_no ?? '-') ?></div>
+                </td>
+            </tr>
+        </table>
+        <div class="masthead-rule"></div>
+
+        <?php if (!empty($gaji_cabang)): ?>
+            <table class="section">
+                <tr>
+                    <td class="section-title">Rincian Gaji Karyawan Cabang</td>
+                    <td class="section-note"><?= esc($periodeLabel) ?> &middot; <?= esc($unit_nama ?? '-') ?></td>
+                </tr>
+            </table>
+            <?= view('cetak/invoice_matriks', ['rows' => $gaji_cabang, 'total' => $gajiCabangTotal]) ?>
+        <?php endif; ?>
+
+        <?php if (!empty($ho_employees)): ?>
+            <table class="section">
+                <tr>
+                    <td class="section-title">Rincian Gaji Head Office</td>
+                    <td class="section-note">
+                        <?php if (empty($gaji_cabang)): ?>
+                            <?= esc($periodeLabel) ?> &middot; <?= esc($unit_nama ?? '-') ?>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            </table>
+            <?= view('cetak/invoice_matriks', ['rows' => $ho_employees, 'total' => $hoTotal]) ?>
+        <?php endif; ?>
+
+        <div class="gaji-note">
+            Nominal aktual (termasuk bonus/potongan) menggantikan perkiraan karyawan yang sudah dibayar; karyawan lain tetap perkiraan.
+            <strong>Jumlah</strong> adalah beban gaji yang ditagihkan ke unit ini.
+        </div>
+
+        <table class="foot">
+            <tr>
+                <td>Lampiran <?= esc($invoice_no ?? '') ?> &middot; dibuat otomatis oleh ERP iClear.</td>
+                <td class="right"><?= esc($unit_nama ?? '') ?></td>
+            </tr>
+        </table>
+    <?php endif; ?>
 </body>
 </html>

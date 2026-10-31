@@ -156,7 +156,14 @@ class HoSalaryDistributionService
             );
 
             $perkiraanGaji = (float)$calc['total_gaji'];
-            $dipotong = $payrollActual[$id]['total_bersih'] ?? $payrollActual[$id]['total'] ?? 0.0;
+            $aktual = (float)($payrollActual[$id]['total_bersih'] ?? 0);
+            if ($aktual <= 0) {
+                // Baris legacy bisa punya total_bersih 0; pakai total bruto.
+                $aktual = (float)($payrollActual[$id]['total'] ?? 0);
+            }
+            $statusPayroll = (string)($payrollActual[$id]['status'] ?? 'belum_ada');
+            $dibayar = $statusPayroll === 'dibayar' && $aktual > 0;
+            $dipotong = $dibayar ? $aktual : 0.0;
 
             $employees[] = [
                 'id'            => $id,
@@ -164,7 +171,10 @@ class HoSalaryDistributionService
                 'jabatan'       => $positionId,
                 'perkiraan_gaji'=> round($perkiraanGaji, 2),
                 'gaji_dipotong' => round($dipotong, 2),
-                'payroll_status'=> $payrollActual[$id]['status'] ?? 'belum_ada',
+                // Yang sudah dibayar memakai nominal aktual (termasuk bonus),
+                // sisanya tetap perkiraan — sama seperti aturan Total Gaji.
+                'gaji_dibebankan' => round($dibayar ? $aktual : $perkiraanGaji, 2),
+                'payroll_status'=> $statusPayroll,
                 'components'    => $calc['components'],
                 'placement'     => $placement,
                 'insentif'      => $calc['incentive'],
@@ -215,11 +225,16 @@ class HoSalaryDistributionService
             'divisor'           => $alokasi['divisor'],
             'pribadi_count'     => $alokasi['pribadi_count'],
             'franchise_count'   => $alokasi['franchise_count'],
+            // Unit pusat (pribadi pertama) menanggung tunjangan penempatan HO.
+            'pribadi_unit_id'   => $alokasi['pribadi_unit_id'],
             'unit_detail'       => $unitDetail,
             'per_unit'          => $alokasi['per_unit'],
             'employees'         => $alokasi['employees'],
             'total_perkiraan'   => round($totalPerkiraan, 2),
             'total_dipotong'    => round($totalDipotong, 2),
+            // Beban yang benar-benar ditanggung unit: aktual menggantikan
+            // perkiraan milik karyawan yang sama, bukan dijumlah.
+            'total_dibebankan'  => round(array_sum(array_column($alokasi['per_unit'], 'total_dibebankan')), 2),
             'total_non_spv_perkiraan' => $alokasi['total_non_spv_perkiraan'],
             'total_non_spv_dipotong'  => $alokasi['total_non_spv_dipotong'],
             'total_spv_perkiraan'     => $alokasi['total_spv_perkiraan'],
@@ -277,6 +292,16 @@ class HoSalaryDistributionService
         [$divisor, $globalCounted] = self::bagianUnit($countable);
         $globalCountedFlip = array_fill_keys($globalCounted, true);
 
+        // Unit pribadi pertama = pusat (Probolinggo). Tunjangan penempatan HO
+        // dibayar pusat, tidak ikut dibagi ke cabang.
+        $pribadiUnitId = null;
+        foreach ($countable as $uid => $u) {
+            if ((string) ($u['jenis'] ?? '') === 'pribadi') {
+                $pribadiUnitId = (int) $uid;
+                break;
+            }
+        }
+
         $perUnit = [];
         foreach ($unitRows as $u) {
             $id = (int)($u['idunit'] ?? 0);
@@ -293,6 +318,11 @@ class HoSalaryDistributionService
                 'spv_perkiraan'      => 0.0,
                 'non_spv_dipotong'   => 0.0,
                 'spv_dipotong'       => 0.0,
+                'non_spv_dibebankan' => 0.0,
+                'spv_dibebankan'     => 0.0,
+                'placement_perkiraan'  => 0.0,
+                'placement_dipotong'   => 0.0,
+                'placement_dibebankan' => 0.0,
             ];
         }
 
@@ -329,21 +359,43 @@ class HoSalaryDistributionService
 
             $perkiraan = (float)($emp['perkiraan_gaji'] ?? 0);
             $dipotong  = (float)($emp['gaji_dipotong'] ?? 0);
+            // Beban yang dipakai invoice: aktual bila sudah dibayar, kalau
+            // belum memakai perkiraan. Test lama tanpa kunci ini memakai
+            // dipotong>0 sebagai aktual.
+            $dibebankan = (float)($emp['gaji_dibebankan']
+                ?? ($dipotong > 0 ? $dipotong : $perkiraan));
 
-            $bagianPerkiraan = $scopeDiv > 0 ? $perkiraan / $scopeDiv : 0.0;
-            $bagianDipotong  = $scopeDiv > 0 ? $dipotong / $scopeDiv : 0.0;
+            // Tunjangan penempatan menempel ke pusat: keluarkan dari pool
+            // cabang, lalu bebankan penuh ke unit pribadi pertama.
+            $placement = max(0.0, (float) ($emp['placement'] ?? 0));
+            $kePusat   = $pribadiUnitId !== null && $placement > 0;
+            $dasarPerkiraan  = $kePusat ? max(0.0, $perkiraan - $placement) : $perkiraan;
+            $dasarDipotong   = $kePusat ? max(0.0, $dipotong - $placement) : $dipotong;
+            $dasarDibebankan = $kePusat ? max(0.0, $dibebankan - $placement) : $dibebankan;
+
+            $bagianPerkiraan  = $scopeDiv > 0 ? $dasarPerkiraan / $scopeDiv : 0.0;
+            $bagianDipotong   = $scopeDiv > 0 ? $dasarDipotong / $scopeDiv : 0.0;
+            $bagianDibebankan = $scopeDiv > 0 ? $dasarDibebankan / $scopeDiv : 0.0;
 
             foreach ($counted as $uid) {
                 if (! isset($perUnit[$uid])) {
                     continue;
                 }
                 if ($isSpv && $scope === 'wilayah') {
-                    $perUnit[$uid]['spv_perkiraan'] += $bagianPerkiraan;
-                    $perUnit[$uid]['spv_dipotong']  += $bagianDipotong;
+                    $perUnit[$uid]['spv_perkiraan']  += $bagianPerkiraan;
+                    $perUnit[$uid]['spv_dipotong']   += $bagianDipotong;
+                    $perUnit[$uid]['spv_dibebankan'] += $bagianDibebankan;
                 } else {
-                    $perUnit[$uid]['non_spv_perkiraan'] += $bagianPerkiraan;
-                    $perUnit[$uid]['non_spv_dipotong']  += $bagianDipotong;
+                    $perUnit[$uid]['non_spv_perkiraan']  += $bagianPerkiraan;
+                    $perUnit[$uid]['non_spv_dipotong']   += $bagianDipotong;
+                    $perUnit[$uid]['non_spv_dibebankan'] += $bagianDibebankan;
                 }
+            }
+
+            if ($kePusat && isset($perUnit[$pribadiUnitId])) {
+                $perUnit[$pribadiUnitId]['placement_perkiraan']  += $placement;
+                $perUnit[$pribadiUnitId]['placement_dipotong']   += min($placement, $dipotong);
+                $perUnit[$pribadiUnitId]['placement_dibebankan'] += min($placement, $dibebankan);
             }
 
             if ($isSpv && $scope === 'wilayah') {
@@ -362,12 +414,32 @@ class HoSalaryDistributionService
         }
 
         foreach ($perUnit as &$u) {
-            $u['non_spv_perkiraan'] = round($u['non_spv_perkiraan'], 2);
-            $u['spv_perkiraan']     = round($u['spv_perkiraan'], 2);
-            $u['non_spv_dipotong']  = round($u['non_spv_dipotong'], 2);
-            $u['spv_dipotong']      = round($u['spv_dipotong'], 2);
-            $u['total_perkiraan']   = round($u['non_spv_perkiraan'] + $u['spv_perkiraan'], 2);
-            $u['total_dipotong']    = round($u['non_spv_dipotong'] + $u['spv_dipotong'], 2);
+            $u['non_spv_perkiraan']  = round($u['non_spv_perkiraan'], 2);
+            $u['spv_perkiraan']      = round($u['spv_perkiraan'], 2);
+            $u['non_spv_dipotong']   = round($u['non_spv_dipotong'], 2);
+            $u['spv_dipotong']       = round($u['spv_dipotong'], 2);
+            $u['non_spv_dibebankan'] = round($u['non_spv_dibebankan'], 2);
+            $u['spv_dibebankan']     = round($u['spv_dibebankan'], 2);
+            $u['placement_perkiraan']  = round($u['placement_perkiraan'], 2);
+            $u['placement_dipotong']   = round($u['placement_dipotong'], 2);
+            $u['placement_dibebankan'] = round($u['placement_dibebankan'], 2);
+            $u['total_perkiraan']    = round($u['non_spv_perkiraan'] + $u['spv_perkiraan'] + $u['placement_perkiraan'], 2);
+            $u['total_dipotong']     = round($u['non_spv_dipotong'] + $u['spv_dipotong'] + $u['placement_dipotong'], 2);
+            $u['total_dibebankan']   = round($u['non_spv_dibebankan'] + $u['spv_dibebankan'] + $u['placement_dibebankan'], 2);
+
+            // Basis yang dipakai kartu/invoice: payroll penuh, sebagian, atau
+            // masih perkiraan. Aktual menggantikan perkiraan karyawan yang
+            // sudah dibayar, jadi `total_dibebankan` selalu dipakai lebih dulu.
+            if ($u['total_dibebankan'] <= 0.005) {
+                $u['basis'] = 'nihil';
+            } elseif ($u['total_dipotong'] > 0.005
+                && abs($u['total_dibebankan'] - $u['total_dipotong']) > 0.005) {
+                $u['basis'] = 'sebagian';
+            } elseif ($u['total_dipotong'] > 0.005) {
+                $u['basis'] = 'payroll';
+            } else {
+                $u['basis'] = 'perkiraan';
+            }
 
             if ($u['is_trial'] === 1) {
                 $u['catatan'] = 'Unit trial — tidak menanggung gaji HO';
@@ -386,6 +458,7 @@ class HoSalaryDistributionService
             'pribadi_count'=> $pribadiCount,
             'franchise_count' => $franchiseCount,
             'counted_unit_ids' => $globalCounted,
+            'pribadi_unit_id'  => $pribadiUnitId,
             'per_unit'     => array_values($perUnit),
             'employees'    => $hasilEmployees,
             'total_non_spv_perkiraan' => round($totalNonSpvPerkiraan, 2),
@@ -458,7 +531,7 @@ class HoSalaryDistributionService
     {
         [$thn, $bln] = self::parseBulan($bulan, $tahun);
 
-        return 'ho_dist_' . \Config\Database::connect()->database
+        return 'ho_dist_v2_' . \Config\Database::connect()->database
             . sprintf('_%04d-%02d', $thn, $bln);
     }
 

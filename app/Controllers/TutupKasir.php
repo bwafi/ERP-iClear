@@ -1076,10 +1076,16 @@ class TutupKasir extends BaseController
         // dari saldo `unit.tanggungan`. Bulan berjalan diperbarui otomatis;
         // bulan lain lewat tombol Simpan.
         // ---------------------------------------------------------------
+        // Beban HO = aktual menggantikan perkiraan untuk karyawan yang sudah
+        // dibayar (sama seperti Total Gaji). Selama belum ada yang dibayar,
+        // angkanya sama dengan perkiraan bagian unit.
+        $hoDibebankan = (float) ($hoUnitShare['total_dibebankan'] ?? 0);
         $hoDipotongPayroll = (float) ($hoUnitShare['total_dipotong'] ?? 0);
-        $hoPotongan = $hoDipotongPayroll > 0
-            ? $hoDipotongPayroll
-            : (float) ($hoUnitShare['total_perkiraan'] ?? 0);
+        $hoPotongan = $hoDibebankan > 0
+            ? $hoDibebankan
+            : ($hoDipotongPayroll > 0
+                ? $hoDipotongPayroll
+                : (float) ($hoUnitShare['total_perkiraan'] ?? 0));
         $profitNett = $omset_bulan - $pengeluaran - $biayaLain - $totalGajiUnit - $hoPotongan;
 
         $unitRow = $this->db->table('unit')
@@ -1193,16 +1199,34 @@ class TutupKasir extends BaseController
                 trim((string) ($unitRow->PROVINSI_UNIT ?? '')),
             ]));
 
+            // Rincian gaji cabang untuk lampiran invoice: komponen per
+            // karyawan. Baris payroll yang sudah dibayar memakai total aktual
+            // (termasuk bonus/potongan), jadi selisihnya masuk "Penyesuaian
+            // payroll" — sama seperti rincian gaji HO.
             $gajiCabang = [];
+            if ($gajiDetail !== []) {
+                $totalBulat = (int) round($totalGajiUnit);
+                $selisihTotal = $totalBulat - array_sum(array_map(
+                    static fn (array $g): int => (int) round((float) ($g['total'] ?? 0)),
+                    $gajiDetail
+                ));
+                if ($selisihTotal !== 0) {
+                    $akhir = count($gajiDetail) - 1;
+                    $gajiDetail[$akhir]['total'] = (float) ($gajiDetail[$akhir]['total'] ?? 0) + $selisihTotal;
+                }
+            }
+
             foreach ($gajiDetail as $gaji) {
                 $gajiCabang[] = [
-                    'nama'    => (string) ($gaji['nama'] ?? '-'),
-                    'nominal' => (int) round((float) ($gaji['total'] ?? 0)),
+                    'nama'     => (string) ($gaji['nama'] ?? '-'),
+                    'nominal'  => (int) round((float) ($gaji['total'] ?? 0)),
+                    'komponen' => invoice_gaji_komponen($gaji),
                 ];
             }
 
             $kodeUnit  = trim((string) ($unitRow->kode_unit ?? ''));
             $config    = config('InvoiceInternal');
+            $signers   = invoice_internal_signers();
             $invoiceNo = 'INT/' . date('Ym', strtotime($bulanStr . '-01')) . '/'
                 . ($kodeUnit !== '' ? $kodeUnit : (string) $unit);
 
@@ -1215,13 +1239,16 @@ class TutupKasir extends BaseController
                 'periode'           => $bulanStr,
                 'invoice_no'        => $invoiceNo,
                 'invoice_date'      => date('Y-m-d', min(strtotime($bulanStr . '-01 +1 month'), time())),
-                'profit_nett'       => $profitNett,
-                'tanggungan_asset'  => (float) ($tanggunganAsset ?? 0),
                 'royalti'           => $tagihanCenter,
                 'gaji_cabang_total' => $totalGajiUnit,
                 'gaji_cabang'       => $gajiCabang,
                 'ho_total'          => $hoPotongan,
+                // Unit trial tidak menanggung HO (bagiannya 0), jadi helper
+                // tidak menghasilkan rincian karyawan HO.
                 'ho_employees'      => invoice_ho_employees($hoDistribution ?? [], (int) $unit, (float) $hoPotongan),
+                'unit_trial'        => (int) ($unitRow->is_trial ?? 0) === 1,
+                'finance_nama'      => $signers['finance'],
+                'manager_nama'      => $signers['manager'],
                 'bank'              => [
                     'nama'      => $config->bank,
                     'norek'     => $config->norek,
