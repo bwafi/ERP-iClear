@@ -1743,6 +1743,25 @@ class PenilaianKPI extends BaseController
         return [sprintf('%02d', $bulan), (string) $tahun];
     }
 
+    /**
+     * Urutkan komponen absen sesuai urutan baku halaman (Kehadiran paling atas).
+     *
+     * @param array<int, object> $components
+     * @param list<string>       $codes
+     * @return array<int, object>
+     */
+    public static function urutkanKomponenAbsen(array $components, array $codes): array
+    {
+        $urutan = array_flip($codes);
+
+        usort(
+            $components,
+            static fn ($a, $b) => ($urutan[$a->code] ?? 99) <=> ($urutan[$b->code] ?? 99)
+        );
+
+        return $components;
+    }
+
     public function penilaian_absen()
     {
         $bulan = (int)($this->request->getGet('bulan') ?: date('m'));
@@ -1843,6 +1862,10 @@ class PenilaianKPI extends BaseController
             $attendanceCodes = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
             $attendanceComponents = (new \App\Models\ModelKpiComponent())
                 ->whereIn('code', $attendanceCodes)->findAll();
+
+            // findAll() tidak menjamin urutan, sedangkan Kehadiran harus tampil
+            // paling atas di semua tabel halaman ini.
+            $attendanceComponents = self::urutkanKomponenAbsen($attendanceComponents, $attendanceCodes);
 
             // Komponen yang boleh dinilai evaluator utk target ini (server-side)
             foreach ($attendanceComponents as $comp) {
