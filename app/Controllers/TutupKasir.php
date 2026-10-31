@@ -1083,7 +1083,6 @@ class TutupKasir extends BaseController
         $profitNett = $omset_bulan - $pengeluaran - $biayaLain - $totalGajiUnit - $hoPotongan;
 
         $unitRow = $this->db->table('unit')
-            ->select('idunit, jenis, tanggungan')
             ->where('idunit', $unit)
             ->get()->getRow();
         $isFranchise = strtolower((string) ($unitRow->jenis ?? '')) === 'franchise';
@@ -1131,11 +1130,20 @@ class TutupKasir extends BaseController
             ? (float) ($tanggunganTersimpan ?? min($tanggunganMentah, max(0.0, $sisaTanggungan)))
             : null;
 
-        return view('template', [
+        // Tagihan Center = 40% sisa laba setelah tanggungan asset. Dihitung di
+        // sini supaya invoice memakai angka yang sama dengan kartu halaman.
+        $tagihanCenter = in_array((int) $unit, [3, 4, 5], true)
+            ? 0.40 * ($profitNett - (float) ($tanggunganAsset ?? 0))
+            : 0.0;
+        $bolehCetakInvoice = in_array((int) $unit, [3, 4, 5], true)
+            && self::bolehLihatRincianGaji((int) $id_jabatan);
+
+        $data = [
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
             'id_jabatan'     => $id_jabatan,
             'boleh_pilih_unit' => $bolehPilihUnit,
+            'boleh_cetak_invoice' => $bolehCetakInvoice,
             'bulan'          => $bulan,
             'tahun'          => $tahun,
             'periodeLabel'   => $periodeLabel,
@@ -1162,11 +1170,75 @@ class TutupKasir extends BaseController
             // Satu sumber angka laba & tanggungan untuk view.
             'profit_nett'     => $profitNett,
             'tanggungan_asset' => $tanggunganAsset,
+            'tagihan_center'  => $tagihanCenter,
             'tanggungan_tersimpan' => $tanggunganTersimpan !== null,
             'bisa_simpan_tanggungan' => $bisaSimpanTanggungan,
             'sisa_tanggungan' => $isFranchise ? $sisaTanggungan : null,
-            'body'              => 'dashboard/asset_berjalan'
-        ]);
+            'body'              => 'dashboard/asset_berjalan',
+        ];
+
+        // Cetak invoice internal: dokumen saja, tidak mencatat tagihan baru.
+        if ($this->request->getGet('invoice') === '1') {
+            if (! $bolehCetakInvoice) {
+                return $this->response->setStatusCode(403)->setBody('Tidak berhak mencetak invoice unit ini.');
+            }
+
+            helper('invoice_internal');
+
+            $alamatUnit = implode(', ', array_filter([
+                trim((string) ($unitRow->JALAN_UNIT ?? '')),
+                trim((string) ($unitRow->KELURAHAN_UNIT ?? '')),
+                trim((string) ($unitRow->KECAMATAN_UNIT ?? '')),
+                trim((string) ($unitRow->KABUPATEN_UNIT ?? '')),
+                trim((string) ($unitRow->PROVINSI_UNIT ?? '')),
+            ]));
+
+            $gajiCabang = [];
+            foreach ($gajiDetail as $gaji) {
+                $gajiCabang[] = [
+                    'nama'    => (string) ($gaji['nama'] ?? '-'),
+                    'nominal' => (int) round((float) ($gaji['total'] ?? 0)),
+                ];
+            }
+
+            $kodeUnit  = trim((string) ($unitRow->kode_unit ?? ''));
+            $config    = config('InvoiceInternal');
+            $invoiceNo = 'INT/' . date('Ym', strtotime($bulanStr . '-01')) . '/'
+                . ($kodeUnit !== '' ? $kodeUnit : (string) $unit);
+
+            $dataInvoice = [
+                'nama_usaha'        => $config->namaUsaha,
+                'alamat_usaha'      => $config->alamat,
+                'telp_usaha'        => $config->telepon,
+                'unit_nama'         => (string) ($unitRow->NAMA_UNIT ?? ('Unit ' . $unit)),
+                'unit_alamat'       => $alamatUnit,
+                'periode'           => $bulanStr,
+                'invoice_no'        => $invoiceNo,
+                'invoice_date'      => date('Y-m-d', min(strtotime($bulanStr . '-01 +1 month'), time())),
+                'profit_nett'       => $profitNett,
+                'tanggungan_asset'  => (float) ($tanggunganAsset ?? 0),
+                'royalti'           => $tagihanCenter,
+                'gaji_cabang_total' => $totalGajiUnit,
+                'gaji_cabang'       => $gajiCabang,
+                'ho_total'          => $hoPotongan,
+                'ho_employees'      => invoice_ho_employees($hoDistribution ?? [], (int) $unit, (float) $hoPotongan),
+                'bank'              => [
+                    'nama'      => $config->bank,
+                    'norek'     => $config->norek,
+                    'atas_nama' => $config->atasNama,
+                ],
+                'catatan' => $config->catatan,
+            ];
+
+            $namaFile = 'invoice-internal-' . $bulanStr . '-unit-' . (int) $unit . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $namaFile . '"')
+                ->setBody(invoice_internal_pdf($dataInvoice));
+        }
+
+        return view('template', $data);
     }
 
     /**

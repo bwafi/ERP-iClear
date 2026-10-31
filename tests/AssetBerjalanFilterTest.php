@@ -756,4 +756,34 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertNull($this->barisTanggungan(1, date('Y-m')));
         $this->assertSame(80000000.0, (float) $this->db->table('unit')->where('idunit', 1)->get()->getRow()->tanggungan);
     }
+
+    public function testInvoiceInternalMenghasilkanPdfUntukUnitBagiHasil(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $result = $this->get('asset_berjalan?unit=3&bulan=9&tahun=2026&invoice=1');
+
+        $result->assertStatus(200);
+        $this->assertStringContainsString('application/pdf', $result->response()->getHeaderLine('Content-Type'));
+        // getBody() milik TestResponse mem-parse DOM dan merusak byte PDF;
+        // response mentah yang dipakai browser.
+        $this->assertStringStartsWith('%PDF', $result->response()->getBody());
+    }
+
+    public function testInvoiceInternalDitolakUntukStafCabang(): void
+    {
+        $this->sesi(100, 3, 36);
+        $this->db->setPrefix('');
+
+        $this->get('asset_berjalan?unit=3&bulan=9&tahun=2026&invoice=1')->assertStatus(403);
+    }
+
+    public function testInvoiceInternalDitolakUntukUnitPribadi(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+
+        $this->get('asset_berjalan?unit=1&bulan=9&tahun=2026&invoice=1')->assertStatus(403);
+    }
 }

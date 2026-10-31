@@ -86,7 +86,9 @@ $hakCabang = 0;
 $tagihanCenter = 0;
 if (in_array($selected_unit, [3, 4, 5])) {
     $hakCabang = 0.60 * $dasarBagiHasil;
-    $tagihanCenter = 0.40 * $dasarBagiHasil;
+    // Controller mengirim angka yang sama untuk invoice; fallback menjaga view
+    // tetap bisa dirender langsung oleh test.
+    $tagihanCenter = (float) ($tagihan_center ?? (0.40 * $dasarBagiHasil));
 }
 
 // Rasio realisasi biaya terkontrol terhadap batas 6% omset. Batas 0 (belum
@@ -787,6 +789,15 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <span class="badge bg-primary-subtle text-primary-emphasis fs-3 fw-bold px-3 py-2 rounded-pill">
                     <?= esc($periodeLabelId) ?>
                 </span>
+
+                <?php if (!empty($boleh_cetak_invoice)): ?>
+                    <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun . '&invoice=1') ?>"
+                        target="_blank" rel="noopener"
+                        class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 py-2 px-3">
+                        <iconify-icon icon="solar:document-text-linear" class="align-middle"></iconify-icon>
+                        <span>Cetak Invoice</span>
+                    </a>
+                <?php endif; ?>
 
                 <?php if (!$isBulanBerjalan): ?>
                     <?php $bulanSesudah = (int) date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>

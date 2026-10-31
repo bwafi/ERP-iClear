@@ -23,12 +23,13 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     /**
      * @param int $unit unit terpilih
      */
-    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null, float $biayaLain = 0.0): string
+    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null, float $biayaLain = 0.0, bool $bolehCetakInvoice = false): string
     {
         $vars = [
             'boleh_pilih_unit' => true,
             'id_jabatan'       => 2,
             'selected_unit'    => $unit,
+            'boleh_cetak_invoice' => $bolehCetakInvoice,
             'list_unit'        => [
                 ['idunit' => $unit, 'NAMA_UNIT' => 'ICLEAR Genteng'],
             ],
@@ -415,5 +416,20 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $this->assertStringContainsString('yang mengurangi Laba Bersih', $html);
         $this->assertStringContainsString('ho-row-active', $html);
         $this->assertStringContainsString('Unit ini', $html);
+    }
+
+    public function testTombolCetakInvoiceMunculUntukUnitBagiHasil(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, null, null, 0.0, true);
+
+        $this->assertStringContainsString('Cetak Invoice', $html);
+        $this->assertStringContainsString('invoice=1', $html);
+    }
+
+    public function testTombolCetakInvoiceTidakMunculTanpaIzin(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000);
+
+        $this->assertStringNotContainsString('Cetak Invoice', $html);
     }
 }
