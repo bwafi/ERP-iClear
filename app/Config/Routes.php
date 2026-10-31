@@ -171,6 +171,7 @@ $routes->get('bisa_diambil', 'Riwayat_Service::service_bisa_diambil', ['filter' 
 $routes->post('service/sudah_diambil', 'Riwayat_Service::update_sudah_diambil', ['filter' => 'auth']);
 $routes->get('sudah_diambil', 'Riwayat_Service::service_sudah_diambil', ['filter' => 'auth']);
 $routes->post('sudah_diambil/ajax', 'Riwayat_Service::service_sudah_diambil_ajax', ['filter' => 'auth']);
+$routes->post('service/kembalikan_ke_proses', 'Riwayat_Service::kembalikanKeProses', ['filter' => ['auth', 'csrf']]);
 
 $routes->post('diambil/dibtalkan', 'Riwayat_Service::dibatalkan_sudah_diambil', ['filter' => 'auth']);
 $routes->post('aktifkan/dibatalkan', 'Riwayat_Service::dibatalkan_aktifkan_lagi', ['filter' => 'auth']);

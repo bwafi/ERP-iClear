@@ -36,6 +36,12 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - [⚠️] Route lama `update_insert/service/savePembayaran` (`Riwayat_Service::insert_pembayaran`, NET) **disonaktifkan** karena menghitung DP dua kali; view pemicunya sudah yatim. — `Routes.php:186-193`
 ### 4.4 Proses & Status
 - `Riwayat_Service::proses_service` + `proses_service_ajax`; `update_status_proses`; `update_bisa_diambil`; `update_dibatalkan`; `update_sudah_diambil`; `dibatalkan_sudah_diambil`; `dibatalkan_aktifkan_lagi`; `togglePrioritas`.
+- **Kembalikan ke Proses Service** (Admin Root, `ID_JABATAN = 1`): `Riwayat_Service::kembalikanKeProses` (POST `service/kembalikan_ke_proses`, filter `['auth','csrf']`).
+  - Syarat: `status_service = 4`, tidak sedang diklaim garansi (`GaransiClaimService::isClaimed`), tidak direfund.
+  - Dalam satu transaksi: hapus jurnal `tabel_referensi='service'`, hapus `pembayaran_bank` (`service_baru`), set `status_service=2`, `tanggal_selesai=NULL`, `tanggal_bisa_diambil=NULL`, `bayar=0`, `bayar_tunai=0`, `bayar_bank=NULL`.
+  - DP (`dp_bayar`, ledger `service_dp`, jurnal DP) tidak berubah. `total_service`/`harus_dibayar` tidak berubah.
+  - Bila Tutup Kasir unit+tanggal `tanggal_selesai` sudah ada, wajib `konfirmasi_tutup_kasir=1`. Angka tutup kasir tersimpan/struk tidak diubah, tetapi halaman live dan omset/KPI teknisi bisa berubah karena dihitung ulang dari `service`.
+  - Alasan wajib (maks 120 karakter) dicatat di log aplikasi.
 - Riwayat service: `Riwayat_Service::index/riwayat_service_ajax/detail_service/cetak_invoice/export/delete_service`.
 ### 4.5 Garansi
 - `StatusGaransi::index/garansi_service_ajax` (garansi aktif), `update_service_pelanggan_garansi`, `insert_kerusakan_garansi`, `insert_sparepart_garansi`, `insert_pembayaran_garansi`.
@@ -97,6 +103,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - ✅ Terverifikasi: guard transaksi aktif, DP ledger, garansi sparepart, route NET dinonaktifkan, klaim garansi.
 - ✅ Refund klaim garansi: tunai/bank, keputusan kondisi sparepart per baris, kunci sekali refund, dan guard retur supplier. — `GaransiRefundService`; test `GaransiRefundServiceTest`, `GaransiServiceViewTest`, `ReturBarangRusakTest`.
 - ✅ Koreksi DP salah catat: Admin Root saja, jurnal DP diperbaiki in-place, audit `service_dp_koreksi`, nominal terkunci setelah service diambil. — `ServiceDpService::koreksiDp`; test `ServiceDpKoreksiTest`.
+- ✅ Kembalikan service sudah diambil ke Proses Service: Admin Root saja, jurnal pengambilan dihapus, pembayaran lama dihapus, DP tetap, guard tutup kasir. Test `tests/unit/ServiceKembalikanKeProsesTest.php`.
 - ⚠️ Koreksi DP tidak menghitung ulang Tutup Kasir yang sudah tersimpan; koreksi Tutup Kasir belum tersedia.
 - ⚠️ Gap tinggi:
   1. `cancel_service` tidak menghapus invoice/detail/pembayaran sparepart → invoice yatim & stok tetap terpotong. — SV-01
