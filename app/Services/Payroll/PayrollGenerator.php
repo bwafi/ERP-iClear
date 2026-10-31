@@ -400,6 +400,13 @@ class PayrollGenerator
     /** Catatan yang menjelaskan asal angkanya, supaya Finance bisa mengcek. */
     protected function susunCatatan(array $gaji, float $lembur): string
     {
+        if (!empty($gaji['probation'])) {
+            return 'Probation: Gaji Pokok ' . $this->rupiah((float) ($gaji['gaji_pokok_bulanan'] ?? 0))
+                . ' ÷ 30 × ' . (int) ($gaji['hari_hadir'] ?? 0) . ' hari hadir = '
+                . $this->rupiah((float) ($gaji['subtotal_before_incentive'] ?? 0))
+                . '. Kasbon dipotong saat dibayar.';
+        }
+
         $bagian = [];
 
         foreach ($gaji['components'] as $component) {

@@ -118,6 +118,19 @@ class SalaryCalculationService
     ): array {
         $structure = $this->getSalaryStructure($positionId, $unitId, $context, $date);
 
+        // Probation: hanya gaji pokok prorata hari hadir (lihat PRD 07).
+        if ($this->isProbation($employeeId)) {
+            return $this->calculateProbationSalary(
+                $employeeId,
+                $positionId,
+                $unitId,
+                $context,
+                $structure,
+                $bon,
+                $date
+            );
+        }
+
         $components = [];
         $subtotal_before_incentive = 0.0;
 
@@ -149,6 +162,7 @@ class SalaryCalculationService
             'position_id' => $positionId,
             'unit_id' => $unitId,
             'context' => $context,
+            'probation' => false,
             'components' => $components,
             'placement_allowance' => round($penempatan, 2),
             'incentive' => round($incentive, 2),
@@ -156,6 +170,105 @@ class SalaryCalculationService
             'bon' => round($bon, 2),
             'subtotal_before_incentive' => round($subtotal_before_incentive, 2),
             'total_gaji' => round($totalGaji, 2),
+        ];
+    }
+
+    /**
+     * Status probation diambil dari master pegawai (JENIS_PEGAWAI = 2).
+     */
+    public function isProbation(int $employeeId): bool
+    {
+        $row = $this->db->table('akun')
+            ->select('JENIS_PEGAWAI')
+            ->where('ID_AKUN', $employeeId)
+            ->get()
+            ->getRow();
+
+        return $row !== null && (int) ($row->JENIS_PEGAWAI ?? 0) === 2;
+    }
+
+    /**
+     * Jumlah hari hadir pada bulan payroll: tanggal unik evaluasi KEHADIRAN.
+     *
+     * Satu tanggal bisa punya dua sesi (shift PS pagi+sore) tetapi tetap
+     * dihitung satu hari. Dibatasi 30 supaya prorata tidak melebihi gaji pokok.
+     */
+    protected function countHariHadir(int $employeeId, ?string $date): int
+    {
+        $date  = $date ?? date('Y-m-d');
+        $year  = (int) substr($date, 0, 4);
+        $month = (int) substr($date, 5, 2);
+
+        $component = $this->db->table('kpi_components')
+            ->where('code', 'KEHADIRAN')
+            ->get()
+            ->getRow();
+
+        if ($component === null) {
+            return 0;
+        }
+
+        $row = $this->db->table('kpi_evaluations')
+            ->select('COUNT(DISTINCT evaluation_date) AS hari', false)
+            ->where('employee_id', $employeeId)
+            ->where('kpi_component_id', (int) $component->id)
+            ->where('period_year', $year)
+            ->where('period_month', $month)
+            ->where('evaluation_date IS NOT NULL', null, false)
+            ->get()
+            ->getRow();
+
+        return min(30, (int) ($row->hari ?? 0));
+    }
+
+    /**
+     * Gaji probation: gaji pokok / 30 x hari hadir, tanpa komponen lain.
+     * Bon tetap dikurangkan karena itu uang muka yang sudah diterima.
+     */
+    protected function calculateProbationSalary(
+        int $employeeId,
+        int $positionId,
+        int $unitId,
+        string $context,
+        array $structure,
+        float $bon,
+        ?string $date
+    ): array {
+        $pokok = 0.0;
+        foreach ($structure as $struct) {
+            if ($struct->code === 'GAJI_POKOK') {
+                $pokok = (float) $struct->base_value;
+                break;
+            }
+        }
+
+        $hari   = $this->countHariHadir($employeeId, $date);
+        $amount = round($pokok / 30 * $hari, 2);
+
+        return [
+            'success' => true,
+            'employee_id' => $employeeId,
+            'position_id' => $positionId,
+            'unit_id' => $unitId,
+            'context' => $context,
+            'probation' => true,
+            'hari_hadir' => $hari,
+            'gaji_pokok_bulanan' => round($pokok, 2),
+            'components' => [[
+                'component_code' => 'GAJI_POKOK',
+                'component_name' => 'Gaji Pokok',
+                'calculation_type' => 'fixed',
+                'base_value' => round($pokok, 2),
+                'unit_id' => null,
+                'context' => $context,
+                'amount' => $amount,
+            ]],
+            'placement_allowance' => 0.0,
+            'incentive' => 0.0,
+            'lembur' => 0.0,
+            'bon' => round($bon, 2),
+            'subtotal_before_incentive' => $amount,
+            'total_gaji' => round($amount - $bon, 2),
         ];
     }
 

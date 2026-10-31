@@ -1501,6 +1501,7 @@ class KpiCalculationService
      *
      * Pool = 3% × gross profit unit 1 bila target OMSET_TOKO tercapai, dibagi
      * rata ke staff toko aktif yang menerima gaji (KT, teknisi, admin, CS).
+     * Pegawai probation tidak ikut pembagi karena insentifnya tidak dibayarkan.
      */
     private function probolinggoPoolIncentive(
         int $employeeId,
@@ -1544,6 +1545,9 @@ class KpiCalculationService
     /**
      * ID akun aktif & menerima gaji pada satu unit, opsional filter jabatan.
      *
+     * Probation (JENIS_PEGAWAI = 2) dikecualikan: insentifnya tidak dibayarkan
+     * (lihat PRD 07), jadi tidak boleh ikut mengurangi bagian pegawai lain.
+     *
      * @param list<int>|null $positions
      * @return list<int>
      */
@@ -1557,6 +1561,10 @@ class KpiCalculationService
             ->where("ID_UNIT", $unitId)
             ->where("STATUS_PEGAWAI", 1)
             ->where("TERIMA_GAJI", 1)
+            ->groupStart()
+            ->where("JENIS_PEGAWAI !=", 2)
+            ->orWhere("JENIS_PEGAWAI", null)
+            ->groupEnd()
             ->groupStart()
             ->where("deleted", null)
             ->orWhere("deleted", 0)

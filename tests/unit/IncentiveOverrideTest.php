@@ -61,7 +61,7 @@ final class IncentiveOverrideTest extends CIUnitTestCase
         $q('CREATE TABLE akun (
                 ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
                 NAMA_AKUN VARCHAR(150) NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL,
-                STATUS_PEGAWAI INT NULL, deleted INT NULL)');
+                STATUS_PEGAWAI INT NULL, JENIS_PEGAWAI INT NULL, deleted INT NULL)');
         $q('CREATE TABLE kpi_components (
                 id INT PRIMARY KEY, code VARCHAR(50) NULL, name VARCHAR(150) NULL)');
         $q('CREATE TABLE kpi_targets (

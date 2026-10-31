@@ -12,7 +12,8 @@ use CodeIgniter\Test\CIUnitTestCase;
  *   (1% bila < 3 cabang capai, 1,5% bila ≥ 3), ditambah pool global 1,5% bila
  *   target global capai; dibagi rata karyawan HO aktif yang menerima gaji.
  * - Probolinggo (unit 1): pool 3% × gross profit bila target capai,
- *   dibagi rata staff toko (KT, teknisi, admin, CS).
+ *   dibagi rata staff toko (KT, teknisi, admin, CS). Pegawai probation
+ *   tidak ikut pembagi karena insentifnya tidak dibayarkan.
  * - Periode sebelum Oktober 2026 tetap memakai incentive_members lama.
  *
  * @internal
@@ -32,6 +33,7 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
     private const PROB_TEK_B = 803;
     private const PROB_CS = 804;
     private const PROB_DIREKTUR = 805;
+    private const PROB_PROBATION = 806;
     private const GENTENG_A = 901;
     private const GENTENG_B = 902;
     private const GENTENG_C = 903;
@@ -77,7 +79,7 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
         $q('CREATE TABLE akun (
                 ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
                 NAMA_AKUN VARCHAR(150) NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL,
-                STATUS_PEGAWAI INT NULL, deleted INT NULL)');
+                STATUS_PEGAWAI INT NULL, JENIS_PEGAWAI INT NULL, deleted INT NULL)');
         $q('CREATE TABLE kpi_components (
                 id INT PRIMARY KEY, code VARCHAR(50) NULL, name VARCHAR(150) NULL)');
         $q('CREATE TABLE kpi_targets (
@@ -150,6 +152,12 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
             ['ID_AKUN' => self::GENTENG_B, 'ID_UNIT' => 5, 'ID_JABATAN' => 41, 'NAMA_AKUN' => 'Genteng B', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
             ['ID_AKUN' => self::GENTENG_C, 'ID_UNIT' => 5, 'ID_JABATAN' => 36, 'NAMA_AKUN' => 'Genteng C', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
             ['ID_AKUN' => self::GENTENG_D, 'ID_UNIT' => 5, 'ID_JABATAN' => 35, 'NAMA_AKUN' => 'Genteng D', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null],
+        ]);
+
+        $this->db->table('akun')->insert([
+            'ID_AKUN' => self::PROB_PROBATION, 'ID_UNIT' => 1, 'ID_JABATAN' => 42,
+            'NAMA_AKUN' => 'CS Probation', 'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1,
+            'JENIS_PEGAWAI' => 2, 'deleted' => null,
         ]);
 
         // Oktober 2026 (omzet = GP = sub_total - hpp):
@@ -235,6 +243,14 @@ final class IncentiveHoProbolinggoTest extends CIUnitTestCase
         foreach ([self::PROB_KT, self::PROB_TEK_A, self::PROB_TEK_B, self::PROB_CS] as $id) {
             $this->assertSame(450000.0, $this->insentif($id, 1), 'akun ' . $id);
         }
+    }
+
+    public function testProbationTidakIkutPembagiPoolProbolinggo(): void
+    {
+        // Probation tidak dapat insentif dan tidak mengurangi bagian staff lain.
+        $this->assertSame(0.0, $this->insentif(self::PROB_PROBATION, 1));
+        $this->assertSame(450000.0, $this->insentif(self::PROB_CS, 1));
+        $this->assertSame(450000.0, $this->insentif(self::PROB_TEK_A, 1));
     }
 
     public function testProbolinggoJabatanDiLuarStaffTokoTidakDapat(): void

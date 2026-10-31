@@ -73,7 +73,7 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
                 ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
                 NAMA_AKUN TEXT NULL, NOID TEXT NULL, ROLES TEXT NULL,
                 ALAMAT TEXT NULL, TERIMA_GAJI INT NULL, STATUS_PEGAWAI INT NULL,
-                deleted TEXT NULL)');
+                JENIS_PEGAWAI INT NULL, deleted TEXT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
         $q('CREATE TABLE spv_units (spv_id INT NULL, unit_id INT NULL)');
         $q('CREATE TABLE stok_barang (

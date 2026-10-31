@@ -56,7 +56,7 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         $q('CREATE TABLE akun (
                 ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
                 NAMA_AKUN TEXT NULL, ALAMAT TEXT NULL, TERIMA_GAJI INT NULL,
-                STATUS_PEGAWAI INT NULL, deleted TEXT NULL)');
+                STATUS_PEGAWAI INT NULL, JENIS_PEGAWAI INT NULL, deleted TEXT NULL)');
         $q('CREATE TABLE kas_keluar (
                 idkas_keluar INT PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
                 kategori_idkategori INT NULL, deskripsi TEXT NULL, jumlah REAL NULL,
