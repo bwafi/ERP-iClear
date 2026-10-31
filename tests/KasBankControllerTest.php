@@ -2493,6 +2493,11 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->sesiAdminCabang();
         $body = (string) $this->get('kas_bank/transfer')->getBody();
         $this->assertStringContainsString('TRF-SH-U1', $body, 'Transfer unit sendiri harus tetap tampil');
+        $this->assertStringContainsString(
+            'Unit A',
+            $this->barisRiwayatPindahSaldo($body, 'TRF-SH-U1'),
+            'Kolom unit harus menampilkan unit transaksi'
+        );
         $this->assertStringNotContainsString(
             'TRF-SH-U2',
             $body,
@@ -2504,6 +2509,16 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $bodyRoot = (string) $this->get('kas_bank/transfer')->getBody();
         $this->assertStringContainsString('TRF-SH-U1', $bodyRoot, 'Konsolidasi harus melihat unit 1');
         $this->assertStringContainsString('TRF-SH-U2', $bodyRoot, 'Konsolidasi harus melihat unit 2');
+        $this->assertStringContainsString(
+            'Unit A',
+            $this->barisRiwayatPindahSaldo($bodyRoot, 'TRF-SH-U1'),
+            'Baris unit 1 harus menampilkan Unit A'
+        );
+        $this->assertStringContainsString(
+            'Unit B',
+            $this->barisRiwayatPindahSaldo($bodyRoot, 'TRF-SH-U2'),
+            'Baris unit 2 harus menampilkan Unit B'
+        );
     }
 
     /**

@@ -33,6 +33,14 @@
 - **Table Style:** Custom `.kb-table` with uppercase headers, hover states, tabular numbers.
 - **Tags:** Color-coded `.kb-tag` system for status, type, and category labels.
 
+### Riwayat Pindah Saldo (`.kbt-*`)
+- **Scope:** `app/Views/kas_bank/transfer.php`; selector hanya di panel riwayat dan memakai token `--kb-*` dari `_theme.php`. Tidak ada palet baru.
+- **Layout:** header kartu memuat judul, konteks unit ("Semua unit" saat konsolidasi), dan ringkasan "Total tampil" + jumlah transfer. Tabel enam kolom: Tanggal/Ref, Unit, Alur Dana, Nominal, Bukti, Aksi (aksi hanya bila `can_reversal`).
+- **Unit:** kolom Unit menampilkan `transaksi_kas_bank.unit_id` (unit yang mencatat), bukan pemilik rekening. Pemilik rekening tampil sebagai meta di bawah nama akun: nama unit, "Rekening bersama", atau "Finance/HO".
+- **Alur Dana:** pengirim → penerima dalam satu sel; nama akun tebal, pemilik di bawahnya. Nominal rata kanan, `tabular-nums`; referensi `kb-mono`.
+- **Responsive:** di bawah `768px` header tabel disembunyikan secara visual (tetap di accessibility tree) dan tiap baris menjadi blok dengan label `data-label`.
+- **Rules:** tidak mengubah query/filter/route; tetap satu aksen (primary) untuk titik unit dan fokus; tanpa gradien atau border kiri berwarna; motion hanya pada state kontrol.
+
 ### Step Cards (`.kb-step-card`)
 - **Purpose:** Numbered form sections for multi-step workflows.
 - **Structure:** Header with numbered badge + title, body with form elements.
