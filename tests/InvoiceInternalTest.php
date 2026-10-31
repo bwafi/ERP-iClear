@@ -174,7 +174,7 @@ class InvoiceInternalTest extends CIUnitTestCase
         $this->assertSame('Penyesuaian payroll', end($akhir['komponen'])['nama']);
     }
 
-    public function testHoEmployeesSelisihPembulatanTidakMunculSebagaiBaris(): void
+    public function testHoEmployeesSelisihPembulatanTidakMengubahGajiPokok(): void
     {
         $dist = [
             'employees' => [
@@ -200,7 +200,92 @@ class InvoiceInternalTest extends CIUnitTestCase
 
         $this->assertSame(1500001, array_sum(array_column($rows, 'nominal')));
         $this->assertSame($akhir['nominal'], array_sum(array_column($akhir['komponen'], 'nominal')));
-        $this->assertNotSame('Penyesuaian payroll', end($akhir['komponen'])['nama']);
+        $this->assertSame(500000, $akhir['komponen'][0]['nominal'], 'Gaji Pokok tidak boleh jadi 499.999');
+        $this->assertSame('Penyesuaian payroll', end($akhir['komponen'])['nama']);
+        $this->assertSame(1, end($akhir['komponen'])['nominal']);
+    }
+
+    /** Aktual payroll 1 rupiah di bawah perkiraan tidak boleh memotong Gaji Pokok. */
+    public function testHoEmployeesAktualMinusSatuTetapGajiPokokPenuh(): void
+    {
+        $dist = [
+            'pribadi_unit_id' => 1,
+            'employees'       => [[
+                'nama' => 'Syahroni', 'perkiraan_gaji' => 1800000, 'gaji_dipotong' => 1799997,
+                'gaji_dibebankan' => 1799997, 'placement' => 0,
+                'divisor' => 3, 'scope' => 'global', 'wilayah_unit_ids' => [],
+                'components' => [
+                    ['component_code' => 'GAJI_POKOK', 'component_name' => 'Gaji Pokok', 'amount' => 1500000],
+                    ['component_code' => 'TUNJANGAN_KINERJA', 'component_name' => 'Tunjangan Kinerja', 'amount' => 300000],
+                ],
+            ]],
+        ];
+
+        $row = invoice_ho_employees($dist, 3, 599999)[0];
+
+        $this->assertSame(599999, $row['nominal']);
+        $this->assertSame(500000, $row['komponen'][0]['nominal'], 'Gaji Pokok harus tetap 500.000');
+        $this->assertSame(100000, $row['komponen'][1]['nominal']);
+        $this->assertSame('Penyesuaian payroll', end($row['komponen'])['nama']);
+        $this->assertSame(-1, end($row['komponen'])['nominal']);
+    }
+
+    /** Bonus/aktual di atas perkiraan tidak boleh menaikkan komponen gaji. */
+    public function testHoEmployeesAktualBonusTidakMenaikkanGajiPokok(): void
+    {
+        $dist = [
+            'employees' => [[
+                'nama' => 'Syahroni', 'perkiraan_gaji' => 1500000, 'gaji_dipotong' => 4795243,
+                'gaji_dibebankan' => 4795243, 'placement' => 0,
+                'divisor' => 3, 'scope' => 'global', 'wilayah_unit_ids' => [],
+                'components' => [
+                    ['component_code' => 'GAJI_POKOK', 'component_name' => 'Gaji Pokok', 'amount' => 1500000],
+                ],
+            ]],
+        ];
+
+        $row = invoice_ho_employees($dist, 3, 1598414)[0];
+
+        $this->assertSame(1598414, $row['nominal']);
+        $this->assertSame(500000, $row['komponen'][0]['nominal'], 'Gaji Pokok tidak boleh ikut naik jadi 500.001');
+        $this->assertSame('Penyesuaian payroll', end($row['komponen'])['nama']);
+        $this->assertSame(1098414, end($row['komponen'])['nominal']);
+        $this->assertSame($row['nominal'], array_sum(array_column($row['komponen'], 'nominal')));
+    }
+
+    /** Unit pribadi tambahan hanya menanggung SPV wilayahnya, bukan pool non-SPV. */
+    public function testHoEmployeesUnitTakTercatatHanyaSpvWilayah(): void
+    {
+        $dist = [
+            'pribadi_unit_id' => 1,
+            'unit_detail'     => [
+                ['idunit' => 1, 'is_counted' => true],
+                ['idunit' => 2, 'is_counted' => false],
+            ],
+            'employees' => [
+                [
+                    'nama' => 'Huda', 'perkiraan_gaji' => 1800000, 'gaji_dibebankan' => 1800000,
+                    'divisor' => 3, 'scope' => 'global', 'wilayah_unit_ids' => [],
+                    'components' => [
+                        ['component_code' => 'GAJI_POKOK', 'component_name' => 'Gaji Pokok', 'amount' => 1800000],
+                    ],
+                ],
+                [
+                    'nama' => 'Mario', 'perkiraan_gaji' => 1200000, 'gaji_dibebankan' => 1200000,
+                    'divisor' => 2, 'scope' => 'wilayah', 'wilayah_unit_ids' => [2, 3],
+                    'components' => [
+                        ['component_code' => 'GAJI_POKOK', 'component_name' => 'Gaji Pokok', 'amount' => 1200000],
+                    ],
+                ],
+            ],
+        ];
+
+        $rows = invoice_ho_employees($dist, 2, 600000);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('Mario', $rows[0]['nama']);
+        $this->assertSame(600000, $rows[0]['nominal']);
+        $this->assertSame(600000, $rows[0]['komponen'][0]['nominal']);
     }
 
     public function testHoEmployeesMemakaiAktualUntukYangSudahDibayar(): void

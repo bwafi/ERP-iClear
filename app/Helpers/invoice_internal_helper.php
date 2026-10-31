@@ -34,13 +34,28 @@ if (! function_exists('invoice_ho_employees')) {
         // ke cabang; cabang tidak menerima komponen ini.
         $isPusat = $unitId > 0 && $unitId === (int) ($distribution['pribadi_unit_id'] ?? 0);
 
+        // Unit pribadi tambahan tidak menanggung pool non-SPV; bagiannya
+        // digabung ke unit pribadi pertama.
+        $unitTercatat = true;
+        foreach (($distribution['unit_detail'] ?? []) as $u) {
+            if ((int) ($u['idunit'] ?? 0) === $unitId) {
+                $unitTercatat = (bool) ($u['is_counted'] ?? true);
+                break;
+            }
+        }
+
         foreach (($distribution['employees'] ?? []) as $emp) {
             $divisor = (int) ($emp['divisor'] ?? 0);
             if ($divisor <= 0) {
                 continue;
             }
 
-            if (($emp['scope'] ?? 'global') === 'wilayah'
+            $scope = (string) ($emp['scope'] ?? 'global');
+            if ($scope === 'global' && ! $unitTercatat) {
+                continue;
+            }
+
+            if ($scope === 'wilayah'
                 && ! in_array($unitId, array_map('intval', $emp['wilayah_unit_ids'] ?? []), true)) {
                 continue;
             }
@@ -75,24 +90,55 @@ if (! function_exists('invoice_ho_employees')) {
                 if ($nama === '') {
                     return;
                 }
-                $bulat = (int) round($nilai / $divisor);
-                if ($bulat === 0) {
+                // Simpan nilai pecahan dulu; pembulatan dilakukan sekaligus
+                // di bawah supaya tidak ada komponen yang dikurangi 1 rupiah.
+                $bagianKomponen = $nilai / $divisor;
+                if ($bagianKomponen == 0.0) {
                     return;
                 }
                 $kunci = $kode !== '' ? $kode : $nama;
-                $komponen[$kunci] ??= ['nama' => $nama, 'nominal' => 0];
-                $komponen[$kunci]['nominal'] += $bulat;
+                $komponen[$kunci] ??= ['nama' => $nama, 'nominal' => 0.0];
+                $komponen[$kunci]['nominal'] += $bagianKomponen;
             };
 
             foreach (($emp['components'] ?? []) as $c) {
                 $tambah((string) ($c['component_code'] ?? ''), (string) ($c['component_name'] ?? ''), (float) ($c['amount'] ?? 0));
             }
             if ($isPusat && $placement > 0) {
-                $komponen['TUNJANGAN_PENEMPATAN'] ??= ['nama' => 'Tunjangan Penempatan', 'nominal' => 0];
-                $komponen['TUNJANGAN_PENEMPATAN']['nominal'] += (int) round($placement);
+                $komponen['TUNJANGAN_PENEMPATAN'] ??= ['nama' => 'Tunjangan Penempatan', 'nominal' => 0.0];
+                $komponen['TUNJANGAN_PENEMPATAN']['nominal'] += $placement;
             }
             if ((float) ($emp['insentif'] ?? 0) > 0) {
                 $tambah('INSENTIF', 'Insentif', (float) $emp['insentif']);
+            }
+
+            // Pembulatan sisa terbesar: komponen dengan pecahan terbesar dapat
+            // +1 rupiah sampai jumlahnya sama dengan total komponennya sendiri.
+            // Target diambil dari komponen (bukan dari nominal aktual) supaya
+            // bonus/aktual tidak menaikkan Gaji Pokok jadi 500.001, dan selisih
+            // aktual tetap masuk "Penyesuaian payroll".
+            $targetKomponen = (int) round(array_sum(array_column($komponen, 'nominal')));
+            $dasar = 0;
+            foreach ($komponen as $k) {
+                $dasar += (int) floor($k['nominal']);
+            }
+            $sisa = $targetKomponen - $dasar;
+            $kandidat = array_keys($komponen);
+            usort($kandidat, static function (string $a, string $b) use ($komponen): int {
+                $fa = $komponen[$a]['nominal'] - floor($komponen[$a]['nominal']);
+                $fb = $komponen[$b]['nominal'] - floor($komponen[$b]['nominal']);
+
+                return $fb <=> $fa;
+            });
+            foreach ($komponen as $kunci => $k) {
+                $komponen[$kunci]['nominal'] = (int) floor($k['nominal']);
+            }
+            foreach ($kandidat as $kunci) {
+                if ($sisa <= 0) {
+                    break;
+                }
+                $komponen[$kunci]['nominal']++;
+                $sisa--;
             }
 
             uksort($komponen, static function (string $a, string $b) use ($prioritas): int {
@@ -117,19 +163,8 @@ if (! function_exists('invoice_ho_employees')) {
                 continue;
             }
 
-            // Selisih pembulatan (<= Rp 100) ditempel ke komponen terbesar agar
-            // invoice tidak menampilkan baris penyesuaian bernilai -1 rupiah.
-            if (abs($selisih) <= 100 && $row['komponen'] !== []) {
-                $terbesar = 0;
-                foreach ($row['komponen'] as $i => $k) {
-                    if ($k['nominal'] > $row['komponen'][$terbesar]['nominal']) {
-                        $terbesar = $i;
-                    }
-                }
-                $row['komponen'][$terbesar]['nominal'] += $selisih;
-                continue;
-            }
-
+            // Sisa di luar pembulatan (mis. aktual payroll berbeda dari
+            // perkiraan) tetap ditampilkan apa adanya sebagai penyesuaian.
             $row['komponen'][] = ['nama' => 'Penyesuaian payroll', 'nominal' => $selisih];
         }
         unset($row);
