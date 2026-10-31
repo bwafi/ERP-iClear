@@ -1219,7 +1219,11 @@ class KasBank extends BaseController
                 // Satu transfer punya dua kaki ledger. Kaki KELUAR membawa
                 // akun tujuan dan mewakili satu transaksi untuk riwayat; kaki
                 // MASUK hanya mirror saldo sehingga tidak boleh dirender lagi.
-                ModeKasBank::ARAH_KELUAR
+                ModeKasBank::ARAH_KELUAR,
+                // Rekening shared dipakai beberapa unit, jadi account scope
+                // saja tidak memisahkan riwayat per unit. Kaki KELUAR sudah
+                // membawa unit transaksi; null = konsolidasi (ROOT/Finance).
+                $unitTerpilih
             ),
             'submit_token'  => $this->buatSubmitToken(),
             'body'          => 'kas_bank/transfer',
@@ -1249,7 +1253,8 @@ class KasBank extends BaseController
         string $jenis,
         ?int $unitTerpilih,
         ?string $sumberTipe = null,
-        ?string $arah = null
+        ?string $arah = null,
+        ?int $unitFilter = null
     )
     {
         $akunIds = $this->AkunScope->akunIdsTerlihat(
@@ -1286,6 +1291,10 @@ class KasBank extends BaseController
 
         if ($arah !== null && $arah !== '') {
             $builder->where('arah', $arah);
+        }
+
+        if ($unitFilter !== null && $unitFilter > 0) {
+            $builder->where('unit_id', $unitFilter);
         }
 
         return $builder

@@ -2454,6 +2454,59 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
     }
 
     /**
+     * Riwayat Pindah Saldo mengikuti unit terpilih walau rekeningnya SHARED.
+     *
+     * Account scope saja tidak memisahkan unit: saat Unit A dan Unit B memakai
+     * rekening 5, memilih Unit A dulu tetap menampilkan transfer milik Unit B
+     * karena query hanya memfilter id rekening. Kaki KELUAR menyimpan unit_id,
+     * jadi riwayat harus difilter per unit. Mode konsolidasi tetap melihat semua.
+     */
+    public function testRiwayatPindahSaldoDifilterPerUnitWalauRekeningShared(): void
+    {
+        $this->db->query("INSERT INTO db_alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal, keterangan) VALUES
+            (5, 1, 500000, 'Hak pakai BCA Bersama Unit A'),
+            (5, 2, 500000, 'Hak pakai BCA Bersama Unit B')");
+
+        $insert = function (int $unit, int $tujuan, string $ref, string $jam): void {
+            $this->db->query(
+                'INSERT INTO db_transaksi_kas_bank
+                    (tanggal, unit_id, akun_kas_bank_id, jenis, arah, jumlah, akun_tujuan_id,
+                     transfer_ref, submission_key, sumber_tipe, keterangan, created_at)
+                 VALUES (?, ?, 5, ?, ?, 100000, ?, ?, NULL, ?, ?, ?)',
+                [
+                    $this->tglMulai,
+                    $unit,
+                    ModeKasBank::JENIS_TRANSFER,
+                    ModeKasBank::ARAH_KELUAR,
+                    $tujuan,
+                    $ref,
+                    KasBankSetorTarikService::SUMBER_TIPE_PINDAH_SALDO,
+                    'transfer unit ' . $unit,
+                    $this->tglMulai . ' ' . $jam,
+                ]
+            );
+        };
+        $insert(1, 6, 'TRF-SH-U1', '09:00:00');
+        $insert(2, 4, 'TRF-SH-U2', '09:00:01');
+
+        // Admin unit 1: rekening shared 5 terlihat, tetapi hanya transfer unit 1.
+        $this->sesiAdminCabang();
+        $body = (string) $this->get('kas_bank/transfer')->getBody();
+        $this->assertStringContainsString('TRF-SH-U1', $body, 'Transfer unit sendiri harus tetap tampil');
+        $this->assertStringNotContainsString(
+            'TRF-SH-U2',
+            $body,
+            'Transfer unit lain pada rekening shared tidak boleh tampil saat unit 1 dipilih'
+        );
+
+        // ROOT tanpa pilihan unit = konsolidasi: semua unit tetap terlihat.
+        $this->sesi();
+        $bodyRoot = (string) $this->get('kas_bank/transfer')->getBody();
+        $this->assertStringContainsString('TRF-SH-U1', $bodyRoot, 'Konsolidasi harus melihat unit 1');
+        $this->assertStringContainsString('TRF-SH-U2', $bodyRoot, 'Konsolidasi harus melihat unit 2');
+    }
+
+    /**
      * [M2] Riwayat Pindah Saldo menampilkan NAMA rekening di kedua kolom.
      *
      * Lookup label harus memuat rekening yang HANYA sah sebagai tujuan.
