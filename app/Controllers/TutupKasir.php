@@ -1591,6 +1591,28 @@ class TutupKasir extends BaseController
         $unit = (int) $tutupKasir->unit;
         $tanggal = date('Y-m-d', strtotime((string) $tutupKasir->tanggal));
 
+        // Identitas dokumen. Angka uang tetap dari baris `tutup_kasir` (record
+        // closing), bukan dihitung ulang dari transaksi yang bisa berubah
+        // setelah closing disimpan.
+        $unitRow = $this->db->table('unit')
+            ->select('NAMA_UNIT, JALAN_UNIT, KELURAHAN_UNIT, KECAMATAN_UNIT, KABUPATEN_UNIT, PROVINSI_UNIT, NOTELP')
+            ->where('idunit', $unit)
+            ->get()
+            ->getRowArray() ?? [];
+
+        $penutup = null;
+        if (! empty($tutupKasir->akun_ID_AKUN)) {
+            $penutup = $this->db->table('akun')
+                ->select('akun.NAMA_AKUN, akun.ID_JABATAN, jabatan.NAMA_JABATAN')
+                ->join('jabatan', 'jabatan.ID_JABATAN = akun.ID_JABATAN', 'left')
+                ->where('akun.ID_AKUN', (int) $tutupKasir->akun_ID_AKUN)
+                ->get()
+                ->getRowArray();
+        }
+
+        helper('invoice_internal');
+        $managerNama = invoice_internal_signers()['manager'] ?? '';
+
         $totalservice = $this->db->table('service')
             ->selectSum('bayar_tunai', 'total')
             ->where('DATE(tanggal_selesai)', $tanggal)
@@ -1699,8 +1721,10 @@ class TutupKasir extends BaseController
             'hp_total' => $hp_total,
             'qty_acc' => $acc_qty,
             'acc_total' => $acc_total,
-            'tutup'    => $tutupKasir,
-            // 'dataunit' => $this->Unit->getById(session('ID_UNIT'))
+            'tutup'        => $tutupKasir,
+            'unit_row'     => $unitRow,
+            'penutup'      => $penutup,
+            'manager_nama' => $managerNama,
         ];
 
         $html = view('cetak/cetak_tutupkasir', $data);
