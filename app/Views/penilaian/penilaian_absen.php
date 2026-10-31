@@ -205,7 +205,7 @@
                                         <input type="time" name="jam_masuk_pagi" id="atsJamPagi" class="form-control form-control-sm">
                                     </div>
                                     <div id="atsJamSoreWrap" class="col-md-3 d-none">
-                                        <label class="form-label small text-muted mb-1">Jam Sore (17:00)</label>
+                                        <label class="form-label small text-muted mb-1">Jam Sore (16:55)</label>
                                         <input type="time" name="jam_masuk_sore" id="atsJamSore" class="form-control form-control-sm">
                                     </div>
                                     <div class="col-md" id="atsPreviewBlockCol">
@@ -530,7 +530,7 @@
             'SIANG': '12:45',
             'PS': {
                 'PAGI': '08:45',
-                'SORE': '17:00'
+                'SORE': '16:55'
             }
         };
 
@@ -686,7 +686,7 @@
                     actual: jamPagiEl.value
                 });
                 if (jamSoreEl.value) sessions.push({
-                    sched: '17:00',
+                    sched: '16:55',
                     actual: jamSoreEl.value
                 });
             } else {

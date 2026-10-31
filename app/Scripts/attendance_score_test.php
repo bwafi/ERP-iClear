@@ -49,7 +49,7 @@ echo "\n== SCHEDULED TIME ==\n";
 ok('PAGI → 08:45', Calc::getScheduledTime('PAGI', 'FULL') === '08:45');
 ok('SIANG → 12:45', Calc::getScheduledTime('SIANG', 'FULL') === '12:45');
 ok('PS PAGI → 08:45', Calc::getScheduledTime('PS', 'PAGI') === '08:45');
-ok('PS SORE → 17:00', Calc::getScheduledTime('PS', 'SORE') === '17:00');
+ok('PS SORE → 16:55', Calc::getScheduledTime('PS', 'SORE') === '16:55');
 
 echo "\n== NORMAL SCORING (Pagi 08:45) ==\n";
 $tests = [
@@ -109,7 +109,7 @@ echo "\n== PS DUAL SESSION ==\n";
 $psPagi = Calc::calculate('PS', 'PAGI', 'NORMAL', '08:45', '08:50');
 ok('PS pagi telat 5 menit → score 3', $psPagi['late_minutes'] === 5 && $psPagi['auto_score'] === 3.0, "late={$psPagi['late_minutes']} score={$psPagi['auto_score']}");
 
-$psSore = Calc::calculate('PS', 'SORE', 'NORMAL', '17:00', '17:05');
+$psSore = Calc::calculate('PS', 'SORE', 'NORMAL', '16:55', '17:00');
 ok('PS sore telat 5 menit → score 3', $psSore['late_minutes'] === 5 && $psSore['auto_score'] === 3.0, "late={$psSore['late_minutes']} score={$psSore['auto_score']}");
 
 $totalPsLate = $psPagi['late_minutes'] + $psSore['late_minutes'];

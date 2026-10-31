@@ -21,7 +21,7 @@ class AttendanceScoreCalculator
         'SIANG' => '12:45',
         'PS'    => [
             'PAGI' => '08:45',
-            'SORE' => '17:00',
+            'SORE' => '16:55',
         ],
     ];
 
@@ -56,7 +56,7 @@ class AttendanceScoreCalculator
      * @param string $shift PAGI|SIANG|PS
      * @param string $session PAGI|SORE|FULL
      * @param string $attendanceType NORMAL|IZIN_TELAT
-     * @param string $scheduledTime Format HH:MM (08:45, 12:45, 17:00)
+     * @param string $scheduledTime Format HH:MM (08:45, 12:45, 16:55)
      * @param string $actualTime Format HH:MM
      * @return array{late_minutes:int, auto_score:float, scheduled_time:string}
      */

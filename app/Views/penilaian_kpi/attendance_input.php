@@ -95,7 +95,7 @@
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="session" id="sessionSore" value="SORE">
-                                    <label class="form-check-label" for="sessionSore">Sore (17:00)</label>
+                                    <label class="form-check-label" for="sessionSore">Sore (16:55)</label>
                                 </div>
                             </div>
                         </div>
@@ -254,7 +254,7 @@
         'SIANG': '12:45',
         'PS': {
             'PAGI': '08:45',
-            'SORE': '17:00'
+            'SORE': '16:55'
         }
     };
 
