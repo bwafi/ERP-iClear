@@ -115,6 +115,33 @@ class Payroll extends BaseController
             ->get()
             ->getResult();
 
+        // Sisa kasbon pegawai untuk preview potongan. Kasbon dipotong saat
+        // bayar, jadi baris rencana baru menampilkan perkiraan. Tetap dihitung
+        // saat mode "semua periode" karena kasbon berlaku per pegawai.
+        $kasbonMap = [];
+        if ($payrollItems !== []) {
+            $employeeIds = array_values(array_unique(array_filter(
+                array_map(static fn ($row) => (int) ($row->pegawai_id ?? 0), $payrollItems)
+            )));
+
+            if ($employeeIds !== []) {
+                $kasbonRows = $this->db->table('hutang_piutang')
+                    ->select('pihak_id, SUM(sisa) AS sisa')
+                    ->where('deleted', 0)
+                    ->where('scope !=', \App\Services\Finance\FinanceScopeService::SCOPE_LEGACY)
+                    ->where('sumber_tipe', \App\Services\Finance\HutangPiutangService::SUMBER_KASBON)
+                    ->where('pihak_tipe', 'pegawai')
+                    ->whereIn('pihak_id', $employeeIds)
+                    ->where('status !=', \App\Services\Finance\HutangPiutangService::STATUS_LUNAS)
+                    ->groupBy('pihak_id')
+                    ->get()->getResult();
+
+                foreach ($kasbonRows as $kasbonRow) {
+                    $kasbonMap[(int) $kasbonRow->pihak_id] = (int) $kasbonRow->sisa;
+                }
+            }
+        }
+
         // Penyesuaian manual bulan terpilih (potongan SP / bonus).
         // Mode "semua" tidak menampilkannya karena satu baris bisa dari bulan lain.
         $adjustmentMap = [];
@@ -219,6 +246,7 @@ class Payroll extends BaseController
             'payrollItems'  => $payrollItems,
             'payrollSummary' => array_values($payrollSummary),
             'adjustment_map' => $adjustmentMap,
+            'kasbon_map'    => $kasbonMap,
             'payrollRun'    => $runSummary['run'],
             'payrollTotals' => $runSummary['totals'],
             'bonusCount'    => $runSummary['run']['bonus']['count'],
@@ -602,6 +630,12 @@ class Payroll extends BaseController
             }
         } catch (\Throwable $e) {
             log_message('error', 'Settlement kasbon payroll #' . $id . ' gagal: ' . $e->getMessage());
+        }
+
+        // Klik bayar ulang: settlement idempoten mengembalikan potongan 0.
+        // Jangan hapus potongan kasbon yang sudah tercatat.
+        if ($potonganKasbon === 0 && $row->status === 'dibayar') {
+            $potonganKasbon = (int) ($row->potongan_kasbon ?? 0);
         }
 
         $totalBersih = (int) ($row->total ?? 0) - $potonganKasbon;

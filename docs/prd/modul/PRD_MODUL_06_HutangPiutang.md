@@ -49,7 +49,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 3. Pembayaran tidak boleh melebihi sisa (row lock `FOR UPDATE`). — `bayar`
 4. Kompensasi hanya pihak sama, jenis berlawanan, non-lunas, dibatasi min sisa. — `kompensasi`
 5. Kasbon: jatuh tempo tanggal 1 bulan berikutnya; pihak dipaksa pegawai; jenis piutang; pencairan membuat `kas_keluar` (kategori Kasbon, no_akun 1020201000). — `createPosition`
-6. Settlement kasbon dari payroll idempotent. — `settleKasbonFromPayroll`
+6. Settlement kasbon dari payroll idempotent dan **mengikuti pegawai lintas unit**: kasbon aktif (bukan `scope = legacy`) di unit mana pun dipotong penuh dari gaji, dengan jurnal `hp_kasbon_potong_payroll` dibebankan ke unit kasbon. — `HutangPiutangService::settleKasbonFromPayroll`; `tests/PayrollKasbonDeductionTest.php`
 7. Jurnal H/P via `template_jurnal`; bila template absent → hanya log, transaksi tetap tersimpan. — `postJurnal`
 8. Settlement legacy bukan pembayaran (tidak ubah `total_dibayar`, tidak sentuh saldo/ledger). — `tandaiLunasLegacy`
 9. Projection disinkron dari sumber (`syncFromPembelian`, `syncFromPiutangLegacy`); lunas-legacy projection ditimpa sync → ditolak. — `refreshProjections`. **`syncFromPembelian` mengisi `total` dari `pembelian.total_bayar` (nilai yang sudah dibayar), bukan `total_transaksi`; untuk pembelian sebagian total tidak sama dengan sisa + dibayar (sisa tetap dari sumber).** — `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)

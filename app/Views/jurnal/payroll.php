@@ -33,6 +33,8 @@ $bonusCount     = $bonusCount ?? count($kas_keluar);
 $bonusTotal     = $bonusTotal ?? 0;
 $payrollLocks   = $payrollLocks ?? [];
 $locks          = $payrollLocks;
+$adjustment_map = $adjustment_map ?? [];
+$kasbon_map     = $kasbon_map ?? [];
 
 $namaBulan = [
     '01' => 'Januari', '02' => 'Februari', '03' => 'Maret', '04' => 'April',
@@ -288,10 +290,22 @@ $fmtTanggal = static function ($value): string {
                                     <span class="pay-timing <?= $timingClass ?>"><?= $timingLabel ?></span>
                                 </td>
                                 <td class="pay-amount" data-label="Total">
-                                    <?= $fmtRupiah($row->total ?? 0) ?>
-                                    <?php $adj = $adjustment_map[(int) ($row->pegawai_id ?? 0)] ?? []; ?>
-                                    <?php $pot = $adj['potongan'] ?? null; ?>
-                                    <?php $bonus = $adj['bonus'] ?? null; ?>
+                                    <?php
+                                    $adj = $adjustment_map[(int) ($row->pegawai_id ?? 0)] ?? [];
+                                    $pot = $adj['potongan'] ?? null;
+                                    $bonus = $adj['bonus'] ?? null;
+                                    $potonganLain = (float) ($pot->jumlah ?? 0);
+                                    $bonusLain = (float) ($bonus->jumlah ?? 0);
+                                    // Baris dibayar memakai potongan tersimpan; baris
+                                    // rencana memakai sisa kasbon saat ini sebagai preview.
+                                    $potonganKasbon = $isPaid
+                                        ? (int) ($row->potongan_kasbon ?? 0)
+                                        : (int) ($kasbon_map[(int) ($row->pegawai_id ?? 0)] ?? 0);
+                                    $totalBersih = $isPaid && (float) ($row->total_bersih ?? 0) > 0
+                                        ? (float) $row->total_bersih
+                                        : max(0, (float) ($row->total ?? 0) - $potonganKasbon - $potonganLain + $bonusLain);
+                                    ?>
+                                    <?= $fmtRupiah($totalBersih) ?>
                                     <?php if ($bonus && (float) $bonus->jumlah > 0): ?>
                                         <span class="pay-date-sub text-success">+ <?= $fmtRupiah($bonus->jumlah) ?><?= $bonus->keterangan ? ' · ' . esc($bonus->keterangan) : '' ?></span>
                                     <?php endif; ?>
@@ -305,7 +319,24 @@ $fmtTanggal = static function ($value): string {
                                     <?php else: ?>
                                         <span class="pay-src pay-src--manual">Manual</span>
                                     <?php endif; ?>
-                                    <span class="pay-note" title="<?= esc($row->notes ?? '') ?>"><?= esc($row->notes ?? '—') ?></span>
+                                    <?php
+                                    // Catatan generator menyebut "Kasbon dipotong saat
+                                    // dibayar."; ganti dengan nominal sisa kasbon.
+                                    $catatan = (string) ($row->notes ?? '');
+                                    if ($potonganKasbon > 0) {
+                                        $frasaKasbon = 'Dikurangi kasbon ' . $fmtRupiah($potonganKasbon) . ' saat dibayar.';
+                                        // str_contains baru ada di PHP 8; dev server masih 7.4.
+                                        if (strpos($catatan, 'Kasbon dipotong saat dibayar.') !== false) {
+                                            $catatan = str_replace('Kasbon dipotong saat dibayar.', $frasaKasbon, $catatan);
+                                        } elseif (preg_match('/Dikurangi kasbon Rp [\d.]+ saat dibayar\./', $catatan)) {
+                                            // Catatan hasil koreksi sebelumnya: perbarui nominalnya.
+                                            $catatan = preg_replace('/Dikurangi kasbon Rp [\d.]+ saat dibayar\./', $frasaKasbon, $catatan, 1);
+                                        } else {
+                                            $catatan = rtrim($catatan . ' ' . $frasaKasbon);
+                                        }
+                                    }
+                                    ?>
+                                    <span class="pay-note" title="<?= esc($catatan) ?>"><?= esc($catatan !== '' ? $catatan : '—') ?></span>
                                 </td>
                                 <td class="pay-cell-actions" data-label="Aksi">
                                     <?php if (! $isPaid && $can_input): ?>
@@ -318,7 +349,8 @@ $fmtTanggal = static function ($value): string {
                                                 data-karyawan="<?= esc($row->NAMA_AKUN ?? '-') ?>"
                                                 data-total="<?= esc($row->total ?? 0) ?>"
                                                 data-due="<?= esc($row->due_date ?? '') ?>"
-                                                data-notes="<?= esc($row->notes ?? '') ?>"
+                                                data-notes="<?= esc($catatan) ?>"
+                                                data-kasbon="<?= (int) $potonganKasbon ?>"
                                                 data-potongan="<?= esc($pot->jumlah ?? 0) ?>"
                                                 data-potongan-keterangan="<?= esc($pot->keterangan ?? '') ?>"
                                                 data-bonus="<?= esc($bonus->jumlah ?? 0) ?>"
@@ -548,7 +580,7 @@ $fmtTanggal = static function ($value): string {
 <div class="modal fade" id="edit-register-modal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="<?= base_url('payroll/update-register') ?>" method="post">
+            <form action="<?= base_url('payroll/update-register') ?>" method="post" id="edit-register-form">
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title fw-bold">Koreksi Payroll</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -558,7 +590,7 @@ $fmtTanggal = static function ($value): string {
                     <p class="mb-3">Koreksi item gajian untuk karyawan: <strong id="edit_register_karyawan" class="text-primary">-</strong></p>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Total Gaji</label>
+                        <label class="form-label fw-semibold">Total Gaji <small class="text-muted fw-normal">(setelah potongan kasbon)</small></label>
                         <div class="input-group">
                             <span class="input-group-text">Rp</span>
                             <input type="text" class="form-control currency-input" name="total" id="edit_register_total" inputmode="numeric" autocomplete="off" required>
@@ -935,7 +967,12 @@ $fmtTanggal = static function ($value): string {
             $('#edit_register_id').val(btn.data('id'));
             $('#edit_register_karyawan').text(btn.data('karyawan'));
             const totalVal = parseInt(btn.data('total'), 10) || 0;
-            $('#edit_register_total').val(totalVal === 0 ? '' : formatRupiah(totalVal, ''));
+            const kasbonVal = parseInt(btn.data('kasbon'), 10) || 0;
+            // Yang diketik Finance adalah gaji bersih; saat submit dikembalikan
+            // ke bruto karena finance_payroll.total menyimpan nilai sebelum potongan.
+            const nettoVal = Math.max(0, totalVal - kasbonVal);
+            $('#edit_register_total').val(nettoVal === 0 ? '' : formatRupiah(nettoVal, ''))
+                .data('kasbon', kasbonVal);
             $('#edit_register_due').val(btn.data('due'));
             $('#edit_register_notes').val(btn.data('notes') || '');
             const potVal = parseInt(btn.data('potongan'), 10) || 0;
@@ -944,6 +981,13 @@ $fmtTanggal = static function ($value): string {
             const bonusVal = parseInt(btn.data('bonus'), 10) || 0;
             $('#edit_register_bonus').val(bonusVal === 0 ? '' : formatRupiah(bonusVal, ''));
             $('#edit_register_bonus_keterangan').val(btn.data('bonus-keterangan') || '');
+        });
+
+        // finance_payroll.total disimpan bruto; kasbon baru dipotong saat bayar.
+        $('#edit-register-form').on('submit', function () {
+            const $total = $('#edit_register_total');
+            const kasbon = parseInt($total.data('kasbon'), 10) || 0;
+            $total.val(Math.max(0, parseRupiah($total.val() || 0) + kasbon));
         });
 
         // Aksi bonus / lembur

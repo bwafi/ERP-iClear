@@ -1570,6 +1570,9 @@ class HutangPiutangService
      * Idempotent: bila referensi payroll sudah pernah dipakai, tidak memotong
      * lagi (UNIQUE uniq_php_referensi + guard existsByReferensi).
      *
+     * Kasbon dicari per PEGAWAI (lintas unit); $unitId hanya fallback unit
+     * jurnal bila baris kasbon tidak punya unit.
+     *
      * @return array{success:bool,potongan:int,jumlah_kasbon:int,message:string}
      */
     public function settleKasbonFromPayroll(int $payrollId, int $pegawaiId, ?int $unitId = null, ?int $inputBy = null): array
@@ -1578,18 +1581,20 @@ class HutangPiutangService
             return ['success' => true, 'potongan' => 0, 'jumlah_kasbon' => 0, 'message' => 'Settlement payroll sudah pernah dilakukan (dilewati).'];
         }
 
-        $q = $this->db->table('hutang_piutang')
+        // Potongan mengikuti PEGAWAI, bukan unit payroll: kasbon bisa tercatat
+        // di unit lain (mis. kasbon cabang, gaji dibayar HO). Filter unit di
+        // sini membuat kasbon seperti itu tidak pernah terpotong.
+        $kasbons = $this->db->table('hutang_piutang')
             ->where('deleted', 0)
             ->where('is_projection', 0)
+            ->where('scope !=', FinanceScopeService::SCOPE_LEGACY)
             ->where('sumber_tipe', self::SUMBER_KASBON)
             ->where('pihak_tipe', 'pegawai')
             ->where('pihak_id', $pegawaiId)
             ->where('status !=', self::STATUS_LUNAS)
-            ->where('sisa >', 0);
-        if ($unitId) {
-            $q->where('unit_id', $unitId);
-        }
-        $kasbons = $q->orderBy('tanggal', 'ASC')->get()->getResult();
+            ->where('sisa >', 0)
+            ->orderBy('tanggal', 'ASC')
+            ->get()->getResult();
 
         if (empty($kasbons)) {
             return ['success' => true, 'potongan' => 0, 'jumlah_kasbon' => 0, 'message' => 'Tidak ada kasbon aktif.'];
@@ -1645,7 +1650,9 @@ class HutangPiutangService
                     'Potongan kasbon ' . $row->kode . ' (payroll #' . $payrollId . ')',
                     (int) $inserted,
                     'pembayaran_hutang_piutang',
-                    $unitId ? (int) $unitId : (int) $row->unit_id,
+                    // Piutang yang berkurang ada di unit kasbon; jurnal ikut
+                    // unit itu, bukan unit payroll.
+                    (int) ($row->unit_id ?: $unitId),
                     $inputBy
                 );
 
