@@ -1679,6 +1679,70 @@ class PenilaianKPI extends BaseController
         return view('template', $viewData);
     }
 
+    /**
+     * Halaman "KPI Saya" — read-only, hanya skor KPI milik pegawai yang login.
+     *
+     * Khusus pegawai cabang (unit != HO). ID pegawai selalu diambil dari
+     * session; tidak ada parameter untuk memilih pegawai lain, sehingga halaman
+     * ini tidak bisa dipakai melihat skor pegawai lain.
+     */
+    public function kpi_saya()
+    {
+        if (! self::kpiSayaUnitAllowed(session()->get('ID_UNIT'))) {
+            return redirect()->to(base_url('/'))->with('error', 'Halaman KPI Saya hanya untuk pegawai cabang.');
+        }
+
+        [$bulan, $tahun] = self::kpiSayaPeriod(
+            $this->request->getGet('bulan'),
+            $this->request->getGet('tahun')
+        );
+
+        // Kalkulasi yang sama dengan /penilaian_kinerja supaya angka konsisten.
+        // Hanya skor & aspek yang diteruskan ke view — nominal gaji tidak.
+        $kpi = (new \App\Services\Kpi\KpiCalculationService())
+            ->calculateForSalary((int) session()->get('ID_AKUN'), $bulan, $tahun, 'penilaian_kinerja');
+
+        $detailKpi = $kpi['detail_kpi'] ?? [];
+        usort($detailKpi, static fn ($a, $b) => (float) ($b['bobot'] ?? 0) <=> (float) ($a['bobot'] ?? 0));
+
+        return view('template', [
+            'title'        => 'KPI Saya',
+            'nama'         => $kpi['karyawan']['NAMA_AKUN'] ?? '',
+            'detail_kpi'   => $detailKpi,
+            'skor_total'   => $kpi['skor_total'],
+            'detail_absen' => $kpi['detail_absen'] ?? [],
+            'skor_absen'   => $kpi['skor_total2'],
+            'bulan'        => $bulan,
+            'tahun'        => $tahun,
+            'body'         => 'penilaian/kpi_saya',
+        ]);
+    }
+
+    /** Halaman KPI Saya hanya untuk pegawai unit cabang (bukan HO / tanpa unit). */
+    public static function kpiSayaUnitAllowed($unit): bool
+    {
+        $unit = (int) $unit;
+
+        return $unit > 0 && $unit !== \App\Services\Kpi\KpiCalculationService::HO_UNIT_ID;
+    }
+
+    /** Normalisasi periode dari query string: bulan 01-12, tahun 2000-2100. */
+    public static function kpiSayaPeriod($bulan, $tahun): array
+    {
+        $bulan = (int) $bulan;
+        $tahun = (int) $tahun;
+
+        if ($bulan < 1 || $bulan > 12) {
+            $bulan = (int) date('m');
+        }
+
+        if ($tahun < 2000 || $tahun > 2100) {
+            $tahun = (int) date('Y');
+        }
+
+        return [sprintf('%02d', $bulan), (string) $tahun];
+    }
+
     public function penilaian_absen()
     {
         $bulan = (int)($this->request->getGet('bulan') ?: date('m'));

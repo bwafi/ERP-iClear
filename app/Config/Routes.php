@@ -573,6 +573,9 @@ $routes->get('riwayat_penilaian_KPI', 'PenilaianKPI::index_riwayat', ['filter' =
 
 $routes->get('penilaian_kinerja', 'PenilaianKPI::penilaian_kinerja', ['filter' => 'auth']);
 
+// KPI Saya — read-only, hanya skor KPI milik pegawai cabang yang login.
+$routes->get('kpi_saya', 'PenilaianKPI::kpi_saya', ['filter' => 'auth']);
+
 $routes->get('gaji', 'PenilaianKPI::gaji', ['filter' => 'auth']);
 
 $routes->get('penilaian/slip_gaji/(:num)', 'PenilaianKPI::slip_gaji/$1', ['filter' => 'auth']);
