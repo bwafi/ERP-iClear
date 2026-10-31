@@ -1426,6 +1426,7 @@ class Riwayat_Service extends BaseController
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
+            'is_admin_root' => (int) session('ID_JABATAN') === 1,
             'body'  => 'riwayat/sudah_diambil'
         );
         return view('template', $data);
@@ -1463,6 +1464,107 @@ class Riwayat_Service extends BaseController
             'recordsFiltered' => $result['recordsFiltered'],
             'data' => $result['data']
         ]);
+    }
+
+    /**
+     * Admin Root mengembalikan service "sudah diambil" ke Proses Service.
+     * Pembayaran lama + jurnal pengambilan dihapus, DP dibiarkan utuh.
+     */
+    public function kembalikanKeProses()
+    {
+        if ((int) session('ID_JABATAN') !== 1) {
+            return redirect()->back()->with('gagal', 'Akses ditolak. Hanya Admin Root yang dapat mengembalikan service ke proses.');
+        }
+
+        $idservice = (int) $this->request->getPost('idservice');
+        $alasan = trim((string) $this->request->getPost('alasan'));
+
+        if ($idservice <= 0 || $alasan === '' || mb_strlen($alasan) > 120) {
+            return redirect()->back()->with('gagal', 'Data koreksi tidak valid.');
+        }
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $sql = $db->table('service')->where('idservice', $idservice)->getCompiledSelect();
+            if (in_array(strtolower((string) $db->DBDriver), ['mysqli', 'postgre'], true)) {
+                $sql .= ' FOR UPDATE';
+            }
+            $service = $db->query($sql)->getRow();
+
+            if ($service === null) {
+                throw new \RuntimeException('Data service tidak ditemukan.');
+            }
+            if ((int) $service->status_service !== 4) {
+                throw new \RuntimeException('Service ini bukan status sudah diambil.');
+            }
+
+            if (! empty($service->refund_garansi_at)) {
+                throw new \RuntimeException('Service sudah direfund; tidak dapat dikembalikan ke proses.');
+            }
+            if (GaransiClaimService::isClaimed($service)) {
+                throw new \RuntimeException('Service sudah diklaim garansi; tidak dapat dikembalikan ke proses.');
+            }
+
+            $tanggalSelesai = substr((string) ($service->tanggal_selesai ?? ''), 0, 10);
+            $adaTutupKasir = false;
+            if ($tanggalSelesai !== '') {
+                $adaTutupKasir = $db->table('tutup_kasir')
+                    ->where('unit', (int) $service->unit_idunit)
+                    ->where('DATE(tanggal)', $tanggalSelesai)
+                    ->countAllResults() > 0;
+            }
+            if ($adaTutupKasir && $this->request->getPost('konfirmasi_tutup_kasir') !== '1') {
+                throw new \RuntimeException('Tutup kasir tanggal ini sudah tersimpan. Ulangi dengan konfirmasi.');
+            }
+
+            if (! $this->JurnalModel->hapusByReferensi('service', $idservice)) {
+                throw new \RuntimeException('Gagal menghapus jurnal pengambilan.');
+            }
+            if (! $db->table('pembayaran_bank')
+                ->where('tabel_referensi', 'service_baru')
+                ->where('id_referensi', $idservice)
+                ->delete()) {
+                throw new \RuntimeException('Gagal menghapus pembayaran bank lama.');
+            }
+            if (! $this->ServiceModel->updateService($idservice, [
+                'status_service' => 2,
+                'tanggal_selesai' => null,
+                'tanggal_bisa_diambil' => null,
+                'bayar' => 0,
+                'bayar_tunai' => 0,
+                'bayar_bank' => null,
+            ])) {
+                throw new \RuntimeException('Gagal memperbarui status service.');
+            }
+
+            if (! $db->transStatus()) {
+                throw new \RuntimeException('Transaksi gagal diselesaikan.');
+            }
+            $db->transCommit();
+
+            log_message('info', 'Kembalikan service ke proses: ' . json_encode([
+                'idservice' => $idservice,
+                'no_service' => $service->no_service ?? null,
+                'alasan' => $alasan,
+                'oleh' => (int) session('ID_AKUN'),
+                'sebelum' => [
+                    'status_service' => (int) $service->status_service,
+                    'tanggal_selesai' => $service->tanggal_selesai,
+                    'bayar' => (int) $service->bayar,
+                    'bayar_tunai' => (int) $service->bayar_tunai,
+                    'dp_bayar' => (int) $service->dp_bayar,
+                ],
+            ]));
+
+            return redirect()->to(base_url('detail/riwayat_service/' . $idservice . '?tab=pembayaran'))
+                ->with('sukses', 'Service dikembalikan ke Proses Service. Silakan input ulang pembayaran.');
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'kembalikanKeProses gagal service ' . $idservice . ': ' . $e->getMessage());
+            return redirect()->back()->with('gagal', $e->getMessage());
+        }
     }
 
     public function delete_service()

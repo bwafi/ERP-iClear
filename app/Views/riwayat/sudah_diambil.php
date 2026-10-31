@@ -107,6 +107,9 @@
     let dataTable;
     let searchTimeout;
 
+    const IS_ADMIN_ROOT = <?= $is_admin_root ? 'true' : 'false' ?>;
+    const CSRF_FIELD = <?= json_encode(csrf_field()) ?>;
+
     window.onload = function() {
         const startDateInput = document.getElementById('startDate');
         const endDateInput = document.getElementById('endDate');
@@ -233,7 +236,16 @@
                     data: null,
                     orderable: false,
                     render: function(data, type, row) {
+                        const tombolKembali = IS_ADMIN_ROOT ? `
+                            <form action="<?= base_url('service/kembalikan_ke_proses') ?>" method="post" class="form-kembalikan-service" style="display:inline-block;">
+                                ${CSRF_FIELD}
+                                <input type="hidden" name="idservice" value="${row.idservice}">
+                                <input type="hidden" name="konfirmasi_tutup_kasir" value="1">
+                                <input type="hidden" name="alasan" value="">
+                                <button type="submit" class="btn btn-sm btn-warning">Kembalikan ke Proses</button>
+                            </form>` : '';
                         return `
+                            ${tombolKembali}
                             <a href="<?= base_url('cetak/invoice_service/') ?>${row.idservice}">
                                 <button type="button" class="btn btn-sm btn-danger" style="display: inline-flex; align-items: center;">
                                     <iconify-icon icon="solar:folder-favourite-bookmark-broken" width="24" height="24"></iconify-icon>
@@ -284,6 +296,18 @@
 
             const waUrl = 'https://wa.me/' + nomor + '?text=' + encodeURIComponent("Halo, Kami dari welldone group ingin melakukan konfirmasi untuk service handphone atas nama " + nama);
             window.open(waUrl, '_blank');
+        });
+
+        $(document).on('submit', '.form-kembalikan-service', function(e) {
+            const alasan = window.prompt('Alasan mengembalikan service ke Proses Service:');
+            if (!alasan || !alasan.trim()) {
+                e.preventDefault();
+                return;
+            }
+            $(this).find('input[name="alasan"]').val(alasan.trim().slice(0, 120));
+            if (!window.confirm('Kembalikan service ini ke Proses Service? Pembayaran yang tercatat akan dihapus dan jurnal pengambilan dibatalkan. Jika Tutup Kasir tanggal ini sudah tersimpan, angka live Tutup Kasir dan omset/KPI teknisi tanggal itu ikut berubah (angka tersimpan dan struk tidak berubah).')) {
+                e.preventDefault();
+            }
         });
     };
 
