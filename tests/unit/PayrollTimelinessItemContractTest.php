@@ -19,6 +19,9 @@ final class PayrollTimelinessItemContractTest extends CIUnitTestCase
 {
     private const KOLOM_WAJIB = ['id', 'period', 'due_date', 'paid_date', 'total', 'status', 'klasifikasi'];
 
+    /** ID akun uji untuk pegawai Finance (jabatan 0). */
+    private const FINANCE_ID = 900001;
+
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
 
@@ -48,10 +51,19 @@ final class PayrollTimelinessItemContractTest extends CIUnitTestCase
             ['unit_id' => 1, 'due_date' => '2026-10-10', 'paid_date' => '2026-10-09', 'status' => 'dibayar', 'total' => 2_000_000],
             ['unit_id' => 2, 'due_date' => '2026-11-30', 'paid_date' => null, 'status' => 'rencana', 'total' => 9_999_999],
         ]);
+
+        $this->db->table('akun')->where('ID_AKUN', self::FINANCE_ID)->delete();
+        $this->db->table('akun')->insert([
+            'ID_AKUN' => self::FINANCE_ID,
+            'ID_UNIT' => 1,
+            'ID_JABATAN' => 0,
+            'NAMA_AKUN' => 'Finance Test',
+        ]);
     }
 
     protected function tearDown(): void
     {
+        $this->db->table('akun')->where('ID_AKUN', self::FINANCE_ID)->delete();
         $this->db->query('DROP TABLE IF EXISTS finance_payroll');
         $this->db->setPrefix($this->prefixAsli);
         parent::tearDown();
@@ -101,5 +113,37 @@ final class PayrollTimelinessItemContractTest extends CIUnitTestCase
         $this->assertSame('data_kosong', $result['status']);
         $this->assertNull($result['score']);
         $this->assertSame([], $result['detail']['items']);
+    }
+
+    public function testBarisPayrollFinanceDikecualikanDariPenilaian(): void
+    {
+        // Due date sudah lewat dan belum dibayar: kalau ikut dinilai, skor
+        // akan turun. Baris Finance harus dikecualikan.
+        $this->db->table('finance_payroll')->insert([
+            'unit_id'   => 1,
+            'pegawai_id' => self::FINANCE_ID,
+            'due_date'  => '2026-10-05',
+            'paid_date' => null,
+            'status'    => 'rencana',
+            'total'     => 999_000,
+        ]);
+
+        $result = (new PayrollTimelinessCalculator())->calculate(1, 10, 2026);
+        $items  = $result['detail']['items'];
+
+        $this->assertCount(3, $items, 'Baris Finance tetap tampil di rincian.');
+        $this->assertSame(
+            ['Dikecualikan (Finance)'],
+            array_values(array_column(
+                array_filter($items, static fn ($item) => $item['klasifikasi'] === 'Dikecualikan (Finance)'),
+                'klasifikasi'
+            ))
+        );
+
+        $this->assertSame(1, (int) $result['detail']['tepat']);
+        $this->assertSame(0, (int) $result['detail']['terlambat']);
+        $this->assertSame(1, (int) $result['detail']['open']);
+        $this->assertSame(100.0, (float) $result['score']);
+        $this->assertSame(4_499_000.0, (float) $result['detail']['total_payroll']);
     }
 }

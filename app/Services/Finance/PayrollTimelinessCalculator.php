@@ -23,6 +23,12 @@ use Config\Database;
  *  - Open       : belum dibayar & hari ini <= due_date → tidak dinilai.
  *
  * Skor = Tepat / (Tepat + Terlambat) x 100. Tanpa record → null (data_kosong).
+ *
+ * Baris payroll pegawai Finance (jabatan 0) DIKECUALIKAN dari penilaian
+ * (klasifikasi "Dikecualikan (Finance)"). Gaji Finance dihitung dari KPI
+ * Finance yang salah satu komponennya adalah KPI Payroll ini, sehingga
+ * menilai barisnya sendiri membuat nilai gaji bergantung pada status bayar
+ * gaji itu sendiri.
  */
 class PayrollTimelinessCalculator implements FinanceCalculatorInterface
 {
@@ -46,6 +52,7 @@ class PayrollTimelinessCalculator implements FinanceCalculatorInterface
             ->orderBy('due_date', 'ASC')
             ->findAll();
 
+        $financeIds = $this->financeEmployeeIds();
         $tepat = 0;
         $terlambat = 0;
         $open = 0;
@@ -54,7 +61,9 @@ class PayrollTimelinessCalculator implements FinanceCalculatorInterface
         foreach ($rows as $row) {
             $paid = $row->paid_date ?: null;
 
-            if ($paid !== null) {
+            if (in_array((int) ($row->pegawai_id ?? 0), $financeIds, true)) {
+                $klasifikasi = 'Dikecualikan (Finance)';
+            } elseif ($paid !== null) {
                 if ($paid <= $row->due_date) {
                     $klasifikasi = 'Tepat Waktu';
                     $tepat++;
@@ -101,5 +110,21 @@ class PayrollTimelinessCalculator implements FinanceCalculatorInterface
                 'items' => $items,
             ],
         ];
+    }
+
+    /**
+     * ID akun pegawai Finance (jabatan 0).
+     *
+     * @return int[]
+     */
+    private function financeEmployeeIds(): array
+    {
+        $rows = $this->db->table('akun')
+            ->select('ID_AKUN')
+            ->where('ID_JABATAN', 0)
+            ->get()
+            ->getResultArray();
+
+        return array_map(static fn ($row) => (int) $row['ID_AKUN'], $rows);
     }
 }
