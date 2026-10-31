@@ -27,6 +27,10 @@ $out = static function ($angka) use ($num): string {
     return (int) $angka === 0 ? '&ndash;' : '(' . $num($angka) . ')';
 };
 
+$rp = static function ($angka) use ($num): string {
+    return 'Rp ' . $num($angka);
+};
+
 $tanggalTs = strtotime((string) ($tutup->tanggal ?? ''));
 $tanggalLabel = $tanggalTs
     ? date('d', $tanggalTs) . ' ' . ($namaBulan[(int) date('n', $tanggalTs)] ?? '-') . ' ' . date('Y', $tanggalTs)
@@ -89,8 +93,8 @@ $verdict = $selisih === 0 ? 'Cocok' : ($selisih > 0 ? 'Lebih' : 'Kurang');
     <style>
         body {
             font-family: 'dejavusanscondensed', Helvetica, Arial, sans-serif;
-            font-size: 9.5pt;
-            color: #111;
+            font-size: 9pt;
+            color: #102a43;
             margin: 0;
         }
         table {
@@ -105,275 +109,451 @@ $verdict = $selisih === 0 ? 'Cocok' : ($selisih > 0 ? 'Lebih' : 'Kurang');
         .n { white-space: nowrap; }
 
         /* Kepala dokumen */
-        .head-name { font-size: 14pt; font-weight: bold; }
-        .head-unit { margin-top: 3px; font-size: 10pt; font-weight: bold; }
-        .head-addr { margin-top: 3px; font-size: 8pt; line-height: 1.5; }
-        .head-doc  { font-size: 13pt; font-weight: bold; }
-        .head-meta { margin-top: 4px; font-size: 9pt; line-height: 1.55; }
-        .head-rule { margin-top: 12px; border-top: 1.2pt solid #111; }
-
-        .currency {
-            margin-top: 10px;
+        .brand-name {
+            font-size: 15pt;
+            font-weight: bold;
+            letter-spacing: .01em;
+            color: #0f2a43;
+        }
+        .brand-unit {
+            margin-top: 2px;
+            font-size: 10pt;
+            font-weight: bold;
+            color: #0f2a43;
+        }
+        .brand-meta {
+            margin-top: 2px;
             font-size: 7.5pt;
+            line-height: 1.5;
+            color: #5b6672;
+        }
+        .doc { text-align: right; }
+        .doc-title {
+            font-size: 22pt;
+            font-weight: bold;
+            line-height: 1.05;
+            color: #0f2a43;
+        }
+        .doc-meta {
+            margin-top: 4px;
+            font-size: 8.5pt;
+            line-height: 1.55;
+            color: #5b6672;
+        }
+        .doc-meta strong { color: #102a43; font-weight: bold; }
+        .masthead-rule {
+            margin-top: 10px;
+            border-top: 2pt solid #0f2a43;
+        }
+
+        /* Identitas closing */
+        .meta { border-bottom: 1px solid #cfd8e3; }
+        .meta td {
+            padding: 7px 10px 8px 0;
+        }
+        .meta td.sep {
+            border-left: 1px solid #e3e8ee;
+            padding-left: 10px;
+        }
+        .meta .k {
+            font-size: 6.8pt;
+            font-weight: bold;
+            letter-spacing: .1em;
+            color: #5b6672;
+        }
+        .meta .v {
+            margin-top: 2px;
+            font-size: 8.5pt;
+            color: #102a43;
+        }
+
+        /* Rekonsiliasi laci */
+        .recon {
+            margin-top: 14px;
+            table-layout: fixed;
+            border-top: 1pt solid #0f2a43;
+            border-bottom: 1pt solid #0f2a43;
+        }
+        .recon td {
+            padding: 12px 0 12px;
+        }
+        .recon td.sep {
+            padding-left: 12px;
+            border-left: 1px solid #cfd8e3;
+        }
+        .recon .k {
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: .08em;
+            color: #5b6672;
+        }
+        .recon .v {
+            margin-top: 4px;
+            font-size: 18pt;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+            color: #0f2a43;
+        }
+        .recon .note {
+            margin-top: 3px;
+            font-size: 7.5pt;
+            color: #5b6672;
+        }
+        .stamp-frame { width: 52mm; }
+        .stamp {
+            border: 1pt solid #0f2a43;
+            padding: 9px 8px 10px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .stamp-k {
+            font-size: 6.8pt;
+            letter-spacing: .1em;
+            color: #5b6672;
+        }
+        .stamp-word {
+            margin-top: 3px;
+            font-size: 14pt;
+            font-weight: bold;
+            line-height: 1.1;
+        }
+        .stamp-amount {
+            margin-top: 1px;
+            font-size: 9pt;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Judul bagian */
+        .sec { margin-top: 28px; }
+        .sec-head {
+            padding-bottom: 4px;
+            border-bottom: 1pt solid #0f2a43;
+        }
+        .sec-title {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #0f2a43;
+        }
+        .sec-note {
+            padding-top: 2px;
             text-align: right;
+            font-size: 7.5pt;
+            color: #5b6672;
         }
 
         /* Buku kas */
-        .lg td {
-            padding: 6px 0;
-            font-size: 10.5pt;
-        }
-        .lg td.lbl { padding-right: 16px; }
-        .lg tr.ch td {
-            padding: 7px 0 5px;
-            border-bottom: 1pt solid #111;
-            font-size: 8pt;
+        .ledger th {
+            padding: 6px 4px;
+            border-bottom: 1px solid #cfd8e3;
+            font-size: 6.8pt;
             font-weight: bold;
+            letter-spacing: .08em;
+            text-align: left;
+            color: #5b6672;
         }
-        .lg tr.gap td { padding-top: 13px; }
-        .lg tr.grand td {
-            padding-top: 8px;
-            border-top: 1.8pt solid #111;
-            font-size: 12pt;
-            font-weight: bold;
+        .ledger th.r { text-align: right; }
+        .ledger tbody th,
+        .ledger tbody td {
+            padding: 8px 4px;
+            border-bottom: 1px solid #e3e8ee;
+            font-size: 9pt;
+            vertical-align: bottom;
         }
-
-        /* Blok bawah: rincian di kiri, hitung laci di kanan */
-        .cols { margin-top: 30px; }
-        .cols td.c1 { width: 50%; padding-right: 26px; }
-        .cols td.c2 { width: 50%; }
-
-        .blk-title {
+        .ledger tbody th {
+            text-align: left;
+            font-weight: normal;
+            color: #102a43;
+        }
+        .ledger tbody tr.gap th,
+        .ledger tbody tr.gap td { padding-top: 13px; }
+        .ledger tbody tr.lead th,
+        .ledger tbody tr.lead td { font-weight: bold; }
+        .ledger tbody tr.internal th { font-size: 8.5pt; color: #5b6672; }
+        .ledger tbody tr.internal td { font-size: 8.5pt; }
+        .ledger tbody tr.grand th,
+        .ledger tbody tr.grand td {
+            padding-top: 14px;
             padding-bottom: 4px;
-            border-bottom: 0.8pt solid #111;
-            font-size: 9.5pt;
-            font-weight: bold;
-        }
-        .blk { margin-top: 4px; }
-        .blk td {
-            padding: 3.5px 0;
-            font-size: 8.5pt;
-        }
-        .blk td.lbl { padding-right: 10px; }
-        .blk tr.ch td {
-            padding-bottom: 3px;
-            border-bottom: 0.6pt solid #111;
-            font-size: 7.5pt;
-            font-weight: bold;
-        }
-        .blk tr.tot td {
-            padding-top: 5px;
-            border-top: 0.6pt solid #111;
-            font-weight: bold;
-        }
-
-        /* Hitung laci */
-        .count { margin-top: 34px; }
-        .count tr.head td {
-            padding-bottom: 4px;
-            border-bottom: 0.8pt solid #111;
-            font-size: 9.5pt;
-            font-weight: bold;
-        }
-        .count td {
-            padding: 4.5px 0;
-            font-size: 9.5pt;
-        }
-        .count td.lbl { width: 58%; }
-        .count td.val { width: 42%; }
-        .count tr.diff td {
-            padding-top: 8px;
-            border-top: 0.8pt solid #111;
+            border-top: 1.5pt solid #0f2a43;
+            border-bottom: 1px solid #ffffff;
             font-size: 11pt;
             font-weight: bold;
+            color: #0f2a43;
         }
-        .count tr.stamp td {
-            padding-top: 2px;
-            font-size: 10pt;
+
+        /* Rincian pendukung */
+        .detail-wrap td.c1 { width: 49%; padding-right: 9mm; }
+        .detail-wrap td.c2 { width: 51%; }
+        .detail-title {
+            padding-bottom: 4px;
+            border-bottom: 1pt solid #0f2a43;
+            font-size: 8.5pt;
             font-weight: bold;
-            text-align: right;
+            color: #0f2a43;
+        }
+        .detail th {
+            padding: 5px 3px;
+            border-bottom: 1px solid #cfd8e3;
+            font-size: 6.8pt;
+            font-weight: bold;
+            letter-spacing: .06em;
+            text-align: left;
+            color: #5b6672;
+        }
+        .detail th.r { text-align: right; }
+        .detail td {
+            padding: 6px 3px;
+            border-bottom: 1px solid #e3e8ee;
+            font-size: 8.4pt;
+            vertical-align: bottom;
+        }
+        .detail tr.tot td {
+            border-top: 1pt solid #0f2a43;
+            border-bottom: none;
+            padding-top: 6px;
+            font-weight: bold;
+        }
+
+        /* Catatan */
+        .notes {
+            margin-top: 22px;
+            padding-top: 8px;
+            border-top: 1px solid #e3e8ee;
+            font-size: 7.5pt;
+            line-height: 1.55;
+            color: #5b6672;
         }
 
         /* Tanda tangan */
-        .sign { margin-top: 64px; }
-        .sign td.role { font-size: 9pt; }
-        .sign td.col { width: 50%; padding-right: 28px; }
-        .sign-inner { width: 66%; }
-        .sign-inner td.space { height: 38px; }
+        .sign-rule {
+            margin-top: 24mm;
+            border-top: 1px solid #cfd8e3;
+        }
+        .sign { margin-top: 14px; }
+        .sign td.role {
+            font-size: 7.5pt;
+            color: #5b6672;
+        }
+        .sign td.col { width: 50%; padding-right: 14mm; }
+        .sign-inner { width: 72%; }
+        .sign-inner td.space { height: 34px; }
         .sign-inner td.line {
-            border-top: 0.8pt solid #111;
-            padding-top: 3px;
-            font-size: 10pt;
+            border-top: 1px solid #7b8794;
+            padding-top: 4px;
+            font-size: 9pt;
             font-weight: bold;
+            color: #0f2a43;
         }
         .sign-inner td.jabatan {
             padding-top: 1px;
-            font-size: 8.5pt;
+            font-size: 8pt;
+            color: #5b6672;
         }
 
         /* Kaki */
         .foot {
-            margin-top: 30px;
-            padding-top: 5px;
-            border-top: 0.6pt solid #111;
-            font-size: 7.5pt;
+            margin-top: 18px;
+            padding-top: 6px;
+            border-top: 1px solid #e3e8ee;
+            font-size: 7pt;
+            color: #5b6672;
         }
     </style>
 </head>
 <body>
 
-<table class="head">
+<table class="masthead">
     <tr>
         <td style="width:56%;">
-            <div class="head-name">iClear</div>
-            <div class="head-unit"><?= esc($namaUnit) ?></div>
-            <div class="head-addr">
+            <div class="brand-name">iClear</div>
+            <div class="brand-unit"><?= esc($namaUnit) ?></div>
+            <div class="brand-meta">
                 <?php if ($alamatUnit !== ''): ?><?= esc($alamatUnit) ?><br><?php endif; ?>
                 <?php if ($teleponUnit !== ''): ?>Telp. <?= esc($teleponUnit) ?><?php endif; ?>
             </div>
         </td>
-        <td class="r">
-            <div class="head-doc">Tutup Kasir #<?= (int) ($tutup->idtutupkasir ?? 0) ?></div>
-            <div class="head-meta">
-                <?= esc($tanggalLabel) ?> &middot; <?= esc($waktuClosing) ?><br>
-                <?= esc($namaPenutup !== '' ? $namaPenutup : '-') ?><?php if ($jabatanPenutup !== ''): ?> &middot; <?= esc($jabatanPenutup) ?><?php endif; ?><br>
-                Status: <?= esc($statusLabel) ?>
+        <td class="doc">
+            <div class="doc-title">Tutup Kasir</div>
+            <div class="doc-meta">
+                <strong><?= esc($tanggalLabel) ?></strong> &middot; <?= esc($waktuClosing) ?><br>
+                Status: <?= esc($statusLabel) ?> &middot; No. <?= (int) ($tutup->idtutupkasir ?? 0) ?>
             </div>
         </td>
     </tr>
 </table>
-<div class="head-rule"></div>
+<div class="masthead-rule"></div>
 
-<div class="currency">Nilai dalam Rupiah</div>
+<table class="meta">
+    <tr>
+        <td style="width:38%;">
+            <div class="k">KASIR</div>
+            <div class="v"><?= esc($namaPenutup !== '' ? $namaPenutup : '-') ?></div>
+        </td>
+        <td class="sep" style="width:24%;">
+            <div class="k">JABATAN</div>
+            <div class="v"><?= esc($jabatanPenutup !== '' ? $jabatanPenutup : '-') ?></div>
+        </td>
+        <td class="sep" style="width:38%;">
+            <div class="k">UNIT</div>
+            <div class="v"><?= esc($namaUnit) ?> (#<?= (int) ($tutup->unit ?? 0) ?>)</div>
+        </td>
+    </tr>
+</table>
 
-<table class="lg">
-    <tr class="ch">
-        <td class="lbl" style="width:40%;">Uraian</td>
-        <td class="r n" style="width:20%;">Kas</td>
-        <td class="r n" style="width:20%;">Transfer</td>
-        <td class="r n" style="width:20%;">Total</td>
-    </tr>
+<table class="recon">
     <tr>
-        <td class="lbl">Saldo awal</td>
-        <td class="r n"><?= $cell($awalCash) ?></td>
-        <td class="r n"><?= $cell($awalTf) ?></td>
-        <td class="r n"><?= $cell($totalAwal) ?></td>
+        <td style="width:35%; padding-right:12px;">
+            <div class="k">Kas menurut sistem</div>
+            <div class="v"><?= $rp($akhirCash) ?></div>
+            <div class="note">Saldo akhir kas</div>
+        </td>
+        <td class="sep" style="width:35%;">
+            <div class="k">Kas hasil hitung fisik</div>
+            <div class="v"><?= $rp($cashLaci) ?></div>
+            <div class="note">Uang di laci</div>
+        </td>
+        <td class="sep" style="width:30%; padding-right:0;">
+            <table class="stamp-frame" align="right">
+                <tr>
+                    <td class="stamp">
+                        <div class="stamp-k">SELISIH</div>
+                        <div class="stamp-word" style="color:<?= $selisih === 0 ? '#0f7a46' : '#b42318' ?>"><?= esc($verdict) ?></div>
+                        <div class="stamp-amount" style="color:<?= $selisih === 0 ? '#0f2a43' : '#b42318' ?>"><?= $selisih < 0 ? '(' . $num($selisih) . ')' : $num($selisih) ?></div>
+                    </td>
+                </tr>
+            </table>
+        </td>
     </tr>
-    <tr class="gap">
-        <td class="lbl">Pendapatan</td>
-        <td class="r n"><?= $cell($pendapatanCash) ?></td>
-        <td class="r n"><?= $cell($pendapatanTf) ?></td>
-        <td class="r n"><?= $cell($totalPendapatan) ?></td>
-    </tr>
-    <tr>
-        <td class="lbl">Pengeluaran</td>
-        <td class="r n"><?= $out($pengeluaranCash) ?></td>
-        <td class="r n"><?= $out($pengeluaranTf) ?></td>
-        <td class="r n"><?= $out($totalPengeluaran) ?></td>
-    </tr>
-    <?php if ($mutasiNeto !== 0): ?>
+</table>
+
+<div class="sec">
+    <table class="sec-head">
         <tr>
-            <td class="lbl"><?= $mutasiNeto > 0 ? 'Setor ke bank (neto)' : 'Tarik dari bank (neto)' ?></td>
-            <td class="r n"><?= $mutasiNeto > 0 ? '(' . $num($mutasiNeto) . ')' : $num($mutasiNeto) ?></td>
-            <td class="r n">&ndash;</td>
-            <td class="r n"><?= $mutasiNeto > 0 ? '(' . $num($mutasiNeto) . ')' : $num($mutasiNeto) ?></td>
+            <td class="sec-title">Buku kas</td>
+            <td class="sec-note">Nilai dalam Rupiah</td>
         </tr>
-    <?php endif; ?>
-    <tr class="grand">
-        <td class="lbl">Saldo akhir</td>
-        <td class="r n"><?= $cell($akhirCash) ?></td>
-        <td class="r n"><?= $cell($akhirTf) ?></td>
-        <td class="r n"><?= $cell($totalAkhir) ?></td>
-    </tr>
-</table>
+    </table>
+    <table class="ledger">
+        <thead>
+            <tr>
+                <th style="width:40%;">URAIAN</th>
+                <th class="r n" style="width:20%;">KAS</th>
+                <th class="r n" style="width:20%;">TRANSFER</th>
+                <th class="r n" style="width:20%;">TOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="lead">
+                <th>Saldo awal</th>
+                <td class="r n"><?= $cell($awalCash) ?></td>
+                <td class="r n"><?= $cell($awalTf) ?></td>
+                <td class="r n"><?= $cell($totalAwal) ?></td>
+            </tr>
+            <tr class="gap">
+                <th>Pendapatan</th>
+                <td class="r n"><?= $cell($pendapatanCash) ?></td>
+                <td class="r n"><?= $cell($pendapatanTf) ?></td>
+                <td class="r n"><?= $cell($totalPendapatan) ?></td>
+            </tr>
+            <tr>
+                <th>Pengeluaran</th>
+                <td class="r n"><?= $out($pengeluaranCash) ?></td>
+                <td class="r n"><?= $out($pengeluaranTf) ?></td>
+                <td class="r n"><?= $out($totalPengeluaran) ?></td>
+            </tr>
+            <?php if ($mutasiNeto !== 0): ?>
+                <tr class="internal">
+                    <th><?= $mutasiNeto > 0 ? 'Setor ke bank (neto)' : 'Tarik dari bank (neto)' ?></th>
+                    <td class="r n"><?= $mutasiNeto > 0 ? '(' . $num($mutasiNeto) . ')' : $num($mutasiNeto) ?></td>
+                    <td class="r n">&ndash;</td>
+                    <td class="r n"><?= $mutasiNeto > 0 ? '(' . $num($mutasiNeto) . ')' : $num($mutasiNeto) ?></td>
+                </tr>
+            <?php endif; ?>
+            <tr class="grand">
+                <th>Saldo akhir</th>
+                <td class="r n"><?= $cell($akhirCash) ?></td>
+                <td class="r n"><?= $cell($akhirTf) ?></td>
+                <td class="r n"><?= $cell($totalAkhir) ?></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
 
-<table class="cols">
-    <tr>
-        <td class="c1">
-            <div class="blk-title">Rekap transaksi</div>
-            <table class="blk">
-                <tr class="ch">
-                    <td class="lbl" style="width:46%;">Uraian</td>
-                    <td class="r n" style="width:18%;">Qty</td>
-                    <td class="r n" style="width:36%;">Nilai</td>
-                </tr>
-                <tr>
-                    <td class="lbl">Unit (HP)</td>
-                    <td class="r n"><?= $cell($qty_hp ?? 0) ?></td>
-                    <td class="r n"><?= $cell($hp_total ?? 0) ?></td>
-                </tr>
-                <tr>
-                    <td class="lbl">Servis</td>
-                    <td class="r n"><?= $cell($qty_service ?? 0) ?></td>
-                    <td class="r n"><?= $cell($service_total ?? 0) ?></td>
-                </tr>
-                <tr>
-                    <td class="lbl">ACC</td>
-                    <td class="r n"><?= $cell($qty_acc ?? 0) ?></td>
-                    <td class="r n"><?= $cell($acc_total ?? 0) ?></td>
-                </tr>
-                <tr class="tot">
-                    <td class="lbl">Total</td>
-                    <td class="r n"><?= $cell($totalQty) ?></td>
-                    <td class="r n"><?= $cell($totalNilai) ?></td>
-                </tr>
-            </table>
-        </td>
-        <td class="c2">
-            <div class="blk-title">Rincian pengeluaran</div>
-            <table class="blk">
-                <tr class="ch">
-                    <td class="lbl" style="width:46%;">Uraian</td>
-                    <td class="r n" style="width:27%;">Kas</td>
-                    <td class="r n" style="width:27%;">Transfer</td>
-                </tr>
-                <tr>
-                    <td class="lbl">Operasional</td>
-                    <td class="r n"><?= $cell($op_cash ?? 0) ?></td>
-                    <td class="r n"><?= $cell($op_tf ?? 0) ?></td>
-                </tr>
-                <tr>
-                    <td class="lbl">Sparepart</td>
-                    <td class="r n"><?= $cell($ps_cash ?? 0) ?></td>
-                    <td class="r n"><?= $cell($ps_tf ?? 0) ?></td>
-                </tr>
-                <tr>
-                    <td class="lbl">Lain-lain</td>
-                    <td class="r n"><?= $cell($lainCash) ?></td>
-                    <td class="r n"><?= $cell($lainTf) ?></td>
-                </tr>
-                <tr class="tot">
-                    <td class="lbl">Total</td>
-                    <td class="r n"><?= $cell($pengeluaranCash) ?></td>
-                    <td class="r n"><?= $cell($pengeluaranTf) ?></td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-</table>
+<div class="sec">
+    <table class="detail-wrap">
+        <tr>
+            <td class="c1">
+                <div class="detail-title">Rekap transaksi</div>
+                <table class="detail">
+                    <tr>
+                        <th style="width:46%;">URAIAN</th>
+                        <th class="r n" style="width:18%;">QTY</th>
+                        <th class="r n" style="width:36%;">NILAI</th>
+                    </tr>
+                    <tr>
+                        <td>Unit (HP)</td>
+                        <td class="r n"><?= $cell($qty_hp ?? 0) ?></td>
+                        <td class="r n"><?= $cell($hp_total ?? 0) ?></td>
+                    </tr>
+                    <tr>
+                        <td>Servis</td>
+                        <td class="r n"><?= $cell($qty_service ?? 0) ?></td>
+                        <td class="r n"><?= $cell($service_total ?? 0) ?></td>
+                    </tr>
+                    <tr>
+                        <td>ACC</td>
+                        <td class="r n"><?= $cell($qty_acc ?? 0) ?></td>
+                        <td class="r n"><?= $cell($acc_total ?? 0) ?></td>
+                    </tr>
+                    <tr class="tot">
+                        <td>Total</td>
+                        <td class="r n"><?= $cell($totalQty) ?></td>
+                        <td class="r n"><?= $cell($totalNilai) ?></td>
+                    </tr>
+                </table>
+            </td>
+            <td class="c2">
+                <div class="detail-title">Rincian pengeluaran</div>
+                <table class="detail">
+                    <tr>
+                        <th style="width:46%;">URAIAN</th>
+                        <th class="r n" style="width:27%;">KAS</th>
+                        <th class="r n" style="width:27%;">TRANSFER</th>
+                    </tr>
+                    <tr>
+                        <td>Operasional</td>
+                        <td class="r n"><?= $cell($op_cash ?? 0) ?></td>
+                        <td class="r n"><?= $cell($op_tf ?? 0) ?></td>
+                    </tr>
+                    <tr>
+                        <td>Sparepart</td>
+                        <td class="r n"><?= $cell($ps_cash ?? 0) ?></td>
+                        <td class="r n"><?= $cell($ps_tf ?? 0) ?></td>
+                    </tr>
+                    <tr>
+                        <td>Lain-lain</td>
+                        <td class="r n"><?= $cell($lainCash) ?></td>
+                        <td class="r n"><?= $cell($lainTf) ?></td>
+                    </tr>
+                    <tr class="tot">
+                        <td>Total</td>
+                        <td class="r n"><?= $cell($pengeluaranCash) ?></td>
+                        <td class="r n"><?= $cell($pengeluaranTf) ?></td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</div>
 
-<table class="count">
-    <tr class="head">
-        <td class="lbl">Hitung laci</td>
-        <td class="r">&nbsp;</td>
-    </tr>
-    <tr>
-        <td class="lbl">Kas menurut sistem</td>
-        <td class="r n val"><?= $cell($akhirCash) ?></td>
-    </tr>
-    <tr>
-        <td class="lbl">Kas hasil hitung fisik</td>
-        <td class="r n val"><?= $cell($cashLaci) ?></td>
-    </tr>
-    <tr class="diff">
-        <td class="lbl">Selisih</td>
-        <td class="r n val"><?= $selisih < 0 ? '(' . $num($selisih) . ')' : $num($selisih) ?></td>
-    </tr>
-    <tr class="stamp">
-        <td colspan="2"><?= esc($verdict) ?></td>
-    </tr>
-</table>
+<div class="notes">
+    Selisih = kas hasil hitung fisik &minus; kas menurut sistem.<br>
+    Saldo akhir = saldo awal + pendapatan &minus; pengeluaran &minus; setor + tarik.
+</div>
 
+<div class="sign-rule"></div>
 <table class="sign">
     <tr>
         <td class="col">
@@ -388,8 +568,8 @@ $verdict = $selisih === 0 ? 'Cocok' : ($selisih > 0 ? 'Lebih' : 'Kurang');
             <div class="role">Mengetahui,</div>
             <table class="sign-inner">
                 <tr><td class="space">&nbsp;</td></tr>
-                <tr><td class="line"><?= esc($manager_nama !== '' ? $manager_nama : '____________') ?></td></tr>
-                <tr><td class="jabatan">Manager</td></tr>
+                <tr><td class="line"><?= esc(($spv_nama ?? '') !== '' ? $spv_nama : '____________') ?></td></tr>
+                <tr><td class="jabatan">SPV</td></tr>
             </table>
         </td>
     </tr>
@@ -397,8 +577,8 @@ $verdict = $selisih === 0 ? 'Cocok' : ($selisih > 0 ? 'Lebih' : 'Kurang');
 
 <table class="foot">
     <tr>
-        <td>Rincian dihitung saat cetak; arus kas mengikuti record closing.</td>
-        <td class="r">Dicetak <?= esc($dicetakLabel) ?></td>
+        <td>Rincian transaksi dihitung saat cetak; arus kas mengikuti record closing.</td>
+        <td class="r n">Dicetak <?= esc($dicetakLabel) ?></td>
     </tr>
 </table>
 

@@ -1610,8 +1610,20 @@ class TutupKasir extends BaseController
                 ->getRowArray();
         }
 
-        helper('invoice_internal');
-        $managerNama = invoice_internal_signers()['manager'] ?? '';
+        // Penanda tangan "Mengetahui" adalah SPV area unit ini (spv_units),
+        // bukan Manager global. Unit tanpa SPV dibiarkan kosong untuk
+        // ditandatangani manual.
+        $spvRow = $this->db->table('spv_units')
+            ->select('akun.NAMA_AKUN')
+            ->join('akun', 'akun.ID_AKUN = spv_units.spv_id', 'inner')
+            ->where('spv_units.unit_id', $unit)
+            ->where('akun.STATUS_PEGAWAI', 1)
+            ->orderBy('spv_units.id', 'ASC')
+            ->limit(1)
+            ->get()
+            ->getRow();
+
+        $spvNama = $spvRow ? trim((string) $spvRow->NAMA_AKUN) : '';
 
         $totalservice = $this->db->table('service')
             ->selectSum('bayar_tunai', 'total')
@@ -1724,7 +1736,7 @@ class TutupKasir extends BaseController
             'tutup'        => $tutupKasir,
             'unit_row'     => $unitRow,
             'penutup'      => $penutup,
-            'manager_nama' => $managerNama,
+            'spv_nama'     => $spvNama,
         ];
 
         $html = view('cetak/cetak_tutupkasir', $data);

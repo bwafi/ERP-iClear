@@ -168,6 +168,13 @@
 - **Tanda tangan:** label Finance/Manager, garis tanda tangan, lalu nama penanda tangan di bawah garis. Nama diambil dari akun aktif jabatan Finance (0) dan Manager (34), bukan hardcode.
 - **mPDF constraints:** hanya tabel/block; hindari flex/grid. Garis tanda tangan memakai sel tabel dengan `height` + `border-bottom`, bukan div kosong. Untuk blok tanda tangan, pakai selector kelas tunggal (descendant selector pada blok itu tidak diterapkan mPDF).
 
+### Bukti Tutup Kasir (cetak/PDF)
+- **Scope:** `app/Views/cetak/cetak_tutupkasir.php`, dirender mPDF A4 oleh `TutupKasir::cetak_tutup_kasir`. Dokumen cetak, bukan halaman web.
+- **Layout:** masthead (wordmark + unit + alamat di kiri, judul `Tutup Kasir #<id>` + tanggal/waktu/status di kanan) → rule 2pt → strip identitas (kasir, jabatan, unit) → pita rekonsiliasi (kas sistem, kas fisik, cap selisih) → buku kas → rekap transaksi + rincian pengeluaran → catatan rumus → pengesahan → footer.
+- **Rekonsiliasi:** dua angka utama memakai `Rp` dan 18pt; cap selisih di kanan berisi label, verdict, dan nominal. `Cocok` hijau `#0f7a46`; `Lebih`/`Kurang` merah `#b42318`. Angka nol di ledger ditulis `–`; pengeluaran dalam tanda kurung.
+- **Type & color:** DejaVu Sans Condensed; nominal `tabular-nums`; navy `#0f2a43`, label `#5b6672`, hairline `#cfd8e3`/`#e3e8ee`. Tanpa gradien, kartu, atau isian latar dekoratif.
+- **Rules:** seluruh angka uang dari baris `tutup_kasir`, bukan dihitung ulang; struktur tabel mPDF (tanpa flex/grid); warna verdict memakai inline style karena descendant selector di dalam tabel bersarang tidak diterapkan mPDF. Penanda tangan "Mengetahui" adalah SPV area unit dari `spv_units` (akun aktif), bukan Manager global; unit tanpa SPV mencetak garis kosong berlabel SPV.
+
 ## Responsive Behavior
 - **Mobile (<768px):** Stacked layouts, icon-only navigation, full-width filters.
 - **Tablet (768-991px):** Adjusted spacing, wrapped filter groups.

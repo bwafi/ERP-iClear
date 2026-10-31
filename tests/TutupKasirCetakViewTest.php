@@ -41,7 +41,7 @@ final class TutupKasirCetakViewTest extends CIUnitTestCase
                 'NOTELP'         => '085183270910',
             ],
             'penutup'       => ['NAMA_AKUN' => 'Priyanka Aprilia Dewi', 'NAMA_JABATAN' => 'Kepala Toko'],
-            'manager_nama'  => 'Nurul Huda',
+            'spv_nama'      => 'Bima Bayu Baskoro',
             'qty_hp'        => 0,
             'hp_total'      => 0,
             'qty_service'   => 8,
@@ -60,7 +60,8 @@ final class TutupKasirCetakViewTest extends CIUnitTestCase
         $html = view('cetak/cetak_tutupkasir', $this->data());
 
         foreach ([
-            'Tutup Kasir #623',
+            'Tutup Kasir',
+            'No. 623',
             '30 Oktober 2026',
             '21:06 WIB',
             'Status: Selesai',
@@ -68,7 +69,8 @@ final class TutupKasirCetakViewTest extends CIUnitTestCase
             'Jl. Hos Cokroaminoto No.06',
             'Priyanka Aprilia Dewi',
             'Kepala Toko',
-            'Nurul Huda',
+            'Bima Bayu Baskoro',
+            'SPV',
             'Saldo awal',
             '463.200',
             '12.448.270',
@@ -93,6 +95,17 @@ final class TutupKasirCetakViewTest extends CIUnitTestCase
         ] as $teks) {
             $this->assertStringContainsString($teks, $html);
         }
+    }
+
+    public function testSpvKosongDibiarkanUntukTandaTanganManual(): void
+    {
+        $data = $this->data();
+        $data['spv_nama'] = '';
+
+        $html = view('cetak/cetak_tutupkasir', $data);
+
+        $this->assertStringContainsString('SPV', $html);
+        $this->assertStringContainsString('____________', $html);
     }
 
     public function testMutasiNetoDanSelisihDitampilkanSaatTidakNol(): void
