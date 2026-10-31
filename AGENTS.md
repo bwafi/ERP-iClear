@@ -39,6 +39,25 @@ Sebelum mengubah kode:
 5. Jika dokumentasi tidak tersedia, tidak lengkap, atau bertentangan dengan kode, nyatakan ketidakpastian dan investigasi kode/test/schema sebelum memutuskan. Tandai aturan yang belum terverifikasi sebagai `⚠️` atau pertanyaan terbuka; inferensi ditandai `🔶`.
 6. Jika kebutuhan bisnis ambigu atau menyentuh alur berisiko, tanyakan kepada user sebelum mengubah perilaku.
 
+## B.1 Issue-first setelah approval (wajib, lintas session)
+
+Jangan buat issue untuk setiap permintaan. Issue hanya dibuat **setelah user menyetujui pekerjaan**, yaitu saat user menyatakan secara eksplisit untuk dikerjakan (mis. "setuju", "kerjakan", "lanjut", "gas", "implementasikan") atau menyetujui rencana yang diajukan. Saat user masih bertanya, minta pendapat, atau menjelaskan kebutuhan, jangan buat issue dan jangan edit file; ajukan rencana singkat lalu tunggu persetujuan.
+
+Setelah approval, urutannya:
+
+1. Buat issue lebih dulu:
+   ```sh
+   gh issue create --repo bwafi/ERP-iClear --title "[Change] <ringkas>" --body-file /tmp/opencode/issue.md --label enhancement
+   ```
+   Body minimal: Sumber, Latar belakang, Perubahan, Dampak, Acceptance criteria.
+2. Masukkan ke board dan set status **Todo**:
+   ```sh
+   gh project item-add 1 --owner bwafi --url <issue-url> --format json
+   gh project item-edit --project-id PVT_kwHOBrFnns4BmskD --id <item-id> --field-id PVTSSF_lAHOBrFnns4BmskDzhlUhds --single-select-option-id f75ad846
+   ```
+3. Setelah implementasi dan test, pindahkan ke **Testing** (`7dc918ef`) dan komentari hash commit + hasil test. Setelah verifikasi manual, pindahkan ke **Done** (`98236657`).
+4. Sebut nomor issue di pesan commit: `... (refs #<nomor>)`.
+
 ## C. Change safety
 
 - Pahami alur data, efek samping, caller, route, laporan, job, dan test sebelum mengubah implementasi. Perubahan harus berada dalam scope tugas.
