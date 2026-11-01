@@ -2313,10 +2313,32 @@ class PenilaianKPI extends BaseController
                 ->total ?? 0);
         };
 
+        // Periode yang payrollnya sudah dibayar memakai potongan kasbon yang
+        // benar-benar terjadi (termasuk 0). Sisa outstanding saat ini bisa
+        // sudah lunas, atau berisi kasbon baru yang bukan milik periode ini.
+        $kasbon = null;
         try {
-            $kasbon = (new \App\Services\Finance\HutangPiutangService())->getSisaKasbonPegawai($employeeId);
+            $paid = $this->db->table('finance_payroll')
+                ->select('potongan_kasbon')
+                ->where('pegawai_id', $employeeId)
+                ->where('status', 'dibayar')
+                ->where('due_date >=', $startMonth)
+                ->where('due_date <=', $endMonth)
+                ->orderBy('id', 'DESC')
+                ->get()->getRow();
+            if ($paid !== null) {
+                $kasbon = (int) round((float) ($paid->potongan_kasbon ?? 0));
+            }
         } catch (\Throwable $e) {
-            $kasbon = 0;
+            $kasbon = null;
+        }
+
+        if ($kasbon === null) {
+            try {
+                $kasbon = (new \App\Services\Finance\HutangPiutangService())->getSisaKasbonPegawai($employeeId);
+            } catch (\Throwable $e) {
+                $kasbon = 0;
+            }
         }
 
         // Penyesuaian manual (SP / bonus kinerja) untuk periode yang sama.

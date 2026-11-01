@@ -57,7 +57,7 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
             'payroll_adjustment',
             'unit', 'akun', 'jabatan', 'menu', 'spv_units',
             'stok_barang', 'penjualan', 'detail_penjualan', 'service', 'pelanggan',
-            'kas_keluar', 'kategori_kas', 'hutang_piutang',
+            'kas_keluar', 'kategori_kas', 'hutang_piutang', 'finance_payroll',
             'incentive_members', 'salary_components', 'salary_structures',
             'kpi_components', 'kpi_weights', 'kpi_targets', 'kpi_evaluations',
             'kpi_attendance_detail', 'kpi_attendance_off',
@@ -112,6 +112,10 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
                 scope TEXT NULL, sumber_tipe TEXT NULL, pihak_tipe TEXT NULL,
                 pihak_id INT NULL, status TEXT NULL, sisa REAL NULL,
                 unit_id INT NULL)');
+        $q('CREATE TABLE finance_payroll (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT, pegawai_id INT NULL,
+                unit_id INT NULL, status TEXT NULL, due_date TEXT NULL,
+                total REAL NULL, total_bersih REAL NULL, potongan_kasbon REAL NULL)');
 
         // Mesin gaji: tanpa KPI/evaluasi → skor 0, gaji murni dari struktur.
         $q('CREATE TABLE incentive_members (
@@ -266,6 +270,67 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
         preg_match($pola, $html, $m);
 
         return (int) str_replace('.', '', $m[1]);
+    }
+
+    public function testPeriodeDibayarMemakaiPotonganKasbonTersimpan(): void
+    {
+        $this->sesi();
+
+        // Kasbon sudah dilunasi saat payroll dibayar: sisa outstanding 0,
+        // tetapi payroll periode Oktober menyimpan potongan 25.000.
+        $this->db->table('hutang_piutang')
+            ->where('pihak_id', self::PEGAWAI)
+            ->update(['sisa' => 0, 'status' => 'lunas']);
+        $this->db->table('finance_payroll')->insert([
+            'pegawai_id' => self::PEGAWAI, 'unit_id' => self::UNIT,
+            'status' => 'dibayar', 'due_date' => '2026-10-31',
+            'potongan_kasbon' => 25000,
+        ]);
+
+        $slip = (string) $this->get(
+            'penilaian/slip_gaji/' . self::PEGAWAI . '?bulan=10&tahun=2026',
+        )->getBody();
+        $bersih = $this->angka(
+            $slip,
+            '/PENERIMAAN BERSIH \(A-B\).*?Rp([\d.]+)/s',
+            'PENERIMAAN BERSIH (A-B)',
+        );
+
+        $this->assertSame(25000, $this->angka(
+            $slip,
+            '/Kasbon<\/td>\s*<td>\s*Rp([\d.]+)/s',
+            'Kasbon',
+        ));
+        $this->assertSame(885000, $bersih, 'kasbon tersimpan harus dipotong');
+    }
+
+    public function testPeriodeDibayarTanpaPotonganKasbonTidakMemakaiSisaOutstanding(): void
+    {
+        $this->sesi();
+
+        // Payroll sudah dibayar tanpa potongan kasbon (mis. kasbon baru muncul
+        // setelahnya). Sisa outstanding tidak boleh dipotong lagi ke periode itu.
+        $this->db->table('finance_payroll')->insert([
+            'pegawai_id' => self::PEGAWAI, 'unit_id' => self::UNIT,
+            'status' => 'dibayar', 'due_date' => '2026-10-31',
+            'potongan_kasbon' => 0,
+        ]);
+
+        $slip = (string) $this->get(
+            'penilaian/slip_gaji/' . self::PEGAWAI . '?bulan=10&tahun=2026',
+        )->getBody();
+        $bersih = $this->angka(
+            $slip,
+            '/PENERIMAAN BERSIH \(A-B\).*?Rp([\d.]+)/s',
+            'PENERIMAAN BERSIH (A-B)',
+        );
+
+        $this->assertSame(0, $this->angka(
+            $slip,
+            '/Kasbon<\/td>\s*<td>\s*Rp([\d.]+)/s',
+            'Kasbon',
+        ));
+        $this->assertSame(910000, $bersih, 'sisa outstanding tidak boleh dipotong ulang');
     }
 
     public function testTakeHomePayEstimasiSamaDenganPenerimaanBersihSlip(): void
