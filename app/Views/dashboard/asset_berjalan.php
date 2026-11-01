@@ -1211,6 +1211,17 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                 <div class="fs-2 text-success mt-1">
                     Tersimpan untuk <?= esc($periodeLabelId) ?><?= !empty($isBulanBerjalan) ? ' (diperbarui otomatis)' : '' ?>
                 </div>
+                <?php if (!empty($boleh_hitung_ulang_tanggungan)): ?>
+                    <form method="post"
+                          action="<?= base_url('asset_berjalan?unit=' . (int) $selected_unit . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun) ?>"
+                          class="mt-2"
+                          onsubmit="return confirm('Hitung ulang tanggungan <?= esc($periodeLabelId) ?>? Nominal tersimpan dan sisa saldo akan disesuaikan dengan laba saat ini.');">
+                        <?= csrf_field() ?>
+                        <button type="submit" name="hitung_ulang_tanggungan" value="1" class="btn btn-sm btn-outline-primary">
+                            Hitung Ulang Tanggungan <?= esc($periodeLabelId) ?>
+                        </button>
+                    </form>
+                <?php endif; ?>
             <?php elseif (!empty($bisa_simpan_tanggungan)): ?>
                 <form method="post"
                       action="<?= base_url('asset_berjalan?unit=' . (int) $selected_unit . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun) ?>"

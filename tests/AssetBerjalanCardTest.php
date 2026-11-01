@@ -23,7 +23,7 @@ class AssetBerjalanCardTest extends CIUnitTestCase
     /**
      * @param int $unit unit terpilih
      */
-    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null, float $biayaLain = 0.0, bool $bolehCetakInvoice = false): string
+    private function render(int $unit, float $omset, float $pengeluaran, float $gaji, ?array $gajiDetail = null, ?array $hoDistribution = null, ?array $hoUnitShare = null, float $biayaLain = 0.0, bool $bolehCetakInvoice = false, array $extra = []): string
     {
         $vars = [
             'boleh_pilih_unit' => true,
@@ -51,6 +51,9 @@ class AssetBerjalanCardTest extends CIUnitTestCase
 
         $r = service('renderer');
         foreach ($vars as $k => $v) {
+            $r->setVar($k, $v);
+        }
+        foreach ($extra as $k => $v) {
             $r->setVar($k, $v);
         }
 
@@ -481,10 +484,28 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $this->assertStringContainsString('invoice=1', $html);
     }
 
-    public function testTombolCetakInvoiceTidakMunculTanpaIzin(): void
+    public function testTombolHitungUlangTampilUntukBulanLaluYangTersimpan(): void
     {
-        $html = $this->render(5, 100000000, 20000000, 10000000);
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, null, null, 0.0, false, [
+            'tanggungan_asset'              => 7453096,
+            'tanggungan_tersimpan'          => true,
+            'sisa_tanggungan'               => 57323120,
+            'boleh_hitung_ulang_tanggungan' => true,
+        ]);
 
-        $this->assertStringNotContainsString('Cetak Invoice', $html);
+        $this->assertStringContainsString('Hitung Ulang Tanggungan', $html);
+        $this->assertStringContainsString('name="hitung_ulang_tanggungan"', $html);
+    }
+
+    public function testTombolHitungUlangTidakMunculTanpaIzin(): void
+    {
+        $html = $this->render(5, 100000000, 20000000, 10000000, null, null, null, 0.0, false, [
+            'tanggungan_asset'              => 7453096,
+            'tanggungan_tersimpan'          => true,
+            'sisa_tanggungan'               => 57323120,
+            'boleh_hitung_ulang_tanggungan' => false,
+        ]);
+
+        $this->assertStringNotContainsString('Hitung Ulang Tanggungan', $html);
     }
 }

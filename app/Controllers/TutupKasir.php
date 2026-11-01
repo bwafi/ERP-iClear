@@ -1105,11 +1105,14 @@ class TutupKasir extends BaseController
         $tanggunganService     = new \App\Services\Finance\TanggunganAssetService();
         $tanggunganTersimpan   = null;
         $bisaSimpanTanggungan  = false;
+        $bolehHitungUlang      = false;
         $sisaTanggungan        = (float) ($unitRow->tanggungan ?? 0);
 
         if ($isFranchise) {
             $mintaSimpan = $this->request->is('post')
                 && (int) $this->request->getPost('simpan_tanggungan') === 1;
+            $mintaHitungUlang = $this->request->is('post')
+                && (int) $this->request->getPost('hitung_ulang_tanggungan') === 1;
 
             // Bulan berjalan: satu baris yang ikut diperbarui sampai bulan
             // berganti, supaya tidak terkunci di angka awal bulan.
@@ -1119,6 +1122,21 @@ class TutupKasir extends BaseController
 
             $tanggunganTersimpan = $tanggunganService->nominalTersimpan($unit, $bulanStr);
             $sisaTanggungan      = $tanggunganService->sisa($unit);
+
+            // Bulan lampau yang sudah tersimpan: kembalikan nominal lama ke
+            // saldo lalu potong ulang dengan laba saat ini.
+            if ($mintaHitungUlang
+                && $tanggunganTersimpan !== null
+                && ! $isBulanBerjalan
+                && $bulanStr <= date('Y-m')
+                && self::bolehHitungUlangTanggungan((int) $id_jabatan)
+            ) {
+                $tanggunganService->simpan($unit, $bulanStr, $tanggunganMentah, true);
+
+                return redirect()->to(
+                    base_url('asset_berjalan?unit=' . $unit . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun)
+                )->with('sukses', 'Tanggungan ' . $periodeLabel . ' dihitung ulang.');
+            }
 
             // Bulan lain: hanya lewat tombol, dan tidak boleh menyisip ke
             // masa depan. Redirect juga saat baris sudah ada supaya refresh
@@ -1136,6 +1154,10 @@ class TutupKasir extends BaseController
             $bisaSimpanTanggungan = $tanggunganTersimpan === null
                 && $bulanStr <= date('Y-m')
                 && $sisaTanggungan > 0;
+            $bolehHitungUlang = $tanggunganTersimpan !== null
+                && ! $isBulanBerjalan
+                && $bulanStr <= date('Y-m')
+                && self::bolehHitungUlangTanggungan((int) $id_jabatan);
         }
 
         // Franchise memakai angka tersimpan (atau perkiraan yang dibatasi
@@ -1187,6 +1209,7 @@ class TutupKasir extends BaseController
             'tagihan_center'  => $tagihanCenter,
             'tanggungan_tersimpan' => $tanggunganTersimpan !== null,
             'bisa_simpan_tanggungan' => $bisaSimpanTanggungan,
+            'boleh_hitung_ulang_tanggungan' => $bolehHitungUlang,
             'sisa_tanggungan' => $isFranchise ? $sisaTanggungan : null,
             'body'              => 'dashboard/asset_berjalan',
         ];
@@ -1494,6 +1517,15 @@ class TutupKasir extends BaseController
 
     /** Rincian gaji hanya untuk Admin root (1), Finance (0), dan Manager (34). */
     public static function bolehLihatRincianGaji(int $idJabatan): bool
+    {
+        return in_array($idJabatan, [0, 1, 34], true);
+    }
+
+    /**
+     * Hitung ulang tanggungan bulan lampau mengubah nominal historis dan
+     * saldo unit, jadi dibatasi ke role keuangan yang sama.
+     */
+    public static function bolehHitungUlangTanggungan(int $idJabatan): bool
     {
         return in_array($idJabatan, [0, 1, 34], true);
     }
