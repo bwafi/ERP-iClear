@@ -4,8 +4,8 @@
  *
  * Halaman ini memakai dunia "Lembar Posisi Kas" yang sama dengan dashboard:
  * satu lembar datar, garis rambut, label mikro kapital, angka tabular. Bagian
- * yang khas di sini hanya ringkasan rekening, baris "Catat & atur" yang bisa
- * dibuka, dan tabel buku rekening. Tabel memakai .kbx-table supaya perilaku
+ * yang khas di sini hanya ringkasan rekening, kartu "Catat & atur" ber-tab,
+ * dan tabel buku rekening. Tabel memakai .kbx-table supaya perilaku
  * mobile-nya (baris jadi blok berlabel) tidak ditulis dua kali.
  */
 ?>
@@ -132,89 +132,148 @@
         color: var(--kbx-muted);
     }
 
-    .kba-step { border-top: 1px solid var(--kbx-line); }
-
-    .kba-step > summary {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.875rem 1.5rem;
-        cursor: pointer;
-        list-style: none;
-    }
-
-    .kba-step > summary::-webkit-details-marker { display: none; }
-    .kba-step > summary:hover { background: var(--kbx-soft); }
-
-    .kba-step > summary:focus-visible {
-        outline: 2px solid var(--bs-primary, #0d6efd);
-        outline-offset: -2px;
-    }
-
-    .kba-step-no {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex: 0 0 auto;
-        width: 1.5rem;
-        height: 1.5rem;
-        border: 1px solid var(--kbx-line-strong);
-        border-radius: 2px;
+    .kba-readonly {
         font-size: 0.75rem;
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-        color: var(--kbx-muted);
-    }
-
-    .kba-step-copy {
-        display: flex;
-        flex: 1 1 auto;
-        flex-direction: column;
-        gap: 0.125rem;
-        min-width: 0;
-    }
-
-    .kba-step-title {
-        font-size: 0.9375rem;
-        font-weight: 600;
-        color: var(--kbx-ink);
-    }
-
-    .kba-step-hint {
-        font-size: 0.75rem;
-        color: var(--kbx-muted);
-    }
-
-    .kba-step-state {
-        flex: 0 0 auto;
-        font-size: 0.75rem;
-        font-variant-numeric: tabular-nums;
         color: var(--kbx-muted);
         white-space: nowrap;
     }
 
-    .kba-chevron {
-        flex: 0 0 auto;
-        font-size: 1rem;
-        color: var(--kbx-muted);
-        transition: transform 0.18s ease;
+    /* Tab: garis bawah 2px pada tab aktif, sama dengan navigasi modul. */
+    .kba-tabs {
+        display: flex;
+        gap: 0.125rem;
+        padding: 0 1rem;
+        overflow-x: auto;
+        border-top: 1px solid var(--kbx-line);
+        border-bottom: 1px solid var(--kbx-line);
+        scrollbar-width: thin;
     }
 
-    .kba-step[open] .kba-chevron { transform: rotate(180deg); }
+    .kba-tab {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 0.4375rem;
+        padding: 0.75rem 0.75rem 0.6875rem;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: none;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--kbx-muted);
+        white-space: nowrap;
+        cursor: pointer;
+        transition: color 0.15s ease, border-color 0.15s ease;
+    }
 
-    /* Indentasi isi mengikuti judul langkah, bukan nomornya, supaya form
-       terbaca sebagai isi baris yang sedang dibuka. */
-    .kba-step-body { padding: 0.25rem 1.5rem 1.25rem 3.75rem; }
+    .kba-tab:hover { color: var(--kbx-ink); }
 
-    .kba-step-note {
-        margin: 0 0 0.75rem;
+    .kba-tab[aria-selected="true"] {
+        color: var(--kbx-ink);
+        border-bottom-color: var(--bs-primary, #0d6efd);
+        font-weight: 600;
+    }
+
+    .kba-tab:focus-visible {
+        outline: 2px solid var(--bs-primary, #0d6efd);
+        outline-offset: -2px;
+        border-radius: 2px;
+    }
+
+    .kba-tab iconify-icon { font-size: 1rem; }
+
+    .kba-tab-n {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--kbx-muted);
+    }
+
+    .kba-panel { padding: 1.25rem 1.5rem 1.25rem; }
+
+    .kba-panel[hidden] { display: none; }
+
+    .kba-panel:focus-visible {
+        outline: 2px solid var(--bs-primary, #0d6efd);
+        outline-offset: -2px;
+    }
+
+    .kba-panel-note {
+        margin: 0 0 1rem;
         max-width: 68ch;
         font-size: 0.75rem;
         line-height: 1.5;
         color: var(--kbx-muted);
     }
 
+    .kba-panel-rule {
+        height: 1px;
+        margin: 1.25rem 0;
+        background: var(--kbx-line);
+    }
+
     /* ===== Form ===== */
+    .kba-form-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        max-width: 48rem;
+        margin-bottom: 1rem;
+    }
+
+    .kba-form-mode {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--kbx-muted);
+    }
+
+    /* Pilihan Kas/Bank: dua tombol radio, bukan dropdown. */
+    .kba-seg {
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--kbx-line);
+        border-radius: 6px;
+        background: var(--kbx-soft);
+    }
+
+    .kba-seg-opt { position: relative; margin: 0; }
+
+    .kba-seg-opt input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .kba-seg-opt span {
+        display: block;
+        padding: 0.3125rem 1rem;
+        border-radius: 4px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--kbx-muted);
+    }
+
+    .kba-seg-opt input:checked + span {
+        background: var(--kbx-sheet);
+        color: var(--kbx-ink);
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(17, 28, 45, 0.14);
+    }
+
+    .kba-seg-opt input:focus-visible + span {
+        outline: 2px solid var(--bs-primary, #0d6efd);
+        outline-offset: 1px;
+    }
+
     /* Form tetap pada measure baca, bukan melebar selebar lembar. */
     .kba-form-grid {
         display: grid;
@@ -235,13 +294,40 @@
 
     .kba-req { color: var(--bs-danger, #dc3545); }
 
-    .kba-form-actions {
+    /* Tanggal cut-off dikunci: dibaca sebagai nilai, bukan kontrol. */
+    .kba-locked {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        min-height: 2.25rem;
+        margin: 0;
+        font-size: 0.8125rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--kbx-muted);
+    }
+
+    .kba-locked iconify-icon {
+        font-size: 0.8125rem;
+        opacity: 0.8;
+    }
+
+    .kba-panel-foot {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
+        justify-content: space-between;
         gap: 0.75rem 1rem;
         max-width: 48rem;
-        margin-top: 1rem;
+        margin-top: 1.25rem;
+        padding-top: 0.875rem;
+        border-top: 1px solid var(--kbx-line);
+    }
+
+    .kba-foot-note {
+        max-width: 46ch;
+        font-size: 0.6875rem;
+        line-height: 1.5;
+        color: var(--kbx-muted);
     }
 
     .kba-link-danger {
@@ -269,7 +355,7 @@
     /* ===== Opening KAS ===== */
     .kba-open-table {
         width: 100%;
-        margin: 0 0 0.75rem;
+        margin: 0;
         border-collapse: collapse;
     }
 
@@ -334,6 +420,36 @@
     }
 
     .kba-icon-btn iconify-icon { font-size: 0.875rem; }
+
+    .kba-row-act {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3125rem;
+        height: 1.875rem;
+        padding: 0 0.5rem;
+        border: 1px solid var(--kbx-line);
+        border-radius: 2px;
+        background: transparent;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--kbx-muted);
+        white-space: nowrap;
+    }
+
+    .kba-row-act:hover {
+        color: var(--kbx-ink);
+        border-color: var(--kbx-line-strong);
+        background: var(--kbx-soft);
+    }
+
+    .kba-row-act:focus-visible {
+        outline: 2px solid var(--bs-primary, #0d6efd);
+        outline-offset: 2px;
+    }
+
+    .kba-row-act iconify-icon { font-size: 0.8125rem; }
+
+    .kba-cell-action .kba-row-act + .kba-icon-btn { margin-left: 0.25rem; }
 
     .kba-tag {
         display: inline-block;
@@ -438,12 +554,16 @@
         .kba-section-head,
         .kba-summary-foot { padding-left: 1rem; padding-right: 1rem; }
 
-        .kba-step > summary { padding-left: 1rem; padding-right: 1rem; }
-        .kba-step-body { padding: 0.25rem 1rem 1rem; }
-        .kba-step-state { display: none; }
+        .kba-tabs { padding: 0 0.5rem; }
+        .kba-tab { padding-left: 0.625rem; padding-right: 0.625rem; }
+        .kba-tab-n { display: none; }
 
+        .kba-panel { padding: 1rem; }
         .kba-form-grid { grid-template-columns: minmax(0, 1fr); }
         .kba-total { font-size: 1.75rem; }
+
+        .kba-panel-foot { align-items: stretch; flex-direction: column-reverse; }
+        .kba-panel-foot .kbx-apply { width: 100%; }
 
         .kba-table td.kba-cell-action {
             display: flex;
@@ -507,6 +627,6 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .kba-chevron { transition: none; }
+        .kba-tab { transition: none; }
     }
 </style>

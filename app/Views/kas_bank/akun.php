@@ -179,113 +179,303 @@ if ((int) ($unit_terpilih ?? 0) > 0 && isset($unitMap[(int) $unit_terpilih])) {
                 </p>
             </div>
             <?php if (! $canInput) : ?>
-                <span class="kba-step-state">Hanya lihat · hubungi Finance untuk mengubah</span>
+                <span class="kba-readonly">Hanya lihat · hubungi Finance untuk mengubah</span>
             <?php endif; ?>
         </div>
 
-        <!-- Langkah 1 -->
-        <details class="kba-step" id="step1" <?= $totalAkun === 0 ? 'open' : '' ?>>
-            <summary>
-                <span class="kba-step-no">1</span>
-                <span class="kba-step-copy">
-                    <span class="kba-step-title" id="form-title">Tambah rekening</span>
-                    <span class="kba-step-hint">Kas atau bank harus terdaftar sebelum saldo bisa dicatat.</span>
+        <div class="kba-tabs" role="tablist" aria-label="Pekerjaan rekening">
+            <button type="button" class="kba-tab" role="tab" id="tab-rekening"
+                aria-controls="panel-rekening" aria-selected="true" tabindex="0">
+                <iconify-icon icon="bi:wallet2" aria-hidden="true"></iconify-icon>
+                <span>Rekening</span>
+                <span class="kba-tab-n"><?= $totalAkun ?></span>
+            </button>
+            <button type="button" class="kba-tab" role="tab" id="tab-saldo-awal"
+                aria-controls="panel-saldo-awal" aria-selected="false" tabindex="-1">
+                <iconify-icon icon="bi:bank" aria-hidden="true"></iconify-icon>
+                <span>Saldo awal</span>
+                <span class="kba-tab-n"><?= $fmtTgl($cutoffBank) ?></span>
+            </button>
+            <button type="button" class="kba-tab" role="tab" id="tab-jatah"
+                aria-controls="panel-jatah" aria-selected="false" tabindex="-1">
+                <iconify-icon icon="bi:pie-chart" aria-hidden="true"></iconify-icon>
+                <span>Jatah cabang</span>
+                <span class="kba-tab-n"><?= $rp($totalAlokasiBank) ?></span>
+            </button>
+            <button type="button" class="kba-tab" role="tab" id="tab-opening-kas"
+                aria-controls="panel-opening-kas" aria-selected="false" tabindex="-1">
+                <iconify-icon icon="bi:cash-stack" aria-hidden="true"></iconify-icon>
+                <span>Opening kas</span>
+                <span class="kba-tab-n">
+                    <?= $openingKasBelum > 0 ? $openingKasBelum . ' laci belum' : count($daftarKas) . ' laci siap' ?>
                 </span>
-                <span class="kba-step-state"><?= $totalAkun ?> rekening</span>
-                <iconify-icon icon="bi:chevron-down" class="kba-chevron" aria-hidden="true"></iconify-icon>
-            </summary>
+            </button>
+        </div>
 
-            <div class="kba-step-body">
-                <form method="post" action="<?= base_url('kas_bank/akun/save') ?>" id="form-akun">
-                    <input type="hidden" name="idakun_kas_bank" id="idakun_kas_bank" value="">
+        <noscript>
+            <style>.kba-panel[hidden] { display: block !important; }</style>
+        </noscript>
 
-                    <div class="kba-form-grid">
-                        <div class="kba-field">
-                            <label class="kbx-label" for="tipe">Tipe <span class="kba-req">*</span></label>
-                            <select name="tipe" id="tipe" class="form-select kbx-control" required>
-                                <option value="KAS">Kas (tunai)</option>
-                                <option value="BANK">Bank</option>
-                            </select>
-                        </div>
-                        <div class="kba-field">
-                            <label class="kbx-label" for="status">Status</label>
-                            <select name="status" id="status" class="form-select kbx-control">
-                                <option value="aktif">Aktif</option>
-                                <option value="nonaktif">Nonaktif</option>
-                            </select>
-                        </div>
+        <!-- Tab 1: rekening -->
+        <div class="kba-panel" role="tabpanel" id="panel-rekening" aria-labelledby="tab-rekening" tabindex="0">
+            <form method="post" action="<?= base_url('kas_bank/akun/save') ?>" id="form-akun">
+                <input type="hidden" name="idakun_kas_bank" id="idakun_kas_bank" value="">
 
-                        <div class="kba-field kba-field--full">
-                            <label class="kbx-label" for="nama_akun">Nama rekening <span class="kba-req">*</span></label>
-                            <input type="text" name="nama_akun" id="nama_akun" class="form-control kbx-control" placeholder="Mis. Kas Kasir 1, BCA Utama" required>
-                        </div>
+                <div class="kba-form-head">
+                    <div class="kba-seg" role="radiogroup" aria-label="Tipe rekening">
+                        <label class="kba-seg-opt">
+                            <input type="radio" name="tipe" value="KAS" checked>
+                            <span>Kas</span>
+                        </label>
+                        <label class="kba-seg-opt">
+                            <input type="radio" name="tipe" value="BANK">
+                            <span>Bank</span>
+                        </label>
+                    </div>
+                    <span class="kba-form-mode" id="form-mode">Rekening baru</span>
+                </div>
 
-                        <div class="kba-field">
-                            <label class="kbx-label" for="unit_id">Cabang pemilik</label>
-                            <select name="unit_id" id="unit_id" class="form-select kbx-control">
-                                <option value="">Lintas unit / bersama</option>
-                                <?php foreach (($unit ?? []) as $u) : ?>
-                                    <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="kba-field" id="bank-select-wrap">
-                            <label class="kbx-label" for="bank_idbank">Master bank</label>
-                            <select name="bank_idbank" id="bank_idbank" class="form-select kbx-control">
-                                <option value="">Pilih master bank</option>
-                                <?php foreach (($bank ?? []) as $b) : ?>
-                                    <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank . ' - ' . $b->atas_nama . ' (' . $b->norek . ')') ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="kba-field kba-field--full" id="shared-wrap">
-                            <div class="form-check form-switch kba-switch">
-                                <input class="form-check-input" type="checkbox" name="is_shared" id="is_shared" value="1">
-                                <label class="form-check-label" for="is_shared">Dipakai bersama lebih dari satu unit</label>
-                            </div>
-                        </div>
-
-                        <div class="kba-field kba-field--full">
-                            <label class="kbx-label" for="no_akun_coa">Akun COA</label>
-                            <select name="no_akun_coa" id="no_akun_coa" class="form-select kbx-control">
-                                <option value="">Pilih COA</option>
-                                <?php foreach (($no_akun ?? []) as $na) : ?>
-                                    <option value="<?= esc($na->no_akun) ?>"><?= esc($na->no_akun . ' - ' . $na->nama_akun) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                <div class="kba-form-grid">
+                    <div class="kba-field kba-field--full">
+                        <label class="kbx-label" for="nama_akun">Nama rekening <span class="kba-req">*</span></label>
+                        <input type="text" name="nama_akun" id="nama_akun" class="form-control kbx-control" placeholder="Mis. Kas Kasir 1, BCA Utama" required>
                     </div>
 
-                    <div class="kba-form-actions">
-                        <button type="submit" class="btn btn-primary kbx-apply">Simpan rekening</button>
-                        <button type="button" class="kba-link-danger d-none" id="btn-reset-form">Batal edit</button>
+                    <div class="kba-field">
+                        <label class="kbx-label" for="unit_id">Cabang pemilik</label>
+                        <select name="unit_id" id="unit_id" class="form-select kbx-control">
+                            <option value="">Lintas unit / bersama</option>
+                            <?php foreach (($unit ?? []) as $u) : ?>
+                                <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
-                </form>
-            </div>
-        </details>
 
-        <!-- Langkah 2 -->
-        <details class="kba-step" id="step2">
-            <summary>
-                <span class="kba-step-no">2</span>
-                <span class="kba-step-copy">
-                    <span class="kba-step-title">Saldo awal bank</span>
-                    <span class="kba-step-hint">Saldo fisik terverifikasi pada tanggal cut-off, bukan hasil penjumlahan transaksi.</span>
-                </span>
-                <span class="kba-step-state"><?= $fmtTgl($cutoffBank) ?></span>
-                <iconify-icon icon="bi:chevron-down" class="kba-chevron" aria-hidden="true"></iconify-icon>
-            </summary>
+                    <div class="kba-field">
+                        <label class="kbx-label" for="status">Status</label>
+                        <select name="status" id="status" class="form-select kbx-control">
+                            <option value="aktif">Aktif</option>
+                            <option value="nonaktif">Nonaktif</option>
+                        </select>
+                    </div>
 
-            <div class="kba-step-body">
-                <form method="post" action="<?= base_url('kas_bank/saldo-awal/save') ?>">
+                    <div class="kba-field kba-field--full" id="bank-select-wrap">
+                        <label class="kbx-label" for="bank_idbank">Master bank <span class="kba-req">*</span></label>
+                        <select name="bank_idbank" id="bank_idbank" class="form-select kbx-control">
+                            <option value="">Pilih master bank</option>
+                            <?php foreach (($bank ?? []) as $b) : ?>
+                                <option value="<?= esc($b->idbank) ?>"><?= esc($b->nama_bank . ' - ' . $b->atas_nama . ' (' . $b->norek . ')') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="kba-hint">Wajib untuk tipe Bank. Satu rekening fisik = satu akun bank.</div>
+                    </div>
+
+                    <div class="kba-field kba-field--full">
+                        <label class="kbx-label" for="no_akun_coa">Akun COA</label>
+                        <select name="no_akun_coa" id="no_akun_coa" class="form-select kbx-control">
+                            <option value="">Pilih COA</option>
+                            <?php foreach (($no_akun ?? []) as $na) : ?>
+                                <option value="<?= esc($na->no_akun) ?>"><?= esc($na->no_akun . ' - ' . $na->nama_akun) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="kba-field kba-field--full" id="shared-wrap">
+                        <div class="form-check form-switch kba-switch">
+                            <input class="form-check-input" type="checkbox" name="is_shared" id="is_shared" value="1">
+                            <label class="form-check-label" for="is_shared">Dipakai bersama lebih dari satu unit</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kba-panel-foot">
+                    <button type="button" class="kba-link-danger d-none" id="btn-reset-form">Batal edit</button>
+                    <button type="submit" class="btn btn-primary kbx-apply">Simpan rekening</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tab 2: saldo awal -->
+        <div class="kba-panel" role="tabpanel" id="panel-saldo-awal" aria-labelledby="tab-saldo-awal" tabindex="0" hidden>
+            <p class="kba-panel-note">
+                Saldo fisik terverifikasi pada tanggal cut-off bank, bukan hasil penjumlahan transaksi.
+            </p>
+
+            <form method="post" action="<?= base_url('kas_bank/saldo-awal/save') ?>">
+                <input type="hidden" name="tanggal" value="<?= esc($cutoffBank) ?>">
+
+                <div class="kba-form-grid">
+                    <div class="kba-field kba-field--full">
+                        <label class="kbx-label" for="saldo-akun">Rekening <span class="kba-req">*</span></label>
+                        <select name="akun_kas_bank_id" id="saldo-akun" class="form-select kbx-control kba-akun-select" required>
+                            <option value="">Pilih rekening</option>
+                            <?php foreach ($daftarAkun as $a) : ?>
+                                <option value="<?= (int) $a->idakun_kas_bank ?>">
+                                    <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : '') . $a->nama_akun) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="kba-field">
+                        <span class="kbx-label">Tanggal cut-off</span>
+                        <p class="kba-locked">
+                            <iconify-icon icon="bi:lock" aria-hidden="true"></iconify-icon>
+                            <?= $fmtTgl($cutoffBank) ?>
+                        </p>
+                    </div>
+                    <div class="kba-field">
+                        <label class="kbx-label" for="saldo-nominal">Nominal (Rp) <span class="kba-req">*</span></label>
+                        <input type="text" name="saldo" id="saldo-nominal" class="form-control kbx-control rupiah kbx-num" placeholder="0" inputmode="numeric" required>
+                    </div>
+
+                    <div class="kba-field kba-field--full">
+                        <label class="kbx-label" for="saldo-ket">Keterangan</label>
+                        <input type="text" name="keterangan" id="saldo-ket" class="form-control kbx-control" placeholder="Opsional">
+                    </div>
+                </div>
+
+                <div class="kba-panel-foot">
+                    <span class="kba-foot-note">Mengubah statement di tanggal cut-off yang sama mengganti nilai lama.</span>
+                    <button type="submit" class="btn btn-primary kbx-apply">Simpan saldo awal</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tab 3: jatah cabang -->
+        <div class="kba-panel" role="tabpanel" id="panel-jatah" aria-labelledby="tab-jatah" tabindex="0" hidden>
+            <p class="kba-panel-note">
+                Bagi saldo bank menjadi hak tiap cabang. Total hak idealnya sama dengan saldo fisik.
+            </p>
+
+            <form method="post" action="<?= base_url('kas_bank/saldo-alokasi/save') ?>">
+                <div class="kba-form-grid">
+                    <div class="kba-field kba-field--full">
+                        <label class="kbx-label" for="jatah-akun">Rekening bank <span class="kba-req">*</span></label>
+                        <select name="akun_kas_bank_id" id="jatah-akun" class="form-select kbx-control kba-akun-select" required>
+                            <option value="">Pilih rekening</option>
+                            <?php foreach ($daftarAkun as $a) : ?>
+                                <?php
+                                // Rekening Finance/HO tidak butuh & tidak boleh
+                                // punya alokasi unit — jangan tawarkan di sini.
+                                $jenisOpsi = $akunJenis[(int) $a->idakun_kas_bank]
+                                    ?? \App\Services\Finance\KasBankScopeService::KIND_UNIT;
+                                ?>
+                                <?php if ($a->tipe === 'BANK'
+                                    && $jenisOpsi !== \App\Services\Finance\KasBankScopeService::KIND_FINANCE_HO) : ?>
+                                    <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($a->nama_akun) ?></option>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="kba-field">
+                        <label class="kbx-label" for="jatah-unit">Cabang pemilik hak <span class="kba-req">*</span></label>
+                        <select name="unit_id" id="jatah-unit" class="form-select kbx-control" required>
+                            <option value="">Pilih cabang</option>
+                            <?php foreach (($unit ?? []) as $u) : ?>
+                                <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="kba-field">
+                        <label class="kbx-label" for="jatah-nominal">Nominal hak (Rp) <span class="kba-req">*</span></label>
+                        <input type="text" name="nominal" id="jatah-nominal" class="form-control kbx-control rupiah kbx-num" placeholder="0" inputmode="numeric" required>
+                    </div>
+
+                    <div class="kba-field kba-field--full">
+                        <label class="kbx-label" for="jatah-ket">Keterangan</label>
+                        <input type="text" name="keterangan" id="jatah-ket" class="form-control kbx-control" placeholder="Opsional">
+                    </div>
+                </div>
+
+                <div class="kba-panel-foot">
+                    <span class="kba-foot-note">Menyimpan untuk cabang yang sama mengganti nominal hak, bukan menambah.</span>
+                    <button type="submit" class="btn btn-primary kbx-apply">Simpan hak unit</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tab 4: opening kas -->
+        <div class="kba-panel" role="tabpanel" id="panel-opening-kas" aria-labelledby="tab-opening-kas" tabindex="0" hidden>
+            <p class="kba-panel-note">
+                Opening ini <strong>bukan</strong> transaksi kas dan tidak ikut masuk cash-in.
+                Laci tidak punya statement bank; setelah tersimpan, saldo laci mulai hari setelah
+                cut-off memakai baseline ini.
+            </p>
+
+            <?php if (! $canInput) : ?>
+                <p class="kba-panel-note">Anda tidak punya hak input. Hubungi Finance untuk menetapkan opening KAS.</p>
+            <?php endif; ?>
+
+            <?php if ($openingKasBelum > 0) : ?>
+                <div class="kb-banner is-warning mb-3">
+                    <div class="kb-banner-icon">
+                        <iconify-icon icon="bi:exclamation-triangle-fill" aria-hidden="true"></iconify-icon>
+                    </div>
+                    <div class="kb-banner-content">
+                        <strong><?= $openingKasBelum ?> laci belum punya opening KAS</strong>
+                        <div class="mt-1">
+                            Saldo laci itu belum bisa dipakai sebagai acuan Setor maupun Penarikan,
+                            dan belum tampil sebagai saldo awal.
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($daftarKas === []) : ?>
+                <p class="kba-panel-note">Belum ada rekening laci kas.</p>
+            <?php else : ?>
+                <div class="table-responsive">
+                    <table class="kba-open-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Laci kas</th>
+                                <th scope="col" class="num">Opening</th>
+                                <th scope="col">Keterangan</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($daftarKas as $a) :
+                                $id  = (int) $a->idakun_kas_bank;
+                                $row = $openingKasById[$id] ?? null;
+                                ?>
+                                <tr>
+                                    <td data-label="Laci kas">
+                                        <?= esc($a->nama_akun) ?>
+                                        <div class="kba-hint">
+                                            Unit <?= esc($unitMap[(int) ($row->unit_id ?? $a->unit_id)] ?? '—') ?>
+                                        </div>
+                                    </td>
+                                    <td class="num" data-label="Opening">
+                                        <?php if ($row !== null) : ?>
+                                            <?= esc($rp((int) $row->opening)) ?>
+                                        <?php else : ?>
+                                            <span class="kba-tag">Belum ada</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td data-label="Keterangan">
+                                        <?php if ($row !== null && ! empty($row->keterangan)) : ?>
+                                            <span class="kbx-acct-meta"><?= esc($row->keterangan) ?></span>
+                                        <?php else : ?>
+                                            <span class="kbx-acct-meta">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="kba-panel-rule"></div>
+
+                <form method="post" action="<?= base_url('kas_bank/opening-kas/save') ?>">
                     <div class="kba-form-grid">
                         <div class="kba-field kba-field--full">
-                            <label class="kbx-label">Rekening <span class="kba-req">*</span></label>
-                            <select name="akun_kas_bank_id" class="form-select kbx-control" required>
-                                <option value="">Pilih rekening</option>
-                                <?php foreach ($daftarAkun as $a) : ?>
+                            <label class="kbx-label" for="opening-akun">Laci kas <span class="kba-req">*</span></label>
+                            <select name="akun_kas_bank_id" id="opening-akun" class="form-select kbx-control kba-akun-select" required>
+                                <option value="">Pilih laci kas</option>
+                                <?php foreach ($daftarKas as $a) : ?>
                                     <option value="<?= (int) $a->idakun_kas_bank ?>">
                                         <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : '') . $a->nama_akun) ?>
                                     </option>
@@ -294,223 +484,31 @@ if ((int) ($unit_terpilih ?? 0) > 0 && isset($unitMap[(int) $unit_terpilih])) {
                         </div>
 
                         <div class="kba-field">
-                            <label class="kbx-label">Tanggal <span class="kba-req">*</span></label>
-                            <input type="date" name="tanggal" class="form-control kbx-control"
-                                value="<?= esc($cutoffBank) ?>"
-                                min="<?= esc($cutoffBank) ?>" max="<?= esc($cutoffBank) ?>"
-                                required>
-                            <div class="kba-hint">Dikunci di tanggal cut-off bank.</div>
+                            <label class="kbx-label" for="opening-nominal">Opening (Rp) <span class="kba-req">*</span></label>
+                            <input type="text" name="opening" id="opening-nominal" class="form-control kbx-control rupiah kbx-num"
+                                placeholder="0" inputmode="numeric" required>
                         </div>
                         <div class="kba-field">
-                            <label class="kbx-label">Nominal (Rp) <span class="kba-req">*</span></label>
-                            <input type="text" name="saldo" class="form-control kbx-control rupiah kbx-num" placeholder="0" inputmode="numeric" required>
+                            <span class="kbx-label">Tanggal cut-off</span>
+                            <p class="kba-locked">
+                                <iconify-icon icon="bi:lock" aria-hidden="true"></iconify-icon>
+                                <?= $fmtTgl($cutoffKas) ?>
+                            </p>
                         </div>
 
                         <div class="kba-field kba-field--full">
-                            <label class="kbx-label">Keterangan</label>
-                            <input type="text" name="keterangan" class="form-control kbx-control" placeholder="Opsional">
+                            <label class="kbx-label" for="opening-ket">Keterangan</label>
+                            <input type="text" name="keterangan" id="opening-ket" class="form-control kbx-control" placeholder="Opsional">
                         </div>
                     </div>
 
-                    <div class="kba-form-actions">
-                        <button type="submit" class="btn btn-primary kbx-apply">Simpan saldo awal</button>
+                    <div class="kba-panel-foot">
+                        <span class="kba-foot-note">Mengubah opening mengganti baseline; saldo setelah cut-off dihitung dari baseline baru + mutasi.</span>
+                        <button type="submit" class="btn btn-primary kbx-apply">Simpan opening KAS</button>
                     </div>
                 </form>
-            </div>
-        </details>
-
-        <!-- Langkah 3 -->
-        <details class="kba-step" id="step3">
-            <summary>
-                <span class="kba-step-no">3</span>
-                <span class="kba-step-copy">
-                    <span class="kba-step-title">Jatah cabang</span>
-                    <span class="kba-step-hint">Bagi saldo bank menjadi hak tiap cabang. Total hak idealnya sama dengan saldo fisik.</span>
-                </span>
-                <span class="kba-step-state"><?= $rp($totalAlokasiBank) ?> terbagi</span>
-                <iconify-icon icon="bi:chevron-down" class="kba-chevron" aria-hidden="true"></iconify-icon>
-            </summary>
-
-            <div class="kba-step-body">
-                <form method="post" action="<?= base_url('kas_bank/saldo-alokasi/save') ?>">
-                    <div class="kba-form-grid">
-                        <div class="kba-field kba-field--full">
-                            <label class="kbx-label">Rekening bank <span class="kba-req">*</span></label>
-                            <select name="akun_kas_bank_id" class="form-select kbx-control" required>
-                                <option value="">Pilih rekening</option>
-                                <?php foreach ($daftarAkun as $a) : ?>
-                                    <?php
-                                    // Rekening Finance/HO tidak butuh & tidak boleh
-                                    // punya alokasi unit — jangan tawarkan di sini.
-                                    $jenisOpsi = $akunJenis[(int) $a->idakun_kas_bank]
-                                        ?? \App\Services\Finance\KasBankScopeService::KIND_UNIT;
-                                    ?>
-                                    <?php if ($a->tipe === 'BANK'
-                                        && $jenisOpsi !== \App\Services\Finance\KasBankScopeService::KIND_FINANCE_HO) : ?>
-                                        <option value="<?= (int) $a->idakun_kas_bank ?>"><?= esc($a->nama_akun) ?></option>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="kba-field">
-                            <label class="kbx-label">Cabang pemilik hak <span class="kba-req">*</span></label>
-                            <select name="unit_id" class="form-select kbx-control" required>
-                                <option value="">Pilih cabang</option>
-                                <?php foreach (($unit ?? []) as $u) : ?>
-                                    <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="kba-field">
-                            <label class="kbx-label">Nominal hak (Rp) <span class="kba-req">*</span></label>
-                            <input type="text" name="nominal" class="form-control kbx-control rupiah kbx-num" placeholder="0" inputmode="numeric" required>
-                        </div>
-
-                        <div class="kba-field kba-field--full">
-                            <label class="kbx-label">Keterangan</label>
-                            <input type="text" name="keterangan" class="form-control kbx-control" placeholder="Opsional">
-                        </div>
-                    </div>
-
-                    <p class="kba-hint">Menyimpan untuk cabang yang sama mengganti nominal hak, bukan menambah.</p>
-
-                    <div class="kba-form-actions">
-                        <button type="submit" class="btn btn-primary kbx-apply">Simpan hak unit</button>
-                    </div>
-                </form>
-            </div>
-        </details>
-
-        <!-- Langkah 4 -->
-        <details class="kba-step" id="step4">
-            <summary>
-                <span class="kba-step-no">4</span>
-                <span class="kba-step-copy">
-                    <span class="kba-step-title">Opening kas laci</span>
-                    <span class="kba-step-hint">Saldo fisik awal uang tunai di laci kasir pada tanggal cut-off.</span>
-                </span>
-                <span class="kba-step-state">
-                    <?= $openingKasBelum > 0 ? $openingKasBelum . ' laci belum ada opening' : count($daftarKas) . ' laci siap' ?>
-                </span>
-                <iconify-icon icon="bi:chevron-down" class="kba-chevron" aria-hidden="true"></iconify-icon>
-            </summary>
-
-            <div class="kba-step-body">
-                <p class="kba-step-note">
-                    Opening ini <strong>bukan</strong> transaksi kas dan tidak ikut masuk cash-in.
-                    Laci tidak punya statement bank; setelah tersimpan, saldo laci mulai hari setelah
-                    cut-off memakai baseline ini.
-                </p>
-
-                <?php if (! $canInput) : ?>
-                    <p class="kba-step-note">Anda tidak punya hak input. Hubungi Finance untuk menetapkan opening KAS.</p>
-                <?php endif; ?>
-
-                <?php if ($openingKasBelum > 0) : ?>
-                    <div class="kb-banner is-warning mb-3">
-                        <div class="kb-banner-icon">
-                            <iconify-icon icon="bi:exclamation-triangle-fill" aria-hidden="true"></iconify-icon>
-                        </div>
-                        <div class="kb-banner-content">
-                            <strong><?= $openingKasBelum ?> laci belum punya opening KAS</strong>
-                            <div class="mt-1">
-                                Saldo laci itu belum bisa dipakai sebagai acuan Setor maupun Penarikan,
-                                dan belum tampil sebagai saldo awal.
-                            </div>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($daftarKas === []) : ?>
-                    <p class="kba-step-note">Belum ada rekening laci kas.</p>
-                <?php else : ?>
-                    <div class="table-responsive">
-                        <table class="kba-open-table">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Laci kas</th>
-                                    <th scope="col" class="num">Opening</th>
-                                    <th scope="col">Keterangan</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($daftarKas as $a) :
-                                    $id  = (int) $a->idakun_kas_bank;
-                                    $row = $openingKasById[$id] ?? null;
-                                    ?>
-                                    <tr>
-                                        <td data-label="Laci kas">
-                                            <?= esc($a->nama_akun) ?>
-                                            <div class="kba-hint">
-                                                Unit <?= esc($unitMap[(int) ($row->unit_id ?? $a->unit_id)] ?? '—') ?>
-                                            </div>
-                                        </td>
-                                        <td class="num" data-label="Opening">
-                                            <?php if ($row !== null) : ?>
-                                                <?= esc($rp((int) $row->opening)) ?>
-                                            <?php else : ?>
-                                                <span class="kba-tag">Belum ada</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td data-label="Keterangan">
-                                            <?php if ($row !== null && ! empty($row->keterangan)) : ?>
-                                                <span class="kbx-acct-meta"><?= esc($row->keterangan) ?></span>
-                                            <?php else : ?>
-                                                <span class="kbx-acct-meta">—</span>
-                                            <?php endif; ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <hr>
-
-                    <form method="post" action="<?= base_url('kas_bank/opening-kas/save') ?>">
-                        <div class="kba-form-grid">
-                            <div class="kba-field kba-field--full">
-                                <label class="kbx-label">Laci kas <span class="kba-req">*</span></label>
-                                <select name="akun_kas_bank_id" class="form-select kbx-control" required>
-                                    <option value="">Pilih laci kas</option>
-                                    <?php foreach ($daftarKas as $a) : ?>
-                                        <option value="<?= (int) $a->idakun_kas_bank ?>">
-                                            <?= esc((isset($unitMap[(int) $a->unit_id]) ? $unitMap[(int) $a->unit_id] . ' – ' : '') . $a->nama_akun) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-
-                            <div class="kba-field">
-                                <label class="kbx-label">Tanggal <span class="kba-req">*</span></label>
-                                <input type="date" name="tanggal_display" class="form-control kbx-control"
-                                    value="<?= esc($cutoffKas) ?>"
-                                    min="<?= esc($cutoffKas) ?>" max="<?= esc($cutoffKas) ?>"
-                                    readonly aria-readonly="true">
-                                <div class="kba-hint">Dikunci di tanggal cut-off kas.</div>
-                            </div>
-                            <div class="kba-field">
-                                <label class="kbx-label">Opening (Rp) <span class="kba-req">*</span></label>
-                                <input type="text" name="opening" class="form-control kbx-control rupiah kbx-num"
-                                    placeholder="0" inputmode="numeric" required>
-                            </div>
-
-                            <div class="kba-field kba-field--full">
-                                <label class="kbx-label">Keterangan</label>
-                                <input type="text" name="keterangan" class="form-control kbx-control" placeholder="Opsional">
-                            </div>
-                        </div>
-
-                        <p class="kba-hint">Mengubah opening mengganti baseline; saldo setelah cut-off dihitung dari baseline baru + mutasi.</p>
-
-                        <div class="kba-form-actions">
-                            <button type="submit" class="btn btn-primary kbx-apply">Simpan opening KAS</button>
-                        </div>
-                    </form>
-                <?php endif; ?>
-            </div>
-        </details>
+            <?php endif; ?>
+        </div>
     </section>
 
     <!-- Buku rekening -->
@@ -638,6 +636,13 @@ if ((int) ($unit_terpilih ?? 0) > 0 && isset($unitMap[(int) $unit_terpilih])) {
                             </td>
                             <td class="kba-cell-action">
                                 <?php if ($canInput) : ?>
+                                    <button type="button" class="kba-row-act"
+                                        data-goto="<?= $isBank ? 'saldo-awal' : 'opening-kas' ?>"
+                                        data-akun="<?= $idAkun ?>"
+                                        aria-label="<?= $isBank ? 'Isi saldo awal' : 'Isi opening kas' ?> <?= esc($a->nama_akun) ?>">
+                                        <iconify-icon icon="<?= $isBank ? 'bi:bank' : 'bi:cash-stack' ?>" aria-hidden="true"></iconify-icon>
+                                        <?= $isBank ? 'Isi saldo' : 'Isi opening' ?>
+                                    </button>
                                     <button type="button" class="kba-icon-btn edit-akun" title="Edit rekening" aria-label="Edit <?= esc($a->nama_akun) ?>"
                                         data-id="<?= $idAkun ?>"
                                         data-unit="<?= (int) $a->unit_id ?>"
@@ -705,22 +710,111 @@ if ((int) ($unit_terpilih ?? 0) > 0 && isset($unitMap[(int) $unit_terpilih])) {
             return document.getElementById(id);
         };
 
-        var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // ===== Tab =====
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('.kba-tab'));
 
-        function openStep(id) {
-            var step = $(id);
-            if (!step) {
+        function panelOf(tab) {
+            return document.getElementById(tab.getAttribute('aria-controls'));
+        }
+
+        function tabFor(nama) {
+            return tabs.filter(function(t) {
+                return t.getAttribute('aria-controls') === 'panel-' + nama;
+            })[0] || null;
+        }
+
+        function activate(tab, pindahFokus) {
+            if (!tab) {
                 return;
             }
-            step.open = true;
-            step.scrollIntoView({
-                behavior: reduceMotion ? 'auto' : 'smooth',
-                block: 'start'
+            tabs.forEach(function(t) {
+                var aktif = t === tab;
+                t.setAttribute('aria-selected', aktif ? 'true' : 'false');
+                t.tabIndex = aktif ? 0 : -1;
+                var panel = panelOf(t);
+                if (panel) {
+                    panel.hidden = !aktif;
+                }
+            });
+            if (pindahFokus) {
+                tab.focus();
+            }
+            if (window.history && history.replaceState) {
+                history.replaceState(null, '', '#' + tab.getAttribute('aria-controls').replace('panel-', ''));
+            }
+        }
+
+        tabs.forEach(function(tab, i) {
+            tab.addEventListener('click', function() {
+                activate(tab, false);
+            });
+            tab.addEventListener('keydown', function(e) {
+                var next = null;
+                if (e.key === 'ArrowRight') {
+                    next = tabs[(i + 1) % tabs.length];
+                } else if (e.key === 'ArrowLeft') {
+                    next = tabs[(i - 1 + tabs.length) % tabs.length];
+                } else if (e.key === 'Home') {
+                    next = tabs[0];
+                } else if (e.key === 'End') {
+                    next = tabs[tabs.length - 1];
+                }
+                if (next) {
+                    e.preventDefault();
+                    activate(next, true);
+                }
+            });
+        });
+
+        // ===== Rekening terpilih dipakai bersama antar tab =====
+        var akunSelects = Array.prototype.slice.call(
+            document.querySelectorAll('.kba-record select[name="akun_kas_bank_id"]')
+        );
+
+        function pilihAkun(id) {
+            akunSelects.forEach(function(sel) {
+                for (var i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].value === id) {
+                        sel.value = id;
+                        return;
+                    }
+                }
             });
         }
 
+        akunSelects.forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                pilihAkun(sel.value);
+            });
+        });
+
+        // ===== Aksi per baris: buka tab yang tepat dengan rekening terpilih =====
+        document.querySelectorAll('.kba-row-act').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var tab = tabFor(btn.dataset.goto);
+                if (!tab) {
+                    return;
+                }
+                activate(tab, false);
+                pilihAkun(btn.dataset.akun);
+                var panel = panelOf(tab);
+                var nominal = panel
+                    ? panel.querySelector('input[name="saldo"], input[name="nominal"], input[name="opening"]')
+                    : null;
+                if (nominal) {
+                    nominal.focus();
+                }
+            });
+        });
+
+        // ===== Form rekening =====
+        function tipeValue() {
+            var radio = document.querySelector('#form-akun input[name="tipe"]:checked');
+            return radio ? radio.value : 'KAS';
+        }
+
         function toggleByTipe() {
-            var isBank = $('tipe').value === 'BANK';
+            var isBank = tipeValue() === 'BANK';
             $('bank-select-wrap').style.display = isBank ? '' : 'none';
             $('shared-wrap').style.display = isBank ? '' : 'none';
         }
@@ -728,38 +822,47 @@ if ((int) ($unit_terpilih ?? 0) > 0 && isset($unitMap[(int) $unit_terpilih])) {
         function exitEditMode() {
             $('form-akun').reset();
             $('idakun_kas_bank').value = '';
-            $('form-title').textContent = 'Tambah rekening';
+            $('form-mode').textContent = 'Rekening baru';
             $('btn-reset-form').classList.add('d-none');
             toggleByTipe();
         }
 
+        document.querySelectorAll('#form-akun input[name="tipe"]').forEach(function(radio) {
+            radio.addEventListener('change', toggleByTipe);
+        });
+
         document.querySelectorAll('.edit-akun').forEach(function(btn) {
             btn.addEventListener('click', function() {
-                openStep('step1');
+                activate(tabFor('rekening'), false);
 
                 $('idakun_kas_bank').value = btn.dataset.id;
                 $('unit_id').value = btn.dataset.unit;
-                $('tipe').value = btn.dataset.tipe;
                 $('nama_akun').value = btn.dataset.nama;
                 $('bank_idbank').value = btn.dataset.bank;
                 $('no_akun_coa').value = btn.dataset.coa;
                 $('status').value = btn.dataset.status;
                 $('is_shared').checked = btn.dataset.shared === '1';
 
-                $('form-title').textContent = 'Edit rekening';
+                var radio = document.querySelector('#form-akun input[name="tipe"][value="' + btn.dataset.tipe + '"]');
+                if (radio) {
+                    radio.checked = true;
+                }
+
+                $('form-mode').textContent = 'Edit rekening';
                 $('btn-reset-form').classList.remove('d-none');
                 toggleByTipe();
+                $('nama_akun').focus();
             });
         });
 
         $('btn-reset-form').addEventListener('click', exitEditMode);
-        $('tipe').addEventListener('change', toggleByTipe);
 
         var btnNew = $('btn-new-akun');
         if (btnNew) {
             btnNew.addEventListener('click', function() {
+                activate(tabFor('rekening'), false);
                 exitEditMode();
-                openStep('step1');
+                $('nama_akun').focus();
             });
         }
 
@@ -804,6 +907,8 @@ if ((int) ($unit_terpilih ?? 0) > 0 && isset($unitMap[(int) $unit_terpilih])) {
             });
         }
 
+        // Tab awal: dari hash URL (mis. setelah simpan opening), kalau tidak ada pakai tab pertama.
+        activate(tabFor((window.location.hash || '').replace('#', '')) || tabs[0], false);
         toggleByTipe();
     })();
 </script>

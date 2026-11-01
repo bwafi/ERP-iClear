@@ -922,7 +922,7 @@ class KasBank extends BaseController
             session()->setFlashdata('sukses', 'Akun berhasil ditambahkan');
         }
 
-        return redirect()->to(base_url('kas_bank/akun'));
+        return redirect()->to(base_url('kas_bank/akun') . '#rekening');
     }
 
     /**
@@ -1039,7 +1039,7 @@ class KasBank extends BaseController
         }
 
         session()->setFlashdata('sukses', 'Alokasi saldo awal unit berhasil disimpan');
-        return redirect()->to(base_url('kas_bank/akun'));
+        return redirect()->to(base_url('kas_bank/akun') . '#jatah');
     }
 
     // =====================================================================
@@ -1170,7 +1170,7 @@ class KasBank extends BaseController
             return $this->gagal('Gagal menyimpan statement: ' . $e->getMessage());
         }
 
-        return redirect()->to(base_url('kas_bank/akun'));
+        return redirect()->to(base_url('kas_bank/akun') . '#saldo-awal');
     }
 
     /**
