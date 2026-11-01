@@ -2444,6 +2444,8 @@ class PenilaianKPI extends BaseController
             'tahun'                => $tahun,
             'awal_bulan'           => $awal_bulan,
             'akhir_bulan'          => $akhir_bulan,
+            'probation'            => !empty($result['probation']),
+            'hari_hadir'           => (int) ($result['hari_hadir'] ?? 0),
         ]);
     }
 

@@ -197,6 +197,14 @@
                     <td>:</td>
                     <td><?= (int) ($pegawai['JENIS_PEGAWAI'] ?? 0) === 2 ? 'Training' : 'Kontrak' ?></td>
                 </tr>
+
+                <?php if (!empty($probation)): ?>
+                <tr>
+                    <td>Hari Kerja</td>
+                    <td>:</td>
+                    <td><?= (int) ($hari_hadir ?? 0) ?> hari</td>
+                </tr>
+                <?php endif; ?>
             </table>
 
             <br>
