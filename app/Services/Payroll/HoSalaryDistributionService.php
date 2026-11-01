@@ -95,7 +95,7 @@ class HoSalaryDistributionService
         $payrollActual = [];
         if ($hoIds) {
             $rows = $this->db->table('finance_payroll')
-                ->select('pegawai_id, total, potongan_kasbon, total_bersih, status')
+                ->select('pegawai_id, total, potongan_kasbon, potongan_lain, bonus_lain, total_bersih, status')
                 ->whereIn('pegawai_id', $hoIds)
                 ->where('due_date >=', $from)
                 ->where('due_date <=', $to)
@@ -106,6 +106,8 @@ class HoSalaryDistributionService
                 $payrollActual[(int)$r['pegawai_id']] = [
                     'total'          => (float)$r['total'],
                     'potongan_kasbon'=> (float)($r['potongan_kasbon'] ?? 0),
+                    'potongan_lain'  => (float)($r['potongan_lain'] ?? 0),
+                    'bonus_lain'     => (float)($r['bonus_lain'] ?? 0),
                     'total_bersih'   => (float)($r['total_bersih'] ?? $r['total']),
                     'status'         => $r['status'],
                 ];
@@ -156,14 +158,17 @@ class HoSalaryDistributionService
             );
 
             $perkiraanGaji = (float)$calc['total_gaji'];
-            $aktual = (float)($payrollActual[$id]['total_bersih'] ?? 0);
-            if ($aktual <= 0) {
-                // Baris legacy bisa punya total_bersih 0; pakai total bruto.
-                $aktual = (float)($payrollActual[$id]['total'] ?? 0);
-            }
+            $bersih = (float)($payrollActual[$id]['total_bersih'] ?? 0);
+            $totalPayroll = (float)($payrollActual[$id]['total'] ?? 0);
+            // Baris legacy bisa punya total_bersih 0; pakai total bruto.
+            $aktual = $bersih > 0 ? $bersih : $totalPayroll;
             $statusPayroll = (string)($payrollActual[$id]['status'] ?? 'belum_ada');
             $dibayar = $statusPayroll === 'dibayar' && $aktual > 0;
+            // Uang yang benar-benar dibayar ke karyawan (setelah bon/kasbon).
             $dipotong = $dibayar ? $aktual : 0.0;
+            // Beban unit memakai bruto sebelum bon: pelunasan kasbon masuk ke
+            // unit asal kasbon, bukan ke unit yang menanggung gaji HO.
+            $dibebankan = self::bebanAktual($totalPayroll, $bersih, (float)($payrollActual[$id]['potongan_kasbon'] ?? 0));
 
             $employees[] = [
                 'id'            => $id,
@@ -173,7 +178,11 @@ class HoSalaryDistributionService
                 'gaji_dipotong' => round($dipotong, 2),
                 // Yang sudah dibayar memakai nominal aktual (termasuk bonus),
                 // sisanya tetap perkiraan — sama seperti aturan Total Gaji.
-                'gaji_dibebankan' => round($dibayar ? $aktual : $perkiraanGaji, 2),
+                'gaji_dibebankan' => round($dibayar ? $dibebankan : $perkiraanGaji, 2),
+                // Penyesuaian hanya berlaku saat aktual dipakai; baris yang
+                // belum dibayar tetap murni perkiraan.
+                'potongan_lain' => $dibayar ? (float)($payrollActual[$id]['potongan_lain'] ?? 0) : 0.0,
+                'bonus_lain'    => $dibayar ? (float)($payrollActual[$id]['bonus_lain'] ?? 0) : 0.0,
                 'payroll_status'=> $statusPayroll,
                 'components'    => $calc['components'],
                 'placement'     => $placement,
@@ -251,6 +260,18 @@ class HoSalaryDistributionService
         cache()->save($cacheKey, $hasil, self::TTL);
 
         return $hasil;
+    }
+
+    /**
+     * Beban gaji aktual untuk pembagian HO: bruto sebelum bon/kasbon.
+     *
+     * `total_bersih` sudah dikurangi potongan lain dan ditambah bonus, jadi
+     * menambahkan potongan kasbon menghasilkan total − potongan_lain + bonus.
+     * Baris legacy tanpa total_bersih memakai total bruto.
+     */
+    public static function bebanAktual(float $total, float $bersih, float $kasbon): float
+    {
+        return $bersih > 0 ? $bersih + $kasbon : $total;
     }
 
     /**

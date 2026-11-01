@@ -93,6 +93,28 @@ class HoSalaryDistributionSpvTest extends CIUnitTestCase
         $this->assertEqualsWithDelta(600.0, $total, 0.001);
     }
 
+    public function testBonTidakMengurangiBebanHo(): void
+    {
+        // total 1.000.000 − potongan lain 50.000 + bonus 30.000 − kasbon 200.000
+        // = total_bersih 780.000. Beban unit = 780.000 + 200.000 = 980.000.
+        $this->assertSame(
+            980000.0,
+            HoSalaryDistributionService::bebanAktual(1000000.0, 780000.0, 200000.0)
+        );
+
+        // Tanpa potongan lain/bonus, beban kembali sama dengan total bruto.
+        $this->assertSame(
+            1000000.0,
+            HoSalaryDistributionService::bebanAktual(1000000.0, 800000.0, 200000.0)
+        );
+
+        // Baris legacy tanpa total_bersih tetap memakai total.
+        $this->assertSame(
+            900000.0,
+            HoSalaryDistributionService::bebanAktual(900000.0, 0.0, 0.0)
+        );
+    }
+
     public function testBebanUnitMemakaiAktualUntukYangSudahDibayar(): void
     {
         $units = [

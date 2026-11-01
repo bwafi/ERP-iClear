@@ -585,7 +585,7 @@ $rp = static function ($angka): string {
         <?php endif; ?>
 
         <div class="gaji-note">
-            Nominal aktual (termasuk bonus/potongan) menggantikan perkiraan karyawan yang sudah dibayar; karyawan lain tetap perkiraan.
+            Nominal aktual menggantikan perkiraan karyawan yang sudah dibayar; bonus dan potongan payroll tampil sebagai kolom tersendiri, sisa selisih menjadi Penyesuaian payroll. Karyawan lain tetap perkiraan.
             <strong>Jumlah</strong> adalah beban gaji yang ditagihkan ke unit ini.
         </div>
 

@@ -26,6 +26,8 @@ if (! function_exists('invoice_ho_employees')) {
             'TUNJANGAN_ABSEN'      => 2,
             'TUNJANGAN_PENEMPATAN' => 3,
             'INSENTIF'             => 4,
+            'BONUS'                => 5,
+            'POTONGAN'             => 6,
         ];
 
         $rows = [];
@@ -111,6 +113,8 @@ if (! function_exists('invoice_ho_employees')) {
             if ((float) ($emp['insentif'] ?? 0) > 0) {
                 $tambah('INSENTIF', 'Insentif', (float) $emp['insentif']);
             }
+            $tambah('BONUS', 'Bonus', (float) ($emp['bonus_lain'] ?? 0));
+            $tambah('POTONGAN', 'Potongan', -(float) ($emp['potongan_lain'] ?? 0));
 
             // Pembulatan sisa terbesar: komponen dengan pecahan terbesar dapat
             // +1 rupiah sampai jumlahnya sama dengan total komponennya sendiri.
@@ -201,6 +205,16 @@ if (! function_exists('invoice_gaji_komponen')) {
             if ($nilai !== 0) {
                 $komponen[] = ['nama' => $nama, 'nominal' => $nilai];
             }
+        }
+
+        $bonus = (int) round((float) ($gaji['bonus_lain'] ?? 0));
+        if ($bonus !== 0) {
+            $komponen[] = ['nama' => 'Bonus', 'nominal' => $bonus];
+        }
+
+        $potongan = (int) round((float) ($gaji['potongan_lain'] ?? 0));
+        if ($potongan !== 0) {
+            $komponen[] = ['nama' => 'Potongan', 'nominal' => -$potongan];
         }
 
         $selisih = $nominal - array_sum(array_column($komponen, 'nominal'));

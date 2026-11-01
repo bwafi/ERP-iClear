@@ -973,7 +973,7 @@ class TutupKasir extends BaseController
         // tetap memakai perkiraan mesin.
         $payrollDibayar = [];
         $rowsDibayar = $this->db->table('finance_payroll fp')
-            ->select('fp.pegawai_id, fp.total, fp.total_bersih, a.NAMA_AKUN, a.ID_JABATAN')
+            ->select('fp.pegawai_id, fp.total, fp.total_bersih, fp.potongan_lain, fp.bonus_lain, a.NAMA_AKUN, a.ID_JABATAN')
             ->join('akun a', 'a.ID_AKUN = fp.pegawai_id', 'left')
             ->where('fp.unit_id', $unit)
             ->where('fp.status', 'dibayar')
@@ -993,9 +993,13 @@ class TutupKasir extends BaseController
                 'jabatan' => $namaJabatan[(int) ($p->ID_JABATAN ?? 0)] ?? ('#' . (int) ($p->ID_JABATAN ?? 0)),
                 'total'   => 0.0,
                 'bersih'  => 0.0,
+                'potongan_lain' => 0.0,
+                'bonus_lain'    => 0.0,
             ];
             $payrollDibayar[$id]['total']  += (float) $p->total;
             $payrollDibayar[$id]['bersih'] += $bersih;
+            $payrollDibayar[$id]['potongan_lain'] += (float) ($p->potongan_lain ?? 0);
+            $payrollDibayar[$id]['bonus_lain']    += (float) ($p->bonus_lain ?? 0);
         }
 
         $sisaPerkiraan = 0.0;
@@ -1010,6 +1014,8 @@ class TutupKasir extends BaseController
             $sisaPerkiraan += $sisa;
             $gajiDetail[$i]['total']   = $payrollDibayar[$id]['bersih'] + $sisa;
             $gajiDetail[$i]['dibayar'] = true;
+            $gajiDetail[$i]['potongan_lain'] = $payrollDibayar[$id]['potongan_lain'];
+            $gajiDetail[$i]['bonus_lain']    = $payrollDibayar[$id]['bonus_lain'];
             unset($payrollDibayar[$id]);
         }
 
@@ -1026,6 +1032,8 @@ class TutupKasir extends BaseController
                 'insentif'             => 0,
                 'lembur'               => 0,
                 'total'                => $p['bersih'],
+                'potongan_lain'        => $p['potongan_lain'],
+                'bonus_lain'           => $p['bonus_lain'],
                 'dibayar'              => true,
             ];
         }

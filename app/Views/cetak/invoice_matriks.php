@@ -7,7 +7,8 @@
  */
 $komponenUrutan = [
     'Gaji Pokok', 'Tunjangan Kinerja', 'Tunjangan Absensi',
-    'Tunjangan Penempatan', 'Insentif', 'Lembur', 'Penyesuaian payroll',
+    'Tunjangan Penempatan', 'Insentif', 'Lembur', 'Bonus', 'Potongan',
+    'Penyesuaian payroll',
 ];
 
 $komponenKolom = [];

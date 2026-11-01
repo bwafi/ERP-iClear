@@ -353,6 +353,52 @@ class InvoiceInternalTest extends CIUnitTestCase
         $this->assertSame([['nama' => 'Gaji Pokok', 'nominal' => 1000000]], $komponen);
     }
 
+    public function testKomponenGajiCabangMemisahkanBonusDanPotongan(): void
+    {
+        // Bonus menambah dan potongan mengurangi; sisa selisih tetap
+        // "Penyesuaian payroll". Total komponen harus sama dengan total aktual.
+        $komponen = invoice_gaji_komponen([
+            'gaji_pokok'        => 1500000,
+            'tunjangan_kinerja' => 300000,
+            'bonus_lain'        => 100000,
+            'potongan_lain'     => 200000,
+            'total'             => 1700000,
+        ]);
+
+        $this->assertSame(
+            ['Gaji Pokok', 'Tunjangan Kinerja', 'Bonus', 'Potongan'],
+            array_column($komponen, 'nama')
+        );
+        $this->assertSame(-200000, $komponen[3]['nominal']);
+        $this->assertSame(1700000, array_sum(array_column($komponen, 'nominal')));
+    }
+
+    public function testHoEmployeesMemisahkanBonusDanPotongan(): void
+    {
+        $dist = [
+            'employees' => [[
+                'nama' => 'Huda', 'perkiraan_gaji' => 3000000, 'gaji_dipotong' => 1425000,
+                'gaji_dibebankan' => 2850000, 'potongan_lain' => 450000, 'bonus_lain' => 300000,
+                'divisor' => 2, 'scope' => 'global', 'wilayah_unit_ids' => [],
+                'components' => [
+                    ['component_code' => 'GAJI_POKOK', 'component_name' => 'Gaji Pokok', 'amount' => 1500000],
+                    ['component_code' => 'TUNJANGAN_KINERJA', 'component_name' => 'Tunjangan Kinerja', 'amount' => 1500000],
+                ],
+            ]],
+        ];
+
+        $row = invoice_ho_employees($dist, 3, 1425000)[0];
+
+        $this->assertSame(
+            ['Gaji Pokok', 'Tunjangan Kinerja', 'Bonus', 'Potongan'],
+            array_column($row['komponen'], 'nama')
+        );
+        $this->assertSame(150000, $row['komponen'][2]['nominal'], 'bonus dibagi divisor');
+        $this->assertSame(-225000, $row['komponen'][3]['nominal'], 'potongan dibagi divisor');
+        $this->assertSame(1425000, $row['nominal']);
+        $this->assertSame(1425000, array_sum(array_column($row['komponen'], 'nominal')));
+    }
+
     public function testHoEmployeesCabangTanpaTunjanganPenempatan(): void
     {
         $dist = [
@@ -419,6 +465,30 @@ class InvoiceInternalTest extends CIUnitTestCase
         // Nama karyawan cabang hanya di lampiran, tidak diulang di halaman 1.
         $this->assertSame(1, substr_count($html, 'Arya'));
         $this->assertSame(1, substr_count($html, 'Adji'));
+    }
+
+    public function testViewMenampilkanKolomBonusDanPotongan(): void
+    {
+        $data = $this->data();
+        $data['gaji_cabang'] = [[
+            'nama' => 'Arya', 'nominal' => 1700000,
+            'komponen' => [
+                ['nama' => 'Gaji Pokok', 'nominal' => 1500000],
+                ['nama' => 'Tunjangan Kinerja', 'nominal' => 300000],
+                ['nama' => 'Bonus', 'nominal' => 100000],
+                ['nama' => 'Potongan', 'nominal' => -200000],
+            ],
+        ]];
+        $data['gaji_cabang_total'] = 1700000;
+        $data['ho_employees']      = [];
+        $data['ho_total']          = 0;
+
+        $html = view('cetak/invoice_internal', $data);
+
+        $this->assertStringContainsString('<th>Bonus</th>', $html);
+        $this->assertStringContainsString('<th>Potongan</th>', $html);
+        $this->assertStringContainsString('100.000', $html);
+        $this->assertStringContainsString('-200.000', $html);
     }
 
     public function testViewUnitTrialTanpaRincianHo(): void
