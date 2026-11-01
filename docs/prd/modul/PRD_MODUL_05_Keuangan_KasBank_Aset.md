@@ -71,6 +71,8 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 
 23. ✅ **Riwayat Pindah Saldo difilter per unit dan menampilkan unit transaksi.** Saat unit transaksi dipilih, daftar riwayat hanya memuat leg KELUAR milik unit itu walaupun rekeningnya shared dan dipakai unit lain; mode konsolidasi (Finance/Root tanpa memilih unit) tetap menampilkan semua unit dalam user scope. Setiap baris menampilkan unit transaksi, alur dana pengirim → penerima beserta pemilik rekening (unit / rekening bersama / Finance-HO), tanggal + referensi, nominal, bukti, dan aksi reversal. Account scope tetap menjadi filter keamanan di bawahnya. — `KasBank::transfer/transaksiTerlihat`; `app/Views/kas_bank/transfer.php`; `tests/KasBankControllerTest::testRiwayatPindahSaldoDifilterPerUnitWalauRekeningShared`
 
+24. ✅ **Rincian Gaji unit pribadi hanya dokumen cetak, tanpa royalti dan nomor invoice.** Tombol "Cetak Rincian Gaji" di `/asset_berjalan` (hanya unit `jenis = pribadi` dan jabatan 0/1/34) membuka `GET asset_berjalan?...&rincian_gaji=1` yang mengembalikan PDF mPDF tanpa menulis database. Isinya header unit + periode, matriks gaji karyawan unit, matriks gaji HO yang dibebankan, total gabungan (`gaji unit + HO`) beserta terbilang, dan tanda tangan Finance/Manager. Dokumen ini **tidak** memuat royalti, nomor invoice, tanggal invoice, rekening pembayaran, maupun label tagihan; unit franchise tetap memakai tombol "Cetak Invoice". Request untuk unit franchise atau role lain ditolak `403`. — `TutupKasir::assetberjalan`; `app/Views/cetak/invoice_internal.php` (mode `rincian_gaji`); `tests/InvoiceInternalTest.php`, `tests/AssetBerjalanCardTest.php`
+
 **Catatan UI `/kas_keluar`:** input dan edit dibuka di modal di atas daftar; satu kartu transaksi = satu baris `kas_keluar`. Simpan yang ditolak mengembalikan isian lewat flashdata `kk_old`, dan hanya badge "6%" yang diwarnai — bukan seluruh nama kategori.
 
 ## 6. Acceptance Criteria
@@ -83,6 +85,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - [ ] Pelunasan antar unit menawarkan rekening unit berpiutang; admin cabang dapat melunasi hutang unitnya walau unit lawan di luar scope (BR 18).
 - [ ] Pelunasan antar unit muncul sebagai baris read-only di `/kas_keluar` dan ikut total, tanpa membuat baris `kas_keluar` baru (BR 19).
 - [ ] Riwayat Pindah Saldo mengikuti unit terpilih walau rekeningnya dipakai bersama unit lain; mode konsolidasi tetap menampilkan semua unit (BR 23).
+- [ ] Unit pribadi dapat mencetak Rincian Gaji (gaji unit + HO) tanpa royalti/nomor invoice; unit franchise tetap memakai Cetak Invoice (BR 24).
 - [ ] Laporan posisi keuangan & laba rugi dapat dicetak (PDF/Excel).
 
 ## 7. Dependensi

@@ -19,7 +19,10 @@ $tanggalLabel = $tanggalTs
 $royalti         = (int) round($royalti ?? 0);
 $gajiCabangTotal = (int) round($gaji_cabang_total ?? 0);
 $hoTotal         = (int) round($ho_total ?? 0);
-$total           = $royalti + $gajiCabangTotal + $hoTotal;
+// Mode rincian gaji: dokumen unit pribadi tanpa royalti, nomor invoice,
+// maupun bagian pembayaran.
+$rincianGaji     = ! empty($rincian_gaji);
+$total           = $rincianGaji ? $gajiCabangTotal + $hoTotal : $royalti + $gajiCabangTotal + $hoTotal;
 
 $rp = static function ($angka): string {
     return 'Rp ' . number_format((int) $angka, 0, ',', '.');
@@ -403,9 +406,11 @@ $rp = static function ($angka): string {
                 </div>
             </td>
             <td class="doc">
-                <div class="doc-kicker">Tagihan Internal</div>
-                <div class="doc-title">Invoice</div>
-                <div class="doc-no">No. <?= esc($invoice_no ?? '-') ?></div>
+                <div class="doc-kicker"><?= $rincianGaji ? 'Dokumen Internal' : 'Tagihan Internal' ?></div>
+                <div class="doc-title"><?= $rincianGaji ? 'Rincian Gaji' : 'Invoice' ?></div>
+                <?php if (! $rincianGaji): ?>
+                    <div class="doc-no">No. <?= esc($invoice_no ?? '-') ?></div>
+                <?php endif; ?>
             </td>
         </tr>
     </table>
@@ -414,7 +419,7 @@ $rp = static function ($angka): string {
     <table class="lede">
         <tr>
             <td class="billed">
-                <div class="eyebrow">Ditagihkan kepada</div>
+                <div class="eyebrow"><?= $rincianGaji ? 'Unit' : 'Ditagihkan kepada' ?></div>
                 <div class="unit-name"><?= esc($unit_nama ?? '-') ?></div>
                 <?php if (!empty($unit_alamat)): ?>
                     <div class="unit-addr"><?= esc($unit_alamat) ?></div>
@@ -426,15 +431,18 @@ $rp = static function ($angka): string {
                         <td class="k">Periode</td>
                         <td class="v"><?= esc($periodeLabel) ?></td>
                     </tr>
-                    <tr>
-                        <td class="k">Tanggal invoice</td>
-                        <td class="v"><?= esc($tanggalLabel) ?></td>
-                    </tr>
+                    <?php if (! $rincianGaji): ?>
+                        <tr>
+                            <td class="k">Tanggal invoice</td>
+                            <td class="v"><?= esc($tanggalLabel) ?></td>
+                        </tr>
+                    <?php endif; ?>
                 </table>
             </td>
         </tr>
     </table>
 
+    <?php if (! $rincianGaji): ?>
     <table class="section">
         <tr>
             <td class="section-title">Rincian Tagihan</td>
@@ -529,15 +537,10 @@ $rp = static function ($angka): string {
             </td>
         </tr>
     </table>
-
-    <table class="foot">
-        <tr>
-            <td>Dokumen ini dibuat otomatis oleh ERP iClear.</td>
-            <td class="right"><?= esc($invoice_no ?? '') ?></td>
-        </tr>
-    </table>
+    <?php endif; ?>
 
     <?php if (!empty($gaji_cabang) || !empty($ho_employees)): ?>
+        <?php if (! $rincianGaji): ?>
         <pagebreak />
 
         <table class="masthead">
@@ -559,6 +562,7 @@ $rp = static function ($angka): string {
             </tr>
         </table>
         <div class="masthead-rule"></div>
+        <?php endif; ?>
 
         <?php if (!empty($gaji_cabang)): ?>
             <table class="section">
@@ -586,15 +590,58 @@ $rp = static function ($angka): string {
 
         <div class="gaji-note">
             Nominal aktual menggantikan perkiraan karyawan yang sudah dibayar; bonus dan potongan payroll tampil sebagai kolom tersendiri, sisa selisih menjadi Penyesuaian payroll. Karyawan lain tetap perkiraan.
-            <strong>Jumlah</strong> adalah beban gaji yang ditagihkan ke unit ini.
+            <?php if ($rincianGaji): ?>
+                <strong>Jumlah</strong> adalah beban gaji unit ini ditambah bagian gaji Head Office.
+            <?php else: ?>
+                <strong>Jumlah</strong> adalah beban gaji yang ditagihkan ke unit ini.
+            <?php endif; ?>
         </div>
 
+        <?php if ($rincianGaji): ?>
+            <table class="total">
+                <tr>
+                    <td class="words">
+                        <strong>Terbilang:</strong> <?= esc(terbilang_rupiah($total)) ?>
+                    </td>
+                    <td class="sum">
+                        <div class="sum-label">Total Gaji</div>
+                        <div class="sum-value"><?= $rp($total) ?></div>
+                    </td>
+                </tr>
+            </table>
+
+            <table class="sign">
+                <tr>
+                    <td class="sign-cell">
+                        <div class="sign-role">Finance</div>
+                        <table class="sign-line"><tr><td class="sign-line-cell">&nbsp;</td></tr></table>
+                        <div class="sign-name"><?= esc($finance_nama ?? '') ?></div>
+                    </td>
+                    <td class="sign-gap"></td>
+                    <td class="sign-cell">
+                        <div class="sign-role">Manager</div>
+                        <table class="sign-line"><tr><td class="sign-line-cell">&nbsp;</td></tr></table>
+                        <div class="sign-name"><?= esc($manager_nama ?? '') ?></div>
+                    </td>
+                </tr>
+            </table>
+        <?php endif; ?>
+
+    <?php endif; ?>
+
+    <htmlpagefooter name="docfooter">
         <table class="foot">
             <tr>
-                <td>Lampiran <?= esc($invoice_no ?? '') ?> &middot; dibuat otomatis oleh ERP iClear.</td>
-                <td class="right"><?= esc($unit_nama ?? '') ?></td>
+                <?php if ($rincianGaji): ?>
+                    <td>Dokumen rincian gaji dibuat otomatis oleh ERP iClear.</td>
+                    <td class="right"><?= esc($unit_nama ?? '') ?></td>
+                <?php else: ?>
+                    <td>Dokumen ini dibuat otomatis oleh ERP iClear.</td>
+                    <td class="right"><?= esc($invoice_no ?? '') ?></td>
+                <?php endif; ?>
             </tr>
         </table>
-    <?php endif; ?>
+    </htmlpagefooter>
+    <sethtmlpagefooter name="docfooter" value="on" />
 </body>
 </html>

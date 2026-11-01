@@ -1173,6 +1173,8 @@ class TutupKasir extends BaseController
             : 0.0;
         $bolehCetakInvoice = in_array((int) $unit, [3, 4, 5], true)
             && self::bolehLihatRincianGaji((int) $id_jabatan);
+        $bolehCetakRincianGaji = strtolower((string) ($unitRow->jenis ?? '')) === 'pribadi'
+            && self::bolehLihatRincianGaji((int) $id_jabatan);
 
         $data = [
             'list_unit'      => $list_unit,
@@ -1180,6 +1182,7 @@ class TutupKasir extends BaseController
             'id_jabatan'     => $id_jabatan,
             'boleh_pilih_unit' => $bolehPilihUnit,
             'boleh_cetak_invoice' => $bolehCetakInvoice,
+            'boleh_cetak_rincian_gaji' => $bolehCetakRincianGaji,
             'bulan'          => $bulan,
             'tahun'          => $tahun,
             'periodeLabel'   => $periodeLabel,
@@ -1214,10 +1217,16 @@ class TutupKasir extends BaseController
             'body'              => 'dashboard/asset_berjalan',
         ];
 
-        // Cetak invoice internal: dokumen saja, tidak mencatat tagihan baru.
-        if ($this->request->getGet('invoice') === '1') {
-            if (! $bolehCetakInvoice) {
+        // Cetak dokumen internal (invoice franchise / rincian gaji unit
+        // pribadi): dokumen saja, tidak mencatat tagihan baru.
+        $mintaInvoice = $this->request->getGet('invoice') === '1';
+        $mintaRincian = $this->request->getGet('rincian_gaji') === '1';
+        if ($mintaInvoice || $mintaRincian) {
+            if ($mintaInvoice && ! $bolehCetakInvoice) {
                 return $this->response->setStatusCode(403)->setBody('Tidak berhak mencetak invoice unit ini.');
+            }
+            if ($mintaRincian && ! $bolehCetakRincianGaji) {
+                return $this->response->setStatusCode(403)->setBody('Tidak berhak mencetak rincian gaji unit ini.');
             }
 
             helper('invoice_internal');
@@ -1286,9 +1295,11 @@ class TutupKasir extends BaseController
                     'atas_nama' => $config->atasNama,
                 ],
                 'catatan' => $config->catatan,
+                'rincian_gaji' => $mintaRincian,
             ];
 
-            $namaFile = 'invoice-internal-' . $bulanStr . '-unit-' . (int) $unit . '.pdf';
+            $namaFile = ($mintaRincian ? 'rincian-gaji-' : 'invoice-internal-')
+                . $bulanStr . '-unit-' . (int) $unit . '.pdf';
 
             return $this->response
                 ->setHeader('Content-Type', 'application/pdf')

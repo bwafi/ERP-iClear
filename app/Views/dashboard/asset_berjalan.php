@@ -970,6 +970,15 @@ $warnaBiayaTerkontrol = $rasioBiayaTerkontrol > 100
                     </a>
                 <?php endif; ?>
 
+                <?php if (!empty($boleh_cetak_rincian_gaji)): ?>
+                    <a href="<?= base_url('asset_berjalan?unit=' . urlencode($selected_unit) . '&bulan=' . (int) $bulan . '&tahun=' . (int) $tahun . '&rincian_gaji=1') ?>"
+                        target="_blank" rel="noopener"
+                        class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 py-2 px-3">
+                        <iconify-icon icon="solar:document-text-linear" class="align-middle"></iconify-icon>
+                        <span>Cetak Rincian Gaji</span>
+                    </a>
+                <?php endif; ?>
+
                 <?php if (!$isBulanBerjalan): ?>
                     <?php $bulanSesudah = (int) date('m', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>
                     <?php $tahunSesudah = (int) date('Y', mktime(0, 0, 0, $bulan + 1, 1, $tahun)); ?>

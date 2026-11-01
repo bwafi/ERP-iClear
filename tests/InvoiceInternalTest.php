@@ -539,4 +539,65 @@ class InvoiceInternalTest extends CIUnitTestCase
         $this->assertStringStartsWith('%PDF', $pdf);
         $this->assertGreaterThan(1000, strlen($pdf));
     }
+
+    public function testFooterInvoiceBeradaDiAkhirDokumen(): void
+    {
+        $html = view('cetak/invoice_internal', $this->data());
+
+        $posLampiran = strpos($html, 'Rincian Gaji Head Office');
+        $posFooter   = strpos($html, 'Dokumen ini dibuat otomatis oleh ERP iClear.');
+
+        $this->assertNotFalse($posLampiran, 'lampiran tidak ditemukan');
+        $this->assertNotFalse($posFooter, 'footer invoice tidak ditemukan');
+        $this->assertGreaterThan($posLampiran, $posFooter, 'footer harus di akhir dokumen, bukan di tengah');
+        $this->assertSame(1, substr_count($html, 'Dokumen ini dibuat otomatis oleh ERP iClear.'));
+    }
+
+    public function testViewRincianGajiTanpaRoyaltiDanNomorInvoice(): void
+    {
+        $data = $this->data();
+        $data['rincian_gaji'] = true;
+
+        $html = view('cetak/invoice_internal', $data);
+
+        foreach ([
+            'Rincian Gaji',
+            'ICLEAR Banyuwangi',
+            'September 2026',
+            'Rincian Gaji Karyawan Cabang',
+            'Rincian Gaji Head Office',
+            'Arya',
+            'Huda HO',
+            'Total Gaji',
+            'Rp 17.000.000',
+            'Tujuh Belas Juta Rupiah',
+            'Ira Kurniawati',
+            'Nurul Huda',
+        ] as $teks) {
+            $this->assertStringContainsString($teks, $html, "tidak ditemukan: {$teks}");
+        }
+
+        foreach ([
+            'Tagihan Internal',
+            'Ditagihkan kepada',
+            'Royalti Perusahaan',
+            'INT/202609/BWI',
+            'Lampiran Invoice',
+            '039-377-8773',
+            'Pembayaran',
+        ] as $teks) {
+            $this->assertStringNotContainsString($teks, $html, "seharusnya tidak ada: {$teks}");
+        }
+    }
+
+    public function testPdfRincianGajiTerbentuk(): void
+    {
+        $data = $this->data();
+        $data['rincian_gaji'] = true;
+
+        $pdf = invoice_internal_pdf($data);
+
+        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertGreaterThan(1000, strlen($pdf));
+    }
 }

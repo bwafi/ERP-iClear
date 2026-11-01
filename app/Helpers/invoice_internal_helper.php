@@ -269,7 +269,7 @@ if (! function_exists('invoice_internal_pdf')) {
             'margin_top'    => 12,
             'margin_bottom' => 12,
         ]);
-        $mpdf->SetTitle('Invoice Internal');
+        $mpdf->SetTitle(! empty($data['rincian_gaji']) ? 'Rincian Gaji' : 'Invoice Internal');
         $mpdf->WriteHTML($html);
 
         return $mpdf->Output('', 'S');

@@ -484,6 +484,17 @@ class AssetBerjalanCardTest extends CIUnitTestCase
         $this->assertStringContainsString('invoice=1', $html);
     }
 
+    public function testTombolCetakRincianGajiMunculUntukUnitPribadi(): void
+    {
+        $html = $this->render(1, 100000000, 20000000, 10000000, null, null, null, 0.0, false, [
+            'boleh_cetak_rincian_gaji' => true,
+        ]);
+
+        $this->assertStringContainsString('Cetak Rincian Gaji', $html);
+        $this->assertStringContainsString('rincian_gaji=1', $html);
+        $this->assertStringNotContainsString('Cetak Invoice', $html);
+    }
+
     public function testTombolHitungUlangTampilUntukBulanLaluYangTersimpan(): void
     {
         $html = $this->render(5, 100000000, 20000000, 10000000, null, null, null, 0.0, false, [
