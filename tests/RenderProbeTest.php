@@ -255,6 +255,23 @@ class RenderProbeTest extends CIUnitTestCase
         $this->assertStringNotContainsString('Bersama ·', $html, 'label lama harus diganti');
     }
 
+    /**
+     * Ringkasan halaman akun memakai identitas yang sama dengan dashboard:
+     * KAS dihitung 100% sudah punya pemilik, BANK hanya sebesar alokasinya.
+     * Uji angka, bukan sekadar keberadaan elemen.
+     */
+    public function testRingkasanRekeningMenghitungKasSebagaiMilikUnit()
+    {
+        $html = $this->render('kas_bank/akun', $this->dataMaster(), 'akun');
+
+        // 5.000 KAS + 25.000.000 HO + 3.000 shared.
+        $this->assertStringContainsString('Rp 25.008.000', $html);
+        // 5.000 KAS (milik unit) + 1.000 alokasi bank.
+        $this->assertStringContainsString('Rp 6.000', $html);
+        // 25.008.000 - 6.000 belum jadi hak unit.
+        $this->assertStringContainsString('Rp 25.002.000', $html);
+    }
+
     public function testAlokasiFormTidakMenawarkanRekeningFinanceHo()
     {
         $html = $this->render('kas_bank/akun', $this->dataMaster(), 'akun');

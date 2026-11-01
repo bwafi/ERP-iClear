@@ -39,7 +39,7 @@
 
 **Structural thesis:** the physical-vs-entitlement duality is one statement, not four cards. Total position leads; Kas and Bank are ruled columns; a thin composition bar shows the split. Cash-flow for the effective cut-off period is a ruled list in the same sheet (no orphan column). The ledger below is full width and every account row shows `Saldo fisik` next to `Dialokasikan`/`Hak unit ini`, with a share bar and the remaining/unallocated amount. The sheet footer states the identity in words and figures: `Fisik = Dialokasikan + Belum dialokasikan` (consolidated) or `Fisik semua unit · Hak unit ini` (unit scope).
 
-**Other pages:** `akun`, `transfer`, `antar_unit` keep their bodies and `.kb-*` components. Only the shared header/tabs in `_nav.php` move to the flat statement header (title, breadcrumb, underline tabs) so the module still reads as one place.
+**Other pages:** `transfer` and `antar_unit` keep their bodies and `.kb-*` components. `akun` now shares the flat statement world (summary sheet, disclosure steps, full-width ledger) because it is the page where the physical-vs-entitlement numbers are configured. Only the shared header/tabs in `_nav.php` move to the flat statement header (title, breadcrumb, underline tabs) so the module still reads as one place.
 
 **Reading guide:** the long banner is replaced by one muted footnote under the hero: saldo fisik = real money; hak unit = the branch's spendable share; the gap is unallocated.
 
@@ -56,6 +56,20 @@
 **FIRST VIEWPORT:** Page head (title + breadcrumb + underline tabs) → slim filter toolbar on canvas → one sheet: meta line, 2.25rem total, Kas/Bank ruled columns, 6px composition bar with legend, footnote, cash-flow list at right (5 ruled rows, net on a double rule), identity footer → ledger header and first rows below the fold on 900px.
 
 **FORM:** Code-led (no image generation). Installed Impeccable build exposes no `concept-seed`/decision-page scripts, so the direction was chosen through the harness structured question; no seed key exists.
+
+**FINISH:** unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+
+## Direction Contract — Rekening & Saldo Awal
+
+**THESIS:** The account register is one ruled treasury sheet, not a form card beside a table: read the position, open the record step you need, then verify the ledger in the same sheet. It refuses the permanent half-page form sidebar.
+
+**OWN-WORLD:** Same flat sheet as the dashboard — 1px hairlines, uppercase 11px labels at .06em, tabular figures, 6px radius, no card shadows. KAS keeps the primary ink, BANK the amber mark. Forms are flat fields inside disclosure rows, never nested cards.
+
+**STORY:** The operator sees total physical money and its allocated/unallocated split, opens one of four numbered record steps (account, opening, allocation, cash opening), then finds any account's physical vs allocated figure in the full-width ledger.
+
+**FIRST VIEWPORT:** Header and underline tabs → slim branch/search toolbar on canvas → summary sheet with meta line, 2rem total, 2×2 ruled facts, identity footer → "Catat & atur" with four collapsed numbered rows → ledger header and first account rows below the fold.
+
+**FORM:** Extension of the established dashboard world; code-led, no comp. The `.kbx-table` mobile rules carry the ledger; page-specific CSS is scoped `.kba-*` in `_akun_theme.php`.
 
 **FINISH:** unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
 

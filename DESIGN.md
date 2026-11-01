@@ -3,7 +3,7 @@
 ## Visual Identity & Theme
 - **Framework:** Bootstrap 5 (Modernize admin style) with dark/light mode compatibility.
 - **Brand Context:** iClear ERP — Professional, financial clarity, operational-first density.
-- **Design Language:** Two layers: the shell's card-based admin vocabulary for the module's operational pages, and the statement-sheet vocabulary (`.kbx-*`) for the Kas & Bank dashboard — flat sheets, hairline rules, underline tabs, tabular figures.
+- **Design Language:** Two layers: the shell's card-based admin vocabulary for the module's operational pages, and the statement-sheet vocabulary (`.kbx-*`) for the Kas & Bank dashboard and account register — flat sheets, hairline rules, underline tabs, tabular figures.
 
 ## System Color Semantics
 - **KAS (Cash):** Primary theme color — Tunai & physical cash drawer.
@@ -22,9 +22,9 @@
 - **Counts:** plain text (`12 rekening`, `6 bank`, `N terbuka`), not colored pills; hidden below `992px`. Labels are hidden below `768px` so the four tabs fit as icons, each still carrying `aria-label`.
 - **Titles:** `$__titles` is keyed by `ringkasan|rekening|mutasi|antar`; the mutasi key must stay `mutasi` (older `pindah`/`tunai` keys never matched and showed the dashboard title).
 
-### Metric Strip (`.kb-stat`)
-- **Purpose:** Compact three-cell summary strip on `/kas_bank/akun` (total rekening, saldo fisik gabungan, rekening bersama); the dashboard no longer uses metric cards — it uses the `.kbx-*` sheet.
-- **Structure:** Label above value, values in `tabular-nums`; no icon tiles and no hover lift.
+### Metric Strip (`.kb-stat`) — legacy
+- **Status:** no current page uses it. `/kas_bank/akun` and the dashboard now use the `.kbx-*` summary sheet. Do not revive this strip for new pages.
+- **Structure (if ever reused):** label above value, values in `tabular-nums`; no icon tiles and no hover lift.
 - **Note:** `.kb-metric-card` in `_theme.php` is legacy and unused; do not revive it for new pages.
 
 ### Data Cards (`.kb-data-card`)
@@ -145,9 +145,10 @@
 - **Rules:** keep the return-status switcher next to the status badge, never as a far-right column; supplier/date gates, field names, routes, and existing save/cancel semantics are unchanged. The status switch posts its own form, warns before discarding unsaved row input, and carries the active unit/date filter back through the `kembali` field. One accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions and disabled under `prefers-reduced-motion`.
 
 ### Lembar Posisi Kas (`.kbx-*`)
-- **Scope:** `app/Views/kas_bank/dashboard.php` + `app/Views/kas_bank/_posisi_theme.php`; every selector lives under `.kbx` and derives from `--kbx-*` tokens tied to the app theme. The older `.kb-*` components in `_theme.php` stay for `akun`/`transfer`/`antar_unit`.
+- **Scope:** `app/Views/kas_bank/dashboard.php`, `app/Views/kas_bank/akun.php`, `_posisi_theme.php`, and `_akun_theme.php`; every selector lives under `.kbx` and derives from `--kbx-*` tokens tied to the app theme. The older `.kb-*` components in `_theme.php` stay for `transfer`/`antar_unit`.
 - **Thesis:** the dashboard is one treasury position sheet, not a widget grid. The physical-vs-entitlement duality is a single statement: hero total, Kas/Bank as ruled columns, one thin composition bar, and an identity footer (`Fisik = Dialokasikan + Belum dialokasikan`, or `Fisik semua unit · Hak unit ini` when a unit is selected).
 - **Layout:** page head → slim filter toolbar on the canvas (bottom hairline, not a card) → sheet (meta line → hero + cash-flow column → composition bar + reading footnote → identity footer) → alert strips → full-width ledger with `tfoot` total. Cash flow is a ruled list inside the sheet, so no empty column is left under a four-row table.
+- **Register (`akun`):** the same sheet used as a working register — meta line, 2rem physical total, 2×2 ruled facts, and the worded identity footer; four numbered disclosure steps (account, bank opening, unit allocation, cash opening); then the full-width ledger. Forms cap at `48rem`; the opening table and ledger stack with `data-label` captions below `768px`; the shared-account allocation strip stays attached to its account row. Page selectors are `.kba-*` scoped under `.kbx`.
 - **Ledger:** Rekening (name + unit/shared meta), Jenis (Kas/Bank mark), Saldo fisik, and Dialokasikan/Hak unit ini with a 72×3px share bar plus `% dari fisik`, `Belum Rp …`, `Penuh`, `Melebihi fisik`, or `Saldo minus`. The hero shows physical total when consolidated and unit entitlement when a unit is selected; the composition bar follows the same numbers.
 - **KAS ownership:** a KAS account always belongs to exactly one unit and never has rows in `alokasi_saldo_kas_bank`; in consolidated mode it is shown as 100% dialokasikan with the note `Milik unit`, and only BANK accounts feed `Belum dialokasikan`. The footer identity `Fisik = Dialokasikan + Belum` therefore counts unit-owned cash as allocated. Never print `Dialokasikan Rp 0` on a KAS account.
 - **Numbers:** `font-variant-numeric: tabular-nums` everywhere; Indonesian formatting `Rp 269.776.654`; minus sign `−`; totals separated by a 3px double rule (`--kbx-line-strong`), never by weight alone.
