@@ -118,7 +118,7 @@ class SalaryCalculationService
     ): array {
         $structure = $this->getSalaryStructure($positionId, $unitId, $context, $date);
 
-        // Probation: hanya gaji pokok prorata hari hadir (lihat PRD 07).
+        // Probation: gaji pokok prorata hari kerja + lembur (lihat PRD 07).
         if ($this->isProbation($employeeId)) {
             return $this->calculateProbationSalary(
                 $employeeId,
@@ -126,6 +126,7 @@ class SalaryCalculationService
                 $unitId,
                 $context,
                 $structure,
+                $lembur,
                 $bon,
                 $date
             );
@@ -243,8 +244,9 @@ class SalaryCalculationService
     }
 
     /**
-     * Gaji probation: gaji pokok / 30 x hari kerja, tanpa komponen lain.
-     * Bon tetap dikurangkan karena itu uang muka yang sudah diterima.
+     * Gaji probation: (gaji pokok / 30 x hari kerja) + lembur.
+     * Tunjangan, penempatan, dan insentif tidak dihitung; bon tetap
+     * dikurangkan karena itu uang muka yang sudah diterima.
      */
     protected function calculateProbationSalary(
         int $employeeId,
@@ -252,6 +254,7 @@ class SalaryCalculationService
         int $unitId,
         string $context,
         array $structure,
+        float $lembur,
         float $bon,
         ?string $date
     ): array {
@@ -286,10 +289,10 @@ class SalaryCalculationService
             ]],
             'placement_allowance' => 0.0,
             'incentive' => 0.0,
-            'lembur' => 0.0,
+            'lembur' => round($lembur, 2),
             'bon' => round($bon, 2),
             'subtotal_before_incentive' => $amount,
-            'total_gaji' => round($amount - $bon, 2),
+            'total_gaji' => round($amount + $lembur - $bon, 2),
         ];
     }
 

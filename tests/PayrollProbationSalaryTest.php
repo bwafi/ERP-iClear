@@ -133,7 +133,7 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
         ]);
     }
 
-    private function hitung(int $pegawai): array
+    private function hitung(int $pegawai, float $lembur = 0.0): array
     {
         return (new SalaryCalculationService())->calculateSalary(
             $pegawai,
@@ -143,7 +143,7 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
             ['TUNJANGAN_KINERJA' => 100, 'TUNJANGAN_ABSEN' => 100],
             350000,
             500000,
-            100000,
+            $lembur,
             0.0,
             '2026-10-15'
         );
@@ -223,6 +223,21 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
         $this->assertSame(8, $this->hitung(self::PROBATION)['hari_hadir']);
     }
 
+    public function testProbationTetapDapatLembur(): void
+    {
+        $result = $this->hitung(self::PROBATION, 140000.0);
+
+        // 400.000 (prorata 8 hari) + 140.000 lembur.
+        $this->assertSame(140000.0, (float) $result['lembur']);
+        $this->assertSame(540000.0, (float) $result['total_gaji']);
+
+        // Tunjangan, penempatan, dan insentif tetap tidak dihitung.
+        $this->assertSame(0.0, (float) $result['placement_allowance']);
+        $this->assertSame(0.0, (float) $result['incentive']);
+        $this->assertCount(1, $result['components']);
+        $this->assertSame('GAJI_POKOK', $result['components'][0]['component_code']);
+    }
+
     public function testCatatanProbationMenjelaskanRumus(): void
     {
         $generator = new \App\Services\Payroll\PayrollGenerator();
@@ -240,6 +255,18 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
             'Probation: Gaji Pokok Rp 1.500.000 ÷ 30 × 8 hari kerja = Rp 400.000. Kasbon dipotong saat dibayar.',
             $catatan
         );
+
+        // Lembur tetap disebut di catatan probation.
+        $this->assertSame(
+            'Probation: Gaji Pokok Rp 1.500.000 ÷ 30 × 8 hari kerja = Rp 400.000 + Lembur Rp 140.000. Kasbon dipotong saat dibayar.',
+            $method->invoke($generator, [
+                'probation' => true,
+                'hari_hadir' => 8,
+                'gaji_pokok_bulanan' => 1500000,
+                'subtotal_before_incentive' => 400000,
+                'components' => [],
+            ], 140000.0)
+        );
     }
 
     public function testPegawaiTetapTetapMemakaiKomponenLengkap(): void
@@ -249,7 +276,7 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
         $this->assertFalse($result['probation'] ?? false);
         $this->assertCount(3, $result['components']);
         $this->assertSame(
-            1500000.0 + 250000.0 + 250000.0 + 350000.0 + 500000.0 + 100000.0,
+            1500000.0 + 250000.0 + 250000.0 + 350000.0 + 500000.0,
             (float) $result['total_gaji']
         );
     }

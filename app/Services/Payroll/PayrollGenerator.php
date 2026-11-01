@@ -401,10 +401,16 @@ class PayrollGenerator
     protected function susunCatatan(array $gaji, float $lembur): string
     {
         if (!empty($gaji['probation'])) {
-            return 'Probation: Gaji Pokok ' . $this->rupiah((float) ($gaji['gaji_pokok_bulanan'] ?? 0))
+            $catatan = 'Probation: Gaji Pokok ' . $this->rupiah((float) ($gaji['gaji_pokok_bulanan'] ?? 0))
                 . ' ÷ 30 × ' . (int) ($gaji['hari_hadir'] ?? 0) . ' hari kerja = '
-                . $this->rupiah((float) ($gaji['subtotal_before_incentive'] ?? 0))
-                . '. Kasbon dipotong saat dibayar.';
+                . $this->rupiah((float) ($gaji['subtotal_before_incentive'] ?? 0));
+
+            // Lembur tetap dibayar untuk probation (PRD 07 butir 17).
+            if ($lembur > 0) {
+                $catatan .= ' + Lembur ' . $this->rupiah($lembur);
+            }
+
+            return $catatan . '. Kasbon dipotong saat dibayar.';
         }
 
         $bagian = [];
