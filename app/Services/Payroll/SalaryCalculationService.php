@@ -188,10 +188,13 @@ class SalaryCalculationService
     }
 
     /**
-     * Jumlah hari hadir pada bulan payroll: tanggal unik evaluasi KEHADIRAN.
+     * Jumlah hari kerja pada bulan payroll: tanggal unik evaluasi KEHADIRAN
+     * ditambah tanggal OFF (`kpi_attendance_off`). Hari OFF tetap dihitung
+     * sebagai hari kerja untuk prorata training.
      *
-     * Satu tanggal bisa punya dua sesi (shift PS pagi+sore) tetapi tetap
-     * dihitung satu hari. Dibatasi 30 supaya prorata tidak melebihi gaji pokok.
+     * Satu tanggal bisa muncul di kedua sumber (atau dua sesi shift PS) dan
+     * tetap dihitung satu hari. Dibatasi 30 supaya prorata tidak melebihi
+     * gaji pokok.
      */
     protected function countHariHadir(int $employeeId, ?string $date): int
     {
@@ -199,30 +202,48 @@ class SalaryCalculationService
         $year  = (int) substr($date, 0, 4);
         $month = (int) substr($date, 5, 2);
 
+        $hari = [];
+
         $component = $this->db->table('kpi_components')
             ->where('code', 'KEHADIRAN')
             ->get()
             ->getRow();
 
-        if ($component === null) {
-            return 0;
+        if ($component !== null) {
+            $rows = $this->db->table('kpi_evaluations')
+                ->select('evaluation_date')
+                ->distinct()
+                ->where('employee_id', $employeeId)
+                ->where('kpi_component_id', (int) $component->id)
+                ->where('period_year', $year)
+                ->where('period_month', $month)
+                ->where('evaluation_date IS NOT NULL', null, false)
+                ->get()
+                ->getResultArray();
+
+            foreach ($rows as $row) {
+                $hari[$row['evaluation_date']] = true;
+            }
         }
 
-        $row = $this->db->table('kpi_evaluations')
-            ->select('COUNT(DISTINCT evaluation_date) AS hari', false)
+        $offRows = $this->db->table('kpi_attendance_off')
+            ->select('evaluation_date')
+            ->distinct()
             ->where('employee_id', $employeeId)
-            ->where('kpi_component_id', (int) $component->id)
             ->where('period_year', $year)
             ->where('period_month', $month)
-            ->where('evaluation_date IS NOT NULL', null, false)
             ->get()
-            ->getRow();
+            ->getResultArray();
 
-        return min(30, (int) ($row->hari ?? 0));
+        foreach ($offRows as $row) {
+            $hari[$row['evaluation_date']] = true;
+        }
+
+        return min(30, count($hari));
     }
 
     /**
-     * Gaji probation: gaji pokok / 30 x hari hadir, tanpa komponen lain.
+     * Gaji probation: gaji pokok / 30 x hari kerja, tanpa komponen lain.
      * Bon tetap dikurangkan karena itu uang muka yang sudah diterima.
      */
     protected function calculateProbationSalary(

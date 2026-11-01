@@ -46,7 +46,7 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
         $q = fn (string $sql) => $this->db->query($sql);
 
         foreach ([
-            'akun', 'kpi_components', 'kpi_evaluations',
+            'akun', 'kpi_components', 'kpi_evaluations', 'kpi_attendance_off',
             'salary_components', 'salary_structures',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
@@ -62,6 +62,10 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
                 id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
                 kpi_component_id INT NULL, evaluation_date DATE NULL,
                 period_year INT NULL, period_month INT NULL)');
+        $q('CREATE TABLE kpi_attendance_off (
+                id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
+                evaluation_date DATE NULL, period_year INT NULL,
+                period_month INT NULL)');
         $q('CREATE TABLE salary_components (
                 id INT PRIMARY KEY, code VARCHAR(50) NULL, name VARCHAR(100) NULL,
                 type VARCHAR(50) NULL)');
@@ -192,6 +196,33 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
         $this->assertSame(1500000.0, (float) $result['total_gaji']);
     }
 
+    public function testHariOffDihitungSebagaiHariKerja(): void
+    {
+        // Dua hari OFF baru + satu tanggal OFF yang sama dengan tanggal
+        // evaluasi (03) supaya terbukti tidak dihitung dua kali.
+        $this->db->table('kpi_attendance_off')->insertBatch([
+            ['employee_id' => self::PROBATION, 'evaluation_date' => '2026-10-09', 'period_year' => 2026, 'period_month' => 10],
+            ['employee_id' => self::PROBATION, 'evaluation_date' => '2026-10-10', 'period_year' => 2026, 'period_month' => 10],
+            ['employee_id' => self::PROBATION, 'evaluation_date' => '2026-10-03', 'period_year' => 2026, 'period_month' => 10],
+        ]);
+
+        $result = $this->hitung(self::PROBATION);
+
+        // 8 tanggal hadir + 2 tanggal OFF baru = 10 hari kerja.
+        $this->assertSame(10, $result['hari_hadir']);
+        $this->assertSame(500000.0, (float) $result['total_gaji']);
+    }
+
+    public function testHariOffBulanLainTidakDihitung(): void
+    {
+        $this->db->table('kpi_attendance_off')->insert([
+            'employee_id' => self::PROBATION, 'evaluation_date' => '2026-09-15',
+            'period_year' => 2026, 'period_month' => 9,
+        ]);
+
+        $this->assertSame(8, $this->hitung(self::PROBATION)['hari_hadir']);
+    }
+
     public function testCatatanProbationMenjelaskanRumus(): void
     {
         $generator = new \App\Services\Payroll\PayrollGenerator();
@@ -206,7 +237,7 @@ final class PayrollProbationSalaryTest extends CIUnitTestCase
         ], 0.0);
 
         $this->assertSame(
-            'Probation: Gaji Pokok Rp 1.500.000 ÷ 30 × 8 hari hadir = Rp 400.000. Kasbon dipotong saat dibayar.',
+            'Probation: Gaji Pokok Rp 1.500.000 ÷ 30 × 8 hari kerja = Rp 400.000. Kasbon dipotong saat dibayar.',
             $catatan
         );
     }

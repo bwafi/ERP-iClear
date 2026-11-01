@@ -402,7 +402,7 @@ class PayrollGenerator
     {
         if (!empty($gaji['probation'])) {
             return 'Probation: Gaji Pokok ' . $this->rupiah((float) ($gaji['gaji_pokok_bulanan'] ?? 0))
-                . ' ÷ 30 × ' . (int) ($gaji['hari_hadir'] ?? 0) . ' hari hadir = '
+                . ' ÷ 30 × ' . (int) ($gaji['hari_hadir'] ?? 0) . ' hari kerja = '
                 . $this->rupiah((float) ($gaji['subtotal_before_incentive'] ?? 0))
                 . '. Kasbon dipotong saat dibayar.';
         }
