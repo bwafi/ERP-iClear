@@ -42,6 +42,8 @@ class KasBankCutoffFoundationTest extends CIUnitTestCase
      */
     private string $tglCutoff;
     private string $tglMulai;
+    private string $bankCutoff;
+    private string $bankMulai;
     private string $h1;
     private string $h2;
     private string $h4;
@@ -63,10 +65,14 @@ class KasBankCutoffFoundationTest extends CIUnitTestCase
 
         $this->tglCutoff     = FinanceScopeService::kasBankCutoffDate();
         $this->tglMulai      = FinanceScopeService::kasBankPeriodeMulaiDate();
+        $this->bankCutoff    = FinanceScopeService::bankCutoffDate();
+        $this->bankMulai     = FinanceScopeService::bankPeriodeMulaiDate();
         $this->h1            = date('Y-m-d', strtotime($this->tglMulai . ' +1 day'));
         $this->h2            = date('Y-m-d', strtotime($this->tglMulai . ' +2 day'));
         $this->h4            = date('Y-m-d', strtotime($this->tglMulai . ' +4 day'));
-        $this->setelahCutoff = date('Y-m-d', strtotime($this->tglCutoff . ' +8 day'));
+        // Statement "sesudah cut-off" untuk rekening BANK harus dihitung dari
+        // cut-off BANK, bukan cut-off KAS.
+        $this->setelahCutoff = date('Y-m-d', strtotime($this->bankCutoff . ' +8 day'));
         $this->legacy        = date('Y-m-d', strtotime($this->tglCutoff . ' -30 day'));
 
         $this->schema();
@@ -160,15 +166,15 @@ class KasBankCutoffFoundationTest extends CIUnitTestCase
             (9,  NULL, 'BANK', 'Rekening Finance/HO','IRA-001','aktif', 1, 1),
             (15, NULL, 'BANK', 'Belum Terverifikasi','2',    'aktif', 1, 0)");
 
-        // Statement cut-off yang SUDAH diverifikasi Finance.
+        // Statement bank memakai cut-off BANK, bukan cut-off KAS.
         $this->q("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
-            (1, '{$this->tglCutoff}', 100000000, 'Koran 30 Sep', 'VERIFIED'),
-            (3, '{$this->tglCutoff}',  20000000, 'Koran 30 Sep', 'VERIFIED'),
-            (9, '{$this->tglCutoff}',  30000000, 'Koran 30 Sep', 'VERIFIED')");
+            (1, '{$this->bankCutoff}', 100000000, 'Koran 31 Okt', 'VERIFIED'),
+            (3, '{$this->bankCutoff}',  20000000, 'Koran 31 Okt', 'VERIFIED'),
+            (9, '{$this->bankCutoff}',  30000000, 'Koran 31 Okt', 'VERIFIED')");
 
         // Rekening 15 sengaja placeholder: saldo 0 dan BELUM diverifikasi.
         $this->q("INSERT INTO db_saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, keterangan, status) VALUES
-            (15, '{$this->tglCutoff}', 0, 'Placeholder, koran belum masuk', 'BELUM_VERIFIKASI')");
+            (15, '{$this->bankCutoff}', 0, 'Placeholder, koran belum masuk', 'BELUM_VERIFIKASI')");
 
         // Opening allocation: dari 100jt di rekening bersama, hanya 40jt yang
         // sudah diketauhui kepemilikannya. 60jt jadi LEGACY.
@@ -276,6 +282,30 @@ class KasBankCutoffFoundationTest extends CIUnitTestCase
             FinanceScopeService::periodeMulaiDate(),
             FinanceScopeService::kasBankPeriodeMulaiDate(),
             'Periode KasBank tidak boleh menimpa periode Finance global'
+        );
+    }
+
+    public function testCutOffBankTerpisahDariCutOffKas(): void
+    {
+        // BANK punya cut-off sendiri; KAS tidak boleh ikut bergeser.
+        $this->assertSame($this->bankCutoff, FinanceScopeService::bankCutoffDate());
+        $this->assertSame($this->bankMulai, FinanceScopeService::bankPeriodeMulaiDate());
+        $this->assertSame(
+            date('Y-m-d', strtotime($this->bankCutoff . ' +1 day')),
+            $this->bankMulai,
+            'Periode ledger BANK harus cut-off bank + 1 hari'
+        );
+        $this->assertNotSame($this->bankCutoff, $this->tglCutoff,
+            'Cut-off BANK tidak boleh sama dengan cut-off KAS');
+        $this->assertSame($this->bankCutoff, $this->cutoff->tanggalCutoffBank());
+        $this->assertSame($this->bankMulai, $this->cutoff->tanggalMulaiPeriodeBank());
+        $this->assertSame($this->tglCutoff, $this->cutoff->tanggalCutoff());
+
+        // Statement BANK diambil pada cut-off BANK, bukan cut-off KAS.
+        $this->assertSame(100000000, $this->cutoff->saldoStatement(1));
+        $this->assertNull(
+            $this->cutoff->statementAt(1, $this->tglCutoff),
+            'Tidak ada statement BANK pada tanggal cut-off KAS'
         );
     }
 
@@ -489,7 +519,11 @@ class KasBankCutoffFoundationTest extends CIUnitTestCase
         $r = $this->pindah->setorTunai(1, 2, 1, 1000000, $this->legacy, 'sub-legacy');
 
         $this->assertFalse($r['ok'], 'Transaksi sebelum periode operasional baru harus ditolak');
-        $this->assertStringContainsString($this->tglMulai, $r['alasan']);
+        $this->assertStringContainsString(
+            max($this->tglMulai, $this->bankMulai),
+            $r['alasan'],
+            'Pesan harus menyebut batas periode efektif (KAS dan BANK)'
+        );
         $this->assertSame(0, $this->db->table('transaksi_kas_bank')->countAllResults());
     }
 

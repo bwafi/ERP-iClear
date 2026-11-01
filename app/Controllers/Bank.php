@@ -25,7 +25,7 @@ class Bank extends BaseController
 
         $data =  array(
             'akun' => $akun,
-            'bank' => $this->BankModel->getBank(),
+            'bank' => $this->BankModel->getBankSemua(),
             'body'  => 'datamaster/bank'
         );
         return view('template', $data);

@@ -54,6 +54,9 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
     private string $h0;
     private string $h1;
     private string $h2;
+    /** Hari pertama periode BANK (movement BANK sebelum ini sudah di statement). */
+    private string $hBank;
+    private string $hBank1;
 
     /** Rekening: 1 = Bank Bersama (shared), 2 = KAS Unit 1. */
     private const AKUN_KAS  = 2;
@@ -71,6 +74,8 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         $this->h0      = FinanceScopeService::kasBankPeriodeMulaiDate();
         $this->h1      = date('Y-m-d', strtotime($this->h0 . ' +1 day'));
         $this->h2      = date('Y-m-d', strtotime($this->h0 . ' +2 day'));
+        $this->hBank   = FinanceScopeService::bankPeriodeMulaiDate();
+        $this->hBank1  = date('Y-m-d', strtotime($this->hBank . ' +1 day'));
 
         // Service dibuat sebelum seed() karena seed() memakai $this->opening.
         $this->cutoff  = new KasBankCutoffService();
@@ -306,10 +311,11 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
     public function testSetorMengurangiSaldoKas(): void
     {
         $this->jual('INV-6', $this->h0, 300000);
-        $r = $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, $this->h0, 'k-setor');
+        // Setor menyentuh BANK: tanggal harus >= periode BANK.
+        $r = $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, $this->hBank, 'k-setor');
         $this->assertSame('inserted', $r['status'], $r['alasan']);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->hBank);
 
         $this->assertSame(200000, $alur['transfer_keluar'], 'Setor dari KAS = KAS keluar');
         $this->assertSame(0, $alur['transfer_masuk']);
@@ -319,10 +325,10 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
     public function testTarikMenambahSaldoKas(): void
     {
-        $r = $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, $this->h0, 'k-tarik');
+        $r = $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, $this->hBank, 'k-tarik');
         $this->assertSame('inserted', $r['status'], $r['alasan']);
 
-        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
+        $alur = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->hBank);
 
         $this->assertSame(50000, $alur['transfer_masuk'], 'Tarik ke KAS = KAS masuk');
         $this->assertSame(0, $alur['transfer_keluar']);
@@ -333,21 +339,21 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
     public function testSetorDanTarikTerpisahPerTanggal(): void
     {
         $this->jual('INV-6', $this->h0, 300000);
-        $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, $this->h1, 'k-setor-7');
-        $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, $this->h2, 'k-tarik-8');
+        $this->pindah->setorTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 200000, $this->hBank, 'k-setor-7');
+        $this->pindah->tarikTunai(self::UNIT, self::AKUN_KAS, self::AKUN_BANK, 50000, $this->hBank1, 'k-tarik-8');
 
-        $enam  = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
-        $tujuh = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h1);
-        $delapan = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h2);
+        $sebelum = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->h0);
+        $setor   = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->hBank);
+        $tarik   = $this->cutoff->alurKasSampai(self::AKUN_KAS, $this->hBank1);
 
-        $this->assertSame(0, $enam['transfer_keluar']);
-        $this->assertSame(200000, $tujuh['transfer_keluar']);
-        $this->assertSame(200000, $delapan['transfer_keluar']);
-        $this->assertSame(50000, $delapan['transfer_masuk'], 'Tarik hari ketiga = KAS masuk 50.000');
+        $this->assertSame(0, $sebelum['transfer_keluar']);
+        $this->assertSame(200000, $setor['transfer_keluar']);
+        $this->assertSame(200000, $tarik['transfer_keluar']);
+        $this->assertSame(50000, $tarik['transfer_masuk'], 'Tarik hari kedua = KAS masuk 50.000');
 
-        $this->assertSame(300000, $enam['movement']);
-        $this->assertSame(100000, $tujuh['movement'], '300.000 - 200.000 setor');
-        $this->assertSame(150000, $delapan['movement'], '+ 50.000 tarik');
+        $this->assertSame(300000, $sebelum['movement']);
+        $this->assertSame(100000, $setor['movement'], '300.000 - 200.000 setor');
+        $this->assertSame(150000, $tarik['movement'], '+ 50.000 tarik');
     }
 
     // =================================================================
@@ -460,7 +466,7 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
 
         $this->db->table('service_dp')->insert([
             'service_idservice' => $serviceId,
-            'tanggal'            => $this->h0,
+            'tanggal'            => $this->hBank,
             'jumlah'             => 95000,
             'metode'             => 'transfer',
             'bank_idbank'        => 'BNI-001',
@@ -471,28 +477,28 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         $srcDef = new TutupKasirSourceDefinition($this->db);
         $this->assertSame(
             95000,
-            $srcDef->dpMasukTransferBankRange('BNI-001', self::UNIT, $this->h0, $this->h0)
+            $srcDef->dpMasukTransferBankRange('BNI-001', self::UNIT, $this->hBank, $this->hBank)
         );
-        $ringkasan = $srcDef->ringkasanRange(self::UNIT, $this->h0, $this->h0);
+        $ringkasan = $srcDef->ringkasanRange(self::UNIT, $this->hBank, $this->hBank);
         $this->assertSame(95000, $ringkasan['dp_transfer']);
         $this->assertSame(95000, $ringkasan['transfer']);
 
-        $this->assertSame(95000, $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->h0));
-        $this->assertSame(95000, $this->cutoff->netMovement(self::AKUN_BANK, null, $this->h0));
+        $this->assertSame(95000, $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->hBank));
+        $this->assertSame(95000, $this->cutoff->netMovement(self::AKUN_BANK, null, $this->hBank));
     }
 
     public function testDpTransferTidakDihitungUlangSaatServiceSelesai(): void
     {
         $this->db->table('service')->insert([
             'no_service' => 'S-DP-SELESAI-1', 'unit_idunit' => self::UNIT,
-            'tanggal_selesai' => $this->h1 . ' 09:00:00', 'status_service' => 4,
+            'tanggal_selesai' => $this->hBank1 . ' 09:00:00', 'status_service' => 4,
             'harus_dibayar' => 100000, 'bayar_tunai' => 40000,
         ]);
         $serviceId = (int) $this->db->insertID();
 
         $this->db->table('service_dp')->insert([
             'service_idservice' => $serviceId,
-            'tanggal'            => $this->h0,
+            'tanggal'            => $this->hBank,
             'jumlah'             => 30000,
             'metode'             => 'transfer',
             'bank_idbank'        => 'BNI-001',
@@ -500,15 +506,15 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
             'unit_id'            => self::UNIT,
         ]);
 
-        $this->assertSame(30000, $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->h0));
+        $this->assertSame(30000, $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->hBank));
         $ringkasan = (new TutupKasirSourceDefinition($this->db))
-            ->ringkasanRange(self::UNIT, $this->h0, $this->h1);
+            ->ringkasanRange(self::UNIT, $this->hBank, $this->hBank1);
         $this->assertSame(30000, $ringkasan['dp_transfer']);
         $this->assertSame(30000, $ringkasan['dp_service_selesai']);
         $this->assertSame(60000, $ringkasan['transfer']);
         $this->assertSame(
             60000,
-            $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->h1),
+            $this->cutoff->netMovement(self::AKUN_BANK, self::UNIT, $this->hBank1),
             'DP 30.000 saat diterima + transfer riil 30.000 saat service selesai'
         );
     }

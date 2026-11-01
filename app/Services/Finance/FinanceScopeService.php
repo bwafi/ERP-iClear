@@ -232,6 +232,28 @@ class FinanceScopeService
     }
 
     /**
+     * Cut-off KHUSUS rekening BANK (YYYY-MM-DD).
+     *
+     * KAS tidak ikut: laci kas memakai kasBankCutoffDate() karena tidak punya
+     * rekening koran. Dipakai jalur BANK saja (statement, baseline, lock).
+     */
+    public static function bankCutoffDate(): string
+    {
+        return (string) (new Finance())->bankCutoffDate;
+    }
+
+    /**
+     * Batas bawah ledger KHUSUS rekening BANK (YYYY-MM-DD) = bankCutoffDate + 1.
+     *
+     * Movement BANK sebelum tanggal ini sudah terserap di statement
+     * bankCutoffDate() dan tidak boleh dihitung lagi.
+     */
+    public static function bankPeriodeMulaiDate(): string
+    {
+        return (string) (new Finance())->bankPeriodeMulaiDate;
+    }
+
+    /**
      * Apakah tanggal transaksi termasuk LEGACY menurut periode Kas & Bank.
      *
      * Legacy = sebelum kasBankPeriodeMulaiDate(). Transaksi 1–7 Okt legacy

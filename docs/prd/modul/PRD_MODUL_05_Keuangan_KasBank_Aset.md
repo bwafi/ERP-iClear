@@ -73,6 +73,10 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 
 24. ✅ **Rincian Gaji unit pribadi hanya dokumen cetak, tanpa royalti dan nomor invoice.** Tombol "Cetak Rincian Gaji" di `/asset_berjalan` (hanya unit `jenis = pribadi` dan jabatan 0/1/34) membuka `GET asset_berjalan?...&rincian_gaji=1` yang mengembalikan PDF mPDF tanpa menulis database. Isinya header unit + periode, matriks gaji karyawan unit, matriks gaji HO yang dibebankan, total gabungan (`gaji unit + HO`) beserta terbilang, dan tanda tangan Finance/Manager. Dokumen ini **tidak** memuat royalti, nomor invoice, tanggal invoice, rekening pembayaran, maupun label tagihan; unit franchise tetap memakai tombol "Cetak Invoice". Request untuk unit franchise atau role lain ditolak `403`. — `TutupKasir::assetberjalan`; `app/Views/cetak/invoice_internal.php` (mode `rincian_gaji`); `tests/InvoiceInternalTest.php`, `tests/AssetBerjalanCardTest.php`
 
+25. ✅ **Cut-off BANK terpisah dari cut-off laci KAS.** `Config\Finance::$bankCutoffDate` (`2026-11-01`) dan `$bankPeriodeMulaiDate` (`2026-11-02`) hanya dipakai jalur rekening BANK: statement/baseline, lock rekening, diagnostik, dan batas bawah movement BANK. Laci KAS tetap memakai `$kasBankCutoffDate` (`2026-10-09`) dan `$kasBankPeriodeMulaiDate` (`2026-10-10`) — laci tidak punya rekening koran. Setor/Tarik tunai menyentuh KAS dan BANK sekaligus, sehingga tanggal minimumnya adalah yang paling akhir dari kedua periode. Form statement bank memakai cut-off BANK; form opening KAS tetap cut-off KAS. — `Config/Finance.php`; `FinanceScopeService::bankCutoffDate/bankPeriodeMulaiDate`; `KasBankCutoffService`; `KasBank::saveSaldoAwal/saveSetorTunai/savePenarikanTunai/saveTransfer/saveAntarUnit`; `KasBankSetorTarikService`; `tests/KasBankCutoffFoundationTest`, `tests/KasBankKonfigurasiTest`
+
+26. ✅ **Dropdown transaksi hanya menampilkan bank yang punya rekening aktif.** `ModelBank::getBank()` melakukan inner join ke `akun_kas_bank` (`tipe = 'BANK'`, `status = 'aktif'`), sehingga bank tanpa rekening aktif atau dengan rekening nonaktif tidak muncul di dropdown pembayaran, kas masuk/keluar, penjualan, pembelian, service, payroll, dan H/P. Halaman master `/bank` dan `/kas_bank/akun` memakai `getBankSemua()` agar rekening baru tetap bisa didaftarkan. — `app/Models/ModelBank.php`; `app/Controllers/Bank.php`; `app/Controllers/KasBank.php`
+
 **Catatan UI `/kas_keluar`:** input dan edit dibuka di modal di atas daftar; satu kartu transaksi = satu baris `kas_keluar`. Simpan yang ditolak mengembalikan isian lewat flashdata `kk_old`, dan hanya badge "6%" yang diwarnai — bukan seluruh nama kategori.
 
 ## 6. Acceptance Criteria
@@ -86,6 +90,8 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - [ ] Pelunasan antar unit muncul sebagai baris read-only di `/kas_keluar` dan ikut total, tanpa membuat baris `kas_keluar` baru (BR 19).
 - [ ] Riwayat Pindah Saldo mengikuti unit terpilih walau rekeningnya dipakai bersama unit lain; mode konsolidasi tetap menampilkan semua unit (BR 23).
 - [ ] Unit pribadi dapat mencetak Rincian Gaji (gaji unit + HO) tanpa royalti/nomor invoice; unit franchise tetap memakai Cetak Invoice (BR 24).
+- [ ] Cut-off BANK (`2026-11-01`) tidak menggeser cut-off laci KAS (`2026-10-09`); statement bank diinput pada cut-off BANK (BR 25).
+- [ ] Bank tanpa rekening aktif tidak muncul di dropdown transaksi, tetapi tetap tampil di halaman master bank (BR 26).
 - [ ] Laporan posisi keuangan & laba rugi dapat dicetak (PDF/Excel).
 
 ## 7. Dependensi

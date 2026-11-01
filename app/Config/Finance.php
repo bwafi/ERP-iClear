@@ -144,6 +144,27 @@ class Finance extends BaseConfig
     public string $kasBankPeriodeMulaiDate = '2026-10-10';
 
     /**
+     * Cut-off KHUSUS rekening BANK (YYYY-MM-DD).
+     *
+     * Dipisahkan dari $kasBankCutoffDate karena laci kas tidak punya rekening
+     * koran: cutoff BANK boleh bergeser tanpa menggeser baseline laci KAS.
+     * Nilai ini HANYA dipakai jalur rekening BANK (statement, baseline, lock,
+     * dan filter movement bank). KAS tetap memakai $kasBankCutoffDate.
+     *
+     * Harus = $bankPeriodeMulaiDate - 1 hari.
+     */
+    public string $bankCutoffDate = '2026-11-01';
+
+    /**
+     * Hari pertama periode ledger rekening BANK (YYYY-MM-DD).
+     *
+     * Batas bawah filter movement BANK. Transaksi BANK sebelum tanggal ini
+     * sudah terserap di saldo statement $bankCutoffDate dan tidak dihitung
+     * sebagai movement.
+     */
+    public string $bankPeriodeMulaiDate = '2026-11-02';
+
+    /**
      * Kategori kas keluar yang dihitung sebagai Biaya Terkontrol (batas 6%
      * omset) di /asset_berjalan. Dipakai juga oleh /kas_keluar supaya penanda
      * kategori di form input tidak pernah beda dengan laporan.

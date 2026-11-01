@@ -132,6 +132,39 @@ class KasBankCutoffService
         return FinanceScopeService::kasBankPeriodeMulaiDate();
     }
 
+    /**
+     * Tanggal baseline statement rekening BANK (Finance::$bankCutoffDate).
+     *
+     * KAS tidak memakai ini: laci kas tidak punya rekening koran, jadi
+     * baseline-nya tetap tanggalCutoff().
+     */
+    public function tanggalCutoffBank(): string
+    {
+        return FinanceScopeService::bankCutoffDate();
+    }
+
+    /** Hari pertama periode ledger rekening BANK (Finance::$bankPeriodeMulaiDate). */
+    public function tanggalMulaiPeriodeBank(): string
+    {
+        return FinanceScopeService::bankPeriodeMulaiDate();
+    }
+
+    /** Periode mulai yang berlaku untuk satu tipe rekening. */
+    private function periodeMulaiUntuk(string $tipe): string
+    {
+        return $tipe === TutupKasirSourceDefinition::TIPE_KAS
+            ? $this->tanggalMulaiPeriode()
+            : $this->tanggalMulaiPeriodeBank();
+    }
+
+    /** Tanggal baseline yang berlaku untuk satu tipe rekening. */
+    private function tanggalCutoffUntuk(string $tipe): string
+    {
+        return $tipe === TutupKasirSourceDefinition::TIPE_KAS
+            ? $this->tanggalCutoff()
+            : $this->tanggalCutoffBank();
+    }
+
     // =====================================================================
     // 1. STATEMENT REFERENCE (baseline bank, bukan transaksi)
     // =====================================================================
@@ -148,7 +181,7 @@ class KasBankCutoffService
      */
     public function statementAt(int $akunId, ?string $tanggal = null)
     {
-        $tanggal ??= $this->tanggalCutoff();
+        $tanggal ??= $this->tanggalCutoffBank();
 
         $db = db_connect();
 
@@ -218,7 +251,7 @@ class KasBankCutoffService
      */
     public function baselineTersedia(int $akunId, ?string $tanggal = null)
     {
-        $tanggal ??= $this->tanggalCutoff();
+        $tanggal ??= $this->tanggalCutoffBank();
         $db        = db_connect();
 
         return $db->table('saldo_awal_kas_bank')
@@ -245,7 +278,10 @@ class KasBankCutoffService
      */
     public function diagnostikBaseline(?string $tanggal = null): array
     {
-        $tanggal     ??= $this->tanggalCutoff();
+        // KAS dan BANK punya cutoff berbeda. Kalau pemanggil memberi tanggal
+        // eksplisit, pakai tanggal itu untuk keduanya (mode historis).
+        $tanggalKas  = $tanggal ?? $this->tanggalCutoff();
+        $tanggalBank = $tanggal ?? $this->tanggalCutoffBank();
         $out         = [];
         $unitOperasi = $this->mapUnitOperasional();
 
@@ -254,12 +290,12 @@ class KasBankCutoffService
             $tipe   = strtoupper((string) $akun->tipe);
 
             if ($tipe === TutupKasirSourceDefinition::TIPE_KAS) {
-                $out[] = $this->diagnostikBaselineKas($akun, $tanggal, $unitOperasi);
+                $out[] = $this->diagnostikBaselineKas($akun, $tanggalKas, $unitOperasi);
 
                 continue;
             }
 
-            $row    = $this->baselineTersedia($akunId, $tanggal);
+            $row    = $this->baselineTersedia($akunId, $tanggalBank);
             $status = $row === null ? null : (is_object($row) ? ($row->status ?? null) : ($row['status'] ?? null));
 
             $out[] = [
@@ -276,10 +312,10 @@ class KasBankCutoffService
                 'baseline_ada'            => $row !== null,
                 'baseline_terverifikasi'  => $status !== null && (string) $status === self::STATEMENT_SUDAH,
                 'saldo'                   => (int) ($row->saldo ?? 0),
-                'tanggal_baseline'        => $row === null ? null : $tanggal,
+                'tanggal_baseline'        => $row === null ? null : $tanggalBank,
                 // Tanggal baris fallback yang SEDANG dipakai statementAt().
                 // Disimpan supaya operator tahu angka 0 itu dari mana.
-                'tertagih'                => $row === null ? $this->tanggalTertagih($akunId, $tanggal) : null,
+                'tertagih'                => $row === null ? $this->tanggalTertagih($akunId, $tanggalBank) : null,
             ];
         }
 
@@ -369,7 +405,7 @@ class KasBankCutoffService
      */
     public function tanggalTertagih(int $akunId, ?string $tanggal = null): ?string
     {
-        $tanggal ??= $this->tanggalCutoff();
+        $tanggal ??= $this->tanggalCutoffBank();
         $row        = $this->statementAt($akunId, $tanggal);
 
         return $row === null ? null : FinanceScopeService::tanggalStr(
@@ -406,10 +442,11 @@ class KasBankCutoffService
      */
     public function lockRekening(int $akunId, ?string $tanggal = null): void
     {
-        $tanggal = $tanggal ?? $this->tanggalCutoff();
+        $tipe    = $this->tipeRekening($akunId);
+        $tanggal = $tanggal ?? $this->tanggalCutoffUntuk($tipe);
         $db      = db_connect();
 
-        $tabel = $this->tipeRekening($akunId) === TutupKasirSourceDefinition::TIPE_KAS
+        $tabel = $tipe === TutupKasirSourceDefinition::TIPE_KAS
             ? 'opening_kas'
             : 'saldo_awal_kas_bank';
 
@@ -485,7 +522,7 @@ class KasBankCutoffService
         return $this->sourceMovement()->netMovement(
             $akunId,
             $unitId,
-            FinanceScopeService::kasBankPeriodeMulaiDate(),
+            $this->periodeMulaiUntuk($this->tipeRekening($akunId)),
             $sampai
         );
     }
@@ -705,9 +742,15 @@ class KasBankCutoffService
             : $alokasi;
 
         // Sama seperti saldoFisik(): $tanggal membatasi KEDUA suku, bukan
-        // hanya opening. Suku mutasi hak mengikuti batas yang sama.
+        // hanya opening. Suku mutasi hak mengikuti batas yang sama, dan
+        // batas bawahnya mengikuti tipe rekening (KAS vs BANK).
         return $pembuka + $this->netMovement($akunId, $unitId, $tanggal)
-            + $this->sourceMovement()->movementHak($akunId, $unitId, $tanggal);
+            + $this->sourceMovement()->movementHak(
+                $akunId,
+                $unitId,
+                $this->periodeMulaiUntuk($this->tipeRekening($akunId)),
+                $tanggal
+            );
     }
 
     /**

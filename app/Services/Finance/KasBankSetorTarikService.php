@@ -223,12 +223,18 @@ class KasBankSetorTarikService
         if ($tanggal === '') {
             return $this->tolakDenganIdempotensi($key, 'Tanggal transaksi wajib diisi.');
         }
-        if ($tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
+        if ($tanggal < max(
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
+            FinanceScopeService::bankPeriodeMulaiDate()
+        )) {
             return $this->tolakDenganIdempotensi($key, sprintf(
                 'Tanggal %s berada sebelum periode operasional baru (%s). Mutasi sebelum '
                 . 'cut-off tidak boleh masuk ledger periode baru.',
                 $tanggal,
-                FinanceScopeService::kasBankPeriodeMulaiDate()
+                max(
+                    FinanceScopeService::kasBankPeriodeMulaiDate(),
+                    FinanceScopeService::bankPeriodeMulaiDate()
+                )
             ));
         }
 

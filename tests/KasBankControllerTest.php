@@ -29,6 +29,7 @@ class KasBankControllerTest extends CIUnitTestCase
     protected $db;
 
     private string $tglCutoff;
+    private string $tglBankCutoff;
     private string $tglMulai;
     private string $tglBerikut;
 
@@ -36,7 +37,14 @@ class KasBankControllerTest extends CIUnitTestCase
     {
         parent::setUp();
         $this->tglCutoff  = FinanceScopeService::kasBankCutoffDate();
-        $this->tglMulai   = FinanceScopeService::kasBankPeriodeMulaiDate();
+        $this->tglBankCutoff = FinanceScopeService::bankCutoffDate();
+        // Tanggal transaksi test harus >= periode BANK juga: semua transfer di
+        // sini menyentuh rekening BANK, dan movement BANK sebelum cut-off bank
+        // sudah terserap di statement.
+        $this->tglMulai   = max(
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
+            FinanceScopeService::bankPeriodeMulaiDate()
+        );
         $this->tglBerikut = date('Y-m-d', strtotime($this->tglMulai . ' +1 day'));
         $this->db = \Config\Database::connect();
         $this->buatSkema();
@@ -3199,7 +3207,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         return $db->table('saldo_awal_kas_bank')
             ->where('akun_kas_bank_id', $akunId)
-            ->where('tanggal', $this->tglCutoff)
+            ->where('tanggal', $this->tglBankCutoff)
             ->get()->getRow();
     }
 
@@ -3210,7 +3218,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $r = $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '5',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '10000000',
             'keterangan'       => 'Saldo riil cut-off tanpa verifikasi',
         ]);
@@ -3240,7 +3248,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $r = $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '6',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '0',
             'keterangan'       => 'Rekening kosong pada cut-off',
         ]);
@@ -3262,7 +3270,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         // Saldo awal rekening shared diinput lebih dulu, tanpa verifikasi.
         $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '5',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '20000000',
         ]);
         $this->assertSame('', $this->flashGagal());
@@ -3298,7 +3306,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $r = $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '5',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '15000000',
             'status'           => \App\Services\Finance\KasBankCutoffService::STATEMENT_SUDAH,
         ]);
@@ -3319,7 +3327,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '5',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '12000000',
         ]);
         $this->assertSame('', $this->flashGagal());
@@ -3328,7 +3336,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         // Proses terpisah: POST kedua khusus menaikkan status.
         $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '5',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '12000000',
             'status'           => \App\Services\Finance\KasBankCutoffService::STATEMENT_SUDAH,
         ]);
@@ -3358,7 +3366,7 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $r2 = $this->post('kas_bank/saldo-awal/save', [
             'akun_kas_bank_id' => '5',
-            'tanggal'          => $this->tglCutoff,
+            'tanggal'          => $this->tglBankCutoff,
             'saldo'            => '10000000',
         ]);
         $r2->assertStatus(302);
@@ -3415,12 +3423,16 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
 
         $this->assertSame('2026-10-05', $cfg->cutoffDate, 'Cutoff Finance global');
         $this->assertSame('2026-10-06', $cfg->periodeMulaiDate, 'Periode Finance global');
-        $this->assertSame('2026-10-07', $cfg->kasBankCutoffDate, 'Cutoff Kas/Bank');
-        $this->assertSame('2026-10-08', $cfg->kasBankPeriodeMulaiDate, 'Periode Kas/Bank');
+        $this->assertSame('2026-10-09', $cfg->kasBankCutoffDate, 'Cutoff Kas');
+        $this->assertSame('2026-10-10', $cfg->kasBankPeriodeMulaiDate, 'Periode Kas');
+        $this->assertSame('2026-11-01', $cfg->bankCutoffDate, 'Cutoff Bank');
+        $this->assertSame('2026-11-02', $cfg->bankPeriodeMulaiDate, 'Periode Bank');
 
         $this->assertSame($cfg->cutoffDate, FinanceScopeService::cutoffDate());
         $this->assertSame($cfg->periodeMulaiDate, FinanceScopeService::periodeMulaiDate());
         $this->assertSame($cfg->kasBankCutoffDate, FinanceScopeService::kasBankCutoffDate());
         $this->assertSame($cfg->kasBankPeriodeMulaiDate, FinanceScopeService::kasBankPeriodeMulaiDate());
+        $this->assertSame($cfg->bankCutoffDate, FinanceScopeService::bankCutoffDate());
+        $this->assertSame($cfg->bankPeriodeMulaiDate, FinanceScopeService::bankPeriodeMulaiDate());
     }
 }

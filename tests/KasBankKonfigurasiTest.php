@@ -80,7 +80,8 @@ class KasBankKonfigurasiTest extends CIUnitTestCase
                 idunit INTEGER PRIMARY KEY AUTO_INCREMENT,
                 NAMA_UNIT TEXT NULL,
                 kode_unit TEXT NULL,
-                is_operational TINYINT(1) NOT NULL DEFAULT 1)');
+                is_operational TINYINT(1) NOT NULL DEFAULT 1,
+                is_trial TINYINT(1) NOT NULL DEFAULT 0)');
         $this->q('CREATE TABLE bank (
                 idbank VARCHAR(20) PRIMARY KEY, jenis_bank TEXT NULL,
                 nama_bank TEXT NULL, norek TEXT NULL, atas_nama TEXT NULL)');
@@ -111,7 +112,8 @@ class KasBankKonfigurasiTest extends CIUnitTestCase
 
     private function seed(): void
     {
-        $cutoff = FinanceScopeService::kasBankCutoffDate();
+        $cutoff     = FinanceScopeService::kasBankCutoffDate();
+        $bankCutoff = FinanceScopeService::bankCutoffDate();
 
         // Unit 1 & 2 operasional; unit 50 = Head Office non-operasional.
         $this->q("INSERT INTO unit (idunit, NAMA_UNIT, kode_unit, is_operational)
@@ -135,14 +137,14 @@ class KasBankKonfigurasiTest extends CIUnitTestCase
         $this->q("INSERT INTO opening_kas (akun_kas_bank_id, unit_id, tanggal, opening, keterangan)
                   VALUES (1, 1, '$cutoff', 1500000, 'Baseline Probolinggo')");
 
-        // Statement bank:
-        //   - akun 4: baseline PERSIS cut-off tapi BELUM_VERIFIKASI (bukan blocker).
-        //   - akun 5: hanya baris lama 2026-10-05 -> baseline cut-off BELUM ADA
+        // Statement bank memakai cut-off BANK, bukan cut-off KAS:
+        //   - akun 4: baseline PERSIS cut-off bank tapi BELUM_VERIFIKASI (bukan blocker).
+        //   - akun 5: hanya baris lama 2026-10-05 -> baseline cut-off bank BELUM ADA
         //     (blocker, fallback tertagih adalah 2026-10-05).
         //   - akun 6 & 7: tanpa baseline sama sekali.
         $this->q("INSERT INTO saldo_awal_kas_bank (akun_kas_bank_id, tanggal, saldo, status, keterangan)
                   VALUES
-                  (4, '$cutoff', 25000000, 'BELUM_VERIFIKASI', 'statement BCA'),
+                  (4, '$bankCutoff', 25000000, 'BELUM_VERIFIKASI', 'statement BCA'),
                   (5, '2026-10-05', 5000000, 'SUDAH', 'statement BNI lama')");
 
         // Akun 6 shared -> wajib punya alokasi supaya cek "shared tanpa
@@ -222,7 +224,7 @@ class KasBankKonfigurasiTest extends CIUnitTestCase
      */
     public function testRekeningBankTetapDiperiksaSesuaiAturanRekening(): void
     {
-        $cutoff = FinanceScopeService::kasBankCutoffDate();
+        $cutoff = FinanceScopeService::bankCutoffDate();
 
         $out  = $this->diagnostik();
         $warn = $this->baselineWarning($out);
@@ -240,13 +242,11 @@ class KasBankKonfigurasiTest extends CIUnitTestCase
     /** Jumlah dan judul warning baseline hanya berisi blocker yang sebenarnya. */
     public function testDiagnostikWarningJumlahDanJudul(): void
     {
-        $cutoff = FinanceScopeService::kasBankCutoffDate();
-
         $out  = $this->diagnostik();
         $warn = $this->baselineWarning($out);
 
         $this->assertSame(
-            '3 rekening belum punya baseline untuk ' . $cutoff,
+            '3 rekening belum punya baseline cut-off',
             $warn['judul']
         );
         $this->assertCount(3, $warn['detail']);

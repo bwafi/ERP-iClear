@@ -11,9 +11,40 @@ class ModelBank extends Model
     protected $returnType = 'object';
     protected $allowedFields = ['idbank', 'nama_bank', 'atas_nama', 'norek', 'gambar_qris', 'created_on', 'updated_on'];
 
+    /**
+     * Bank yang punya rekening aktif di `akun_kas_bank`.
+     *
+     * Dipakai SEMUA dropdown transaksi. Bank dengan rekening nonaktif (atau
+     * belum punya rekening) tidak boleh dipilih: transaksi sumbernya tetap
+     * tersimpan, tetapi posting ledger gagal karena akun tujuannya tidak ada.
+     */
     public function getBank()
     {
+        if (! $this->db->tableExists('akun_kas_bank')) {
+            return $this->findAll();
+        }
 
+        return $this->select('bank.*')
+            ->join(
+                'akun_kas_bank',
+                'akun_kas_bank.bank_idbank = bank.idbank'
+                . ' AND akun_kas_bank.tipe = \'BANK\''
+                . ' AND akun_kas_bank.status = \'aktif\'',
+                'inner'
+            )
+            ->distinct()
+            ->orderBy('bank.idbank', 'ASC')
+            ->findAll();
+    }
+
+    /**
+     * SEMUA bank, termasuk yang belum/tidak punya rekening aktif.
+     *
+     * HANYA untuk halaman master (`/bank` dan `/kas_bank/akun`) supaya
+     * rekening baru tetap bisa didaftarkan. Jangan dipakai di form transaksi.
+     */
+    public function getBankSemua()
+    {
         return $this->findAll();
     }
 

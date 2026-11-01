@@ -71,10 +71,16 @@ class SharedAccountSeparationTest extends CIUnitTestCase
         );
     }
 
-    /** Hari pertama periode KasBank — tanggal semua mutasi di test ini. */
+    /**
+     * Tanggal semua mutasi di test ini.
+     *
+     * Diambil dari periode BANK karena setiap test di sini menyetor ke
+     * rekening BANK, dan movement BANK sebelum periode bank sudah terserap
+     * di statement cut-off BANK. Tanggal ini juga >= periode KAS.
+     */
     private static function tanggalPeriode(): string
     {
-        return \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate();
+        return \App\Services\Finance\FinanceScopeService::bankPeriodeMulaiDate();
     }
 
     private function laci(int $akunKas, int $unit, int $nominal = 10_000_000): void

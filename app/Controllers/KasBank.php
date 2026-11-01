@@ -704,7 +704,7 @@ class KasBank extends BaseController
                     '%s (#%d) — belum ada baris statement pada %s%s',
                     $b['nama_akun'],
                     $b['akun_id'],
-                    FinanceScopeService::kasBankCutoffDate(),
+                    FinanceScopeService::bankCutoffDate(),
                     $context
                 );
             }
@@ -713,9 +713,9 @@ class KasBank extends BaseController
             // melakukan hal yang memang tidak bisa dilakukan di form itu.
             $aksi = [];
             if ($adaBank) {
-                $aksi[] = 'Rekening bank: input SALDO RIIL akhir ' . FinanceScopeService::kasBankCutoffDate()
+                $aksi[] = 'Rekening bank: input SALDO RIIL akhir ' . FinanceScopeService::bankCutoffDate()
                     . ' di ' . base_url('kas_bank/akun') . ' (tab Saldo awal). Saldo riil itu sudah memabsorpsi transaksi 1-'
-                    . FinanceScopeService::kasBankCutoffDate()
+                    . FinanceScopeService::bankCutoffDate()
                     . ', jadi jangan input hasil SUM transaksi legacy.';
             }
             if ($adaKasus) {
@@ -726,7 +726,7 @@ class KasBank extends BaseController
 
             $out[] = [
                 'level'  => 'warning',
-                'judul'  => count($baselineBelum) . ' rekening belum punya baseline untuk ' . FinanceScopeService::kasBankCutoffDate(),
+                'judul'  => count($baselineBelum) . ' rekening belum punya baseline cut-off',
                 'detail' => $detail,
                 'aksi'   => implode(' ', $aksi),
             ];
@@ -786,7 +786,7 @@ class KasBank extends BaseController
             'akun_scope'        => $this->AkunScope->petaAccountScope($akun),
             'akun_jenis'        => $jenisRek,
             'saldo_fisik_akun'  => $fisikSaldo,
-            'bank'              => $this->BankModel->getBank(),
+            'bank'              => $this->BankModel->getBankSemua(),
             'no_akun'           => $this->NoAkunModel->getAkun(),
             'saldo_awal'        => $this->SaldoAwalModel->findAll(),
             'alokasi'           => $this->AlokasiModel->indexByAkun(),
@@ -796,6 +796,7 @@ class KasBank extends BaseController
             'opening_kas_by_akun'   => $openingKasById,
             'opening_kas_belum'    => $openingKasBelum,
             'opening_kas_cutoff'    => FinanceScopeService::kasBankCutoffDate(),
+            'bank_cutoff'           => FinanceScopeService::bankCutoffDate(),
             'bisa_input'            => $this->canInput(),
             'body'              => 'kas_bank/akun',
         ]);
@@ -1128,10 +1129,10 @@ class KasBank extends BaseController
         // `getByAkun()` tanpa tanggal sudah tidak unambiguously benar: dia
         // bisa saja update statement dari periode lain. Migrasi ini membuat
         // edit selalu menyasar baris (akun, tanggal cut-off) yang benar.
-        if ($tanggal !== $cutoff->tanggalCutoff()) {
+        if ($tanggal !== $cutoff->tanggalCutoffBank()) {
             return $this->gagal(
-                'Tanggal statement harus ' . $cutoff->tanggalCutoff()
-                . ' (tanggal cut-off). Tanggal yang dipilih: ' . $tanggal . '.'
+                'Tanggal statement harus ' . $cutoff->tanggalCutoffBank()
+                . ' (tanggal cut-off bank). Tanggal yang dipilih: ' . $tanggal . '.'
             );
         }
 
@@ -1399,7 +1400,7 @@ class KasBank extends BaseController
         // dengan saveTransfer() di file ini. Catatan lengkap soal kenapa tidak
         // ada batas atas "tanggal <= hari ini" ada di saveTransfer().
         $tanggal = FinanceScopeService::tanggalStr($tanggal);
-        $mulai   = FinanceScopeService::kasBankPeriodeMulaiDate();
+        $mulai   = FinanceScopeService::bankPeriodeMulaiDate();
 
 
         if ($tanggal < $mulai) {
@@ -2041,10 +2042,16 @@ class KasBank extends BaseController
 
         // Setor ke rekening bank tidak lagi memerlukan statement terverifikasi
         // (keputusan bisnis 2026-10-15): saldo bank dipakai apa adanya.
+        // Tanggal harus >= periode KAS DAN BANK: kalau jatuh di antara dua
+        // cutoff, leg KAS tercatat tetapi leg BANK terserap statement.
         $tanggal = (string) $input['tanggal'];
-        if ($tanggal !== '' && $tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
+        $mulai   = max(
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
+            FinanceScopeService::bankPeriodeMulaiDate()
+        );
+        if ($tanggal !== '' && $tanggal < $mulai) {
             $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
-                . FinanceScopeService::kasBankPeriodeMulaiDate() . ').';
+                . $mulai . ').';
             $bisaSubmit = false;
         }
 
@@ -2159,9 +2166,13 @@ class KasBank extends BaseController
         }
 
         $tanggal = (string) $input['tanggal'];
-        if ($tanggal !== '' && $tanggal < FinanceScopeService::kasBankPeriodeMulaiDate()) {
+        $mulai   = max(
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
+            FinanceScopeService::bankPeriodeMulaiDate()
+        );
+        if ($tanggal !== '' && $tanggal < $mulai) {
             $blokir[] = 'Tanggal transaksi sebelum periode operasional baru ('
-                . FinanceScopeService::kasBankPeriodeMulaiDate() . ').';
+                . $mulai . ').';
             $bisaSubmit = false;
         }
 
@@ -2239,7 +2250,12 @@ class KasBank extends BaseController
     private function infoCutoff(): array
     {
         $cutoff     = FinanceScopeService::kasBankCutoffDate();
-        $mulai      = FinanceScopeService::kasBankPeriodeMulaiDate();
+        // Setor/Tarik menyentuh KAS dan BANK sekaligus: tanggal minimum harus
+        // lewat KEDUA periode, kalau tidak leg BANK terserap statement.
+        $mulai      = max(
+            FinanceScopeService::kasBankPeriodeMulaiDate(),
+            FinanceScopeService::bankPeriodeMulaiDate()
+        );
         $tanpaUnit  = KasBankCutoffService::unitTanpaClosingCutoff();
         $namaTanpa  = [];
 
@@ -2629,7 +2645,7 @@ class KasBank extends BaseController
         // dan karena `kasBankPeriodeMulaiDate()` = cutoff + 1 hari, seluruh fitur
         // mati selama periode baru belum dibuka.
         $tanggal = FinanceScopeService::tanggalStr($tanggal);
-        $mulai   = FinanceScopeService::kasBankPeriodeMulaiDate();
+        $mulai   = FinanceScopeService::bankPeriodeMulaiDate();
 
         if ($tanggal < $mulai) {
             return $this->gagal('Tanggal ' . $tanggal . ' berada sebelum periode operasional baru (' . $mulai . '). '
