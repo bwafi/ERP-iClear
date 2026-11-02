@@ -9,8 +9,9 @@ Status: disusun dari kode yang benar-benar dibaca. Metode: verifikasi langsung t
 - Volume baseline 2026-10-26: **88 controller, 127 model, 86 service, 151 file migration PHP, 219 view PHP, 87 file test**.
 
 ## 2. Autentikasi & Otorisasi (VERIFIKASI)
-- Filter global `AuthFilter` (`app/Filters/AuthFilter.php`): hanya memeriksa `session()->get('logged_in') === true`. Bila tidak, redirect ke `/login`. **Tidak ada cek menu/role global di filter.**
+- Filter global `AuthFilter` (`app/Filters/AuthFilter.php`): hanya memeriksa `session()->get('logged_in') === true`. Bila tidak, menyimpan path halaman yang diminta ke `session('redirect_after_login')` lalu redirect ke `/login`. **Tidak ada cek menu/role global di filter.**
 - Login (`app/Controllers/Auth.php::proses_login`): username dicocokkan ke kolom `NOID` / `KTP` / `EMAIL` (`ModelAuth::cekUsername`). Password dicek dengan `password_verify` terhadap `akun.PASSWORD` (hash bcrypt).
+- Setelah login berhasil, `LoginRedirectService` memakai path tersimpan (hanya path internal; bukan URL eksternal, protocol-relative, atau halaman login), menghapusnya, lalu redirect ke sana. Tanpa path tersimpan, redirect ke `/`. Login gagal tidak menyentuh nilai tersimpan.
 - Setelah login, session diisi: `ID_AKUN, NAMA, NOID, KTP, EMAIL, ID_JABATAN, NAMA_JABATAN, ID_UNIT, NAMA_UNIT, logged_in=true`. `ID_UNIT` di-decode JSON dan diambil elemen pertama bila array.
 - Peran (role) disimpan di kolom `akun.ROLES` (JSON array idmenu) dan `jabatan.ROLES_JABATAN` (JSON). Menu yang boleh ditampilkan diambil lewat `Auth::getRoles` (query tabel `menu`).
 - **Konsekuensi penting [VERIFIKASI]**: otorisasi berbasis hak akses menu/role TIDAK diterapkan secara global pada seluruh route. Banyak controller melakukan cek role/unit secara manual di dalam method (contoh: `Kas_Keluar::bebasPilihUnit`, `unitFilterTerpilih` memakai `ID_JABATAN` dan `FinanceScopeService`). Ini berarti security bergantung pada disiplin per-controller, bukan satu gerbang terpusat.

@@ -2,87 +2,151 @@
 
 namespace App\Controllers;
 
-use App\Models\ModelJadwalMasuk;
 use App\Models\ModelAuth;
+use App\Models\ModelPresensiRoster;
 use App\Models\ModelUnit;
+use App\Services\Presensi\PresensiScopeService;
+use App\Services\Presensi\RosterService;
 
 class JadwalMasuk extends BaseController
 {
-    protected $JadwalMasukModel;
     protected $AuthModel;
     protected $UnitModel;
 
     public function __construct()
     {
-        $this->JadwalMasukModel = new ModelJadwalMasuk();
         $this->AuthModel = new ModelAuth();
         $this->UnitModel = new ModelUnit();
     }
 
     public function index()
     {
-        $akun = $this->AuthModel->getById(session('ID_AKUN'));
-        $data = [
-            'akun' => $akun,
-            'body' => 'absensi/jadwal_masuk',
-            'jadwal' => $this->JadwalMasukModel->getAll(),
-            'unit' => $this->UnitModel->getUnit()
-        ];
-        return view('template', $data);
-    }
+        $jabatan    = (int) session('ID_JABATAN');
+        $unitSesi   = (int) session('ID_UNIT');
+        $scope      = new PresensiScopeService();
+        $bolehSemua = in_array($jabatan, config('Presensi')->rosterSemuaUnit, true);
 
-    public function insert_jadwal()
-    {
-        $data = $this->request->getPost([
-            'nama_jadwal',
-            'jam_masuk',
-            'jam_pulang',
-            'total_jamkerja',
-            'jml_wfh',
-            'jml_wfo',
-            'jenis',
-            'toleransi',
-            'unit_idunit'
+        $bulan = (string) ($this->request->getGet('bulan') ?: date('Y-m'));
+        if (! preg_match('/^\d{4}-\d{2}$/', $bulan)) {
+            $bulan = date('Y-m');
+        }
+
+        $unitFilter = $bolehSemua
+            ? (int) ($this->request->getGet('unit') ?: 0)
+            : $unitSesi;
+
+        $pegawai = $unitFilter === 0
+            ? $this->AuthModel->getAkun()
+            : $this->AuthModel->getAkun($unitFilter);
+
+        $akunId = (int) ($this->request->getGet('akun') ?: 0);
+        $valid  = array_map(static fn ($row) => (int) $row->ID_AKUN, $pegawai);
+        if ($akunId === 0 || ! in_array($akunId, $valid, true)) {
+            $akunId = $valid[0] ?? 0;
+        }
+
+        $roster = $akunId === 0 ? [] : (new ModelPresensiRoster())
+            ->getRentang($akunId, $bulan . '-01', date('Y-m-t', strtotime($bulan . '-01')));
+
+        return view('template', [
+            'body'               => 'absensi/jadwal_masuk',
+            'bulan'              => $bulan,
+            'unit'               => $this->UnitModel->getUnit(),
+            'pegawai'            => $pegawai,
+            'akunId'             => $akunId,
+            'roster'             => $roster,
+            'bolehSemuaUnit'     => $bolehSemua,
+            'bolehKoreksiLampau' => $scope->bolehKoreksiLampau($jabatan),
         ]);
-
-        if ($this->JadwalMasukModel->insert($data)) {
-            return redirect()->back()->with('sukses', 'Jadwal berhasil ditambahkan.');
-        } else {
-            return redirect()->back()->with('gagal', 'Gagal menambahkan jadwal.');
-        }
     }
 
-    public function update_jadwal()
+    public function terapkan()
     {
-        $id = $this->request->getPost('idjadwal_masuk');
-
-        $data = $this->request->getPost([
-            'nama_jadwal',
-            'jam_masuk',
-            'jam_pulang',
-            'total_jamkerja',
-            'jml_wfh',
-            'jml_wfo',
-            'jenis',
-            'toleransi',
-            'unit_idunit'
-        ]);
-
-        if ($this->JadwalMasukModel->update($id, $data)) {
-            return redirect()->back()->with('sukses', 'Jadwal berhasil diperbarui.');
-        } else {
-            return redirect()->back()->with('gagal', 'Gagal memperbarui jadwal.');
+        $akun = $this->AuthModel->getById((int) $this->request->getPost('akun_idakun'));
+        if (! $akun) {
+            return redirect()->back()->with('gagal', 'Pegawai tidak ditemukan.');
         }
+
+        $jabatan  = (int) session('ID_JABATAN');
+        $unitSesi = (int) session('ID_UNIT');
+        $scope    = new PresensiScopeService();
+
+        if (! $scope->bolehKelolaUnit($jabatan, $unitSesi, (int) $akun->ID_UNIT)) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengelola roster unit ini.');
+        }
+
+        $bulan = (string) $this->request->getPost('bulan');
+        if (! $scope->bolehKoreksiLampau($jabatan) && $bulan < date('Y-m')) {
+            return redirect()->back()->with('gagal', 'Roster bulan lampau hanya bisa diubah Admin Root.');
+        }
+
+        try {
+            $jumlah = (new RosterService())->terapkanBulan(
+                (int) $akun->ID_AKUN,
+                $bulan,
+                (array) $this->request->getPost('pola'),
+                (int) session('ID_AKUN')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('gagal', $e->getMessage());
+        }
+
+        return redirect()->back()->with('sukses', $jumlah . ' tanggal roster ditambahkan.');
     }
 
-    public function delete_jadwal()
+    public function simpan()
     {
-        $id = $this->request->getPost('idjadwal_masuk');
-
-        if ($this->JadwalMasukModel->delete($id)) {
-            return redirect()->back()->with('sukses', 'Jadwal berhasil dihapus.');
-        } else {
-            return redirect()->back()->with('gagal', 'Gagal menghapus jadwal.');
+        $akun = $this->AuthModel->getById((int) $this->request->getPost('akun_idakun'));
+        if (! $akun) {
+            return redirect()->back()->with('gagal', 'Pegawai tidak ditemukan.');
         }
+
+        $jabatan  = (int) session('ID_JABATAN');
+        $unitSesi = (int) session('ID_UNIT');
+        $scope    = new PresensiScopeService();
+
+        if (! $scope->bolehKelolaUnit($jabatan, $unitSesi, (int) $akun->ID_UNIT)) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak mengelola roster unit ini.');
+        }
+
+        $shift      = (array) $this->request->getPost('shift');
+        $keterangan = (array) $this->request->getPost('keterangan');
+        $hariIni    = date('Y-m-d');
+
+        // Validasi semua baris dulu supaya tidak ada simpan setengah jalan.
+        foreach ($shift as $tanggal => $nilai) {
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $tanggal)) {
+                return redirect()->back()->with('gagal', 'Tanggal roster tidak valid.');
+            }
+            if ($tanggal < $hariIni && ! $scope->bolehKoreksiLampau($jabatan)) {
+                return redirect()->back()->with('gagal', 'Roster tanggal lampau hanya bisa diubah Admin Root.');
+            }
+            if (! in_array((string) $nilai, ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN'], true)) {
+                return redirect()->back()->with('gagal', 'Shift roster tidak valid.');
+            }
+            if ((string) $nilai === 'IZIN' && trim((string) ($keterangan[$tanggal] ?? '')) === '') {
+                return redirect()->back()->with('gagal', 'Keterangan izin wajib diisi.');
+            }
+        }
+
+        $service = new RosterService();
+        $db      = db_connect();
+        $db->transStart();
+        foreach ($shift as $tanggal => $nilai) {
+            $service->simpanTanggal(
+                (int) $akun->ID_AKUN,
+                $tanggal,
+                (string) $nilai,
+                (string) ($keterangan[$tanggal] ?? ''),
+                (int) session('ID_AKUN')
+            );
+        }
+        $db->transComplete();
+
+        if (! $db->transStatus()) {
+            return redirect()->back()->with('gagal', 'Roster gagal disimpan.');
+        }
+
+        return redirect()->back()->with('sukses', 'Roster berhasil disimpan.');
     }
 }

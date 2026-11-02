@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Models\ModelAuth;
+use App\Services\Auth\LoginRedirectService;
 
 class Auth extends BaseController
 
@@ -15,7 +16,6 @@ class Auth extends BaseController
     {
         $this->ModelAuth = new ModelAuth();
         $this->session = \Config\Services::session();
-        $this->session->start();
     }
 
     public function login()
@@ -101,7 +101,7 @@ class Auth extends BaseController
                 $this->session->set($SessionGedung);
                 session()->setFlashdata('success', 'Selamat Anda Berhasil Login');
                 // echo json_encode($SessionGedung);
-                return redirect()->to(base_url());
+                return redirect()->to((new LoginRedirectService())->ambil());
                 // }
             } else {
                 echo "Password salah";

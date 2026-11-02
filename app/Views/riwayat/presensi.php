@@ -125,6 +125,8 @@
                                     data-jadwalpulang="<?= $row->jam_jadwal_pulang ?>"
                                     data-ip="<?= $row->ip ?>"
                                     data-nama="<?= $row->NAMA_AKUN ?>"
+                                    data-idpresensi="<?= (int) $row->idpresensi ?>"
+                                    data-sumber="<?= esc((string) $row->sumber) ?>"
                                     data-foto="<?= $row->foto ?>"
                                     data-long="<?= $row->long ?>"
                                     data-jarak="<?= $row->jarak ?>"
@@ -338,6 +340,11 @@
                 const waktuMasukDate = waktuMasuk ? new Date(waktuMasuk) : null;
                 const waktuPulangDate = waktuPulang ? new Date(waktuPulang) : null;
                 const fotopulang = e.target.getAttribute('data-fotopulang');
+                const idpresensi = e.target.getAttribute('data-idpresensi');
+                const sumber = e.target.getAttribute('data-sumber');
+                const urlFoto = (path, pulang) => sumber === 'mobile'
+                    ? "<?= base_url('absen/foto/') ?>" + idpresensi + (pulang ? '/pulang' : '')
+                    : "<?= base_url('foto_presensi/') ?>" + path;
 
                 document.getElementById('detail_nama_map').textContent = nama;
                 document.getElementById('detail_jarak_map').textContent = jarak + ' meter';
@@ -359,7 +366,7 @@
                             <li class="list-group-item"><strong>Foto Kehadiran:</strong><br>`;
 
                     if (foto) {
-                        const imgSrc = "<?= base_url('foto_presensi/') ?>" + foto;
+                        const imgSrc = urlFoto(foto);
                         konten += `
                     <center>
                     
@@ -374,7 +381,7 @@
 
                     <li class="list-group-item"><strong>Foto Kepulangan:</strong><br>`;
                     if (fotopulang) {
-                        const imgSrc = "<?= base_url('foto_presensi/') ?>" + fotopulang;
+                        const imgSrc = urlFoto(fotopulang, true);
                         konten += `
                     <center>
                         <img src="${imgSrc}" alt="Foto Absen"

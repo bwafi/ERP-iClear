@@ -11,6 +11,7 @@ class ModelIzin extends Model
     protected $returnType = 'object';
     protected $allowedFields = [
         'idizin',
+        'akun_idakun',
         'alasan',
         'status',
         'tanggal_mulai',
@@ -65,6 +66,26 @@ class ModelIzin extends Model
         return $this->select('izin.*, jenis_perizinan.jenis_izin')
             ->join('jenis_perizinan', 'jenis_perizinan.idjenis_perizinan = izin.jenis_perizinan_idjenis_perizinan')
             ->where('pegawai_uuid', $uuid)
+            ->findAll();
+    }
+
+    public function getByAkun(int $akunId)
+    {
+        return $this->select('izin.*, jenis_perizinan.jenis_izin')
+            ->join('jenis_perizinan', 'jenis_perizinan.idjenis_perizinan = izin.jenis_perizinan_idjenis_perizinan', 'left')
+            ->where('akun_idakun', $akunId)
+            ->orderBy('idizin', 'DESC')
+            ->findAll();
+    }
+
+    public function getWithAkun()
+    {
+        return $this->select('izin.*, akun.NAMA_AKUN, unit.NAMA_UNIT, jenis_perizinan.jenis_izin')
+            ->join('akun', 'akun.ID_AKUN = izin.akun_idakun', 'left')
+            ->join('unit', 'unit.idunit = akun.ID_UNIT', 'left')
+            ->join('jenis_perizinan', 'jenis_perizinan.idjenis_perizinan = izin.jenis_perizinan_idjenis_perizinan', 'left')
+            ->orderBy('izin.status', 'ASC')
+            ->orderBy('izin.idizin', 'DESC')
             ->findAll();
     }
 }

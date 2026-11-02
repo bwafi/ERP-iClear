@@ -29,8 +29,26 @@ class ModelPresensi extends Model
         'updated_at',
         'jarak',
         'status_kehadiran',
-        'keterangan'
+        'keterangan',
+        'sesi',
+        'sumber',
     ];
+
+    /** @return list<object> */
+    public function getHariIniByAkun(int $akunId, string $tanggal): array
+    {
+        return $this->where('akun_idakun', $akunId)
+            ->where('DATE(waktu_masuk)', $tanggal)
+            ->findAll();
+    }
+
+    public function getByAkunTanggalSesi(int $akunId, string $tanggal, string $sesi)
+    {
+        return $this->where('akun_idakun', $akunId)
+            ->where('DATE(waktu_masuk)', $tanggal)
+            ->where('sesi', $sesi)
+            ->first();
+    }
 
     public function getAll()
     {

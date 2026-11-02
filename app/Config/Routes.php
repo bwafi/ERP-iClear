@@ -361,12 +361,17 @@ $routes->get('template_tugas', 'TemplateTugas::index');
 $routes->post('insert_tugas_template', 'TemplateTugas::insert');
 $routes->post('update_tugas_template', 'TemplateTugas::update');
 
-//jadwal masuk
+//roster absensi
 $routes->get('jadwal_masuk', 'JadwalMasuk::index', ['filter' => 'auth']);
-$routes->get('/jadwalmasuk', 'JadwalMasuk::index');
-$routes->post('/insert_jadwal', 'JadwalMasuk::insert_jadwal');
-$routes->post('/update_jadwal', 'JadwalMasuk::update_jadwal');
-$routes->post('/delete_jadwal', 'JadwalMasuk::delete_jadwal');
+$routes->post('jadwal_masuk/terapkan', 'JadwalMasuk::terapkan', ['filter' => 'auth']);
+$routes->post('jadwal_masuk/simpan', 'JadwalMasuk::simpan', ['filter' => 'auth']);
+
+//absen mobile
+$routes->get('absen', 'AbsenMobile::index', ['filter' => 'auth']);
+$routes->post('absen/masuk', 'AbsenMobile::masuk', ['filter' => 'auth']);
+$routes->post('absen/pulang', 'AbsenMobile::pulang', ['filter' => 'auth']);
+$routes->get('absen/foto/(:num)', 'AbsenMobile::foto/$1', ['filter' => 'auth']);
+$routes->get('absen/foto/(:num)/pulang', 'AbsenMobile::fotoPulang/$1', ['filter' => 'auth']);
 
 
 //absensi
@@ -383,9 +388,14 @@ $routes->get('riwayat_presensi', 'RiwayatPresensi::index', ['filter' => 'auth'])
 $routes->get('semua_riwayat_presensi', 'RiwayatPresensi::semua_riwayat', ['filter' => 'auth']);
 $routes->post('export/semua_presensi', 'RiwayatPresensi::export_semua_presensi', ['filter' => 'auth']);
 
-//approval presensi
-$routes->get('approval_presensi', 'RiwayatPresensi::approval_presensi', ['filter' => 'auth']);
-$routes->post('presensi/update_status_kehadiran', 'RiwayatPresensi::submit_approval_presensi', ['filter' => 'auth']);
+//approval presensi (hanya izin/sakit/cuti; absensi langsung final)
+$routes->get('approval_presensi', 'Izin::approval', ['filter' => 'auth']);
+$routes->post('approval_presensi/putuskan', 'Izin::putuskan', ['filter' => 'auth']);
+
+//pengajuan izin/sakit/cuti
+$routes->get('pengajuan_izin', 'Izin::index', ['filter' => 'auth']);
+$routes->post('pengajuan_izin/simpan', 'Izin::simpan', ['filter' => 'auth']);
+$routes->get('pengajuan_izin/surat/(:num)', 'Izin::surat/$1', ['filter' => 'auth']);
 
 //absen manual
 $routes->post('kirim/lokasi_masuk_manual', 'RiwayatPresensi::submit_absen_manual', ['filter' => 'auth']);

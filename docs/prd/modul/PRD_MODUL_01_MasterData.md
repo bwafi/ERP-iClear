@@ -24,7 +24,7 @@ Menyediakan data master yang dipakai lintas modul: akun pengguna & jabatan, unit
 1. GET `/login` → `Auth::login` render form.
 2. POST `/proses_login` → `Auth::proses_login`: cari akun via `ModelAuth::cekUsername` (`NOID|KTP|EMAIL`).
 3. `password_verify(PASSWORD)` → set sesi (`ID_AKUN, ID_JABATAN, ID_UNIT, NAMA_UNIT, logged_in=true`).
-4. Redirect `/`.
+4. Redirect ke halaman tujuan yang disimpan `AuthFilter` (`session('redirect_after_login')`), atau `/` bila tidak ada. Session tujuan dihapus setelah dipakai.
 ### 4.2 Pegawai & Jabatan
 CRUD via `Pegawai::insert/update/delete`; jabatan via `insert/update_jabatan`; reset password via `reset_password`. Upload foto KTP/KK.
 ### 4.3 Unit, Produk, Handphone, Kategori
@@ -45,6 +45,7 @@ CRUD; pelanggan mendukung ekspor/impor Excel, pencarian, region; bundle menyimpa
 10. NoAkun: `no_akun` unik. — `NoAkun::insert`
 11. Bundle: simpan `bundle`+`detail_bundle`; update sinkronkan detail; delete hapus bundle+detail. — `Bundle::insert/update/delete`
 12. **Tidak ada transaksi DB eksplisit** untuk operasi multi-tabel (risiko data parsial). — pemeriksaan seluruh controller grup A
+13. Redirect setelah login memakai halaman tujuan yang disimpan `AuthFilter`; hanya path internal yang diterima, dan nilai dihapus setelah dipakai. — `LoginRedirectService`
 
 ### Alur Alternatif
 - Multi-gedung: `Auth::setGedung` menyimpan `ID_GEDUNG` dan tetap `logged_in=true`.
@@ -52,6 +53,7 @@ CRUD; pelanggan mendukung ekspor/impor Excel, pencarian, region; bundle menyimpa
 
 ## 6. Acceptance Criteria
 - [ ] User dapat login, ganti password, logout.
+- [ ] User yang membuka halaman ber-filter `auth` dikembalikan ke halaman itu setelah login berhasil.
 - [ ] CRUD pegawai & jabatan berfungsi; reset password mengubah password ke nilai default.
 - [ ] IMEI duplikat ditolak saat insert/update HP.
 - [ ] Duplikat NIK/No HP ditolak saat input pelanggan (AJAX).

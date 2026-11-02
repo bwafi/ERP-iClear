@@ -1,5 +1,5 @@
-Garansi Claim Detail Prefill (Tests\GaransiClaimDetailPrefill)
- [x] Sparepart service tampil dengan pilihan klaim
- [x] Service tanpa sparepart menampilkan pesan kosong
- [x] Modal pengganti memakai desain pemilih sparepart
+Presensi Schema Migration (Tests\PresensiSchemaMigration)
+ [x] Roster dan kolom presensi terbentuk
+ [x] Dijalankan dua kali tetap idempoten
+ [x] Tanpa tabel presensi tidak membuat tabel baru
 

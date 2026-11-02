@@ -81,6 +81,8 @@
                                     data-jadwalmasuk="<?= $row->jam_jadwal_masuk ?>"
                                     data-jadwalpulang="<?= $row->jam_jadwal_pulang ?>" data-ip="<?= $row->ip ?>"
                                     data-nama="<?= $row->NAMA_AKUN ?>" data-foto="<?= $row->foto ?>"
+                                    data-idpresensi="<?= (int) $row->idpresensi ?>"
+                                    data-sumber="<?= esc((string) $row->sumber) ?>"
                                     data-long="<?= $row->long ?>" data-jarak="<?= $row->jarak ?>">
                                     Detail
                                 </button>
@@ -139,6 +141,7 @@
                                             data-bs-target="#modal-detail-absen-pulang" data-jammasuk="<?= $row->waktu_masuk ?>"
                                             data-jampulang="<?= $row->waktu_pulang ?>"
                                             data-detailabsenpulang="<?= $row->idpresensi ?>" data-jarak="<?= $row->jarak ?>"
+                                            data-sumber="<?= esc((string) $row->sumber) ?>"
                                             data-fotopulang="<?= $row->foto_pulang ?>">
                                             Detail
                                         </button>
@@ -534,6 +537,11 @@
             const jamPulang = waktuPulang ? new Date(waktuPulang) : null;
 
             const fotopulang = button.getAttribute('data-fotopulang');
+            const idpresensi = button.getAttribute('data-detailabsenpulang');
+            const sumber = button.getAttribute('data-sumber');
+            const urlFotoPulang = sumber === 'mobile'
+                ? "<?= base_url('absen/foto/') ?>" + idpresensi + '/pulang'
+                : "<?= base_url('foto_presensi/') ?>" + fotopulang;
 
             let konten = '';
 
@@ -551,7 +559,7 @@
                     <li class="list-group-item"><strong>Durasi Kerja:</strong> ${durasiJam} jam ${durasiMenit} menit</li>
                     <li class="list-group-item"><strong>Foto:</strong><br>`;
                 if (fotopulang) {
-                    const imgSrc = "<?= base_url('foto_presensi/') ?>" + fotopulang;
+                    const imgSrc = urlFotoPulang;
                     konten += `
                     <center>
                         <img src="${imgSrc}" alt="Foto Absen"
@@ -596,6 +604,11 @@
 
                     const waktuMasukDate = waktuMasuk ? new Date(waktuMasuk) : null;
                     const waktuPulangDate = waktuPulang ? new Date(waktuPulang) : null;
+                    const idpresensi = e.target.getAttribute('data-idpresensi');
+                    const sumber = e.target.getAttribute('data-sumber');
+                    const urlFoto = sumber === 'mobile'
+                        ? "<?= base_url('absen/foto/') ?>" + idpresensi
+                        : "<?= base_url('foto_presensi/') ?>" + foto;
 
                     document.getElementById('detail_nama_map').textContent = nama;
                     document.getElementById('detail_jarak_map').textContent = jarak + ' meter';
@@ -616,7 +629,7 @@
                             <li class="list-group-item"><strong>Lokasi:</strong> ${lat}, ${long}</li>
                             <li class="list-group-item"><strong>Foto:</strong><br>`;
                         if (foto) {
-                            const imgSrc = "<?= base_url('foto_presensi/') ?>" + foto;
+                            const imgSrc = urlFoto;
                             konten += `
                     <center>
                         <img src="${imgSrc}" alt="Foto Absen"

@@ -5,6 +5,7 @@ namespace App\Filters;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Filters\FilterInterface;
+use App\Services\Auth\LoginRedirectService;
 
 class AuthFilter implements FilterInterface
 {
@@ -20,6 +21,8 @@ class AuthFilter implements FilterInterface
         // cukup cek logged_in. Alur login "pilih gedung" (hanya menyimpan
         // ID_GEDUNG) tetap lolos karena tetap menyertakan logged_in.
         if (session()->get('logged_in') !== true) {
+            (new LoginRedirectService())->simpan($request);
+
             return redirect()->to(base_url('/login'))->with('error', "Invalid Credential Login");
         }
             // $ID_AKUN = session()->get("ID_AKUN");

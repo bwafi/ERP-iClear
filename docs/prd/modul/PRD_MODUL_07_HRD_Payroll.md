@@ -23,9 +23,11 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 ## 4. Alur Utama
 ### 4.1 Absensi
 - `Absensi::kirim_lokasi_masuk/kirim_lokasi_pulang`; `RiwayatPresensi::submit_absen_manual/kirim_lokasi_pulang_manual`.
-- `RiwayatPresensi::index/semua_riwayat/export_semua_presensi/approval_presensi/submit_approval_presensi`.
+- `RiwayatPresensi::index/semua_riwayat/export_semua_presensi`.
+- `Izin::index/simpan` (`/pengajuan_izin`), `Izin::surat` (`/pengajuan_izin/surat/{id}`), dan `Izin::approval/putuskan` (`/approval_presensi`) — pengajuan & approval izin/sakit/cuti; absensi tidak lewat approval.
+- Sidebar: grup **Absensi** di blok KEPEGAWAIAN berisi Approval Presensi, Riwayat Absen (admin), dan Jadwal Masuk. Menu **Presensi** lama (`absensi`) disembunyikan (`show_menu = 0`) karena alur absensi memakai `/absen` mobile-first; route tetap ada. **Riwayat Absen** (`riwayat_presensi`) berada di parent **DASHBOARD**. Riwayat Absen di-grant ke semua jabatan; Riwayat Absen (admin) hanya ke `0/1/2/34/40`. `/absen` dan `/pengajuan_izin` tetap mobile-first dan tidak punya baris menu. — migrasi `GroupAbsensiMenu`/`RenameRiwayatAbsenMenu`/`GrantMenuAbsensiGroup`/`MoveRiwayatAbsenToDashboard`/`HidePresensiLamaMenu`; `tests/GroupAbsensiMenuTest.php`, `tests/RenameRiwayatAbsenMenuTest.php`, `tests/GrantMenuAbsensiGroupTest.php`, `tests/MoveRiwayatAbsenToDashboardTest.php`, `tests/HidePresensiLamaMenuTest.php`
 ### 4.2 Jadwal Masuk
-`JadwalMasuk::index/insert_jadwal/update_jadwal/delete_jadwal` — daftar jadwal & jabatan.
+`JadwalMasuk::index/terapkan/simpan` — roster absensi per pegawai per tanggal (bukan lagi CRUD master `jadwal_masuk`).
 ### 4.3 Tugas & Template
 - `Tugas::index/index2/insert/update/delete/clear_all/updateStatus`; `Riwayat_Tugas::index`; `TemplateTugas::index/insert/update`.
 ### 4.4 Payroll
@@ -35,6 +37,16 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 4. `lockPayroll/unlockPayroll` — file lock `writable/locks/payroll.json`; **tanpa guard role**.
 5. `insert/update/delete` — CRUD legacy baris `kas_keluar` payroll; update/delete ditolak bila terkunci; **tanpa guard role/scope** dan `idunit` dari POST.
 6. `bayar` — set baris `finance_payroll` `dibayar`; potong **seluruh sisa kasbon pegawai lintas unit** (settle idempotent, jurnal dibebankan ke unit kasbon); hitung `total_bersih`; tulis `potongan_kasbon`. Tidak menolak baris yang sudah `dibayar`; panggilan kedua mempertahankan `potongan_kasbon` yang sudah tersimpan.
+
+### 4.5 Roster Absensi & Absen Mobile (fase 1)
+1. `/jadwal_masuk` menampilkan roster satu pegawai untuk satu bulan dari tabel `presensi_roster` (satu baris per pegawai per tanggal). Tombol **Terapkan pola 7 hari** hanya mengisi tanggal yang belum punya baris; tanggal yang sudah ada tidak ditimpa. Edit per tanggal dilakukan lewat form **Simpan Roster**.
+2. Shift roster: `PAGI` (08:45–17:00), `SIANG` (12:45–21:00), `PS` (08:45–13:00 dan 16:55–21:00), `OFF`, `IZIN`. `IZIN` wajib keterangan.
+3. `/absen` (mobile, tanpa layout `template`) menampilkan shift hari ini berdasarkan roster dan zona `Asia/Jakarta`. Sebelum `Config\Presensi::$goLiveDate` halaman hanya menampilkan tanggal aktif.
+4. Punch masuk/pulang wajib GPS dalam radius unit dan foto JPEG/PNG maksimal 2 MB. Shift `PS` memakai 4 punch (PAGI masuk/pulang, lalu SORE masuk/pulang); SORE ditolak bila PAGI belum ada.
+5. Setiap punch menulis satu baris `presensi` dengan `sesi` (`FULL`/`PAGI`/`SORE`) dan `sumber = 'mobile'`; kolom jadwal/toleransi/status_kehadiran tetap diisi agar pembaca lama (riwayat/KPI) tidak rusak.
+6. Foto disimpan privat di `writable/uploads/presensi/YYYYMM/` dan hanya disajikan lewat `GET /absen/foto/{id}` (ber-`auth` + scope). Foto legacy di `public/foto_presensi` tidak dipindahkan.
+7. Absen mobile langsung final (`presensi.status_absensi = 1`) dan **tidak masuk approval**. Approval hanya untuk izin/sakit/cuti: `/pengajuan_izin` menulis tabel `izin` (`akun_idakun` dari session, `status = 0`), `/approval_presensi` menampilkan pengajuan dan tombol Setujui/Tolak (`status` 1/2 + `balasan`).
+8. Halaman riwayat menampilkan foto absen mobile lewat `/absen/foto/{id}` bila `presensi.sumber = 'mobile'`; baris legacy tetap memakai `public/foto_presensi/`. Jarak (`presensi.jarak`, meter) tampil di modal detail yang sama.
 
 ## 5. Business Rules (Bukti)
 1. Generate register berasal dari master gaji + **skor KPI bulan itu** (blok `KpiCalculationService`). — `Payroll::generateRegister`
@@ -59,16 +71,27 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 
 18. [✅] Status pada slip gaji cetak: `JENIS_PEGAWAI = 2` (probation) ditampilkan **Training**; selain itu tetap **Kontrak** (sesuai permintaan user, bukan label master "Pegawai Probation"). Khusus pegawai Training, slip juga menampilkan baris **Hari Kerja** berisi jumlah hari kerja yang dipakai menghitung gaji pokok prorata. — `app/Views/cetak/slip_gaji.php`; `PenilaianKPI::slip_gaji`
 
+19. [✅] **Roster absensi & absen mobile (fase 1).** `presensi_roster` adalah sumber jadwal operasional; master `jadwal_masuk` lama tidak dipakai lagi oleh halaman roster. Pola 7 hari hanya mengisi tanggal kosong (`RosterService::terapkanBulan`). Role pengelola roster: `0/1/34` semua unit, `35/47` hanya unit sendiri, koreksi tanggal lampau hanya role `1` (`PresensiScopeService`). `/absen` menolak punch tanpa roster, shift `OFF`/`IZIN`, duplikat sesi, sesi tidak sesuai shift, lokasi di luar radius unit, dan foto tidak valid; punch pulang memeriksa kepemilikan baris sebelum GPS. Foto privat disajikan lewat route ber-`auth` dengan cek pemilik/scope. Punch yang ditolak karena di luar radius memuat jarak aktual, dan `/absen` menampilkan tautan **Lihat titik absen** yang membuka peta Leaflet (pin unit, lingkaran radius, pin user, label jarak; tautan Google Maps sebagai cadangan). **KPI dan payroll belum tersambung otomatis ke punch mobile pada fase ini** — keduanya masih membaca `presensi`/`kpi_attendance_*` yang ada. — `AbsenPunchService`, `FotoPresensiService`, `AbsenMobile`, migrasi `CreatePresensiRoster`/`AddSesiSumberToPresensi`/`GrantMenuJadwalMasukRoster`; `tests/unit/AbsenPunchServiceTest.php`, `tests/AbsenMobilePageTest.php`, `tests/AbsenMobilePunchTest.php`, `tests/unit/FotoPresensiServiceTest.php`, `tests/unit/RosterServiceTest.php`, `tests/RosterPageTest.php`, `tests/RosterSimpanTest.php`, `tests/MenuRosterGrantTest.php`
+
+20. [⚠️] Sinkronisasi otomatis punch mobile ke evaluasi KPI/payroll (mis. `kpi_attendance`, hari hadir probation) **belum dikerjakan** dan menjadi pekerjaan terpisah. Selama belum ada, punch mobile hanya menambah baris `presensi`.
+
+21. [✅] **Approval hanya untuk izin/sakit/cuti.** Punch mobile menulis `presensi.status_absensi = 1` sehingga tidak perlu approval. `/pengajuan_izin` menyimpan `izin` dengan `akun_idakun` dari session dan `status = 0`; jenis divalidasi ke `jenis_perizinan` (seed awal `IZIN`/`SAKIT`/`CUTI`), tanggal harus valid dan `tanggal_akhir >= tanggal_mulai`, alasan wajib. `/approval_presensi` (menu 116, URL tetap) hanya membaca `izin` dan mengubah `status` menjadi `1` (setujui) atau `2` (tolak) beserta `balasan`; nilai lain ditolak. `izin.pegawai_uuid` lama dibuat nullable karena tidak punya tabel pasangan. — `Izin::index/simpan/approval/putuskan`, `ModelIzin::getByAkun/getWithAkun`, migrasi `AddAkunIdakunToIzin`; `tests/IzinApprovalTest.php`, `tests/unit/AbsenPunchServiceTest.php`
+
+22. [✅] **Aturan tanggal per jenis.** Aturan dicocokkan lewat **nama** `jenis_perizinan.jenis_izin`, bukan ID, karena urutan seed berbeda antar database. `CUTI` wajib diajukan minimal **7 hari sebelum** `tanggal_mulai` (zona `Asia/Jakarta`); `SAKIT` dan `IZIN` boleh kapan saja, termasuk hari ini. Surat keterangan dokter **opsional** untuk `SAKIT` (hanya JPG/PNG, maksimal 2 MB, dideteksi dari isi file; PDF ditolak); jenis lain tidak menerima lampiran. File disimpan privat di `writable/uploads/izin/YYYYMM/` (`izin.file` berisi path relatif) dan hanya disajikan lewat `GET /pengajuan_izin/surat/{id}` dengan `auth` + scope pemilik/atasan yang sama dengan foto absen. Halaman pengajuan menampilkan tautan surat pada riwayat; halaman approval menampilkan tautan surat di kolom alasan. — `Izin::simpan/surat`, `SuratIzinService`, `Config\Presensi::$suratDir/$maxSuratBytes`, route `pengajuan_izin/surat/(:num)`; `tests/IzinApprovalTest.php`, `tests/unit/SuratIzinServiceTest.php`
+
 ## 6. Acceptance Criteria
 - [ ] Pegawai dapat absen masuk/pulang (normal & manual); riwayat tercatat.
-- [ ] Approval presensi mengubah status kehadiran.
+- [ ] Roster bulanan dapat diterapkan dan diedit; role 35/47 hanya unit sendiri; tanggal lampau hanya role 1.
+- [ ] `/absen` menolak punch tanpa foto, di luar radius, duplikat sesi, dan SORE tanpa PAGI; shift PS menghasilkan 2 baris.
+- [ ] Approval presensi hanya untuk izin/sakit/cuti; absensi mobile langsung final tanpa approval.
+- [ ] Cuti minimal 7 hari sebelumnya ditolak bila kurang; sakit/izin kapan saja diterima; surat dokter hanya untuk sakit dan hanya bisa diakses pemilik/atasan.
 - [ ] Generate register menghitung dari master gaji & KPI; baris berstatus.
 - [ ] Baris yang sudah dibayar/terkunci tidak dapat diubah/dihapus.
 - [ ] Pembayaran memotong kasbon dan mencatat total bersih.
 
 ## 7. Dependensi
-- `ModelPresensi/ModelIzin/ModelJenisPerizinan/ModelJadwalMasuk/ModelTugas/ModelTugasTemplate/ModelPayroll/ModelFinancePayroll/ModelIncentive*`.
-- Service `Payroll/*`, `IncentiveCalculationService`, `HutangPiutangService` (kasbon), `KpiCalculationService`.
+- `ModelPresensi/ModelPresensiRoster/ModelIzin/ModelJenisPerizinan/ModelJadwalMasuk/ModelTugas/ModelTugasTemplate/ModelPayroll/ModelFinancePayroll/ModelIncentive*`.
+- Service `Presensi/*` (scope, roster, foto, punch), `Payroll/*`, `IncentiveCalculationService`, `HutangPiutangService` (kasbon), `KpiCalculationService`.
 - Modul: KPI, Keuangan (kas_keluar), Hutang Piutang (kasbon).
 
 ## 8. Status & Tandai
@@ -81,4 +104,5 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
   5. `slip_gaji`/`gaji` dapat diakses semua user login **kecuali SPV (40)**: `/gaji` dialihkan, slip karyawan lain ditolak, slip sendiri tetap boleh. `attendance_save` tanpa otorisasi evaluator. — PR-06/PR-07
   6. `lockPayroll`/`unlockPayroll` tanpa guard role. — PR-08
 - ⚠️ Belum diverifikasi penuh: detail absensi & approval, struktur komponen gaji, rule insentif unit cabang selain HO/Probolinggo.
-- Test: `PayrollGeneratorUnitTest`, `PayrollRunSummaryTest`, `HoSalaryDistributionCacheTest`, `HoSalaryDistributionSpvTest`, `DetailAbsenPegawaiTanpaWeightTest`, `ManagerKpiTest`, `unit/IncentiveHoProbolinggoTest`, `PenilaianThpMatchesSlipTest`. Tidak ada test untuk scope view, bayar ulang, lock `updateRegister`, dan otorisasi slip/attendance.
+- ⚠️ Fase roster/absen mobile: unit 4, 5, 50 belum punya `LATITUDE`/`LONGTITUDE`/`RADIUS`, sehingga `/absen` menolak sampai master unit diisi. Sinkronisasi punch → KPI/payroll masih pekerjaan terpisah.
+- Test: `PayrollGeneratorUnitTest`, `PayrollRunSummaryTest`, `HoSalaryDistributionCacheTest`, `HoSalaryDistributionSpvTest`, `DetailAbsenPegawaiTanpaWeightTest`, `ManagerKpiTest`, `unit/IncentiveHoProbolinggoTest`, `PenilaianThpMatchesSlipTest`, `PresensiSchemaMigrationTest`, `unit/PresensiScopeServiceTest`, `unit/RosterServiceTest`, `RosterPageTest`, `RosterSimpanTest`, `unit/FotoPresensiServiceTest`, `unit/AbsenPunchServiceTest`, `AbsenMobilePageTest`, `AbsenMobilePunchTest`, `MenuRosterGrantTest`, `IzinApprovalTest`. Tidak ada test untuk scope view, bayar ulang, lock `updateRegister`, dan otorisasi slip/attendance.

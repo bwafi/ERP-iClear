@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="Tests\GaransiClaimDetailPrefillTest" file="/home/syro/Projects/ERP/tests/GaransiClaimDetailPrefillTest.php" tests="3" assertions="24" errors="0" warnings="0" failures="0" skipped="0" time="0.053653">
-    <testcase name="testSparepartServiceTampilDenganPilihanKlaim" class="Tests\GaransiClaimDetailPrefillTest" classname="Tests.GaransiClaimDetailPrefillTest" file="/home/syro/Projects/ERP/tests/GaransiClaimDetailPrefillTest.php" line="40" assertions="10" time="0.047643"/>
-    <testcase name="testServiceTanpaSparepartMenampilkanPesanKosong" class="Tests\GaransiClaimDetailPrefillTest" classname="Tests.GaransiClaimDetailPrefillTest" file="/home/syro/Projects/ERP/tests/GaransiClaimDetailPrefillTest.php" line="63" assertions="1" time="0.002968"/>
-    <testcase name="testModalPenggantiMemakaiDesainPemilihSparepart" class="Tests\GaransiClaimDetailPrefillTest" classname="Tests.GaransiClaimDetailPrefillTest" file="/home/syro/Projects/ERP/tests/GaransiClaimDetailPrefillTest.php" line="70" assertions="13" time="0.003043"/>
+  <testsuite name="Tests\PresensiSchemaMigrationTest" file="/home/syro/Projects/ERP/tests/PresensiSchemaMigrationTest.php" tests="3" assertions="7" errors="0" warnings="0" failures="0" skipped="0" time="0.121676">
+    <testcase name="testRosterDanKolomPresensiTerbentuk" class="Tests\PresensiSchemaMigrationTest" classname="Tests.PresensiSchemaMigrationTest" file="/home/syro/Projects/ERP/tests/PresensiSchemaMigrationTest.php" line="51" assertions="4" time="0.049989"/>
+    <testcase name="testDijalankanDuaKaliTetapIdempoten" class="Tests\PresensiSchemaMigrationTest" classname="Tests.PresensiSchemaMigrationTest" file="/home/syro/Projects/ERP/tests/PresensiSchemaMigrationTest.php" line="59" assertions="2" time="0.037760"/>
+    <testcase name="testTanpaTabelPresensiTidakMembuatTabelBaru" class="Tests\PresensiSchemaMigrationTest" classname="Tests.PresensiSchemaMigrationTest" file="/home/syro/Projects/ERP/tests/PresensiSchemaMigrationTest.php" line="75" assertions="1" time="0.033927"/>
   </testsuite>
 </testsuites>
