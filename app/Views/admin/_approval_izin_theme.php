@@ -62,7 +62,11 @@
         align-items: flex-end;
         justify-content: space-between;
         gap: 16px;
-        padding: 4px 2px 0;
+        padding: 16px 20px;
+        background: var(--ap-surface);
+        border: 1px solid var(--ap-rule);
+        border-radius: var(--ap-radius);
+        box-shadow: var(--ap-shadow);
     }
 
     .ap-page .ap-crumb {

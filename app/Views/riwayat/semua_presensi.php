@@ -322,7 +322,11 @@ $kehadiran = [
         align-items: flex-end;
         justify-content: space-between;
         gap: 16px;
-        padding: 4px 2px 0;
+        padding: 16px 20px;
+        background: var(--ra-surface);
+        border: 1px solid var(--ra-rule);
+        border-radius: var(--ra-radius);
+        box-shadow: var(--ra-shadow);
     }
 
     .ra-page .ra-crumb {

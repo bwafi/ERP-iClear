@@ -39,7 +39,7 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 6. `bayar` — set baris `finance_payroll` `dibayar`; potong **seluruh sisa kasbon pegawai lintas unit** (settle idempotent, jurnal dibebankan ke unit kasbon); hitung `total_bersih`; tulis `potongan_kasbon`. Tidak menolak baris yang sudah `dibayar`; panggilan kedua mempertahankan `potongan_kasbon` yang sudah tersimpan.
 
 ### 4.5 Roster Absensi & Absen Mobile (fase 1)
-1. `/jadwal_masuk` menampilkan roster satu pegawai untuk satu bulan dari tabel `presensi_roster` (satu baris per pegawai per tanggal). Tombol **Terapkan pola 7 hari** hanya mengisi tanggal yang belum punya baris; tanggal yang sudah ada tidak ditimpa. Edit per tanggal dilakukan lewat form **Simpan Roster**.
+1. `/jadwal_masuk` menampilkan roster satu pegawai untuk satu bulan dari tabel `presensi_roster` (satu baris per pegawai per tanggal). Panel **Pola mingguan** selalu tampil di atas kalender; tombol **Terapkan pola** hanya mengisi tanggal yang belum punya baris, tanggal yang sudah ada tidak ditimpa. Edit per tanggal lewat form **Simpan Roster**; catatan per tanggal memakai tombol **Catatan** yang otomatis terbuka untuk shift `IZIN` atau tanggal yang sudah punya catatan.
 2. Shift roster: `PAGI` (08:45–17:00), `SIANG` (12:45–21:00), `PS` (08:45–13:00 dan 16:55–21:00), `OFF`, `IZIN`. `IZIN` wajib keterangan.
 3. `/absen` (mobile, tanpa layout `template`) menampilkan shift hari ini berdasarkan roster dan zona `Asia/Jakarta`. Sebelum `Config\Presensi::$goLiveDate` halaman hanya menampilkan tanggal aktif.
 4. Punch masuk/pulang wajib GPS dalam radius unit dan foto JPEG/PNG maksimal 2 MB. Shift `PS` memakai 4 punch (PAGI masuk/pulang, lalu SORE masuk/pulang); SORE ditolak bila PAGI belum ada.

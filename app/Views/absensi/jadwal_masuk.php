@@ -2,9 +2,10 @@
 /**
  * Roster Absensi — lembar kalender bulanan.
  *
- * Header, toolbar, dan lembar memakai bahasa visual yang sama dengan
- * /kas_bank (.kbx): judul di kanvas, garis rambut, tanpa bayangan kartu.
- * Semua selector di-scope .jad supaya tidak bocor ke halaman absensi lain.
+ * Header dan toolbar berada dalam satu kartu putih ber-hairline, lalu panel pola
+ * dan lembar roster memakai permukaan putih yang sama: garis rambut, tanpa
+ * bayangan kartu. Semua selector di-scope .jad supaya tidak bocor ke halaman
+ * absensi lain.
  */
 
 $namaBulan = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -42,48 +43,50 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
 ?>
 
 <div class="jad">
-    <header class="jad-head">
-        <div class="jad-head-copy">
-            <h1 class="jad-title">Roster Absensi</h1>
-            <p class="jad-sub">Jadwal shift per pegawai per tanggal. Perubahan disimpan sekaligus di akhir bulan.</p>
-        </div>
-        <a class="jad-btn jad-btn--ghost" href="<?= base_url('absen') ?>">
-            <iconify-icon icon="bi:phone" aria-hidden="true"></iconify-icon>
-            Buka Absen Mobile
-        </a>
-    </header>
+    <div class="jad-top">
+        <header class="jad-head">
+            <div class="jad-head-copy">
+                <h1 class="jad-title">Roster Absensi</h1>
+                <p class="jad-sub">Jadwal shift per pegawai per tanggal. Perubahan disimpan sekaligus di akhir bulan.</p>
+            </div>
+            <a class="jad-btn jad-btn--ghost" href="<?= base_url('absen') ?>">
+                <iconify-icon icon="bi:phone" aria-hidden="true"></iconify-icon>
+                Buka Absen Mobile
+            </a>
+        </header>
 
-    <form method="get" action="<?= base_url('jadwal_masuk') ?>" class="jad-toolbar">
-        <div class="jad-field">
-            <label class="jad-label" for="jad-bulan">Bulan</label>
-            <input id="jad-bulan" type="month" class="jad-control" name="bulan" value="<?= esc($bulan) ?>">
-        </div>
-        <?php if ($bolehSemuaUnit): ?>
+        <form method="get" action="<?= base_url('jadwal_masuk') ?>" class="jad-toolbar">
             <div class="jad-field">
-                <label class="jad-label" for="jad-unit">Unit</label>
-                <select id="jad-unit" class="jad-control" name="unit">
-                    <option value="">Semua unit</option>
-                    <?php foreach ($unit as $u): ?>
-                        <option value="<?= (int) $u->idunit ?>"
-                            <?= (int) ($_GET['unit'] ?? 0) === (int) $u->idunit ? 'selected' : '' ?>>
-                            <?= esc($u->NAMA_UNIT) ?>
+                <label class="jad-label" for="jad-bulan">Bulan</label>
+                <input id="jad-bulan" type="month" class="jad-control" name="bulan" value="<?= esc($bulan) ?>">
+            </div>
+            <?php if ($bolehSemuaUnit): ?>
+                <div class="jad-field">
+                    <label class="jad-label" for="jad-unit">Unit</label>
+                    <select id="jad-unit" class="jad-control" name="unit">
+                        <option value="">Semua unit</option>
+                        <?php foreach ($unit as $u): ?>
+                            <option value="<?= (int) $u->idunit ?>"
+                                <?= (int) ($_GET['unit'] ?? 0) === (int) $u->idunit ? 'selected' : '' ?>>
+                                <?= esc($u->NAMA_UNIT) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            <?php endif; ?>
+            <div class="jad-field jad-field--akun">
+                <label class="jad-label" for="jad-akun">Pegawai</label>
+                <select id="jad-akun" class="jad-control" name="akun">
+                    <?php foreach ($pegawai as $p): ?>
+                        <option value="<?= (int) $p->ID_AKUN ?>" <?= (int) $p->ID_AKUN === (int) $akunId ? 'selected' : '' ?>>
+                            <?= esc($p->NAMA_AKUN) ?><?= isset($p->NAMA_UNIT) ? ' — ' . esc($p->NAMA_UNIT) : '' ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
             </div>
-        <?php endif; ?>
-        <div class="jad-field jad-field--akun">
-            <label class="jad-label" for="jad-akun">Pegawai</label>
-            <select id="jad-akun" class="jad-control" name="akun">
-                <?php foreach ($pegawai as $p): ?>
-                    <option value="<?= (int) $p->ID_AKUN ?>" <?= (int) $p->ID_AKUN === (int) $akunId ? 'selected' : '' ?>>
-                        <?= esc($p->NAMA_AKUN) ?><?= isset($p->NAMA_UNIT) ? ' — ' . esc($p->NAMA_UNIT) : '' ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <button type="submit" class="jad-btn jad-btn--primary">Tampilkan</button>
-    </form>
+            <button type="submit" class="jad-btn jad-btn--primary">Tampilkan</button>
+        </form>
+    </div>
 
     <?php if (session()->getFlashdata('sukses')): ?>
         <div class="jad-flash jad-flash--ok" role="status"><?= esc(session()->getFlashdata('sukses')) ?></div>
@@ -98,33 +101,31 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
             <p>Belum ada pegawai aktif<?= $bolehSemuaUnit ? ' di unit ini' : '' ?>.</p>
         </div>
     <?php else: ?>
-        <details class="jad-pattern">
-            <summary class="jad-pattern-summary">
-                <span>Terapkan pola mingguan</span>
-                <span class="jad-pattern-hint">Isi tanggal yang belum punya roster. Tanggal yang sudah ada tidak ditimpa.</span>
-            </summary>
-            <form method="post" action="<?= base_url('jadwal_masuk/terapkan') ?>" class="jad-pattern-body">
-                <?= csrf_field() ?>
-                <input type="hidden" name="akun_idakun" value="<?= (int) $akunId ?>">
-                <input type="hidden" name="bulan" value="<?= esc($bulan) ?>">
-                <div class="jad-pattern-grid">
-                    <?php $shiftPola = ['PAGI', 'SIANG', 'PS', 'OFF']; ?>
-                    <?php foreach ($namaHari as $nomor => $label): ?>
-                        <div class="jad-field">
-                            <label class="jad-label" for="jad-pola-<?= $nomor ?>"><?= $label ?></label>
-                            <select id="jad-pola-<?= $nomor ?>" class="jad-control" name="pola[<?= $nomor ?>]">
-                                <?php foreach ($shiftPola as $s): ?>
-                                    <option value="<?= $s ?>"><?= $labelShift[$s] ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    <?php endforeach; ?>
+        <form method="post" action="<?= base_url('jadwal_masuk/terapkan') ?>" class="jad-pattern">
+            <?= csrf_field() ?>
+            <input type="hidden" name="akun_idakun" value="<?= (int) $akunId ?>">
+            <input type="hidden" name="bulan" value="<?= esc($bulan) ?>">
+            <div class="jad-pattern-head">
+                <div>
+                    <h2 class="jad-pattern-title">Pola mingguan</h2>
+                    <p class="jad-pattern-hint">Isi shift tiap hari, lalu terapkan. Hanya tanggal kosong yang diisi; tanggal yang sudah ada tidak ditimpa.</p>
                 </div>
-                <div class="jad-pattern-foot">
-                    <button type="submit" class="jad-btn jad-btn--primary">Terapkan ke bulan</button>
-                </div>
-            </form>
-        </details>
+                <button type="submit" class="jad-btn jad-btn--ghost">Terapkan pola</button>
+            </div>
+            <div class="jad-pattern-grid">
+                <?php $shiftPola = ['PAGI', 'SIANG', 'PS', 'OFF']; ?>
+                <?php foreach ($namaHari as $nomor => $label): ?>
+                    <div class="jad-field">
+                        <label class="jad-label" for="jad-pola-<?= $nomor ?>"><?= $label ?></label>
+                        <select id="jad-pola-<?= $nomor ?>" class="jad-control" name="pola[<?= $nomor ?>]">
+                            <?php foreach ($shiftPola as $s): ?>
+                                <option value="<?= $s ?>"><?= $labelShift[$s] ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </form>
 
         <section class="jad-sheet" aria-labelledby="jad-sheet-title">
             <header class="jad-sheet-head">
@@ -195,10 +196,20 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                                             <option value="<?= $s ?>" <?= $s === $shift ? 'selected' : '' ?>><?= $labelShift[$s] ?></option>
                                         <?php endforeach; ?>
                                     </select>
-                                    <input type="text" class="jad-note" name="keterangan[<?= $tanggal ?>]"
-                                        value="<?= esc($ket) ?>" placeholder="Keterangan"
-                                        aria-label="Keterangan <?= $tgl ?> <?= esc($bulanLabel) ?>"
-                                        <?= $shift === 'IZIN' ? 'required' : '' ?>>
+                                    <?php $adaCatatan = trim((string) $ket) !== ''; ?>
+                                    <div class="jad-note-wrap<?= $adaCatatan || $shift === 'IZIN' ? ' is-open' : '' ?>">
+                                        <button type="button" class="jad-note-toggle"
+                                            aria-expanded="<?= $adaCatatan || $shift === 'IZIN' ? 'true' : 'false' ?>"
+                                            aria-controls="jad-note-<?= $tanggal ?>">
+                                            <iconify-icon icon="bi:plus" aria-hidden="true"></iconify-icon>
+                                            Catatan
+                                        </button>
+                                        <input type="text" class="jad-note" id="jad-note-<?= $tanggal ?>"
+                                            name="keterangan[<?= $tanggal ?>]" value="<?= esc($ket) ?>"
+                                            placeholder="Tulis catatan"
+                                            aria-label="Catatan <?= $tgl ?> <?= esc($bulanLabel) ?>"
+                                            <?= $shift === 'IZIN' ? 'required' : '' ?>>
+                                    </div>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -255,13 +266,21 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         --jad-izin: #fb977d;
     }
 
+    .jad-top {
+        margin-bottom: 1rem;
+        padding: 1rem 1.25rem;
+        background: var(--jad-sheet);
+        border: 1px solid var(--jad-line);
+        border-radius: var(--jad-radius);
+    }
+
     .jad-head {
         display: flex;
         flex-wrap: wrap;
         align-items: flex-start;
         justify-content: space-between;
         gap: 0.75rem 1.5rem;
-        margin-bottom: 1.25rem;
+        margin-bottom: 0.75rem;
     }
 
     .jad-title {
@@ -287,9 +306,6 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         flex-wrap: wrap;
         align-items: flex-end;
         gap: 0.75rem 1rem;
-        padding-bottom: 1rem;
-        margin-bottom: 1.25rem;
-        border-bottom: 1px solid var(--jad-line);
     }
 
     .jad-field {
@@ -342,6 +358,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         text-decoration: none;
         white-space: nowrap;
         cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
 
     .jad-btn iconify-icon { font-size: 1rem; }
@@ -368,6 +385,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
     .jad-btn--ghost:hover,
     .jad-btn--ghost:focus {
         color: var(--jad-ink);
+        background: var(--jad-soft);
         border-color: var(--jad-ink);
     }
 
@@ -404,64 +422,48 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         border-color: var(--bs-danger-border-subtle, #f1aeb5);
     }
 
-    /* ===== Pola mingguan (disclosure) ===== */
+    /* ===== Pola mingguan ===== */
     .jad-pattern {
         margin-bottom: 1rem;
+        padding: 0.875rem 1.25rem 1rem;
         background: var(--jad-sheet);
         border: 1px solid var(--jad-line);
         border-radius: var(--jad-radius);
     }
 
-    .jad-pattern-summary {
+    .jad-pattern-head {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
-        gap: 0.25rem 0.75rem;
-        padding: 0.75rem 1.25rem;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding-bottom: 0.75rem;
+        margin-bottom: 0.75rem;
+        border-bottom: 1px solid var(--jad-line);
+    }
+
+    .jad-pattern-title {
+        margin: 0;
         font-size: 0.875rem;
         font-weight: 600;
         color: var(--jad-ink);
-        cursor: pointer;
-        list-style: none;
     }
-
-    .jad-pattern-summary::-webkit-details-marker { display: none; }
-
-    .jad-pattern-summary::after {
-        content: "+";
-        margin-left: auto;
-        font-size: 1rem;
-        font-weight: 500;
-        color: var(--jad-muted);
-    }
-
-    .jad-pattern[open] .jad-pattern-summary::after { content: "−"; }
 
     .jad-pattern-hint {
+        margin: 0.125rem 0 0;
+        max-width: 72ch;
         font-size: 0.75rem;
-        font-weight: 400;
+        line-height: 1.45;
         color: var(--jad-muted);
-    }
-
-    .jad-pattern-body {
-        padding: 0 1.25rem 1rem;
-        border-top: 1px solid var(--jad-line);
     }
 
     .jad-pattern-grid {
         display: grid;
         grid-template-columns: repeat(7, minmax(0, 1fr));
         gap: 0.75rem;
-        padding-top: 0.875rem;
     }
 
     .jad-pattern-grid .jad-control { width: 100%; }
-
-    .jad-pattern-foot {
-        display: flex;
-        justify-content: flex-end;
-        padding-top: 0.875rem;
-    }
 
     /* ===== Lembar roster ===== */
     .jad-sheet {
@@ -614,18 +616,40 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         border-radius: 0.25rem;
     }
 
-    .jad-note {
-        width: 100%;
+    .jad-note-wrap { display: flex; flex-direction: column; }
+
+    .jad-note-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        align-self: flex-start;
         padding: 0.125rem 0;
         font-size: 0.75rem;
-        color: var(--jad-ink);
-        background: transparent;
+        line-height: 1.4;
+        color: var(--jad-muted);
+        background: none;
         border: 0;
-        border-bottom: 1px solid var(--jad-line);
-        border-radius: 0;
+        cursor: pointer;
     }
 
-    .jad-note::placeholder { color: var(--jad-muted); opacity: 0.55; }
+    .jad-note-toggle iconify-icon { font-size: 0.875rem; }
+
+    .jad-note-toggle:hover { color: var(--jad-ink); }
+
+    .jad-note-wrap.is-open .jad-note-toggle { display: none; }
+    .jad-note-wrap:not(.is-open) .jad-note { display: none; }
+
+    .jad-note {
+        width: 100%;
+        padding: 0.1875rem 0.375rem;
+        font-size: 0.75rem;
+        color: var(--jad-ink);
+        background: var(--jad-soft);
+        border: 1px solid var(--jad-line);
+        border-radius: 0.25rem;
+    }
+
+    .jad-note::placeholder { color: var(--jad-muted); opacity: 1; }
 
     /* Tanggal yang belum punya baris roster tampil netral, bukan seperti sudah diisi. */
     .jad-day.is-unset .jad-select {
@@ -633,7 +657,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         border-style: dashed;
         border-left-style: solid;
     }
-    .jad-note:focus { border-bottom-color: var(--bs-primary, #0074ba); }
+    .jad-note:focus { border-color: var(--bs-primary, #0074ba); }
 
     .jad-chip {
         display: inline-flex;
@@ -696,16 +720,13 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         .jad-toolbar .jad-field { flex: 1 1 45%; }
         .jad-toolbar .jad-field .jad-control { width: 100%; }
 
-        .jad-head,
-        .jad-toolbar,
+        .jad-top,
         .jad-sheet-head,
-        .jad-pattern-summary,
-        .jad-pattern-body,
+        .jad-pattern,
         .jad-save { padding-left: 1rem; padding-right: 1rem; }
 
         .jad-pattern-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .jad-pattern-foot { justify-content: stretch; }
-        .jad-pattern-foot .jad-btn { width: 100%; }
+        .jad-pattern-head .jad-btn { width: 100%; }
 
         /* Grid kalender jadi daftar baris: tanggal di kiri, kontrol di kanan. */
         .jad-grid {
@@ -738,24 +759,66 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         .jad-save { flex-direction: column; align-items: stretch; }
         .jad-save .jad-btn { width: 100%; }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+        .jad-btn { transition: none; }
+    }
 </style>
 
 <script>
     (() => {
         const grid = document.querySelector('.jad-grid');
-        if (!grid) return;
 
-        // Aksen warna dan status wajib keterangan mengikuti shift yang dipilih.
-        grid.addEventListener('change', (event) => {
-            const select = event.target.closest('.jad-select');
-            if (!select) return;
+        // Catatan per tanggal disembunyikan sampai diminta, tapi tetap terkirim saat simpan.
+        const bukaCatatan = (wrap) => {
+            if (!wrap) return;
+            wrap.classList.add('is-open');
+            wrap.querySelector('.jad-note-toggle')?.setAttribute('aria-expanded', 'true');
+        };
+        const tutupCatatan = (wrap) => {
+            if (!wrap) return;
+            wrap.classList.remove('is-open');
+            wrap.querySelector('.jad-note-toggle')?.setAttribute('aria-expanded', 'false');
+        };
 
-            const sel = select.closest('.jad-day');
-            sel.dataset.shift = select.value.toLowerCase();
-            sel.classList.remove('is-unset');
+        if (grid) {
+            grid.addEventListener('click', (event) => {
+                const tombol = event.target.closest('.jad-note-toggle');
+                if (!tombol) return;
+                const wrap = tombol.closest('.jad-note-wrap');
+                bukaCatatan(wrap);
+                wrap.querySelector('.jad-note')?.focus();
+            });
 
-            const catatan = sel.querySelector('.jad-note');
-            if (catatan) catatan.required = select.value === 'IZIN';
-        });
+            // Aksen warna dan status wajib keterangan mengikuti shift yang dipilih.
+            grid.addEventListener('change', (event) => {
+                const select = event.target.closest('.jad-select');
+                if (!select) return;
+
+                const sel = select.closest('.jad-day');
+                sel.dataset.shift = select.value.toLowerCase();
+                sel.classList.remove('is-unset');
+
+                const wrap = sel.querySelector('.jad-note-wrap');
+                const catatan = wrap?.querySelector('.jad-note');
+                if (!catatan) return;
+
+                catatan.required = select.value === 'IZIN';
+                if (select.value === 'IZIN') bukaCatatan(wrap);
+                else if (catatan.value.trim() === '') tutupCatatan(wrap);
+            });
+
+            grid.addEventListener('blur', (event) => {
+                const catatan = event.target.closest('.jad-note');
+                if (!catatan || catatan.value.trim() !== '') return;
+                const sel = catatan.closest('.jad-day');
+                if (sel?.querySelector('.jad-select')?.value === 'IZIN') return;
+                tutupCatatan(catatan.closest('.jad-note-wrap'));
+            }, true);
+        }
+
+        // Filter langsung memuat ulang; tombol Tampilkan tetap ada untuk pengguna tanpa JS.
+        const toolbar = document.querySelector('.jad-toolbar');
+        toolbar?.addEventListener('change', () => toolbar.requestSubmit());
     })();
 </script>

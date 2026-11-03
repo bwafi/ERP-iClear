@@ -108,4 +108,20 @@ class RosterPageTest extends CIUnitTestCase
         $result->assertSee('Pegawai Satu');
         $result->assertSee('name="unit"');
     }
+
+    public function testPolaSelaluTerlihatDanCatatanIzinLangsungTerbuka(): void
+    {
+        $this->db->query("INSERT INTO presensi_roster (akun_idakun, tanggal, shift, keterangan)
+            VALUES (100,'2026-11-05','IZIN','Sakit')");
+
+        $this->sesi(1, 1, 34);
+        $result = $this->get('jadwal_masuk?bulan=2026-11&unit=1&akun=100');
+
+        $result->assertStatus(200);
+        $body = $result->getBody();
+        $this->assertStringContainsString('Pola mingguan', $body);
+        $this->assertStringNotContainsString('<details class="jad-pattern"', $body);
+        $this->assertStringContainsString('jad-note-wrap is-open', $body);
+        $this->assertStringContainsString('name="keterangan[2026-11-05]"', $body);
+    }
 }

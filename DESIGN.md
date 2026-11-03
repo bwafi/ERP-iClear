@@ -146,10 +146,23 @@
 
 ### Riwayat Absen (`.ra-*`)
 - **Scope:** `app/Views/riwayat/semua_presensi.php`; every selector lives under `.ra-page` (the photo viewer lives inside it too) and derives from `--ra-*` tokens tied to the app theme. No new palette, font, or dependency; the map and DataTables are the template's own libraries.
-- **Layout:** page head (breadcrumb, title, Export Excel) → five-cell summary board (Total, Tepat waktu, Toleransi, Telat, Belum konfirmasi) → filter band (date range + reset + hint) → log panel (length/search toolbar → table → info/pagination). Board figures come from the rows DataTables currently shows, so they follow the date filter and search.
+- **Layout:** page head berupa kartu putih ber-hairline (breadcrumb, title, Export Excel) → five-cell summary board (Total, Tepat waktu, Toleransi, Telat, Belum konfirmasi) → filter band (date range + reset + hint) → log panel (length/search toolbar → table → info/pagination). Board figures come from the rows DataTables currently shows, so they follow the date filter and search.
 - **Table:** Pegawai (name + unit), Tanggal, Jadwal (jam + toleransi), Masuk, Pulang, Kehadiran, Status, Detail. Dates carry ISO `data-order` so sorting is chronological; the date filter reads that ISO attribute, not the `dd-mm-yyyy` display text. Below `767.98px` rows become stacked cards with `data-label` captions.
 - **Detail modal:** employee header, Leaflet map of office vs employee with distance, meta grid (jam masuk/pulang, jadwal, toleransi, jarak, IP, koordinat), and masuk/pulang photos. Clicking a photo opens the dark viewer with pan/zoom; the viewer reopens the detail modal when closed so the two modals never stack.
 - **Rules:** mobile (sumber `mobile`) photos come from `/absen/foto/{id}[/pulang]`, legacy photos from `/foto_presensi/{file}`; the template customizer is hidden because it covers the action column. Routes, export dates, and the 15-day default window are unchanged. One accent for primary action/focus, no gradients or colored left borders; muted text stays ≥4.5:1 in both themes; motion is limited to control transitions and disabled under `prefers-reduced-motion`.
+
+### Approval Izin (`.ap-*`)
+- **Scope:** `app/Views/admin/approval_izin.php` + `_approval_izin_theme.php`; semua selector di bawah `.ap-page` dan memakai token `--ap-*` dari tema aplikasi.
+- **Layout:** page head berupa kartu putih ber-hairline (breadcrumb, title, tombol Buat Pengajuan) → papan ringkasan empat sel (total, menunggu, disetujui, ditolak) → kartu filter status → kartu tabel dengan form keputusan inline.
+- **Rules:** route, query, field keputusan (`idizin`, `status`, `balasan`), dan aturan approval tidak berubah. Satu aksen primary; muted text ≥4.5:1 di kedua tema; tabel menjadi stacked cards dengan `data-label` di bawah `768px`.
+
+### Roster Absensi (`/jadwal_masuk`, `.jad-*`)
+- **Scope:** `app/Views/absensi/jadwal_masuk.php`; semua selector di bawah `.jad` dan memakai token `--jad-*` yang diturunkan dari tema aplikasi. Tanpa palet, font, atau dependency baru.
+- **Layout:** kartu head (judul + deskripsi + tombol "Buka Absen Mobile" + toolbar bulan/unit/pegawai) → flash → kartu pola mingguan yang selalu tampil → lembar roster bulanan. Head dan toolbar berbagi satu permukaan putih ber-hairline (`.jad-top`); toolbar bukan lagi strip di kanvas dan tidak punya garis bawah sendiri.
+- **Pola mingguan:** tujuh select Sen–Min selalu terlihat; tombol outline "Terapkan pola" hanya mengisi tanggal yang belum punya baris roster. Aksi utama tetap "Simpan Roster" (primary).
+- **Sel tanggal:** tanggal + select shift; catatan per tanggal memakai tombol `+ Catatan` yang membuka input dan otomatis terbuka untuk shift `IZIN` atau tanggal yang sudah punya catatan. Tanggal lampau tampil sebagai chip terkunci.
+- **Responsive:** di bawah `992px` grid pola menjadi 4 kolom, di bawah `768px` menjadi 2 kolom dan grid kalender berubah menjadi daftar baris (tanggal kiri, kontrol kanan); tombol pola dan simpan menjadi full width.
+- **Rules:** route, field POST (`pola[]`, `shift[]`, `keterangan[]`), CSRF, dan aturan scope/koreksi tanggal lampau tidak berubah. Satu aksen primary, tanpa gradien atau bayangan kartu; muted text ≥4.5:1 di kedua tema; motion hanya pada state kontrol dan dimatikan under `prefers-reduced-motion`.
 
 ### Presensi Mobile (`/absen`, `/pengajuan_izin`) (`.mob`)
 - **Scope:** `app/Views/absen/mobile.php`, `app/Views/izin/pengajuan.php`, dan tema bersama `app/Views/inc/_presensi_mobile_theme.php`; semua selector berada di bawah `.mob` dan memakai token `--mob-*`. Halaman standalone mobile-first (tanpa layout `template`), maksimal `480px`.
