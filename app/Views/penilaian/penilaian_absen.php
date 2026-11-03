@@ -3,9 +3,9 @@
     <div class="card-body px-4 py-3">
         <div class="row align-items-center">
             <div class="col-9">
-                <h4 class="fw-semibold mb-2">Penilaian Absensi Karyawan</h4>
+                <h4 class="fw-semibold mb-2">Penilaian Harian Karyawan</h4>
                 <p class="text-muted mb-0 fs-3">
-                    Input skor harian (1-5) per komponen; hari OFF (libur/istirahat) ditandai lewat status Kehadiran dan tidak dihitung. Rumus Nilai = $\frac{\text{SUM}}{\text{Hari Efektif} \times 5} \times 100$
+                    Koreksi kehadiran/OFF serta skor harian Kebersihan dan Kepatuhan SOP; Kehadiran dan Seragam terisi otomatis dari absen mobile. Hari OFF tidak dihitung. Rumus Nilai = $\frac{\text{SUM}}{\text{Hari Efektif} \times 5} \times 100$
                 </p>
             </div>
             <div class="col-3 text-end">
@@ -13,7 +13,7 @@
                     <ol class="breadcrumb mb-0 justify-content-end bg-transparent p-0">
                         <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Dashboard</a></li>
                         <li class="breadcrumb-item"><a class="text-muted text-decoration-none" href="<?= base_url('/penilaian/kpi') ?>">Penilaian</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Absensi</li>
+                        <li class="breadcrumb-item active" aria-current="page">Harian</li>
                     </ol>
                 </nav>
             </div>
@@ -142,8 +142,8 @@
                         <iconify-icon icon="solar:calendar-add-bold" class="fs-5"></iconify-icon>
                     </div>
                     <div>
-                        <h5 class="mb-0 fw-semibold">Input Absensi Harian</h5>
-                        <small class="text-muted">Form pencatatan aspek kehadiran dan komponen harian</small>
+                        <h5 class="mb-0 fw-semibold">Input Penilaian Harian</h5>
+                        <small class="text-muted">Koreksi kehadiran dan skor Kebersihan &amp; Kepatuhan SOP</small>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm px-4">

@@ -73,7 +73,7 @@ $currentPath = trim(uri_string(), '/');
                                         <span class="aside-icon"><?= $parentIcon ?></span>
                                         <span class="hide-menu" title="<?= esc($mymenu['nama']) ?>"><?= $mymenu['nama'] ?></span>
                                         <?php if ($mymenu['id'] == 101) : ?>
-                                            <span class="sb-badge" title="Modul lama, dialihkan ke Penilaian Absensi">Deprecated</span>
+                                            <span class="sb-badge" title="Modul lama, dialihkan ke Penilaian Harian">Deprecated</span>
                                         <?php endif; ?>
                                     </a>
                                 </li>

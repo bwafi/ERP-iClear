@@ -18,17 +18,17 @@
     <div class="d-flex align-items-center gap-2">
         <iconify-icon icon="solar:info-circle-bold" width="26" height="26"></iconify-icon>
         <div>
-            <strong>Modul Checklist Pekerjaan sudah digantikan Penilaian Absensi.</strong>
+            <strong>Modul Checklist Pekerjaan sudah digantikan Penilaian Harian.</strong>
             <span class="d-block text-muted" style="font-size: 0.85rem;">
                 Halaman ini tetap tersedia untuk melihat data checklist lama. Untuk input penilaian
-                absen yang baru, gunakan tombol di samping.
+                harian yang baru, gunakan tombol di samping.
             </span>
         </div>
     </div>
     <a href="<?= base_url('penilaian/absen') ?>" class="btn btn-primary">
         <iconify-icon icon="solar:dollar-minimalistic-broken" width="20" height="20"
             style="margin-right: 6px;"></iconify-icon>
-        Buka Penilaian Absensi
+        Buka Penilaian Harian
     </a>
 </div>
 

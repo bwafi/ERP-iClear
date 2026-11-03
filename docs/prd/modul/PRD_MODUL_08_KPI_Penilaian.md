@@ -61,6 +61,8 @@ Mengelola template KPI, penilaian kinerja, evaluasi KPI otomatis dari data opera
 
 23. [✅] **SERAGAM dari centang foto absen mobile.** Nilai SERAGAM tidak lagi manual. Di modal detail `/semua_riwayat_presensi`, penilai mencentang **Seragam (3), Sepatu (1), ID Card (1)**; total 0–5 per hari disimpan ke `kpi_evaluations` komponen `SERAGAM` pada tanggal absen. Penilaian boleh menyusul (besok/lusa). Satu baris per pegawai+tanggal; simpan ulang mengganti baris itu. Rincian centang ada di `notes` (`SERAGAM_ABSEN;S=..;P=..;I=..`), tanpa schema baru. Otorisasi server: role `0/1` semua unit, `34` hanya unit 50, `40` hanya unit binaan `spv_units`; role lain ditolak. Pegawai Manager (34) tidak dinilai lewat checklist karena SERAGAM-nya tetap rata-rata tim. Kebersihan dan Kepatuhan SOP tetap manual; hari tanpa nilai tetap 0 seperti perilaku `/penilaian/absen`. Nilai SERAGAM manual lama tetap dipakai KPI, tetapi tidak boleh tertimpa tanpa konfirmasi: modal menampilkan nilai lama + tombol **Nilai ulang dari foto**, dan server menolak penimpaan tanpa `timpa_manual=1`. — `PresensiSeragamService`, `RiwayatPresensi::semua_riwayat/seragam`; `tests/unit/PresensiSeragamServiceTest.php`
 
+24. [✅] **Nama halaman `/penilaian/absen` = "Penilaian Harian".** Setelah KEHADIRAN dan SERAGAM otomatis, halaman ini hanya untuk koreksi kehadiran/OFF serta skor manual Kebersihan dan Kepatuhan SOP. Label menu idmenu 10027 diganti lewat migrasi `RenamePenilaianAbsensiMenu`; judul halaman, breadcrumb, dan judul form memakai nama baru. Route, permission `penilaian_absen`, query, dan rumus tidak berubah. — `2026-11-03-000100_RenamePenilaianAbsensiMenu`, `penilaian/penilaian_absen.php`; `tests/RenamePenilaianAbsensiMenuTest.php`
+
 ## 6. Acceptance Criteria
 - [ ] Template KPI & penilaian dapat dikelola.
 - [ ] Evaluasi KPI otomatis dipicu dari data operasional & menghasilkan skor/grading.
@@ -69,6 +71,7 @@ Mengelola template KPI, penilaian kinerja, evaluasi KPI otomatis dari data opera
 - [ ] Target KPI dikelola role `[1,34]` sesuai guard saat ini.
 - [ ] Customer satisfaction & input kehadiran tersimpan.
 - [ ] SERAGAM dari centang foto (seragam 3, sepatu 1, ID card 1) tersimpan per tanggal absen; role/unit divalidasi server; Manager tetap rata-rata tim.
+- [ ] Menu dan halaman `/penilaian/absen` memakai nama "Penilaian Harian" tanpa mengubah route atau permission.
 - [ ] Punch `/absen` otomatis mengisi KEHADIRAN dengan evaluator SPV unit (cabang) / Manager (HO); OFF/IZIN tidak dinilai; koreksi manual menimpa nilai otomatis tanpa rata-rata ganda.
 - [ ] KPI omzet lintas cabang (HO/SPV) tidak memuat unit trial; KPI non-omzet dan KPI karyawan unit trial tetap berjalan.
 - [ ] Pegawai cabang dapat melihat skor KPI-nya sendiri di `/kpi_saya` tanpa nominal gaji; pegawai HO ditolak.
