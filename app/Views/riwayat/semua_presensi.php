@@ -131,6 +131,10 @@ $kehadiran = [
                         $pulang     = $jam($row->waktu_pulang);
                         $kehadiranV = $row->status_kehadiran;
                         $statusV    = $row->status_absensi;
+                        $tanggalIso = substr((string) ($row->waktu_masuk ?: $row->created_at), 0, 10);
+                        $kunciSrg   = (int) $row->akun_idakun . '|' . $tanggalIso;
+                        $srg        = $seragam[$kunciSrg] ?? ['score' => 0, 'seragam' => false, 'sepatu' => false, 'idcard' => false];
+                        $bolehSrg   = !empty($bolehSeragam[$kunciSrg]);
                         ?>
                         <tr data-kehadiran="<?= $kehadiranV === null ? '' : (int) $kehadiranV ?>"
                             data-status="<?= $statusV === null ? '' : (int) $statusV ?>">
@@ -195,7 +199,15 @@ $kehadiran = [
                                     data-foto="<?= esc((string) $row->foto, 'attr') ?>"
                                     data-fotopulang="<?= esc((string) $row->foto_pulang, 'attr') ?>"
                                     data-kehadiran="<?= $kehadiranV === null ? '' : (int) $kehadiranV ?>"
-                                    data-status="<?= $statusV === null ? '' : (int) $statusV ?>">
+                                    data-status="<?= $statusV === null ? '' : (int) $statusV ?>"
+                                    data-akun="<?= (int) $row->akun_idakun ?>"
+                                    data-tanggal-iso="<?= esc($tanggalIso, 'attr') ?>"
+                                    data-seragam-boleh="<?= $bolehSrg ? '1' : '0' ?>"
+                                    data-seragam-nilai="<?= esc((string) $srg['score'], 'attr') ?>"
+                                    data-seragam-s="<?= $srg['seragam'] ? '1' : '0' ?>"
+                                    data-seragam-p="<?= $srg['sepatu'] ? '1' : '0' ?>"
+                                    data-seragam-i="<?= $srg['idcard'] ? '1' : '0' ?>"
+                                    data-seragam-manual="<?= !empty($srg['manual']) ? '1' : '0' ?>">
                                     <iconify-icon icon="solar:magnifer-zoom-in-linear" width="16" height="16" aria-hidden="true"></iconify-icon>
                                     Detail
                                 </button>
@@ -229,6 +241,37 @@ $kehadiran = [
                         <div class="col-lg-5">
                             <div class="ra-detail__tags" id="ra-detail-tags"></div>
                             <dl class="ra-meta" id="ra-detail-meta"></dl>
+
+                            <div class="ra-seragam" id="ra-seragam">
+                                <h6 class="fw-semibold mb-2">Penilaian Seragam</h6>
+                                <form method="post" action="<?= base_url('riwayat_presensi/seragam') ?>" id="ra-seragam-form" class="d-none">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="employee_id" id="ra-seragam-akun">
+                                    <input type="hidden" name="tanggal" id="ra-seragam-tanggal">
+                                    <input type="hidden" name="timpa_manual" id="ra-seragam-timpa" value="">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="seragam" value="1" id="ra-seragam-s">
+                                        <label class="form-check-label" for="ra-seragam-s">Seragam sesuai <span class="text-muted">(3)</span></label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="sepatu" value="1" id="ra-seragam-p">
+                                        <label class="form-check-label" for="ra-seragam-p">Sepatu sesuai <span class="text-muted">(1)</span></label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="idcard" value="1" id="ra-seragam-i">
+                                        <label class="form-check-label" for="ra-seragam-i">ID Card sesuai <span class="text-muted">(1)</span></label>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 mt-2">
+                                        <button type="submit" class="btn btn-sm btn-primary">Simpan nilai</button>
+                                        <span class="text-muted small" id="ra-seragam-hasil">0/5</span>
+                                    </div>
+                                </form>
+                                <p class="text-muted small mb-0" id="ra-seragam-info"></p>
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2 d-none" id="ra-seragam-timpa-btn">
+                                    Nilai ulang dari foto
+                                </button>
+                            </div>
+
                             <div class="ra-photos" id="ra-detail-photos"></div>
                         </div>
                     </div>
@@ -1379,7 +1422,15 @@ $kehadiran = [
                 foto: btn.getAttribute('data-foto'),
                 fotoPulang: btn.getAttribute('data-fotopulang'),
                 kehadiran: btn.getAttribute('data-kehadiran'),
-                status: btn.getAttribute('data-status')
+                status: btn.getAttribute('data-status'),
+                akun: btn.getAttribute('data-akun'),
+                tanggalIso: btn.getAttribute('data-tanggal-iso'),
+                seragamBoleh: btn.getAttribute('data-seragam-boleh') === '1',
+                seragamNilai: btn.getAttribute('data-seragam-nilai') || '0',
+                seragamS: btn.getAttribute('data-seragam-s') === '1',
+                seragamP: btn.getAttribute('data-seragam-p') === '1',
+                seragamI: btn.getAttribute('data-seragam-i') === '1',
+                seragamManual: btn.getAttribute('data-seragam-manual') === '1'
             };
 
             const masuk = data.waktuMasuk ? new Date(data.waktuMasuk) : null;
@@ -1429,6 +1480,53 @@ $kehadiran = [
             });
 
             detailAktif = data;
+
+            const formSeragam = document.getElementById('ra-seragam-form');
+            const infoSeragam = document.getElementById('ra-seragam-info');
+            const btnTimpa = document.getElementById('ra-seragam-timpa-btn');
+            document.getElementById('ra-seragam-akun').value = data.akun || '';
+            document.getElementById('ra-seragam-tanggal').value = data.tanggalIso || '';
+            document.getElementById('ra-seragam-timpa').value = '';
+            document.getElementById('ra-seragam-s').checked = data.seragamS;
+            document.getElementById('ra-seragam-p').checked = data.seragamP;
+            document.getElementById('ra-seragam-i').checked = data.seragamI;
+
+            if (data.seragamBoleh) {
+                if (data.seragamManual) {
+                    formSeragam.classList.add('d-none');
+                    btnTimpa.classList.remove('d-none');
+                    infoSeragam.textContent = 'Nilai manual lama: ' + data.seragamNilai + '/5.';
+                } else {
+                    formSeragam.classList.remove('d-none');
+                    btnTimpa.classList.add('d-none');
+                    infoSeragam.textContent = '';
+                    perbaruiNilaiSeragam();
+                }
+            } else {
+                formSeragam.classList.add('d-none');
+                btnTimpa.classList.add('d-none');
+                infoSeragam.textContent = data.seragamNilai !== '0'
+                    ? 'Nilai tersimpan: ' + data.seragamNilai + '/5. Anda tidak berwenang mengubahnya.'
+                    : 'Anda tidak berwenang menilai SERAGAM pegawai ini.';
+            }
+        });
+
+        document.getElementById('ra-seragam-timpa-btn').addEventListener('click', function () {
+            document.getElementById('ra-seragam-form').classList.remove('d-none');
+            document.getElementById('ra-seragam-timpa').value = '1';
+            this.classList.add('d-none');
+            document.getElementById('ra-seragam-info').textContent = 'Nilai manual lama akan diganti setelah disimpan.';
+        });
+
+        function perbaruiNilaiSeragam() {
+            const nilai = (document.getElementById('ra-seragam-s').checked ? 3 : 0)
+                + (document.getElementById('ra-seragam-p').checked ? 1 : 0)
+                + (document.getElementById('ra-seragam-i').checked ? 1 : 0);
+            document.getElementById('ra-seragam-hasil').textContent = nilai + '/5';
+        }
+
+        ['ra-seragam-s', 'ra-seragam-p', 'ra-seragam-i'].forEach(function (id) {
+            document.getElementById(id).addEventListener('change', perbaruiNilaiSeragam);
         });
 
         let peta = null;

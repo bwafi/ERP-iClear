@@ -2061,6 +2061,11 @@ class PenilaianKPI extends BaseController
 
             $savedAnyAllowed = true;
 
+            // SERAGAM kini dinilai dari centang foto absen mobile.
+            if ($code === 'SERAGAM') {
+                continue;
+            }
+
             if ($code === 'KEHADIRAN' && $statusKehadiran === 'OFF') {
                 // Tandai OFF: hari libur/istirahat tidak dihitung.
                 // Nilai absensi TIDAK disimpan sebagai 0 (null) supaya tidak
@@ -2275,6 +2280,16 @@ class PenilaianKPI extends BaseController
         // Ada evaluasi KEHADIRAN nyata tersimpan → batalkan penandaan OFF.
         if ($kehadiranActual) {
             $offModel->clearOff($employeeId, $tanggal, (int)$me->ID_AKUN);
+        }
+
+        // Koreksi manual menimpa baris hasil sinkronisasi absen mobile.
+        if ($saved > 0 && ($kehadiranActual || $markOff)) {
+            try {
+                (new \App\Services\Kpi\PresensiAttendanceSyncService())
+                    ->clearAutoForManual($employeeId, $tanggal, (int)$me->ID_AKUN, $markOff);
+            } catch (\Throwable $e) {
+                log_message('error', 'Bersihkan absen otomatis gagal: ' . $e->getMessage());
+            }
         }
 
         $message = $savedOff && $saved === 1
@@ -2676,6 +2691,13 @@ class PenilaianKPI extends BaseController
                 $actualTime,
                 $myId
             );
+
+            try {
+                (new \App\Services\Kpi\PresensiAttendanceSyncService())
+                    ->clearAutoForManual($targetId, $date, $myId, false);
+            } catch (\Throwable $e) {
+                log_message('error', 'Bersihkan absen otomatis gagal: ' . $e->getMessage());
+            }
 
             session()->setFlashdata('success', 'Absensi berhasil disimpan. Nilai otomatis: ' . $result['auto_score'] . ', Telat: ' . $result['late_minutes'] . ' menit.');
         } catch (\Exception $e) {

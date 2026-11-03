@@ -56,11 +56,51 @@ class RiwayatPresensi extends BaseController
 
     public function semua_riwayat()
     {
+        $presensi = $this->PresensiModel->getAll();
+        $seragamSvc = new \App\Services\Kpi\PresensiSeragamService();
+
+        $baris = [];
+        $bolehSeragam = [];
+        foreach ($presensi as $row) {
+            $tanggal = substr((string) ($row->waktu_masuk ?: $row->created_at), 0, 10);
+            $baris[] = ['akun_idakun' => (int) $row->akun_idakun, 'tanggal' => $tanggal];
+            $bolehSeragam[(int) $row->akun_idakun . '|' . $tanggal] = $seragamSvc->bolehMenilai(
+                (int) ($row->ID_UNIT ?? 0),
+                (int) ($row->ID_JABATAN ?? 0)
+            );
+        }
+
         $data = array(
-            'presensi' => $this->PresensiModel->getAll(),
+            'presensi' => $presensi,
+            'seragam' => $seragamSvc->petaNilai($baris),
+            'bolehSeragam' => $bolehSeragam,
             'body' => 'riwayat/semua_presensi'
         );
         return view('template', $data);
+    }
+
+    /**
+     * Simpan nilai SERAGAM (3/1/1) dari centang foto absen.
+     */
+    public function seragam()
+    {
+        try {
+            $svc = new \App\Services\Kpi\PresensiSeragamService();
+            $hasil = $svc->simpan(
+                (int) $this->request->getPost('employee_id'),
+                (string) $this->request->getPost('tanggal'),
+                $this->request->getPost('seragam') === '1',
+                $this->request->getPost('sepatu') === '1',
+                $this->request->getPost('idcard') === '1',
+                $this->request->getPost('timpa_manual') === '1'
+            );
+
+            return redirect()->to(base_url('semua_riwayat_presensi'))
+                ->with('sukses', 'Nilai SERAGAM ' . $hasil['score'] . '/5 tersimpan.');
+        } catch (\Throwable $e) {
+            return redirect()->to(base_url('semua_riwayat_presensi'))
+                ->with('gagal', $e->getMessage());
+        }
     }
 
     public function export_semua_presensi()

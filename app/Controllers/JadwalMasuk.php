@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Models\ModelAuth;
 use App\Models\ModelPresensiRoster;
 use App\Models\ModelUnit;
+use App\Services\Kpi\PresensiAttendanceSyncService;
 use App\Services\Presensi\PresensiScopeService;
 use App\Services\Presensi\RosterService;
 
@@ -91,6 +92,8 @@ class JadwalMasuk extends BaseController
             return redirect()->back()->with('gagal', $e->getMessage());
         }
 
+        $this->syncKpi((int) $akun->ID_AKUN, $bulan);
+
         return redirect()->back()->with('sukses', $jumlah . ' tanggal roster ditambahkan.');
     }
 
@@ -147,6 +150,24 @@ class JadwalMasuk extends BaseController
             return redirect()->back()->with('gagal', 'Roster gagal disimpan.');
         }
 
+        $this->syncKpi((int) $akun->ID_AKUN, (string) $this->request->getPost('bulan'));
+
         return redirect()->back()->with('sukses', 'Roster berhasil disimpan.');
+    }
+
+    /**
+     * Sinkronkan OFF/IZIN dan punch roster ke KPI tanpa menggagalkan simpan roster.
+     */
+    private function syncKpi(int $akunId, string $bulan): void
+    {
+        if (! preg_match('/^\d{4}-\d{2}$/', $bulan)) {
+            return;
+        }
+
+        try {
+            (new PresensiAttendanceSyncService())->syncMonth($akunId, $bulan);
+        } catch (\Throwable $e) {
+            log_message('error', 'Sync KPI roster gagal: ' . $e->getMessage());
+        }
     }
 }

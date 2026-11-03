@@ -58,6 +58,7 @@ class ModelPresensi extends Model
                           jadwal_masuk.jam_masuk as jmmasuk, 
                           akun.NAMA_AKUN, 
                           akun.ID_UNIT, 
+                          akun.ID_JABATAN,
                           unit.NAMA_UNIT,
                           unit.LATITUDE, 
                           unit.LONGTITUDE')

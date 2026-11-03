@@ -165,6 +165,12 @@
                         <small class="text-muted fs-1 mt-1 d-block">Tanggal yang akan diinput/diubah skornya.</small>
                     </div>
                     <div class="col-md-9">
+                        <?php if (in_array('SERAGAM', (array)$allowedComponentCodes, true)) : ?>
+                            <div class="alert alert-info py-2 px-3 fs-2 mb-3">
+                                Nilai <strong>Seragam</strong> diisi dari centang foto absen di
+                                <a href="<?= base_url('semua_riwayat_presensi') ?>">Riwayat Presensi (admin)</a>.
+                            </div>
+                        <?php endif; ?>
                         <?php if (in_array('KEHADIRAN', (array)$allowedComponentCodes, true)) : ?>
                             <!-- KEHADIRAN: input jam masuk auto-scoring -->
                             <div class="bg-light border rounded-3 p-3 mb-3">
@@ -224,6 +230,7 @@
                         <div class="row g-3">
                             <?php foreach ($attendanceComponents as $c) : ?>
                                 <?php if ($c->code === 'KEHADIRAN') continue; ?>
+                                <?php if ($c->code === 'SERAGAM') continue; // dinilai dari foto absen ?>
                                 <?php if (!in_array($c->code, $allowedComponentCodes, true)) continue; ?>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold fs-3"><?= esc($c->name) ?></label>

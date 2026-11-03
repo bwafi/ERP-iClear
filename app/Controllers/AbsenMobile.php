@@ -6,6 +6,7 @@ use App\Models\ModelPresensi;
 use App\Models\ModelPresensiRoster;
 use App\Models\ModelUnit;
 use App\Services\Kpi\AttendanceScoreCalculator;
+use App\Services\Kpi\PresensiAttendanceSyncService;
 use App\Services\Presensi\AbsenPunchService;
 use App\Services\Presensi\PresensiException;
 use App\Services\Presensi\PresensiScopeService;
@@ -96,6 +97,8 @@ class AbsenMobile extends Controller
                 $file,
                 $waktu
             );
+
+            $this->syncKpi($akunId, substr($waktu, 0, 10));
 
             return $this->jawab(true, 'Absen masuk berhasil.');
         } catch (PresensiException $e) {
@@ -208,6 +211,19 @@ class AbsenMobile extends Controller
     private function jawab(bool $ok, string $message, int $status = 200, array $data = [])
     {
         return $this->response->setStatusCode($status)->setJSON(['ok' => $ok, 'message' => $message] + $data);
+    }
+
+    /**
+     * Punch tetap sukses walau sinkronisasi KPI gagal; kegagalan dicatat
+     * dan bisa diperbaiki lewat `spark presensi:sync-kpi`.
+     */
+    private function syncKpi(int $akunId, string $tanggal): void
+    {
+        try {
+            (new PresensiAttendanceSyncService())->syncDay($akunId, $tanggal);
+        } catch (\Throwable $e) {
+            log_message('error', 'Sync KPI absen gagal: ' . $e->getMessage());
+        }
     }
 
     private function labelSesi(string $shift, string $sesi): string

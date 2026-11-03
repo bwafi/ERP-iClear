@@ -386,6 +386,7 @@ $routes->post('insert_payroll', 'Jenis_Payroll::insert_Payroll', ['filter' => 'a
 //riwayat presensi
 $routes->get('riwayat_presensi', 'RiwayatPresensi::index', ['filter' => 'auth']);
 $routes->get('semua_riwayat_presensi', 'RiwayatPresensi::semua_riwayat', ['filter' => 'auth']);
+$routes->post('riwayat_presensi/seragam', 'RiwayatPresensi::seragam', ['filter' => ['auth', 'csrf']]);
 $routes->post('export/semua_presensi', 'RiwayatPresensi::export_semua_presensi', ['filter' => 'auth']);
 
 //approval presensi (hanya izin/sakit/cuti; absensi langsung final)
