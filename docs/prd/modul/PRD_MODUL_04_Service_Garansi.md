@@ -42,6 +42,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
   - DP (`dp_bayar`, ledger `service_dp`, jurnal DP) tidak berubah. `total_service`/`harus_dibayar` tidak berubah.
   - Bila Tutup Kasir unit+tanggal `tanggal_selesai` sudah ada, wajib `konfirmasi_tutup_kasir=1`. Angka tutup kasir tersimpan/struk tidak diubah, tetapi halaman live dan omset/KPI teknisi bisa berubah karena dihitung ulang dari `service`.
   - Alasan wajib (maks 120 karakter) dicatat di log aplikasi.
+- **Pengambilan — `Riwayat_Service::update_sudah_diambil`**: bila `total_service <= 0` dan service punya baris `service_sparepart` dengan `sub_total`, total tagihan = `SUM(sub_total)` dan disimpan ke `total_service` + `harus_dibayar` dalam transaksi yang sama. Total yang sudah terisi tidak ditimpa. Bila total tetap 0 sementara saldo DP > 0, pengambilan ditolak (status tidak berubah, tanpa jurnal) agar DP tidak dianggap kas keluar saat service selesai. — `Riwayat_Service.php`; test `ServicePengambilanDpTest`
 - Riwayat service: `Riwayat_Service::index/riwayat_service_ajax/detail_service/cetak_invoice/export/delete_service`.
 ### 4.5 Garansi
 - `StatusGaransi::index/garansi_service_ajax` (garansi aktif), `update_service_pelanggan_garansi`, `insert_kerusakan_garansi`, `insert_sparepart_garansi`, `insert_pembayaran_garansi`.
@@ -84,6 +85,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 12. DP tambahan setelah DP awal memakai `kode_dp` yang sama (`DP{no_service}`), sehingga `ServiceDpService::catatDp()` mengembalikan `duplikat` dan pembayaran DP kedua gagal. — `Service::insert_service/insert_pembayaran`; `ServiceDpService` (SV-03)
 13. Halaman `GET status_service/{id}` publik, tanpa auth, dan view mencetak nama/keluhan pelanggan tanpa `esc()` → PII/XSS. — `Routes.php:218`; `Views/transaksi/status_service.php:83-88` (SV-04)
 14. Pembatalan service memakai `GET service/cancel/{id}` tanpa CSRF. — `Routes.php:158`; `Service::cancel_service` (SV-05)
+15. Pengambilan service dengan total 0 mengambil total dari `SUM(service_sparepart.sub_total)`; total yang sudah terisi tidak ditimpa, dan DP>0 tanpa total ditolak. — `Riwayat_Service::update_sudah_diambil`; test `ServicePengambilanDpTest`
 
 ## 6. Acceptance Criteria
 - [ ] Intake service menolak transaksi aktif kedua; memaksa pelanggan.

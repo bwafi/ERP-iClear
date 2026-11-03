@@ -116,6 +116,7 @@ final class ServicePengambilanDpTest extends CIUnitTestCase
         $q('CREATE TABLE db_service_sparepart (
             idservice_sparepart INT UNSIGNED NOT NULL AUTO_INCREMENT,
             service_idservice INT UNSIGNED NOT NULL,
+            sub_total INT NULL DEFAULT 0,
             PRIMARY KEY (idservice_sparepart)
         ) ENGINE=InnoDB');
 
@@ -233,6 +234,14 @@ final class ServicePengambilanDpTest extends CIUnitTestCase
         return (int) $this->db->insertID();
     }
 
+    private function seedSparepart(int $idservice, int $subTotal): void
+    {
+        $this->db->table('service_sparepart')->insert([
+            'service_idservice' => $idservice,
+            'sub_total'         => $subTotal,
+        ]);
+    }
+
     private function seedDp(int $idservice, int $jumlah, string $metode = 'tunai', string $status = 'aktif'): void
     {
         $this->db->table('service_dp')->insert([
@@ -311,6 +320,54 @@ final class ServicePengambilanDpTest extends CIUnitTestCase
         $this->assertSame(70000, $this->jumlahDenganAkun($jurnal, '1010101000', 'debet'), 'DP intake TIDAK boleh dihitung lagi sebagai kas.');
         $this->assertSame(30000, $this->jumlahDenganAkun($jurnal, '2010302000', 'debet'), 'PDM dilepas tepat sebesar DP terpakai.');
         $this->assertSame(100000, $this->jumlahDenganAkun($jurnal, '4010201000', 'kredit'), 'Pendapatan total = tunai + DP.');
+    }
+
+    public function testTotalKosongDiambilDariSparepart(): void
+    {
+        $this->sesi();
+        $id = $this->seedService(['total_service' => 0, 'harus_dibayar' => 0, 'bayar_tunai' => 0]);
+        $this->seedSparepart($id, 2500000);
+        $this->seedDp($id, 2500000, 'transfer');
+
+        $this->post('service/sudah_diambil', ['idservice' => $id])->assertStatus(302);
+
+        $db = $this->koneksiFresh();
+        $service = $db->table('service')->where('idservice', $id)->get()->getRow();
+        $this->assertSame(2500000, (int) $service->total_service, 'Total diisi dari sparepart.');
+        $this->assertSame(2500000, (int) $service->harus_dibayar, 'Harus dibayar bruto = total.');
+        $this->assertSame(4, (int) $service->status_service);
+
+        $jurnal = $this->jurnalService($id);
+        $this->assertSame(0, $this->jumlahDenganAkun($jurnal, '1010101000', 'debet'), 'DP intake bukan kas baru.');
+        $this->assertSame(0, $this->jumlahDenganAkun($jurnal, '1010102000', 'debet'), 'DP intake bukan kas baru.');
+        $this->assertSame(2500000, $this->jumlahDenganAkun($jurnal, '2010302000', 'debet'), 'PDM dilepas sebesar DP terpakai.');
+        $this->assertSame(2500000, $this->jumlahDenganAkun($jurnal, '4010201000', 'kredit'), 'Pendapatan diakui penuh.');
+    }
+
+    public function testDpTanpaTotalTagihanDitolak(): void
+    {
+        $this->sesi();
+        $id = $this->seedService(['total_service' => 0, 'bayar_tunai' => 0]);
+        $this->seedDp($id, 100000);
+
+        $this->post('service/sudah_diambil', ['idservice' => $id])->assertStatus(302);
+
+        $db = $this->koneksiFresh();
+        $this->assertSame(3, (int) $db->table('service')->where('idservice', $id)->get()->getRow()->status_service, 'Status tidak boleh berubah.');
+        $this->assertCount(0, $this->jurnalService($id), 'Tidak ada jurnal DP tanpa total.');
+    }
+
+    public function testTotalTerisiTidakDitimpaSparepart(): void
+    {
+        $this->sesi();
+        $id = $this->seedService(['total_service' => 100000, 'bayar_tunai' => 100000]);
+        $this->seedSparepart($id, 50000);
+
+        $this->post('service/sudah_diambil', ['idservice' => $id])->assertStatus(302);
+
+        $db = $this->koneksiFresh();
+        $this->assertSame(100000, (int) $db->table('service')->where('idservice', $id)->get()->getRow()->total_service, 'Total yang sudah terisi tidak diubah.');
+        $this->assertSame(100000, $this->jumlahDenganAkun($this->jurnalService($id), '4010201000', 'kredit'));
     }
 
     public function testPengambilanDpHistorisTanpaLedger(): void

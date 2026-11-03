@@ -1313,7 +1313,27 @@ class Riwayat_Service extends BaseController
 
         $db = Database::connect();
 
+        // Service yang hanya berisi sparepart sering tidak punya tarif jasa
+        // manual sehingga `total_service` masih 0. Pakai jumlah sparepart agar
+        // pendapatan diakui dan DP tidak dianggap kas baru saat pengambilan.
         $total_service = (int) $dataservice->total_service;
+        $totalDariSparepart = false;
+        if ($total_service <= 0
+            && $db->tableExists($db->getPrefix() . 'service_sparepart', false)
+            && $db->fieldExists('sub_total', 'service_sparepart')) {
+            $ringkasanSparepart = $db->table('service_sparepart')
+                ->select('COUNT(*) AS jumlah_baris, COALESCE(SUM(sub_total), 0) AS total_tagihan', false)
+                ->where('service_idservice', $idservice)
+                ->get()
+                ->getRow();
+
+            if ((int) ($ringkasanSparepart->jumlah_baris ?? 0) > 0
+                && (int) ($ringkasanSparepart->total_tagihan ?? 0) > 0) {
+                $total_service = (int) $ringkasanSparepart->total_tagihan;
+                $totalDariSparepart = true;
+            }
+        }
+
         $bayar_tunai   = (int) $dataservice->bayar_tunai;
 
         // Pembayaran via bank pada saat pengambilan (referensi 'service_baru').
@@ -1327,6 +1347,14 @@ class Riwayat_Service extends BaseController
 
         // Sumber saldo DP: ledger baru (`service_dp`) atau historis (`service.dp_bayar`).
         $sumberDp    = $this->DpService->statusSumberDp($idservice);
+
+        // DP tanpa total tagihan akan hilang dari pendapatan dan tampak sebagai
+        // kas keluar saat service selesai. Minta total diisi lebih dulu.
+        if ($total_service <= 0 && (int) ($sumberDp['saldo'] ?? 0) > 0) {
+            session()->setFlashdata('gagal', 'Total tagihan service masih 0. Tambahkan sparepart atau tarif jasa sebelum menyelesaikan service.');
+            return redirect()->to(base_url('bisa_diambil'));
+        }
+
         $sisaTagihan = max($total_service - $bayar_tunai - $bayar_bank, 0);
         $dpTerpakai  = min((int) $sumberDp['saldo'], $sisaTagihan);
         $pendapatan  = $bayar_tunai + $bayar_bank + $dpTerpakai;
@@ -1337,10 +1365,16 @@ class Riwayat_Service extends BaseController
         $db->transBegin();
 
         try {
-            $this->ServiceModel->updateService($idservice, [
+            $perubahanService = [
                 'status_service'  => 4,
                 'tanggal_selesai' => $wibTime->format('Y-m-d H:i:s'),
-            ]);
+            ];
+            if ($totalDariSparepart) {
+                $perubahanService['total_service'] = $total_service;
+                $perubahanService['harus_dibayar'] = $total_service;
+            }
+
+            $this->ServiceModel->updateService($idservice, $perubahanService);
 
             // Idempotensi berbasis jurnal: bila jurnal pengambilan (tabel_referensi
             // 'service') untuk service ini sudah pernah tertulis, JANGAN posting
