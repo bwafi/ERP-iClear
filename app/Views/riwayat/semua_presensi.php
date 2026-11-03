@@ -221,9 +221,9 @@ $kehadiran = [
 
     <!-- Detail absensi -->
     <div class="modal fade ra-modal" id="ra-modal-detail" tabindex="-1" aria-labelledby="ra-detail-title" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header ra-head">
                     <div class="ra-detail__identity">
                         <span class="ra-detail__avatar" aria-hidden="true"><iconify-icon icon="solar:user-rounded-linear" width="22" height="22"></iconify-icon></span>
                         <div>
@@ -231,48 +231,61 @@ $kehadiran = [
                             <p class="ra-detail__sub"><span id="ra-detail-unit">—</span> · <span id="ra-detail-tanggal">—</span></p>
                         </div>
                     </div>
+                    <div class="ra-detail__tags" id="ra-detail-tags"></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-lg-7">
+                    <div class="ra-detail">
+                        <div class="ra-detail__media">
                             <div class="ra-map" id="ra-map"></div>
+                            <div class="ra-photos" id="ra-detail-photos"></div>
                         </div>
-                        <div class="col-lg-5">
-                            <div class="ra-detail__tags" id="ra-detail-tags"></div>
-                            <dl class="ra-meta" id="ra-detail-meta"></dl>
 
-                            <div class="ra-seragam" id="ra-seragam">
-                                <h6 class="fw-semibold mb-2">Penilaian Seragam</h6>
+                        <div class="ra-detail__side">
+                            <section class="ra-panel" aria-labelledby="ra-meta-title">
+                                <h6 class="ra-panel__title" id="ra-meta-title">Jejak absen</h6>
+                                <dl class="ra-meta" id="ra-detail-meta"></dl>
+                            </section>
+
+                            <section class="ra-panel ra-seragam" id="ra-seragam" aria-labelledby="ra-seragam-title">
+                                <div class="ra-seragam__head">
+                                    <h6 class="ra-panel__title" id="ra-seragam-title">Penilaian seragam</h6>
+                                    <span class="ra-seragam__score" id="ra-seragam-hasil">0/5</span>
+                                </div>
                                 <form method="post" action="<?= base_url('riwayat_presensi/seragam') ?>" id="ra-seragam-form" class="d-none">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="employee_id" id="ra-seragam-akun">
                                     <input type="hidden" name="tanggal" id="ra-seragam-tanggal">
                                     <input type="hidden" name="timpa_manual" id="ra-seragam-timpa" value="">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="seragam" value="1" id="ra-seragam-s">
-                                        <label class="form-check-label" for="ra-seragam-s">Seragam sesuai <span class="text-muted">(3)</span></label>
+                                    <div class="ra-checks">
+                                        <label class="ra-check">
+                                            <input class="ra-check__input" type="checkbox" name="seragam" value="1" id="ra-seragam-s">
+                                            <span class="ra-check__box" aria-hidden="true"><iconify-icon icon="solar:check-read-linear" width="14" height="14"></iconify-icon></span>
+                                            <span class="ra-check__text">Seragam sesuai</span>
+                                            <span class="ra-check__points">+3</span>
+                                        </label>
+                                        <label class="ra-check">
+                                            <input class="ra-check__input" type="checkbox" name="sepatu" value="1" id="ra-seragam-p">
+                                            <span class="ra-check__box" aria-hidden="true"><iconify-icon icon="solar:check-read-linear" width="14" height="14"></iconify-icon></span>
+                                            <span class="ra-check__text">Sepatu sesuai</span>
+                                            <span class="ra-check__points">+1</span>
+                                        </label>
+                                        <label class="ra-check">
+                                            <input class="ra-check__input" type="checkbox" name="idcard" value="1" id="ra-seragam-i">
+                                            <span class="ra-check__box" aria-hidden="true"><iconify-icon icon="solar:check-read-linear" width="14" height="14"></iconify-icon></span>
+                                            <span class="ra-check__text">ID Card sesuai</span>
+                                            <span class="ra-check__points">+1</span>
+                                        </label>
                                     </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="sepatu" value="1" id="ra-seragam-p">
-                                        <label class="form-check-label" for="ra-seragam-p">Sepatu sesuai <span class="text-muted">(1)</span></label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="idcard" value="1" id="ra-seragam-i">
-                                        <label class="form-check-label" for="ra-seragam-i">ID Card sesuai <span class="text-muted">(1)</span></label>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2 mt-2">
-                                        <button type="submit" class="btn btn-sm btn-primary">Simpan nilai</button>
-                                        <span class="text-muted small" id="ra-seragam-hasil">0/5</span>
+                                    <div class="ra-seragam__actions">
+                                        <button type="submit" class="ra-btn ra-btn--primary">Simpan nilai</button>
                                     </div>
                                 </form>
-                                <p class="text-muted small mb-0" id="ra-seragam-info"></p>
-                                <button type="button" class="btn btn-sm btn-outline-primary mt-2 d-none" id="ra-seragam-timpa-btn">
+                                <p class="ra-seragam__note" id="ra-seragam-info"></p>
+                                <button type="button" class="ra-btn ra-btn--ghost mt-2 d-none" id="ra-seragam-timpa-btn">
                                     Nilai ulang dari foto
                                 </button>
-                            </div>
-
-                            <div class="ra-photos" id="ra-detail-photos"></div>
+                            </section>
                         </div>
                     </div>
                 </div>
@@ -327,6 +340,7 @@ $kehadiran = [
         --ra-warn-soft: rgba(192, 118, 0, .13);
         --ra-bad-ink: #b02a37;
         --ra-bad-soft: rgba(176, 42, 55, .10);
+        --ra-control-line: #7d8a99;
         --ra-radius: 16px;
         --ra-radius-sm: 10px;
         --ra-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 18px 40px -32px rgba(16, 24, 40, .35);
@@ -349,6 +363,7 @@ $kehadiran = [
         --ra-warn-soft: rgba(255, 207, 110, .12);
         --ra-bad-ink: #ff9aa2;
         --ra-bad-soft: rgba(255, 154, 162, .12);
+        --ra-control-line: #8fa0b8;
         --ra-shadow: none;
     }
 
@@ -467,7 +482,7 @@ $kehadiran = [
     .ra-page .ra-btn--ghost {
         color: var(--ra-ink);
         background: transparent;
-        border-color: var(--ra-rule);
+        border-color: var(--ra-control-line);
     }
 
     .ra-page .ra-btn--ghost:hover,
@@ -920,6 +935,10 @@ $kehadiran = [
         padding: 18px;
     }
 
+    .ra-page #ra-modal-detail .modal-body {
+        padding: 0;
+    }
+
     .ra-page .ra-detail__identity {
         display: flex;
         gap: 12px;
@@ -950,8 +969,171 @@ $kehadiran = [
         font-size: .75rem;
     }
 
+    /* Detail absensi: bukti di kiri, bacaan + penilaian di kanan */
+    .ra-page .ra-head {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px 14px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--ra-rule);
+    }
+
+    .ra-page .ra-head .ra-detail__identity {
+        flex: 1 1 240px;
+    }
+
+    .ra-page .ra-head .ra-detail__tags {
+        align-self: center;
+    }
+
+    .ra-page .ra-detail {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+        gap: 22px;
+        align-items: start;
+        padding: 20px;
+    }
+
+    .ra-page .ra-detail__media {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .ra-page .ra-detail__side {
+        display: grid;
+        gap: 20px;
+        min-width: 0;
+    }
+
+    .ra-page .ra-panel__title {
+        margin: 0 0 8px;
+        color: var(--ra-muted);
+        font-size: .65rem;
+        font-weight: 700;
+        letter-spacing: .07em;
+        text-transform: uppercase;
+    }
+
+    .ra-page .ra-seragam {
+        padding-top: 16px;
+        border-top: 1px solid var(--ra-rule);
+    }
+
+    .ra-page .ra-seragam__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+
+    .ra-page .ra-seragam__head .ra-panel__title {
+        margin: 0;
+    }
+
+    .ra-page .ra-seragam__score {
+        color: var(--ra-ink);
+        font-size: 1.35rem;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        letter-spacing: -.03em;
+        line-height: 1;
+    }
+
+    .ra-page .ra-checks {
+        display: grid;
+        border-top: 1px solid var(--ra-rule);
+    }
+
+    .ra-page .ra-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 2px;
+        border-bottom: 1px solid var(--ra-rule);
+        cursor: pointer;
+        transition: background-color .15s ease;
+    }
+
+    .ra-page .ra-check:last-child {
+        border-bottom: 0;
+    }
+
+    .ra-page .ra-check:hover {
+        background: var(--ra-accent-soft);
+    }
+
+    .ra-page .ra-check__input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .ra-page .ra-check__box {
+        display: grid;
+        flex: none;
+        width: 20px;
+        height: 20px;
+        place-items: center;
+        color: transparent;
+        background: transparent;
+        border: 1.5px solid var(--ra-control-line);
+        border-radius: 6px;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+
+    .ra-page .ra-check__input:checked + .ra-check__box {
+        color: #fff;
+        background: var(--ra-accent-solid);
+        border-color: var(--ra-accent-solid);
+    }
+
+    .ra-page .ra-check__input:focus-visible + .ra-check__box {
+        outline: 2px solid var(--ra-accent-ink);
+        outline-offset: 2px;
+    }
+
+    .ra-page .ra-check__text {
+        font-size: .8rem;
+        font-weight: 600;
+    }
+
+    .ra-page .ra-check__points {
+        margin-left: auto;
+        color: var(--ra-muted);
+        font-size: .72rem;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+    }
+
+    .ra-page .ra-seragam__actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .ra-page .ra-seragam__note {
+        margin: 0 0 8px;
+        color: var(--ra-muted);
+        font-size: .73rem;
+        line-height: 1.5;
+    }
+
+    .ra-page .ra-seragam__note:empty {
+        display: none;
+    }
+
     .ra-page .ra-map {
-        height: 420px;
+        height: 300px;
         overflow: hidden;
         background: var(--ra-subtle);
         border: 1px solid var(--ra-rule);
@@ -973,30 +1155,33 @@ $kehadiran = [
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        margin-bottom: 12px;
     }
 
+    /* Fakta absen: baris berhairline, bukan kotak-kotak */
     .ra-page .ra-meta {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-        margin: 0 0 14px;
+        margin: 0;
+        border-top: 1px solid var(--ra-rule);
     }
 
     .ra-page .ra-meta__item {
-        min-width: 0;
-        padding: 9px 11px;
-        background: var(--ra-subtle);
-        border-radius: 9px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--ra-rule);
+    }
+
+    .ra-page .ra-meta__item:last-child {
+        border-bottom: 0;
     }
 
     .ra-page .ra-meta__item dt {
-        margin: 0 0 2px;
+        margin: 0;
         color: var(--ra-muted);
-        font-size: .63rem;
-        font-weight: 700;
-        letter-spacing: .05em;
-        text-transform: uppercase;
+        font-size: .72rem;
+        font-weight: 500;
     }
 
     .ra-page .ra-meta__item dd {
@@ -1006,6 +1191,7 @@ $kehadiran = [
         font-variant-numeric: tabular-nums;
         font-weight: 600;
         overflow-wrap: anywhere;
+        text-align: right;
     }
 
     .ra-page .ra-photos {
@@ -1129,6 +1315,14 @@ $kehadiran = [
         .ra-page .ra-filter__hint {
             justify-content: flex-start;
         }
+
+        .ra-page .ra-detail {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .ra-page .ra-detail__side {
+            order: -1;
+        }
     }
 
     @media (max-width: 575.98px) {
@@ -1169,6 +1363,15 @@ $kehadiran = [
 
         .ra-page .ra-meta {
             grid-template-columns: 1fr;
+        }
+
+        .ra-page .ra-detail {
+            padding: 16px;
+        }
+
+        .ra-page .ra-head .ra-detail__tags {
+            flex-basis: 100%;
+            order: 3;
         }
 
         .ra-page .ra-map {
@@ -1490,12 +1693,13 @@ $kehadiran = [
             document.getElementById('ra-seragam-s').checked = data.seragamS;
             document.getElementById('ra-seragam-p').checked = data.seragamP;
             document.getElementById('ra-seragam-i').checked = data.seragamI;
+            document.getElementById('ra-seragam-hasil').textContent = data.seragamNilai + '/5';
 
             if (data.seragamBoleh) {
                 if (data.seragamManual) {
                     formSeragam.classList.add('d-none');
                     btnTimpa.classList.remove('d-none');
-                    infoSeragam.textContent = 'Nilai manual lama: ' + data.seragamNilai + '/5.';
+                    infoSeragam.textContent = 'Nilai ini berasal dari input manual sebelum penilaian foto.';
                 } else {
                     formSeragam.classList.remove('d-none');
                     btnTimpa.classList.add('d-none');
@@ -1506,8 +1710,8 @@ $kehadiran = [
                 formSeragam.classList.add('d-none');
                 btnTimpa.classList.add('d-none');
                 infoSeragam.textContent = data.seragamNilai !== '0'
-                    ? 'Nilai tersimpan: ' + data.seragamNilai + '/5. Anda tidak berwenang mengubahnya.'
-                    : 'Anda tidak berwenang menilai SERAGAM pegawai ini.';
+                    ? 'Nilai ini sudah diisi. Anda tidak berwenang mengubahnya.'
+                    : 'Anda tidak berwenang menilai seragam pegawai ini.';
             }
         });
 
@@ -1516,6 +1720,7 @@ $kehadiran = [
             document.getElementById('ra-seragam-timpa').value = '1';
             this.classList.add('d-none');
             document.getElementById('ra-seragam-info').textContent = 'Nilai manual lama akan diganti setelah disimpan.';
+            perbaruiNilaiSeragam();
         });
 
         function perbaruiNilaiSeragam() {
