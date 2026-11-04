@@ -25,8 +25,9 @@ Menjembatani ERP dengan sistem eksternal: Kommo CRM (webhook & API read-only), c
 - Idempotent (unique `uniq_kommo_lead` + `GET_LOCK`); soft-delete; skip unsorted; UPDATE tidak menimpa null.
 - Menulis `nama,no_hp,cs,price,cabang,ads_organic,source_id,tanggal,status` + kolom `kommo_*`. **Tidak menulis `omset`.**
 ### 4.2 CRM Bridge (read-only)
-- `GET api/crm/lead-summary|lead-list|price-catalog|service-summary`, `GET api/customer-chat/invoice-progress`.
+- `GET api/crm/lead-summary|lead-list|price-catalog|service-summary|service-search`, `GET api/customer-chat/invoice-progress`.
 - Wajib signature HMAC; tanpa session ERP.
+- `service-search?q=` mencari maksimal 20 servis berdasarkan nomor servis, nama customer, nomor HP (10 digit terakhir), tipe device, atau IMEI. Signature: `q + "\n" + time`.
 - Price catalog: harga jual cabang → master; kategori servis via heuristik teks; promo tanggal 21 & 1–10.
 ### 4.3 Approval Phone — `Approval::approve/decline/{id}` (approval phone).
 ### 4.4 Dashboards — `Home::index`, `DashboardService::index`.
