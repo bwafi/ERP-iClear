@@ -124,20 +124,47 @@ class CrmLeadBridge extends BaseController
         $suffix = substr($phone, -10);
         $normal = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '+', ''), '-', ''), ' ', ''), '(', ''), 10)";
         $rows = db_connect()->table('service s')
-            ->select("s.idservice,s.no_service,s.no_hp,s.tipe_hp,s.keterangan,s.status_service,s.status_proses,s.harus_dibayar,s.bayar,s.garansi_hari,s.tanggal_bisa_diambil,s.tanggal_selesai,s.created_at,s.unit_idunit, COALESCE(u.NAMA_UNIT, CONCAT('Unit ',COALESCE(s.unit_idunit,''))) AS cabang", false)
+            ->select("s.idservice,s.no_service,s.no_hp,s.imei,s.tipe_hp,s.keterangan,s.status_service,s.status_proses,s.harus_dibayar,s.bayar,s.garansi_hari,s.tanggal_bisa_diambil,s.tanggal_selesai,s.created_at,s.unit_idunit,p.nama AS customer_name, COALESCE(u.NAMA_UNIT, CONCAT('Unit ',COALESCE(s.unit_idunit,''))) AS cabang", false)
+            ->join('pelanggan p', 'p.id_pelanggan = s.pelanggan_id_pelanggan', 'left')
             ->join('unit u', 'u.idunit = s.unit_idunit', 'left')
             ->where(sprintf($normal, 's.no_hp') . ' =', $suffix)
             ->orderBy('s.created_at', 'DESC')->limit(10)->get()->getResultArray();
-        foreach ($rows as &$row) {
-            $row['status_label'] = $this->serviceStatusLabel((int) ($row['status_service'] ?? 0));
-            $due = max(0, (float) ($row['harus_dibayar'] ?? 0));
-            $paid = max(0, (float) ($row['bayar'] ?? 0));
-            $row['payment_due'] = $due;
-            $row['payment_paid'] = $paid;
-            $row['payment_remaining'] = max(0, $due - $paid);
-            $row['payment_label'] = $due <= 0 ? 'Belum ada tagihan final' : ($paid + 0.01 >= $due ? 'Lunas' : 'Menunggu pembayaran');
+        $items = array_map(fn (array $row) => $this->decorateServiceRow($row), $rows);
+
+        return $this->response->setContentType('application/json')->setJSON(['ok' => true, 'items' => $items, 'read_only' => true]);
+    }
+
+    /** Pencarian servis read-only untuk penautan percakapan CRM. */
+    public function serviceSearch()
+    {
+        $auth = $this->authorizeSearch();
+        if (!is_array($auth)) return $this->error($auth, 403);
+        [$query] = $auth;
+
+        $digits = preg_replace('/\D+/', '', $query);
+        $suffix = strlen($digits) >= 7 ? substr($digits, -10) : '';
+        $normal = "RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '+', ''), '-', ''), ' ', ''), '(', ''), 10)";
+
+        $builder = db_connect()->table('service s')
+            ->select("s.idservice,s.no_service,s.no_hp,s.tipe_hp,s.imei,s.keluhan,s.status_service,s.status_proses,s.harus_dibayar,s.bayar,s.created_at,s.unit_idunit,p.nama AS customer_name, COALESCE(u.NAMA_UNIT, CONCAT('Unit ',COALESCE(s.unit_idunit,''))) AS cabang", false)
+            ->join('pelanggan p', 'p.id_pelanggan = s.pelanggan_id_pelanggan', 'left')
+            ->join('unit u', 'u.idunit = s.unit_idunit', 'left')
+            ->groupStart()
+            ->like('s.no_service', $query)
+            ->orLike('p.nama', $query)
+            ->orLike('s.tipe_hp', $query)
+            ->orLike('s.imei', $query);
+
+        if ($suffix !== '') {
+            $builder->orWhere(sprintf($normal, 's.no_hp') . ' =', $suffix)
+                ->orWhere(sprintf($normal, 'p.no_hp') . ' =', $suffix);
         }
-        return $this->response->setContentType('application/json')->setJSON(['ok' => true, 'items' => $rows, 'read_only' => true]);
+
+        $rows = $builder->groupEnd()->orderBy('s.created_at', 'DESC')->limit(20)->get()->getResultArray();
+        $items = array_map(fn (array $row) => $this->decorateServiceRow($row), $rows);
+
+        return $this->response->setContentType('application/json')
+            ->setJSON(['ok' => true, 'items' => $items, 'read_only' => true]);
     }
 
     private function authorize(string $type)
@@ -178,6 +205,41 @@ class CrmLeadBridge extends BaseController
         $signed = $month . "\n" . $page . "\n" . $status . "\n" . $query . "\n" . $time;
         if (!hash_equals(hash_hmac('sha256', $signed, $secret), $given)) return 'Signature bridge tidak valid.';
         return [$month, $page, $status, $query];
+    }
+
+    private function authorizeSearch()
+    {
+        $secret = trim((string) env('CRM_BRIDGE_SECRET', ''));
+        $time = trim((string) $this->request->getHeaderLine('X-CRM-Time'));
+        $given = trim((string) $this->request->getHeaderLine('X-CRM-Signature'));
+        $query = trim((string) ($this->request->getGet('q') ?? ''));
+
+        if ($secret === '' || !ctype_digit($time) || abs(time() - (int) $time) > 300) {
+            return 'Permintaan bridge tidak valid.';
+        }
+        if (mb_strlen($query) < 2 || mb_strlen($query) > 100) {
+            return 'Pencarian tidak valid.';
+        }
+        if (!hash_equals(hash_hmac('sha256', $query . "\n" . $time, $secret), $given)) {
+            return 'Signature bridge tidak valid.';
+        }
+
+        return [$query];
+    }
+
+    private function decorateServiceRow(array $row): array
+    {
+        $row['status_label'] = $this->serviceStatusLabel((int) ($row['status_service'] ?? 0));
+        $due = max(0, (float) ($row['harus_dibayar'] ?? 0));
+        $paid = max(0, (float) ($row['bayar'] ?? 0));
+        $row['payment_due'] = $due;
+        $row['payment_paid'] = $paid;
+        $row['payment_remaining'] = max(0, $due - $paid);
+        $row['payment_label'] = $due <= 0
+            ? 'Belum ada tagihan final'
+            : ($paid + 0.01 >= $due ? 'Lunas' : 'Menunggu pembayaran');
+
+        return $row;
     }
 
     private function firstField(array $fields, array $candidates): ?string
