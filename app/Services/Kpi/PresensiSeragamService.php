@@ -8,7 +8,7 @@ use App\Models\ModelKpiComponent;
  * Nilai SERAGAM dari foto absen mobile.
  *
  * Evaluator melihat foto punch lalu mencentang tiga komponen:
- * seragam (3), sepatu (1), ID card (1) — total 0–5 per hari. Satu baris
+ * seragam (2), sepatu (1), ID card (2) — total 0–5 per hari. Satu baris
  * `kpi_evaluations` per pegawai + tanggal; simpan ulang mengganti baris itu
  * supaya tidak ada rata-rata ganda. Rincian centang disimpan di `notes`
  * karena tidak ada kolom khusus (tanpa perubahan schema).
@@ -18,7 +18,7 @@ class PresensiSeragamService
     public const NOTE_PREFIX = 'SERAGAM_ABSEN';
 
     /** Bobot tiap centang; total maksimal 5. */
-    private const BOBOT = ['seragam' => 3, 'sepatu' => 1, 'idcard' => 1];
+    private const BOBOT = ['seragam' => 2, 'sepatu' => 1, 'idcard' => 2];
 
     private const JABATAN_MANAGER = 34;
     private const JABATAN_SPV     = 40;

@@ -233,9 +233,9 @@ $petaSiap =
             ][$langkah] ?? 'Absen';
 
             $deskripsi = [
-                'masuk'      => 'Absen masuk boleh kapan saja. Pastikan seragam terlihat dan kamu berada di titik toko.',
-                'break'      => 'Tutup sesi pagi untuk mulai jeda. Break tanpa foto, tapi lokasi tetap dicek.',
-                'masuk_lagi' => 'Masuk kembali setelah jeda. Foto wajib; pulang baru bisa pukul ' . $s['pulang'] . '.',
+                'masuk'      => 'Pastikan seragam dan ID card terlihat jelas, serta kamu berada di titik toko.',
+                'break'      => 'Tutup sesi pagi untuk mulai break. Break tanpa foto, tapi lokasi tetap dicek.',
+                'masuk_lagi' => 'Masuk kembali setelah break. Foto wajib; pulang baru bisa pukul ' . $s['pulang'] . '.',
                 'pulang'     => 'Absen pulang dengan foto. Tombol aktif tepat pukul ' . $s['pulang'] . '.',
             ][$langkah] ?? '';
 

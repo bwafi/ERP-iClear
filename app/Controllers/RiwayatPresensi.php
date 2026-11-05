@@ -80,7 +80,7 @@ class RiwayatPresensi extends BaseController
     }
 
     /**
-     * Simpan nilai SERAGAM (3/1/1) dari centang foto absen.
+     * Simpan nilai SERAGAM (2/1/2) dari centang foto absen.
      */
     public function seragam()
     {

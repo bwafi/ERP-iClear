@@ -1724,9 +1724,9 @@ $kehadiran = [
         });
 
         function perbaruiNilaiSeragam() {
-            const nilai = (document.getElementById('ra-seragam-s').checked ? 3 : 0)
+            const nilai = (document.getElementById('ra-seragam-s').checked ? 2 : 0)
                 + (document.getElementById('ra-seragam-p').checked ? 1 : 0)
-                + (document.getElementById('ra-seragam-i').checked ? 1 : 0);
+                + (document.getElementById('ra-seragam-i').checked ? 2 : 0);
             document.getElementById('ra-seragam-hasil').textContent = nilai + '/5';
         }
 

@@ -106,15 +106,24 @@ class PresensiSeragamServiceTest extends CIUnitTestCase
         ]);
     }
 
-    public function testSeragamDanSepatuTanpaIdCardBernilaiEmpat(): void
+    public function testBobotSeragamDuaIdCardDuaSepatuSatu(): void
+    {
+        $svc = new PresensiSeragamService(1);
+
+        $this->assertSame(2.0, $svc->simpan(10, '2026-11-02', true, false, false)['score']);
+        $this->assertSame(2.0, $svc->simpan(10, '2026-11-02', false, false, true)['score']);
+        $this->assertSame(1.0, $svc->simpan(10, '2026-11-02', false, true, false)['score']);
+    }
+
+    public function testSeragamDanSepatuTanpaIdCardBernilaiTiga(): void
     {
         $hasil = (new PresensiSeragamService(1))->simpan(10, '2026-11-02', true, true, false);
 
-        $this->assertSame(4.0, $hasil['score']);
+        $this->assertSame(3.0, $hasil['score']);
         $rows = $this->evaluasi();
         $this->assertCount(1, $rows);
-        $this->assertSame(4.0, (float) $rows[0]['raw_score']);
-        $this->assertSame(80.0, (float) $rows[0]['normalized_score']);
+        $this->assertSame(3.0, (float) $rows[0]['raw_score']);
+        $this->assertSame(60.0, (float) $rows[0]['normalized_score']);
         $this->assertStringStartsWith('SERAGAM_ABSEN;S=1;P=1;I=0', (string) $rows[0]['notes']);
     }
 
