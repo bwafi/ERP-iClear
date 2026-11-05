@@ -21,7 +21,7 @@ class AddAbsenSayaMenu extends Migration
     private array $menuDef = [
         'idmenu'     => self::MENU_ID,
         'urutan'     => 0,
-        'nama_menu'  => 'Absen Saya',
+        'nama_menu'  => 'Absen',
         'roles'      => 'absen_saya',
         'url'        => 'absen',
         'show_menu'  => 1,
