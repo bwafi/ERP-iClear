@@ -123,6 +123,16 @@ $kehadiran = [
                 <tbody>
                     <?php foreach ($presensi as $row): ?>
                         <?php
+                        $ps         = !empty($row->ps);
+                        $pagi       = $row->ps_pagi ?? null;
+                        $sore       = $row->ps_sore ?? null;
+                        $sesiPs     = [];
+                        if ($pagi) {
+                            $sesiPs['Pagi'] = $pagi;
+                        }
+                        if ($sore) {
+                            $sesiPs['Sore'] = $sore;
+                        }
                         $tgl        = $tanggalRow($row);
                         $iso        = $isoRow($row);
                         $jadwal     = $jam($row->jam_jadwal_masuk ?: $row->jmmasuk);
@@ -135,6 +145,44 @@ $kehadiran = [
                         $kunciSrg   = (int) $row->akun_idakun . '|' . $tanggalIso;
                         $srg        = $seragam[$kunciSrg] ?? ['score' => 0, 'seragam' => false, 'sepatu' => false, 'idcard' => false];
                         $bolehSrg   = !empty($bolehSeragam[$kunciSrg]);
+                        $psJson     = '';
+                        if ($ps) {
+                            $jadwalList    = [];
+                            $toleransiList = [];
+                            $masukList     = [];
+                            $pulangList    = [];
+                            $detailSesi    = [];
+                            foreach ($sesiPs as $label => $sesi) {
+                                $jadwalList[]    = $jam($sesi->jam_jadwal_masuk ?: $sesi->jmmasuk);
+                                $toleransiList[] = $jam($sesi->jam_toleransi ?: $sesi->toleransi);
+                                $masukList[]     = $jam($sesi->waktu_masuk);
+                                $pulangList[]    = $jam($sesi->waktu_pulang);
+                                $detailSesi[]    = [
+                                    'label'        => $label,
+                                    'idpresensi'   => (int) $sesi->idpresensi,
+                                    'waktuMasuk'   => (string) $sesi->waktu_masuk,
+                                    'waktuPulang'  => (string) $sesi->waktu_pulang,
+                                    'jadwalMasuk'  => $jam($sesi->jam_jadwal_masuk ?: $sesi->jmmasuk),
+                                    'jadwalPulang' => $jam($sesi->jam_jadwal_pulang),
+                                    'toleransi'    => $jam($sesi->jam_toleransi ?: $sesi->toleransi),
+                                    'ip'           => (string) $sesi->ip,
+                                    'lat'          => (string) $sesi->lat,
+                                    'long'         => (string) $sesi->long,
+                                    'jarak'        => (string) $sesi->jarak,
+                                    'kehadiran'    => $sesi->status_kehadiran === null ? '' : (int) $sesi->status_kehadiran,
+                                    'status'       => $sesi->status_absensi === null ? '' : (int) $sesi->status_absensi,
+                                    'sumber'       => (string) $sesi->sumber,
+                                    'foto'         => (string) $sesi->foto,
+                                    'fotoPulang'   => (string) $sesi->foto_pulang,
+                                    'pulangLabel'  => $label === 'Pagi' ? 'Break' : 'Pulang',
+                                ];
+                            }
+                            $jadwal    = implode(' / ', $jadwalList);
+                            $toleransi = implode(' / ', $toleransiList);
+                            $masuk     = implode(' / ', $masukList);
+                            $pulang    = implode(' / ', $pulangList);
+                            $psJson    = (string) json_encode($detailSesi, JSON_UNESCAPED_SLASHES);
+                        }
                         ?>
                         <tr data-kehadiran="<?= $kehadiranV === null ? '' : (int) $kehadiranV ?>"
                             data-status="<?= $statusV === null ? '' : (int) $statusV ?>">
@@ -150,17 +198,44 @@ $kehadiran = [
                             <td data-label="Jadwal">
                                 <span class="ra-time__stack">
                                     <span class="ra-time"><?= esc($jadwal) ?></span>
-                                    <span class="ra-time__note">toleransi <?= esc($toleransi) ?></span>
+                                    <span class="ra-time__note"><?= $ps ? 'Pagi / Sore · ' : '' ?>toleransi <?= esc($toleransi) ?></span>
                                 </span>
                             </td>
                             <td data-label="Masuk">
-                                <span class="ra-time"><?= esc($masuk) ?></span>
+                                <?php if ($ps): ?>
+                                    <span class="ra-time__stack">
+                                        <?php foreach ($sesiPs as $label => $sesi): ?>
+                                            <span class="ra-time"><?= esc($jam($sesi->waktu_masuk)) ?> <span class="ra-time__note"><?= esc($label) ?></span></span>
+                                        <?php endforeach; ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="ra-time"><?= esc($masuk) ?></span>
+                                <?php endif; ?>
                             </td>
                             <td data-label="Pulang">
-                                <span class="ra-time<?= $pulang === '—' ? ' is-empty' : '' ?>"><?= esc($pulang) ?></span>
+                                <?php if ($ps): ?>
+                                    <span class="ra-time__stack">
+                                        <?php foreach ($sesiPs as $label => $sesi): ?>
+                                            <span class="ra-time<?= $jam($sesi->waktu_pulang) === '—' ? ' is-empty' : '' ?>"><?= esc($jam($sesi->waktu_pulang)) ?> <span class="ra-time__note"><?= $label === 'Pagi' ? 'break' : 'pulang' ?></span></span>
+                                        <?php endforeach; ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="ra-time<?= $pulang === '—' ? ' is-empty' : '' ?>"><?= esc($pulang) ?></span>
+                                <?php endif; ?>
                             </td>
                             <td data-label="Kehadiran">
-                                <?php if (isset($kehadiran[$kehadiranV])): ?>
+                                <?php if ($ps): ?>
+                                    <span class="ra-tags">
+                                        <?php foreach ($sesiPs as $label => $sesi):
+                                            $hadirSesi = $sesi->status_kehadiran === null ? null : (int) $sesi->status_kehadiran; ?>
+                                            <?php if (isset($kehadiran[$hadirSesi])): ?>
+                                                <span class="ra-tag ra-tag--<?= $kehadiran[$hadirSesi][1] ?>"><?= esc($label . ' ' . strtolower($kehadiran[$hadirSesi][0])) ?></span>
+                                            <?php else: ?>
+                                                <span class="ra-muted"><?= esc($label) ?> —</span>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </span>
+                                <?php elseif (isset($kehadiran[$kehadiranV])): ?>
                                     <span class="ra-tag ra-tag--<?= $kehadiran[$kehadiranV][1] ?>"><?= esc($kehadiran[$kehadiranV][0]) ?></span>
                                 <?php else: ?>
                                     <span class="ra-muted">—</span>
@@ -196,6 +271,7 @@ $kehadiran = [
                                     data-jarak="<?= esc((string) $row->jarak, 'attr') ?>"
                                     data-idpresensi="<?= (int) $row->idpresensi ?>"
                                     data-sumber="<?= esc((string) $row->sumber, 'attr') ?>"
+                                    <?php if ($psJson !== ''): ?>data-ps="<?= esc($psJson, 'attr') ?>"<?php endif; ?>
                                     data-foto="<?= esc((string) $row->foto, 'attr') ?>"
                                     data-fotopulang="<?= esc((string) $row->foto_pulang, 'attr') ?>"
                                     data-kehadiran="<?= $kehadiranV === null ? '' : (int) $kehadiranV ?>"
@@ -728,6 +804,13 @@ $kehadiran = [
         align-items: flex-start;
     }
 
+    .ra-page .ra-tags {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
     .ra-page .ra-tag {
         display: inline-flex;
         align-items: center;
@@ -1155,6 +1238,19 @@ $kehadiran = [
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
+    }
+
+    .ra-page .ra-sesi + .ra-sesi {
+        margin-top: 14px;
+    }
+
+    .ra-page .ra-sesi__title {
+        margin: 0 0 4px;
+        color: var(--ra-muted);
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
     }
 
     /* Fakta absen: baris berhairline, bukan kotak-kotak */
@@ -1636,6 +1732,16 @@ $kehadiran = [
                 seragamManual: btn.getAttribute('data-seragam-manual') === '1'
             };
 
+            let sesiList = null;
+            const psAttr = btn.getAttribute('data-ps');
+            if (psAttr) {
+                try {
+                    sesiList = JSON.parse(psAttr);
+                } catch (e) {
+                    sesiList = null;
+                }
+            }
+
             const masuk = data.waktuMasuk ? new Date(data.waktuMasuk) : null;
             const pulang = data.waktuPulang ? new Date(data.waktuPulang) : null;
             const formatJam = function (date) {
@@ -1650,7 +1756,14 @@ $kehadiran = [
             document.getElementById('ra-detail-tanggal').textContent = data.tanggal || '—';
 
             let tags = '';
-            if (labelKehadiran[data.kehadiran]) {
+            if (sesiList && sesiList.length) {
+                sesiList.forEach(function (s) {
+                    if (labelKehadiran[s.kehadiran]) {
+                        const warna = String(s.kehadiran) === '0' ? 'ok' : (String(s.kehadiran) === '1' ? 'warn' : 'bad');
+                        tags += '<span class="ra-tag ra-tag--' + warna + '">' + esc(s.label + ' ' + labelKehadiran[s.kehadiran].toLowerCase()) + '</span>';
+                    }
+                });
+            } else if (labelKehadiran[data.kehadiran]) {
                 const warna = data.kehadiran === '0' ? 'ok' : (data.kehadiran === '1' ? 'warn' : 'bad');
                 tags += '<span class="ra-tag ra-tag--' + warna + '">' + esc(labelKehadiran[data.kehadiran]) + '</span>';
             }
@@ -1659,30 +1772,62 @@ $kehadiran = [
             }
             document.getElementById('ra-detail-tags').innerHTML = tags;
 
-            const koordinat = (data.lat && data.long) ? data.lat + ', ' + data.long : '—';
-            document.getElementById('ra-detail-meta').innerHTML = [
-                metaItem('Jam masuk', formatJam(masuk)),
-                metaItem('Jam pulang', formatJam(pulang)),
-                metaItem('Jadwal masuk', data.jadwalMasuk),
-                metaItem('Toleransi', data.toleransi),
-                metaItem('Jadwal pulang', data.jadwalPulang),
-                metaItem('Jarak', data.jarak === '—' ? '—' : data.jarak + ' m'),
-                metaItem('IP', data.ip || '—'),
-                metaItem('Koordinat', koordinat)
-            ].join('');
+            if (sesiList && sesiList.length) {
+                document.getElementById('ra-detail-meta').innerHTML = sesiList.map(function (s) {
+                    const masukSesi = s.waktuMasuk ? new Date(s.waktuMasuk) : null;
+                    const pulangSesi = s.waktuPulang ? new Date(s.waktuPulang) : null;
+                    const koordinatSesi = (s.lat && s.long) ? s.lat + ', ' + s.long : '—';
+                    return '<div class="ra-sesi">' +
+                        '<h6 class="ra-sesi__title">' + esc(s.label) + '</h6>' +
+                        '<dl class="ra-meta">' + [
+                            metaItem('Jam masuk', formatJam(masukSesi)),
+                            metaItem('Jam ' + s.pulangLabel.toLowerCase(), formatJam(pulangSesi)),
+                            metaItem('Jadwal masuk', s.jadwalMasuk),
+                            metaItem('Toleransi', s.toleransi),
+                            metaItem('Jadwal pulang', s.jadwalPulang),
+                            metaItem('Jarak', (s.jarak === '' || s.jarak === '—') ? '—' : s.jarak + ' m'),
+                            metaItem('IP', s.ip || '—'),
+                            metaItem('Koordinat', koordinatSesi)
+                        ].join('') + '</dl></div>';
+                }).join('');
 
-            document.getElementById('ra-detail-photos').innerHTML = [
-                fotoItem('Foto masuk', urlFoto(data, false)),
-                fotoItem('Foto pulang', urlFoto(data, true))
-            ].join('');
+                const fotoSesi = [];
+                sesiList.forEach(function (s) {
+                    fotoSesi.push(fotoItem(s.label + ' · Foto masuk', urlFoto(s, false)));
+                    fotoSesi.push(fotoItem(s.label + ' · ' + (s.pulangLabel === 'Break' ? 'Break' : 'Foto pulang'), urlFoto(s, true)));
+                });
+                document.getElementById('ra-detail-photos').innerHTML = fotoSesi.join('');
+
+                detailAktif = Object.assign({}, data, {
+                    lat: sesiList[0].lat,
+                    long: sesiList[0].long
+                });
+            } else {
+                const koordinat = (data.lat && data.long) ? data.lat + ', ' + data.long : '—';
+                document.getElementById('ra-detail-meta').innerHTML = [
+                    metaItem('Jam masuk', formatJam(masuk)),
+                    metaItem('Jam pulang', formatJam(pulang)),
+                    metaItem('Jadwal masuk', data.jadwalMasuk),
+                    metaItem('Toleransi', data.toleransi),
+                    metaItem('Jadwal pulang', data.jadwalPulang),
+                    metaItem('Jarak', data.jarak === '—' ? '—' : data.jarak + ' m'),
+                    metaItem('IP', data.ip || '—'),
+                    metaItem('Koordinat', koordinat)
+                ].join('');
+
+                document.getElementById('ra-detail-photos').innerHTML = [
+                    fotoItem('Foto masuk', urlFoto(data, false)),
+                    fotoItem('Foto pulang', urlFoto(data, true))
+                ].join('');
+
+                detailAktif = data;
+            }
 
             document.querySelectorAll('#ra-detail-photos .ra-photo__img').forEach(function (img) {
                 img.addEventListener('click', function () {
                     tampilkanModalGambar(img.getAttribute('src'));
                 });
             });
-
-            detailAktif = data;
 
             const formSeragam = document.getElementById('ra-seragam-form');
             const infoSeragam = document.getElementById('ra-seragam-info');

@@ -56,7 +56,7 @@ class RiwayatPresensi extends BaseController
 
     public function semua_riwayat()
     {
-        $presensi = $this->PresensiModel->getAll();
+        $presensi = self::gabungSesiPs($this->PresensiModel->getAll());
         $seragamSvc = new \App\Services\Kpi\PresensiSeragamService();
 
         $baris = [];
@@ -77,6 +77,77 @@ class RiwayatPresensi extends BaseController
             'body' => 'riwayat/semua_presensi'
         );
         return view('template', $data);
+    }
+
+    /**
+     * Shift PS menyimpan dua baris presensi (PAGI/SORE). Gabungkan untuk tampilan
+     * riwayat supaya satu hari kerja PS tampil sebagai satu baris.
+     *
+     * @param list<object> $presensi
+     *
+     * @return list<object>
+     */
+    public static function gabungSesiPs(array $presensi): array
+    {
+        $hasil = [];
+        $grup  = [];
+
+        foreach ($presensi as $row) {
+            $sesi    = strtoupper((string) ($row->sesi ?? ''));
+            $tanggal = substr((string) ($row->waktu_masuk ?: $row->created_at), 0, 10);
+
+            if (! in_array($sesi, ['PAGI', 'SORE'], true) || $tanggal === '') {
+                $hasil[] = $row;
+                continue;
+            }
+
+            $kunci = (int) $row->akun_idakun . '|' . $tanggal;
+            if (! isset($grup[$kunci])) {
+                $grup[$kunci] = ['index' => count($hasil), 'PAGI' => null, 'SORE' => null];
+                $hasil[]      = null;
+            }
+            $grup[$kunci][$sesi] = $row;
+        }
+
+        foreach ($grup as $g) {
+            $hasil[$g['index']] = self::barisPs($g['PAGI'], $g['SORE']);
+        }
+
+        return array_values(array_filter($hasil, static fn ($row) => $row !== null));
+    }
+
+    private static function barisPs(?object $pagi, ?object $sore): object
+    {
+        $utama = $pagi ?? $sore;
+        $baris = clone $utama;
+
+        $baris->ps        = true;
+        $baris->ps_pagi   = $pagi;
+        $baris->ps_sore   = $sore;
+        $baris->sesi      = 'PS';
+        $baris->waktu_masuk       = $pagi->waktu_masuk ?? $sore->waktu_masuk;
+        $baris->waktu_pulang      = $sore->waktu_pulang ?? $pagi->waktu_pulang;
+        $baris->jam_jadwal_masuk  = $pagi->jam_jadwal_masuk ?? $sore->jam_jadwal_masuk;
+        $baris->jam_jadwal_pulang = $sore->jam_jadwal_pulang ?? $pagi->jam_jadwal_pulang;
+        $baris->jam_toleransi     = $pagi->jam_toleransi ?? $sore->jam_toleransi;
+
+        $kehadiran = [];
+        foreach ([$pagi, $sore] as $sesi) {
+            if ($sesi && $sesi->status_kehadiran !== null) {
+                $kehadiran[] = (int) $sesi->status_kehadiran;
+            }
+        }
+        $baris->status_kehadiran = $kehadiran === [] ? null : max($kehadiran);
+
+        $status = [];
+        foreach ([$pagi, $sore] as $sesi) {
+            if ($sesi && $sesi->status_absensi !== null) {
+                $status[] = (int) $sesi->status_absensi;
+            }
+        }
+        $baris->status_absensi = in_array(0, $status, true) ? 0 : (in_array(1, $status, true) ? 1 : null);
+
+        return $baris;
     }
 
     /**
