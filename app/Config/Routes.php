@@ -370,6 +370,7 @@ $routes->post('jadwal_masuk/simpan', 'JadwalMasuk::simpan', ['filter' => 'auth']
 $routes->get('absen', 'AbsenMobile::index', ['filter' => 'auth']);
 $routes->post('absen/masuk', 'AbsenMobile::masuk', ['filter' => 'auth']);
 $routes->post('absen/pulang', 'AbsenMobile::pulang', ['filter' => 'auth']);
+$routes->post('absen/break', 'AbsenMobile::istirahat', ['filter' => 'auth']);
 $routes->get('absen/foto/(:num)', 'AbsenMobile::foto/$1', ['filter' => 'auth']);
 $routes->get('absen/foto/(:num)/pulang', 'AbsenMobile::fotoPulang/$1', ['filter' => 'auth']);
 

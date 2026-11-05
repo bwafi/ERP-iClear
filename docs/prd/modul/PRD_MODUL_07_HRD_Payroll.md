@@ -41,12 +41,13 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 ### 4.5 Roster Absensi & Absen Mobile (fase 1)
 1. `/jadwal_masuk` menampilkan roster satu pegawai untuk satu bulan dari tabel `presensi_roster` (satu baris per pegawai per tanggal). Panel **Pola mingguan** selalu tampil di atas kalender; tombol **Terapkan pola** hanya mengisi tanggal yang belum punya baris, tanggal yang sudah ada tidak ditimpa. Edit per tanggal lewat form **Simpan Roster**; catatan per tanggal memakai tombol **Catatan** yang otomatis terbuka untuk shift `IZIN` atau tanggal yang sudah punya catatan.
 2. Shift roster: `PAGI` (08:45–17:00), `SIANG` (12:45–21:00), `PS` (08:45–13:00 dan 16:55–21:00), `OFF`, `IZIN`. `IZIN` wajib keterangan.
-3. `/absen` (mobile, tanpa layout `template`) menampilkan shift hari ini berdasarkan roster dan zona `Asia/Jakarta`. Sebelum `Config\Presensi::$goLiveDate` halaman hanya menampilkan tanggal aktif.
-4. Punch masuk/pulang wajib GPS dalam radius unit dan foto JPEG/PNG maksimal 2 MB. Shift `PS` memakai 4 punch (PAGI masuk/pulang, lalu SORE masuk/pulang); SORE ditolak bila PAGI belum ada.
-5. Setiap punch menulis satu baris `presensi` dengan `sesi` (`FULL`/`PAGI`/`SORE`) dan `sumber = 'mobile'`; kolom jadwal/toleransi/status_kehadiran tetap diisi agar pembaca lama (riwayat/KPI) tidak rusak.
-6. Foto disimpan privat di `writable/uploads/presensi/YYYYMM/` dan hanya disajikan lewat `GET /absen/foto/{id}` (ber-`auth` + scope). Foto legacy di `public/foto_presensi` tidak dipindahkan.
-7. Absen mobile langsung final (`presensi.status_absensi = 1`) dan **tidak masuk approval**. Approval hanya untuk izin/sakit/cuti: `/pengajuan_izin` menulis tabel `izin` (`akun_idakun` dari session, `status = 0`), `/approval_presensi` menampilkan pengajuan dan tombol Setujui/Tolak (`status` 1/2 + `balasan`).
-8. Halaman riwayat menampilkan foto absen mobile lewat `/absen/foto/{id}` bila `presensi.sumber = 'mobile'`; baris legacy tetap memakai `public/foto_presensi/`. Jarak (`presensi.jarak`, meter) tampil di modal detail yang sama.
+3. `/absen` (mobile, tanpa layout `template`) menampilkan shift hari ini berdasarkan roster dan zona `Asia/Jakarta`. Sebelum `Config\Presensi::$goLiveDate` halaman hanya menampilkan tanggal aktif. Shift PS tampil sebagai **satu kartu bertahap** (`Masuk → Break → In Break → Pulang`); `PAGI`/`SIANG` memakai pola `Masuk → Pulang`. Kartu menampilkan ringkasan langkah yang sudah selesai (jam masuk/break/in break).
+4. Punch **masuk** dan **in break** (SORE masuk) boleh kapan saja. Punch **break** dan **pulang** ditolak server bila waktu masih sebelum `presensi.jam_jadwal_pulang` baris (`kode = belum_waktunya`), tanpa toleransi lebih awal; tombol `/absen` ikut nonaktif sampai jam itu. Pulang cepat/sakit tidak dilayani di mobile dan diselesaikan lewat koreksi admin.
+5. Punch masuk, in break, dan pulang wajib GPS dalam radius unit dan foto JPEG/PNG maksimal 2 MB. Shift `PS` memakai 4 punch: PAGI masuk (foto) → **break 13:00 tanpa foto** → SORE masuk/in break 16:55 (foto) → pulang 21:00 (foto). Break menyimpan `waktu_pulang` baris PAGI dengan `foto_pulang` kosong; SORE ditolak bila PAGI belum ada atau break PAGI belum tercatat. Baris legacy tanpa `jam_jadwal_pulang` tidak dikunci.
+6. Setiap punch menulis satu baris `presensi` dengan `sesi` (`FULL`/`PAGI`/`SORE`) dan `sumber = 'mobile'`; kolom jadwal/toleransi/status_kehadiran tetap diisi agar pembaca lama (riwayat/KPI) tidak rusak.
+7. Foto disimpan privat di `writable/uploads/presensi/YYYYMM/` dan hanya disajikan lewat `GET /absen/foto/{id}` (ber-`auth` + scope). Foto legacy di `public/foto_presensi` tidak dipindahkan.
+8. Absen mobile langsung final (`presensi.status_absensi = 1`) dan **tidak masuk approval**. Approval hanya untuk izin/sakit/cuti: `/pengajuan_izin` menulis tabel `izin` (`akun_idakun` dari session, `status = 0`), `/approval_presensi` menampilkan pengajuan dan tombol Setujui/Tolak (`status` 1/2 + `balasan`).
+9. Halaman riwayat menampilkan foto absen mobile lewat `/absen/foto/{id}` bila `presensi.sumber = 'mobile'`; baris legacy tetap memakai `public/foto_presensi/`. Jarak (`presensi.jarak`, meter) tampil di modal detail yang sama.
 
 ## 5. Business Rules (Bukti)
 1. Generate register berasal dari master gaji + **skor KPI bulan itu** (blok `KpiCalculationService`). — `Payroll::generateRegister`
@@ -85,6 +86,8 @@ Mengelola kehadiran/absensi (masuk-pulang berbasis lokasi & manual), persetujuan
 - [ ] Pegawai dapat absen masuk/pulang (normal & manual); riwayat tercatat.
 - [ ] Roster bulanan dapat diterapkan dan diedit; role 35/47 hanya unit sendiri; tanggal lampau hanya role 1.
 - [ ] `/absen` menolak punch tanpa foto, di luar radius, duplikat sesi, dan SORE tanpa PAGI; shift PS menghasilkan 2 baris.
+- [ ] Break dan pulang sebelum jam jadwalnya ditolak server; masuk dan in break tetap bebas. Break PS tidak memakai foto dan tetap divalidasi GPS.
+- [ ] `/absen` PS hanya menampilkan satu kartu dengan form sesuai langkah aktif (Masuk/Break/In Break/Pulang) dan ringkasan langkah selesai.
 - [ ] Approval presensi hanya untuk izin/sakit/cuti; absensi mobile langsung final tanpa approval.
 - [ ] Cuti minimal 7 hari sebelumnya ditolak bila kurang; sakit/izin kapan saja diterima; surat dokter hanya untuk sakit dan hanya bisa diakses pemilik/atasan.
 - [ ] Punch `/absen` otomatis mengisi KEHADIRAN KPI dengan evaluator SPV unit (cabang) / Manager (HO); OFF/IZIN tidak menurunkan skor dan koreksi manual menimpa nilai otomatis.

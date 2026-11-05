@@ -171,41 +171,18 @@ $petaSiap =
                     <div class="shift-head">
                         <div>
                             <h2 class="shift-name"><?= esc($s["label"]) ?></h2>
-                            <p class="shift-time"><time datetime="<?= esc(
-                                $s["masuk"],
-                            ) ?>"><?= esc(
-    $s["masuk"],
-) ?></time><span class="dash" aria-hidden="true">&ndash;</span><time datetime="<?= esc(
-    $s["pulang"],
-) ?>"><?= esc($s["pulang"]) ?></time></p>
+                            <p class="shift-time"><?= esc($s["rentang"]) ?></p>
                         </div>
-                        <?php if ($s["presensi"] === null): ?>
-                            <p class="shift-state">Belum absen</p>
-                        <?php elseif (empty($s["presensi"]->waktu_pulang)): ?>
-                            <?php
-                            $kehadiran = (int) $s["presensi"]->status_kehadiran;
-                            $kelas =
-                                [0 => "is-ok", 1 => "is-warn"][$kehadiran] ??
-                                "is-bad";
-                            $label =
-                                ["Tepat", "Toleransi", "Telat"][$kehadiran] ??
-                                "Tercatat";
-                            ?>
-                            <p class="shift-state <?= $kelas ?>">Masuk <?= esc(
-    substr((string) $s["presensi"]->waktu_masuk, 11, 5),
-) ?> &middot; <?= esc($label) ?></p>
-                        <?php else: ?>
-                            <p class="shift-state is-ok">Selesai <?= esc(
-                                substr(
-                                    (string) $s["presensi"]->waktu_pulang,
-                                    11,
-                                    5,
-                                ),
-                            ) ?></p>
+                        <?php if ($s["langkah"] === "selesai"): ?>
+                            <p class="shift-state is-ok">Selesai</p>
                         <?php endif; ?>
                     </div>
 
-                    <?php if ($s["presensi"] === null): ?>
+                    <?php if ($s["ringkasan"] !== ""): ?>
+                        <p class="shift-state"><?= esc($s["ringkasan"]) ?></p>
+                    <?php endif; ?>
+
+                    <?php if ($s["langkah"] === "masuk" || $s["langkah"] === "masuk_lagi"): ?>
                         <form class="form-absen" method="post" action="<?= base_url(
                             "absen/masuk",
                         ) ?>" enctype="multipart/form-data">
@@ -230,13 +207,40 @@ $petaSiap =
                                     </span>
                                 </label>
                             </div>
-                            <button class="btn" type="submit">Absen Masuk</button>
+                            <button class="btn" type="submit"><?= $s["langkah"] === "masuk_lagi"
+                                ? "Absen In Break"
+                                : "Absen Masuk" ?></button>
                             <p class="msg" role="status" aria-live="polite"></p>
                             <?php if ($petaSiap): ?>
                             <button type="button" class="link lihat-peta" hidden>Lihat titik absen</button>
                             <?php endif; ?>
                         </form>
-                    <?php elseif (empty($s["presensi"]->waktu_pulang)): ?>
+                    <?php elseif ($s["langkah"] === "break"): ?>
+                        <form class="form-absen" method="post" action="<?= base_url(
+                            "absen/break",
+                        ) ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="idpresensi" value="<?= (int) $s[
+                                "presensi"
+                            ]->idpresensi ?>">
+                            <input type="hidden" name="latitude">
+                            <input type="hidden" name="longitude">
+                            <button class="btn" type="submit"<?= $s["boleh_tutup"]
+                                ? ""
+                                : ' data-buka="' .
+                                    esc($s["buka"], "attr") .
+                                    '" disabled' ?>>Absen Break</button>
+                            <?php if (! $s["boleh_tutup"]): ?>
+                                <p class="hint">Break tanpa foto, bisa mulai <?= esc(
+                                    $s["pulang"],
+                                ) ?>.</p>
+                            <?php endif; ?>
+                            <p class="msg" role="status" aria-live="polite"></p>
+                            <?php if ($petaSiap): ?>
+                            <button type="button" class="link lihat-peta" hidden>Lihat titik absen</button>
+                            <?php endif; ?>
+                        </form>
+                    <?php elseif ($s["langkah"] === "pulang"): ?>
                         <form class="form-absen" method="post" action="<?= base_url(
                             "absen/pulang",
                         ) ?>" enctype="multipart/form-data">
@@ -260,7 +264,16 @@ $petaSiap =
                                     </span>
                                 </label>
                             </div>
-                            <button class="btn" type="submit">Absen Pulang</button>
+                            <button class="btn" type="submit"<?= $s["boleh_tutup"]
+                                ? ""
+                                : ' data-buka="' .
+                                    esc($s["buka"], "attr") .
+                                    '" disabled' ?>>Absen Pulang</button>
+                            <?php if (! $s["boleh_tutup"]): ?>
+                                <p class="hint">Pulang bisa mulai <?= esc(
+                                    $s["pulang"],
+                                ) ?>.</p>
+                            <?php endif; ?>
                             <p class="msg" role="status" aria-live="polite"></p>
                             <?php if ($petaSiap): ?>
                             <button type="button" class="link lihat-peta" hidden>Lihat titik absen</button>
@@ -268,15 +281,11 @@ $petaSiap =
                         </form>
                     <?php else: ?>
                         <div class="links">
+                            <?php foreach ($s["foto"] as $f): ?>
                             <a class="link" href="<?= base_url(
-                                "absen/foto/" .
-                                    (int) $s["presensi"]->idpresensi,
-                            ) ?>">Foto masuk</a>
-                            <a class="link" href="<?= base_url(
-                                "absen/foto/" .
-                                    (int) $s["presensi"]->idpresensi .
-                                    "/pulang",
-                            ) ?>">Foto pulang</a>
+                                $f["url"],
+                            ) ?>"><?= esc($f["label"]) ?></a>
+                            <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
                 </article>
@@ -405,16 +414,18 @@ $petaSiap =
             petaBtn.addEventListener('click', function () { tampilkanPeta(form); });
         }
 
-        input.addEventListener('change', function () {
-            var file = input.files && input.files[0];
-            if (!file) return;
+        if (input) {
+            input.addEventListener('change', function () {
+                var file = input.files && input.files[0];
+                if (!file) return;
 
-            if (preview.dataset.url) URL.revokeObjectURL(preview.dataset.url);
-            preview.dataset.url = URL.createObjectURL(file);
-            preview.style.backgroundImage = 'url("' + preview.dataset.url + '")';
-            label.classList.add('has-photo');
-            hint.textContent = 'Foto siap dikirim';
-        });
+                if (preview.dataset.url) URL.revokeObjectURL(preview.dataset.url);
+                preview.dataset.url = URL.createObjectURL(file);
+                preview.style.backgroundImage = 'url("' + preview.dataset.url + '")';
+                label.classList.add('has-photo');
+                hint.textContent = 'Foto siap dikirim';
+            });
+        }
 
         form.addEventListener('submit', function (e) {
             e.preventDefault();
@@ -426,7 +437,7 @@ $petaSiap =
             pesan.textContent = 'Mengambil lokasi...';
             if (petaBtn) petaBtn.hidden = true;
 
-            if (!input.files[0]) {
+            if (input && !input.files[0]) {
                 pesan.className = 'msg is-err';
                 pesan.textContent = 'Foto wajib diambil.';
                 return;
@@ -439,10 +450,10 @@ $petaSiap =
                 form.querySelector('input[name=latitude]').value = coords.latitude;
                 form.querySelector('input[name=longitude]').value = coords.longitude;
 
-                return kompres(input.files[0]);
+                return input ? kompres(input.files[0]) : null;
             }).then(function (blob) {
                 var data = new FormData(form);
-                data.set('foto', blob, 'absen.jpg');
+                if (blob) data.set('foto', blob, 'absen.jpg');
                 pesan.textContent = 'Mengirim absen...';
 
                 return fetch(form.action, {
@@ -470,6 +481,13 @@ $petaSiap =
             });
         });
     });
+    setInterval(function () {
+        document.querySelectorAll('button[data-buka]').forEach(function (btn) {
+            if (new Date() < new Date(btn.dataset.buka)) return;
+            btn.disabled = false;
+            btn.removeAttribute('data-buka');
+        });
+    }, 15000);
 })();
 </script>
 </body>

@@ -38,15 +38,10 @@ class AbsenMobile extends Controller
                     $bySesi[$row->sesi ?: 'FULL'] = $row;
                 }
 
-                foreach ($roster->shift === 'PS' ? ['PAGI', 'SORE'] : ['FULL'] as $kode) {
-                    $sesi[] = [
-                        'kode'     => $kode,
-                        'label'    => $this->labelSesi($roster->shift, $kode),
-                        'masuk'    => AttendanceScoreCalculator::getScheduledTime($roster->shift, $kode),
-                        'pulang'   => $this->jamPulang($roster->shift, $kode),
-                        'presensi' => $bySesi[$kode] ?? null,
-                    ];
-                }
+                $jamSekarang = $sekarang->format('H:i:s');
+                $sesi[] = $roster->shift === 'PS'
+                    ? $this->alurPs($bySesi, $jamSekarang, $hariIni, $zona)
+                    : $this->alurBiasa($roster->shift, $bySesi, $jamSekarang, $hariIni, $zona);
             }
         }
 
@@ -156,6 +151,45 @@ class AbsenMobile extends Controller
         }
     }
 
+    public function istirahat()
+    {
+        if (! $this->request->is('post')) {
+            return $this->jawab(false, 'Metode tidak diizinkan.', 405);
+        }
+
+        $sekarang = new \DateTime('now', new \DateTimeZone(config('Presensi')->zonaWaktu));
+        if ($sekarang->format('Y-m-d') < config('Presensi')->goLiveDate) {
+            return $this->jawab(false, 'Absen mobile aktif mulai ' . config('Presensi')->goLiveDate . '.');
+        }
+
+        $akunId = (int) session('ID_AKUN');
+        $unitId = (int) session('ID_UNIT');
+        $id     = (int) $this->request->getPost('idpresensi');
+        $row    = (new ModelPresensi())->find($id);
+
+        if (! $row || (int) $row->akun_idakun !== $akunId) {
+            return $this->jawab(false, 'Data absen tidak ditemukan.', 403);
+        }
+
+        $lat    = (float) $this->request->getPost('latitude');
+        $long   = (float) $this->request->getPost('longitude');
+        $waktu  = $sekarang->format('Y-m-d H:i:s');
+        $service = new AbsenPunchService();
+
+        try {
+            $service->validasiLokasi($unitId, $lat, $long);
+            $service->istirahat($akunId, $id, $waktu);
+
+            return $this->jawab(true, 'Absen break berhasil.');
+        } catch (PresensiException $e) {
+            return $this->jawab(false, $e->getMessage(), $e->status, ['kode' => $e->kode]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Absen break gagal: ' . $e->getMessage());
+
+            return $this->jawab(false, 'Absen gagal disimpan.', 500);
+        }
+    }
+
     public function foto($id)
     {
         return $this->sajikanFoto((int) $id, 'foto');
@@ -224,6 +258,140 @@ class AbsenMobile extends Controller
         } catch (\Throwable $e) {
             log_message('error', 'Sync KPI absen gagal: ' . $e->getMessage());
         }
+    }
+
+    private function alurBiasa(string $shift, array $bySesi, string $jamSekarang, string $hariIni, \DateTimeZone $zona): array
+    {
+        $row       = $bySesi['FULL'] ?? null;
+        $masuk     = AttendanceScoreCalculator::getScheduledTime($shift, 'FULL');
+        $pulang    = $this->jamPulang($shift, 'FULL');
+        $ringkasan = [];
+
+        if ($row) {
+            $ringkasan[] = 'Masuk ' . $this->jamRingkas($row->waktu_masuk)
+                . ' (' . $this->labelKehadiran($row) . ')';
+            if (! empty($row->waktu_pulang)) {
+                $ringkasan[] = 'Pulang ' . $this->jamRingkas($row->waktu_pulang);
+            }
+        }
+
+        $langkah = 'masuk';
+        if ($row) {
+            $langkah = empty($row->waktu_pulang) ? 'pulang' : 'selesai';
+        }
+
+        return [
+            'kode'        => 'FULL',
+            'label'       => $this->labelSesi($shift, 'FULL'),
+            'rentang'     => $masuk . '–' . $pulang,
+            'pulang'      => $pulang,
+            'buka'        => $this->bukaPada($hariIni, $pulang, $zona),
+            'boleh_tutup' => $jamSekarang >= $pulang . ':00',
+            'langkah'     => $langkah,
+            'presensi'    => $row,
+            'ringkasan'   => implode(' · ', $ringkasan),
+            'foto'        => $this->tautanFoto($row, null, 'Foto pulang'),
+        ];
+    }
+
+    private function alurPs(array $bySesi, string $jamSekarang, string $hariIni, \DateTimeZone $zona): array
+    {
+        $pagi  = $bySesi['PAGI'] ?? null;
+        $sore  = $bySesi['SORE'] ?? null;
+        $jamPagi    = AttendanceScoreCalculator::getScheduledTime('PS', 'PAGI');
+        $jamSore    = AttendanceScoreCalculator::getScheduledTime('PS', 'SORE');
+        $pulangPagi = $this->jamPulang('PS', 'PAGI');
+        $pulangSore = $this->jamPulang('PS', 'SORE');
+
+        $ringkasan = [];
+        if ($pagi) {
+            $ringkasan[] = 'Masuk ' . $this->jamRingkas($pagi->waktu_masuk)
+                . ' (' . $this->labelKehadiran($pagi) . ')';
+            if (! empty($pagi->waktu_pulang)) {
+                $ringkasan[] = 'Break ' . $this->jamRingkas($pagi->waktu_pulang);
+            }
+        }
+        if ($sore) {
+            $ringkasan[] = 'In Break ' . $this->jamRingkas($sore->waktu_masuk)
+                . ' (' . $this->labelKehadiran($sore) . ')';
+            if (! empty($sore->waktu_pulang)) {
+                $ringkasan[] = 'Pulang ' . $this->jamRingkas($sore->waktu_pulang);
+            }
+        }
+
+        $langkah = 'masuk';
+        $row     = null;
+        $kode    = 'PAGI';
+        $pulang  = $pulangPagi;
+
+        if ($sore) {
+            $row     = $sore;
+            $pulang  = $pulangSore;
+            $langkah = empty($sore->waktu_pulang) ? 'pulang' : 'selesai';
+        } elseif ($pagi) {
+            $row = $pagi;
+            if (empty($pagi->waktu_pulang)) {
+                $langkah = 'break';
+            } else {
+                $langkah = 'masuk_lagi';
+                $kode    = 'SORE';
+                $pulang  = $pulangSore;
+            }
+        }
+
+        return [
+            'kode'        => $kode,
+            'label'       => 'Shift PS',
+            'rentang'     => $jamPagi . '–' . $pulangPagi . ' · ' . $jamSore . '–' . $pulangSore,
+            'pulang'      => $pulang,
+            'buka'        => $this->bukaPada($hariIni, $pulang, $zona),
+            'boleh_tutup' => $jamSekarang >= $pulang . ':00',
+            'langkah'     => $langkah,
+            'presensi'    => $row,
+            'ringkasan'   => implode(' · ', $ringkasan),
+            'foto'        => $this->tautanFoto($pagi, $sore),
+        ];
+    }
+
+    private function jamRingkas(?string $waktu): string
+    {
+        return substr((string) $waktu, 11, 5);
+    }
+
+    private function labelKehadiran(object $row): string
+    {
+        if ($row->status_kehadiran === null) {
+            return 'Tercatat';
+        }
+
+        return [0 => 'Tepat', 1 => 'Toleransi', 2 => 'Telat'][(int) $row->status_kehadiran] ?? 'Tercatat';
+    }
+
+    private function bukaPada(string $hariIni, string $jam, \DateTimeZone $zona): string
+    {
+        return (new \DateTime($hariIni . ' ' . $jam . ':00', $zona))->format(\DateTimeInterface::ATOM);
+    }
+
+    /**
+     * @return list<array{label:string,url:string}>
+     */
+    private function tautanFoto(?object $pagi, ?object $sore, string $labelPagiTutup = 'Foto break'): array
+    {
+        $foto = [];
+        if ($pagi) {
+            $foto[] = ['label' => 'Foto masuk', 'url' => 'absen/foto/' . (int) $pagi->idpresensi];
+            if (! empty($pagi->foto_pulang)) {
+                $foto[] = ['label' => $labelPagiTutup, 'url' => 'absen/foto/' . (int) $pagi->idpresensi . '/pulang'];
+            }
+        }
+        if ($sore) {
+            $foto[] = ['label' => 'Foto in break', 'url' => 'absen/foto/' . (int) $sore->idpresensi];
+            if (! empty($sore->foto_pulang)) {
+                $foto[] = ['label' => 'Foto pulang', 'url' => 'absen/foto/' . (int) $sore->idpresensi . '/pulang'];
+            }
+        }
+
+        return $foto;
     }
 
     private function labelSesi(string $shift, string $sesi): string

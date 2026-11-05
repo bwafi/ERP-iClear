@@ -211,6 +211,93 @@ class AbsenPunchServiceTest extends CIUnitTestCase
             $this->assertTrue($foto->dihapus, 'Foto harus dihapus saat insert melempar exception.');
         }
     }
+
+    public function testPulangSebelumJamJadwalDitolak(): void
+    {
+        $this->roster(10, '2026-11-02', 'PAGI');
+        $service = new AbsenPunchService(null, null, new FakeFotoService());
+        $id = $service->masuk(10, 1, 'FULL', -8.1, 113.7, 5, $this->foto(), '2026-11-02 08:50:00');
+
+        try {
+            $service->pulang(10, $id, -8.1, 113.7, $this->foto(), '2026-11-02 16:59:59');
+            $this->fail('Pulang sebelum jam jadwal seharusnya ditolak.');
+        } catch (PresensiException $e) {
+            $this->assertSame('belum_waktunya', $e->kode);
+            $this->assertStringContainsString('17:00', $e->getMessage());
+        }
+
+        $row = $this->db->table('presensi')->where('idpresensi', $id)->get()->getRow();
+        $this->assertNull($row->waktu_pulang);
+    }
+
+    public function testPulangTepatJamJadwalDiterima(): void
+    {
+        $this->roster(10, '2026-11-02', 'PAGI');
+        $service = new AbsenPunchService(null, null, new FakeFotoService());
+        $id = $service->masuk(10, 1, 'FULL', -8.1, 113.7, 5, $this->foto(), '2026-11-02 08:50:00');
+
+        $service->pulang(10, $id, -8.1, 113.7, $this->foto(), '2026-11-02 17:00:00');
+
+        $row = $this->db->table('presensi')->where('idpresensi', $id)->get()->getRow();
+        $this->assertSame('2026-11-02 17:00:00', $row->waktu_pulang);
+    }
+
+    public function testBreakPsTanpaFotoHanyaSetelahJamnya(): void
+    {
+        $this->roster(10, '2026-11-02', 'PS');
+        $service = new AbsenPunchService(null, null, new FakeFotoService());
+        $id = $service->masuk(10, 1, 'PAGI', -8.1, 113.7, 5, $this->foto(), '2026-11-02 08:50:00');
+
+        try {
+            $service->istirahat(10, $id, '2026-11-02 12:59:59');
+            $this->fail('Break sebelum 13:00 seharusnya ditolak.');
+        } catch (PresensiException $e) {
+            $this->assertSame('belum_waktunya', $e->kode);
+        }
+
+        $service->istirahat(10, $id, '2026-11-02 13:00:00');
+
+        $row = $this->db->table('presensi')->where('idpresensi', $id)->get()->getRow();
+        $this->assertSame('2026-11-02 13:00:00', $row->waktu_pulang);
+        $this->assertNull($row->foto_pulang, 'Break tidak menyimpan foto pulang.');
+    }
+
+    public function testSoreWajibSetelahBreak(): void
+    {
+        $this->roster(10, '2026-11-02', 'PS');
+        $service = new AbsenPunchService(null, null, new FakeFotoService());
+        $pagi = $service->masuk(10, 1, 'PAGI', -8.1, 113.7, 5, $this->foto(), '2026-11-02 08:50:00');
+
+        try {
+            $service->masuk(10, 1, 'SORE', -8.1, 113.7, 5, $this->foto(), '2026-11-02 16:55:00');
+            $this->fail('Masuk sore sebelum break seharusnya ditolak.');
+        } catch (PresensiException $e) {
+            $this->assertStringContainsString('break', $e->getMessage());
+        }
+
+        $service->istirahat(10, $pagi, '2026-11-02 13:00:00');
+        $sore = $service->masuk(10, 1, 'SORE', -8.1, 113.7, 5, $this->foto(), '2026-11-02 16:55:00');
+
+        $row = $this->db->table('presensi')->where('idpresensi', $sore)->get()->getRow();
+        $this->assertSame('SORE', $row->sesi);
+    }
+
+    public function testPulangBarisLegacyTanpaJadwalTetapBoleh(): void
+    {
+        $this->db->table('presensi')->insert([
+            'idpresensi'  => 88,
+            'akun_idakun' => 10,
+            'unit_idunit' => 1,
+            'waktu_masuk' => '2026-11-02 08:00:00',
+            'sesi'        => 'FULL',
+        ]);
+
+        (new AbsenPunchService(null, null, new FakeFotoService()))
+            ->pulang(10, 88, -8.1, 113.7, $this->foto(), '2026-11-02 09:00:00');
+
+        $row = $this->db->table('presensi')->where('idpresensi', 88)->get()->getRow();
+        $this->assertSame('2026-11-02 09:00:00', $row->waktu_pulang);
+    }
 }
 
 class FakeFotoService extends FotoPresensiService

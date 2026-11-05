@@ -117,19 +117,61 @@ class AbsenMobilePageTest extends CIUnitTestCase
         $result->assertDontSee('Absen Masuk');
     }
 
-    public function testPagiSatuKartuDanPsDuaKartu(): void
+    public function testSatuKartuBertahapPerShift(): void
     {
         $this->sesi(10, 1, 36);
 
         $this->roster(10, $this->hariIni(), 'PAGI');
-        $this->get('absen')->assertSee('Pagi');
+        $result = $this->get('absen');
+        $result->assertSee('Pagi');
+        $result->assertSee('Absen Masuk');
+        $result->assertDontSee('Shift PS');
 
         $this->db->table('presensi_roster')
             ->where('akun_idakun', 10)->where('tanggal', $this->hariIni())
             ->update(['shift' => 'PS']);
         $result = $this->get('absen');
-        $result->assertSee('PS Pagi');
-        $result->assertSee('PS Sore');
+        $result->assertSee('Shift PS');
+        $result->assertSee('08:45–13:00 · 16:55–21:00');
+        $result->assertSee('Absen Masuk');
+        $result->assertDontSee('PS Pagi');
+        $result->assertDontSee('PS Sore');
+
+        $this->db->table('presensi')->insert([
+            'akun_idakun' => 10, 'unit_idunit' => 1, 'sesi' => 'PAGI',
+            'waktu_masuk' => $this->hariIni() . ' 08:50:00',
+            'jam_jadwal_masuk' => '08:45:00', 'jam_jadwal_pulang' => '13:00:00',
+            'status_kehadiran' => 0,
+        ]);
+        $result = $this->get('absen');
+        $result->assertSee('Absen Break');
+        $result->assertSee('Masuk 08:50 (Tepat)');
+        $result->assertDontSee('Absen Masuk');
+
+        $this->db->table('presensi')
+            ->where('akun_idakun', 10)->where('sesi', 'PAGI')
+            ->update(['waktu_pulang' => $this->hariIni() . ' 13:00:00']);
+        $result = $this->get('absen');
+        $result->assertSee('Absen In Break');
+        $result->assertSee('Break 13:00');
+
+        $this->db->table('presensi')->insert([
+            'akun_idakun' => 10, 'unit_idunit' => 1, 'sesi' => 'SORE',
+            'waktu_masuk' => $this->hariIni() . ' 16:55:00',
+            'jam_jadwal_masuk' => '16:55:00', 'jam_jadwal_pulang' => '21:00:00',
+            'status_kehadiran' => 0,
+        ]);
+        $result = $this->get('absen');
+        $result->assertSee('Absen Pulang');
+        $result->assertSee('In Break 16:55');
+
+        $this->db->table('presensi')
+            ->where('akun_idakun', 10)->where('sesi', 'SORE')
+            ->update(['waktu_pulang' => $this->hariIni() . ' 21:00:00']);
+        $result = $this->get('absen');
+        $result->assertSee('Selesai');
+        $result->assertSee('Pulang 21:00');
+        $result->assertSee('Foto masuk');
     }
 
     public function testSebelumGoLiveHanyaPesan(): void

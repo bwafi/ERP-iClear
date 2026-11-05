@@ -83,8 +83,14 @@ class AbsenPunchService
             if (! in_array($sesi, ['PAGI', 'SORE'], true)) {
                 throw new PresensiException('Sesi shift PS tidak valid.');
             }
-            if ($sesi === 'SORE' && ! $this->presensi->getByAkunTanggalSesi($akunId, $tanggal, 'PAGI')) {
-                throw new PresensiException('Absen sore bisa dilakukan setelah absen pagi.');
+            if ($sesi === 'SORE') {
+                $pagi = $this->presensi->getByAkunTanggalSesi($akunId, $tanggal, 'PAGI');
+                if (! $pagi) {
+                    throw new PresensiException('Absen sore bisa dilakukan setelah absen pagi.');
+                }
+                if (empty($pagi->waktu_pulang)) {
+                    throw new PresensiException('Absen break PS pagi dulu sebelum masuk sore.');
+                }
             }
         } elseif ($sesi !== 'FULL') {
             throw new PresensiException('Sesi shift tidak valid.');
@@ -154,6 +160,8 @@ class AbsenPunchService
             throw new PresensiException('Absen pulang hanya untuk hari ini.');
         }
 
+        $this->pastikanSudahWaktunya($row, $waktu, 'pulang');
+
         $fotoPath = $this->foto->simpan($foto, 'pulang', $akunId);
 
         try {
@@ -170,6 +178,65 @@ class AbsenPunchService
         if (! $ok) {
             $this->foto->hapus($fotoPath);
             throw new PresensiException('Absen pulang gagal disimpan.', 500);
+        }
+    }
+
+    /**
+     * Break PS pagi: menutup sesi PAGI pada jam jadwalnya tanpa foto.
+     */
+    public function istirahat(int $akunId, int $idPresensi, string $waktu): void
+    {
+        $row = $this->presensi->find($idPresensi);
+        if (! $row || (int) $row->akun_idakun !== $akunId) {
+            throw new PresensiException('Data absen tidak ditemukan.', 403);
+        }
+
+        if (strtoupper((string) ($row->sesi ?? '')) !== 'PAGI') {
+            throw new PresensiException('Break hanya untuk sesi pagi shift PS.');
+        }
+
+        if (! empty($row->waktu_pulang)) {
+            throw new PresensiException('Anda sudah absen break.');
+        }
+
+        if (substr((string) $row->waktu_masuk, 0, 10) !== substr($waktu, 0, 10)) {
+            throw new PresensiException('Absen break hanya untuk hari ini.');
+        }
+
+        $this->pastikanSudahWaktunya($row, $waktu, 'break');
+
+        try {
+            $ok = $this->presensi->update($idPresensi, [
+                'waktu_pulang' => $waktu,
+                'updated_at'   => $waktu,
+            ]);
+        } catch (\Throwable $e) {
+            throw new PresensiException('Absen break gagal disimpan.', 500);
+        }
+
+        if (! $ok) {
+            throw new PresensiException('Absen break gagal disimpan.', 500);
+        }
+    }
+
+    /**
+     * Baris legacy tanpa jam jadwal pulang tidak dikunci agar koreksi manual
+     * tetap jalan.
+     */
+    private function pastikanSudahWaktunya(object $row, string $waktu, string $jenis): void
+    {
+        $jadwal = substr((string) ($row->jam_jadwal_pulang ?? ''), 0, 8);
+        if ($jadwal === '' || $jadwal === '00:00:00') {
+            return;
+        }
+
+        $batas = substr((string) $row->waktu_masuk, 0, 10) . ' ' . $jadwal;
+        if (strtotime($waktu) < strtotime($batas)) {
+            throw new PresensiException(
+                'Belum waktunya ' . $jenis . '. Bisa mulai ' . substr($jadwal, 0, 5) . '.',
+                422,
+                'belum_waktunya'
+            );
         }
     }
 

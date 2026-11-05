@@ -177,6 +177,18 @@ class AbsenMobilePunchTest extends CIUnitTestCase
         $result->assertStatus(403);
     }
 
+    public function testBreakBarisOrangLainDitolak(): void
+    {
+        $this->sesi(11, 1, 36);
+        $this->db->table('presensi')->insert([
+            'idpresensi' => 78, 'akun_idakun' => 10, 'unit_idunit' => 1,
+            'waktu_masuk' => date('Y-m-d H:i:s'), 'sesi' => 'PAGI',
+        ]);
+
+        $result = $this->post('absen/break', ['idpresensi' => 78]);
+        $result->assertStatus(403);
+    }
+
     public function testFotoHanyaUntukPemilikAtauScope(): void
     {
         $this->siapkanFoto('202611/uji.jpg');
