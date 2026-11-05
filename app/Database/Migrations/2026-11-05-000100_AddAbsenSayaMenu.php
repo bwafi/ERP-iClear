@@ -22,7 +22,7 @@ class AddAbsenSayaMenu extends Migration
         'idmenu'     => self::MENU_ID,
         'urutan'     => 0,
         'nama_menu'  => 'Absen',
-        'roles'      => 'absen_saya',
+        'roles'      => 'absen',
         'url'        => 'absen',
         'show_menu'  => 1,
         'sub'        => 0,
