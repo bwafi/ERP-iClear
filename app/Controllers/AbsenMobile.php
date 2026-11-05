@@ -280,17 +280,53 @@ class AbsenMobile extends Controller
             $langkah = empty($row->waktu_pulang) ? 'pulang' : 'selesai';
         }
 
+        $rel = [
+            ['kode' => 'masuk', 'label' => 'Masuk', 'jam' => $masuk],
+            ['kode' => 'pulang', 'label' => 'Pulang', 'jam' => $pulang],
+        ];
+        $langkahIndex = ['masuk' => 0, 'pulang' => 1, 'selesai' => 2][$langkah] ?? 0;
+        $timeline     = [];
+
+        if ($row) {
+            $timeline[] = [
+                'kode'       => 'masuk',
+                'label'      => 'Masuk',
+                'waktu'      => $this->jamRingkas($row->waktu_masuk),
+                'status'     => $this->labelKehadiran($row),
+                'foto'       => ! empty($row->foto) ? 'absen/foto/' . (int) $row->idpresensi : null,
+                'foto_label' => 'Foto masuk',
+                'tanpa_foto' => empty($row->foto),
+            ];
+
+            if (! empty($row->waktu_pulang)) {
+                $timeline[] = [
+                    'kode'       => 'pulang',
+                    'label'      => 'Pulang',
+                    'waktu'      => $this->jamRingkas($row->waktu_pulang),
+                    'status'     => null,
+                    'foto'       => ! empty($row->foto_pulang)
+                        ? 'absen/foto/' . (int) $row->idpresensi . '/pulang'
+                        : null,
+                    'foto_label' => 'Foto pulang',
+                    'tanpa_foto' => empty($row->foto_pulang),
+                ];
+            }
+        }
+
         return [
-            'kode'        => 'FULL',
-            'label'       => $this->labelSesi($shift, 'FULL'),
-            'rentang'     => $masuk . '–' . $pulang,
-            'pulang'      => $pulang,
-            'buka'        => $this->bukaPada($hariIni, $pulang, $zona),
-            'boleh_tutup' => $jamSekarang >= $pulang . ':00',
-            'langkah'     => $langkah,
-            'presensi'    => $row,
-            'ringkasan'   => implode(' · ', $ringkasan),
-            'foto'        => $this->tautanFoto($row, null, 'Foto pulang'),
+            'kode'          => 'FULL',
+            'label'         => $this->labelSesi($shift, 'FULL'),
+            'rentang'       => $masuk . '–' . $pulang,
+            'pulang'        => $pulang,
+            'buka'          => $this->bukaPada($hariIni, $pulang, $zona),
+            'boleh_tutup'   => $jamSekarang >= $pulang . ':00',
+            'langkah'       => $langkah,
+            'langkah_index' => $langkahIndex,
+            'rel'           => $rel,
+            'timeline'      => $timeline,
+            'presensi'      => $row,
+            'ringkasan'     => implode(' · ', $ringkasan),
+            'foto'          => $this->tautanFoto($row, null, 'Foto pulang'),
         ];
     }
 
@@ -339,17 +375,85 @@ class AbsenMobile extends Controller
             }
         }
 
+        $rel = [
+            ['kode' => 'masuk', 'label' => 'Masuk', 'jam' => $jamPagi],
+            ['kode' => 'break', 'label' => 'Break', 'jam' => $pulangPagi],
+            ['kode' => 'masuk_lagi', 'label' => 'In Break', 'jam' => $jamSore],
+            ['kode' => 'pulang', 'label' => 'Pulang', 'jam' => $pulangSore],
+        ];
+        $langkahIndex = [
+            'masuk'      => 0,
+            'break'      => 1,
+            'masuk_lagi' => 2,
+            'pulang'     => 3,
+            'selesai'    => 4,
+        ][$langkah] ?? 0;
+
+        $timeline = [];
+        if ($pagi) {
+            $timeline[] = [
+                'kode'       => 'masuk',
+                'label'      => 'Masuk',
+                'waktu'      => $this->jamRingkas($pagi->waktu_masuk),
+                'status'     => $this->labelKehadiran($pagi),
+                'foto'       => ! empty($pagi->foto) ? 'absen/foto/' . (int) $pagi->idpresensi : null,
+                'foto_label' => 'Foto masuk',
+                'tanpa_foto' => empty($pagi->foto),
+            ];
+
+            if (! empty($pagi->waktu_pulang)) {
+                $timeline[] = [
+                    'kode'       => 'break',
+                    'label'      => 'Break',
+                    'waktu'      => $this->jamRingkas($pagi->waktu_pulang),
+                    'status'     => null,
+                    'foto'       => null,
+                    'foto_label' => null,
+                    'tanpa_foto' => true,
+                ];
+            }
+        }
+
+        if ($sore) {
+            $timeline[] = [
+                'kode'       => 'masuk_lagi',
+                'label'      => 'In Break',
+                'waktu'      => $this->jamRingkas($sore->waktu_masuk),
+                'status'     => $this->labelKehadiran($sore),
+                'foto'       => ! empty($sore->foto) ? 'absen/foto/' . (int) $sore->idpresensi : null,
+                'foto_label' => 'Foto in break',
+                'tanpa_foto' => empty($sore->foto),
+            ];
+
+            if (! empty($sore->waktu_pulang)) {
+                $timeline[] = [
+                    'kode'       => 'pulang',
+                    'label'      => 'Pulang',
+                    'waktu'      => $this->jamRingkas($sore->waktu_pulang),
+                    'status'     => null,
+                    'foto'       => ! empty($sore->foto_pulang)
+                        ? 'absen/foto/' . (int) $sore->idpresensi . '/pulang'
+                        : null,
+                    'foto_label' => 'Foto pulang',
+                    'tanpa_foto' => empty($sore->foto_pulang),
+                ];
+            }
+        }
+
         return [
-            'kode'        => $kode,
-            'label'       => 'Shift PS',
-            'rentang'     => $jamPagi . '–' . $pulangPagi . ' · ' . $jamSore . '–' . $pulangSore,
-            'pulang'      => $pulang,
-            'buka'        => $this->bukaPada($hariIni, $pulang, $zona),
-            'boleh_tutup' => $jamSekarang >= $pulang . ':00',
-            'langkah'     => $langkah,
-            'presensi'    => $row,
-            'ringkasan'   => implode(' · ', $ringkasan),
-            'foto'        => $this->tautanFoto($pagi, $sore),
+            'kode'          => $kode,
+            'label'         => 'Shift PS',
+            'rentang'       => $jamPagi . '–' . $pulangPagi . ' · ' . $jamSore . '–' . $pulangSore,
+            'pulang'        => $pulang,
+            'buka'          => $this->bukaPada($hariIni, $pulang, $zona),
+            'boleh_tutup'   => $jamSekarang >= $pulang . ':00',
+            'langkah'       => $langkah,
+            'langkah_index' => $langkahIndex,
+            'rel'           => $rel,
+            'timeline'      => $timeline,
+            'presensi'      => $row,
+            'ringkasan'     => implode(' · ', $ringkasan),
+            'foto'          => $this->tautanFoto($pagi, $sore),
         ];
     }
 
