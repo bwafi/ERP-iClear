@@ -28,6 +28,9 @@ class AbsenMobile extends Controller
 
         $roster = null;
         $sesi   = [];
+        $service = new AbsenPunchService();
+        $unitKerja = $service->unitKerja($akunId, $hariIni, $unitId);
+
         if ($hariIni >= $goLive) {
             $roster = (new ModelPresensiRoster())->getByAkunTanggal($akunId, $hariIni);
 
@@ -46,12 +49,13 @@ class AbsenMobile extends Controller
         }
 
         return view('absen/mobile', [
-            'hariIni' => $hariIni,
-            'goLive'  => $goLive,
-            'roster'  => $roster,
-            'sesi'    => $sesi,
-            'unit'    => (new ModelUnit())->getById($unitId),
-            'nama'    => (string) session('NAMA'),
+            'hariIni'   => $hariIni,
+            'goLive'    => $goLive,
+            'roster'    => $roster,
+            'sesi'      => $sesi,
+            'unit'      => (new ModelUnit())->getById($unitKerja),
+            'kunjungan' => $unitKerja !== $unitId,
+            'nama'      => (string) session('NAMA'),
         ]);
     }
 
@@ -76,7 +80,8 @@ class AbsenMobile extends Controller
 
         try {
             // Lokasi dulu supaya request di luar radius tidak perlu upload.
-            $jarak = $service->validasiLokasi($unitId, $lat, $long);
+            $unitKerja = $service->unitKerja($akunId, substr($waktu, 0, 10), $unitId);
+            $jarak     = $service->validasiLokasi($unitKerja, $lat, $long);
 
             if (! $file) {
                 throw new PresensiException('Foto wajib diambil dan berhasil diunggah.');
@@ -84,7 +89,7 @@ class AbsenMobile extends Controller
 
             $service->masuk(
                 $akunId,
-                $unitId,
+                $unitKerja,
                 (string) $this->request->getPost('sesi'),
                 $lat,
                 $long,
@@ -133,7 +138,8 @@ class AbsenMobile extends Controller
         $service = new AbsenPunchService();
 
         try {
-            $service->validasiLokasi($unitId, $lat, $long);
+            $unitKerja = $service->unitKerja($akunId, substr((string) $row->waktu_masuk, 0, 10), $unitId);
+            $service->validasiLokasi($unitKerja, $lat, $long);
 
             if (! $file) {
                 throw new PresensiException('Foto wajib diambil dan berhasil diunggah.');
@@ -177,7 +183,8 @@ class AbsenMobile extends Controller
         $service = new AbsenPunchService();
 
         try {
-            $service->validasiLokasi($unitId, $lat, $long);
+            $unitKerja = $service->unitKerja($akunId, substr((string) $row->waktu_masuk, 0, 10), $unitId);
+            $service->validasiLokasi($unitKerja, $lat, $long);
             $service->istirahat($akunId, $id, $waktu);
 
             return $this->jawab(true, 'Absen break berhasil.');

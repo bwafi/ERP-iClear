@@ -51,7 +51,7 @@ class IzinApprovalServiceTest extends CIUnitTestCase
                 jenis_perizinan_idjenis_perizinan INT NOT NULL)');
         $q('CREATE TABLE presensi_roster (
                 id INT PRIMARY KEY AUTO_INCREMENT, akun_idakun INT NOT NULL, tanggal DATE NOT NULL,
-                shift VARCHAR(10) NOT NULL, keterangan TEXT NULL, created_by INT NULL,
+                shift VARCHAR(10) NOT NULL, unit_idunit INT NULL, keterangan TEXT NULL, created_by INT NULL,
                 updated_by INT NULL, created_at DATETIME NULL, updated_at DATETIME NULL)');
         $q('CREATE TABLE kpi_attendance_off (
                 id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NOT NULL, evaluation_date DATE NOT NULL,
@@ -75,12 +75,13 @@ class IzinApprovalServiceTest extends CIUnitTestCase
         return (int) $this->db->insertID();
     }
 
-    private function roster(int $akun, string $tanggal, string $shift, string $ket = ''): void
+    private function roster(int $akun, string $tanggal, string $shift, string $ket = '', ?int $unit = null): void
     {
         $this->db->table('presensi_roster')->insert([
             'akun_idakun' => $akun,
             'tanggal'     => $tanggal,
             'shift'       => $shift,
+            'unit_idunit' => $unit,
             'keterangan'  => $ket,
         ]);
     }
@@ -115,6 +116,21 @@ class IzinApprovalServiceTest extends CIUnitTestCase
 
         $this->assertSame('PS', $this->baris(10, '2026-11-21')->shift);
         $this->assertSame('Tetap', $this->baris(10, '2026-11-21')->keterangan);
+    }
+
+    public function testSetujuiTidakMenimpaUnitKerjaRoster(): void
+    {
+        $id = $this->izin(3, '2026-11-15', '2026-11-16');
+        $this->roster(10, '2026-11-15', 'PAGI', '', 2);
+        $this->roster(10, '2026-11-16', 'PAGI', '', 2);
+
+        (new IzinApprovalService())->setujui($id, 99);
+
+        foreach (['2026-11-15', '2026-11-16'] as $tanggal) {
+            $row = $this->baris(10, $tanggal);
+            $this->assertSame('CUTI', $row->shift);
+            $this->assertSame(2, (int) $row->unit_idunit);
+        }
     }
 
     public function testBatalkanMenghapusShiftJenisPengajuanSaja(): void

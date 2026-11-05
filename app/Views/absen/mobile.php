@@ -166,7 +166,7 @@ $petaSiap =
             <h1><?= esc($nama) ?></h1>
             <p class="meta"><?= esc(
                 $unit->NAMA_UNIT ?? "Unit tidak dikenal",
-            ) ?><span class="sep" aria-hidden="true">·</span><?= esc(
+            ) ?><?php if ($kunjungan ?? false): ?><span class="visit">Kunjungan</span><?php endif; ?><span class="sep" aria-hidden="true">·</span><?= esc(
     $tanggal,
 ) ?></p>
         </div>

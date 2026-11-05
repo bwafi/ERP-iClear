@@ -49,10 +49,18 @@ class JadwalMasuk extends BaseController
         $roster = $akunId === 0 ? [] : (new ModelPresensiRoster())
             ->getRentang($akunId, $bulan . '-01', date('Y-m-t', strtotime($bulan . '-01')));
 
+        // Pengelola unit sendiri hanya boleh memilih unit kerjanya sendiri.
+        $unitSemua = $this->UnitModel->getUnit();
+        $unitList  = $bolehSemua ? $unitSemua : array_values(array_filter(
+            $unitSemua,
+            static fn ($u) => (int) $u->idunit === $unitSesi
+        ));
+
         return view('template', [
             'body'               => 'absensi/jadwal_masuk',
             'bulan'              => $bulan,
-            'unit'               => $this->UnitModel->getUnit(),
+            'unit'               => $unitList,
+            'unitSemua'          => $unitSemua,
             'pegawai'            => $pegawai,
             'akunId'             => $akunId,
             'roster'             => $roster,
@@ -114,7 +122,18 @@ class JadwalMasuk extends BaseController
 
         $shift      = (array) $this->request->getPost('shift');
         $keterangan = (array) $this->request->getPost('keterangan');
+        $unitPost   = (array) $this->request->getPost('unit');
+        $bulan      = (string) $this->request->getPost('bulan');
         $hariIni    = date('Y-m-d');
+        $bolehSemua = in_array($jabatan, config('Presensi')->rosterSemuaUnit, true);
+
+        $lama = preg_match('/^\d{4}-\d{2}$/', $bulan)
+            ? (new ModelPresensiRoster())->getRentang(
+                (int) $akun->ID_AKUN,
+                $bulan . '-01',
+                date('Y-m-t', strtotime($bulan . '-01'))
+            )
+            : [];
 
         // Validasi semua baris dulu supaya tidak ada simpan setengah jalan.
         foreach ($shift as $tanggal => $nilai) {
@@ -127,18 +146,32 @@ class JadwalMasuk extends BaseController
             if (! in_array((string) $nilai, RosterService::SHIFT_SEMUA, true)) {
                 return redirect()->back()->with('gagal', 'Shift roster tidak valid.');
             }
+
+            $unitLama   = (int) ($lama[$tanggal]->unit_idunit ?? 0);
+            $unitTujuan = (int) ($unitPost[$tanggal] ?? 0) ?: ($unitLama ?: (int) $akun->ID_UNIT);
+            if ($unitTujuan <= 0 || ! $this->UnitModel->getById($unitTujuan)) {
+                return redirect()->back()->with('gagal', 'Unit kerja tidak valid.');
+            }
+            // Unit di luar scope hanya boleh dipertahankan, bukan dipilih baru.
+            if (! $bolehSemua && $unitTujuan !== $unitSesi && $unitTujuan !== $unitLama) {
+                return redirect()->back()->with('gagal', 'Anda hanya bisa memilih unit kerja sendiri.');
+            }
         }
 
         $service = new RosterService();
         $db      = db_connect();
         $db->transStart();
         foreach ($shift as $tanggal => $nilai) {
+            $unitLama   = (int) ($lama[$tanggal]->unit_idunit ?? 0);
+            $unitTujuan = (int) ($unitPost[$tanggal] ?? 0) ?: ($unitLama ?: (int) $akun->ID_UNIT);
+
             $service->simpanTanggal(
                 (int) $akun->ID_AKUN,
                 $tanggal,
                 (string) $nilai,
                 (string) ($keterangan[$tanggal] ?? ''),
-                (int) session('ID_AKUN')
+                (int) session('ID_AKUN'),
+                $unitTujuan
             );
         }
         $db->transComplete();

@@ -57,6 +57,7 @@ class AbsenPunchServiceTest extends CIUnitTestCase
         $q('CREATE TABLE presensi_roster (
                 id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
                 akun_idakun INT NOT NULL, tanggal DATE NOT NULL, shift VARCHAR(10) NOT NULL,
+                unit_idunit INT NULL,
                 keterangan TEXT NULL, created_by INT NULL, updated_by INT NULL,
                 created_at DATETIME NULL, updated_at DATETIME NULL,
                 UNIQUE KEY uniq_akun_tanggal (akun_idakun, tanggal))');
@@ -76,12 +77,13 @@ class AbsenPunchServiceTest extends CIUnitTestCase
             VALUES (1, 'Unit Satu', '-8.1', '113.7', 200)");
     }
 
-    private function roster(int $akunId, string $tanggal, string $shift): void
+    private function roster(int $akunId, string $tanggal, string $shift, ?int $unit = null): void
     {
         $this->db->table('presensi_roster')->insert([
             'akun_idakun' => $akunId,
             'tanggal'     => $tanggal,
             'shift'       => $shift,
+            'unit_idunit' => $unit,
             'created_at'  => date('Y-m-d H:i:s'),
         ]);
     }
@@ -122,6 +124,32 @@ class AbsenPunchServiceTest extends CIUnitTestCase
                 $e->getMessage()
             );
         }
+    }
+
+    public function testUnitKerjaFallbackKeUnitSesi(): void
+    {
+        $service = new AbsenPunchService();
+
+        $this->assertSame(7, $service->unitKerja(10, '2026-11-02', 7), 'Tanpa roster memakai unit sesi.');
+        $this->roster(10, '2026-11-02', 'PAGI');
+        $this->assertSame(7, $service->unitKerja(10, '2026-11-02', 7), 'Unit roster kosong memakai unit sesi.');
+        $this->db->table('presensi_roster')->where('akun_idakun', 10)->update(['unit_idunit' => 2]);
+        $this->assertSame(2, $service->unitKerja(10, '2026-11-02', 7), 'Unit roster dipakai bila diisi.');
+    }
+
+    public function testMasukMenyimpanUnitKerjaRoster(): void
+    {
+        $this->db->table('unit')->insert([
+            'idunit' => 2, 'NAMA_UNIT' => 'Unit Dua', 'LATITUDE' => '-8.2', 'LONGTITUDE' => '113.8', 'RADIUS' => 200,
+        ]);
+        $this->roster(10, '2026-11-02', 'PAGI', 2);
+
+        $id = (new AbsenPunchService(null, null, new FakeFotoService()))->masuk(
+            10, 1, 'FULL', -8.2, 113.8, 5, $this->foto(), '2026-11-02 08:50:00'
+        );
+
+        $row = $this->db->table('presensi')->where('idpresensi', $id)->get()->getRow();
+        $this->assertSame(2, (int) $row->unit_idunit);
     }
 
     public function testMasukPagiMembuatSatuBaris(): void

@@ -58,12 +58,12 @@ class RosterService
         return $jumlah;
     }
 
-    public function simpanTanggal(int $akunId, string $tanggal, string $shift, ?string $keterangan, int $oleh): bool
+    public function simpanTanggal(int $akunId, string $tanggal, string $shift, ?string $keterangan, int $oleh, ?int $unitId = null): bool
     {
         if (! in_array($shift, self::SHIFT_SEMUA, true)) {
             throw new \InvalidArgumentException('Shift roster tidak valid.');
         }
 
-        return $this->model->simpan($akunId, $tanggal, $shift, $keterangan, $oleh);
+        return $this->model->simpan($akunId, $tanggal, $shift, $keterangan, $oleh, $unitId);
     }
 }

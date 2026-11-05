@@ -77,6 +77,7 @@ class AbsenMobilePunchTest extends CIUnitTestCase
         $q('CREATE TABLE presensi_roster (
                 id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
                 akun_idakun INT NOT NULL, tanggal DATE NOT NULL, shift VARCHAR(10) NOT NULL,
+                unit_idunit INT NULL,
                 keterangan TEXT NULL, created_by INT NULL, updated_by INT NULL,
                 created_at DATETIME NULL, updated_at DATETIME NULL,
                 UNIQUE KEY uniq_akun_tanggal (akun_idakun, tanggal))');
@@ -107,12 +108,13 @@ class AbsenMobilePunchTest extends CIUnitTestCase
         ]);
     }
 
-    private function roster(int $akunId, string $tanggal, string $shift): void
+    private function roster(int $akunId, string $tanggal, string $shift, ?int $unit = null): void
     {
         $this->db->table('presensi_roster')->insert([
             'akun_idakun' => $akunId,
             'tanggal'     => $tanggal,
             'shift'       => $shift,
+            'unit_idunit' => $unit,
             'created_at'  => date('Y-m-d H:i:s'),
         ]);
     }
@@ -163,6 +165,40 @@ class AbsenMobilePunchTest extends CIUnitTestCase
         $json = json_decode($result->getJSON(), true);
         $this->assertStringContainsString('m dari titik absen', $json['message']);
         $this->assertSame('jarak', $json['kode']);
+    }
+
+    public function testKunjunganDivalidasiKeRadiusUnitRoster(): void
+    {
+        $this->db->table('unit')->insert([
+            'idunit' => 2, 'NAMA_UNIT' => 'Unit Dua', 'LATITUDE' => '-8.2', 'LONGTITUDE' => '113.8', 'RADIUS' => 200,
+        ]);
+        $this->sesi(10, 1, 36);
+        $this->roster(10, $this->hariIni(), 'PAGI', 2);
+
+        // Berdiri di unit sesi (1), bukan unit kerja roster (2).
+        $result = $this->post('absen/masuk', [
+            'sesi' => 'FULL', 'latitude' => -8.1, 'longitude' => 113.7,
+        ]);
+
+        $result->assertStatus(422);
+        $this->assertSame('jarak', json_decode($result->getJSON(), true)['kode']);
+    }
+
+    public function testKunjunganLolosRadiusUnitRosterLaluMintaFoto(): void
+    {
+        $this->db->table('unit')->insert([
+            'idunit' => 2, 'NAMA_UNIT' => 'Unit Dua', 'LATITUDE' => '-8.2', 'LONGTITUDE' => '113.8', 'RADIUS' => 200,
+        ]);
+        $this->sesi(10, 1, 36);
+        $this->roster(10, $this->hariIni(), 'PAGI', 2);
+
+        // Berdiri di unit kerja roster (2): lokasi lolos, tinggal foto.
+        $result = $this->post('absen/masuk', [
+            'sesi' => 'FULL', 'latitude' => -8.2, 'longitude' => 113.8,
+        ]);
+
+        $result->assertStatus(422);
+        $this->assertStringContainsString('Foto wajib', json_decode($result->getJSON(), true)['message']);
     }
 
     public function testPulangBarisOrangLainDitolak(): void

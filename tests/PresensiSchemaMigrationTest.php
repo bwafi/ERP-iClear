@@ -44,8 +44,10 @@ class PresensiSchemaMigrationTest extends CIUnitTestCase
         $dir = APPPATH . 'Database/Migrations/';
         require_once $dir . '2026-11-02-000100_CreatePresensiRoster.php';
         require_once $dir . '2026-11-02-000200_AddSesiSumberToPresensi.php';
+        require_once $dir . '2026-11-05-000300_AddUnitToPresensiRoster.php';
         (new \App\Database\Migrations\CreatePresensiRoster())->up();
         (new \App\Database\Migrations\AddSesiSumberToPresensi())->up();
+        (new \App\Database\Migrations\AddUnitToPresensiRoster())->up();
     }
 
     public function testRosterDanKolomPresensiTerbentuk(): void
@@ -53,6 +55,7 @@ class PresensiSchemaMigrationTest extends CIUnitTestCase
         $this->assertTrue($this->db->tableExists('presensi_roster'));
         $this->assertTrue($this->db->fieldExists('sesi', 'presensi'));
         $this->assertTrue($this->db->fieldExists('sumber', 'presensi'));
+        $this->assertTrue($this->db->fieldExists('unit_idunit', 'presensi_roster'));
         $this->assertArrayHasKey('idx_presensi_akun_masuk', $this->db->getIndexData('presensi'));
     }
 

@@ -61,6 +61,7 @@ class RosterSimpanTest extends CIUnitTestCase
         $q('CREATE TABLE presensi_roster (
                 id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
                 akun_idakun INT NOT NULL, tanggal DATE NOT NULL, shift VARCHAR(10) NOT NULL,
+                unit_idunit INT NULL,
                 keterangan TEXT NULL, created_by INT NULL, updated_by INT NULL,
                 created_at DATETIME NULL, updated_at DATETIME NULL,
                 UNIQUE KEY uniq_akun_tanggal (akun_idakun, tanggal))');
@@ -128,6 +129,91 @@ class RosterSimpanTest extends CIUnitTestCase
 
         $row = $this->db->table('presensi_roster')->where('akun_idakun', 100)->get()->getRow();
         $this->assertSame('PS', $row->shift);
+    }
+
+    public function testAdminRootBisaSimpanUnitKerjaLintasCabang(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->post('jadwal_masuk/simpan', [
+            'akun_idakun' => 100,
+            'bulan'       => '2099-01',
+            'shift'       => ['2099-01-02' => 'PAGI'],
+            'unit'        => ['2099-01-02' => 2],
+            'keterangan'  => ['2099-01-02' => ''],
+        ])->assertRedirect();
+
+        $row = $this->db->table('presensi_roster')->where('akun_idakun', 100)->get()->getRow();
+        $this->assertSame(2, (int) $row->unit_idunit);
+    }
+
+    public function testUnitKerjaDefaultUnitPegawai(): void
+    {
+        $this->sesi(1, 1, 1);
+        $this->post('jadwal_masuk/simpan', [
+            'akun_idakun' => 100,
+            'bulan'       => '2099-01',
+            'shift'       => ['2099-01-03' => 'PAGI'],
+            'keterangan'  => ['2099-01-03' => ''],
+        ])->assertRedirect();
+
+        $row = $this->db->table('presensi_roster')->where('akun_idakun', 100)->get()->getRow();
+        $this->assertSame(1, (int) $row->unit_idunit);
+    }
+
+    public function testAdminKasirTidakBisaPilihUnitLain(): void
+    {
+        $this->sesi(200, 2, 35);
+        $this->post('jadwal_masuk/simpan', [
+            'akun_idakun' => 200,
+            'bulan'       => '2099-01',
+            'shift'       => ['2099-01-04' => 'PAGI'],
+            'unit'        => ['2099-01-04' => 1],
+            'keterangan'  => ['2099-01-04' => ''],
+        ])->assertRedirect();
+
+        $this->assertSame(0, (int) $this->db->table('presensi_roster')->countAllResults());
+        $this->assertStringContainsString('unit', (string) session('gagal'));
+    }
+
+    public function testUnitKunjunganTidakTeresetSaatAdminUnitMenyimpan(): void
+    {
+        $this->db->table('presensi_roster')->insert([
+            'akun_idakun' => 100, 'tanggal' => '2099-01-05', 'shift' => 'PAGI',
+            'unit_idunit' => 2, 'created_at' => date('Y-m-d H:i:s'),
+        ]);
+        $this->sesi(1, 1, 35);
+
+        $this->post('jadwal_masuk/simpan', [
+            'akun_idakun' => 100,
+            'bulan'       => '2099-01',
+            'shift'       => ['2099-01-05' => 'SIANG'],
+            'unit'        => ['2099-01-05' => 2],
+            'keterangan'  => ['2099-01-05' => ''],
+        ])->assertRedirect();
+
+        $row = $this->db->table('presensi_roster')->where('akun_idakun', 100)->get()->getRow();
+        $this->assertSame('SIANG', $row->shift);
+        $this->assertSame(2, (int) $row->unit_idunit);
+    }
+
+    public function testSimpanTanpaUnitMempertahankanUnitKunjungan(): void
+    {
+        $this->db->table('presensi_roster')->insert([
+            'akun_idakun' => 100, 'tanggal' => '2099-01-06', 'shift' => 'PAGI',
+            'unit_idunit' => 2, 'created_at' => date('Y-m-d H:i:s'),
+        ]);
+        $this->sesi(1, 1, 35);
+
+        $this->post('jadwal_masuk/simpan', [
+            'akun_idakun' => 100,
+            'bulan'       => '2099-01',
+            'shift'       => ['2099-01-06' => 'OFF'],
+            'keterangan'  => ['2099-01-06' => ''],
+        ])->assertRedirect();
+
+        $row = $this->db->table('presensi_roster')->where('akun_idakun', 100)->get()->getRow();
+        $this->assertSame('OFF', $row->shift);
+        $this->assertSame(2, (int) $row->unit_idunit);
     }
 
     public function testIzinTanpaKeteranganTersimpan(): void

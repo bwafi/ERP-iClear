@@ -22,6 +22,7 @@ class RosterServiceTest extends CIUnitTestCase
             akun_idakun INT NOT NULL,
             tanggal DATE NOT NULL,
             shift VARCHAR(10) NOT NULL,
+            unit_idunit INT NULL,
             keterangan TEXT NULL,
             created_by INT NULL,
             updated_by INT NULL,
@@ -71,6 +72,27 @@ class RosterServiceTest extends CIUnitTestCase
         $this->assertSame('IZIN', $row->shift);
         $this->assertSame('sakit', $row->keterangan);
         $this->assertSame(1, (int) $this->db->table('presensi_roster')->countAllResults());
+    }
+
+    public function testSimpanTanggalMenyimpanUnitKerja(): void
+    {
+        (new RosterService())->simpanTanggal(10, '2026-11-05', 'PAGI', null, 1, 2);
+
+        $row = $this->db->table('presensi_roster')
+            ->where('akun_idakun', 10)->where('tanggal', '2026-11-05')->get()->getRow();
+        $this->assertSame(2, (int) $row->unit_idunit);
+    }
+
+    public function testSimpanTanpaUnitTidakMenimpaUnitKerja(): void
+    {
+        $service = new RosterService();
+        $service->simpanTanggal(10, '2026-11-05', 'PAGI', null, 1, 2);
+        $service->simpanTanggal(10, '2026-11-05', 'IZIN', 'sakit', 1);
+
+        $row = $this->db->table('presensi_roster')
+            ->where('akun_idakun', 10)->where('tanggal', '2026-11-05')->get()->getRow();
+        $this->assertSame('IZIN', $row->shift);
+        $this->assertSame(2, (int) $row->unit_idunit);
     }
 
     public function testShiftIzinSakitCutiTanpaKeteranganDiterima(): void

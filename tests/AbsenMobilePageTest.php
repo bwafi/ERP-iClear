@@ -56,6 +56,7 @@ class AbsenMobilePageTest extends CIUnitTestCase
         $q('CREATE TABLE presensi_roster (
                 id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
                 akun_idakun INT NOT NULL, tanggal DATE NOT NULL, shift VARCHAR(10) NOT NULL,
+                unit_idunit INT NULL,
                 keterangan TEXT NULL, created_by INT NULL, updated_by INT NULL,
                 created_at DATETIME NULL, updated_at DATETIME NULL,
                 UNIQUE KEY uniq_akun_tanggal (akun_idakun, tanggal))');
@@ -86,12 +87,13 @@ class AbsenMobilePageTest extends CIUnitTestCase
         ]);
     }
 
-    private function roster(int $akunId, string $tanggal, string $shift): void
+    private function roster(int $akunId, string $tanggal, string $shift, ?int $unit = null): void
     {
         $this->db->table('presensi_roster')->insert([
             'akun_idakun' => $akunId,
             'tanggal'     => $tanggal,
             'shift'       => $shift,
+            'unit_idunit' => $unit,
             'created_at'  => date('Y-m-d H:i:s'),
         ]);
     }
@@ -181,6 +183,30 @@ class AbsenMobilePageTest extends CIUnitTestCase
         config('Presensi')->goLiveDate = '2099-01-01';
 
         $this->get('absen')->assertSee('aktif mulai');
+    }
+
+    public function testUnitKunjunganTampilDanDitandai(): void
+    {
+        $this->db->table('unit')->insert([
+            'idunit' => 2, 'NAMA_UNIT' => 'Unit Dua', 'LATITUDE' => '-8.2', 'LONGTITUDE' => '113.8', 'RADIUS' => 200,
+        ]);
+        $this->sesi(10, 1, 36);
+        $this->roster(10, $this->hariIni(), 'PAGI', 2);
+
+        $result = $this->get('absen');
+        $result->assertSee('Unit Dua');
+        $result->assertSee('Kunjungan');
+        $result->assertDontSee('Unit Satu');
+    }
+
+    public function testTanpaUnitRosterMemakaiUnitSendiriTanpaTandaKunjungan(): void
+    {
+        $this->sesi(10, 1, 36);
+        $this->roster(10, $this->hariIni(), 'PAGI');
+
+        $result = $this->get('absen');
+        $result->assertSee('Unit Satu');
+        $result->assertDontSee('Kunjungan');
     }
 
     public function testHalamanMenyediakanPetaTitikAbsen(): void

@@ -92,6 +92,18 @@
         font-size: 10.5px;
     }
 
+    .absen .head .meta .visit {
+        margin-left: 5px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #8a5300;
+        background: #ffe8b8;
+    }
+
     .absen .head .ghost {
         min-height: 34px;
         padding: 0 10px;

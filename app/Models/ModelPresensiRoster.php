@@ -14,6 +14,7 @@ class ModelPresensiRoster extends Model
         'akun_idakun',
         'tanggal',
         'shift',
+        'unit_idunit',
         'keterangan',
         'created_by',
         'updated_by',
@@ -51,25 +52,29 @@ class ModelPresensiRoster extends Model
             ->countAllResults() > 0;
     }
 
-    public function simpan(int $akunId, string $tanggal, string $shift, ?string $keterangan, int $oleh): bool
+    public function simpan(int $akunId, string $tanggal, string $shift, ?string $keterangan, int $oleh, ?int $unitId = null): bool
     {
         $sekarang = date('Y-m-d H:i:s');
         $baris    = $this->getByAkunTanggal($akunId, $tanggal);
+        $data     = [
+            'shift'      => $shift,
+            'keterangan' => $keterangan,
+            'updated_by' => $oleh,
+            'updated_at' => $sekarang,
+        ];
 
-        if ($baris) {
-            return (bool) $this->update($baris->id, [
-                'shift'      => $shift,
-                'keterangan' => $keterangan,
-                'updated_by' => $oleh,
-                'updated_at' => $sekarang,
-            ]);
+        // Null = pertahankan unit yang sudah ada (mis. saat izin menimpa shift).
+        if ($unitId !== null) {
+            $data['unit_idunit'] = $unitId;
         }
 
-        return (bool) $this->insert([
+        if ($baris) {
+            return (bool) $this->update($baris->id, $data);
+        }
+
+        return (bool) $this->insert($data + [
             'akun_idakun' => $akunId,
             'tanggal'     => $tanggal,
-            'shift'       => $shift,
-            'keterangan'  => $keterangan,
             'created_by'  => $oleh,
             'created_at'  => $sekarang,
         ]);

@@ -33,6 +33,16 @@ class AbsenPunchService
         $this->unit     = $unit ?? new ModelUnit();
     }
 
+    /**
+     * Unit kerja untuk tanggal tertentu: unit roster bila diisi, selain itu unit sesi.
+     */
+    public function unitKerja(int $akunId, string $tanggal, int $unitSesi): int
+    {
+        $roster = $this->roster->getByAkunTanggal($akunId, $tanggal);
+
+        return (int) ($roster->unit_idunit ?? 0) ?: $unitSesi;
+    }
+
     public function validasiLokasi(int $unitId, float $lat, float $long): int
     {
         if (abs($lat) > 90 || abs($long) > 180) {
@@ -77,6 +87,9 @@ class AbsenPunchService
         if (! in_array($shift, self::SHIFT_ABSEN, true)) {
             throw new PresensiException('Hari ini ' . $shift . ', tidak perlu absen.');
         }
+
+        // Roster menentukan lokasi kerja; null/0 = unit pegawai sendiri.
+        $unitId = (int) ($roster->unit_idunit ?? 0) ?: $unitId;
 
         $sesi = strtoupper($sesi);
         if ($shift === 'PS') {

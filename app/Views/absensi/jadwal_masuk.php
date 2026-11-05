@@ -40,6 +40,12 @@ foreach ($pegawai as $p) {
 }
 $namaPegawai = $pegawaiAktif->NAMA_AKUN ?? '';
 $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
+$unitAsal    = (int) ($pegawaiAktif->ID_UNIT ?? 0);
+$unitOpsiIds = array_map(static fn ($u) => (int) $u->idunit, $unit);
+$namaUnitMap = [];
+foreach ($unitSemua ?? $unit as $u) {
+    $namaUnitMap[(int) $u->idunit] = $u->NAMA_UNIT;
+}
 ?>
 
 <div class="jad">
@@ -167,6 +173,15 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                         $baris    = $roster[$tanggal] ?? null;
                         $shift    = $baris->shift ?? '';
                         $ket      = $baris->keterangan ?? '';
+                        $unitKerja = (int) ($baris->unit_idunit ?? 0) ?: $unitAsal;
+                        // Unit kunjungan yang sudah ada tetap ditampilkan agar tidak tereset saat simpan.
+                        $opsiUnit = $unit;
+                        if (! $bolehSemuaUnit && $unitKerja > 0 && ! in_array($unitKerja, $unitOpsiIds, true)) {
+                            $opsiUnit[] = (object) [
+                                'idunit'   => $unitKerja,
+                                'NAMA_UNIT' => $namaUnitMap[$unitKerja] ?? 'Unit lain',
+                            ];
+                        }
                         $ketTampil = trim((string) $ket);
                         $nomorHari = (int) date('N', strtotime($tanggal));
                         $akhirPekan = $nomorHari >= 6;
@@ -186,6 +201,9 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
 
                             <?php if ($lampau): ?>
                                 <span class="jad-chip"><?= esc($labelShift[$shift] ?? '—') ?></span>
+                                <?php if ($unitKerja > 0 && $unitKerja !== $unitAsal): ?>
+                                    <span class="jad-chip-note">di <?= esc($namaUnitMap[$unitKerja] ?? 'unit lain') ?></span>
+                                <?php endif; ?>
                                 <?php if ($ketTampil !== ''): ?>
                                     <span class="jad-chip-note"><?= esc($ketTampil) ?></span>
                                 <?php endif; ?>
@@ -198,6 +216,14 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                                         aria-label="Shift <?= $tgl ?> <?= esc($bulanLabel) ?><?= $baris ? '' : ', belum diatur' ?>">
                                         <?php foreach ($daftarShift as $s): ?>
                                             <option value="<?= $s ?>" <?= $s === $shift ? 'selected' : '' ?>><?= $labelShift[$s] ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <select class="jad-select jad-select--unit" name="unit[<?= $tanggal ?>]"
+                                        aria-label="Unit kerja <?= $tgl ?> <?= esc($bulanLabel) ?>, default <?= esc($namaUnitMap[$unitAsal] ?? 'unit pegawai') ?>">
+                                        <?php foreach ($opsiUnit as $u): ?>
+                                            <option value="<?= (int) $u->idunit ?>" <?= (int) $u->idunit === $unitKerja ? 'selected' : '' ?>>
+                                                di <?= esc($u->NAMA_UNIT) ?>
+                                            </option>
                                         <?php endforeach; ?>
                                     </select>
                                     <?php $adaCatatan = trim((string) $ket) !== ''; ?>
@@ -622,6 +648,13 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         border: 1px solid var(--jad-line-strong);
         border-left: 3px solid var(--jad-accent, var(--jad-line-strong));
         border-radius: 0.25rem;
+    }
+
+    .jad-select--unit {
+        height: 1.75rem;
+        font-size: 0.75rem;
+        color: var(--jad-muted);
+        border-left-color: var(--jad-line-strong);
     }
 
     .jad-note-wrap { display: flex; flex-direction: column; }
