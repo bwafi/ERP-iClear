@@ -68,7 +68,7 @@ class AddAbsenSayaMenuTest extends CIUnitTestCase
 
         $menu = $this->menu(10162);
         $this->assertNotNull($menu);
-        $this->assertSame('Absen Saya', $menu->nama_menu);
+        $this->assertSame('Absen', $menu->nama_menu);
         $this->assertSame('absen', $menu->url);
         $this->assertEquals(1, $menu->parent);
         $this->assertEquals(0, $menu->urutan);
