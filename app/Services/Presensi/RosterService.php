@@ -7,7 +7,7 @@ use App\Models\ModelPresensiRoster;
 class RosterService
 {
     private const SHIFT_POLA  = ['PAGI', 'SIANG', 'PS', 'OFF'];
-    private const SHIFT_SEMUA = ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN'];
+    public const SHIFT_SEMUA = ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN', 'SAKIT', 'CUTI'];
 
     protected $model;
 
@@ -62,10 +62,6 @@ class RosterService
     {
         if (! in_array($shift, self::SHIFT_SEMUA, true)) {
             throw new \InvalidArgumentException('Shift roster tidak valid.');
-        }
-
-        if ($shift === 'IZIN' && trim((string) $keterangan) === '') {
-            throw new \InvalidArgumentException('Keterangan izin wajib diisi.');
         }
 
         return $this->model->simpan($akunId, $tanggal, $shift, $keterangan, $oleh);

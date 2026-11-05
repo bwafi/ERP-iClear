@@ -73,10 +73,18 @@ class RosterServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $this->db->table('presensi_roster')->countAllResults());
     }
 
-    public function testIzinWajibKeterangan(): void
+    public function testShiftIzinSakitCutiTanpaKeteranganDiterima(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        (new RosterService())->simpanTanggal(10, '2026-11-05', 'IZIN', '  ', 1);
+        $service = new RosterService();
+        $service->simpanTanggal(10, '2026-11-05', 'IZIN', null, 1);
+        $service->simpanTanggal(10, '2026-11-06', 'SAKIT', '  ', 1);
+        $service->simpanTanggal(10, '2026-11-07', 'CUTI', null, 1);
+
+        $rows = $this->db->table('presensi_roster')
+            ->where('akun_idakun', 10)
+            ->orderBy('tanggal', 'ASC')
+            ->get()->getResult();
+        $this->assertSame(['IZIN', 'SAKIT', 'CUTI'], array_column($rows, 'shift'));
     }
 
     public function testShiftTidakDikenalDitolak(): void

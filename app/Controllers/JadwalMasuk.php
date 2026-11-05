@@ -124,11 +124,8 @@ class JadwalMasuk extends BaseController
             if ($tanggal < $hariIni && ! $scope->bolehKoreksiLampau($jabatan)) {
                 return redirect()->back()->with('gagal', 'Roster tanggal lampau hanya bisa diubah Admin Root.');
             }
-            if (! in_array((string) $nilai, ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN'], true)) {
+            if (! in_array((string) $nilai, RosterService::SHIFT_SEMUA, true)) {
                 return redirect()->back()->with('gagal', 'Shift roster tidak valid.');
-            }
-            if ((string) $nilai === 'IZIN' && trim((string) ($keterangan[$tanggal] ?? '')) === '') {
-                return redirect()->back()->with('gagal', 'Keterangan izin wajib diisi.');
             }
         }
 
@@ -156,7 +153,7 @@ class JadwalMasuk extends BaseController
     }
 
     /**
-     * Sinkronkan OFF/IZIN dan punch roster ke KPI tanpa menggagalkan simpan roster.
+     * Sinkronkan OFF/IZIN/SAKIT/CUTI dan punch roster ke KPI tanpa menggagalkan simpan roster.
      */
     private function syncKpi(int $akunId, string $bulan): void
     {

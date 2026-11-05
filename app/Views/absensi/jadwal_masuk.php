@@ -14,9 +14,9 @@ $bulanLabel = ($namaBulan[(int) substr($bulan, 5, 2)] ?? '') . ' ' . substr($bul
 $namaHari = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu'];
 $hariPendek = [1 => 'Sen', 2 => 'Sel', 3 => 'Rab', 4 => 'Kam', 5 => 'Jum', 6 => 'Sab', 7 => 'Min'];
 
-$daftarShift = ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN'];
-$labelShift  = ['PAGI' => 'Pagi', 'SIANG' => 'Siang', 'PS' => 'PS', 'OFF' => 'Off', 'IZIN' => 'Izin'];
-$slugShift   = ['PAGI' => 'pagi', 'SIANG' => 'siang', 'PS' => 'ps', 'OFF' => 'off', 'IZIN' => 'izin'];
+$daftarShift = ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN', 'SAKIT', 'CUTI'];
+$labelShift  = ['PAGI' => 'Pagi', 'SIANG' => 'Siang', 'PS' => 'PS', 'OFF' => 'Off', 'IZIN' => 'Izin', 'SAKIT' => 'Sakit', 'CUTI' => 'Cuti'];
+$slugShift   = ['PAGI' => 'pagi', 'SIANG' => 'siang', 'PS' => 'ps', 'OFF' => 'off', 'IZIN' => 'izin', 'SAKIT' => 'sakit', 'CUTI' => 'cuti'];
 
 $jumlahHari = (int) date('t', strtotime($bulan . '-01'));
 $offsetAwal = (int) date('N', strtotime($bulan . '-01')) - 1;
@@ -167,6 +167,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                         $baris    = $roster[$tanggal] ?? null;
                         $shift    = $baris->shift ?? '';
                         $ket      = $baris->keterangan ?? '';
+                        $ketTampil = trim((string) $ket);
                         $nomorHari = (int) date('N', strtotime($tanggal));
                         $akhirPekan = $nomorHari >= 6;
                         $lampau   = $tanggal < $hariIni && ! $bolehKoreksiLampau;
@@ -185,11 +186,14 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
 
                             <?php if ($lampau): ?>
                                 <span class="jad-chip"><?= esc($labelShift[$shift] ?? '—') ?></span>
-                                <?php if (trim((string) $ket) !== ''): ?>
-                                    <span class="jad-chip-note"><?= esc($ket) ?></span>
+                                <?php if ($ketTampil !== ''): ?>
+                                    <span class="jad-chip-note"><?= esc($ketTampil) ?></span>
                                 <?php endif; ?>
                             <?php else: ?>
                                 <div class="jad-day-body">
+                                    <?php if (in_array($shift, ['IZIN', 'SAKIT', 'CUTI'], true)): ?>
+                                        <span class="jad-chip"><?= esc($labelShift[$shift] ?? $shift) ?></span>
+                                    <?php endif; ?>
                                     <select class="jad-select" name="shift[<?= $tanggal ?>]"
                                         aria-label="Shift <?= $tgl ?> <?= esc($bulanLabel) ?><?= $baris ? '' : ', belum diatur' ?>">
                                         <?php foreach ($daftarShift as $s): ?>
@@ -197,9 +201,9 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                                         <?php endforeach; ?>
                                     </select>
                                     <?php $adaCatatan = trim((string) $ket) !== ''; ?>
-                                    <div class="jad-note-wrap<?= $adaCatatan || $shift === 'IZIN' ? ' is-open' : '' ?>">
+                                    <div class="jad-note-wrap<?= $adaCatatan ? ' is-open' : '' ?>">
                                         <button type="button" class="jad-note-toggle"
-                                            aria-expanded="<?= $adaCatatan || $shift === 'IZIN' ? 'true' : 'false' ?>"
+                                            aria-expanded="<?= $adaCatatan ? 'true' : 'false' ?>"
                                             aria-controls="jad-note-<?= $tanggal ?>">
                                             <iconify-icon icon="bi:plus" aria-hidden="true"></iconify-icon>
                                             Catatan
@@ -207,8 +211,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                                         <input type="text" class="jad-note" id="jad-note-<?= $tanggal ?>"
                                             name="keterangan[<?= $tanggal ?>]" value="<?= esc($ket) ?>"
                                             placeholder="Tulis catatan"
-                                            aria-label="Catatan <?= $tgl ?> <?= esc($bulanLabel) ?>"
-                                            <?= $shift === 'IZIN' ? 'required' : '' ?>>
+                                            aria-label="Catatan <?= $tgl ?> <?= esc($bulanLabel) ?>">
                                     </div>
                                 </div>
                             <?php endif; ?>
@@ -790,7 +793,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                 wrap.querySelector('.jad-note')?.focus();
             });
 
-            // Aksen warna dan status wajib keterangan mengikuti shift yang dipilih.
+            // Aksen warna mengikuti shift yang dipilih; catatan tidak wajib.
             grid.addEventListener('change', (event) => {
                 const select = event.target.closest('.jad-select');
                 if (!select) return;
@@ -803,16 +806,12 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                 const catatan = wrap?.querySelector('.jad-note');
                 if (!catatan) return;
 
-                catatan.required = select.value === 'IZIN';
-                if (select.value === 'IZIN') bukaCatatan(wrap);
-                else if (catatan.value.trim() === '') tutupCatatan(wrap);
+                if (catatan.value.trim() === '') tutupCatatan(wrap);
             });
 
             grid.addEventListener('blur', (event) => {
                 const catatan = event.target.closest('.jad-note');
                 if (!catatan || catatan.value.trim() !== '') return;
-                const sel = catatan.closest('.jad-day');
-                if (sel?.querySelector('.jad-select')?.value === 'IZIN') return;
                 tutupCatatan(catatan.closest('.jad-note-wrap'));
             }, true);
         }

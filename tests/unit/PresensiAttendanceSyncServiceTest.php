@@ -248,6 +248,36 @@ class PresensiAttendanceSyncServiceTest extends CIUnitTestCase
         $this->assertSame(49, (int) $off->evaluator_id);
     }
 
+    public function testRosterIzinTidakDihitungWalauAdaPunch(): void
+    {
+        $this->karyawan(10, 2);
+        $this->spv(49, 2);
+        $this->roster(10, '2026-11-02', 'IZIN');
+        $this->punch(10, '2026-11-02 08:50:00', 'FULL', '08:45:00');
+
+        (new PresensiAttendanceSyncService())->syncDay(10, '2026-11-02');
+
+        $this->assertSame(0, (int) $this->db->table('kpi_evaluations')->countAllResults());
+        $off = $this->db->table('kpi_attendance_off')->get()->getRow();
+        $this->assertNotNull($off);
+        $this->assertSame(49, (int) $off->evaluator_id);
+    }
+
+    public function testRosterSakitDanCutiJugaTidakDihitung(): void
+    {
+        $this->karyawan(10, 2);
+        $this->spv(49, 2);
+        $this->roster(10, '2026-11-03', 'SAKIT');
+        $this->roster(10, '2026-11-04', 'CUTI');
+
+        $sync = new PresensiAttendanceSyncService();
+        $sync->syncDay(10, '2026-11-03');
+        $sync->syncDay(10, '2026-11-04');
+
+        $this->assertSame(0, (int) $this->db->table('kpi_evaluations')->countAllResults());
+        $this->assertSame(2, (int) $this->db->table('kpi_attendance_off')->countAllResults());
+    }
+
     public function testBarisManualTidakDitimpaSinkronisasi(): void
     {
         $this->karyawan(10, 2);

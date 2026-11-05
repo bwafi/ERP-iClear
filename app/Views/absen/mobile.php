@@ -190,11 +190,11 @@ $petaSiap =
             <h2 class="state-title">OFF</h2>
             <p class="state-text">Hari ini libur. Tidak perlu absen.</p>
         </section>
-    <?php elseif ($roster->shift === "IZIN"): ?>
+    <?php elseif (in_array($roster->shift, ["IZIN", "SAKIT", "CUTI"], true)): ?>
         <section class="sheet">
-            <h2 class="state-title">IZIN</h2>
+            <h2 class="state-title"><?= esc($roster->shift) ?></h2>
             <p class="state-text"><?= esc(
-                $roster->keterangan ?: "Izin disetujui.",
+                trim((string) ($roster->keterangan ?? "")) ?: "Tidak perlu absen.",
             ) ?></p>
         </section>
     <?php else: ?>

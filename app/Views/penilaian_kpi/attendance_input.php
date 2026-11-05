@@ -191,10 +191,13 @@
                                 </thead>
                                 <tbody>
                                     <?php foreach ($monthlyList as $item) : ?>
+                                        <?php $isLeave = in_array($item->shift, ['IZIN', 'SAKIT', 'CUTI'], true); ?>
                                         <tr>
                                             <td><?= date('d/m/Y', strtotime($item->evaluation_date)) ?></td>
                                             <td>
-                                                <?php if ($item->shift) : ?>
+                                                <?php if ($isLeave) : ?>
+                                                    <span class="badge bg-danger"><?= esc($item->shift) ?></span>
+                                                <?php elseif ($item->shift) : ?>
                                                     <span class="badge bg-secondary"><?= esc($item->shift) ?></span>
                                                     <?php if ($item->shift === 'PS' && $item->session) : ?>
                                                         <small class="text-muted">(<?= esc($item->session) ?>)</small>
@@ -220,14 +223,20 @@
                                                 <?php endif; ?>
                                             </td>
                                             <td class="text-center">
-                                                <?php 
-                                                $score = $item->auto_score ?? $item->raw_score;
-                                                $badgeClass = $score >= 4 ? 'bg-success' : ($score >= 3 ? 'bg-warning' : ($score >= 1 ? 'bg-danger' : 'bg-secondary'));
-                                                ?>
-                                                <span class="badge <?= $badgeClass ?>"><?= number_format((float)$score, 1) ?></span>
+                                                <?php if ($isLeave) : ?>
+                                                    <span class="text-muted">—</span>
+                                                <?php else : ?>
+                                                    <?php
+                                                    $score = $item->auto_score ?? $item->raw_score;
+                                                    $badgeClass = $score >= 4 ? 'bg-success' : ($score >= 3 ? 'bg-warning' : ($score >= 1 ? 'bg-danger' : 'bg-secondary'));
+                                                    ?>
+                                                    <span class="badge <?= $badgeClass ?>"><?= number_format((float)$score, 1) ?></span>
+                                                <?php endif; ?>
                                             </td>
                                             <td class="text-center">
-                                                <?php if ($item->attendance_type) : ?>
+                                                <?php if ($isLeave) : ?>
+                                                    <small class="text-muted"><?= esc(trim((string) ($item->keterangan ?? '')) ?: $item->shift) ?></small>
+                                                <?php elseif ($item->attendance_type) : ?>
                                                     <small class="text-muted"><?= $item->attendance_type === 'IZIN_TELAT' ? 'Izin' : 'Normal' ?></small>
                                                 <?php else : ?>
                                                     <small class="text-muted">Manual</small>

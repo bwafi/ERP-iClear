@@ -97,7 +97,7 @@ class PresensiAttendanceSyncService
             ->getRow();
 
         $shift = $roster ? strtoupper((string) $roster->shift) : '';
-        if (in_array($shift, ['OFF', 'IZIN'], true)) {
+        if (in_array($shift, ['OFF', 'IZIN', 'SAKIT', 'CUTI'], true)) {
             $this->deleteEvaluations($auto);
             $this->markOffIfMissing($employeeId, $date, $evaluatorId);
 

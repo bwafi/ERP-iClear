@@ -130,7 +130,7 @@ class RosterSimpanTest extends CIUnitTestCase
         $this->assertSame('PS', $row->shift);
     }
 
-    public function testIzinTanpaKeteranganDitolak(): void
+    public function testIzinTanpaKeteranganTersimpan(): void
     {
         $this->sesi(1, 1, 1);
         $this->post('jadwal_masuk/simpan', [
@@ -140,7 +140,7 @@ class RosterSimpanTest extends CIUnitTestCase
             'keterangan'  => ['2099-01-01' => ''],
         ])->assertRedirect();
 
-        $this->assertSame(0, (int) $this->db->table('presensi_roster')->countAllResults());
-        $this->assertStringContainsString('Keterangan', (string) session('gagal'));
+        $row = $this->db->table('presensi_roster')->where('akun_idakun', 100)->get()->getRow();
+        $this->assertSame('IZIN', $row->shift);
     }
 }

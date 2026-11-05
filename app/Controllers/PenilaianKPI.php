@@ -1881,12 +1881,24 @@ class PenilaianKPI extends BaseController
             // Hari-hari OFF (marker eksplisit) + legacy (raw_score 0 tanpa detail sesi).
             // Hari OFF TIDAK diisi skor (null) — persis interpretasi "OFF = null".
             $offDays = [];
+            $rosterShift = [];
+            $rosterAwal  = sprintf('%04d-%02d-01', $tahun, $bulan);
+            $rosterAkhir = date('Y-m-t', strtotime($rosterAwal));
+            foreach ($this->db->table('presensi_roster')
+                ->select('tanggal, shift')
+                ->where('akun_idakun', (int)$target->ID_AKUN)
+                ->where('tanggal >=', $rosterAwal)
+                ->where('tanggal <=', $rosterAkhir)
+                ->get()->getResult() as $rr) {
+                $rosterShift[$rr->tanggal] = strtoupper((string)$rr->shift);
+            }
             foreach ((new \App\Models\ModelKpiAttendanceOff())->offDatesForPeriod(
                 (int)$target->ID_AKUN,
                 $bulan,
                 $tahun
             ) as $od) {
-                $offDays[(int)date('j', strtotime($od))] = true;
+                $label = $rosterShift[date('Y-m-d', strtotime($od))] ?? 'OFF';
+                $offDays[(int)date('j', strtotime($od))] = in_array($label, ['OFF', 'IZIN', 'SAKIT', 'CUTI'], true) ? $label : 'OFF';
             }
             $legacyOff = $this->db->table('kpi_evaluations e')
                 ->select('e.evaluation_date')
@@ -1901,7 +1913,8 @@ class PenilaianKPI extends BaseController
                 ->where('d.id', null)
                 ->get()->getResultArray();
             foreach ($legacyOff as $lo) {
-                $offDays[(int)date('j', strtotime($lo['evaluation_date']))] = true;
+                $offDays[(int)date('j', strtotime($lo['evaluation_date']))]
+                    = $offDays[(int)date('j', strtotime($lo['evaluation_date']))] ?? 'OFF';
             }
 
             // Ringkasan hari efektif & hari libur/OFF periode berjalan.
@@ -2044,7 +2057,8 @@ class PenilaianKPI extends BaseController
         $jamMasukSore    = $this->request->getPost('jam_masuk_sore');
         $shift           = (string)$this->request->getPost('shift');
         $attendanceType  = (string)($this->request->getPost('attendance_type') ?: 'NORMAL');
-        $statusKehadiran = (string)($this->request->getPost('kehadiran_status') ?: 'HADIR');
+        $statusKehadiran = strtoupper((string)($this->request->getPost('kehadiran_status') ?: 'HADIR'));
+        $statusLibur     = ['OFF', 'IZIN', 'SAKIT', 'CUTI'];
         $pendingKehadiran = null; // [sessions] yang akan disimpan setelah konfirmasi
         $savedOff = false;  // hari ini ditandai OFF (libur/istirahat)
         $markOff  = false;  // permintaan menandai OFF (dieksekusi setelah gate konfirmasi)
@@ -2066,8 +2080,8 @@ class PenilaianKPI extends BaseController
                 continue;
             }
 
-            if ($code === 'KEHADIRAN' && $statusKehadiran === 'OFF') {
-                // Tandai OFF: hari libur/istirahat tidak dihitung.
+            if ($code === 'KEHADIRAN' && in_array($statusKehadiran, $statusLibur, true)) {
+                // Tandai libur/izin: hari tersebut tidak dihitung.
                 // Nilai absensi TIDAK disimpan sebagai 0 (null) supaya tidak
                 // tertukar dengan skor 0 (telat ≥15 menit). Pembersihan data
                 // lama + penandaan dilakukan setelah gate konfirmasi.
@@ -2186,7 +2200,7 @@ class PenilaianKPI extends BaseController
                     $comparisons[] = [
                         'name' => $kehadiranForOff->name,
                         'old' => (int)$existingByComponentId[(int)$kehadiranForOff->id],
-                        'new' => 'OFF (Libur)',
+                        'new' => $statusKehadiran,
                     ];
                 }
             }
@@ -2202,7 +2216,7 @@ class PenilaianKPI extends BaseController
                 if ($offExists) {
                     $comparisons[] = [
                         'name' => 'Status Kehadiran',
-                        'old' => 'OFF (Libur)',
+                        'old' => 'OFF/Izin',
                         'new' => 'Hadir / Dinilai',
                     ];
                 }
@@ -2230,6 +2244,12 @@ class PenilaianKPI extends BaseController
         if ($markOff) {
             $attendanceSvc->resetDay($employeeId, $tanggal, (int)$me->ID_AKUN);
             $offModel->markOff($employeeId, $tanggal, (int)$me->ID_AKUN);
+
+            // Status libur/izin juga mengubah roster agar Jadwal Masuk, /absen,
+            // dan KPI memakai status yang sama.
+            (new \App\Services\Presensi\RosterService())
+                ->simpanTanggal($employeeId, $tanggal, $statusKehadiran, null, (int)$me->ID_AKUN);
+
             $saved++;
         }
 
@@ -2293,7 +2313,7 @@ class PenilaianKPI extends BaseController
         }
 
         $message = $savedOff && $saved === 1
-            ? 'Tanggal ' . date('d M Y', strtotime($tanggal)) . ' ditandai OFF — hari libur tidak dihitung dalam absensi.'
+            ? 'Tanggal ' . date('d M Y', strtotime($tanggal)) . ' ditandai ' . $statusKehadiran . ' — tidak dihitung dalam absensi.'
             : 'Skor absensi ' . date('d M Y', strtotime($tanggal)) . ' tersimpan (' . $saved . ' komponen).' . $autoDetail;
 
         return redirect()->to('/penilaian/absen?karyawan=' . $employeeId . '&bulan=' . $bulan . '&tahun=' . $tahun)
@@ -2635,10 +2655,10 @@ class PenilaianKPI extends BaseController
                 ->where('code', 'KEHADIRAN')
                 ->get()->getRow();
 
-            if ($kehadiranComp) {
-                $monthStart = sprintf('%04d-%02d-01', $year, $month);
-                $monthEnd = date('Y-m-t', strtotime($monthStart));
+            $monthStart = sprintf('%04d-%02d-01', $year, $month);
+            $monthEnd   = date('Y-m-t', strtotime($monthStart));
 
+            if ($kehadiranComp) {
                 $monthlyList = $this->db->table('kpi_evaluations e')
                     ->select('e.evaluation_date, e.raw_score, d.shift, d.session, d.attendance_type, d.actual_time, d.late_minutes, d.auto_score')
                     ->join('kpi_attendance_detail d', 'd.evaluation_id = e.id', 'left')
@@ -2649,6 +2669,41 @@ class PenilaianKPI extends BaseController
                     ->orderBy('e.evaluation_date', 'DESC')
                     ->get()->getResult();
             }
+
+            // Tanggal izin tidak punya kpi_evaluations; tampilkan dari roster
+            // supaya status cuti/sakit/izin tetap terlihat di halaman ini.
+            $tanggalHadir = [];
+            foreach ($monthlyList as $row) {
+                $tanggalHadir[$row->evaluation_date] = true;
+            }
+
+            $rosterIzin = $this->db->table('presensi_roster')
+                ->select('tanggal, shift, keterangan')
+                ->where('akun_idakun', $targetId)
+                ->whereIn('shift', ['IZIN', 'SAKIT', 'CUTI'])
+                ->where('tanggal >=', $monthStart)
+                ->where('tanggal <=', $monthEnd)
+                ->get()->getResult();
+
+            foreach ($rosterIzin as $row) {
+                if (isset($tanggalHadir[$row->tanggal])) {
+                    continue;
+                }
+
+                $monthlyList[] = (object) [
+                    'evaluation_date' => $row->tanggal,
+                    'raw_score'       => null,
+                    'shift'           => $row->shift,
+                    'session'         => null,
+                    'attendance_type' => $row->shift,
+                    'actual_time'     => null,
+                    'late_minutes'    => null,
+                    'auto_score'      => null,
+                    'keterangan'      => $row->keterangan,
+                ];
+            }
+
+            usort($monthlyList, static fn ($a, $b) => strcmp($b->evaluation_date, $a->evaluation_date));
         }
 
         return view('template', [

@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Models\ModelIzin;
 use App\Models\ModelJenisPerizinan;
+use App\Services\Kpi\PresensiAttendanceSyncService;
+use App\Services\Presensi\IzinApprovalService;
 use App\Services\Presensi\PresensiException;
 use App\Services\Presensi\PresensiScopeService;
 use App\Services\Presensi\SuratIzinService;
@@ -161,14 +163,61 @@ class Izin extends BaseController
         }
 
         $model = new ModelIzin();
-        if (! $model->getById($id)) {
+        $izin  = $model->getById($id);
+        if (! $izin) {
             return redirect()->to(base_url('approval_presensi'))->with('gagal', 'Pengajuan tidak ditemukan.');
         }
 
-        $model->update($id, ['status' => $status, 'balasan' => $balasan]);
+        $oleh = (int) session('ID_AKUN');
+        $db   = db_connect();
+        $db->transStart();
+
+        try {
+            $model->update($id, ['status' => $status, 'balasan' => $balasan]);
+            $bulan = $status === 1
+                ? (new IzinApprovalService())->setujui($id, $oleh)
+                : (new IzinApprovalService())->batalkan($id, (int) $izin->status === 1);
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'Keputusan izin gagal diterapkan: ' . $e->getMessage());
+
+            return redirect()->to(base_url('approval_presensi'))->with('gagal', 'Keputusan gagal disimpan.');
+        }
+
+        if (! $db->transStatus()) {
+            return redirect()->to(base_url('approval_presensi'))->with('gagal', 'Keputusan gagal disimpan.');
+        }
+
+        $this->syncKpi((int) $izin->akun_idakun, $bulan);
 
         return redirect()->to(base_url('approval_presensi'))
             ->with('sukses', $status === 1 ? 'Pengajuan disetujui.' : 'Pengajuan ditolak.');
+    }
+
+    /**
+     * Sinkronkan KPI setelah roster izin berubah; kegagalan sync tidak
+     * membatalkan keputusan approval.
+     *
+     * @param list<string> $bulan
+     */
+    private function syncKpi(int $akunId, array $bulan): void
+    {
+        try {
+            $sync = new PresensiAttendanceSyncService();
+        } catch (\Throwable $e) {
+            log_message('error', 'Sync KPI izin tidak tersedia: ' . $e->getMessage());
+
+            return;
+        }
+
+        foreach ($bulan as $periode) {
+            try {
+                $sync->syncMonth($akunId, $periode);
+            } catch (\Throwable $e) {
+                log_message('error', 'Sync KPI izin gagal untuk ' . $periode . ': ' . $e->getMessage());
+            }
+        }
     }
 
     private function tanggalValid(string $tanggal): bool

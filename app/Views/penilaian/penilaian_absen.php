@@ -5,7 +5,7 @@
             <div class="col-9">
                 <h4 class="fw-semibold mb-2">Penilaian Harian Karyawan</h4>
                 <p class="text-muted mb-0 fs-3">
-                    Koreksi kehadiran/OFF serta skor harian Kebersihan dan Kepatuhan SOP; Kehadiran dan Seragam terisi otomatis dari absen mobile. Hari OFF tidak dihitung. Rumus Nilai = $\frac{\text{SUM}}{\text{Hari Efektif} \times 5} \times 100$
+                    Koreksi kehadiran/OFF/izin serta skor harian Kebersihan dan Kepatuhan SOP; Kehadiran dan Seragam terisi otomatis dari absen mobile. Hari OFF/izin/sakit/cuti tidak dihitung. Rumus Nilai = $\frac{\text{SUM}}{\text{Hari Efektif} \times 5} \times 100$
                 </p>
             </div>
             <div class="col-3 text-end">
@@ -184,6 +184,9 @@
                                         <select class="form-select form-select-sm" name="kehadiran_status" id="atsStatus">
                                             <option value="HADIR">Hadir</option>
                                             <option value="OFF">OFF (Libur)</option>
+                                            <option value="IZIN">IZIN</option>
+                                            <option value="SAKIT">Sakit</option>
+                                            <option value="CUTI">Cuti</option>
                                         </select>
                                     </div>
                                     <div class="col-md-2" id="atsShiftWrap">
@@ -248,7 +251,7 @@
             </div>
             <div class="card-footer bg-light py-2 text-muted fs-2">
                 <iconify-icon icon="solar:info-circle-bold" class="me-1 align-text-bottom text-info"></iconify-icon>
-                Aspek yang dikosongkan (-) nilainya tidak akan diubah pada tanggal tersebut. Hari OFF/Libur: pilih status <strong>OFF (Libur)</strong> pada Kehadiran — hari itu tidak dihitung &amp; tidak mengubah nilai.
+                Aspek yang dikosongkan (-) nilainya tidak akan diubah pada tanggal tersebut. Hari libur/izin: pilih status <strong>OFF</strong>, <strong>IZIN</strong>, <strong>Sakit</strong>, atau <strong>Cuti</strong> pada Kehadiran — hari itu tidak dihitung &amp; tidak mengubah nilai.
             </div>
         </form>
 
@@ -265,7 +268,7 @@
                             <iconify-icon icon="solar:calendar-check-bold" class="me-1"></iconify-icon> Hari Efektif: <strong><?= (int)$hariEfektif ?></strong> dari <?= (int)$jumlahHari ?> hari
                         </span>
                         <span class="badge bg-secondary-subtle text-secondary px-3 py-2">
-                            <iconify-icon icon="solar:calendar-date-bold" class="me-1"></iconify-icon> Libur/OFF: <strong><?= (int)$hariLibur ?> hari</strong>
+                            <iconify-icon icon="solar:calendar-date-bold" class="me-1"></iconify-icon> Libur/Izin: <strong><?= (int)$hariLibur ?> hari</strong>
                         </span>
                         <?php if (!empty($attendanceDetails)) : ?>
                             <?php
@@ -365,7 +368,8 @@
                                     <?php for ($d = 1; $d <= $jumlahHari; $d++) : ?>
                                         <td class="riwayat-date">
                                             <?php if (isset($offDays[$d])) : ?>
-                                                <span class="skor-cell skor-off" data-bs-toggle="tooltip" data-bs-placement="top" title="OFF — hari libur/istirahat, tidak dihitung">OFF</span>
+                                                <?php $labelOff = (string) $offDays[$d]; ?>
+                                                <span class="skor-cell skor-off" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= esc($labelOff) ?> — tidak dihitung"><?= esc($labelOff) ?></span>
                                             <?php elseif (isset($existing[$c->id][$d])) : ?>
                                                 <?php
                                                 $skorValue = (int)$existing[$c->id][$d];
@@ -422,7 +426,8 @@
                 <div class="d-flex flex-wrap align-items-center justify-content-between mt-3 pt-2 border-top">
                     <div class="d-flex flex-wrap align-items-center gap-3 text-muted fs-2">
                         <span class="fw-semibold text-dark">Legenda:</span>
-                        <span><span class="skor-cell skor-off">OFF</span> Hari Libur/OFF</span>
+                        <span><span class="skor-cell skor-off">OFF</span> Libur</span>
+                        <span><span class="skor-cell skor-off">IZIN</span> Izin / Sakit / Cuti</span>
                         <span><span class="skor-cell skor-low">1–2</span> Kurang</span>
                         <span><span class="skor-cell skor-mid">3</span> Cukup</span>
                         <span><span class="skor-cell skor-good">4–5</span> Baik / Sangat Baik</span>
@@ -631,8 +636,13 @@
             return '<span class="badge ' + cls + '">' + score + '</span>';
         }
 
+        const liburStatus = ['OFF', 'IZIN', 'SAKIT', 'CUTI'];
+        function isLibur() {
+            return !!statusEl && liburStatus.includes(statusEl.value);
+        }
+
         function renderStatusMode() {
-            const off = statusEl && statusEl.value === 'OFF';
+            const off = isLibur();
 
             if (shiftWrapEl) shiftWrapEl.classList.toggle('d-none', off);
             if (typeWrapEl) typeWrapEl.classList.toggle('d-none', off);
@@ -640,11 +650,15 @@
             jamPagiWrap.classList.add('d-none');
             jamSoreWrap.classList.add('d-none');
             if (previewBlockColEl) previewBlockColEl.classList.toggle('d-none', off);
-            if (offNoteEl) offNoteEl.classList.toggle('d-none', !off);
+            if (offNoteEl) {
+                offNoteEl.classList.toggle('d-none', !off);
+                const badge = offNoteEl.querySelector('.badge');
+                if (badge) badge.textContent = statusEl.value + ' — hari ini tidak dihitung';
+            }
 
             if (off) {
                 previewEl.innerHTML = '';
-                hintEl.textContent = 'Status OFF: hari libur/istirahat — tidak dihitung dalam nilai absensi.';
+                hintEl.textContent = 'Status ' + statusEl.value + ': tidak dihitung dalam nilai absensi.';
             } else {
                 renderShiftMode();
                 updatePreview();
@@ -652,7 +666,7 @@
         }
 
         function renderShiftMode() {
-            const off = statusEl && statusEl.value === 'OFF';
+            const off = isLibur();
             const shift = shiftEl.value;
 
             jamWrap.classList.add('d-none');
@@ -660,7 +674,7 @@
             jamSoreWrap.classList.add('d-none');
 
             if (off) {
-                hintEl.textContent = 'Status OFF: hari libur/istirahat — tidak dihitung dalam nilai absensi.';
+                hintEl.textContent = 'Status ' + statusEl.value + ': tidak dihitung dalam nilai absensi.';
                 return;
             }
 

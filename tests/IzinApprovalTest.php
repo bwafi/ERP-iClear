@@ -23,7 +23,7 @@ class IzinApprovalTest extends CIUnitTestCase
 
     protected function tearDown(): void
     {
-        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan'] as $tabel) {
+        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'presensi_roster', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan'] as $tabel) {
             $this->db->query('DROP TABLE IF EXISTS ' . $tabel);
         }
         $this->db->dataCache['table_names'] = [];
@@ -37,7 +37,7 @@ class IzinApprovalTest extends CIUnitTestCase
     {
         $q = function (string $sql): void { $this->db->query($sql); };
 
-        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan'] as $tabel) {
+        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'presensi_roster', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan'] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
@@ -57,6 +57,10 @@ class IzinApprovalTest extends CIUnitTestCase
         $q('CREATE TABLE presensi (
                 idpresensi INT PRIMARY KEY AUTO_INCREMENT, akun_idakun INT NOT NULL,
                 waktu_masuk DATETIME NULL, status_absensi INT NULL)');
+        $q('CREATE TABLE presensi_roster (
+                id INT PRIMARY KEY AUTO_INCREMENT, akun_idakun INT NOT NULL, tanggal DATE NOT NULL,
+                shift VARCHAR(10) NOT NULL, keterangan TEXT NULL, created_by INT NULL,
+                updated_by INT NULL, created_at DATETIME NULL, updated_at DATETIME NULL)');
         $q('CREATE TABLE stok_barang (idbarang INT PRIMARY KEY, id_unit INT NULL, stok_akhir REAL NULL,
                 stok_minimum REAL NULL, nama_barang TEXT NULL)');
         $q('CREATE TABLE service (idservice INT PRIMARY KEY, status_service INT NULL,
@@ -164,6 +168,39 @@ class IzinApprovalTest extends CIUnitTestCase
         $row = $this->db->table('izin')->where('idizin', $id)->get()->getRow();
         $this->assertSame(1, (int) $row->status);
         $this->assertSame('Disetujui, lekas sembuh.', $row->balasan);
+    }
+
+    public function testSetujuiMenulisRosterIzinSesuaiJenis(): void
+    {
+        $id = $this->ajukan(10, 2, 'Demam');
+        $this->sesi(10);
+
+        $this->post('approval_presensi/putuskan', [
+            'idizin' => $id,
+            'status' => 1,
+        ])->assertRedirectTo(base_url('approval_presensi'));
+
+        $rows = $this->db->table('presensi_roster')
+            ->where('akun_idakun', 10)
+            ->orderBy('tanggal', 'ASC')
+            ->get()
+            ->getResult();
+
+        $this->assertCount(2, $rows);
+        $this->assertSame('2026-11-03', $rows[0]->tanggal);
+        $this->assertSame('SAKIT', $rows[0]->shift);
+        $this->assertNull($rows[0]->keterangan);
+    }
+
+    public function testTolakSetelahSetujuiMenghapusRosterIzin(): void
+    {
+        $id = $this->ajukan(10, 3, 'Acara keluarga');
+        $this->sesi(10);
+
+        $this->post('approval_presensi/putuskan', ['idizin' => $id, 'status' => 1]);
+        $this->post('approval_presensi/putuskan', ['idizin' => $id, 'status' => 2]);
+
+        $this->assertSame(0, (int) $this->db->table('presensi_roster')->countAllResults());
     }
 
     public function testTolakMengubahStatus(): void
