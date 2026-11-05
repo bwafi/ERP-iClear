@@ -80,6 +80,10 @@
                                     <label class="form-check-label" for="shiftSiang">Siang (12:45)</label>
                                 </div>
                                 <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shift" id="shiftFull" value="FULL" required>
+                                    <label class="form-check-label" for="shiftFull">Full (08:45–21:00)</label>
+                                </div>
+                                <div class="form-check">
                                     <input class="form-check-input" type="radio" name="shift" id="shiftPs" value="PS" required>
                                     <label class="form-check-label" for="shiftPs">PS (Pagi+Sore)</label>
                                 </div>
@@ -261,6 +265,7 @@
     const scheduledTimes = {
         'PAGI': '08:45',
         'SIANG': '12:45',
+        'FULL': '08:45',
         'PS': {
             'PAGI': '08:45',
             'SORE': '16:55'

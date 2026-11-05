@@ -4,7 +4,7 @@ namespace App\Services\Kpi;
 
 /**
  * Pure function untuk menghitung nilai absensi otomatis berdasarkan:
- * - Shift (PAGI, SIANG, PS)
+ * - Shift (PAGI, SIANG, FULL, PS)
  * - Sesi (PAGI, SORE, FULL)
  * - Jenis absensi (NORMAL, IZIN_TELAT)
  * - Jam masuk aktual vs jam mulai shift
@@ -19,6 +19,7 @@ class AttendanceScoreCalculator
     public const SCHEDULED_TIMES = [
         'PAGI'  => '08:45',
         'SIANG' => '12:45',
+        'FULL'  => '08:45',
         'PS'    => [
             'PAGI' => '08:45',
             'SORE' => '16:55',
@@ -53,7 +54,7 @@ class AttendanceScoreCalculator
     /**
      * Hitung keterlambatan & nilai otomatis.
      *
-     * @param string $shift PAGI|SIANG|PS
+     * @param string $shift PAGI|SIANG|FULL|PS
      * @param string $session PAGI|SORE|FULL
      * @param string $attendanceType NORMAL|IZIN_TELAT
      * @param string $scheduledTime Format HH:MM (08:45, 12:45, 16:55)
@@ -86,7 +87,7 @@ class AttendanceScoreCalculator
     /**
      * Ambil jam mulai shift berdasarkan shift & sesi.
      *
-     * @param string $shift PAGI|SIANG|PS
+     * @param string $shift PAGI|SIANG|FULL|PS
      * @param string $session PAGI|SORE|FULL
      * @return string Jam schedule HH:MM
      */

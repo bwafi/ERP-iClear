@@ -14,9 +14,9 @@ $bulanLabel = ($namaBulan[(int) substr($bulan, 5, 2)] ?? '') . ' ' . substr($bul
 $namaHari = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu'];
 $hariPendek = [1 => 'Sen', 2 => 'Sel', 3 => 'Rab', 4 => 'Kam', 5 => 'Jum', 6 => 'Sab', 7 => 'Min'];
 
-$daftarShift = ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN', 'SAKIT', 'CUTI'];
-$labelShift  = ['PAGI' => 'Pagi', 'SIANG' => 'Siang', 'PS' => 'PS', 'OFF' => 'Off', 'IZIN' => 'Izin', 'SAKIT' => 'Sakit', 'CUTI' => 'Cuti'];
-$slugShift   = ['PAGI' => 'pagi', 'SIANG' => 'siang', 'PS' => 'ps', 'OFF' => 'off', 'IZIN' => 'izin', 'SAKIT' => 'sakit', 'CUTI' => 'cuti'];
+$daftarShift = ['PAGI', 'SIANG', 'FULL', 'PS', 'OFF', 'IZIN', 'SAKIT', 'CUTI'];
+$labelShift  = ['PAGI' => 'Pagi', 'SIANG' => 'Siang', 'FULL' => 'Full', 'PS' => 'PS', 'OFF' => 'Off', 'IZIN' => 'Izin', 'SAKIT' => 'Sakit', 'CUTI' => 'Cuti'];
+$slugShift   = ['PAGI' => 'pagi', 'SIANG' => 'siang', 'FULL' => 'full', 'PS' => 'ps', 'OFF' => 'off', 'IZIN' => 'izin', 'SAKIT' => 'sakit', 'CUTI' => 'cuti'];
 
 $jumlahHari = (int) date('t', strtotime($bulan . '-01'));
 $offsetAwal = (int) date('N', strtotime($bulan . '-01')) - 1;
@@ -113,7 +113,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
                 <button type="submit" class="jad-btn jad-btn--ghost">Terapkan pola</button>
             </div>
             <div class="jad-pattern-grid">
-                <?php $shiftPola = ['PAGI', 'SIANG', 'PS', 'OFF']; ?>
+                <?php $shiftPola = ['PAGI', 'SIANG', 'FULL', 'PS', 'OFF']; ?>
                 <?php foreach ($namaHari as $nomor => $label): ?>
                     <div class="jad-field">
                         <label class="jad-label" for="jad-pola-<?= $nomor ?>"><?= $label ?></label>
@@ -249,6 +249,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         --jad-pagi: #0074ba;
         --jad-siang: #b45309;
         --jad-ps: #0f766e;
+        --jad-full: #6d28d9;
         --jad-off: #5b6672;
         --jad-izin: #c2353f;
         --jad-radius: 0.375rem;
@@ -265,6 +266,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
         --jad-pagi: #66b6e9;
         --jad-siang: #fbbf24;
         --jad-ps: #2dd4bf;
+        --jad-full: #c4b5fd;
         --jad-off: #8fa0b8;
         --jad-izin: #fb977d;
     }
@@ -538,6 +540,8 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
     .jad-day[data-shift="siang"] .jad-dot { color: var(--jad-siang); }
     .jad-count.is-ps .jad-dot,
     .jad-day[data-shift="ps"] .jad-dot { color: var(--jad-ps); }
+    .jad-count.is-full .jad-dot,
+    .jad-day[data-shift="full"] .jad-dot { color: var(--jad-full); }
     .jad-count.is-off .jad-dot,
     .jad-day[data-shift="off"] .jad-dot { color: var(--jad-off); }
     .jad-count.is-izin .jad-dot,
@@ -546,6 +550,7 @@ $namaUnit    = $pegawaiAktif->NAMA_UNIT ?? '';
     .jad-day[data-shift="pagi"] { --jad-accent: var(--jad-pagi); }
     .jad-day[data-shift="siang"] { --jad-accent: var(--jad-siang); }
     .jad-day[data-shift="ps"] { --jad-accent: var(--jad-ps); }
+    .jad-day[data-shift="full"] { --jad-accent: var(--jad-full); }
     .jad-day[data-shift="off"] { --jad-accent: var(--jad-off); }
     .jad-day[data-shift="izin"] { --jad-accent: var(--jad-izin); }
 

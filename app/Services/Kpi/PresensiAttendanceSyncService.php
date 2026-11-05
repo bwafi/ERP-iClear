@@ -116,7 +116,7 @@ class PresensiAttendanceSyncService
             return ['status' => 'skipped', 'reason' => 'no_punch'];
         }
 
-        $sessions = $this->sessionsFromPunches($punches);
+        $sessions = $this->sessionsFromPunches($punches, $shift);
         if (empty($sessions)) {
             return ['status' => 'skipped', 'reason' => 'no_session'];
         }
@@ -277,7 +277,7 @@ class PresensiAttendanceSyncService
      * @param array<int,object> $punches
      * @return array<int,array{shift:string,session:string,attendance_type:string,actual_time:string}>
      */
-    private function sessionsFromPunches(array $punches): array
+    private function sessionsFromPunches(array $punches, string $rosterShift = ''): array
     {
         $sessions = [];
 
@@ -289,6 +289,10 @@ class PresensiAttendanceSyncService
 
             if ($sesi === 'PAGI' || $sesi === 'SORE') {
                 $shift = 'PS';
+            } elseif (in_array($rosterShift, ['PAGI', 'SIANG', 'FULL'], true)) {
+                // Shift roster adalah sumber kebenaran; PAGI dan FULL sama-sama
+                // masuk 08:45 sehingga tidak bisa dibedakan dari jam jadwal.
+                $shift = $rosterShift;
             } else {
                 $jadwal = substr((string) $punch->jam_jadwal_masuk, 0, 5);
                 $shift  = $jadwal === AttendanceScoreCalculator::SCHEDULED_TIMES['SIANG'] ? 'SIANG' : 'PAGI';

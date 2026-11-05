@@ -73,7 +73,7 @@ class AttendanceInputService
             $attendanceType = strtoupper((string)($s['attendance_type'] ?? 'NORMAL'));
             $actualTime   = (string)($s['actual_time'] ?? '');
 
-            if (!in_array($shift, ['PAGI', 'SIANG', 'PS'], true)) {
+            if (!in_array($shift, ['PAGI', 'SIANG', 'FULL', 'PS'], true)) {
                 throw new \InvalidArgumentException("Invalid shift: {$shift}");
             }
             if (!in_array($session, ['PAGI', 'SORE', 'FULL'], true)) {

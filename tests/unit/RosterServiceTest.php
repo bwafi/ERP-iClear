@@ -87,6 +87,21 @@ class RosterServiceTest extends CIUnitTestCase
         $this->assertSame(['IZIN', 'SAKIT', 'CUTI'], array_column($rows, 'shift'));
     }
 
+    public function testShiftFullDiterimaPolaDanSimpanTanggal(): void
+    {
+        $service = new RosterService();
+        $pola    = [1 => 'FULL', 2 => 'FULL', 3 => 'FULL', 4 => 'FULL', 5 => 'FULL', 6 => 'OFF', 7 => 'OFF'];
+
+        $jumlah = $service->terapkanBulan(10, '2026-11', $pola, 1);
+        $service->simpanTanggal(11, '2026-11-05', 'FULL', null, 1);
+
+        $this->assertSame(30, $jumlah);
+        $this->assertSame('FULL', $this->db->table('presensi_roster')
+            ->where('akun_idakun', 10)->where('tanggal', '2026-11-02')->get()->getRow()->shift);
+        $this->assertSame('FULL', $this->db->table('presensi_roster')
+            ->where('akun_idakun', 11)->where('tanggal', '2026-11-05')->get()->getRow()->shift);
+    }
+
     public function testShiftTidakDikenalDitolak(): void
     {
         $this->expectException(\InvalidArgumentException::class);

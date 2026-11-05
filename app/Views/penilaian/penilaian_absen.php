@@ -195,6 +195,7 @@
                                             <option value="">- Pilih Shift -</option>
                                             <option value="PAGI">Pagi (08:45)</option>
                                             <option value="SIANG">Siang (12:45)</option>
+                                            <option value="FULL">Full (08:45–21:00)</option>
                                             <option value="PS">PS (Pagi + Sore)</option>
                                         </select>
                                     </div>
@@ -540,6 +541,7 @@
         const scheduledTimes = {
             'PAGI': '08:45',
             'SIANG': '12:45',
+            'FULL': '08:45',
             'PS': {
                 'PAGI': '08:45',
                 'SORE': '16:55'
@@ -730,7 +732,7 @@
                 const late = minutesLate(s.sched, s.actual);
                 const score = calculateScore(late, isIzin);
                 totalLate += late;
-                const label = shift === 'PS' ? (i === 0 ? 'Pagi' : 'Sore') : (shift === 'SIANG' ? 'Siang' : 'Pagi');
+                const label = shift === 'PS' ? (i === 0 ? 'Pagi' : 'Sore') : (shift === 'SIANG' ? 'Siang' : (shift === 'FULL' ? 'Full' : 'Pagi'));
                 rows.push(label + ': ' + late + 'm (' + score + ')');
             });
 

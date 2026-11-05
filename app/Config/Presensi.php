@@ -18,6 +18,7 @@ class Presensi extends BaseConfig
     public array $shiftPulang = [
         'PAGI'  => '17:00',
         'SIANG' => '21:00',
+        'FULL'  => '21:00',
         'PS'    => ['PAGI' => '13:00', 'SORE' => '21:00'],
     ];
 

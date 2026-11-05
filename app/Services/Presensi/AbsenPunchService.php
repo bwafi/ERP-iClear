@@ -14,7 +14,7 @@ use CodeIgniter\HTTP\Files\UploadedFile;
  */
 class AbsenPunchService
 {
-    private const SHIFT_ABSEN = ['PAGI', 'SIANG', 'PS'];
+    private const SHIFT_ABSEN = ['PAGI', 'SIANG', 'FULL', 'PS'];
 
     protected $presensi;
     protected $roster;

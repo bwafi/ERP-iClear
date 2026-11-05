@@ -6,8 +6,8 @@ use App\Models\ModelPresensiRoster;
 
 class RosterService
 {
-    private const SHIFT_POLA  = ['PAGI', 'SIANG', 'PS', 'OFF'];
-    public const SHIFT_SEMUA = ['PAGI', 'SIANG', 'PS', 'OFF', 'IZIN', 'SAKIT', 'CUTI'];
+    private const SHIFT_POLA  = ['PAGI', 'SIANG', 'FULL', 'PS', 'OFF'];
+    public const SHIFT_SEMUA = ['PAGI', 'SIANG', 'FULL', 'PS', 'OFF', 'IZIN', 'SAKIT', 'CUTI'];
 
     protected $model;
 

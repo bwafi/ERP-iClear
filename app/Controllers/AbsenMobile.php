@@ -31,7 +31,7 @@ class AbsenMobile extends Controller
         if ($hariIni >= $goLive) {
             $roster = (new ModelPresensiRoster())->getByAkunTanggal($akunId, $hariIni);
 
-            if ($roster && in_array($roster->shift, ['PAGI', 'SIANG', 'PS'], true)) {
+            if ($roster && in_array($roster->shift, ['PAGI', 'SIANG', 'FULL', 'PS'], true)) {
                 $rows   = (new ModelPresensi())->getHariIniByAkun($akunId, $hariIni);
                 $bySesi = [];
                 foreach ($rows as $row) {
@@ -500,6 +500,10 @@ class AbsenMobile extends Controller
 
     private function labelSesi(string $shift, string $sesi): string
     {
+        if ($shift === 'FULL') {
+            return 'Full';
+        }
+
         if ($shift !== 'PS') {
             return $shift === 'PAGI' ? 'Pagi' : 'Siang';
         }

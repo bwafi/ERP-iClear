@@ -139,6 +139,19 @@ class AbsenPunchServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $row->status_absensi, 'Absen mobile langsung final tanpa approval.');
     }
 
+    public function testShiftFullMemakaiJadwal08DanPulang21(): void
+    {
+        $this->roster(10, '2026-11-02', 'FULL');
+        $id = (new AbsenPunchService(null, null, new FakeFotoService()))->masuk(
+            10, 1, 'FULL', -8.1, 113.7, 5, $this->foto(), '2026-11-02 08:50:00'
+        );
+
+        $row = $this->db->table('presensi')->where('idpresensi', $id)->get()->getRow();
+        $this->assertSame('FULL', $row->sesi);
+        $this->assertSame('08:45:00', $row->jam_jadwal_masuk);
+        $this->assertSame('21:00:00', $row->jam_jadwal_pulang);
+    }
+
     public function testMasukGandaDitolak(): void
     {
         $this->roster(10, '2026-11-02', 'PAGI');

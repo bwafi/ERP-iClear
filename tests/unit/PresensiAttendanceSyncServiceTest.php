@@ -263,6 +263,23 @@ class PresensiAttendanceSyncServiceTest extends CIUnitTestCase
         $this->assertSame(49, (int) $off->evaluator_id);
     }
 
+    public function testRosterFullTersimpanSebagaiShiftFull(): void
+    {
+        $this->karyawan(10, 2);
+        $this->spv(49, 2);
+        $this->roster(10, '2026-11-05', 'FULL');
+        $this->punch(10, '2026-11-05 08:45:00', 'FULL', '08:45:00');
+
+        (new PresensiAttendanceSyncService())->syncDay(10, '2026-11-05');
+
+        $detail = $this->db->table('kpi_attendance_detail')->get()->getRow();
+        $this->assertNotNull($detail);
+        $this->assertSame('FULL', $detail->shift);
+        $this->assertSame('FULL', $detail->session);
+        $this->assertSame('08:45', substr((string) $detail->scheduled_time, 0, 5));
+        $this->assertSame(5.0, (float) $detail->auto_score);
+    }
+
     public function testRosterSakitDanCutiJugaTidakDihitung(): void
     {
         $this->karyawan(10, 2);
