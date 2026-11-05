@@ -262,7 +262,7 @@ $kehadiran = [
                                             <input class="ra-check__input" type="checkbox" name="seragam" value="1" id="ra-seragam-s">
                                             <span class="ra-check__box" aria-hidden="true"><iconify-icon icon="solar:check-read-linear" width="14" height="14"></iconify-icon></span>
                                             <span class="ra-check__text">Seragam sesuai</span>
-                                            <span class="ra-check__points">+3</span>
+                                            <span class="ra-check__points">+2</span>
                                         </label>
                                         <label class="ra-check">
                                             <input class="ra-check__input" type="checkbox" name="sepatu" value="1" id="ra-seragam-p">
@@ -274,7 +274,7 @@ $kehadiran = [
                                             <input class="ra-check__input" type="checkbox" name="idcard" value="1" id="ra-seragam-i">
                                             <span class="ra-check__box" aria-hidden="true"><iconify-icon icon="solar:check-read-linear" width="14" height="14"></iconify-icon></span>
                                             <span class="ra-check__text">ID Card sesuai</span>
-                                            <span class="ra-check__points">+1</span>
+                                            <span class="ra-check__points">+2</span>
                                         </label>
                                     </div>
                                     <div class="ra-seragam__actions">
