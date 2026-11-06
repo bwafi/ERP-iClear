@@ -23,10 +23,6 @@ $total = count($pengajuan);
             <h1>Pengajuan izin</h1>
             <p class="meta"><?= esc($nama) ?><span class="sep" aria-hidden="true">·</span><?= esc($unit) ?></p>
         </div>
-        <a class="ghost" href="<?= base_url('absen') ?>">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-            Absen
-        </a>
     </header>
 
     <?php if (session()->getFlashdata('sukses')): ?>
@@ -121,6 +117,10 @@ $total = count($pengajuan);
         <?php endif; ?>
     </section>
 </main>
+
+<?= view('inc/_pwa_install') ?>
+
+<?= view('inc/_mobile_nav', ['active' => 'izin']) ?>
 
 <script>
     (function () {

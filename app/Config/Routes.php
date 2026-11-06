@@ -374,6 +374,10 @@ $routes->post('absen/break', 'AbsenMobile::istirahat', ['filter' => 'auth']);
 $routes->get('absen/foto/(:num)', 'AbsenMobile::foto/$1', ['filter' => 'auth']);
 $routes->get('absen/foto/(:num)/pulang', 'AbsenMobile::fotoPulang/$1', ['filter' => 'auth']);
 
+// PWA mobile + profil pegawai (halaman absen/izin/profil)
+$routes->get('manifest.webmanifest', 'Pwa::manifest');
+$routes->get('profil', 'Profil::index', ['filter' => 'auth']);
+
 
 //absensi
 $routes->get('absensi', 'Absensi::index', ['filter' => 'auth']);

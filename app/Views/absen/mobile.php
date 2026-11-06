@@ -170,7 +170,6 @@ $petaSiap =
     $tanggal,
 ) ?></p>
         </div>
-        <a class="ghost" href="<?= base_url("pengajuan_izin") ?>"><svg class="ic"><use href="#i-calendar"/></svg> Ajukan izin</a>
     </header>
 
     <?php if ($hariIni < $goLive): ?>
@@ -522,6 +521,10 @@ $petaSiap =
     </div>
     <?php endif; ?>
 </main>
+
+<?= view('inc/_pwa_install') ?>
+
+<?= view('inc/_mobile_nav', ['active' => 'absen']) ?>
 
 <script>
 (function () {

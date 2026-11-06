@@ -1,6 +1,6 @@
 <?php
 /**
- * Tema halaman mobile presensi: /absen dan /pengajuan_izin.
+ * Tema halaman mobile presensi: /absen, /pengajuan_izin, dan /profil.
  *
  * Satu bahasa visual untuk dua halaman: kanvas tenang, sheet rata dengan
  * garis rambut, satu aksen (primary #0085db), angka tabular, tanpa gradient
@@ -12,6 +12,13 @@
  *   tombol primary #0074ba dengan teks putih (4.99:1)
  */
 ?>
+<link rel="manifest" href="<?= base_url('manifest.webmanifest') ?>">
+<meta name="theme-color" content="#0074ba" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1726" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Absen iClear">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="<?= base_url('template/assets/pwa/apple-touch-icon.png') ?>">
 <script>
 (function () {
     var saved = null;
@@ -86,7 +93,7 @@
         min-height: 100dvh;
         max-width: 480px;
         margin: 0 auto;
-        padding: calc(20px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        padding: calc(20px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
         display: flex;
         flex-direction: column;
         gap: 12px;
@@ -654,12 +661,345 @@
         overflow-wrap: anywhere;
     }
 
+    /* ===== Navigasi bawah app: kapsul kaca melayang ===== */
+    .mob-nav {
+        position: fixed;
+        left: 50%;
+        bottom: calc(10px + env(safe-area-inset-bottom));
+        z-index: 40;
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        width: calc(100% - 24px);
+        max-width: 456px;
+        transform: translateX(-50%);
+        padding: 6px;
+        border: 1px solid rgba(255, 255, 255, .62);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .58);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, .85),
+            inset 0 -1px 0 rgba(255, 255, 255, .22),
+            0 12px 32px -14px rgba(15, 35, 60, .45);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        backdrop-filter: blur(24px) saturate(180%);
+    }
+
+    .mob-nav__item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        padding: 9px 4px 7px;
+        border-radius: 999px;
+        color: var(--mob-muted);
+        font-size: .6875rem;
+        font-weight: 600;
+        line-height: 1.2;
+        text-align: center;
+        text-decoration: none;
+        -webkit-tap-highlight-color: transparent;
+        transition: background-color .18s ease, color .18s ease;
+    }
+
+    .mob-nav__item svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .mob-nav__item.is-active {
+        color: var(--mob-accent-ink);
+        background: linear-gradient(180deg, rgba(0, 116, 186, .18), rgba(0, 116, 186, .09));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    }
+
+    .mob-nav__item:active {
+        transform: translateY(1px);
+    }
+
+    html[data-bs-theme="dark"] .mob-nav {
+        border-color: rgba(255, 255, 255, .12);
+        background: rgba(20, 31, 46, .55);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, .10),
+            inset 0 -1px 0 rgba(0, 0, 0, .28),
+            0 12px 32px -14px rgba(0, 0, 0, .7);
+    }
+
+    html[data-bs-theme="dark"] .mob-nav__item.is-active {
+        background: linear-gradient(180deg, rgba(124, 196, 240, .16), rgba(124, 196, 240, .08));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
+    }
+
+    /* Tanpa backdrop-filter kaca jadi putih susu, tetap terbaca. */
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .mob-nav {
+            background: rgba(255, 255, 255, .94);
+        }
+
+        html[data-bs-theme="dark"] .mob-nav {
+            background: rgba(20, 31, 46, .94);
+        }
+    }
+
+    /* ===== Profil ===== */
+    .prof-card {
+        display: grid;
+        justify-items: center;
+        gap: 4px;
+        padding: 22px 16px 18px;
+        text-align: center;
+    }
+
+    .prof-avatar {
+        display: grid;
+        place-items: center;
+        width: 64px;
+        height: 64px;
+        border: 1px solid var(--mob-rule);
+        border-radius: 20px;
+        background: var(--mob-accent-wash);
+        color: var(--mob-accent-ink);
+        font-size: 20px;
+        font-weight: 750;
+        letter-spacing: .02em;
+    }
+
+    .prof-name {
+        margin: 8px 0 0;
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -.01em;
+    }
+
+    .prof-meta {
+        margin: 0;
+        color: var(--mob-muted);
+        font-size: .8125rem;
+    }
+
+    .prof-list {
+        width: 100%;
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .prof-list__row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 11px 0;
+        border-top: 1px solid var(--mob-rule);
+        font-size: .875rem;
+    }
+
+    .prof-list__label {
+        color: var(--mob-muted);
+    }
+
+    .prof-list__value {
+        text-align: right;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .mob .btn.is-outline {
+        border: 1px solid var(--mob-rule-strong);
+        background: var(--mob-surface);
+        color: var(--mob-ink);
+    }
+
+    .mob .btn.is-outline:hover {
+        background: var(--mob-accent-wash);
+    }
+
+    /* ===== Ajakan install PWA ===== */
+    dialog.pwa-install {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 480px;
+        margin: auto auto 0;
+        padding: 0;
+        border: 0;
+        border-top: 1px solid var(--mob-rule);
+        border-radius: 18px 18px 0 0;
+        background: var(--mob-surface);
+        color: var(--mob-ink);
+    }
+
+    dialog.pwa-install::backdrop {
+        background: rgba(14, 23, 38, .45);
+    }
+
+    .pwa-install__body {
+        padding: 20px 18px calc(18px + env(safe-area-inset-bottom));
+    }
+
+    .pwa-install__icon {
+        display: block;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+    }
+
+    .pwa-install__title {
+        margin: 12px 0 0;
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: -.01em;
+    }
+
+    .pwa-install__copy {
+        margin: 6px 0 0;
+        color: var(--mob-muted);
+        font-size: .8125rem;
+    }
+
+    .pwa-install__actions {
+        display: grid;
+        gap: 8px;
+        margin-top: 16px;
+    }
+
+    .pwa-install__actions .btn {
+        min-height: 48px;
+        padding: 0 18px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: var(--mob-accent-solid);
+        color: #fff;
+        font: inherit;
+        font-size: .9375rem;
+        font-weight: 650;
+        cursor: pointer;
+    }
+
+    .pwa-install__actions .btn.is-outline {
+        border-color: var(--mob-rule-strong);
+        background: var(--mob-surface);
+        color: var(--mob-ink);
+    }
+
     @media (prefers-reduced-motion: reduce) {
         .mob *,
         .mob *::before,
-        .mob *::after {
+        .mob *::after,
+        .mob-nav__item {
             transition: none !important;
             animation: none !important;
         }
     }
 </style>
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+        navigator.serviceWorker.register('<?= base_url('sw.js') ?>').catch(function () {});
+    });
+}
+</script>
+<script>
+(function () {
+    var KEY = 'pwa-install-seen';
+    var ULANG_MS = 7 * 24 * 60 * 60 * 1000;
+    var sheet = null;
+    var event = null;
+
+    function sudahTerpasang() {
+        return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+    }
+
+    function tandai() {
+        try { localStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    }
+
+    function bolehTampil() {
+        try {
+            var at = Number(localStorage.getItem(KEY) || 0);
+            return !at || Date.now() - at > ULANG_MS;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    function tampilkan() {
+        if (!sheet || sheet.open || sudahTerpasang() || !bolehTampil()) {
+            return;
+        }
+        tandai();
+        sheet.showModal();
+    }
+
+    // Chrome/Edge: dialog install asli dipicu dari tombol kita.
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        event = e;
+        tampilkan();
+    });
+
+    function init() {
+        sheet = document.getElementById('pwa-install');
+        if (!sheet || typeof sheet.showModal !== 'function') {
+            sheet = null;
+            return;
+        }
+
+        var tombol = sheet.querySelector('[data-pwa-install]');
+        var salinan = sheet.querySelector('[data-pwa-copy]');
+        var nanti = sheet.querySelector('[data-pwa-dismiss]');
+
+        tombol.addEventListener('click', function () {
+            if (!event) {
+                return;
+            }
+            var prompt = event;
+            event = null;
+            sheet.close();
+            prompt.prompt();
+            prompt.userChoice.catch(function () {}).then(tandai);
+        });
+
+        nanti.addEventListener('click', function () {
+            sheet.close();
+        });
+
+        window.addEventListener('appinstalled', function () {
+            tandai();
+            if (sheet.open) {
+                sheet.close();
+            }
+        });
+
+        // Safari iOS tidak punya event install: tampilkan instruksi manual saja.
+        var ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (ios) {
+            salinan.textContent = 'Ketuk tombol Bagikan di Safari, lalu pilih "Tambahkan ke Layar Utama".';
+            tombol.hidden = true;
+            nanti.textContent = 'Mengerti';
+            nanti.classList.remove('is-outline');
+            window.addEventListener('load', function () {
+                if (!event) {
+                    tampilkan();
+                }
+            });
+        }
+
+        if (event) {
+            tampilkan();
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>
