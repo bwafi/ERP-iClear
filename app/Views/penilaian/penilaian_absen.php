@@ -17,7 +17,7 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
             </nav>
             <h1 class="pa-title">Penilaian Harian</h1>
             <p class="pa-sub">
-                Koreksi kehadiran dan skor Kebersihan serta Kepatuhan SOP. Kehadiran dan Seragam terisi otomatis dari absen mobile; hari OFF/izin/sakit/cuti tidak dihitung.
+                Isi skor Kebersihan dan Kepatuhan SOP. Nilai Kehadiran dan Seragam terisi otomatis dari absen mobile.
                 <span class="pa-formula">Nilai = SUM ÷ (Hari Efektif × 5) × 100</span>
             </p>
         </div>
@@ -172,7 +172,7 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
                 <header class="pa-sheet__head">
                     <div>
                         <h2 class="pa-sheet__title">Input penilaian harian</h2>
-                        <p class="pa-sheet__sub">Koreksi kehadiran dan skor Kebersihan serta Kepatuhan SOP.</p>
+                        <p class="pa-sheet__sub">Skor Kebersihan dan Kepatuhan SOP per tanggal.</p>
                     </div>
                     <button type="submit" class="pa-btn pa-btn--primary">
                         <iconify-icon icon="solar:diskette-bold" aria-hidden="true"></iconify-icon> Simpan data
@@ -198,91 +198,29 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
                         <?php endif; ?>
                     </div>
 
-                    <div>
-                        <?php if (in_array('KEHADIRAN', (array) $allowedComponentCodes, true)) : ?>
-                            <div class="pa-punch">
-                                <div class="pa-punch__head">
-                                    <h3 class="pa-punch__title">Kehadiran <span class="pa-punch__badge">auto-scoring</span></h3>
-                                </div>
-
-                                <div class="pa-punch__grid" id="atsInputsRow">
-                                    <div class="pa-field" id="atsStatusWrap">
-                                        <label class="pa-label" for="atsStatus">Status</label>
-                                        <select class="form-select form-select-sm" name="kehadiran_status" id="atsStatus">
-                                            <option value="HADIR">Hadir</option>
-                                            <option value="OFF">OFF (Libur)</option>
-                                            <option value="IZIN">IZIN</option>
-                                            <option value="SAKIT">Sakit</option>
-                                            <option value="CUTI">Cuti</option>
-                                        </select>
-                                    </div>
-                                    <div class="pa-field" id="atsShiftWrap">
-                                        <label class="pa-label" for="atsShift">Shift</label>
-                                        <select class="form-select form-select-sm" name="shift" id="atsShift">
-                                            <option value="">- Pilih Shift -</option>
-                                            <option value="PAGI">Pagi (08:45)</option>
-                                            <option value="SIANG">Siang (12:45)</option>
-                                            <option value="FULL">Full (08:45–21:00)</option>
-                                            <option value="PS">PS (Pagi + Sore)</option>
-                                        </select>
-                                    </div>
-                                    <div class="pa-field" id="atsTypeWrap">
-                                        <label class="pa-label" for="atsType">Jenis absensi</label>
-                                        <select class="form-select form-select-sm" name="attendance_type" id="atsType">
-                                            <option value="NORMAL">Normal</option>
-                                            <option value="IZIN_TELAT">Izin Telat</option>
-                                        </select>
-                                    </div>
-                                    <div id="atsJamWrap" class="pa-field d-none">
-                                        <label class="pa-label" for="atsJam" id="atsJamLabel">Jam masuk</label>
-                                        <input type="time" name="jam_masuk" id="atsJam" class="form-control form-control-sm">
-                                    </div>
-                                    <div id="atsJamPagiWrap" class="pa-field d-none">
-                                        <label class="pa-label" for="atsJamPagi">Jam pagi (08:45)</label>
-                                        <input type="time" name="jam_masuk_pagi" id="atsJamPagi" class="form-control form-control-sm">
-                                    </div>
-                                    <div id="atsJamSoreWrap" class="pa-field d-none">
-                                        <label class="pa-label" for="atsJamSore">Jam sore (16:55)</label>
-                                        <input type="time" name="jam_masuk_sore" id="atsJamSore" class="form-control form-control-sm">
-                                    </div>
-                                    <div id="atsPreviewBlockCol" class="d-none">
-                                        <div id="atsPreview"></div>
-                                    </div>
-                                    <div id="atsOffNote" class="pa-off d-none">
-                                        <span class="badge bg-secondary">OFF — hari ini tidak dihitung</span>
-                                    </div>
-                                </div>
-
-                                <p class="pa-help" id="atsHint">
-                                    Aturan: Normal (≤0m=5, 1-3m=4, 4-6m=3, 7-10m=2, 11-14m=1, ≥15m=0) · Izin Telat memiliki toleransi lebih longgar.
-                                </p>
+                    <div class="pa-assess">
+                        <?php foreach ($attendanceComponents as $c) : ?>
+                            <?php if ($c->code === 'KEHADIRAN') continue; ?>
+                            <?php if ($c->code === 'SERAGAM') continue; // dinilai dari foto absen ?>
+                            <?php if (!in_array($c->code, $allowedComponentCodes, true)) continue; ?>
+                            <?php $skorId = 'paSkor' . strtolower($c->code); ?>
+                            <div class="pa-field">
+                                <label class="pa-label" for="<?= esc($skorId) ?>"><?= esc($c->name) ?></label>
+                                <select id="<?= esc($skorId) ?>" class="form-select form-select-sm" name="skor_<?= strtolower($c->code) ?>">
+                                    <option value="">- Tidak Diubah -</option>
+                                    <?php foreach ([5 => 'Sangat Baik (5)', 4 => 'Baik (4)', 3 => 'Cukup (3)', 2 => 'Kurang (2)', 1 => 'Sangat Kurang (1)', 0 => 'Buruk (0)'] as $v => $label) : ?>
+                                        <option value="<?= $v ?>"><?= $label ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
-                        <?php endif; ?>
-
-                        <div class="pa-assess">
-                            <?php foreach ($attendanceComponents as $c) : ?>
-                                <?php if ($c->code === 'KEHADIRAN') continue; ?>
-                                <?php if ($c->code === 'SERAGAM') continue; // dinilai dari foto absen ?>
-                                <?php if (!in_array($c->code, $allowedComponentCodes, true)) continue; ?>
-                                <?php $skorId = 'paSkor' . strtolower($c->code); ?>
-                                <div class="pa-field">
-                                    <label class="pa-label" for="<?= esc($skorId) ?>"><?= esc($c->name) ?></label>
-                                    <select id="<?= esc($skorId) ?>" class="form-select form-select-sm" name="skor_<?= strtolower($c->code) ?>">
-                                        <option value="">- Tidak Diubah -</option>
-                                        <?php foreach ([5 => 'Sangat Baik (5)', 4 => 'Baik (4)', 3 => 'Cukup (3)', 2 => 'Kurang (2)', 1 => 'Sangat Kurang (1)', 0 => 'Buruk (0)'] as $v => $label) : ?>
-                                            <option value="<?= $v ?>"><?= $label ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
 
                 <footer class="pa-sheet__foot">
                     <iconify-icon icon="solar:info-circle-bold" aria-hidden="true"></iconify-icon>
                     <p>
-                        Aspek yang dikosongkan (-) nilainya tidak akan diubah pada tanggal tersebut. Hari libur/izin: pilih status <strong>OFF</strong>, <strong>IZIN</strong>, <strong>Sakit</strong>, atau <strong>Cuti</strong> pada Kehadiran — hari itu tidak dihitung &amp; tidak mengubah nilai.
+                        Aspek yang dikosongkan (-) nilainya tidak akan diubah pada tanggal tersebut. Hari libur/izin dikelola dari absen mobile dan roster, sehingga tidak perlu ditandai di sini.
                     </p>
                 </footer>
             </form>
@@ -454,257 +392,14 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
     </script>
 <?php endif; ?>
 
-<!-- Script Utama (Auto-scoring & Tooltips) -->
+<!-- Script Utama (Reset skor & Tooltips) -->
 <script>
     function resetSkorInput() {
         var selects = document.querySelectorAll('select[name^="skor_"]');
         selects.forEach(function(el) {
             el.value = '';
         });
-        if (typeof window.atsResetAbsensi === 'function') {
-            window.atsResetAbsensi();
-        }
     }
-
-    (function() {
-        'use strict';
-
-        const scheduledTimes = {
-            'PAGI': '08:45',
-            'SIANG': '12:45',
-            'FULL': '08:45',
-            'PS': {
-                'PAGI': '08:45',
-                'SORE': '16:55'
-            }
-        };
-
-        const normalScoring = [{
-                max: 0,
-                score: 5
-            },
-            {
-                max: 3,
-                score: 4
-            },
-            {
-                max: 6,
-                score: 3
-            },
-            {
-                max: 10,
-                score: 2
-            },
-            {
-                max: 14,
-                score: 1
-            },
-            {
-                max: 999,
-                score: 0
-            }
-        ];
-
-        const izinScoring = [{
-                max: 5,
-                score: 5
-            },
-            {
-                max: 15,
-                score: 4
-            },
-            {
-                max: 30,
-                score: 3
-            },
-            {
-                max: 40,
-                score: 1
-            },
-            {
-                max: 999,
-                score: 0
-            }
-        ];
-
-        const shiftEl = document.getElementById('atsShift');
-        const typeEl = document.getElementById('atsType');
-        const statusEl = document.getElementById('atsStatus');
-        const shiftWrapEl = document.getElementById('atsShiftWrap');
-        const typeWrapEl = document.getElementById('atsTypeWrap');
-        const previewBlockColEl = document.getElementById('atsPreviewBlockCol');
-        const offNoteEl = document.getElementById('atsOffNote');
-        const jamWrap = document.getElementById('atsJamWrap');
-        const jamLabel = document.getElementById('atsJamLabel');
-        const jamEl = document.getElementById('atsJam');
-        const jamPagiWrap = document.getElementById('atsJamPagiWrap');
-        const jamPagiEl = document.getElementById('atsJamPagi');
-        const jamSoreWrap = document.getElementById('atsJamSoreWrap');
-        const jamSoreEl = document.getElementById('atsJamSore');
-        const previewEl = document.getElementById('atsPreview');
-        const hintEl = document.getElementById('atsHint');
-
-        if (!shiftEl) return;
-
-        function minutesLate(scheduled, actual) {
-            if (!scheduled || !actual) return 0;
-            const schedTime = new Date('1970-01-01T' + scheduled);
-            const actualTime = new Date('1970-01-01T' + actual);
-            const diff = Math.ceil((actualTime - schedTime) / 60000);
-            return Math.max(0, diff);
-        }
-
-        function calculateScore(minutes, isIzin) {
-            const rules = isIzin ? izinScoring : normalScoring;
-            for (let rule of rules) {
-                if (minutes <= rule.max) {
-                    return rule.score;
-                }
-            }
-            return 0;
-        }
-
-        function scoreBadge(score) {
-            const cls = score >= 4 ? 'bg-success' : (score >= 3 ? 'bg-warning' : (score >= 1 ? 'bg-danger' : 'bg-secondary'));
-            return '<span class="badge ' + cls + '">' + score + '</span>';
-        }
-
-        const liburStatus = ['OFF', 'IZIN', 'SAKIT', 'CUTI'];
-        function isLibur() {
-            return !!statusEl && liburStatus.includes(statusEl.value);
-        }
-
-        function renderStatusMode() {
-            const off = isLibur();
-
-            if (shiftWrapEl) shiftWrapEl.classList.toggle('d-none', off);
-            if (typeWrapEl) typeWrapEl.classList.toggle('d-none', off);
-            jamWrap.classList.add('d-none');
-            jamPagiWrap.classList.add('d-none');
-            jamSoreWrap.classList.add('d-none');
-            if (previewBlockColEl) previewBlockColEl.classList.toggle('d-none', off);
-            if (offNoteEl) {
-                offNoteEl.classList.toggle('d-none', !off);
-                const badge = offNoteEl.querySelector('.badge');
-                if (badge) badge.textContent = statusEl.value + ' — hari ini tidak dihitung';
-            }
-
-            if (off) {
-                previewEl.innerHTML = '';
-                hintEl.textContent = 'Status ' + statusEl.value + ': tidak dihitung dalam nilai absensi.';
-            } else {
-                renderShiftMode();
-                updatePreview();
-            }
-        }
-
-        function renderShiftMode() {
-            const off = isLibur();
-            const shift = shiftEl.value;
-
-            jamWrap.classList.add('d-none');
-            jamPagiWrap.classList.add('d-none');
-            jamSoreWrap.classList.add('d-none');
-
-            if (off) {
-                hintEl.textContent = 'Status ' + statusEl.value + ': tidak dihitung dalam nilai absensi.';
-                return;
-            }
-
-            if (shift === 'PS') {
-                jamPagiWrap.classList.remove('d-none');
-                jamSoreWrap.classList.remove('d-none');
-                hintEl.textContent = 'Shift PS: Masukkan jam masuk sesi pagi dan sesi sore.';
-            } else if (shift === '') {
-                hintEl.textContent = 'Pilih shift terlebih dahulu untuk mengaktifkan input jam masuk.';
-            } else {
-                jamWrap.classList.remove('d-none');
-                jamLabel.textContent = shift === 'SIANG' ? 'Jam Masuk (12:45)' : 'Jam Masuk (08:45)';
-                hintEl.textContent = 'Masukkan jam kedatangan untuk menghitung skor keterlambatan otomatis.';
-            }
-        }
-
-        function updatePreview() {
-            const shift = shiftEl.value;
-            const isIzin = typeEl.value === 'IZIN_TELAT';
-
-            if (!shift) {
-                previewEl.innerHTML = '';
-                return;
-            }
-
-            let sessions = [];
-            if (shift === 'PS') {
-                if (jamPagiEl.value) sessions.push({
-                    sched: '08:45',
-                    actual: jamPagiEl.value
-                });
-                if (jamSoreEl.value) sessions.push({
-                    sched: '16:55',
-                    actual: jamSoreEl.value
-                });
-            } else {
-                const sched = scheduledTimes[shift];
-                if (jamEl.value) sessions.push({
-                    sched: sched,
-                    actual: jamEl.value
-                });
-            }
-
-            if (sessions.length === 0) {
-                previewEl.innerHTML = '';
-                return;
-            }
-
-            let totalLate = 0;
-            let rows = [];
-
-            sessions.forEach(function(s, i) {
-                const late = minutesLate(s.sched, s.actual);
-                const score = calculateScore(late, isIzin);
-                totalLate += late;
-                const label = shift === 'PS' ? (i === 0 ? 'Pagi' : 'Sore') : (shift === 'SIANG' ? 'Siang' : (shift === 'FULL' ? 'Full' : 'Pagi'));
-                rows.push(label + ': ' + late + 'm (' + score + ')');
-            });
-
-            const dailyScore = calculateScore(totalLate, isIzin);
-
-            previewEl.innerHTML =
-                '<div class="alert alert-info py-2 px-3 small mb-0 d-flex align-items-center justify-content-between">' +
-                '<span>Detail: ' + rows.join(' | ') + ' &bull; <strong>Total Telat: ' + totalLate + 'm</strong></span>' +
-                '<span class="ms-2">Skor: ' + scoreBadge(dailyScore) + '</span>' +
-                '</div>';
-        }
-
-        window.atsResetAbsensi = function() {
-            if (statusEl) statusEl.value = 'HADIR';
-            if (shiftEl) shiftEl.value = '';
-            if (jamEl) jamEl.value = '';
-            if (jamPagiEl) jamPagiEl.value = '';
-            if (jamSoreEl) jamSoreEl.value = '';
-            renderStatusMode();
-            renderShiftMode();
-            updatePreview();
-        };
-
-        renderStatusMode();
-        renderShiftMode();
-        updatePreview();
-
-        if (statusEl) {
-            statusEl.addEventListener('change', function() {
-                renderStatusMode();
-            });
-        }
-        shiftEl.addEventListener('change', function() {
-            renderShiftMode();
-            updatePreview();
-        });
-        typeEl.addEventListener('change', updatePreview);
-        jamEl.addEventListener('input', updatePreview);
-        jamPagiEl.addEventListener('input', updatePreview);
-        jamSoreEl.addEventListener('input', updatePreview);
-    })();
 
     document.addEventListener('DOMContentLoaded', function() {
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
