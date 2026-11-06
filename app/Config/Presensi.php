@@ -28,4 +28,7 @@ class Presensi extends BaseConfig
 
     /** SPV hanya melihat foto/surat pegawai di unit binaan `spv_units`. */
     public int $jabatanSpv = 40;
+
+    /** Riwayat absen: role yang boleh melihat dan memfilter semua unit. */
+    public array $riwayatSemuaUnit = [0, 1, 2, 34];
 }

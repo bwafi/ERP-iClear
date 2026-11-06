@@ -35,6 +35,9 @@ $kehadiran = [
     1 => ['Toleransi', 'warn'],
     2 => ['Telat', 'bad'],
 ];
+
+$unitFilter     = $unit_filter ?? [];
+$showUnitFilter = $show_unit_filter ?? false;
 ?>
 
 <div class="ra-page">
@@ -90,11 +93,22 @@ $kehadiran = [
                 <label for="endDate">Sampai tanggal</label>
                 <input name="tanggal_akhir" type="date" id="endDate" class="ra-control">
             </div>
+            <?php if ($showUnitFilter): ?>
+                <div class="ra-field">
+                    <label for="raUnitFilter">Unit</label>
+                    <select name="unit_idunit" id="raUnitFilter" class="ra-control">
+                        <option value="">Semua Unit</option>
+                        <?php foreach ($unitFilter as $u): ?>
+                            <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            <?php endif; ?>
             <button type="button" id="ra-reset" class="ra-btn ra-btn--ghost">Reset</button>
         </div>
         <p class="ra-filter__hint">
             <iconify-icon icon="solar:info-circle-linear" width="16" height="16" aria-hidden="true"></iconify-icon>
-            Filter bawaan 15 hari terakhir. Export mengikuti tanggal yang dipilih.
+            Filter bawaan 15 hari terakhir. Export mengikuti tanggal dan unit yang dipilih.
         </p>
     </form>
 
@@ -185,7 +199,8 @@ $kehadiran = [
                         }
                         ?>
                         <tr data-kehadiran="<?= $kehadiranV === null ? '' : (int) $kehadiranV ?>"
-                            data-status="<?= $statusV === null ? '' : (int) $statusV ?>">
+                            data-status="<?= $statusV === null ? '' : (int) $statusV ?>"
+                            data-unit="<?= (int) ($row->ID_UNIT ?? 0) ?>">
                             <td data-label="Pegawai">
                                 <span class="ra-emp">
                                     <span class="ra-emp__name"><?= esc($row->NAMA_AKUN ?? 'Tanpa nama') ?></span>
@@ -1598,6 +1613,7 @@ $kehadiran = [
 
         const startInput = document.getElementById('startDate');
         const endInput = document.getElementById('endDate');
+        const unitInput = document.getElementById('raUnitFilter');
         let table = null;
 
         const esc = function (value) {
@@ -1640,6 +1656,17 @@ $kehadiran = [
                 return true;
             });
 
+            // Filter unit membaca atribut data-unit di <tr>; baris SPV sudah
+            // dibatasi server ke wilayah `spv_units`.
+            $.fn.dataTable.ext.search.push(function (settings, data, index) {
+                if (!unitInput || !unitInput.value) {
+                    return true;
+                }
+                const tr = settings.aoData[index] && settings.aoData[index].nTr;
+
+                return tr ? tr.getAttribute('data-unit') === unitInput.value : true;
+            });
+
             table = $('#riwayat-absen-table').DataTable({
                 order: [[1, 'desc']],
                 pageLength: 15,
@@ -1661,6 +1688,9 @@ $kehadiran = [
 
             startInput.addEventListener('change', function () { table.draw(); });
             endInput.addEventListener('change', function () { table.draw(); });
+            if (unitInput) {
+                unitInput.addEventListener('change', function () { table.draw(); });
+            }
 
             table.table().container().querySelector('.dataTables_filter input')
                 .setAttribute('aria-label', 'Cari pegawai');
@@ -1670,6 +1700,9 @@ $kehadiran = [
             document.getElementById('ra-reset').addEventListener('click', function () {
                 startInput.value = '';
                 endInput.value = '';
+                if (unitInput) {
+                    unitInput.value = '';
+                }
                 table.search('').draw();
             });
 

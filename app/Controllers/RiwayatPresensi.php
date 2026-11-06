@@ -12,6 +12,7 @@ use App\Models\ModelService;
 use App\Models\ModelPresensi;
 use App\Models\ModelJadwalMasuk;
 use App\Models\ModelUnit;
+use App\Services\Presensi\PresensiScopeService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -56,7 +57,22 @@ class RiwayatPresensi extends BaseController
 
     public function semua_riwayat()
     {
-        $presensi = self::gabungSesiPs($this->PresensiModel->getAll());
+        $jabatan  = (int) session('ID_JABATAN');
+        $akunId   = (int) session('ID_AKUN');
+        $unitSesi = (int) session('ID_UNIT');
+
+        $scope    = (new PresensiScopeService())->unitTerlihat($jabatan, $akunId, $unitSesi);
+        $presensi = $this->PresensiModel->getAll();
+
+        // SPV hanya menerima baris wilayah `spv_units`; role lain tidak dibatasi.
+        if (! $scope['lintas']) {
+            $presensi = array_values(array_filter(
+                $presensi,
+                static fn ($row) => in_array((int) ($row->ID_UNIT ?? 0), $scope['ids'], true)
+            ));
+        }
+
+        $presensi   = self::gabungSesiPs($presensi);
         $seragamSvc = new \App\Services\Kpi\PresensiSeragamService();
 
         $baris = [];
@@ -70,10 +86,16 @@ class RiwayatPresensi extends BaseController
             );
         }
 
+        $unitFilter = $scope['lintas']
+            ? $this->UnitModel->orderBy('idunit', 'ASC')->findAll()
+            : $this->UnitModel->whereIn('idunit', $scope['ids'])->orderBy('idunit', 'ASC')->findAll();
+
         $data = array(
             'presensi' => $presensi,
             'seragam' => $seragamSvc->petaNilai($baris),
             'bolehSeragam' => $bolehSeragam,
+            'unit_filter' => $unitFilter,
+            'show_unit_filter' => $scope['lintas'] || $jabatan === (int) config('Presensi')->jabatanSpv,
             'body' => 'riwayat/semua_presensi'
         );
         return view('template', $data);
@@ -183,9 +205,19 @@ class RiwayatPresensi extends BaseController
         $tanggal_awal  = $this->request->getPost('tanggal_awal');
         $tanggal_akhir = $this->request->getPost('tanggal_akhir');
 
+        $jabatan  = (int) session('ID_JABATAN');
+        $akunId   = (int) session('ID_AKUN');
+        $unitSesi = (int) session('ID_UNIT');
+        $scope    = (new PresensiScopeService())->unitTerlihat($jabatan, $akunId, $unitSesi);
 
+        // Unit yang diminta hanya dipercaya bila masih di dalam scope sesi.
+        $unitIds = $scope['lintas'] ? [] : $scope['ids'];
+        $unitReq = (int) $this->request->getPost('unit_idunit');
+        if ($unitReq > 0 && ($scope['lintas'] || in_array($unitReq, $unitIds, true))) {
+            $unitIds = [$unitReq];
+        }
 
-        $datapresensi = $this->PresensiModel->filterexport($tanggal_awal, $tanggal_akhir);
+        $datapresensi = $this->PresensiModel->filterexport($tanggal_awal, $tanggal_akhir, $unitIds);
 
 
         $headers = [

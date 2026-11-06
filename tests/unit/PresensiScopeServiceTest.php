@@ -88,4 +88,23 @@ class PresensiScopeServiceTest extends CIUnitTestCase
         $this->assertTrue($this->scope->bolehLihatFoto(40, 50, 56, 56, 50));
         $this->assertFalse($this->scope->bolehLihatFoto(40, 50, 57, 1, 1));
     }
+
+    public function testUnitTerlihatRoleLintas(): void
+    {
+        foreach ([0, 1, 2, 34] as $jabatan) {
+            $this->assertSame(['lintas' => true, 'ids' => []], $this->scope->unitTerlihat($jabatan, 99, 7));
+        }
+    }
+
+    public function testUnitTerlihatSpvDanRoleLain(): void
+    {
+        // Bima (56) membina unit 1 dan 4.
+        $this->assertSame(['lintas' => false, 'ids' => [1, 4]], $this->scope->unitTerlihat(40, 56, 50));
+
+        // SPV tanpa mapping jatuh ke unit sesinya.
+        $this->assertSame(['lintas' => false, 'ids' => [50]], $this->scope->unitTerlihat(40, 57, 50));
+
+        // Role lain hanya unit sendiri.
+        $this->assertSame(['lintas' => false, 'ids' => [2]], $this->scope->unitTerlihat(35, 99, 2));
+    }
 }

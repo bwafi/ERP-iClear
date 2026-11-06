@@ -91,23 +91,28 @@ class ModelPresensi extends Model
 
 
 
-    public function filterexport($tanggalAwal, $tanggalAkhir)
+    public function filterexport($tanggalAwal, $tanggalAkhir, array $unitIds = [])
     {
         $tanggalAkhir .= ' 23:59:59';
         //tambahan
-        return $this->select('presensi.*, 
-                              jadwal_masuk.nama_jadwal, 
-                              akun.NAMA_AKUN, 
-                              akun.ID_UNIT, 
+        $builder = $this->select('presensi.*,
+                              jadwal_masuk.nama_jadwal,
+                              akun.NAMA_AKUN,
+                              akun.ID_UNIT,
                               unit.NAMA_UNIT,
-                              unit.LATITUDE, 
+                              unit.LATITUDE,
                               unit.LONGTITUDE')
             ->join('jadwal_masuk', 'jadwal_masuk.idjadwal_masuk = presensi.idjadwal_masuk', 'left')
             ->join('akun', 'akun.ID_AKUN = presensi.akun_idakun', 'left')
             ->join('unit', 'unit.idunit = akun.ID_UNIT', 'left')
             ->where('presensi.created_at >=', $tanggalAwal)
-            ->where('presensi.created_at <=', $tanggalAkhir)
-            ->findAll();
+            ->where('presensi.created_at <=', $tanggalAkhir);
+
+        if ($unitIds !== []) {
+            $builder->whereIn('akun.ID_UNIT', $unitIds);
+        }
+
+        return $builder->findAll();
     }
 
 
