@@ -80,7 +80,7 @@ class ModelIzin extends Model
 
     public function getWithAkun()
     {
-        return $this->select('izin.*, akun.NAMA_AKUN, unit.NAMA_UNIT, jenis_perizinan.jenis_izin')
+        return $this->select('izin.*, akun.NAMA_AKUN, akun.ID_UNIT, unit.NAMA_UNIT, jenis_perizinan.jenis_izin')
             ->join('akun', 'akun.ID_AKUN = izin.akun_idakun', 'left')
             ->join('unit', 'unit.idunit = akun.ID_UNIT', 'left')
             ->join('jenis_perizinan', 'jenis_perizinan.idjenis_perizinan = izin.jenis_perizinan_idjenis_perizinan', 'left')

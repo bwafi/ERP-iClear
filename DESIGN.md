@@ -160,8 +160,8 @@
 
 ### Approval Izin (`.ap-*`)
 - **Scope:** `app/Views/admin/approval_izin.php` + `_approval_izin_theme.php`; semua selector di bawah `.ap-page` dan memakai token `--ap-*` dari tema aplikasi.
-- **Layout:** page head berupa kartu putih ber-hairline (breadcrumb, title, tombol Buat Pengajuan) → papan ringkasan empat sel (total, menunggu, disetujui, ditolak) → kartu filter status → kartu tabel dengan form keputusan inline.
-- **Rules:** route, query, field keputusan (`idizin`, `status`, `balasan`), dan aturan approval tidak berubah. Satu aksen primary; muted text ≥4.5:1 di kedua tema; tabel menjadi stacked cards dengan `data-label` di bawah `768px`.
+- **Layout:** page head berupa kartu putih ber-hairline (breadcrumb, title, tombol Buat Pengajuan) → papan ringkasan empat sel (total, menunggu, disetujui, ditolak) → kartu filter status + unit → kartu tabel dengan form keputusan inline.
+- **Rules:** route, query, field keputusan (`idizin`, `status`, `balasan`), dan aturan approval tidak berubah. Filter unit mengikuti scope jabatan yang sama dengan `/semua_riwayat_presensi`: role `0/1/2/34` melihat semua unit, SPV `40` hanya `spv_units`, dan baris SPV sudah dibatasi server. Keputusan approval SPV juga divalidasi server ke `spv_units`, bukan hanya disembunyikan di tampilan. Satu aksen primary; muted text ≥4.5:1 di kedua tema; tabel menjadi stacked cards dengan `data-label` di bawah `768px`.
 
 ### Roster Absensi (`/jadwal_masuk`, `.jad-*`)
 - **Scope:** `app/Views/absensi/jadwal_masuk.php`; semua selector di bawah `.jad` dan memakai token `--jad-*` yang diturunkan dari tema aplikasi. Tanpa palet, font, atau dependency baru.

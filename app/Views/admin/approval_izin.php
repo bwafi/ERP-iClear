@@ -36,6 +36,9 @@ $iso = static function ($nilai): string {
 
     return $ts === false ? '' : date('Y-m-d', $ts);
 };
+
+$unitFilter     = $unit_filter ?? [];
+$showUnitFilter = $show_unit_filter ?? false;
 ?>
 
 <div class="ap-page">
@@ -88,6 +91,17 @@ $iso = static function ($nilai): string {
                     <option value="2">Ditolak</option>
                 </select>
             </div>
+            <?php if ($showUnitFilter): ?>
+                <div class="ap-field">
+                    <label for="ap-unit">Unit</label>
+                    <select id="ap-unit" class="ap-control">
+                        <option value="">Semua Unit</option>
+                        <?php foreach ($unitFilter as $u): ?>
+                            <option value="<?= (int) $u->idunit ?>"><?= esc($u->NAMA_UNIT) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            <?php endif; ?>
             <button type="button" id="ap-reset" class="ap-btn ap-btn--ghost">Reset</button>
         </div>
         <p class="ap-filter__hint">
@@ -123,7 +137,7 @@ $iso = static function ($nilai): string {
                         $akhir   = $tanggal($row->tanggal_akhir ?? null);
                         $balasan = trim((string) ($row->balasan ?? ''));
                         ?>
-                        <tr data-status="<?= $s ?>">
+                        <tr data-status="<?= $s ?>" data-unit="<?= (int) ($row->ID_UNIT ?? 0) ?>">
                             <td data-label="Pegawai">
                                 <span class="ap-emp">
                                     <span class="ap-emp__name"><?= esc($row->NAMA_AKUN ?? 'Tanpa nama') ?></span>
@@ -199,13 +213,21 @@ $iso = static function ($nilai): string {
     (function () {
         $(function () {
             const statusSelect = document.getElementById('ap-status');
+            const unitSelect = document.getElementById('ap-unit');
 
             $.fn.dataTable.ext.search.push(function (settings, data, index) {
                 if (settings.nTable.id !== 'approval-izin-table') {
                     return true;
                 }
                 const tr = settings.aoData[index] && settings.aoData[index].nTr;
-                return !statusSelect.value || (tr && tr.getAttribute('data-status') === statusSelect.value);
+                if (statusSelect.value && (!tr || tr.getAttribute('data-status') !== statusSelect.value)) {
+                    return false;
+                }
+                // Baris SPV sudah dibatasi server ke wilayah `spv_units`.
+                if (unitSelect && unitSelect.value && (!tr || tr.getAttribute('data-unit') !== unitSelect.value)) {
+                    return false;
+                }
+                return true;
             });
 
             const table = $('#approval-izin-table').DataTable({
@@ -228,8 +250,14 @@ $iso = static function ($nilai): string {
             });
 
             statusSelect.addEventListener('change', function () { table.draw(); });
+            if (unitSelect) {
+                unitSelect.addEventListener('change', function () { table.draw(); });
+            }
             document.getElementById('ap-reset').addEventListener('click', function () {
                 statusSelect.value = '';
+                if (unitSelect) {
+                    unitSelect.value = '';
+                }
                 table.search('').draw();
             });
 

@@ -3,7 +3,9 @@
 namespace App\Controllers;
 
 use App\Models\ModelIzin;
+use App\Models\ModelAuth;
 use App\Models\ModelJenisPerizinan;
+use App\Models\ModelUnit;
 use App\Services\Kpi\PresensiAttendanceSyncService;
 use App\Services\Presensi\IzinApprovalService;
 use App\Services\Presensi\PresensiException;
@@ -142,9 +144,31 @@ class Izin extends BaseController
 
     public function approval()
     {
+        $jabatan  = (int) session('ID_JABATAN');
+        $akunId   = (int) session('ID_AKUN');
+        $unitSesi = (int) session('ID_UNIT');
+
+        $scope     = (new PresensiScopeService())->unitTerlihat($jabatan, $akunId, $unitSesi);
+        $pengajuan = (new ModelIzin())->getWithAkun();
+
+        // SPV hanya menerima pengajuan wilayah `spv_units`; role lain tidak dibatasi.
+        if (! $scope['lintas']) {
+            $pengajuan = array_values(array_filter(
+                $pengajuan,
+                static fn ($row) => in_array((int) ($row->ID_UNIT ?? 0), $scope['ids'], true)
+            ));
+        }
+
+        $unitModel  = new ModelUnit();
+        $unitFilter = $scope['lintas']
+            ? $unitModel->orderBy('idunit', 'ASC')->findAll()
+            : $unitModel->whereIn('idunit', $scope['ids'])->orderBy('idunit', 'ASC')->findAll();
+
         return view('template', [
-            'body'      => 'admin/approval_izin',
-            'pengajuan' => (new ModelIzin())->getWithAkun(),
+            'body'             => 'admin/approval_izin',
+            'pengajuan'        => $pengajuan,
+            'unit_filter'      => $unitFilter,
+            'show_unit_filter' => $scope['lintas'] || $jabatan === (int) config('Presensi')->jabatanSpv,
         ]);
     }
 
@@ -166,6 +190,21 @@ class Izin extends BaseController
         $izin  = $model->getById($id);
         if (! $izin) {
             return redirect()->to(base_url('approval_presensi'))->with('gagal', 'Pengajuan tidak ditemukan.');
+        }
+
+        // Scope sama dengan daftar pengajuan: SPV hanya unit `spv_units`,
+        // role lintas semua unit. Jangan percaya idizin dari request.
+        $scope = (new PresensiScopeService())->unitTerlihat(
+            (int) session('ID_JABATAN'),
+            (int) session('ID_AKUN'),
+            (int) session('ID_UNIT')
+        );
+        if (! $scope['lintas']) {
+            $pengaju = (new ModelAuth())->getById((int) $izin->akun_idakun);
+            if (! in_array((int) ($pengaju->ID_UNIT ?? 0), $scope['ids'], true)) {
+                return redirect()->to(base_url('approval_presensi'))
+                    ->with('gagal', 'Pengajuan ini di luar unit yang Anda kelola.');
+            }
         }
 
         $oleh = (int) session('ID_AKUN');

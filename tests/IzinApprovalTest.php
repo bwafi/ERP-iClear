@@ -23,7 +23,7 @@ class IzinApprovalTest extends CIUnitTestCase
 
     protected function tearDown(): void
     {
-        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'presensi_roster', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan'] as $tabel) {
+        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'presensi_roster', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan', 'spv_units'] as $tabel) {
             $this->db->query('DROP TABLE IF EXISTS ' . $tabel);
         }
         $this->db->dataCache['table_names'] = [];
@@ -37,7 +37,7 @@ class IzinApprovalTest extends CIUnitTestCase
     {
         $q = function (string $sql): void { $this->db->query($sql); };
 
-        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'presensi_roster', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan'] as $tabel) {
+        foreach (['izin', 'jenis_perizinan', 'akun', 'unit', 'presensi', 'presensi_roster', 'stok_barang', 'service', 'pelanggan', 'menu', 'jabatan', 'spv_units'] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
@@ -74,10 +74,12 @@ class IzinApprovalTest extends CIUnitTestCase
                 utama INT NULL, categories INT NULL, icon TEXT NULL,
                 manualbook TEXT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
+        $q('CREATE TABLE spv_units (id INT AUTO_INCREMENT PRIMARY KEY, spv_id INT NOT NULL, unit_id INT NOT NULL)');
 
-        $q("INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, 'Unit Satu')");
+        $q("INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, 'Unit Satu'), (4, 'Unit Empat')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN)
-            VALUES (10, 1, 36, 'Budi'), (11, 1, 36, 'Siti')");
+            VALUES (10, 1, 36, 'Budi'), (11, 1, 36, 'Siti'), (12, 4, 36, 'Joko')");
+        $q("INSERT INTO spv_units (spv_id, unit_id) VALUES (56, 4)");
         $q("INSERT INTO jenis_perizinan (idjenis_perizinan, jenis_izin)
             VALUES (1, 'IZIN'), (2, 'SAKIT'), (3, 'CUTI')");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN)
@@ -154,6 +156,35 @@ class IzinApprovalTest extends CIUnitTestCase
         $result->assertDontSee('Siti');
     }
 
+    public function testApprovalSpvHanyaMelihatUnitBinaan(): void
+    {
+        $this->ajukan(10, 2, 'Demam');
+        $this->ajukan(12, 2, 'Flu');
+        // Sesi di unit 1, tetapi SPV 56 membina unit 4: yang tampil hanya unit 4.
+        $this->sesi(56, 1, 40);
+
+        $result = $this->get('approval_presensi');
+        $result->assertSee('Joko');
+        $result->assertDontSee('Budi');
+        $result->assertSee('Semua Unit');
+        $result->assertSee('Unit Empat');
+        $result->assertDontSee('Unit Satu');
+    }
+
+    public function testApprovalRoleLintasMelihatSemuaUnitDanBisaFilterUnit(): void
+    {
+        $this->ajukan(10, 2, 'Demam');
+        $this->ajukan(12, 2, 'Flu');
+        $this->sesi(1, 1, 1);
+
+        $result = $this->get('approval_presensi');
+        $result->assertSee('Budi');
+        $result->assertSee('Joko');
+        $result->assertSee('Semua Unit');
+        $result->assertSee('Unit Satu');
+        $result->assertSee('Unit Empat');
+    }
+
     public function testSetujuiMengubahStatusDanBalasan(): void
     {
         $id = $this->ajukan();
@@ -223,6 +254,37 @@ class IzinApprovalTest extends CIUnitTestCase
 
         $row = $this->db->table('izin')->where('idizin', $id)->get()->getRow();
         $this->assertSame(0, (int) $row->status);
+    }
+
+    public function testSpvHanyaBisaMemutuskanPengajuanUnitBinaan(): void
+    {
+        // SPV 56 membina unit 4; sesi di unit 1 tidak dipakai untuk scope.
+        $dalam = $this->ajukan(12, 2, 'Flu');
+        $luar  = $this->ajukan(10, 2, 'Demam');
+        $this->sesi(56, 1, 40);
+
+        $this->post('approval_presensi/putuskan', ['idizin' => $dalam, 'status' => 1]);
+        $this->post('approval_presensi/putuskan', ['idizin' => $luar, 'status' => 1]);
+
+        $this->assertSame(1, (int) $this->db->table('izin')->where('idizin', $dalam)->get()->getRow()->status);
+        $this->assertSame(0, (int) $this->db->table('izin')->where('idizin', $luar)->get()->getRow()->status);
+        $this->assertSame(
+            [12],
+            array_map('intval', array_column(
+                $this->db->table('presensi_roster')->select('akun_idakun')->distinct()->get()->getResultArray(),
+                'akun_idakun'
+            ))
+        );
+    }
+
+    public function testRoleLintasBisaMemutuskanUnitLain(): void
+    {
+        $id = $this->ajukan(12, 2, 'Flu');
+        $this->sesi(1, 1, 1);
+
+        $this->post('approval_presensi/putuskan', ['idizin' => $id, 'status' => 2]);
+
+        $this->assertSame(2, (int) $this->db->table('izin')->where('idizin', $id)->get()->getRow()->status);
     }
 
     public function testHalamanPengajuanMenampilkanRiwayatSendiri(): void
