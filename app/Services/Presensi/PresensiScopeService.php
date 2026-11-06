@@ -44,7 +44,24 @@ class PresensiScopeService
             return true;
         }
 
-        return in_array($jabatan, $config->rosterUnitSendiri, true) &&
-            $unitPemilik === $unitSesi;
+        if (in_array($jabatan, $config->rosterUnitSendiri, true)) {
+            return $unitPemilik === $unitSesi;
+        }
+
+        return $jabatan === $config->jabatanSpv && $this->spvMembina($akunId, $unitPemilik);
+    }
+
+    /** Apakah unit pemilik foto/surat termasuk wilayah SPV ini. */
+    private function spvMembina(int $spvId, int $unit): bool
+    {
+        $db = db_connect();
+        if (! $db->tableExists('spv_units')) {
+            return false;
+        }
+
+        return $db->table('spv_units')
+            ->where('spv_id', $spvId)
+            ->where('unit_id', $unit)
+            ->countAllResults() > 0;
     }
 }

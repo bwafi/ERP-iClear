@@ -25,4 +25,7 @@ class Presensi extends BaseConfig
     public array $rosterSemuaUnit = [0, 1, 34];
     public array $rosterUnitSendiri = [35, 47];
     public int $koreksiLampau = 1;
+
+    /** SPV hanya melihat foto/surat pegawai di unit binaan `spv_units`. */
+    public int $jabatanSpv = 40;
 }

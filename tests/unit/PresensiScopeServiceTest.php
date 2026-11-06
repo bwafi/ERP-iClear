@@ -9,10 +9,34 @@ class PresensiScopeServiceTest extends CIUnitTestCase
 {
     private PresensiScopeService $scope;
 
+    private string $prefixAsli = '';
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->scope = new PresensiScopeService();
+        $this->db = \Config\Database::connect();
+        $this->prefixAsli = (string) $this->db->DBPrefix;
+        $this->db->setPrefix('');
+        $this->db->query('DROP TABLE IF EXISTS spv_units');
+        $this->db->query('CREATE TABLE spv_units (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            spv_id INT NOT NULL,
+            unit_id INT NOT NULL,
+            UNIQUE KEY uniq_spv_unit (spv_id, unit_id))');
+        $this->db->table('spv_units')->insertBatch([
+            ['spv_id' => 56, 'unit_id' => 1],
+            ['spv_id' => 56, 'unit_id' => 4],
+        ]);
+        $this->db->dataCache['table_names'] = [];
+    }
+
+    protected function tearDown(): void
+    {
+        $this->db->query('DROP TABLE IF EXISTS spv_units');
+        $this->db->dataCache['table_names'] = [];
+        $this->db->setPrefix($this->prefixAsli);
+        parent::tearDown();
     }
 
     public function testRoleLintasBolehSemuaUnit(): void
@@ -49,5 +73,19 @@ class PresensiScopeServiceTest extends CIUnitTestCase
         $this->assertTrue($this->scope->bolehLihatFoto(35, 2, 99, 10, 2));
         $this->assertFalse($this->scope->bolehLihatFoto(35, 2, 99, 10, 1));
         $this->assertFalse($this->scope->bolehLihatFoto(36, 2, 99, 10, 2));
+    }
+
+    public function testSpvBolehFotoUnitBinaan(): void
+    {
+        // Bima (56) membina unit 1 dan 4.
+        $this->assertTrue($this->scope->bolehLihatFoto(40, 50, 56, 1, 1));
+        $this->assertTrue($this->scope->bolehLihatFoto(40, 50, 56, 1, 4));
+
+        // Unit di luar spv_units tetap ditolak.
+        $this->assertFalse($this->scope->bolehLihatFoto(40, 50, 56, 1, 7));
+
+        // Foto sendiri tetap boleh, SPV lain tidak.
+        $this->assertTrue($this->scope->bolehLihatFoto(40, 50, 56, 56, 50));
+        $this->assertFalse($this->scope->bolehLihatFoto(40, 50, 57, 1, 1));
     }
 }
