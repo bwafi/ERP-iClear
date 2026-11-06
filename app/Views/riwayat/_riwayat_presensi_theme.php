@@ -568,16 +568,26 @@
         font-size: .73rem;
     }
 
+    /* DataTables inti merender <a class="paginate_button">, bukan markup
+       Bootstrap 5 (<ul class="pagination"><a class="page-link">), karena
+       integrasi dataTables.bootstrap5.min.js tidak dimuat. Gaya di bawah
+       mengikuti kotak 32px halaman /kas_keluar. */
     .rp-page .dataTables_paginate {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
         padding: 0;
     }
 
-    .rp-page .dataTables_paginate .pagination {
+    .rp-page .dataTables_paginate > span {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 4px;
-        margin: 0;
     }
 
-    .rp-page .dataTables_paginate .page-link {
+    .rp-page .dataTables_paginate .paginate_button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -585,28 +595,49 @@
         height: 32px;
         padding: 0 8px;
         color: var(--rp-ink);
-        background: transparent;
+        background: var(--rp-surface);
         border: 1px solid var(--rp-rule);
         border-radius: 8px;
-        font-size: .73rem;
+        font-size: .8125rem;
         font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        text-decoration: none;
+        cursor: pointer;
+        user-select: none;
     }
 
-    .rp-page .dataTables_paginate .page-link:hover {
+    .rp-page .dataTables_paginate .paginate_button.previous,
+    .rp-page .dataTables_paginate .paginate_button.next {
+        font-size: 1rem;
+    }
+
+    .rp-page .dataTables_paginate .paginate_button:hover {
         color: var(--rp-accent-ink);
         background: var(--rp-accent-soft);
         border-color: var(--rp-accent-ink);
     }
 
-    .rp-page .dataTables_paginate .active .page-link {
+    .rp-page .dataTables_paginate .paginate_button.current {
         color: #fff;
         background: var(--rp-accent-solid);
         border-color: var(--rp-accent-solid);
+        cursor: default;
     }
 
-    .rp-page .dataTables_paginate .disabled .page-link {
+    .rp-page .dataTables_paginate .paginate_button.disabled {
+        color: var(--rp-muted);
+        background: transparent;
+        border-color: var(--rp-rule);
         opacity: .45;
         pointer-events: none;
+    }
+
+    .rp-page .dataTables_paginate .ellipsis {
+        padding: 0 2px;
+        color: var(--rp-muted);
+        font-size: .8125rem;
+        line-height: 32px;
     }
 
     .rp-page .dataTables_empty {
