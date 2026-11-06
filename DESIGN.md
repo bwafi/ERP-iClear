@@ -164,6 +164,13 @@
 - **Responsive:** di bawah `992px` grid pola menjadi 4 kolom, di bawah `768px` menjadi 2 kolom dan grid kalender berubah menjadi daftar baris (tanggal kiri, kontrol kanan); tombol pola dan simpan menjadi full width.
 - **Rules:** route, field POST (`pola[]`, `shift[]`, `keterangan[]`), CSRF, dan aturan scope/koreksi tanggal lampau tidak berubah. Satu aksen primary, tanpa gradien atau bayangan kartu; muted text ≥4.5:1 di kedua tema; motion hanya pada state kontrol dan dimatikan under `prefers-reduced-motion`.
 
+### Penilaian Harian (`.pa-*`)
+- **Scope:** `app/Views/penilaian/penilaian_absen.php` + `_penilaian_absen_theme.php`; every selector lives under `.pa-page` / `.pa-modal` and derives from `--pa-*` tokens tied to the app theme. No new palette, font, or dependency.
+- **Layout:** page head on the canvas (breadcrumb, title, period) → filter toolbar with a bottom hairline (month, year, typed employee Select2, reset) → monthly board (identity + score out of 100, four hairline-separated components) → input sheet (date + Seragam note, Kehadiran auto-scoring block, Kebersihan/Kepatuhan selects) → history ledger.
+- **Matrix:** the desktop table has a sticky component column and one column per day inside a horizontal scroll; below `768px` it becomes one card per component with a 7-column wrapped day grid, so the month does not require horizontal scrolling. OFF/IZIN/SAKIT/CUTI cells are neutral; scores 1–2 danger, 3 warning, 4–5 success; Kehadiran tooltips carry shift/jam/telat details.
+- **Select2:** the employee filter inherits `form-select-sm` height, padding, radius, and focus ring; the global `40px` height in `styles.css` is overridden, and the arrow is a chevron matching the native selects.
+- **Rules:** routes, POST field names, CSRF, evaluator authorization, the overwrite-confirmation modal, and auto-scoring JS are unchanged. One accent for primary action/focus; no gradients or colored left borders; muted text ≥4.5:1 in both themes; motion is limited to control state and disabled under `prefers-reduced-motion`.
+
 ### Presensi Mobile (`/absen`, `/pengajuan_izin`) (`.mob`)
 - **Scope:** `app/Views/absen/mobile.php`, `app/Views/izin/pengajuan.php`, dan tema bersama `app/Views/inc/_presensi_mobile_theme.php`; semua selector berada di bawah `.mob` dan memakai token `--mob-*`. Halaman standalone mobile-first (tanpa layout `template`), maksimal `480px`.
 - **Thesis:** satu sheet tenang per keputusan, bukan tumpukan kartu. Kanvas `#eef2f7`, sheet putih bergaris rambut `12px`, tanpa shadow bertumpuk, tanpa gradient, satu aksen primary.
