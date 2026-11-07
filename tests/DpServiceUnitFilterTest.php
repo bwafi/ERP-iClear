@@ -8,10 +8,10 @@ use CodeIgniter\Test\FeatureTestTrait;
 /**
  * Regresi filter unit di /dp_service.
  *
- * Jabatan Customer Service (42) harus bisa memilih unit seperti daftar riwayat
- * service (Riwayat_Service::index/riwayat_service_ajax); role lain tetap
- * terkunci ke ID_UNIT sesi. Cakupan data diuji lewat endpoint DataTables dan
- * status select di halaman.
+ * Jabatan Customer Service (42) dan Manager (34) harus bisa memilih unit seperti
+ * daftar riwayat service (Riwayat_Service::index/riwayat_service_ajax); role lain
+ * tetap terkunci ke ID_UNIT sesi. Cakupan data diuji lewat endpoint DataTables
+ * dan status select di halaman.
  */
 class DpServiceUnitFilterTest extends CIUnitTestCase
 {
@@ -44,12 +44,13 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
         foreach ([
             'unit', 'akun', 'jabatan', 'menu', 'stok_barang', 'service',
             'pelanggan', 'service_dp', 'bank', 'penjualan', 'service_sparepart',
+            'fungsi', 'service_kerusakan',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
         // Template + BaseController (notifikasi stok/service/expired).
-        $q('CREATE TABLE unit (idunit INTEGER PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL)');
+        $q('CREATE TABLE unit (idunit INTEGER PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL, is_operational INT NULL DEFAULT 1)');
         $q('CREATE TABLE akun (ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL, NAMA_AKUN TEXT NULL, ROLES TEXT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
         $q('CREATE TABLE menu (
@@ -66,8 +67,12 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
                 pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL,
                 no_service TEXT NULL, tipe_hp TEXT NULL, created_at TEXT NULL,
                 tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
-                service_by INT NULL)');
-        $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL)');
+                service_by INT NULL, prioritas INT NULL, no_hp TEXT NULL,
+                tanggal_claim_garansi TEXT NULL, status_proses INT NULL,
+                keterangan TEXT NULL, garansi_hari INT NULL)');
+        $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL, deleted INT NULL DEFAULT 0)');
+        $q('CREATE TABLE fungsi (idfungsi INT PRIMARY KEY, nama_fungsi TEXT NULL, deleted INT NULL)');
+        $q('CREATE TABLE service_kerusakan (idservice_kerusakan INT PRIMARY KEY, service_idservice INT NULL)');
 
         // Tabel yang dibaca DataTables DP service.
         $q('CREATE TABLE service_dp (
@@ -88,8 +93,9 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
             (1, 'ICLEAR Probolinggo', 'logo.png'),
             (2, 'ICLEAR Jember', 'logo.png')");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES
-            (35, 'ADMIN / KASIR', '[]'), (42, 'Customer Service', '[]')");
+            (34, 'Manager', '[]'), (35, 'ADMIN / KASIR', '[]'), (42, 'Customer Service', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ROLES) VALUES
+            (340, 1, 34, 'Manager Probolinggo', NULL),
             (350, 1, 35, 'Kasir Probolinggo', NULL),
             (420, 1, 42, 'CS Probolinggo', NULL)");
         $q("INSERT INTO pelanggan (id_pelanggan, nama) VALUES (1, 'Pelanggan A')");
@@ -97,7 +103,9 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
             (idservice, status_service, pelanggan_id_pelanggan, unit_idunit, no_service, tipe_hp, created_at, tanggal_selesai)
             VALUES
             (1, 5, 1, 1, 'SRV-UNIT1', 'iPhone 11', '2026-10-01 09:00:00', '2026-10-01 10:00:00'),
-            (2, 5, 1, 2, 'SRV-UNIT2', 'iPhone 12', '2026-10-02 09:00:00', '2026-10-02 10:00:00')");
+            (2, 5, 1, 2, 'SRV-UNIT2', 'iPhone 12', '2026-10-02 09:00:00', '2026-10-02 10:00:00'),
+            (3, 1, 1, 1, 'AKTIF-UNIT1', 'iPhone 13', '2026-10-03 09:00:00', NULL),
+            (4, 1, 1, 2, 'AKTIF-UNIT2', 'iPhone 14', '2026-10-04 09:00:00', NULL)");
         $q("INSERT INTO service_dp
             (id, service_idservice, kode_dp, tanggal, jumlah, metode, status)
             VALUES
@@ -177,5 +185,75 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
 
         preg_match('/<select[^>]*id="dpUnitFilter"[^>]*>/', $html, $m);
         $this->assertStringContainsString('disabled', $m[0]);
+    }
+
+    public function testManagerBisaMemfilterUnitLainDiDpService(): void
+    {
+        $this->sesi(340, 1, 34);
+
+        $body = $this->ajaxDp(2);
+        $this->assertCount(1, $body['data']);
+        $this->assertSame('DP-UNIT2', $body['data'][0]['kode_dp']);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('dp_service')->getBody();
+        preg_match('/<select[^>]*id="dpUnitFilter"[^>]*>/', $html, $m);
+        $this->assertStringNotContainsString('disabled', $m[0]);
+    }
+
+    public function testManagerBisaMemfilterUnitLainDiProsesService(): void
+    {
+        $this->sesi(340, 1, 34);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('proses_service')->getBody();
+        $this->assertStringContainsString('<select id="unitFilter"', $html);
+        $this->assertStringNotContainsString('class="ps-locked"', $html);
+
+        $body = $this->ajax('proses_service/ajax', 2);
+        $this->assertCount(1, $body['data']);
+        $this->assertSame('AKTIF-UNIT2', $body['data'][0]['no_service']);
+    }
+
+    public function testManagerBisaMemfilterUnitLainDiRiwayatService(): void
+    {
+        $this->sesi(340, 1, 34);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('riwayat_service')->getBody();
+        preg_match('/<select[^>]*id="unitFilter"[^>]*>/', $html, $m);
+        $this->assertStringNotContainsString('disabled', $m[0]);
+
+        $body = $this->ajax('riwayat_service/ajax', 2);
+        $this->assertNotEmpty($body['data']);
+        foreach ($body['data'] as $row) {
+            $this->assertSame(2, (int) $row['unit_idunit'], 'Manager harus melihat unit yang difilter');
+        }
+    }
+
+    public function testKasirTetapTerkunciUnitSesiDiRiwayatService(): void
+    {
+        $this->sesi(350, 1, 35);
+
+        $body = $this->ajax('riwayat_service/ajax', 2);
+
+        $this->assertNotEmpty($body['data']);
+        foreach ($body['data'] as $row) {
+            $this->assertSame(1, (int) $row['unit_idunit'], 'Kasir tidak boleh melihat unit lain');
+        }
+    }
+
+    private function ajax(string $route, int $unitFilter): array
+    {
+        $this->db->setPrefix('');
+        $result = $this->post($route, [
+            'draw'       => 1,
+            'start'      => 0,
+            'length'     => 10,
+            'unitFilter' => $unitFilter,
+            'search'     => ['value' => ''],
+        ]);
+
+        return json_decode((string) $result->response()->getBody(), true);
     }
 }
