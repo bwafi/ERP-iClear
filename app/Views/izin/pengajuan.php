@@ -20,7 +20,8 @@ $total = count($pengajuan);
 <main class="mob">
     <header class="head">
         <div class="head-main">
-            <h1>Pengajuan izin</h1>
+            <p class="kicker">Pengajuan</p>
+            <h1>Ajukan izin</h1>
             <p class="meta"><?= esc($nama) ?><span class="sep" aria-hidden="true">·</span><?= esc($unit) ?></p>
         </div>
     </header>

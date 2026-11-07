@@ -32,6 +32,7 @@ $rincian = array_filter([
 <main class="mob">
     <header class="head">
         <div class="head-main">
+            <p class="kicker">Akun</p>
             <h1>Profil</h1>
             <p class="meta">Identitas akun pegawai</p>
         </div>

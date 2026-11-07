@@ -12,7 +12,7 @@ $tabs   = [
         'icon'  => '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.2 2"/>',
     ],
     'izin' => [
-        'label' => 'Pengajuan Izin',
+        'label' => 'Izin',
         'href'  => 'pengajuan_izin',
         'icon'  => '<rect x="4" y="5.5" width="16" height="15" rx="2.5"/><path d="M4 10h16M8 3.5v4M16 3.5v4"/>',
     ],
