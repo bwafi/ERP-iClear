@@ -1290,7 +1290,6 @@
     .mob-nav__item {
         gap: 3px;
         padding: 8px 4px 7px;
-        border-radius: 14px;
         font-size: .6875rem;
         font-weight: 700;
         letter-spacing: .01em;
