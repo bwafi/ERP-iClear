@@ -1562,11 +1562,17 @@ if ('serviceWorker' in navigator) {
             }
         });
 
-        // Safari iOS tidak punya event install: tampilkan instruksi manual saja.
-        var ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+        // Semua browser iOS memakai WebKit tanpa event install: instruksi manual, label sesuai browser.
+        var ua = navigator.userAgent;
+        var ios = /iPad|iPhone|iPod/.test(ua)
             || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (ios) {
-            salinan.textContent = 'Ketuk tombol Bagikan di Safari, lalu pilih "Tambahkan ke Layar Utama".';
+            var peramban = /CriOS/.test(ua) ? 'Chrome'
+                : /FxiOS/.test(ua) ? 'Firefox'
+                : /EdgiOS/.test(ua) ? 'Edge'
+                : /OPiOS/.test(ua) ? 'Opera'
+                : 'Safari';
+            salinan.textContent = 'Ketuk tombol Bagikan di ' + peramban + ', lalu pilih "Tambahkan ke Layar Utama".';
             tombol.hidden = true;
             nanti.textContent = 'Mengerti';
             nanti.classList.remove('is-outline');

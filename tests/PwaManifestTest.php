@@ -72,6 +72,8 @@ final class PwaManifestTest extends CIUnitTestCase
         $this->assertStringContainsString('(display-mode: standalone)', $html);
         $this->assertStringContainsString("addEventListener('appinstalled'", $html);
         $this->assertStringContainsString('pwa-install-seen', $html);
+        $this->assertStringContainsString('CriOS', $html);
+        $this->assertStringContainsString('Tambahkan ke Layar Utama', $html);
     }
 
     public function testHalamanMobileMemasangDialogInstall(): void
