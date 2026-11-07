@@ -297,7 +297,7 @@
             <div class="card-body p-3">
                 <span class="text-muted fs-2 d-block mb-1">Value</span>
                 <h5 class="fw-bold text-dark mb-0">Rp <?= number_format($value ?? 0, 0, ',', '.') ?></h5>
-                <small class="text-muted fs-2">Uang masuk kotor (tanpa HPP)</small>
+                <small class="text-muted fs-2">Bruto tanpa HPP (net klaim &amp; refund)</small>
             </div>
         </div>
     </div>
@@ -368,13 +368,21 @@
 <!-- Detailed Table Section -->
 <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
             <div>
                 <h5 class="fw-bold mb-1">Detail Omset Harian</h5>
                 <small class="text-muted">Rincian pendapatan per tanggal bulan <?= esc($periodeLabel) ?></small>
             </div>
-            <div class="p-2 bg-light rounded-2 text-primary">
-                <iconify-icon icon="solar:bill-list-bold-duotone" width="24" height="24"></iconify-icon>
+            <div class="d-flex align-items-center gap-3">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Pilih data detail harian">
+                    <input type="radio" class="btn-check" name="detailMode" id="detailModeOmset" value="omset" checked onchange="pilihDetailMode('omset')">
+                    <label class="btn btn-outline-primary" for="detailModeOmset">Omset</label>
+                    <input type="radio" class="btn-check" name="detailMode" id="detailModeValue" value="value" onchange="pilihDetailMode('value')">
+                    <label class="btn btn-outline-primary" for="detailModeValue">Value</label>
+                </div>
+                <div class="p-2 bg-light rounded-2 text-primary">
+                    <iconify-icon icon="solar:bill-list-bold-duotone" width="24" height="24"></iconify-icon>
+                </div>
             </div>
         </div>
 
@@ -384,7 +392,7 @@
                     <tr>
                         <th width="6%" class="text-center">No</th>
                         <th>Tanggal</th>
-                        <th class="text-end">Omset</th>
+                        <th class="text-end" id="thDetailNominal">Omset</th>
                         <th width="120px" class="text-center">Arus Kas</th>
                     </tr>
                 </thead>
@@ -428,7 +436,7 @@
         </div>
         <div class="alert alert-light border mt-3 mb-0 d-flex align-items-center gap-2 py-2 px-3 text-muted fs-2">
             <iconify-icon icon="solar:info-circle-bold-duotone" class="fs-5 text-primary flex-shrink-0"></iconify-icon>
-            <span>Kolom <strong>Omset</strong> menghitung nilai penjualan/penyerahan barang/jasa dikurangi HPP Klaim service pada tanggal klaim. Tombol <strong>Arus Kas</strong> menampilkan mutasi fisik kas/bank masuk dan keluar pada tanggal tersebut, plus HPP Klaim non-kas.</span>
+            <span>Kolom <strong>Omset</strong> menghitung nilai penjualan/penyerahan barang/jasa dikurangi HPP Klaim service pada tanggal klaim. Pilih <strong>Value</strong> untuk melihat penjualan bruto (<em>sub_total</em>, tanpa HPP) yang tetap dikurangi HPP Klaim dan refund garansi pada tanggalnya; data Value baru dimuat saat pertama kali dipilih. Tombol <strong>Arus Kas</strong> menampilkan mutasi fisik kas/bank masuk dan keluar pada tanggal tersebut, plus HPP Klaim non-kas.</span>
         </div>
     </div>
 </div>
@@ -585,6 +593,9 @@
 <script>
     const ARUS_KAS_URL = '<?= base_url('omset_bulanan/arus_kas') ?>';
     const ARUS_KAS_UNIT = <?= (int) $selected_unit ?>;
+    const VALUE_HARIAN_URL = '<?= base_url('omset_bulanan/value_harian') ?>';
+    const OMSET_BULAN = <?= (int) $bulan ?>;
+    const OMSET_TAHUN = <?= (int) $tahun ?>;
 
     const formatRupiah = (value) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.abs(value || 0));
 
@@ -614,6 +625,14 @@
     // Default: bulan sebelumnya (entri pertama = 1 bulan sebelum periode terpilih).
     let selectedCompareKeys = compareMonths.length ? [compareMonths[0].value] : [];
     let currentChartData = rawData;
+
+    // Detail Omset Harian: omset sudah ada di payload awal; value per hari
+    // baru dimuat saat mode Value dipilih agar page load tetap ringan.
+    let detailMode = 'omset';
+    let valueHarian = null;
+    let valueHarianLoading = false;
+
+    const dataDetailAktif = () => (detailMode === 'value' && valueHarian) ? valueHarian : rawData;
 
     const dayOfMonth = (tanggal) => parseInt(String(tanggal).slice(8, 10), 10);
 
@@ -780,16 +799,74 @@
     function filterData() {
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
-        let filtered = rawData;
+        const dalamRentang = (item) => !(startDate && endDate) || (item.tanggal >= startDate && item.tanggal <= endDate);
 
-        if (startDate && endDate) {
-            filtered = rawData.filter(item => {
-                return item.tanggal >= startDate && item.tanggal <= endDate;
-            });
+        // Grafik tetap omset; hanya tabel yang mengikuti mode Omset/Value.
+        renderChart(rawData.filter(dalamRentang));
+        updateTable(dataDetailAktif().filter(dalamRentang));
+    }
+
+    function pilihDetailMode(mode) {
+        detailMode = mode;
+
+        const th = document.getElementById('thDetailNominal');
+        if (th) th.textContent = mode === 'value' ? 'Value' : 'Omset';
+
+        if (mode === 'value' && !valueHarian) {
+            muatValueHarian();
+            return;
         }
 
-        renderChart(filtered);
-        updateTable(filtered);
+        filterData();
+    }
+
+    function muatValueHarian() {
+        if (valueHarianLoading) return;
+        valueHarianLoading = true;
+
+        const tbody = document.querySelector('#tableOmset tbody');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>Memuat data value...</td></tr>';
+        document.getElementById('totalOmset').textContent = '...';
+
+        const url = VALUE_HARIAN_URL
+            + '?unit=' + encodeURIComponent(ARUS_KAS_UNIT)
+            + '&bulan=' + encodeURIComponent(OMSET_BULAN)
+            + '&tahun=' + encodeURIComponent(OMSET_TAHUN);
+
+        fetch(url, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then((response) => response.json())
+            .then((payload) => {
+                if (!payload || payload.success !== true || !Array.isArray(payload.data)) {
+                    throw new Error((payload && payload.message) ? payload.message : 'Gagal memuat data value');
+                }
+
+                const perTanggal = {};
+                payload.data.forEach((row) => {
+                    perTanggal[row.tanggal] = row.total;
+                });
+
+                // Ikuti daftar tanggal tabel omset (semua hari bulan ini) agar
+                // baris tidak bergeser; hari tanpa penjualan bernilai 0.
+                valueHarian = rawData.map((item) => ({
+                    tanggal: item.tanggal,
+                    label: item.label,
+                    total: Number(perTanggal[item.tanggal]) || 0
+                }));
+
+                valueHarianLoading = false;
+                filterData();
+            })
+            .catch((error) => {
+                valueHarianLoading = false;
+                if (detailMode === 'value') {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">' + escHtml(error.message || 'Gagal memuat data value') + '</td></tr>';
+                    document.getElementById('totalOmset').textContent = '-';
+                }
+            });
     }
 
     function updateTable(data) {

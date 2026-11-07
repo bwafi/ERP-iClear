@@ -348,4 +348,111 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('Rp 680.000', $html);
         $this->assertStringContainsString('total: 680000', $html);
     }
+
+    // ── Detail Omset Harian mode Value (endpoint lazy) ─────────────────────
+
+    /**
+     * @return array{status:int, body:array|null}
+     */
+    private function responValue(string $query): array
+    {
+        $this->db->setPrefix('');
+        $result = $this->get('omset_bulanan/value_harian' . $query);
+
+        return [
+            'status' => $result->response()->getStatusCode(),
+            'body'   => json_decode((string) $result->response()->getBody(), true),
+        ];
+    }
+
+    public function testValueHarianMenjumlahkanSubTotalPerTanggalDanUnit(): void
+    {
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan) VALUES
+            (9201, 'INV-V1', '2026-10-05 09:00:00', 1, NULL),
+            (9202, 'INV-V2', '2026-10-05 15:00:00', 1, NULL),
+            (9203, 'INV-V3', '2026-10-06 10:00:00', 1, NULL),
+            (9204, 'INV-V4', '2026-10-05 11:00:00', 2, NULL)");
+        $this->db->query("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES
+            (9201, NULL, 100000, 40000),
+            (9202, NULL, 50000, 10000),
+            (9201, NULL, 25000, 5000),
+            (9203, NULL, 40000, 0),
+            (9204, NULL, 999999, 0)");
+
+        $this->sesi(44, 50, 0);
+        ['status' => $status, 'body' => $body] = $this->responValue('?unit=1&bulan=10&tahun=2026');
+
+        $this->assertSame(200, $status);
+        $this->assertTrue($body['success']);
+        $this->assertCount(2, $body['data'], 'Hanya tanggal unit 1 yang boleh muncul');
+        $this->assertSame('2026-10-05', $body['data'][0]['tanggal']);
+        $this->assertSame(175000.0, (float) $body['data'][0]['total'], 'sub_total dijumlah bruto tanpa HPP');
+        $this->assertSame('2026-10-06', $body['data'][1]['tanggal']);
+        $this->assertSame(40000.0, (float) $body['data'][1]['total']);
+    }
+
+    public function testValueHarianDikurangiHppKlaimDanRefund(): void
+    {
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan) VALUES
+            (9401, 'INV-CR', '2026-11-10 09:00:00', 1, NULL)");
+        $this->db->query("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES
+            (9401, NULL, 1000000, 200000)");
+        $this->db->query("INSERT INTO service
+            (idservice, status_service, unit_idunit, tanggal_selesai, created_at, no_service, service_by,
+             refund_garansi_tanggal, refund_garansi_jumlah, refund_garansi_omset)
+            VALUES (9401, 4, 1, '2026-11-10 10:00:00', '2026-11-10 09:00:00', 'SRV-CR', 43,
+                    '2026-11-12', 100000, 30000)");
+        $this->db->query("INSERT INTO service_sparepart
+            (service_idservice, barang_idbarang, unit_idunit, hpp_omset_garansi,
+             jumlah_tambahan_garansi, status_retur, tanggal_hpp_klaim)
+            VALUES (9401, NULL, 1, 50000, 1, 'tidak_bisa', '2026-11-10')");
+
+        $this->sesi(44, 50, 0);
+
+        // Harian: klaim 50.000 pada 10 Nov, refund 30.000 (porsi omset) pada
+        // 12 Nov. Tanggal tanpa penjualan tetap muncul sebagai nilai negatif.
+        ['status' => $status, 'body' => $body] = $this->responValue('?unit=1&bulan=11&tahun=2026');
+
+        $this->assertSame(200, $status);
+        $this->assertCount(2, $body['data']);
+        $this->assertSame('2026-11-10', $body['data'][0]['tanggal']);
+        $this->assertSame(950000.0, (float) $body['data'][0]['total']);
+        $this->assertSame('2026-11-12', $body['data'][1]['tanggal']);
+        $this->assertSame(-30000.0, (float) $body['data'][1]['total']);
+
+        // Kartu Value bulanan memakai aturan yang sama: 1.000.000 - 50.000 - 30.000.
+        $html = $this->halaman('?unit=1&bulan=11&tahun=2026');
+        $this->assertStringContainsString('Rp 920.000', $html);
+    }
+
+    public function testValueHarianTetapTerkunciUnitSesiUntukRoleTakBerwenang(): void
+    {
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO penjualan (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan) VALUES
+            (9301, 'INV-S1', '2026-10-07 09:00:00', 1, NULL),
+            (9302, 'INV-S2', '2026-10-07 10:00:00', 2, NULL)");
+        $this->db->query("INSERT INTO detail_penjualan (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan) VALUES
+            (9301, NULL, 500000, 0),
+            (9302, NULL, 70000, 0)");
+
+        // Kasir (35) terkunci ke ID_UNIT sesi (2) walau request meminta unit 1.
+        $this->sesi(43, 2, 35);
+        ['status' => $status, 'body' => $body] = $this->responValue('?unit=1&bulan=10&tahun=2026');
+
+        $this->assertSame(200, $status);
+        $this->assertTrue($body['success']);
+        $this->assertCount(1, $body['data']);
+        $this->assertSame(70000.0, (float) $body['data'][0]['total']);
+    }
+
+    public function testValueHarianMenolakParameterBulanTahunTidakValid(): void
+    {
+        $this->sesi(44, 50, 0);
+        ['status' => $status, 'body' => $body] = $this->responValue('?unit=1&bulan=13&tahun=2026');
+
+        $this->assertSame(400, $status);
+        $this->assertFalse($body['success']);
+    }
 }

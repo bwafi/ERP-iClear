@@ -668,18 +668,10 @@ class TutupKasir extends BaseController
             ->getRow()
             ->total ?? 0;
 
-        $value = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total) AS total')
-            ->join(
-                'penjualan',
-                'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan'
-            )
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow()
-            ->total ?? 0;
+        // Value = penjualan bruto tanpa HPP, tetapi tetap dikurangi HPP Klaim
+        // dan refund garansi seperti omset. Secara aljabar sama dengan
+        // omset + HPP penjualan, jadi tidak perlu query agregasi ketiga.
+        $value = $omset_bulan + $hpp;
 
         // ==========================
         // DATA GRAFIK
@@ -1620,6 +1612,74 @@ class TutupKasir extends BaseController
         // dengan data di `payload.data`. Versi yang mengembalikan baris mentah
         // tanpa wrapper membuat pitanya selalu jatuh ke "Gagal memuat data
         // arus kas".
+        return $this->response->setJSON([
+            'success' => true,
+            'data'    => $data,
+        ]);
+    }
+
+    /**
+     * Total penjualan bruto (`sub_total`) per tanggal untuk mode "Value" di
+     * Detail Omset Harian, dikurangi HPP Klaim dan refund garansi pada tanggal
+     * masing-masing (tanpa mengurangi HPP penjualan). Sengaja tidak ikut
+     * payload awal halaman agar /omset_bulanan tidak menambah query agregasi
+     * harian saat dibuka.
+     */
+    public function valueHarian()
+    {
+        // `?unit=` divalidasi lewat scope yang sama dengan halaman induk.
+        $scope = $this->resolveUnitScope([43]);
+        $unit  = (int) $scope['unit'];
+
+        $bulan = (int) $this->request->getGet('bulan');
+        $tahun = (int) $this->request->getGet('tahun');
+
+        if ($bulan < 1 || $bulan > 12 || $tahun < 1) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'success' => false,
+                'message' => 'Parameter bulan/tahun tidak valid',
+            ]);
+        }
+
+        $rows = $this->db->table('detail_penjualan')
+            ->select('DATE(penjualan.tanggal) AS tanggal, SUM(detail_penjualan.sub_total) AS total')
+            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
+            ->where('penjualan.unit_idunit', $unit)
+            ->groupBy('DATE(penjualan.tanggal)')
+            ->orderBy('tanggal', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $perTanggal = [];
+        foreach ($rows as $row) {
+            $perTanggal[(string) $row['tanggal']] = (float) $row['total'];
+        }
+
+        // Sama seperti omset harian: klaim/refund mengurangi tanggalnya sendiri,
+        // termasuk tanggal yang tidak punya penjualan.
+        $awalBulan = sprintf('%04d-%02d-01', $tahun, $bulan);
+        $akhirBulan = date('Y-m-t', strtotime($awalBulan));
+
+        foreach ($this->hppKlaimHarian($awalBulan, $akhirBulan, $unit) as $tanggal => $total) {
+            $perTanggal[$tanggal] = ($perTanggal[$tanggal] ?? 0) - $total;
+        }
+
+        foreach ($this->refundHarian($awalBulan, $akhirBulan, $unit) as $tanggal => $total) {
+            $perTanggal[$tanggal] = ($perTanggal[$tanggal] ?? 0) - $total;
+        }
+
+        ksort($perTanggal);
+
+        $data = [];
+        foreach ($perTanggal as $tanggal => $total) {
+            $data[] = [
+                'tanggal' => (string) $tanggal,
+                'total'   => (float) $total,
+            ];
+        }
+
         return $this->response->setJSON([
             'success' => true,
             'data'    => $data,
