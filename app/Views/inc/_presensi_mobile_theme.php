@@ -1,8 +1,8 @@
 <?php
 /**
- * Tema halaman mobile presensi: /absen, /pengajuan_izin, dan /profil.
+ * Tema halaman mobile presensi: /absen, /jadwal, /pengajuan_izin, dan /profil.
  *
- * Satu bahasa visual untuk dua halaman: kanvas tenang, sheet rata dengan
+ * Satu bahasa visual untuk empat halaman: kanvas tenang, sheet rata dengan
  * garis rambut, satu aksen (primary #0085db), angka tabular, tanpa gradient
  * dan tanpa shadow bertumpuk. Tema mengikuti `localStorage['app-theme']`
  * yang dipakai shell ERP, dengan fallback preferensi sistem.
@@ -716,7 +716,7 @@
         z-index: 40;
         box-sizing: border-box;
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 4px;
         width: calc(100% - 24px);
         max-width: 456px;

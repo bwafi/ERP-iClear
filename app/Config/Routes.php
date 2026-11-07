@@ -366,6 +366,9 @@ $routes->get('jadwal_masuk', 'JadwalMasuk::index', ['filter' => 'auth']);
 $routes->post('jadwal_masuk/terapkan', 'JadwalMasuk::terapkan', ['filter' => 'auth']);
 $routes->post('jadwal_masuk/simpan', 'JadwalMasuk::simpan', ['filter' => 'auth']);
 
+//jadwal mobile (read-only)
+$routes->get('jadwal', 'JadwalMobile::index', ['filter' => 'auth']);
+
 //absen mobile
 $routes->get('absen', 'AbsenMobile::index', ['filter' => 'auth']);
 $routes->post('absen/masuk', 'AbsenMobile::masuk', ['filter' => 'auth']);

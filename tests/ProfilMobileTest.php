@@ -49,15 +49,16 @@ final class ProfilMobileTest extends CIUnitTestCase
         $this->assertStringContainsString('id="pwa-install"', (string) $result->response()->getBody());
     }
 
-    public function testNavbarTigaTabDanProfilAktif(): void
+    public function testNavbarEmpatTabDanProfilAktif(): void
     {
         $this->sesi();
 
         $body = (string) $this->get('profil')->getBody();
 
-        $this->assertSame(3, substr_count($body, 'class="mob-nav__item'));
+        $this->assertSame(4, substr_count($body, 'class="mob-nav__item'));
         $this->assertSame(1, substr_count($body, 'aria-current="page"'));
         $this->assertStringContainsString('href="' . base_url('absen') . '"', $body);
+        $this->assertStringContainsString('href="' . base_url('jadwal') . '"', $body);
         $this->assertStringContainsString('href="' . base_url('pengajuan_izin') . '"', $body);
         $this->assertStringContainsString('href="' . base_url('profil') . '"', $body);
     }
@@ -66,7 +67,7 @@ final class ProfilMobileTest extends CIUnitTestCase
     {
         helper('url');
 
-        foreach (['absen', 'izin', 'profil'] as $aktif) {
+        foreach (['absen', 'jadwal', 'izin', 'profil'] as $aktif) {
             $html = view('inc/_mobile_nav', ['active' => $aktif]);
 
             $this->assertSame(1, substr_count($html, 'aria-current="page"'));
