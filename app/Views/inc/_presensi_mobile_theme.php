@@ -1483,7 +1483,7 @@ if ('serviceWorker' in navigator) {
 <script>
 (function () {
     var KEY = 'pwa-install-seen';
-    var ULANG_MS = 7 * 24 * 60 * 60 * 1000;
+    var ULANG_MS = 24 * 60 * 60 * 1000;
     var sheet = null;
     var event = null;
 
@@ -1512,7 +1512,6 @@ if ('serviceWorker' in navigator) {
         if (!sheet || sheet.open || sudahTerpasang() || !bolehTampil()) {
             return;
         }
-        tandai();
         sheet.showModal();
     }
 
@@ -1552,6 +1551,7 @@ if ('serviceWorker' in navigator) {
         });
 
         nanti.addEventListener('click', function () {
+            tandai();
             sheet.close();
         });
 
