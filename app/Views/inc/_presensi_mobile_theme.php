@@ -1437,6 +1437,10 @@ if ('serviceWorker' in navigator) {
         try { localStorage.setItem(KEY, String(Date.now())); } catch (e) {}
     }
 
+    function lupakan() {
+        try { localStorage.removeItem(KEY); } catch (e) {}
+    }
+
     function bolehTampil() {
         try {
             var at = Number(localStorage.getItem(KEY) || 0);
@@ -1480,7 +1484,13 @@ if ('serviceWorker' in navigator) {
             event = null;
             sheet.close();
             prompt.prompt();
-            prompt.userChoice.catch(function () {}).then(tandai);
+            prompt.userChoice.catch(function () {}).then(function (choice) {
+                if (choice && choice.outcome === 'accepted') {
+                    lupakan();
+                } else {
+                    tandai();
+                }
+            });
         });
 
         nanti.addEventListener('click', function () {
@@ -1488,7 +1498,7 @@ if ('serviceWorker' in navigator) {
         });
 
         window.addEventListener('appinstalled', function () {
-            tandai();
+            lupakan();
             if (sheet.open) {
                 sheet.close();
             }
