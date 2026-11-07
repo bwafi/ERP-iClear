@@ -734,6 +734,7 @@
     }
 
     .mob-nav__item {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -747,7 +748,21 @@
         text-align: center;
         text-decoration: none;
         -webkit-tap-highlight-color: transparent;
-        transition: background-color .18s ease, color .18s ease;
+        transition: color .18s ease, transform .12s ease;
+    }
+
+    .mob-nav__pill {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        border-radius: inherit;
+        background: transparent;
+    }
+
+    .mob-nav__item > svg,
+    .mob-nav__item > span:not(.mob-nav__pill) {
+        position: relative;
+        z-index: 1;
     }
 
     .mob-nav__item svg {
@@ -762,12 +777,10 @@
 
     .mob-nav__item.is-active {
         color: var(--mob-accent-ink);
-        background: linear-gradient(180deg, rgba(0, 116, 186, .18), rgba(0, 116, 186, .09));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
     }
 
     .mob-nav__item:active {
-        transform: translateY(1px);
+        transform: scale(.94);
     }
 
     html[data-bs-theme="dark"] .mob-nav {
@@ -775,11 +788,6 @@
             inset 0 1px 0 var(--mob-glass-edge),
             inset 0 -1px 0 rgba(0, 0, 0, .28),
             0 12px 32px -14px rgba(0, 0, 0, .7);
-    }
-
-    html[data-bs-theme="dark"] .mob-nav__item.is-active {
-        background: linear-gradient(180deg, rgba(124, 196, 240, .16), rgba(124, 196, 240, .08));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
     }
 
     /* Tanpa backdrop-filter kaca jadi putih susu, tetap terbaca. */
@@ -1300,14 +1308,9 @@
         height: 20px;
     }
 
-    .mob-nav__item.is-active {
+    .mob-nav__item.is-active .mob-nav__pill {
         background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-        box-shadow: none;
-    }
-
-    html[data-bs-theme="dark"] .mob-nav__item.is-active {
-        background: var(--mob-accent-wash);
+        view-transition-name: mob-nav-pill;
     }
 
     /* Profil */
@@ -1412,6 +1415,61 @@
 
         html[data-bs-theme="dark"] .mob-nav {
             background: rgba(10, 19, 32, .97);
+        }
+    }
+
+    /* ===== Transisi antarhalaman ===== */
+    @view-transition {
+        navigation: auto;
+    }
+
+    main.mob {
+        view-transition-name: mob-page;
+    }
+
+    .mob-nav {
+        view-transition-name: mob-nav;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root),
+    ::view-transition-old(mob-nav),
+    ::view-transition-new(mob-nav) {
+        animation: none;
+    }
+
+    ::view-transition-old(mob-page) {
+        animation: mob-page-out .16s ease-out both;
+    }
+
+    ::view-transition-new(mob-page) {
+        animation: mob-page-in .26s cubic-bezier(.22, 1, .36, 1) both;
+    }
+
+    ::view-transition-group(mob-nav-pill) {
+        animation-duration: .3s;
+        animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+    }
+
+    @keyframes mob-page-out {
+        to {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+    }
+
+    @keyframes mob-page-in {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        ::view-transition-group(*),
+        ::view-transition-old(*),
+        ::view-transition-new(*) {
+            animation: none !important;
         }
     }
 </style>

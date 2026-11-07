@@ -33,6 +33,7 @@ $tabs   = [
         <a class="mob-nav__item<?= $active === $key ? ' is-active' : '' ?>"
             href="<?= base_url($tab['href']) ?>"
             <?= $active === $key ? 'aria-current="page"' : '' ?>>
+            <span class="mob-nav__pill" aria-hidden="true"></span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><?= $tab['icon'] ?></svg>
             <span><?= esc($tab['label']) ?></span>
         </a>
