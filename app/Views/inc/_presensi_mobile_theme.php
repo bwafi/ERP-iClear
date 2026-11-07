@@ -930,6 +930,16 @@
         font-size: .8125rem;
     }
 
+    .pwa-install__steps {
+        display: grid;
+        gap: 4px;
+        margin: 8px 0 0;
+        padding-left: 1.15em;
+        color: var(--mob-muted);
+        font-size: .8125rem;
+        line-height: 1.45;
+    }
+
     .pwa-install__actions {
         display: grid;
         gap: 8px;
@@ -1572,7 +1582,18 @@ if ('serviceWorker' in navigator) {
                 : /EdgiOS/.test(ua) ? 'Edge'
                 : /OPiOS/.test(ua) ? 'Opera'
                 : 'Safari';
-            salinan.textContent = 'Ketuk tombol Bagikan di ' + peramban + ', lalu pilih "Tambahkan ke Layar Utama".';
+            var langkah = document.createElement('ol');
+            langkah.className = 'pwa-install__steps';
+            [
+                'Ketuk tombol Bagikan di ' + peramban + '.',
+                'Pilih "Tambahkan ke Layar Utama".',
+                'Buka Absen iClear dari Layar Utama.'
+            ].forEach(function (teks) {
+                var li = document.createElement('li');
+                li.textContent = teks;
+                langkah.appendChild(li);
+            });
+            salinan.replaceWith(langkah);
             tombol.hidden = true;
             nanti.textContent = 'Mengerti';
             nanti.classList.remove('is-outline');

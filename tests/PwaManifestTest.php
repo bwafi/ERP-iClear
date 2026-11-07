@@ -73,6 +73,7 @@ final class PwaManifestTest extends CIUnitTestCase
         $this->assertStringContainsString("addEventListener('appinstalled'", $html);
         $this->assertStringContainsString('pwa-install-seen', $html);
         $this->assertStringContainsString('CriOS', $html);
+        $this->assertStringContainsString('pwa-install__steps', $html);
         $this->assertStringContainsString('Tambahkan ke Layar Utama', $html);
     }
 
