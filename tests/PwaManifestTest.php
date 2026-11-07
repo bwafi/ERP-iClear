@@ -77,6 +77,26 @@ final class PwaManifestTest extends CIUnitTestCase
         $this->assertStringContainsString('Tambahkan ke Layar Utama', $html);
     }
 
+    public function testIkonLayarUtamaIosTersediaDiRoot(): void
+    {
+        helper('url');
+        $html = view('inc/_presensi_mobile_theme');
+        $root = FCPATH . 'apple-touch-icon.png';
+
+        $this->assertStringContainsString('sizes="180x180"', $html);
+        $this->assertStringContainsString('apple-touch-icon.png?v=2', $html);
+        $this->assertFileExists($root);
+
+        $ukuran = getimagesize($root);
+        $this->assertSame(180, $ukuran[0]);
+        $this->assertSame(180, $ukuran[1]);
+        $this->assertSame(
+            md5_file(FCPATH . 'template/assets/pwa/apple-touch-icon.png'),
+            md5_file($root),
+            'apple-touch-icon.png di root harus sama dengan versi di template/assets/pwa',
+        );
+    }
+
     public function testHalamanMobileMemasangDialogInstall(): void
     {
         foreach (['absen/mobile.php', 'izin/pengajuan.php', 'profil/mobile.php'] as $view) {
