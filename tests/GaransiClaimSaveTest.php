@@ -31,6 +31,7 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
         'db_jabatan',
         'db_barang',
         'db_hpp_barang',
+        'db_hpp_unit',
         'db_stok_awal',
         'db_proses_service',
         'db_penjualan',
@@ -186,9 +187,18 @@ final class GaransiClaimSaveTest extends CIUnitTestCase
             kode_barang VARCHAR(64) NULL,
             nama_barang VARCHAR(150) NULL,
             harga INT NULL DEFAULT 0,
+            harga_beli INT NULL DEFAULT 0,
             idkategori INT NULL,
             deleted VARCHAR(5) NULL DEFAULT "0",
             PRIMARY KEY (idbarang)
+        ) ENGINE=InnoDB');
+
+        $q('CREATE TABLE db_hpp_unit (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            barang_idbarang INT NULL,
+            unit_idunit INT NULL,
+            hpp INT NULL DEFAULT 0,
+            PRIMARY KEY (id)
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_hpp_barang (

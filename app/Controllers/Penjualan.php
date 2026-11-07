@@ -21,6 +21,7 @@ use DateTime;
 use Mpdf\Mpdf;
 use App\Models\ModelAuth;
 use App\Models\ModelHppBarang;
+use App\Models\ModelHppUnit;
 use App\Models\ModelStokBarang;
 use App\Models\ModelJurnal;
 use App\Models\ModelPenilaianKPI;
@@ -45,6 +46,7 @@ class Penjualan extends BaseController
     protected $PelangganModel;
     protected $AuthModel;
     protected $HppBarangModel;
+    protected $HppUnitModel;
     protected $StokBarangModel;
     protected $JurnalModel;
     protected $ModelPenilaianKPI;
@@ -73,6 +75,7 @@ class Penjualan extends BaseController
         $this->PelangganModel = new ModelPelanggan();
         $this->AuthModel = new ModelAuth();
         $this->HppBarangModel = new ModelHppBarang();
+        $this->HppUnitModel = new ModelHppUnit();
         $this->StokBarangModel = new ModelStokBarang();
         $this->JurnalModel = new ModelJurnal();
         $this->PenilaianKPIModel = new ModelPenilaianKPI();
@@ -319,7 +322,7 @@ class Penjualan extends BaseController
 
                     $datahpp = $this->HppBarangModel->getById($idBarangBundle);
                     $satuan_jual = $datahpp->satuan_terkecil ?? null;
-                    $hpp_penjualan = $datahpp->hpp ?? 0;
+                    $hpp_penjualan = $this->HppUnitModel->resolve((int) $idBarangBundle, (int) $unit_idunit);
 
                     $data2 = array(
                         'jumlah' => $jumlahBundle,
@@ -350,7 +353,7 @@ class Penjualan extends BaseController
                 // barang biasa
                 $datahpp = $this->HppBarangModel->getById($produkid);
                 $satuan_jual = $datahpp->satuan_terkecil ?? null;
-                $hpp_penjualan = $datahpp->hpp ?? 0;
+                $hpp_penjualan = $this->HppUnitModel->resolve((int) $produkid, (int) $unit_idunit);
 
                 $data2 = array(
                     'jumlah' => $produkjumlah,

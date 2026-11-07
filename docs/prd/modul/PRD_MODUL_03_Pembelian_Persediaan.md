@@ -50,6 +50,7 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
 9. Finalisasi stok opname tidak lagi mengoreksi `stok_akhir`; migration 2026-10-07 menghapus komponen opname dari view, dan view final menulis `0 AS stok_opname` untuk cabang opname. — `2026-10-07-000001_RemoveStokOpnameSelisihFromStokAkhir.php`; `2026-10-23-000500...:80` (PI-02)
 10. `StokOpnameService::batalDraft()` menulis aksi `batal_draft`, tetapi ENUM audit hanya `mulai|simpan|finalisasi|reopen`. — `StokOpnameService.php:710`; `2026-09-28-000001...:127` (PI-03)
 11. Retur supplier/customer tidak memakai transaksi, mengambil unit per item dari POST, dan route-nya tanpa CSRF. — `Retur_Suplier.php:80,96`; `Retur_Customer.php`; `Routes.php:313,321` (PI-04)
+12. HPP Kartu Stok dibaca per produk+unit dari `hpp_unit`, fallback `hpp_barang` (global) lalu `barang.harga_beli`. Seed diambil dari baris `stok_awal.harga_beli` terakhir yang > 0. Koreksi HPP satu baris/unit boleh dilakukan Finance (0), Admin root (1), Manager (34), ADMIN/KASIR (35 & 47), dan Kepala Toko (41); nilai tersimpan sebagai `manual` dan tidak ditimpa sync stok awal berikutnya. Role lain ditolak server (403). Resolver yang sama dipakai penjualan dan service. Transaksi lama tetap memakai snapshot `detail_penjualan.hpp_penjualan`/`service_sparepart.hpp_penjualan`. — `2026-11-07-000100_CreateHppUnit.php`; `ModelHppUnit`; `Kartu_Stok::bolehUbahHpp`/`updateHpp`; `ModelKartuStok::kartuStokBuilder`
 
 ## 6. Acceptance Criteria
 - [ ] Input pembelian tersimpan atomik beserta jurnal & pembayaran.
@@ -65,6 +66,7 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
 ## 8. Status & Tandai
 - ✅ Terverifikasi: alur pembelian (nota, PPN, HPP, jurnal, sync H/P, atomik).
 - ✅ Terverifikasi: VIEW `stok_barang` mengurangi penjualan, menambah pembelian/mutasi diterima/retur, dan mengabaikan opname pada `stok_akhir`; retur customer/supplier serta pemakaian garansi ikut dihitung.
+- ✅ Terverifikasi: HPP Kartu Stok dan Nilai Stok memakai `hpp_unit` per produk+unit dengan fallback `hpp_barang`/`barang.harga_beli`; override manual per unit diuji di `HppPerUnitTest`.
 - ⚠️ Gap tinggi:
   1. Projection hutang memakai `total_bayar` → total dan rekonsiliasi salah untuk pembelian tidak lunas. — PI-05/HP-01
   2. `StokMinimum::update` menulis ke VIEW `stok_barang`; fitur stok minimum tidak berfungsi. — PI-01
@@ -72,4 +74,5 @@ Mencatat pembelian dari supplier (dengan hutang/PPN), mengelola stok (awal, kart
   4. Retur supplier/customer tidak atomik, unit item dari POST, tanpa CSRF. — PI-04
   5. Route `insert_produk` dari halaman pembelian tanpa auth. — PI-06
 - 🔶 Inferensi/keputusan bisnis: apakah opname seharusnya mengoreksi `stok_akhir` (kode saat ini tidak) perlu konfirmasi user. — PI-02
-- Test yang ada: `StokOpnameBukanProdukTest`, `StokBarangHanyaMutasiDiterimaTest`, `MutasiNoNotaUniqueTest`, `MutasiStokPickerTest`, `ReturBarangRusakTest`, `StokBarangKurangiSparepartGaransiTest`. Tidak ada test untuk projection `total_bayar`, update stok minimum, `batal_draft`, retur atomik/scope, dan route `insert_produk`.
+- ⚠️ Batas iterasi HPP per unit: input HPP manual di Stok Awal masih dinonaktifkan sehingga `stok_awal.harga_beli` disalin dari master; koreksi HPP saat ini hanya lewat modal Kartu Stok (Finance, Admin root, Manager, ADMIN/KASIR, Kepala Toko).
+- Test yang ada: `HppPerUnitTest`, `StokOpnameBukanProdukTest`, `StokBarangHanyaMutasiDiterimaTest`, `MutasiNoNotaUniqueTest`, `MutasiStokPickerTest`, `ReturBarangRusakTest`, `StokBarangKurangiSparepartGaransiTest`. Tidak ada test untuk projection `total_bayar`, update stok minimum, `batal_draft`, retur atomik/scope, dan route `insert_produk`.

@@ -266,6 +266,7 @@ $routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => ['a
 $routes->get('kartu_stok', 'Kartu_Stok::index', ['filter' => 'auth']);
 $routes->post('export/kartu_stock', 'Kartu_Stok::export', ['filter' => 'auth']);
 $routes->get('kartu_stok/dt', 'Kartu_Stok::dt', ['filter' => 'auth']);
+$routes->post('kartu_stok/hpp', 'Kartu_Stok::updateHpp', ['filter' => ['auth', 'csrf']]);
 
 //stok hp
 $routes->get('stok_hp', 'StokHP::index', ['filter' => 'auth']);

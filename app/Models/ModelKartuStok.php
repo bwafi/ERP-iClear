@@ -52,7 +52,7 @@ class ModelKartuStok extends Model
                 stok_barang.total_retur_supplier,
                 stok_barang.total_mutasi_masuk,
                 stok_barang.total_mutasi_keluar,
-                barang.harga_beli,
+                COALESCE(hpp_unit.hpp, hpp_barang.hpp, barang.harga_beli) AS harga_beli,
                 barang.jenis_hp,
                 barang.warna,
                 barang.status_ppn,
@@ -76,6 +76,8 @@ class ModelKartuStok extends Model
                 ) AS nama_supplier
             ')
             ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('hpp_unit', 'hpp_unit.barang_idbarang = stok_barang.idbarang AND hpp_unit.unit_idunit = stok_barang.id_unit', 'left')
+            ->join('hpp_barang', 'hpp_barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0');
@@ -158,9 +160,11 @@ class ModelKartuStok extends Model
                 COUNT(*) AS total_barang,
                 COUNT(DISTINCT stok_barang.id_unit) AS total_unit,
                 COALESCE(SUM(stok_barang.stok_akhir), 0) AS total_stok,
-                COALESCE(SUM(stok_barang.stok_akhir * barang.harga_beli), 0) AS nilai_stok
+                COALESCE(SUM(stok_barang.stok_akhir * COALESCE(hpp_unit.hpp, hpp_barang.hpp, barang.harga_beli)), 0) AS nilai_stok
             ')
             ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('hpp_unit', 'hpp_unit.barang_idbarang = stok_barang.idbarang AND hpp_unit.unit_idunit = stok_barang.id_unit', 'left')
+            ->join('hpp_barang', 'hpp_barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
@@ -169,6 +173,16 @@ class ModelKartuStok extends Model
     }
 
 
+
+    /**
+     * Pastikan produk+unit benar-benar ada sebelum HPP ditulis.
+     */
+    public function existsPair(int $idbarang, int $idunit): bool
+    {
+        return $this->db->table('stok_barang')
+            ->where(['idbarang' => $idbarang, 'id_unit' => $idunit])
+            ->countAllResults() > 0;
+    }
 
     public function insert_getKartuStok($data)
     {

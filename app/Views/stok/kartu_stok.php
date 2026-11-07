@@ -132,6 +132,35 @@
     </div>
 </div>
 
+<?php if (!empty($can_edit_hpp)): ?>
+<div class="modal fade" id="modal-hpp" tabindex="-1" aria-labelledby="modal-hpp-label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form id="form-hpp" method="post" action="<?= base_url('kartu_stok/hpp') ?>" class="modal-content">
+            <?= csrf_field() ?>
+            <input type="hidden" name="idbarang" id="hpp-idbarang">
+            <input type="hidden" name="id_unit" id="hpp-idunit">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-hpp-label">Ubah HPP</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3" id="hpp-target"></p>
+                <label for="hpp-value" class="form-label">HPP</label>
+                <div class="input-group">
+                    <span class="input-group-text">Rp</span>
+                    <input type="number" class="form-control" id="hpp-value" name="hpp" min="1" step="1" required>
+                </div>
+                <div class="form-text">Hanya berlaku untuk unit ini. Riwayat transaksi lama tidak berubah.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Script Configurations -->
 <script>
     $(document).ready(function() {
@@ -140,6 +169,12 @@
         function esc(s) {
             return $('<div>').text(s == null ? '' : s).html();
         }
+
+        function attr(s) {
+            return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        const canEditHpp = <?= !empty($can_edit_hpp) ? 'true' : 'false' ?>;
 
         function fmt(n) {
             return new Intl.NumberFormat('id-ID').format(n || 0);
@@ -153,7 +188,7 @@
             const rows = [
                 ['IMEI', d.imei ? esc(d.imei) : 'Tidak ada IMEI'],
                 ['Jenis / Warna', esc(d.jenis_hp || '-') + ' / ' + esc(d.warna || '-')],
-                ['HPP (Harga Beli)', money(d.harga_beli)],
+                ['HPP (Harga Beli)', money(d.harga_beli) + (canEditHpp ? ' <button type="button" class="btn btn-sm btn-light-primary text-primary ms-2 py-0 px-2 js-edit-hpp" data-idbarang="' + attr(d.idbarang) + '" data-idunit="' + attr(d.id_unit) + '" data-hpp="' + attr(d.harga_beli) + '" data-nama="' + attr(d.nama_barang) + '" data-unit="' + attr(d.nama_unit) + '">Ubah</button>' : '')],
                 ['Harga Jual', money(d.harga)],
                 ['Stok Awal', fmt(d.stok_awal)],
                 ['Stok Akhir', '<b>' + fmt(d.stok_akhir) + '</b>'],
@@ -269,5 +304,51 @@
             $('#expPpn').val($('#ppnFilter').val());
             $('#exportForm').submit();
         });
+
+        if (canEditHpp) {
+            const modalHppEl = document.getElementById('modal-hpp');
+            const modalHpp = new bootstrap.Modal(modalHppEl);
+            const formHpp = document.getElementById('form-hpp');
+
+            $('#ks-datatable').on('click', '.js-edit-hpp', function() {
+                const btn = $(this);
+                $('#hpp-idbarang').val(btn.data('idbarang'));
+                $('#hpp-idunit').val(btn.data('idunit'));
+                $('#hpp-value').val(btn.data('hpp'));
+                $('#hpp-target').text(btn.data('nama') + ' - ' + btn.data('unit'));
+                modalHpp.show();
+            });
+
+            formHpp.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                fetch(formHpp.action, {
+                        method: 'POST',
+                        body: new FormData(formHpp),
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(function(r) {
+                        return r.json();
+                    })
+                    .then(function(res) {
+                        if (res.status !== 'success') {
+                            alert(res.message || 'Gagal menyimpan HPP.');
+                            return;
+                        }
+
+                        if (res.csrf) {
+                            formHpp.querySelector('input[name="<?= csrf_token() ?>"]').value = res.csrf;
+                        }
+
+                        modalHpp.hide();
+                        table.ajax.reload(null, false);
+                    })
+                    .catch(function() {
+                        alert('Gagal menyimpan HPP.');
+                    });
+            });
+        }
     });
 </script>

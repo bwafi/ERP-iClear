@@ -27,7 +27,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 2. Generate kode invoice: `SLL{idunit}{Ymd}{seq4}` (per unit per hari; last invoice hari itu).
 3. Potong pembayaran: `bayar_tunai` (POST `bayar`) dan `bank[]` (per baris → `pembayaran_bank`).
 4. Susun jurnal: tunai (`penjualan_lunas_tunai`), bank (`penjualan_lunas_bank_{bankid}`), PPN, diskon, aksesoris/sparepart (`penjualan_acc_cash`), HP baru PPN/non-PPN, HP second.
-5. Insert header `penjualan` + detail `detail_penjualan` (HPP per item dari `ModelHppBarang`; bundle dipecah per barang penyusun).
+5. Insert header `penjualan` + detail `detail_penjualan` (HPP per item dari `hpp_unit` unit transaksi, fallback `hpp_barang` lalu `barang.harga_beli`; bundle dipecah per barang penyusun).
 6. Eksekusi dalam satu transaksi `transStart/transComplete`; bila gagal `transRollback` + flashdata.
 7. Cetak struk/invoice mPDF (thermal/default) ke `uploads/Struk-{invoice}.pdf` + output ke browser.
 ### 4.2 Riwayat & Cetak
@@ -40,7 +40,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 2. Total & diskon disanitasi (`Rp/.`/spasi dihilangkan). — `Penjualan::sanitizeCurrency`
 3. Pembayaran terpecah tunai + bank; `bank_idbank` header menyimpan `kode_pembayaran` (bukan id bank asli). — `insert_penjualan`
 4. Status keterangan = `Lunas` bila `hutang==0`, else `Belum Lunas`. — `insert_penjualan`
-5. HPP per item diambil dari `ModelHppBarang`; bundle dipecah (jumlah × qty bundle). — `insert_penjualan`
+5. HPP per item diambil dari `hpp_unit` produk+unit transaksi; fallback `hpp_barang` (global) lalu `barang.harga_beli`. Bundle dipecah (jumlah × qty bundle) dan tiap komponen memakai HPP unit transaksi. — `ModelHppUnit::resolve`; `Penjualan::insert_penjualan`
 6. Kategori akun jurnal dibedakan: HP baru PPN/non-PPN/second, sparepart, aksesoris, PPN, diskon. — `insert_penjualan`
 7. Penjualan berjalan dalam SATU transaksi (header+detail+jurnal+pembayaran bank). — `insert_penjualan`
 8. Kode pembayaran bank = `PJL{date}{unit}{rand4}`; di-refer ke `id_referensi` penjualan setelah insert. — `insert_penjualan`
@@ -58,12 +58,13 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 - [ ] Jadwayat penjualan dapat dicari, dilihat detailnya, diekspor.
 
 ## 7. Dependensi
-- `ModelPenjualan`, `ModelDetailPenjualan`, `ModelPembayaranBank`, `ModelHppBarang`, `ModelJurnal`, `ModelBundle/ModelDetailBundle`, `ModelPelanggan`, `ModelUnit`, `ModelAuth`.
+- `ModelPenjualan`, `ModelDetailPenjualan`, `ModelPembayaranBank`, `ModelHppUnit`/`ModelHppBarang`, `ModelJurnal`, `ModelBundle/ModelDetailBundle`, `ModelPelanggan`, `ModelUnit`, `ModelAuth`.
 - Modul: Master Data (produk/pelanggan/bank), Hutang Piutang (piutang legacy), Jurnal, KPI (omzet).
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: alur input, invoice, pembayaran, jurnal, transaksi atomik.
 - ✅ Terverifikasi: stok penjualan dihitung oleh VIEW `stok_barang` dari `detail_penjualan` (bukan update stok eksplisit).
+- ✅ Terverifikasi: HPP detail penjualan baru memakai `hpp_unit` produk+unit; produk tanpa baris per unit tetap memakai `hpp_barang`/`barang.harga_beli`. — `HppPerUnitTest`
 - ⚠️ Gap tinggi:
   1. Penjualan kredit tidak membentuk piutang pelanggan/registry H/P; `Piutang` legacy adalah piutang pegawai. — SL-02
   2. `detail_penjualan.sub_total` bundle digandakan per komponen; laporan omzet/laba dapat salah. — SL-03

@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Models\ModelAuth;
+use App\Models\ModelHppUnit;
 use App\Models\ModelKartuStok;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -18,12 +19,14 @@ class Kartu_Stok extends BaseController
 
     protected $AuthModel;
     protected $KartuStokModel;
+    protected $HppUnitModel;
     protected $UnitModel;
 
     public function __construct()
     {
         $this->AuthModel = new ModelAuth();
         $this->KartuStokModel = new ModelKartuStok();
+        $this->HppUnitModel = new ModelHppUnit();
         $this->UnitModel = new ModelUnit();
     }
 
@@ -34,9 +37,62 @@ class Kartu_Stok extends BaseController
             'akun' => $akun,
             'summary' => $this->KartuStokModel->getSummaryKartuStok(),
             'body'  => 'stok/kartu_stok',
-            'unit' => $this->UnitModel->getUnit()
+            'unit' => $this->UnitModel->getUnit(),
+            'can_edit_hpp' => self::bolehUbahHpp((int) session('ID_JABATAN')),
         );
         return view('template', $data);
+    }
+
+    /**
+     * Role yang boleh mengoreksi HPP per unit: Finance (0), Admin root (1),
+     * Manager (34), ADMIN/KASIR (35 & 47), dan Kepala Toko (41).
+     */
+    public static function bolehUbahHpp(int $idJabatan): bool
+    {
+        return in_array($idJabatan, [0, 1, 34, 35, 41, 47], true);
+    }
+
+    /**
+     * Koreksi HPP satu produk pada satu unit.
+     *
+     * Unit diambil dari baris Kartu Stok yang dipilih, bukan dari master, dan
+     * hanya baris itu yang berubah. Nilai disimpan sebagai sumber `manual`
+     * supaya sync stok awal berikutnya tidak menimpanya.
+     */
+    public function updateHpp()
+    {
+        if (!self::bolehUbahHpp((int) session('ID_JABATAN'))) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'status'  => 'error',
+                'message' => 'Role Anda tidak dapat mengubah HPP.',
+            ]);
+        }
+
+        $idbarang = (int) $this->request->getPost('idbarang');
+        $idunit   = (int) $this->request->getPost('id_unit');
+        $hpp      = (float) $this->request->getPost('hpp');
+
+        if ($idbarang <= 0 || $idunit <= 0 || $hpp <= 0 || $hpp > 9999999999999) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'HPP tidak valid.',
+            ]);
+        }
+
+        if (!$this->KartuStokModel->existsPair($idbarang, $idunit)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk/unit tidak ditemukan.',
+            ]);
+        }
+
+        $this->HppUnitModel->setManual($idbarang, $idunit, $hpp, (int) session('ID_AKUN'));
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'hpp'    => $hpp,
+            'csrf'   => csrf_hash(),
+        ]);
     }
 
     /**
