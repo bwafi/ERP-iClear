@@ -23,6 +23,7 @@ final class PwaManifestTest extends CIUnitTestCase
 
         $manifest = json_decode((string) $result->response()->getBody(), true);
         $this->assertSame('Absen iClear', $manifest['name']);
+        $this->assertSame('Absen iClear', $manifest['short_name']);
         $this->assertSame(base_url('absen'), $manifest['start_url']);
         $this->assertSame(base_url('/'), $manifest['scope']);
         $this->assertSame('standalone', $manifest['display']);

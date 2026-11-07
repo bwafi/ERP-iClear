@@ -17,7 +17,7 @@ class Pwa extends Controller
         $data = [
             'id'               => base_url('absen'),
             'name'             => 'Absen iClear',
-            'short_name'       => 'Absen',
+            'short_name'       => 'Absen iClear',
             'description'      => 'Absen, pengajuan izin, dan profil pegawai.',
             'start_url'        => base_url('absen'),
             'scope'            => base_url('/'),
