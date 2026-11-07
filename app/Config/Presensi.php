@@ -14,6 +14,9 @@ class Presensi extends BaseConfig
     public int $maxSuratBytes = 2097152;
     public int $toleransiMenit = 14;
 
+    /** In break PS SORE dikunci sampai jam ini; jadwal SORE tetap 16:55. */
+    public string $inBreakMulai = '15:00';
+
     /** Jam pulang per shift; sesi PS punya dua nilai. */
     public array $shiftPulang = [
         'PAGI'  => '17:00',

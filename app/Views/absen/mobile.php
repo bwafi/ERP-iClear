@@ -203,7 +203,11 @@ $petaSiap =
             $rel         = $s['rel'];
             $jmlRel      = count($rel);
             $langkahIndex = (int) $s['langkah_index'];
-            $terkunci    = in_array($langkah, ['break', 'pulang'], true) && ! $s['boleh_tutup'];
+            $bolehInBreak = (bool) ($s['boleh_in_break'] ?? true);
+            $terkunci    = (in_array($langkah, ['break', 'pulang'], true) && ! $s['boleh_tutup'])
+                || ($langkah === 'masuk_lagi' && ! $bolehInBreak);
+            $bukaTerkunci = $langkah === 'masuk_lagi' ? ($s['buka_in_break'] ?? $s['buka']) : $s['buka'];
+            $labelBuka    = $langkah === 'masuk_lagi' ? ($s['in_break'] ?? $s['pulang']) : $s['pulang'];
             $railInset   = rtrim(rtrim(number_format(50 / max(1, $jmlRel), 2, '.', ''), '0'), '.');
             $jamInBreak  = $rel[2]['jam'] ?? '';
 
@@ -217,8 +221,8 @@ $petaSiap =
                 $plateState = $s['boleh_tutup'] ? 'Waktunya break' : 'Menunggu break';
                 $plateClass = $s['boleh_tutup'] ? '' : 'is-wait';
             } elseif ($langkah === 'masuk_lagi') {
-                $plateState = 'Siap in break';
-                $plateClass = '';
+                $plateState = $bolehInBreak ? 'Siap in break' : 'Menunggu in break';
+                $plateClass = $bolehInBreak ? '' : 'is-wait';
             } else {
                 $plateState = $s['boleh_tutup'] ? 'Waktunya pulang' : 'Menunggu pulang';
                 $plateClass = $s['boleh_tutup'] ? '' : 'is-wait';
@@ -329,9 +333,9 @@ $petaSiap =
                             <span class="eyebrow">Langkah berikutnya</span>
                             <?php if ($terkunci): ?>
                                 <span class="chip is-wait" data-hitung="<?= esc(
-                                    $s['buka'],
+                                    $bukaTerkunci,
                                     'attr',
-                                ) ?>">Buka <?= esc($s['pulang']) ?></span>
+                                ) ?>">Buka <?= esc($labelBuka) ?></span>
                             <?php else: ?>
                                 <span class="chip is-open">Bisa sekarang</span>
                             <?php endif; ?>
@@ -395,7 +399,7 @@ $petaSiap =
                             <?php endif; ?>
 
                             <button class="punch-btn" type="submit"<?= $terkunci
-                                ? ' data-buka="' . esc($s['buka'], 'attr') . '" disabled'
+                                ? ' data-buka="' . esc($bukaTerkunci, 'attr') . '" disabled'
                                 : '' ?>>
                                 <span class="btn-ic"><svg class="ic"><use href="#<?= $terkunci
                                     ? 'i-lock'
@@ -406,7 +410,11 @@ $petaSiap =
                                     : 'i-arrow' ?>"/></svg></span>
                             </button>
 
-                            <?php if ($terkunci && $langkah === 'break'): ?>
+                            <?php if ($terkunci && $langkah === 'masuk_lagi'): ?>
+                                <p class="punch-hint"><svg class="ic"><use href="#i-clock"/></svg> In break bisa mulai <?= esc(
+                                    $labelBuka,
+                                ) ?>.</p>
+                            <?php elseif ($terkunci && $langkah === 'break'): ?>
                                 <p class="punch-hint"><svg class="ic"><use href="#i-clock"/></svg> Break tanpa foto, bisa mulai <?= esc(
                                     $s['pulang'],
                                 ) ?>.</p>

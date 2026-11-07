@@ -323,6 +323,25 @@ class AbsenPunchServiceTest extends CIUnitTestCase
         $this->assertSame('SORE', $row->sesi);
     }
 
+    public function testInBreakSebelumJam15Ditolak(): void
+    {
+        $this->roster(10, '2026-11-02', 'PS');
+        $service = new AbsenPunchService(null, null, new FakeFotoService());
+        $pagi = $service->masuk(10, 1, 'PAGI', -8.1, 113.7, 5, $this->foto(), '2026-11-02 08:50:00');
+        $service->istirahat(10, $pagi, '2026-11-02 13:00:00');
+
+        try {
+            $service->masuk(10, 1, 'SORE', -8.1, 113.7, 5, $this->foto(), '2026-11-02 14:59:00');
+            $this->fail('In break sebelum 15:00 seharusnya ditolak.');
+        } catch (PresensiException $e) {
+            $this->assertSame('belum_waktunya', $e->kode);
+            $this->assertStringContainsString('15:00', $e->getMessage());
+        }
+
+        $sore = $service->masuk(10, 1, 'SORE', -8.1, 113.7, 5, $this->foto(), '2026-11-02 15:00:00');
+        $this->assertGreaterThan(0, $sore);
+    }
+
     public function testPulangBarisLegacyTanpaJadwalTetapBoleh(): void
     {
         $this->db->table('presensi')->insert([

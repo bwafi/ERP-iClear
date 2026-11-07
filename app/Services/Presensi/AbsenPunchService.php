@@ -104,6 +104,7 @@ class AbsenPunchService
                 if (empty($pagi->waktu_pulang)) {
                     throw new PresensiException('Absen break PS pagi dulu sebelum masuk sore.');
                 }
+                $this->pastikanInBreakSudahWaktunya($waktu);
             }
         } elseif ($sesi !== 'FULL') {
             throw new PresensiException('Sesi shift tidak valid.');
@@ -229,6 +230,26 @@ class AbsenPunchService
 
         if (! $ok) {
             throw new PresensiException('Absen break gagal disimpan.', 500);
+        }
+    }
+
+    /**
+     * In break PS SORE punya gerbang sendiri; jadwal SORE tetap 16:55.
+     */
+    private function pastikanInBreakSudahWaktunya(string $waktu): void
+    {
+        $mulai = substr((string) config('Presensi')->inBreakMulai, 0, 5);
+        if ($mulai === '') {
+            return;
+        }
+
+        $batas = substr($waktu, 0, 10) . ' ' . $mulai . ':00';
+        if (strtotime($waktu) < strtotime($batas)) {
+            throw new PresensiException(
+                'Belum waktunya in break. Bisa mulai ' . $mulai . '.',
+                422,
+                'belum_waktunya'
+            );
         }
     }
 

@@ -176,6 +176,40 @@ class AbsenMobilePageTest extends CIUnitTestCase
         $result->assertSee('Foto masuk');
     }
 
+    public function testInBreakTerkunciSebelumJamMulai(): void
+    {
+        $zona = new \DateTimeZone(config('Presensi')->zonaWaktu);
+        $now  = new \DateTime('now', $zona);
+        if ($now->format('H:i') >= '23:50') {
+            $this->markTestSkipped('Terlalu dekat tengah malam untuk uji jam kunci.');
+        }
+
+        $asli = config('Presensi')->inBreakMulai;
+        config('Presensi')->inBreakMulai = $now->modify('+5 minutes')->format('H:i');
+
+        try {
+            $this->sesi(10, 1, 36);
+            $this->roster(10, $this->hariIni(), 'PS');
+            $this->db->table('presensi')->insert([
+                'akun_idakun'      => 10,
+                'unit_idunit'      => 1,
+                'sesi'             => 'PAGI',
+                'waktu_masuk'      => $this->hariIni() . ' 08:50:00',
+                'waktu_pulang'     => $this->hariIni() . ' 13:00:00',
+                'jam_jadwal_masuk' => '08:45:00',
+                'jam_jadwal_pulang' => '13:00:00',
+                'status_kehadiran' => 0,
+            ]);
+
+            $result = $this->get('absen');
+            $result->assertSee('Menunggu in break');
+            $result->assertSee('Buka ' . config('Presensi')->inBreakMulai);
+            $result->assertSee('In break bisa mulai ' . config('Presensi')->inBreakMulai);
+        } finally {
+            config('Presensi')->inBreakMulai = $asli;
+        }
+    }
+
     public function testSebelumGoLiveHanyaPesan(): void
     {
         $this->sesi(10, 1, 36);

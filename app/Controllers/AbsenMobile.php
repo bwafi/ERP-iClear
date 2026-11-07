@@ -345,6 +345,7 @@ class AbsenMobile extends Controller
         $jamSore    = AttendanceScoreCalculator::getScheduledTime('PS', 'SORE');
         $pulangPagi = $this->jamPulang('PS', 'PAGI');
         $pulangSore = $this->jamPulang('PS', 'SORE');
+        $jamInBreak = substr((string) config('Presensi')->inBreakMulai, 0, 5) ?: '00:00';
 
         $ringkasan = [];
         if ($pagi) {
@@ -454,6 +455,9 @@ class AbsenMobile extends Controller
             'pulang'        => $pulang,
             'buka'          => $this->bukaPada($hariIni, $pulang, $zona),
             'boleh_tutup'   => $jamSekarang >= $pulang . ':00',
+            'in_break'      => $jamInBreak,
+            'buka_in_break' => $this->bukaPada($hariIni, $jamInBreak, $zona),
+            'boleh_in_break' => $jamSekarang >= $jamInBreak . ':00',
             'langkah'       => $langkah,
             'langkah_index' => $langkahIndex,
             'rel'           => $rel,
