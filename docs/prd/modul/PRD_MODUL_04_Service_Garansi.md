@@ -50,6 +50,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - Riwayat garansi: `Riwayat_Service::index2`, `riwayat_service_garansi/export2`; `Status_Service::index/{id}`.
 ### 4.6 DP & Refund
 - `dp_service` + `dp_service_ajax`; `refund_dp_service` (`ServiceDpService`); `DP_SERVICE_MENU` migration.
+- **Filter unit DP Service**: Admin Root/Finance (`0/1`) dan **Customer Service (42)** boleh memilih unit (termasuk "Semua Unit"); role lain terkunci ke `ID_UNIT` sesi. Berlaku di halaman (`dp_service`) dan data (`dp_service_ajax`), mengikuti pola `Riwayat_Service::index/riwayat_service_ajax`. Refund DP tetap dibatasi unit sendiri untuk non-HO (42 tidak termasuk), jadi CS hanya melebarkan cakupan baca.
 - **Koreksi DP salah catat**: `Riwayat_Service::koreksi_dp_service` (POST `dp_service/koreksi`, filter `['auth','csrf']`) → `ServiceDpService::koreksiDp()`. Hanya **Admin Root** (`ID_JABATAN = 1`); role lain tidak melihat tombol "Koreksi" dan ditolak server.
   - Yang bisa dikoreksi: `metode` (`tunai`/`transfer`), `bank_idbank` + `referensi` (wajib saat transfer, dikosongkan saat tunai), dan `jumlah` (> 0). Tanggal DP tidak diubah.
   - Bukan kas masuk/keluar baru. Dalam satu transaksi: update `service_dp`, perbaiki dua baris jurnal DP yang ada (akun debit Kas Besar `1010101000` ↔ Kas di Bank `1010102000`, nominal debit/kredit disesuaikan; tanggal jurnal tetap), lalu hitung ulang proyeksi `service.dp_bayar` lewat `proyeksiDpBayar()`.

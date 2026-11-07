@@ -981,7 +981,9 @@ class Riwayat_Service extends BaseController
     public function dp_service()
     {
         $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        // Customer Service (42) ikut boleh memilih unit, sama seperti daftar
+        // riwayat service (Riwayat_Service::index/riwayat_service_ajax).
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42');
         $isAdminRoot = ((int) $idJabatan === 1);
         $unitList = $this->UnitModel->getUnit();
 
@@ -1020,7 +1022,8 @@ class Riwayat_Service extends BaseController
         $request = \Config\Services::request();
         $draw = (int) ($request->getPost('draw') ?? 0);
         $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
+        // Sama dengan dp_service(): Customer Service (42) boleh memfilter unit.
+        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42');
         $userUnit = (int) session('ID_UNIT');
 
         if (! $this->DpService->punyaTabelLedger()) {

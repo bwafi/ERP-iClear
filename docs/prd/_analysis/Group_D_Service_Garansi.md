@@ -232,7 +232,8 @@ Nomor service: `SRV` + unit + `Ymd` + urutan 3 digit (counter per unit per hari)
 | `delete_service`, edit/hapus sparepart keluar | Admin Root (jabatan 1) | `Riwayat_Service::delete_service`, `edit_sparepart_keluar`, `delete_sparepart_keluar` |
 | Lihat seluruh unit (filter lintas unit) | jabatan [0,1,34,40] (Admin Root, Manager, Finance, SPV) | `GaransiClaimService::canSeeAllUnits` |
 | Navigasi unit lintas unit | hanya `is_operational=1` | `Riwayat_Service::sparepartUnitScope`, `StatusGaransi::index`, `proses_service` |
-| Non-HO selalu terkunci ke unit sesi | `ID_UNIT` dipaksa | `riwayat_service_ajax`, `proses_service_ajax`, `dp_service_ajax`, `garansi_service_ajax`, `claim_garansi` |
+| Non-HO selalu terkunci ke unit sesi | `ID_UNIT` dipaksa | `proses_service_ajax`, `garansi_service_ajax`, `claim_garansi` |
+| Filter unit Riwayat Service & DP Service | jabatan 0/1 + Customer Service (42); role lain terkunci `ID_UNIT` | `Riwayat_Service::index/riwayat_service_ajax`, `dp_service/dp_service_ajax` |
 | Menu DP Service | jabatan [0,1,2,34,35,38,40,41,47] | `AddDpServiceMenu` |
 | Ruang cross-unit (H0) di `Riwayat_Service::index2` | `isHO = jabatan 1/0/42` | `index2` L149 |
 
