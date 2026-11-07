@@ -18,13 +18,13 @@ related_targets: ["pengajuan_izin","profil"]
 
 ## Direction contract
 
-THESIS: Presensi is a personal daily ritual, not an ERP form: one luminous glass sheet makes the clock and the next punch the unmistakable center, and the rest of the shift recedes into a quiet rail. Refuses the incumbent white admin card stack and corporate-blue chrome.
+THESIS: Presensi is a personal daily ritual, not an ERP form: one luminous glass sheet makes the active shift and the next punch the unmistakable center, and the rest of the shift recedes into a quiet rail. Refuses the incumbent white admin card stack and corporate-blue chrome.
 
-OWN-WORLD: Aurora — deep navy `#070d18` canvas lit by teal/indigo/sky ambient washes; one translucent glass surface per page with a white rim, inner highlight, deep soft shadow, and 22–24px radius; mint `#5eead4` → sky `#38bdf8` gradient CTA with near-black ink; system sans, 200-weight clock, uppercase micro-labels; floating pill dock. Light mirrors on `#eef5fb` with white glass and `#0f766e` / `#0369a1` accents.
+OWN-WORLD: Aurora — deep navy `#070d18` canvas lit by teal/indigo/sky ambient washes; one translucent glass surface per page with a white rim, inner highlight, deep soft shadow, and 22–24px radius; mint `#5eead4` → sky `#38bdf8` gradient CTA with near-black ink; system sans, compact live clock, uppercase micro-labels; floating pill dock. Light mirrors on `#eef5fb` with white glass and `#0f766e` / `#0369a1` accents.
 
-STORY: The employee opens the app and instantly knows which shift is active, what time it is, which step comes next, and that location/photo are checked on the server. One tap punches; the history below confirms what was recorded. Izin and Profil keep the same one-sheet rhythm, so the app feels like one product rather than three forms.
+STORY: The employee opens the app and instantly knows which shift is active, its hours, what time it is, which step comes next, and that location/photo are checked on the server. One tap punches; the history below confirms what was recorded. Izin and Profil keep the same one-sheet rhythm, so the app feels like one product rather than three forms.
 
-FIRST VIEWPORT: Header with a 38px avatar tile, greeting, name, and unit. One glass card: shift pill, 52px clock with mint seconds and WIB, status line, four-step rail (done mint, now sky, todo muted), and a location inset. A full-width gradient CTA “Absen istirahat” sits below, with a micro-hint and a compact history list. The floating dock holds Absen · Izin · Profil.
+FIRST VIEWPORT: Header with a 38px avatar tile, greeting, name, and unit. One glass card: shift name with a large time range as the focus, a compact live clock with mint seconds and WIB at the top right, status line, four-step rail (done mint, now sky, todo muted), and a location inset. A full-width gradient CTA “Absen istirahat” sits below, with a micro-hint and a compact history list. The floating dock holds Absen · Izin · Profil.
 
 FORM: User-pinned Aurora, chosen by the user from three presented directions (A Aurora / B Kertas / C Signal) in the brainstorming round; no concept roll — the user's pick outranks it. Seed: user-pinned-aurora.
 

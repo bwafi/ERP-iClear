@@ -260,23 +260,23 @@ $petaSiap =
             $jamPulang = $events !== [] ? $events[array_key_last($events)]['waktu'] : '--:--';
             ?>
             <article class="shift-card" data-langkah="<?= esc($langkah, 'attr') ?>">
-                <section class="clock-card" aria-label="Jam dan progres shift">
+                <section class="clock-card" aria-label="Shift dan progres">
                     <svg class="ic plate-mark"><use href="#i-clock"/></svg>
                     <div class="plate-top">
-                        <span class="shift-badge"><span class="pulse"></span><?= esc(
-                            $s['label'],
-                        ) ?> <span class="range"><?= esc(
-    $s['rentang'],
-) ?></span></span>
-                    </div>
-                    <div class="clock-line">
-                        <div class="clock" data-base="<?= esc($jamSekarang, 'attr') ?>"><span class="hm"><?= esc(
-                            substr($jamSekarang, 0, 5),
-                        ) ?></span><span class="sec">:<?= esc(
+                        <div class="plate-shift">
+                            <span class="pulse"></span>
+                            <p class="plate-name"><?= esc($s['label']) ?></p>
+                        </div>
+                        <div class="clock-line">
+                            <div class="clock" data-base="<?= esc($jamSekarang, 'attr') ?>"><span class="hm"><?= esc(
+                                substr($jamSekarang, 0, 5),
+                            ) ?></span><span class="sec">:<?= esc(
     substr($jamSekarang, 6, 2),
 ) ?></span></div>
-                        <span class="tz">WIB</span>
+                            <span class="tz">WIB</span>
+                        </div>
                     </div>
+                    <p class="plate-range"><?= esc($s['rentang']) ?></p>
                     <p class="plate-state <?= esc($plateClass, 'attr') ?>"><span class="state-dot"></span> <?= esc(
                         $plateState,
                     ) ?></p>

@@ -175,29 +175,6 @@
         gap: 10px;
     }
 
-    .absen .shift-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 8px;
-        border: 1px solid rgba(255, 255, 255, .15);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, .09);
-        color: #fff;
-        font-size: 9.5px;
-        font-weight: 750;
-        letter-spacing: .075em;
-        line-height: 1;
-        text-transform: uppercase;
-        white-space: nowrap;
-    }
-
-    .absen .shift-badge .range {
-        color: var(--absen-plate-muted);
-        font-weight: 600;
-        letter-spacing: .03em;
-    }
-
     .absen .pulse {
         width: 5px;
         height: 5px;
@@ -1072,19 +1049,6 @@
     }
 
     @media (max-width: 380px) {
-        .absen .clock {
-            font-size: 50px;
-        }
-
-        .absen .clock .sec {
-            font-size: 17px;
-        }
-
-        .absen .clock-card {
-            padding-left: 13px;
-            padding-right: 13px;
-        }
-
         .absen .action-title {
             font-size: 19px;
         }
@@ -1121,19 +1085,6 @@
 
     .absen .done-card {
         border-top: 1px solid var(--mob-glass-border);
-    }
-
-    .absen .clock-card {
-        border: 1px solid rgba(255, 255, 255, .18);
-        border-radius: 24px;
-        background: linear-gradient(155deg, rgba(10, 48, 80, .88), rgba(6, 26, 45, .8));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 24px 44px -30px rgba(4, 19, 34, .95);
-        -webkit-backdrop-filter: blur(22px) saturate(150%);
-        backdrop-filter: blur(22px) saturate(150%);
-    }
-
-    html[data-bs-theme="dark"] .absen .clock-card {
-        background: linear-gradient(155deg, rgba(12, 42, 68, .9), rgba(6, 20, 34, .86));
     }
 
     .absen .avatar {
@@ -1210,7 +1161,7 @@
     .absen .head {
         align-items: center;
         gap: 10px;
-        margin-bottom: 13px;
+        margin-bottom: 14px;
     }
 
     .absen .avatar {
@@ -1263,7 +1214,7 @@
     .absen .sheet,
     .absen .shift-card {
         margin-top: 0;
-        padding: 14px 16px;
+        padding: 16px;
         border: 1px solid var(--mob-glass-border);
         border-radius: 22px;
         background: var(--mob-glass);
@@ -1299,24 +1250,35 @@
     }
 
     .absen .plate-top {
-        justify-content: flex-start;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
     }
 
-    .absen .shift-badge {
-        gap: 6px;
-        padding: 4px 9px;
-        border: 1px solid var(--mob-accent-wash);
-        border-radius: 999px;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-        font-size: .5625rem;
-        font-weight: 800;
-        letter-spacing: .06em;
+    .absen .plate-shift {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
     }
 
-    .absen .shift-badge .range {
-        color: var(--mob-accent-ink);
+    .absen .plate-name {
+        margin: 0;
+        color: var(--mob-ink);
+        font-size: 1.0625rem;
         font-weight: 700;
+        letter-spacing: -.02em;
+        line-height: 1.15;
+    }
+
+    .absen .plate-range {
+        margin: 3px 0 0;
+        color: var(--mob-ink);
+        font-size: 1.375rem;
+        font-weight: 650;
+        letter-spacing: -.025em;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
     }
 
     .absen .pulse {
@@ -1327,34 +1289,40 @@
     }
 
     .absen .clock-line {
-        gap: 5px;
-        margin-top: 7px;
+        align-items: baseline;
+        flex: 0 0 auto;
+        gap: 3px;
+        margin-top: 0;
     }
 
     .absen .clock {
-        font-size: 52px;
-        font-weight: 200;
-        letter-spacing: -.05em;
+        font-family: inherit;
+        font-size: .8125rem;
+        font-weight: 600;
+        letter-spacing: .01em;
         line-height: 1;
-        color: var(--mob-ink);
+        color: var(--mob-muted);
     }
 
     .absen .clock .sec {
-        font-size: 19px;
-        font-weight: 600;
+        margin-left: 0;
+        font-size: inherit;
+        font-weight: 750;
+        letter-spacing: 0;
+        opacity: 1;
         color: var(--mob-accent-ink);
     }
 
     .absen .tz {
-        margin-left: 2px;
+        margin: 0 0 0 2px;
         color: var(--mob-muted);
         font-size: .5625rem;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: .08em;
     }
 
     .absen .plate-state {
-        margin-top: 3px;
+        margin-top: 8px;
         color: var(--mob-muted);
         font-size: .6875rem;
         font-weight: 600;
@@ -1384,11 +1352,13 @@
         display: grid;
         grid-template-columns: repeat(var(--rail-count, 4), minmax(0, 1fr));
         gap: 4px;
-        margin-top: 15px;
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid var(--mob-rule);
     }
 
     .absen .rail::before {
-        top: 4px;
+        top: 20.5px;
         left: 4px;
         right: 4px;
         height: 1px;
@@ -1787,14 +1757,6 @@
     }
 
     @media (max-width: 380px) {
-        .absen .clock {
-            font-size: 46px;
-        }
-
-        .absen .clock .sec {
-            font-size: 17px;
-        }
-
         .absen .rail-label {
             font-size: .5rem;
         }
