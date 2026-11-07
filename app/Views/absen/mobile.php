@@ -27,10 +27,6 @@ $tanggal =
 $zonaPresensi = new \DateTimeZone(config('Presensi')->zonaWaktu);
 $sekarang     = new \DateTime('now', $zonaPresensi);
 $jamSekarang  = $sekarang->format('H:i:s');
-$jamSapaan    = (int) $sekarang->format('G');
-$sapaan       = $jamSapaan < 11
-    ? 'Selamat pagi'
-    : ($jamSapaan < 15 ? 'Selamat siang' : ($jamSapaan < 19 ? 'Selamat sore' : 'Selamat malam'));
 
 $kataNama = preg_split('/\s+/', trim((string) $nama)) ?: [];
 $inisial  = '';
@@ -142,27 +138,16 @@ $petaSiap =
 <body>
 
 <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
-    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/></symbol>
-    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3.5v3M16 3.5v3M3.5 9.5h17"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2a1 1 0 0 0 .8-.4l.9-1.2a1.5 1.5 0 0 1 1.2-.6h4.8a1.5 1.5 0 0 1 1.2.6l.9 1.2a1 1 0 0 0 .8.4h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><circle cx="12" cy="12.5" r="3.2"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="10.5" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></symbol>
-    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
-    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.2l3.2 2"/></symbol>
-    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.2c0 4.3-2.9 7.5-7 9.3-4.1-1.8-7-5-7-9.3V6z"/><path d="m9 12 2 2 4-4"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5.5" width="3.6" height="13" rx="1.2"/><rect x="13.9" y="5.5" width="3.6" height="13" rx="1.2"/></symbol>
 </svg>
 
-<main class="mob absen"<?php if ($petaSiap): ?> data-titik-lat="<?= esc(
-     $unit->LATITUDE,
- ) ?>" data-titik-lng="<?= esc(
-    $unit->LONGTITUDE,
-) ?>" data-titik-radius="<?= (int) $unit->RADIUS ?>"<?php endif; ?>>
+<main class="mob absen"<?php if ($petaSiap): ?> data-titik-lat="<?= esc($unit->LATITUDE) ?>" data-titik-lng="<?= esc($unit->LONGTITUDE) ?>" data-titik-radius="<?= (int) $unit->RADIUS ?>"<?php endif; ?>>
     <header class="head">
         <span class="avatar" aria-hidden="true"><?= esc($inisial) ?></span>
         <div class="head-main">
-            <p class="hello"><?= esc($sapaan) ?>,</p>
             <h1><?= esc($nama) ?></h1>
             <p class="meta"><?= esc(
                 $unit->NAMA_UNIT ?? "Unit tidak dikenal",
@@ -199,20 +184,19 @@ $petaSiap =
     <?php else: ?>
         <?php foreach ($sesi as $s): ?>
             <?php
-            $langkah     = (string) $s['langkah'];
-            $rel         = $s['rel'];
-            $jmlRel      = count($rel);
+            $langkah      = (string) $s['langkah'];
+            $rel          = $s['rel'];
+            $jmlRel       = count($rel);
             $langkahIndex = (int) $s['langkah_index'];
             $bolehInBreak = (bool) ($s['boleh_in_break'] ?? true);
-            $terkunci    = (in_array($langkah, ['break', 'pulang'], true) && ! $s['boleh_tutup'])
+            $terkunci     = (in_array($langkah, ['break', 'pulang'], true) && ! $s['boleh_tutup'])
                 || ($langkah === 'masuk_lagi' && ! $bolehInBreak);
             $bukaTerkunci = $langkah === 'masuk_lagi' ? ($s['buka_in_break'] ?? $s['buka']) : $s['buka'];
             $labelBuka    = $langkah === 'masuk_lagi' ? ($s['in_break'] ?? $s['pulang']) : $s['pulang'];
-            $railInset   = rtrim(rtrim(number_format(50 / max(1, $jmlRel), 2, '.', ''), '0'), '.');
-            $jamInBreak  = $rel[2]['jam'] ?? '';
+            $jamInBreak   = $rel[2]['jam'] ?? '';
 
             if ($langkah === 'selesai') {
-                $plateState = 'Shift selesai';
+                $plateState = 'Selesai';
                 $plateClass = 'is-done';
             } elseif ($langkah === 'masuk') {
                 $plateState = 'Belum masuk';
@@ -231,20 +215,18 @@ $petaSiap =
             $judul = [
                 'masuk'      => 'Mulai shift',
                 'break'      => 'Break siang',
-                'masuk_lagi' => 'In break',
+                'masuk_lagi' => 'Masuk lagi',
                 'pulang'     => 'Pulang',
             ][$langkah] ?? 'Absen';
 
             $deskripsi = [
-                'masuk'      => 'Pastikan seragam dan ID card terlihat jelas, serta kamu berada di titik toko.',
-                'break'      => 'Tutup sesi pagi untuk mulai break. Break tanpa foto, tapi lokasi tetap dicek.',
-                'masuk_lagi' => 'Masuk kembali setelah break. Foto wajib; pulang baru bisa pukul ' . $s['pulang'] . '.',
-                'pulang'     => 'Absen pulang dengan foto. Tombol aktif tepat pukul ' . $s['pulang'] . '.',
+                'masuk'      => 'Seragam & ID card terlihat · foto wajib.',
+                'break'      => 'Tanpa foto · lokasi tetap dicek.',
+                'masuk_lagi' => 'Foto wajib · pulang baru pukul ' . $s['pulang'] . '.',
+                'pulang'     => 'Foto wajib · tombol aktif pukul ' . $s['pulang'] . '.',
             ][$langkah] ?? '';
 
-            $aksi = $langkah === 'break'
-                ? 'absen/break'
-                : ($langkah === 'pulang' ? 'absen/pulang' : 'absen/masuk');
+            $aksi      = $langkah === 'break' ? 'absen/break' : ($langkah === 'pulang' ? 'absen/pulang' : 'absen/masuk');
             $butuhFoto = $langkah !== 'break';
             $labelTombol = [
                 'masuk'      => 'Absen Masuk',
@@ -253,111 +235,64 @@ $petaSiap =
                 'pulang'     => 'Absen Pulang',
             ][$langkah] ?? 'Absen';
             $ikonTombol = $langkah === 'break' ? 'i-pause' : 'i-camera';
-            $idFoto = 'foto-' . strtolower((string) $s['kode']) . '-' . (int) ($s['presensi']->idpresensi ?? 0);
-            $events = $s['timeline'];
+            $idFoto     = 'foto-' . strtolower((string) $s['kode']) . '-' . (int) ($s['presensi']->idpresensi ?? 0);
+            $events     = $s['timeline'];
             $jmlSelesai = count($events);
-            $jamMasuk = $events[0]['waktu'] ?? '--:--';
-            $jamPulang = $events !== [] ? $events[array_key_last($events)]['waktu'] : '--:--';
+            $adaFoto    = array_filter($events, static fn ($ev) => $ev['foto'] !== null);
             ?>
-            <article class="shift-card" data-langkah="<?= esc($langkah, 'attr') ?>">
-                <section class="clock-card" aria-label="Shift dan progres">
-                    <svg class="ic plate-mark"><use href="#i-clock"/></svg>
-                    <div class="plate-top">
-                        <div class="plate-shift">
-                            <span class="pulse"></span>
-                            <p class="plate-name"><?= esc($s['label']) ?></p>
-                        </div>
-                        <div class="clock-line">
-                            <div class="clock" data-base="<?= esc($jamSekarang, 'attr') ?>"><span class="hm"><?= esc(
-                                substr($jamSekarang, 0, 5),
-                            ) ?></span><span class="sec">:<?= esc(
-    substr($jamSekarang, 6, 2),
-) ?></span></div>
-                            <span class="tz">WIB</span>
-                        </div>
+            <article class="sheet shift" data-langkah="<?= esc($langkah, 'attr') ?>">
+                <div class="plate-top">
+                    <div class="plate-shift">
+                        <p class="plate-name"><?= esc($s['label']) ?></p>
+                        <p class="plate-state <?= esc($plateClass, 'attr') ?>"><span class="state-dot" aria-hidden="true"></span><?= esc(
+                            $plateState,
+                        ) ?></p>
                     </div>
-                    <p class="plate-range"><?= esc($s['rentang']) ?></p>
-                    <p class="plate-state <?= esc($plateClass, 'attr') ?>"><span class="state-dot"></span> <?= esc(
-                        $plateState,
-                    ) ?></p>
+                    <div class="clock-line">
+                        <div class="clock" data-base="<?= esc($jamSekarang, 'attr') ?>"><span class="hm"><?= esc(
+                            substr($jamSekarang, 0, 5),
+                        ) ?></span><span class="sec">:<?= esc(substr($jamSekarang, 6, 2)) ?></span></div>
+                        <span class="tz">WIB</span>
+                    </div>
+                </div>
 
-                    <div class="rail" style="--rail-count: <?= (int) $jmlRel ?>; --rail-inset: <?= esc(
-                        $railInset,
-                        'attr',
-                    ) ?>%;" aria-label="Progres shift">
-                        <?php foreach ($rel as $i => $step): ?>
-                            <?php
-                            $status = $i < $langkahIndex ? 'done' : ($i === $langkahIndex ? 'now' : 'todo');
-                            ?>
-                            <div class="rail-step <?= $status ?>"<?= $status === 'now' ? ' aria-current="step"' : '' ?>>
-                                <span class="rail-dot"><?php if ($status === 'done'): ?><svg class="ic"><use href="#i-check"/></svg><?php elseif ($status === 'now'): ?><?php else: ?><?= $i + 1 ?><?php endif; ?></span>
-                                <span class="rail-label"><?= esc($step['label']) ?></span>
-                                <span class="rail-time"><?= esc($step['jam']) ?></span>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </section>
+                <p class="plate-range"><?= esc($s['rentang']) ?></p>
+
+                <ol class="rail" style="--rail-count: <?= (int) $jmlRel ?>;" aria-label="Progres shift">
+                    <?php foreach ($rel as $i => $step): ?>
+                        <?php $status = $i < $langkahIndex ? 'done' : ($i === $langkahIndex ? 'now' : 'todo'); ?>
+                        <li class="rail-step <?= $status ?>"<?= $status === 'now' ? ' aria-current="step"' : '' ?>>
+                            <span class="rail-dot" aria-hidden="true"></span>
+                            <span class="rail-label"><?= esc($step['label']) ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ol>
 
                 <?php if ($langkah === 'selesai'): ?>
-                    <section class="done-card" aria-label="Ringkasan shift selesai">
-                        <div class="done-head">
-                            <span class="done-ic"><svg class="ic"><use href="#i-check"/></svg></span>
-                            <div class="done-copy">
-                                <h3>Shift selesai</h3>
-                                <p><?= esc($s['ringkasan']) ?></p>
-                            </div>
-                            <span class="chip is-open">Selesai</span>
+                    <section class="action is-done" aria-label="Ringkasan shift">
+                        <div class="action-head">
+                            <h2>Ringkasan shift</h2>
                         </div>
-                        <div class="done-grid">
-                            <div class="metric"><b><?= esc($jamMasuk) ?></b><span>Masuk</span></div>
-                            <div class="metric"><b><?= esc($jamPulang) ?></b><span>Pulang</span></div>
-                            <div class="metric"><b><?= esc($jmlSelesai) ?>/<?= esc($jmlRel) ?></b><span>Langkah</span></div>
-                        </div>
-                        <?php if ($s['foto'] !== []): ?>
-                            <div class="photo-links">
-                                <?php foreach ($s['foto'] as $f): ?>
-                                    <a class="photo-link" href="<?= base_url($f['url']) ?>"><?= esc(
-                                        $f['label'],
-                                    ) ?></a>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
-                        <div class="done-foot">
-                            <span><svg class="ic"><use href="#i-check"/></svg> Semua langkah lengkap</span>
-                            <span><?= count($s['foto']) ?> foto</span>
-                        </div>
+                        <p class="action-desc">Semua langkah lengkap · <?= count($adaFoto) ?> foto.</p>
                     </section>
                 <?php else: ?>
-                    <section class="action-card" aria-label="Aksi berikutnya">
-                        <div class="action-kicker">
-                            <span class="eyebrow">Langkah berikutnya</span>
+                    <section class="action" aria-label="Aksi berikutnya">
+                        <div class="action-head">
+                            <h2><?= esc($judul) ?></h2>
                             <?php if ($terkunci): ?>
-                                <span class="chip is-wait" data-hitung="<?= esc(
-                                    $bukaTerkunci,
-                                    'attr',
-                                ) ?>">Buka <?= esc($labelBuka) ?></span>
-                            <?php else: ?>
-                                <span class="chip is-open">Bisa sekarang</span>
+                                <span class="chip is-wait" data-hitung="<?= esc($bukaTerkunci, 'attr') ?>">Buka <?= esc(
+                                    $labelBuka,
+                                ) ?></span>
                             <?php endif; ?>
                         </div>
-                        <h3 class="action-title"><?= esc($judul) ?></h3>
                         <p class="action-desc"><?= esc($deskripsi) ?></p>
-
-                        <div class="history-strip">
-                            <span class="hs-label">Sudah</span>
-                            <span class="hs-text"><?= $s['ringkasan'] !== ''
-                                ? esc($s['ringkasan'])
-                                : 'Belum ada absen hari ini' ?></span>
-                        </div>
 
                         <form class="form-absen" method="post" action="<?= base_url(
                             $aksi,
                         ) ?>"<?= $butuhFoto ? ' enctype="multipart/form-data"' : '' ?>>
                             <?= csrf_field() ?>
                             <?php if ($langkah === 'masuk' || $langkah === 'masuk_lagi'): ?>
-                                <input type="hidden" name="sesi" value="<?= esc(
-                                    $s['kode'],
-                                ) ?>">
+                                <input type="hidden" name="sesi" value="<?= esc($s['kode']) ?>">
                             <?php else: ?>
                                 <input type="hidden" name="idpresensi" value="<?= (int) $s[
                                     'presensi'
@@ -367,33 +302,19 @@ $petaSiap =
                             <input type="hidden" name="longitude">
 
                             <?php if ($langkah === 'break'): ?>
-                                <div class="no-photo">
-                                    <span class="shield"><svg class="ic"><use href="#i-shield"/></svg></span>
-                                    <span class="copy">
-                                        <strong>Tanpa foto</strong>
-                                        <span>GPS tetap dicek · in break berikutnya <?= esc(
-                                            $jamInBreak,
-                                        ) ?></span>
-                                    </span>
-                                </div>
+                                <p class="no-photo"><svg class="ic"><use href="#i-clock"/></svg> In break berikutnya <?= esc(
+                                    $jamInBreak,
+                                ) ?></p>
                             <?php else: ?>
                                 <div class="photo">
                                     <input id="<?= esc($idFoto, 'attr') ?>" type="file" name="foto" accept="image/*" capture="environment">
-                                    <label class="photo-label photo-slot" for="<?= esc(
-                                        $idFoto,
-                                        'attr',
-                                    ) ?>">
+                                    <label class="photo-label photo-slot" for="<?= esc($idFoto, 'attr') ?>">
                                         <span class="cam"><svg class="ic"><use href="#i-camera"/></svg></span>
                                         <span class="photo-preview" role="img" aria-label="Pratinjau foto"></span>
                                         <span class="photo-text">
-                                            <span class="photo-title"><?= $langkah === 'masuk'
-                                                ? 'Ambil foto masuk'
-                                                : ($langkah === 'masuk_lagi'
-                                                    ? 'Ambil foto in break'
-                                                    : 'Ambil foto pulang') ?></span>
-                                            <span class="photo-hint">Kamera belakang &middot; wajib</span>
+                                            <span class="photo-title">Ambil foto</span>
+                                            <span class="photo-hint">Kamera belakang</span>
                                         </span>
-                                        <span class="chev"><svg class="ic"><use href="#i-chevron"/></svg></span>
                                     </label>
                                 </div>
                             <?php endif; ?>
@@ -405,112 +326,41 @@ $petaSiap =
                                     ? 'i-lock'
                                     : $ikonTombol ?>"/></svg></span>
                                 <span class="btn-label"><?= esc($labelTombol) ?></span>
-                                <span class="btn-arrow"><svg class="ic"><use href="#<?= $terkunci
-                                    ? 'i-lock'
-                                    : 'i-arrow' ?>"/></svg></span>
                             </button>
-
-                            <?php if ($terkunci && $langkah === 'masuk_lagi'): ?>
-                                <p class="punch-hint"><svg class="ic"><use href="#i-clock"/></svg> In break bisa mulai <?= esc(
-                                    $labelBuka,
-                                ) ?>.</p>
-                            <?php elseif ($terkunci && $langkah === 'break'): ?>
-                                <p class="punch-hint"><svg class="ic"><use href="#i-clock"/></svg> Break tanpa foto, bisa mulai <?= esc(
-                                    $s['pulang'],
-                                ) ?>.</p>
-                            <?php elseif ($terkunci && $langkah === 'pulang'): ?>
-                                <p class="punch-hint"><svg class="ic"><use href="#i-clock"/></svg> Pulang bisa mulai <?= esc(
-                                    $s['pulang'],
-                                ) ?>.</p>
-                            <?php elseif ($langkah === 'masuk_lagi'): ?>
-                                <p class="punch-hint"><svg class="ic"><use href="#i-lock"/></svg> Pulang baru aktif pukul <?= esc(
-                                    $s['pulang'],
-                                ) ?>.</p>
-                            <?php endif; ?>
 
                             <p class="msg" role="status" aria-live="polite"></p>
                             <?php if ($petaSiap): ?>
                                 <button type="button" class="link lihat-peta" hidden>Lihat titik absen</button>
                             <?php endif; ?>
                         </form>
-
-                        <div class="meta-row">
-                            <span class="meta-item"><span class="live-dot"></span> GPS titik toko</span>
-                            <?php if ($langkah === 'break'): ?>
-                                <span class="meta-item"><svg class="ic"><use href="#i-shield"/></svg> Tanpa foto</span>
-                                <span class="meta-item"><svg class="ic"><use href="#i-clock"/></svg> In break <?= esc(
-                                    $jamInBreak,
-                                ) ?></span>
-                            <?php elseif ($langkah === 'masuk'): ?>
-                                <span class="meta-item"><svg class="ic"><use href="#i-camera"/></svg> Foto seragam</span>
-                                <span class="meta-item"><svg class="ic"><use href="#i-clock"/></svg> Boleh kapan saja</span>
-                            <?php elseif ($langkah === 'masuk_lagi'): ?>
-                                <span class="meta-item"><svg class="ic"><use href="#i-camera"/></svg> Foto wajib</span>
-                                <span class="meta-item"><svg class="ic"><use href="#i-clock"/></svg> Pulang <?= esc(
-                                    $s['pulang'],
-                                ) ?></span>
-                            <?php else: ?>
-                                <span class="meta-item"><svg class="ic"><use href="#i-camera"/></svg> Foto wajib</span>
-                                <span class="meta-item"><svg class="ic"><use href="#i-clock"/></svg> Buka <?= esc(
-                                    $s['pulang'],
-                                ) ?></span>
-                            <?php endif; ?>
-                        </div>
                     </section>
                 <?php endif; ?>
 
-                <section class="timeline-card" aria-label="Riwayat absen hari ini">
-                    <div class="sec-head">
-                        <h3>Absen hari ini</h3>
+                <section class="today" aria-label="Absen hari ini">
+                    <div class="today-head">
+                        <h2>Hari ini</h2>
                         <span class="count"><?= $jmlSelesai ?> dari <?= $jmlRel ?></span>
                     </div>
-                    <?php if ($events === []): ?>
-                        <div class="empty">
-                            <span class="empty-ic"><svg class="ic"><use href="#i-clock"/></svg></span>
-                            <strong>Belum ada absen</strong>
-                            <p>Mulai dengan Absen Masuk. Setiap langkah akan muncul di sini.</p>
-                        </div>
+                    <?php if ($s['ringkasan'] !== ''): ?>
+                        <p class="today-line"><?= esc($s['ringkasan']) ?></p>
                     <?php else: ?>
-                        <ol class="timeline">
-                            <?php foreach ($events as $ev): ?>
-                                <li>
-                                    <span class="node is-done"><svg class="ic"><use href="#i-check"/></svg></span>
-                                    <div class="event">
-                                        <div class="event-top"><strong><?= esc(
-                                            $ev['label'],
-                                        ) ?></strong><time><?= esc(
-    $ev['waktu'],
-) ?></time></div>
-                                        <p><?php if ($ev['tanpa_foto']): ?>Tanpa foto<?= $ev['kode'] === 'break'
-    ? ' · lokasi dicek'
-    : '' ?><?php else: ?>Foto tersimpan<?= $ev['status']
-    ? ' · ' . esc($ev['status'])
-    : '' ?><?php endif; ?></p>
-                                    </div>
-                                    <?php if ($ev['foto']): ?>
-                                        <a class="thumb" href="<?= base_url(
-                                            $ev['foto'],
-                                        ) ?>" aria-label="<?= esc(
+                        <p class="today-line is-empty">Belum ada absen hari ini.</p>
+                    <?php endif; ?>
+                    <?php if ($adaFoto !== []): ?>
+                        <div class="thumbs">
+                            <?php foreach ($adaFoto as $ev): ?>
+                                <a class="thumb" href="<?= base_url(
+                                    $ev['foto'],
+                                ) ?>" aria-label="<?= esc(
     $ev['foto_label'] ?? 'Foto absen',
     'attr',
 ) ?>">
-                                            <img src="<?= base_url(
-                                                $ev['foto'],
-                                            ) ?>" alt="" loading="lazy">
-                                        </a>
-                                    <?php else: ?>
-                                        <span class="thumb no-photo" aria-hidden="true"><svg class="ic"><use href="#i-pause"/></svg></span>
-                                    <?php endif; ?>
-                                </li>
+                                    <img src="<?= base_url($ev['foto']) ?>" alt="" loading="lazy">
+                                </a>
                             <?php endforeach; ?>
-                        </ol>
+                        </div>
                     <?php endif; ?>
                 </section>
-
-                <footer class="app-foot">
-                    <span><svg class="ic"><use href="#i-shield"/></svg> Lokasi dicek saat absen</span>
-                    <span class="foot-note">Koreksi lewat admin</span>
-                </footer>
             </article>
         <?php endforeach; ?>
     <?php endif; ?>
@@ -746,7 +596,8 @@ $petaSiap =
             }
             var menit = Math.floor(selisih / 60000);
             var detik = Math.floor(selisih / 1000) % 60;
-            el.textContent = 'Buka dalam ' + menit + ':' + dua(detik);
+            var jam = Math.floor(menit / 60);
+            el.textContent = 'Buka dalam ' + (jam > 0 ? jam + ':' + dua(menit % 60) : menit) + ':' + dua(detik);
         });
     }
 

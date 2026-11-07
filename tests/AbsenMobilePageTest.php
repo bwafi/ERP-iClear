@@ -143,7 +143,7 @@ class AbsenMobilePageTest extends CIUnitTestCase
             'akun_idakun' => 10, 'unit_idunit' => 1, 'sesi' => 'PAGI',
             'waktu_masuk' => $this->hariIni() . ' 08:50:00',
             'jam_jadwal_masuk' => '08:45:00', 'jam_jadwal_pulang' => '13:00:00',
-            'status_kehadiran' => 0,
+            'status_kehadiran' => 0, 'foto' => 'uji-pagi.jpg',
         ]);
         $result = $this->get('absen');
         $result->assertSee('Absen Break');
@@ -161,7 +161,7 @@ class AbsenMobilePageTest extends CIUnitTestCase
             'akun_idakun' => 10, 'unit_idunit' => 1, 'sesi' => 'SORE',
             'waktu_masuk' => $this->hariIni() . ' 16:55:00',
             'jam_jadwal_masuk' => '16:55:00', 'jam_jadwal_pulang' => '21:00:00',
-            'status_kehadiran' => 0,
+            'status_kehadiran' => 0, 'foto' => 'uji-sore.jpg',
         ]);
         $result = $this->get('absen');
         $result->assertSee('Absen Pulang');
@@ -204,7 +204,6 @@ class AbsenMobilePageTest extends CIUnitTestCase
             $result = $this->get('absen');
             $result->assertSee('Menunggu in break');
             $result->assertSee('Buka ' . config('Presensi')->inBreakMulai);
-            $result->assertSee('In break bisa mulai ' . config('Presensi')->inBreakMulai);
         } finally {
             config('Presensi')->inBreakMulai = $asli;
         }

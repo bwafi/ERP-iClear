@@ -1,31 +1,15 @@
 <?php
 /**
- * Tampilan khusus /absen. Sengaja tidak mengubah tema bersama
- * `inc/_presensi_mobile_theme.php` karena tema itu juga dipakai
- * /pengajuan_izin.
+ * Tampilan /absen: satu lembar, tiga blok — shift, aksi, hari ini.
+ *
+ * Token warna dan permukaan berasal dari `inc/_presensi_mobile_theme.php`.
+ * Halaman ini hanya menambah susunan dan komponen yang khas absen.
  */
 ?>
 <style>
     .absen {
-        --absen-soft: #f5f8fc;
-        --absen-soft-2: #eef3f9;
-        --absen-plate: #082a47;
-        --absen-plate-ink: #f6fbff;
-        --absen-plate-muted: #a9c4da;
-        --absen-sky: #6cc6f5;
-        --absen-shadow: 0 1px 2px rgba(13, 26, 41, .05), 0 16px 36px -26px rgba(13, 26, 41, .45);
-        gap: 10px;
-        padding-top: calc(18px + env(safe-area-inset-top));
-        padding-bottom: calc(24px + env(safe-area-inset-bottom));
-    }
-
-    html[data-bs-theme="dark"] .absen {
-        --absen-soft: #111c2a;
-        --absen-soft-2: #0b1522;
-        --absen-plate: #071c30;
-        --absen-plate-muted: #9fbdd5;
-        --absen-sky: #7cc4f0;
-        --absen-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 20px 50px -30px rgba(0, 0, 0, .9);
+        gap: 0;
+        padding-top: calc(14px + env(safe-area-inset-top));
     }
 
     .absen .ic {
@@ -39,1153 +23,36 @@
         stroke-linejoin: round;
     }
 
-    .absen .shift-card {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
     /* ===== Kepala ===== */
     .absen .head {
-        align-items: center;
         gap: 10px;
-        margin-bottom: 2px;
+        margin-bottom: 14px;
+        padding: 0 2px;
+    }
+
+    .absen .avatar {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        border: 1px solid var(--mob-glass-border);
+        border-radius: 13px;
+        background: var(--mob-field);
+        box-shadow: inset 0 1px 0 var(--mob-glass-edge);
+        color: var(--mob-accent-ink);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .02em;
     }
 
     .absen .head-main {
         flex: 1 1 auto;
     }
 
-    .absen .avatar {
-        display: grid;
-        place-items: center;
-        width: 38px;
-        height: 38px;
-        flex: 0 0 auto;
-        border: 1px solid var(--mob-rule);
-        border-radius: 12px;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-        font-size: 12px;
-        font-weight: 750;
-        letter-spacing: .02em;
-    }
-
-    .absen .hello {
-        margin: 0;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        font-weight: 550;
-        line-height: 1.2;
-    }
-
     .absen .head h1 {
-        margin: 1px 0 0;
-        font-size: 15px;
-        font-weight: 720;
-        letter-spacing: -.015em;
-        line-height: 1.2;
-    }
-
-    .absen .head .meta {
-        margin: 1px 0 0;
-        font-size: 10.5px;
-    }
-
-    .absen .head .meta .visit {
-        margin-left: 5px;
-        padding: 1px 5px;
-        border-radius: 4px;
-        font-size: 9px;
-        font-weight: 700;
-        letter-spacing: .04em;
-        text-transform: uppercase;
-        color: #8a5300;
-        background: #ffe8b8;
-    }
-
-    .absen .head .ghost {
-        min-height: 34px;
-        padding: 0 10px;
-        border-radius: 9px;
-        font-size: 10.5px;
-    }
-
-    .absen .head .ghost .ic {
-        width: 14px;
-        height: 14px;
-    }
-
-    .absen .unit {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        margin: -2px 0 1px 2px;
-        color: var(--mob-muted);
-        font-size: 11px;
-        font-weight: 550;
-    }
-
-    .absen .unit .ic {
-        width: 13px;
-        height: 13px;
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .unit .sep {
-        padding: 0 1px;
-    }
-
-    .absen .sheet {
-        padding: 16px;
-        border-radius: 18px;
-        background: var(--mob-surface);
-        box-shadow: var(--absen-shadow);
-    }
-
-    /* ===== Pelat jam ===== */
-    .absen .clock-card {
-        position: relative;
-        isolation: isolate;
-        overflow: hidden;
-        padding: 15px 16px 14px;
-        border: 1px solid rgba(255, 255, 255, .08);
-        border-radius: 20px;
-        background: var(--absen-plate);
-        color: var(--absen-plate-ink);
-        box-shadow: 0 18px 34px -28px rgba(4, 19, 34, .9);
-    }
-
-    .absen .plate-mark {
-        position: absolute;
-        z-index: -1;
-        top: 20px;
-        right: -20px;
-        width: 132px;
-        height: 132px;
-        color: #fff;
-        opacity: .055;
-        stroke-width: 1.1;
-    }
-
-    .absen .plate-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-    }
-
-    .absen .pulse {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: var(--absen-sky);
-        box-shadow: 0 0 0 3px rgba(108, 198, 245, .16);
-        animation: absen-pulse 2.4s ease-in-out infinite;
-    }
-
-    @keyframes absen-pulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: .45; transform: scale(.8); }
-    }
-
-    .absen .clock-line {
-        display: flex;
-        align-items: flex-end;
-        gap: 8px;
-        margin-top: 7px;
-        line-height: 1;
-    }
-
-    .absen .clock {
-        display: flex;
-        align-items: baseline;
-        color: #fff;
-        font-family: "SFMono-Regular", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
-        font-size: 56px;
-        font-weight: 700;
-        letter-spacing: -.06em;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .absen .clock .sec {
-        margin-left: 2px;
-        color: var(--absen-sky);
-        font-size: 19px;
-        font-weight: 600;
-        letter-spacing: -.03em;
-        opacity: .9;
-    }
-
-    .absen .tz {
-        margin-bottom: 8px;
-        color: var(--absen-plate-muted);
-        font-size: 9px;
-        font-weight: 700;
-        letter-spacing: .12em;
-    }
-
-    .absen .plate-state {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        margin: 3px 0 0;
-        color: var(--absen-plate-muted);
-        font-size: 11px;
-        font-weight: 600;
-    }
-
-    .absen .state-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--absen-sky);
-        box-shadow: 0 0 0 3px rgba(108, 198, 245, .16);
-    }
-
-    .absen .plate-state.is-wait .state-dot {
-        background: #f0b45a;
-        box-shadow: 0 0 0 3px rgba(240, 180, 90, .16);
-    }
-
-    .absen .plate-state.is-done {
-        color: #a9e8c5;
-    }
-
-    .absen .plate-state.is-done .state-dot {
-        background: #6fdd9d;
-        box-shadow: 0 0 0 3px rgba(111, 221, 157, .16);
-    }
-
-    /* ===== Rel langkah ===== */
-    .absen .rail {
-        --rail-count: 4;
-        --rail-inset: 12.5%;
-        position: relative;
-        display: grid;
-        grid-template-columns: repeat(var(--rail-count), minmax(0, 1fr));
-        gap: 4px;
-        margin-top: 13px;
-        padding-top: 14px;
-        border-top: 1px solid rgba(255, 255, 255, .13);
-    }
-
-    .absen .rail::before {
-        content: "";
-        position: absolute;
-        top: 23px;
-        left: var(--rail-inset);
-        right: var(--rail-inset);
-        height: 1px;
-        background: rgba(255, 255, 255, .17);
-    }
-
-    .absen .rail-step {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 5px;
-        min-width: 0;
-        text-align: center;
-    }
-
-    .absen .rail-dot {
-        display: grid;
-        place-items: center;
-        width: 18px;
-        height: 18px;
-        border: 1.5px solid rgba(255, 255, 255, .30);
-        border-radius: 50%;
-        background: var(--absen-plate);
-        color: rgba(255, 255, 255, .55);
-        font-size: 8.5px;
-        font-weight: 750;
-        line-height: 1;
-    }
-
-    .absen .rail-dot .ic {
-        width: 10px;
-        height: 10px;
-        stroke-width: 2.6;
-    }
-
-    .absen .rail-step.done .rail-dot {
-        border-color: var(--absen-sky);
-        background: var(--absen-sky);
-        color: #06233b;
-    }
-
-    .absen .rail-step.now .rail-dot {
-        border-color: var(--absen-sky);
-        background: #fff;
-        color: var(--absen-plate);
-        box-shadow: 0 0 0 4px rgba(108, 198, 245, .18);
-    }
-
-    .absen .rail-step.now .rail-dot::after {
-        content: "";
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: var(--mob-accent-solid);
-    }
-
-    .absen .rail-label {
-        overflow: hidden;
-        max-width: 100%;
-        color: rgba(255, 255, 255, .52);
-        font-size: 10.5px;
-        font-weight: 650;
-        line-height: 1.2;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .absen .rail-time {
-        color: rgba(255, 255, 255, .56);
-        font-size: 9.5px;
-        font-weight: 550;
-        font-variant-numeric: tabular-nums;
-        line-height: 1;
-    }
-
-    .absen .rail-step.done .rail-label {
-        color: rgba(255, 255, 255, .82);
-    }
-
-    .absen .rail-step.done .rail-time {
-        color: rgba(255, 255, 255, .58);
-    }
-
-    .absen .rail-step.now .rail-label {
-        color: #fff;
-    }
-
-    .absen .rail-step.now .rail-time {
-        color: var(--absen-sky);
-    }
-
-    /* ===== Kartu aksi ===== */
-    .absen .action-card,
-    .absen .timeline-card,
-    .absen .done-card {
-        padding: 15px 16px;
-        border: 1px solid var(--mob-rule);
-        border-radius: 18px;
-        background: var(--mob-surface);
-        box-shadow: var(--absen-shadow);
-    }
-
-    .absen .action-kicker {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 7px;
-    }
-
-    .absen .eyebrow {
-        color: var(--mob-muted);
-        font-size: 10px;
-        font-weight: 750;
-        letter-spacing: .085em;
-        text-transform: uppercase;
-    }
-
-    .absen .chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 4px 7px;
-        border: 1px solid var(--mob-rule);
-        border-radius: 999px;
-        background: var(--absen-soft);
-        color: var(--mob-muted);
-        font-size: 10px;
-        font-weight: 700;
-        line-height: 1;
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .absen .chip.is-open {
-        border-color: transparent;
-        background: var(--mob-ok);
-        color: var(--mob-surface);
-    }
-
-    html[data-bs-theme="dark"] .absen .chip.is-open {
-        background: rgba(111, 221, 157, .16);
-        color: var(--mob-ok);
-    }
-
-    .absen .chip.is-wait {
-        border-color: transparent;
-        background: var(--mob-warn);
-        color: var(--mob-surface);
-    }
-
-    html[data-bs-theme="dark"] .absen .chip.is-wait {
-        background: rgba(240, 180, 90, .16);
-        color: var(--mob-warn);
-    }
-
-    .absen .action-title {
-        margin: 0 0 3px;
-        font-size: 20px;
-        font-weight: 750;
-        letter-spacing: -.025em;
-        line-height: 1.15;
-    }
-
-    .absen .action-desc {
-        margin: 0 0 10px;
-        color: var(--mob-muted);
-        font-size: 12px;
-        line-height: 1.5;
-    }
-
-    .absen .history-strip {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: 4px 8px;
-        margin: 0 0 10px;
-        padding: 7px 9px;
-        border: 1px solid var(--mob-rule);
-        border-radius: 9px;
-        background: var(--absen-soft);
-        color: var(--mob-muted);
-        font-size: 11px;
-        line-height: 1.4;
-    }
-
-    .absen .history-strip .hs-label {
-        color: var(--mob-muted);
-        font-size: 9px;
-        font-weight: 750;
-        letter-spacing: .07em;
-        text-transform: uppercase;
-    }
-
-    .absen .history-strip .hs-text {
-        color: var(--mob-ink);
-        font-weight: 650;
-        font-variant-numeric: tabular-nums;
-    }
-
-    /* ===== Foto ===== */
-    .absen .photo {
-        margin-top: 0;
-    }
-
-    .absen .photo-label.photo-slot {
-        min-height: 0;
-        gap: 9px;
-        margin: 0 0 10px;
-        padding: 9px 10px;
-        border: 1px dashed var(--mob-rule-strong);
-        border-radius: 11px;
-        background: var(--absen-soft);
-    }
-
-    .absen .photo-label.photo-slot .cam {
-        display: grid;
-        place-items: center;
-        width: 32px;
-        height: 32px;
-        flex: 0 0 auto;
-        border-radius: 9px;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .photo-label.photo-slot .cam .ic {
-        width: 17px;
-        height: 17px;
-    }
-
-    .absen .photo-label.photo-slot .photo-preview {
-        width: 32px;
-        height: 32px;
-        border-radius: 9px;
-    }
-
-    .absen .photo-label.photo-slot .photo-title {
-        font-size: 12px;
-        font-weight: 700;
-        line-height: 1.25;
-    }
-
-    .absen .photo-label.photo-slot .photo-hint {
-        font-size: 10.5px;
-        line-height: 1.25;
-    }
-
-    .absen .photo-label.has-photo .cam {
-        display: none;
-    }
-
-    .absen .photo-label.photo-slot .chev {
-        color: var(--mob-muted);
-    }
-
-    .absen .photo-label.photo-slot .chev .ic {
-        width: 15px;
-        height: 15px;
-    }
-
-    .absen .no-photo {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        margin: 0 0 10px;
-        padding: 8px 10px;
-        border: 1px solid var(--mob-rule);
-        border-radius: 11px;
-        background: var(--absen-soft);
-    }
-
-    .absen .no-photo .shield {
-        display: grid;
-        place-items: center;
-        width: 32px;
-        height: 32px;
-        flex: 0 0 auto;
-        border: 1px solid var(--mob-rule);
-        border-radius: 9px;
-        background: var(--mob-surface);
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .no-photo .shield .ic {
-        width: 16px;
-        height: 16px;
-    }
-
-    .absen .no-photo strong {
-        display: block;
-        font-size: 12px;
-        font-weight: 700;
-        line-height: 1.25;
-    }
-
-    .absen .no-photo span {
-        display: block;
-        margin-top: 1px;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        line-height: 1.25;
-    }
-
-    /* ===== Tombol aksi ===== */
-    .absen .punch-btn {
-        display: grid;
-        grid-template-columns: 24px 1fr 24px;
-        align-items: center;
-        width: 100%;
-        min-height: 58px;
-        padding: 0 15px;
-        border: 0;
-        border-radius: 14px;
-        background: var(--mob-accent-solid);
-        color: #fff;
-        font: inherit;
-        font-size: 15.5px;
-        font-weight: 750;
-        letter-spacing: -.01em;
-        cursor: pointer;
-        box-shadow: 0 10px 22px -12px rgba(0, 116, 186, .72);
-        transition: background-color .15s ease, transform .1s ease;
-    }
-
-    .absen .punch-btn:hover {
-        background: var(--mob-accent-hover);
-    }
-
-    .absen .punch-btn:active {
-        transform: translateY(1px);
-    }
-
-    .absen .punch-btn .btn-ic {
-        display: grid;
-        place-items: center;
-    }
-
-    .absen .punch-btn .btn-ic .ic {
-        width: 19px;
-        height: 19px;
-    }
-
-    .absen .punch-btn .btn-arrow {
-        display: grid;
-        place-items: center;
-        justify-self: end;
-        opacity: .9;
-    }
-
-    .absen .punch-btn .btn-arrow .ic {
-        width: 17px;
-        height: 17px;
-    }
-
-    .absen .punch-btn[disabled] {
-        border: 1px solid var(--mob-rule);
-        background: var(--absen-soft-2);
-        color: var(--mob-muted);
-        box-shadow: none;
-        cursor: not-allowed;
-    }
-
-    .absen .punch-btn[disabled] .btn-ic .ic {
-        color: var(--mob-muted);
-    }
-
-    .absen .punch-hint {
-        display: flex;
-        align-items: flex-start;
-        gap: 5px;
-        margin: 8px 1px 0;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        line-height: 1.4;
-    }
-
-    .absen .punch-hint .ic {
-        width: 12px;
-        height: 12px;
-        margin-top: 1px;
-    }
-
-    .absen .meta-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 5px 10px;
-        margin-top: 10px;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        font-weight: 550;
-    }
-
-    .absen .meta-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-    }
-
-    .absen .meta-item .ic {
-        width: 12px;
-        height: 12px;
-    }
-
-    .absen .meta-item .live-dot {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: var(--mob-ok);
-    }
-
-    .absen .form-absen .lihat-peta {
-        min-height: 34px;
-        margin-top: 2px;
-        padding: 0;
-        font-size: 10.5px;
-    }
-
-    .absen .form-absen .msg {
-        min-height: 1.1rem;
-        margin-top: 7px;
-        font-size: 11px;
-    }
-
-    /* ===== Timeline ===== */
-    .absen .timeline-card {
-        padding-bottom: 13px;
-    }
-
-    .absen .sec-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 11px;
-    }
-
-    .absen .sec-head h3 {
         margin: 0;
-        color: var(--mob-muted);
-        font-size: 10px;
-        font-weight: 750;
-        letter-spacing: .085em;
-        text-transform: uppercase;
-    }
-
-    .absen .sec-head .count {
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .absen .timeline {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-
-    .absen .timeline li {
-        position: relative;
-        display: grid;
-        grid-template-columns: 25px minmax(0, 1fr) auto;
-        align-items: start;
-        gap: 9px;
-        padding-bottom: 13px;
-    }
-
-    .absen .timeline li:last-child {
-        padding-bottom: 0;
-    }
-
-    .absen .timeline li:not(:last-child)::before {
-        content: "";
-        position: absolute;
-        top: 23px;
-        bottom: 0;
-        left: 12px;
-        width: 1px;
-        background: var(--mob-rule);
-    }
-
-    .absen .node {
-        display: grid;
-        place-items: center;
-        width: 25px;
-        height: 25px;
-        border: 1px solid transparent;
-        border-radius: 50%;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .node .ic {
-        width: 12px;
-        height: 12px;
-        stroke-width: 2.4;
-    }
-
-    .absen .node.is-done {
-        background: var(--mob-ok);
-        color: var(--mob-surface);
-    }
-
-    html[data-bs-theme="dark"] .absen .node.is-done {
-        background: rgba(111, 221, 157, .16);
-        color: var(--mob-ok);
-    }
-
-    .absen .event {
-        min-width: 0;
-        padding-top: 1px;
-    }
-
-    .absen .event-top {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 8px;
-    }
-
-    .absen .event-top strong {
-        overflow: hidden;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: -.01em;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .absen .event-top time {
-        flex: 0 0 auto;
-        color: var(--mob-ink);
-        font-size: 11.5px;
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .absen .event p {
-        margin: 1px 0 0;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        line-height: 1.4;
-    }
-
-    .absen .thumb {
-        display: grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        overflow: hidden;
-        border: 1px solid var(--mob-rule);
-        border-radius: 9px;
-        background: var(--absen-soft);
-        color: var(--mob-muted);
-        text-decoration: none;
-    }
-
-    .absen .thumb img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .absen .thumb.no-photo .ic {
-        width: 15px;
-        height: 15px;
-    }
-
-    .absen .empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 5px;
-        padding: 12px 8px 8px;
-        text-align: center;
-    }
-
-    .absen .empty .empty-ic {
-        display: grid;
-        place-items: center;
-        width: 38px;
-        height: 38px;
-        margin-bottom: 2px;
-        border: 1px dashed var(--mob-rule-strong);
-        border-radius: 12px;
-        background: var(--absen-soft);
-        color: var(--mob-muted);
-    }
-
-    .absen .empty .empty-ic .ic {
-        width: 18px;
-        height: 18px;
-    }
-
-    .absen .empty strong {
-        color: var(--mob-ink);
-        font-size: 11.5px;
-        font-weight: 700;
-    }
-
-    .absen .empty p {
-        margin: 0;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        line-height: 1.4;
-    }
-
-    /* ===== Selesai ===== */
-    .absen .done-card {
-        border-top: 3px solid var(--mob-ok);
-    }
-
-    .absen .done-head {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-    }
-
-    .absen .done-ic {
-        display: grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        flex: 0 0 auto;
-        border-radius: 11px;
-        background: var(--mob-ok);
-        color: var(--mob-surface);
-    }
-
-    html[data-bs-theme="dark"] .absen .done-ic {
-        background: rgba(111, 221, 157, .16);
-        color: var(--mob-ok);
-    }
-
-    .absen .done-ic .ic {
-        width: 19px;
-        height: 19px;
-        stroke-width: 2.4;
-    }
-
-    .absen .done-copy {
-        min-width: 0;
-        flex: 1 1 auto;
-    }
-
-    .absen .done-copy h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 750;
-        letter-spacing: -.02em;
-        line-height: 1.2;
-    }
-
-    .absen .done-copy p {
-        margin: 2px 0 0;
-        color: var(--mob-muted);
-        font-size: 10.5px;
-        font-variant-numeric: tabular-nums;
-        line-height: 1.35;
-    }
-
-    .absen .done-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 7px;
-        margin-top: 11px;
-    }
-
-    .absen .metric {
-        padding: 7px 8px;
-        border: 1px solid var(--mob-rule);
-        border-radius: 9px;
-        background: var(--absen-soft);
-    }
-
-    .absen .metric b {
-        display: block;
-        font-size: 13px;
-        font-weight: 750;
-        letter-spacing: -.02em;
-        font-variant-numeric: tabular-nums;
-        line-height: 1.2;
-    }
-
-    .absen .metric span {
-        display: block;
-        margin-top: 1px;
-        color: var(--mob-muted);
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: .03em;
-        text-transform: uppercase;
-    }
-
-    .absen .done-foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin-top: 10px;
-        padding-top: 9px;
-        border-top: 1px solid var(--mob-rule);
-        color: var(--mob-muted);
-        font-size: 10.5px;
-    }
-
-    .absen .done-foot span {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-    }
-
-    .absen .done-foot span .ic {
-        width: 12px;
-        height: 12px;
-        color: var(--mob-ok);
-    }
-
-    .absen .photo-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 6px;
-        margin-top: 10px;
-    }
-
-    .absen .photo-link {
-        display: inline-flex;
-        align-items: center;
-        min-height: 30px;
-        padding: 0 9px;
-        border: 1px solid var(--mob-rule);
-        border-radius: 8px;
-        background: var(--absen-soft);
-        color: var(--mob-accent-ink);
-        font-size: 10.5px;
-        font-weight: 650;
-        text-decoration: none;
-    }
-
-    .absen .photo-link:hover {
-        border-color: var(--mob-accent-solid);
-        background: var(--mob-accent-wash);
-    }
-
-    .absen .app-foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 0 2px;
-        color: var(--mob-muted);
-        font-size: 10px;
-    }
-
-    .absen .app-foot span {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-    }
-
-    .absen .app-foot .ic {
-        width: 12px;
-        height: 12px;
-    }
-
-    .absen .app-foot .foot-note {
-        font-weight: 600;
-    }
-
-    @media (max-width: 380px) {
-        .absen .action-title {
-            font-size: 19px;
-        }
-
-        .absen .rail-label {
-            font-size: 10px;
-        }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .absen .pulse {
-            animation: none;
-        }
-    }
-
-    /* ===== Liquid glass: permukaan /absen ===== */
-    .absen {
-        --absen-soft: color-mix(in srgb, var(--mob-ink) 4%, transparent);
-        --absen-soft-2: color-mix(in srgb, var(--mob-ink) 4%, transparent);
-        padding-bottom: calc(96px + env(safe-area-inset-bottom));
-    }
-
-    .absen .sheet,
-    .absen .action-card,
-    .absen .timeline-card,
-    .absen .done-card {
-        border: 1px solid var(--mob-glass-border);
-        border-radius: 22px;
-        background: var(--mob-glass);
-        box-shadow: inset 0 1px 0 var(--mob-glass-edge), var(--mob-glass-shadow);
-        -webkit-backdrop-filter: blur(20px) saturate(170%);
-        backdrop-filter: blur(20px) saturate(170%);
-    }
-
-    .absen .done-card {
-        border-top: 1px solid var(--mob-glass-border);
-    }
-
-    .absen .avatar {
-        border: 1px solid var(--mob-glass-border);
-        border-radius: 14px;
-        background: linear-gradient(160deg, var(--mob-accent-wash), transparent 70%);
-        box-shadow: inset 0 1px 0 var(--mob-glass-edge);
-    }
-
-    .absen .chip,
-    .absen .history-strip,
-    .absen .photo-label.photo-slot,
-    .absen .no-photo,
-    .absen .thumb,
-    .absen .metric,
-    .absen .empty .empty-ic,
-    .absen .photo-link {
-        border-color: var(--mob-field-border);
-        box-shadow: inset 0 1px 0 var(--mob-field-edge);
-    }
-
-    .absen .photo-label.photo-slot {
-        border-color: var(--mob-rule-strong);
-        border-style: dashed;
-        border-radius: 14px;
-        background: var(--mob-field);
-    }
-
-    .absen .no-photo,
-    .absen .thumb,
-    .absen .metric,
-    .absen .photo-link {
-        border-radius: 12px;
-    }
-
-    .absen .punch-btn {
-        border-radius: 16px;
-        background: linear-gradient(180deg, #0a86d2 0%, #0074ba 100%);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 14px 26px -14px rgba(0, 116, 186, .8);
-    }
-
-    .absen .punch-btn:hover {
-        background: linear-gradient(180deg, #0f93e3 0%, #0080cb 100%);
-    }
-
-    .absen .punch-btn[disabled] {
-        border: 1px solid var(--mob-glass-border);
-        background: var(--absen-soft-2);
-        box-shadow: none;
-    }
-
-    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-        .absen .sheet,
-        .absen .action-card,
-        .absen .timeline-card,
-        .absen .done-card {
-            background: rgba(255, 255, 255, .95);
-        }
-
-        html[data-bs-theme="dark"] .absen .sheet,
-        html[data-bs-theme="dark"] .absen .action-card,
-        html[data-bs-theme="dark"] .absen .timeline-card,
-        html[data-bs-theme="dark"] .absen .done-card {
-            background: rgba(20, 31, 46, .96);
-        }
-    }
-
-    /* ===== Aurora: satu lembar kaca per halaman ===== */
-    .absen {
-        gap: 0;
-        padding-top: calc(14px + env(safe-area-inset-top));
-    }
-
-    .absen .head {
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-
-    .absen .avatar {
-        width: 38px;
-        height: 38px;
-        border-radius: 13px;
-        background: var(--mob-field);
-        border: 1px solid var(--mob-glass-border);
-        box-shadow: inset 0 1px 0 var(--mob-glass-edge);
-        color: var(--mob-accent-ink);
-        font-size: 11px;
-        font-weight: 800;
-    }
-
-    .absen .hello {
-        color: var(--mob-muted);
-        font-size: .6875rem;
-        font-weight: 600;
-        letter-spacing: .01em;
-    }
-
-    .absen .head h1 {
-        margin-top: 1px;
-        font-size: 1.0625rem;
+        font-size: 1.125rem;
         font-weight: 650;
         letter-spacing: -.02em;
         line-height: 1.2;
@@ -1211,126 +78,49 @@
         text-transform: uppercase;
     }
 
-    .absen .sheet,
-    .absen .shift-card {
-        margin-top: 0;
-        padding: 16px;
-        border: 1px solid var(--mob-glass-border);
-        border-radius: 22px;
-        background: var(--mob-glass);
-        box-shadow: inset 0 1px 0 var(--mob-glass-edge), var(--mob-glass-shadow);
-        -webkit-backdrop-filter: blur(18px) saturate(160%);
-        backdrop-filter: blur(18px) saturate(160%);
+    /* ===== Lembar ===== */
+    .absen .sheet {
+        padding: 18px 16px;
     }
 
-    .absen .shift-card {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-    }
-
-    .absen .shift-card + .shift-card {
-        margin-top: 12px;
-    }
-
-    .absen .clock-card {
-        padding: 0;
-        border: 0;
-        border-radius: 0;
-        background: transparent;
-        color: var(--mob-ink);
-        box-shadow: none;
-        overflow: visible;
-        -webkit-backdrop-filter: none;
-        backdrop-filter: none;
-    }
-
-    .absen .plate-mark {
-        display: none;
-    }
-
+    /* ===== Shift ===== */
     .absen .plate-top {
-        align-items: baseline;
+        display: flex;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
     }
 
     .absen .plate-shift {
-        display: flex;
-        align-items: center;
-        gap: 7px;
         min-width: 0;
     }
 
     .absen .plate-name {
         margin: 0;
-        color: var(--mob-ink);
-        font-size: 1.0625rem;
-        font-weight: 700;
-        letter-spacing: -.02em;
-        line-height: 1.15;
-    }
-
-    .absen .plate-range {
-        margin: 3px 0 0;
-        color: var(--mob-ink);
-        font-size: 1.375rem;
-        font-weight: 650;
-        letter-spacing: -.025em;
-        line-height: 1.2;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .absen .pulse {
-        width: 5px;
-        height: 5px;
-        background: var(--mob-accent-solid);
-        box-shadow: 0 0 0 3px var(--mob-accent-wash);
-    }
-
-    .absen .clock-line {
-        align-items: baseline;
-        flex: 0 0 auto;
-        gap: 3px;
-        margin-top: 0;
-    }
-
-    .absen .clock {
-        font-family: inherit;
-        font-size: .8125rem;
-        font-weight: 600;
-        letter-spacing: .01em;
-        line-height: 1;
         color: var(--mob-muted);
-    }
-
-    .absen .clock .sec {
-        margin-left: 0;
-        font-size: inherit;
+        font-size: .6875rem;
         font-weight: 750;
-        letter-spacing: 0;
-        opacity: 1;
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .tz {
-        margin: 0 0 0 2px;
-        color: var(--mob-muted);
-        font-size: .5625rem;
-        font-weight: 700;
         letter-spacing: .08em;
+        line-height: 1.2;
+        text-transform: uppercase;
     }
 
     .absen .plate-state {
-        margin-top: 8px;
-        color: var(--mob-muted);
-        font-size: .6875rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 6px 0 0;
+        color: var(--mob-ink);
+        font-size: .8125rem;
         font-weight: 600;
+        line-height: 1.2;
     }
 
     .absen .state-dot {
-        width: 5px;
-        height: 5px;
+        width: 6px;
+        height: 6px;
+        flex: 0 0 auto;
+        border-radius: 999px;
         background: var(--mob-accent-solid);
         box-shadow: 0 0 0 3px var(--mob-accent-wash);
     }
@@ -1341,47 +131,85 @@
     }
 
     .absen .plate-state.is-done {
-        color: var(--mob-accent-ink);
+        color: var(--mob-muted);
     }
 
     .absen .plate-state.is-done .state-dot {
-        background: var(--mob-accent-solid);
+        background: var(--mob-muted);
+        box-shadow: none;
     }
 
+    .absen .clock-line {
+        display: flex;
+        align-items: baseline;
+        gap: 3px;
+        flex: 0 0 auto;
+        margin-top: 1px;
+    }
+
+    .absen .clock {
+        font-size: .8125rem;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: .01em;
+        line-height: 1;
+    }
+
+    .absen .clock .sec {
+        color: var(--mob-accent-ink);
+        font-weight: 750;
+    }
+
+    .absen .tz {
+        color: var(--mob-muted);
+        font-size: .5625rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+    }
+
+    .absen .plate-range {
+        margin: 12px 0 0;
+        font-size: 1.5rem;
+        font-weight: 650;
+        letter-spacing: -.03em;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ===== Rel langkah ===== */
     .absen .rail {
+        position: relative;
         display: grid;
-        grid-template-columns: repeat(var(--rail-count, 4), minmax(0, 1fr));
+        grid-template-columns: repeat(var(--rail-count, 2), minmax(0, 1fr));
         gap: 4px;
-        margin-top: 18px;
-        padding-top: 16px;
-        border-top: 1px solid var(--mob-rule);
+        margin: 16px 0 0;
+        padding: 0;
+        list-style: none;
     }
 
     .absen .rail::before {
-        top: 20.5px;
+        content: "";
+        position: absolute;
+        top: 4px;
         left: 4px;
-        right: 4px;
+        right: calc(100% / var(--rail-count, 2) - 4px);
         height: 1px;
         background: var(--mob-rule);
     }
 
     .absen .rail-step {
-        align-items: flex-start;
-        gap: 2px;
-        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
     }
 
     .absen .rail-dot {
-        width: 9px;
-        height: 9px;
-        border: 1px solid var(--mob-muted);
+        width: 8px;
+        height: 8px;
+        border: 1.5px solid var(--mob-rule-strong);
+        border-radius: 999px;
         background: var(--mob-canvas);
-        color: transparent;
-        font-size: 0;
-    }
-
-    .absen .rail-dot .ic {
-        display: none;
     }
 
     .absen .rail-step.done .rail-dot {
@@ -1395,24 +223,13 @@
         box-shadow: 0 0 0 3px var(--mob-accent-wash);
     }
 
-    .absen .rail-step.now .rail-dot::after {
-        display: none;
-    }
-
     .absen .rail-label {
-        margin-top: 4px;
         color: var(--mob-muted);
         font-size: .5625rem;
-        font-weight: 800;
-        letter-spacing: .07em;
+        font-weight: 750;
+        letter-spacing: .05em;
+        line-height: 1.2;
         text-transform: uppercase;
-    }
-
-    .absen .rail-time {
-        color: var(--mob-muted);
-        font-size: .625rem;
-        font-weight: 500;
-        opacity: .85;
     }
 
     .absen .rail-step.done .rail-label,
@@ -1420,345 +237,300 @@
         color: var(--mob-ink);
     }
 
-    .absen .rail-step.now .rail-time {
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .action-card,
-    .absen .timeline-card,
-    .absen .done-card {
-        margin-top: 14px;
-        padding: 12px 0 0;
-        border: 0;
+    /* ===== Aksi ===== */
+    .absen .action {
+        margin-top: 16px;
+        padding-top: 16px;
         border-top: 1px solid var(--mob-rule);
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-        -webkit-backdrop-filter: none;
-        backdrop-filter: none;
     }
 
-    .absen .action-kicker {
-        margin-bottom: 5px;
+    .absen .action-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
     }
 
-    .absen .eyebrow {
-        color: var(--mob-muted);
-        font-size: .5625rem;
-        font-weight: 800;
-        letter-spacing: .12em;
-    }
-
-    .absen .chip {
-        padding: 3px 7px;
-        border: 1px solid var(--mob-field-border);
-        background: var(--mob-field);
-        color: var(--mob-muted);
-        font-size: .5625rem;
-        font-weight: 800;
-        letter-spacing: .05em;
-        text-transform: uppercase;
-    }
-
-    .absen .chip.is-open {
-        border-color: transparent;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .chip.is-wait {
-        border-color: transparent;
-        background: color-mix(in srgb, var(--mob-warn) 14%, transparent);
-        color: var(--mob-warn);
-    }
-
-    .absen .action-title {
-        margin-bottom: 3px;
-        font-size: 1.125rem;
+    .absen .action h2 {
+        margin: 0;
+        font-size: 1.0625rem;
         font-weight: 650;
-        letter-spacing: -.025em;
+        letter-spacing: -.02em;
+        line-height: 1.25;
     }
 
     .absen .action-desc {
-        margin-bottom: 9px;
+        margin: 4px 0 0;
         color: var(--mob-muted);
         font-size: .75rem;
-        line-height: 1.5;
+        line-height: 1.45;
     }
 
-    .absen .history-strip {
-        margin-bottom: 10px;
-        padding: 7px 9px;
-        border: 1px solid var(--mob-field-border);
-        border-radius: 11px;
-        background: var(--mob-field);
-        box-shadow: inset 0 1px 0 var(--mob-field-edge);
-        color: var(--mob-muted);
-        font-size: .6875rem;
+    .absen .chip {
+        flex: 0 0 auto;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--mob-warn) 14%, transparent);
+        color: var(--mob-warn);
+        font-size: .625rem;
+        font-weight: 750;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: .01em;
+        white-space: nowrap;
     }
 
-    .absen .history-strip .hs-label {
-        color: var(--mob-muted);
-        font-size: .5rem;
-        font-weight: 800;
-        letter-spacing: .1em;
+    /* ===== Foto ===== */
+    .absen .photo {
+        position: relative;
     }
 
-    .absen .history-strip .hs-text {
-        color: var(--mob-ink);
-        font-weight: 650;
-    }
-
-    .absen .photo-label.photo-slot,
-    .absen .no-photo {
-        gap: 9px;
-        margin: 0 0 10px;
-        padding: 9px 10px;
-        border: 1px solid var(--mob-field-border);
-        border-radius: 13px;
-        background: var(--mob-field);
-        box-shadow: inset 0 1px 0 var(--mob-field-edge);
-    }
-
-    .absen .photo-label.photo-slot .cam,
-    .absen .no-photo .shield {
-        width: 32px;
-        height: 32px;
+    .absen .photo input[type="file"] {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
         border: 0;
-        border-radius: 10px;
+        white-space: nowrap;
+    }
+
+    .absen .photo-slot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 56px;
+        margin-top: 14px;
+        padding: 10px 12px;
+        border: 1px solid var(--mob-field-border);
+        border-radius: 14px;
+        background: var(--mob-field);
+        box-shadow: inset 0 1px 0 var(--mob-field-edge);
+        cursor: pointer;
+        transition: border-color .15s ease, background-color .15s ease;
+    }
+
+    .absen .photo-slot:hover {
+        border-color: var(--mob-accent-solid);
+        background: var(--mob-accent-wash);
+    }
+
+    .absen .photo input:focus-visible + .photo-slot {
+        outline: 2px solid var(--mob-accent-solid);
+        outline-offset: 2px;
+    }
+
+    .absen .cam,
+    .absen .photo-preview {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        flex: 0 0 auto;
+        border-radius: 11px;
         background: var(--mob-accent-wash);
         color: var(--mob-accent-ink);
     }
 
-    .absen .photo-label.photo-slot .photo-title,
-    .absen .no-photo strong {
-        font-size: .6875rem;
-        font-weight: 700;
+    .absen .photo-preview {
+        display: none;
+        background-position: center;
+        background-size: cover;
     }
 
-    .absen .photo-label.photo-slot .photo-hint,
-    .absen .no-photo span {
-        color: var(--mob-muted);
-        font-size: .625rem;
+    .absen .photo-slot.has-photo .cam {
+        display: none;
     }
 
-    .absen .punch-btn {
-        min-height: 54px;
-        padding: 0 15px;
-        border-radius: 16px;
-        background: linear-gradient(135deg, #5eead4, #38bdf8);
-        color: var(--mob-cta-ink);
+    .absen .photo-slot.has-photo .photo-preview {
+        display: block;
+    }
+
+    .absen .photo-text {
+        display: grid;
+        gap: 1px;
+        min-width: 0;
+    }
+
+    .absen .photo-title {
         font-size: .8125rem;
-        font-weight: 800;
-        letter-spacing: 0;
-        box-shadow: 0 16px 30px -16px rgba(56, 189, 248, .7);
+        font-weight: 650;
+        line-height: 1.3;
+    }
+
+    .absen .photo-hint {
+        color: var(--mob-muted);
+        font-size: .6875rem;
+        line-height: 1.3;
+    }
+
+    .absen .no-photo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin: 14px 0 0;
+        padding: 12px;
+        border: 1px solid var(--mob-field-border);
+        border-radius: 14px;
+        background: var(--mob-field);
+        color: var(--mob-muted);
+        font-size: .75rem;
+        line-height: 1.4;
+    }
+
+    /* ===== Tombol aksi ===== */
+    .absen .punch-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        width: 100%;
+        min-height: 52px;
+        margin-top: 12px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: 14px;
+        background: var(--mob-accent-solid);
+        color: #fff;
+        font: inherit;
+        font-size: .9375rem;
+        font-weight: 700;
+        letter-spacing: -.01em;
+        cursor: pointer;
+        transition: background-color .15s ease, transform .1s ease;
+    }
+
+    html[data-bs-theme="dark"] .absen .punch-btn {
+        color: var(--mob-cta-ink);
     }
 
     .absen .punch-btn:hover {
-        background: linear-gradient(135deg, #7cf0dd, #5cc9fa);
+        background: var(--mob-accent-hover);
+    }
+
+    .absen .punch-btn:active {
+        transform: scale(.99);
     }
 
     .absen .punch-btn[disabled] {
         border: 1px solid var(--mob-field-border);
         background: var(--mob-field);
         color: var(--mob-muted);
-        box-shadow: none;
+        cursor: not-allowed;
+        transform: none;
     }
 
-    .absen .punch-btn[disabled] .btn-ic .ic {
-        color: var(--mob-muted);
+    .absen .btn-ic {
+        display: grid;
+        place-items: center;
     }
 
-    .absen .punch-hint {
-        margin-top: 7px;
-        color: var(--mob-muted);
-        font-size: .625rem;
+    .absen .btn-ic .ic {
+        width: 19px;
+        height: 19px;
     }
 
-    .absen .meta-row {
-        gap: 4px 9px;
-        margin-top: 9px;
-        color: var(--mob-muted);
-        font-size: .625rem;
+    .absen .msg {
+        min-height: 0;
+        margin: 0;
     }
 
-    .absen .meta-item .live-dot {
-        background: var(--mob-accent-solid);
+    .absen .msg:not(:empty) {
+        margin-top: 10px;
     }
 
-    .absen .form-absen .msg {
-        margin-top: 7px;
-        font-size: .625rem;
+    .absen .lihat-peta {
+        margin-top: 4px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font-family: inherit;
+        font-size: .75rem;
+        cursor: pointer;
     }
 
-    .absen .sec-head {
-        margin-bottom: 8px;
-    }
-
-    .absen .sec-head h3 {
-        color: var(--mob-muted);
-        font-size: .5625rem;
-        font-weight: 800;
-        letter-spacing: .12em;
-    }
-
-    .absen .sec-head .count {
-        color: var(--mob-muted);
-        font-size: .5625rem;
-        font-weight: 600;
-    }
-
-    .absen .timeline li {
-        grid-template-columns: 20px minmax(0, 1fr) auto;
-        gap: 9px;
-        padding: 8px 0;
-        border-top: 1px solid var(--mob-rule);
-    }
-
-    .absen .timeline li:first-child {
-        border-top: 0;
-    }
-
-    .absen .timeline li:not(:last-child)::before {
+    .absen .lihat-peta[hidden] {
         display: none;
     }
 
-    .absen .node {
-        width: 18px;
-        height: 18px;
-        margin-top: 1px;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
+    /* ===== Hari ini ===== */
+    .absen .today {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--mob-rule);
     }
 
-    .absen .node.is-done {
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
+    .absen .today-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
     }
 
-    .absen .node .ic {
-        width: 9px;
-        height: 9px;
-        stroke-width: 3;
-    }
-
-    .absen .event-top strong {
-        font-size: .6875rem;
+    .absen .today h2 {
+        margin: 0;
+        font-size: .8125rem;
         font-weight: 700;
+        letter-spacing: -.01em;
     }
 
-    .absen .event-top time {
+    .absen .count {
         color: var(--mob-muted);
-        font-size: .625rem;
-        font-weight: 600;
+        font-size: .6875rem;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
     }
 
-    .absen .event p {
+    .absen .today-line {
+        margin: 6px 0 0;
+        font-size: .75rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .absen .today-line.is-empty {
         color: var(--mob-muted);
-        font-size: .625rem;
+    }
+
+    .absen .thumbs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
     }
 
     .absen .thumb {
-        width: 34px;
-        height: 34px;
-        border: 1px solid var(--mob-field-border);
-        border-radius: 10px;
-        background: var(--mob-field);
-        color: var(--mob-muted);
-    }
-
-    .absen .empty {
-        padding: 10px 6px 6px;
-        gap: 4px;
-    }
-
-    .absen .empty .empty-ic {
-        width: 36px;
-        height: 36px;
-        border: 1px solid var(--mob-field-border);
-        border-radius: 12px;
-        background: var(--mob-field);
-        color: var(--mob-muted);
-    }
-
-    .absen .empty strong {
-        font-size: .6875rem;
-    }
-
-    .absen .empty p {
-        font-size: .625rem;
-    }
-
-    .absen .done-card {
-        border-top: 1px solid var(--mob-rule);
-    }
-
-    .absen .done-ic {
-        width: 34px;
-        height: 34px;
-        border-radius: 11px;
-        background: var(--mob-accent-wash);
-        color: var(--mob-accent-ink);
-    }
-
-    .absen .done-copy h3 {
-        font-size: .875rem;
-        font-weight: 650;
-    }
-
-    .absen .done-copy p {
-        font-size: .625rem;
-    }
-
-    .absen .done-grid {
-        gap: 6px;
-        margin-top: 9px;
-    }
-
-    .absen .metric {
-        padding: 7px 8px;
+        width: 38px;
+        height: 38px;
+        overflow: hidden;
         border: 1px solid var(--mob-field-border);
         border-radius: 10px;
         background: var(--mob-field);
     }
 
-    .absen .metric b {
-        font-size: .75rem;
-        font-weight: 700;
-    }
-
-    .absen .metric span {
-        font-size: .5rem;
-        letter-spacing: .06em;
-    }
-
-    .absen .done-foot {
-        margin-top: 9px;
-        padding-top: 8px;
-        border-top: 1px solid var(--mob-rule);
-        font-size: .5625rem;
-    }
-
-    .absen .photo-link {
-        min-height: 30px;
-        border: 1px solid var(--mob-field-border);
-        border-radius: 9px;
-        background: var(--mob-field);
-        color: var(--mob-accent-ink);
-        font-size: .5625rem;
-    }
-
-    .absen .app-foot {
-        margin-top: 12px;
-        padding-top: 9px;
-        border-top: 1px solid var(--mob-rule);
-        color: var(--mob-muted);
-        font-size: .625rem;
+    .absen .thumb img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
     @media (max-width: 380px) {
+        .absen .plate-range {
+            font-size: 1.3125rem;
+        }
+
         .absen .rail-label {
             font-size: .5rem;
+            letter-spacing: .03em;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .absen .photo-slot,
+        .absen .punch-btn {
+            transition: none;
         }
     }
 </style>
