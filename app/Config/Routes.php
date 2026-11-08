@@ -93,6 +93,13 @@ $routes->group('kategori', ['filter' => 'auth'], function ($routes) {
     $routes->post('update_sub_kategori', 'Kategori::update_sub_kategori', ['filter' => 'auth']);
     $routes->post('delete_sub_kategori', 'Kategori::delete_sub_kategori', ['filter' => 'auth']);
 });
+
+//tarif jasa (master jasa; jenis_barang = 'jasa')
+$routes->group('tarif_jasa', ['filter' => ['auth', 'csrf']], function ($routes) {
+    $routes->get('/', 'TarifJasa::index');
+    $routes->post('simpan', 'TarifJasa::simpan');
+    $routes->post('ubah', 'TarifJasa::ubah');
+});
 //phone
 $routes->get('/phone', 'Phone::index', ['filter' => 'auth']);
 $routes->post('insert_phone', 'Phone::insert_phone', ['filter' => 'auth']);

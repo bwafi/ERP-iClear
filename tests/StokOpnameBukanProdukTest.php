@@ -6,12 +6,14 @@ use App\Services\StokOpnameService;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
- * Barang jasa (nama berawalan PUP/JASA/MESIN) bukan produk sehingga tidak
+ * Barang jasa (barang.jenis_barang = 'jasa') bukan produk sehingga tidak
  * boleh masuk daftar opname.
  *
  * Menguji lewat service (bukan controller) supaya fokus pada aturan seed dan
  * pembersihan draft: seed baru harus melewatkan jasa, draft lama yang dibuka
- * sebelum aturan ini pun harus bersih.
+ * sebelum kolom jenis_barang ada pun harus bersih. Di produksi penyaring
+ * utamanya adalah view stok_barang (hanya produk); tes ini menirunya dengan
+ * tabel datar yang hanya memuat produk.
  *
  * Catatan prefix: StokOpnameService memakai sebagian raw SQL tanpa prefix
  * (asumsi produksi: DBPrefix = ''). Tes ini menyetel prefix koneksi ke '' agar
@@ -50,7 +52,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
 
-        $q('CREATE TABLE barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL, kode_barang TEXT NULL, deleted INTEGER DEFAULT 0)');
+        $q('CREATE TABLE barang (idbarang INTEGER PRIMARY KEY, nama_barang TEXT NULL, kode_barang TEXT NULL, deleted INTEGER DEFAULT 0, jenis_barang TEXT NOT NULL DEFAULT \'produk\')');
 
         // Di produksi `stok_barang` adalah VIEW; di test cukup tabel datar dengan
         // kolom yang dibaca StokOpnameService::createPeriode().
@@ -90,25 +92,32 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
 
     /**
      * Barang 101,105,106 adalah produk (106 hanya KEBETULAN memuat kata
-     * "Mesin" di tengah, bukan awalan). 102/103/104 adalah jasa.
+     * "Mesin" di tengah). 102/103/104 adalah jasa (jenis_barang = 'jasa').
+     * Di produksi view stok_barang sudah membuang jasa, jadi tabel datar
+     * stok_barang di test hanya memuat produk.
      */
     private function sebarData(): void
     {
         $barang = [
-            [101, 'HP Samsung A', 'HP-101', 5],
-            [102, 'PUP Ganti LCD', 'PUP-102', 2],
-            [103, 'JASA Service Panggilan', 'JASA-103', 1],
-            [104, 'MESIN Press LCD', 'MESIN-104', 3],
-            [105, 'LCD iPhone 11', 'LCD-105', 4],
-            [106, 'Kuras Mesin HP', 'SVC-106', 2],
+            [101, 'HP Samsung A', 'HP-101', 5, 'produk'],
+            [102, 'PUP Ganti LCD', 'PUP-102', 2, 'jasa'],
+            [103, 'JASA Service Panggilan', 'JASA-103', 1, 'jasa'],
+            [104, 'MESIN Press LCD', 'MESIN-104', 3, 'jasa'],
+            [105, 'LCD iPhone 11', 'LCD-105', 4, 'produk'],
+            [106, 'Kuras Mesin HP', 'SVC-106', 2, 'produk'],
         ];
 
-        foreach ($barang as [$id, $nama, $kode, $stok]) {
-            $this->db->query('INSERT INTO barang (idbarang, nama_barang, kode_barang, deleted) VALUES (?, ?, ?, 0)', [$id, $nama, $kode]);
+        foreach ($barang as [$id, $nama, $kode, $stok, $jenis]) {
             $this->db->query(
-                'INSERT INTO stok_barang (idbarang, id_unit, kode_barang, nama_barang, stok_akhir) VALUES (?, 1, ?, ?, ?)',
-                [$id, $kode, $nama, $stok]
+                'INSERT INTO barang (idbarang, nama_barang, kode_barang, deleted, jenis_barang) VALUES (?, ?, ?, 0, ?)',
+                [$id, $nama, $kode, $jenis]
             );
+            if ($jenis === 'produk') {
+                $this->db->query(
+                    'INSERT INTO stok_barang (idbarang, id_unit, kode_barang, nama_barang, stok_akhir) VALUES (?, 1, ?, ?, ?)',
+                    [$id, $kode, $nama, $stok]
+                );
+            }
             $this->db->query('INSERT INTO stok_awal (barang_idbarang, unit_idunit, jumlah, satuan_terkecil) VALUES (?, 1, ?, ?)', [$id, $stok, 'pcs']);
             $this->db->query('INSERT INTO hpp_barang (idbarang, hpp) VALUES (?, 1000)', [$id]);
         }
@@ -125,7 +134,7 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
         $rows = $this->db->table('stok_opname_draft')->orderBy('barang_idbarang', 'ASC')->get()->getResultArray();
         $ids = array_map(static fn ($r) => (int) $r['barang_idbarang'], $rows);
 
-        $this->assertSame([101, 105, 106], $ids, 'Barang jasa PUP/JASA/MESIN tidak boleh ikut ter-seed');
+        $this->assertSame([101, 105, 106], $ids, 'Baris jasa tidak pernah masuk seed (view stok_barang hanya produk)');
         $this->assertSame(3, (int) $r['periode']->total_barang);
     }
 
@@ -164,11 +173,11 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
         $svc = new StokOpnameService($this->db);
         $dibuang = $svc->buangBukanProdukDariDraft(1);
 
-        $this->assertSame(2, $dibuang, 'Hanya baris jasa (102 PUP, 103 JASA) yang dibuang');
+        $this->assertSame(2, $dibuang, 'Hanya baris ber-jenis jasa (102, 103) yang dibuang');
 
         $sisa = $this->db->table('stok_opname_draft')->orderBy('barang_idbarang', 'ASC')->get()->getResultArray();
         $ids = array_map(static fn ($r) => (int) $r['barang_idbarang'], $sisa);
-        $this->assertSame([101, 106], $ids, '"Kuras Mesin" (bukan awalan MESIN) harus tetap ada');
+        $this->assertSame([101, 106], $ids, '"Kuras Mesin HP" adalah produk (jenis_barang = produk)');
 
         $periode = $this->db->table('stok_opname_periode')->where('id', 50)->get()->getRowArray();
         $this->assertSame(2, (int) $periode['total_barang'], 'Ringkasan periode harus dihitung ulang setelah pembersihan');

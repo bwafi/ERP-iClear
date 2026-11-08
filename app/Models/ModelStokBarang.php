@@ -92,4 +92,22 @@ class ModelStokBarang extends Model
             ->where('stok_barang.stok_akhir >', 0)
             ->findAll();
     }
+
+    /**
+     * Barang jasa (jenis_barang = 'jasa') untuk picker kasir.
+     *
+     * Jasa tidak punya stok — sejak view stok_barang difilter produk, jasa
+     * tidak lagi butuh stok awal agar bisa dijual. Harga jual/HPP diambil
+     * dari master barang yang dikelola di /tarif_jasa.
+     */
+    public function getJasa()
+    {
+        return $this->db->table('barang')
+            ->select('idbarang, kode_barang, nama_barang, harga, harga_beli, status_ppn')
+            ->where('jenis_barang', 'jasa')
+            ->where('deleted', 0)
+            ->orderBy('nama_barang', 'ASC')
+            ->get()
+            ->getResult();
+    }
 }

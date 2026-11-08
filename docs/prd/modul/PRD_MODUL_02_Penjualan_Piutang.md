@@ -49,6 +49,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 11. Penjualan kredit hanya mengisi `keterangan='Belum Lunas'`; tidak membentuk piutang pelanggan dan tidak memanggil `HutangPiutangService`. — `Penjualan::insert_penjualan` (SL-02)
 12. Setiap komponen bundle ditulis dengan `sub_total` penuh, sehingga laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet/laba. — `Penjualan.php:327-334`; `TutupKasir.php:360,610`; `ModelPenjualan.php:132` (SL-03)
 13. `kode_invoice` tidak memiliki unique constraint; dua transaksi bersamaan dapat memperoleh kode sama. Kode invoice service juga memakai `SRV{date('YmdHis')}` tanpa random. — migration `penjualan`; `Service.php:496` (SL-04)
+14. Picker kasir punya tab Produk/Bundle/Jasa. Tab Jasa memakai `ModelStokBarang::getJasa()` (`barang.jenis_barang='jasa'`) sehingga jasa bisa dijual tanpa stok awal; baris keranjang memakai kontrak `produk-checkbox` yang sama (harga, qty, diskon, PPN). Penjualan jasa tetap dicatat di `detail_penjualan` (omset/refund/DP/KPI tidak berubah) tetapi tidak menyentuh persediaan karena view `stok_barang` hanya memuat produk. HPP jasa mengikuti resolver yang sama (`hpp_unit` → `hpp_barang` → `barang.harga_beli`). — `Penjualan::index`; `ModelStokBarang::getJasa`; `Views/transaksi/penjualan.php`
 
 ## 6. Acceptance Criteria
 - [ ] Input penjualan menyimpan header+detail+pembayaran bank+jurnal dalam satu transaksi.
@@ -65,6 +66,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 - ✅ Terverifikasi: alur input, invoice, pembayaran, jurnal, transaksi atomik.
 - ✅ Terverifikasi: stok penjualan dihitung oleh VIEW `stok_barang` dari `detail_penjualan` (bukan update stok eksplisit).
 - ✅ Terverifikasi: HPP detail penjualan baru memakai `hpp_unit` produk+unit; produk tanpa baris per unit tetap memakai `hpp_barang`/`barang.harga_beli`. — `HppPerUnitTest`
+- ✅ Terverifikasi: jasa dijual lewat tab Jasa tanpa stok; tercatat di `detail_penjualan` untuk omset tetapi tidak masuk persediaan. — `JasaBukanProdukTest`
 - ⚠️ Gap tinggi:
   1. Penjualan kredit tidak membentuk piutang pelanggan/registry H/P; `Piutang` legacy adalah piutang pegawai. — SL-02
   2. `detail_penjualan.sub_total` bundle digandakan per komponen; laporan omzet/laba dapat salah. — SL-03

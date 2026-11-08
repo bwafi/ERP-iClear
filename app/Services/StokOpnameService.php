@@ -29,17 +29,6 @@ class StokOpnameService
     /** Jumlah barang per statement saat menyimpan draft. */
     private const BATCH_SIZE = 200;
 
-    /**
-     * Awalan nama barang yang BUKAN produk (jasa/internal) sehingga tidak
-     * relevan dihitung fisik pada stok opname. PUP, JASA, dan MESIN adalah
-     * penamaan item jasa, bukan barang berstok yang bisa dihitung.
-     *
-     * Dicocokkan dari AWAL nama (LIKE 'PUP%'); "Kuras Mesin" tetap ikut
-     * karena "MESIN" bukan di awal. Samakan mental model dengan penamaan
-     * kategori di StokAwal::input_stokawal().
-     */
-    private const NON_PRODUK_AWALAN = ['PUP', 'JASA', 'MESIN'];
-
     protected $db;
     protected $model;
     protected $draftModel;
@@ -151,10 +140,11 @@ class StokOpnameService
             ];
         }
 
+        // Jasa (barang.jenis_barang = 'jasa') bukan produk berstok; view
+        // stok_barang sudah memfilternya, jadi seed opname otomatis bersih.
         $stocks = $this->db->table('stok_barang')
             ->where('id_unit', $unit)
             ->where('aktif_unit', 1);
-        $this->kecualikanBukanProduk($stocks);
         $stocks = $stocks->orderBy('kode_barang', 'ASC')
             ->get()
             ->getResultArray();
@@ -221,41 +211,13 @@ class StokOpnameService
     }
 
     /**
-     * Terapkan pengecualian barang non-produk (jasa) pada builder:
-     * NOT LIKE 'PUP%' / 'JASA%' / 'MESIN%', dikelompokkan agar aman
-     * disandingkan kondisi lain dengan AND.
-     */
-    private function kecualikanBukanProduk($builder, string $kolomNama = 'nama_barang'): void
-    {
-        $builder->groupStart();
-        foreach (self::NON_PRODUK_AWALAN as $awalan) {
-            $builder->notLike($kolomNama, $awalan, 'after');
-        }
-        $builder->groupEnd();
-    }
-
-    /**
-     * Kebalikan dari kecualikanBukanProduk(): cocokkan HANYA barang non-produk
-     * (LIKE 'PUP%' OR 'JASA%' OR 'MESIN%'). Dipakai saat membuang baris jasa.
-     */
-    private function saringBukanProduk($builder, string $kolomNama = 'nama_barang'): void
-    {
-        $builder->groupStart();
-        foreach (self::NON_PRODUK_AWALAN as $i => $awalan) {
-            $i === 0
-                ? $builder->like($kolomNama, $awalan, 'after')
-                : $builder->orLike($kolomNama, $awalan, 'after');
-        }
-        $builder->groupEnd();
-    }
-
-    /**
-     * Buang barang non-produk (jasa) dari DRAFT yang masih terbuka.
+     * Buang barang jasa dari DRAFT yang masih terbuka.
      *
-     * Draft yang dibuat sebelum aturan "jasa tidak diopname" bisa saja masih
-     * memuat PUP/JASA/MESIN. Karena draft belum final, baris itu aman dibuang
-     * dan ringkasan periode dihitung ulang. Periode FINAL TIDAK disentuh — itu
-     * catatan historis. Idempoten: kalau tidak ada yang cocok, tidak berubah.
+     * Draft yang dibuat sebelum kolom `jenis_barang` ada bisa saja masih
+     * memuat jasa (dulu dicocokkan dari awalan nama; sekarang dari flag).
+     * Karena draft belum final, baris itu aman dibuang dan ringkasan periode
+     * dihitung ulang. Periode FINAL TIDAK disentuh — itu catatan historis.
+     * Idempoten: kalau tidak ada yang cocok, tidak berubah.
      *
      * @return int jumlah baris draft yang dibuang
      */
@@ -278,8 +240,8 @@ class StokOpnameService
         $builder = $this->db->table('stok_opname_draft d')
             ->select('d.idstok_opname, d.periode_id')
             ->join('barang b', 'b.idbarang = d.barang_idbarang')
+            ->where('b.jenis_barang', 'jasa')
             ->whereIn('d.periode_id', $periodeIds);
-        $this->saringBukanProduk($builder, 'b.nama_barang');
 
         $rows = $builder->get()->getResultArray();
         if ($rows === []) {

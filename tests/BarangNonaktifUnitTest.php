@@ -70,7 +70,8 @@ final class BarangNonaktifUnitTest extends CIUnitTestCase
                 harga INT NULL, harga_beli INT NULL, idkategori INT NULL, imei TEXT NULL,
                 jenis_hp TEXT NULL, internal TEXT NULL, warna TEXT NULL,
                 status TEXT NULL, status_barang TEXT NULL, input TEXT NULL,
-                deleted TEXT NULL DEFAULT "0", status_ppn INT NULL)');
+                deleted TEXT NULL DEFAULT "0", status_ppn INT NULL,
+                jenis_barang TEXT NULL DEFAULT "produk")');
         $q('CREATE TABLE kategori (id INT PRIMARY KEY, nama_kategori TEXT NULL, `delete` TEXT NULL)');
 
         // Di produksi stok_barang adalah VIEW; di tes cukup tabel dengan kolom

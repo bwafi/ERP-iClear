@@ -95,6 +95,7 @@ class Penjualan extends BaseController
         $data = array(
             'akun' => $akun,
             'produk' => $this->StokBarangModel->getAllBarang2(),
+            'jasa' => $this->StokBarangModel->getJasa(),
             'frontliner' => $this->AuthModel->getdataakun(),
             'bank' => $this->BankModel->getBank(),
             'kategori' => $this->KategoriModel->getKategori(),

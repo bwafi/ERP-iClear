@@ -138,6 +138,11 @@
                                             data-bs-target="#bundle-content" type="button" role="tab"
                                             aria-controls="bundle-content" aria-selected="false">Bundle</button>
                                     </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="jasa-tab" data-bs-toggle="tab"
+                                            data-bs-target="#jasa-content" type="button" role="tab"
+                                            aria-controls="jasa-content" aria-selected="false">Jasa</button>
+                                    </li>
                                 </ul>
 
                                 <!-- Tab Content -->
@@ -214,6 +219,50 @@
                                                 </tbody>
                                             </table>
                                         </div>
+                                    </div>
+
+                                    <!-- Jasa -->
+                                    <div class="tab-pane fade" id="jasa-content" role="tabpanel"
+                                        aria-labelledby="jasa-tab">
+                                        <div class="table-responsive mb-4 px-4">
+                                            <table class="table border text-nowrap mb-0 align-middle"
+                                                id="jasa-modal-table">
+                                                <thead class="text-dark fs-4">
+                                                    <tr>
+                                                        <th></th>
+                                                        <th>
+                                                            <h6 class="fs-4 fw-semibold mb-0">Kode</h6>
+                                                        </th>
+                                                        <th>
+                                                            <h6 class="fs-4 fw-semibold mb-0">Nama Jasa</h6>
+                                                        </th>
+                                                        <th>
+                                                            <h6 class="fs-4 fw-semibold mb-0">Harga</h6>
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($jasa as $j): ?>
+                                                        <tr>
+                                                            <td>
+                                                                <input type="checkbox" class="produk-checkbox"
+                                                                    data-id="<?= (int) $j->idbarang ?>"
+                                                                    data-kode="<?= esc($j->kode_barang) ?>"
+                                                                    data-nama="<?= esc($j->nama_barang) ?>"
+                                                                    data-harga="<?= (float) $j->harga ?>"
+                                                                    data-kategori="Jasa"
+                                                                    data-kondisi_barang="0">
+                                                            </td>
+                                                            <td><?= esc($j->kode_barang) ?></td>
+                                                            <td><?= esc($j->nama_barang) ?></td>
+                                                            <td><?= 'Rp ' . number_format($j->harga, 0, ',', '.') ?></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <p class="form-text mb-0">Jasa tidak memiliki stok — qty di transaksi hanya
+                                            jumlah penjualan. Harga dikelola di menu Master Jasa → Tarif Jasa.</p>
                                     </div>
 
                                     <!-- Bundle -->
@@ -475,12 +524,12 @@
                         const bayarBank = document.getElementById('bayar_bank');
 
                         selectAll.addEventListener('change', function() {
-                            document.querySelectorAll('.produk-checkbox').forEach(cb => cb.checked = this
+                            document.querySelectorAll('#produkTabContent .tab-pane.active .produk-checkbox').forEach(cb => cb.checked = this
                                 .checked);
                         });
 
                         confirmBtn.addEventListener('click', function() {
-                            document.querySelectorAll('.produk-checkbox:checked').forEach(cb => {
+                            document.querySelectorAll('#produkTabContent .tab-pane.active .produk-checkbox:checked').forEach(cb => {
                                 const id = cb.getAttribute('data-id');
                                 const kode = cb.getAttribute('data-kode');
                                 const nama = cb.getAttribute('data-nama');
@@ -931,6 +980,10 @@
         <script>
             $(document).ready(function() {
                 var table = $('#produk-modal-table').DataTable();
+            });
+
+            $(document).ready(function() {
+                var table = $('#jasa-modal-table').DataTable();
             });
 
             $(document).ready(function() {
