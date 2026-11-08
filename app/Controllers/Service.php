@@ -815,7 +815,7 @@ class Service extends BaseController
               AND sa.suplier_id_suplier != 0) AS nama_suplier";
 
         $builder = $db->table('stok_barang sb')
-            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT, {$namaSuplier}")
+            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, b.jenis_barang, u.NAMA_UNIT, {$namaSuplier}")
             ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
             ->join('unit u', 'u.idunit = sb.id_unit', 'left');
         
@@ -840,7 +840,34 @@ class Service extends BaseController
             ->get()
             ->getResult();
 
-        return $this->response->setJSON($sparepart);
+        // Jasa (PUP/mesin/cleaning) dipakai teknisi sebagai item service, tetapi
+        // sejak `barang.jenis_barang` ada ia tidak lagi muncul di view
+        // stok_barang. Ambil dari master tanpa syarat stok dan tanpa filter kode
+        // sprt/acc — jenisnya sudah eksplisit jasa.
+        $jasa = $db->table('barang b')
+            ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei')
+            ->where('b.jenis_barang', 'jasa')
+            ->where('b.deleted', 0);
+
+        if (!empty($search)) {
+            $jasa->groupStart()
+                ->like('b.nama_barang', $search)
+                ->orLike('b.kode_barang', $search)
+                ->orLike('b.warna', $search)
+                ->groupEnd();
+        }
+
+        foreach ($jasa->orderBy('b.nama_barang', 'ASC')->limit(50)->get()->getResult() as $row) {
+            $row->jenis_barang = 'jasa';
+            $row->stok_akhir   = 0;
+            $row->nama_suplier = null;
+            $row->NAMA_UNIT    = session('NAMA_UNIT');
+            $sparepart[] = $row;
+        }
+
+        usort($sparepart, static fn ($a, $b) => strcasecmp((string) $a->nama_barang, (string) $b->nama_barang));
+
+        return $this->response->setJSON(array_slice($sparepart, 0, 50));
     }
 
     public function search_pelanggan_ajax()

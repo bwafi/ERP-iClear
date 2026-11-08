@@ -88,6 +88,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 14. Pembatalan service memakai `GET service/cancel/{id}` tanpa CSRF. — `Routes.php:158`; `Service::cancel_service` (SV-05)
 15. Pengambilan service dengan total 0 mengambil total dari `SUM(service_sparepart.sub_total)`; total yang sudah terisi tidak ditimpa, dan DP>0 tanpa total ditolak. — `Riwayat_Service::update_sudah_diambil`; test `ServicePengambilanDpTest`
 16. HPP sparepart service (`service_sparepart.hpp_penjualan`), HPP invoice sparepart, dan HPP klaim garansi (`hpp_penjualan_garansi`/`hpp_omset_garansi`) memakai `hpp_unit` produk+unit service; fallback `hpp_barang` lalu `barang.harga_beli`. Prefill HPP di halaman klaim memakai resolver yang sama. — `ModelHppUnit::resolve/resolveMany`; `Service/Riwayat_Service::insert_sparepart`; `StatusGaransi`
+17. Picker sparepart (`service/search_sparepart`, dipakai `/service` dan `/detail/riwayat_service/{id}?tab=sparepart`) menggabungkan produk sparepart/aksesoris berstok dari view `stok_barang` dengan **semua jasa** (`barang.jenis_barang='jasa'`) dari master tanpa syarat stok. Jasa ditampilkan berlabel "Jasa" dan tetap bisa ditambahkan/di-insert ke `service_sparepart` seperti sebelumnya; produk stok 0 tetap tersaring. — `Service::search_sparepart_ajax`; `Views/riwayat/table/sparepart_table.php`; `Views/transaksi/table/sparepart_table.php`; test `ServiceSparepartJasaTest`
 
 ## 6. Acceptance Criteria
 - [ ] Intake service menolak transaksi aktif kedua; memaksa pelanggan.
@@ -106,6 +107,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 ## 8. Status & Tandai
 - ✅ Terverifikasi: guard transaksi aktif, DP ledger, garansi sparepart, route NET dinonaktifkan, klaim garansi.
 - ✅ Terverifikasi: HPP sparepart service dan klaim garansi baru memakai `hpp_unit` per unit service (fallback `hpp_barang`/`barang.harga_beli`); snapshot lama tidak diubah. — `HppPerUnitTest`, `GaransiClaimSaveTest`
+- ✅ Terverifikasi: picker sparepart service tetap memuat jasa (PUP/mesin/cleaning) walau jasa bukan persediaan dan tidak ada di view `stok_barang`; produk stok 0 tetap tersaring. — `ServiceSparepartJasaTest`, `ServiceSparepartSearchDedupTest`
 - ✅ Refund klaim garansi: tunai/bank, keputusan kondisi sparepart per baris, kunci sekali refund, dan guard retur supplier. — `GaransiRefundService`; test `GaransiRefundServiceTest`, `GaransiServiceViewTest`, `ReturBarangRusakTest`.
 - ✅ Koreksi DP salah catat: Admin Root saja, jurnal DP diperbaiki in-place, audit `service_dp_koreksi`, nominal terkunci setelah service diambil. — `ServiceDpService::koreksiDp`; test `ServiceDpKoreksiTest`.
 - ✅ Kembalikan service sudah diambil ke Proses Service: Admin Root saja, jurnal pengambilan dihapus, pembayaran lama dihapus, DP tetap, guard tutup kasir. Test `tests/unit/ServiceKembalikanKeProsesTest.php`.

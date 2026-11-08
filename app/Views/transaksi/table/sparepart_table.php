@@ -157,6 +157,7 @@
         const harga = Number(item.harga) || 0;
         const hpp = Number(item.harga_beli) || 0;
         const stok = Number(item.stok_akhir) || 0;
+        const isJasa = item.jenis_barang === 'jasa';
         const isChecked = document.getElementById('row-' + id) ? ' checked' : '';
 
         let meta = '<span class="service-sp-code">' + escapeSparepart(kode || '-') + '</span>';
@@ -179,7 +180,8 @@
             ' data-kode="' + escapeSparepart(kode) + '"' +
             ' data-nama="' + escapeSparepart(nama) + '"' +
             ' data-harga="' + harga + '"' +
-            ' data-stok="' + stok + '"' + isChecked + '>' +
+            ' data-stok="' + stok + '"' +
+            ' data-jenis="' + (isJasa ? 'jasa' : 'produk') + '"' + isChecked + '>' +
             '<span class="service-sp-item__box">' +
             '<span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>' +
             '<span class="service-sp-item__main">' +
@@ -188,7 +190,9 @@
             '</span>' +
             '<span class="service-sp-side">' +
             '<span class="service-sp-price">Rp ' + sparepartFormatter.format(harga) + '</span>' +
-            '<span class="service-sp-stock' + (stok <= 2 ? ' is-low' : '') + '">Stok ' + sparepartFormatter.format(stok) + '</span>' +
+            (isJasa
+                ? '<span class="service-sp-stock">Jasa</span>'
+                : '<span class="service-sp-stock' + (stok <= 2 ? ' is-low' : '') + '">Stok ' + sparepartFormatter.format(stok) + '</span>') +
             '</span>' +
             '</span>' +
             '</label>';
@@ -300,7 +304,9 @@
             const kode = checkbox.getAttribute('data-kode');
             const nama = checkbox.getAttribute('data-nama');
             const harga = parseFloat(checkbox.getAttribute('data-harga'));
-            const stokAkhir = parseFloat(checkbox.getAttribute('data-stok')) || 0;
+            const stokAkhir = checkbox.getAttribute('data-jenis') === 'jasa'
+                ? '-'
+                : (parseFloat(checkbox.getAttribute('data-stok')) || 0);
 
             // Cek apakah sparepart sudah ada di tabel
             if (!document.getElementById(`row-${id}`)) {

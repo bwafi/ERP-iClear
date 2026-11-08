@@ -60,6 +60,7 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
             harga_beli BIGINT NULL DEFAULT 0,
             warna VARCHAR(64) NULL,
             imei VARCHAR(64) NULL,
+            jenis_barang VARCHAR(10) NULL DEFAULT \'produk\',
             deleted VARCHAR(2) NULL DEFAULT \'0\',
             PRIMARY KEY (idbarang)
         ) ENGINE=InnoDB');
