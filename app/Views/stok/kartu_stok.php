@@ -355,9 +355,11 @@ $ringkasan = [
             }, 350);
         });
 
-        $('#ks-datatable tbody').on('click', '.js-detail', function() {
-            const tr = $(this).closest('tr');
+        function toggleDetailRow(tr) {
             const row = table.row(tr);
+            if (!row.data()) {
+                return;
+            }
             if (row.child.isShown()) {
                 row.child.hide();
                 tr.removeClass('shown');
@@ -365,6 +367,21 @@ $ringkasan = [
                 row.child(childHtml(row.data())).show();
                 tr.addClass('shown');
             }
+        }
+
+        $('#ks-datatable tbody').on('click', '.js-detail', function() {
+            toggleDetailRow($(this).closest('tr'));
+        });
+
+        /* Klik area baris (bukan kontrol) ikut membuka/menutup detail. */
+        $('#ks-datatable tbody').on('click', 'td', function(e) {
+            if ($(e.target).closest('button, a, input, select, label').length) {
+                return;
+            }
+            if (window.getSelection && window.getSelection().toString()) {
+                return;
+            }
+            toggleDetailRow($(this).closest('tr'));
         });
 
         $('#unitFilter, #ppnFilter').on('change', function() {

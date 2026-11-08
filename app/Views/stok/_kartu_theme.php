@@ -355,6 +355,15 @@
         background: var(--ks-hover);
     }
 
+    /* Klik baris membuka detail; panel detail sendiri tidak bisa diklik-tutup. */
+    .ks-table tbody td {
+        cursor: pointer;
+    }
+
+    .ks-table td:has(.ks-detail) {
+        cursor: default;
+    }
+
     .ks-table .ks-num {
         text-align: right;
         font-variant-numeric: tabular-nums;
