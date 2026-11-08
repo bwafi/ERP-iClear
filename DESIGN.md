@@ -96,6 +96,14 @@
 - **Rules:** same accent/no-gradient rules, no color-only states, focus visible, motion limited to control transitions and the detail caret.
 
 
+### Kartu Stok (`.ks-*`)
+- **Scope:** `app/Views/stok/_kartu_theme.php`; every selector lives under `.kartu-stok` (modal HPP included) and derives from `--ks-*` tokens tied to the app theme.
+- **Layout:** page head on its own white surface → four-figure summary strip (Total Barang, Total Unit, Stok Akhir, Nilai Stok/HPP) separated by 1px rules → one filter row (unit, status PPN, search, Export) → ledger sheet with sticky headings and a `lip` footer.
+- **Header surface:** `.ks-head` is a white card (hairline border, `14px` radius, same shadow token as the sheet), never transparent over the page canvas — the title block must read as a surface, not as text floating on the blue background. Dark theme uses the same card background token.
+- **Ledger rows:** kode (mono), barang (+IMEI subline), unit, kategori, PPN dot + text, stok akhir (right, tabular; zero muted, negative danger), actions (detail chevron + status switch). Supplier lives in the detail row, not the main row.
+- **Detail row:** four groups — Identitas, Harga & stok, Stok masuk, Stok keluar. Movement values carry `+`/`−` and stay muted at zero; HPP carries the role-gated Ubah button.
+- **Rules:** one accent for focus and the primary action, no gradients, no colored left borders, no card around the table; status is never color-only (dot + label, switch + label); footer, pagination, and processing share the same tokens; the detail grid steps 4 → 2 → 1 columns and filters stack below `767.98px`.
+
 ### Payroll Run Sheet (`.pay-*`)
 - **Scope:** `app/Views/jurnal/payroll.php` + `app/Views/jurnal/_payroll_theme.php`; every selector lives under `.payroll-page` and derives from `--pay-*` tokens tied to the app theme. No new palette, font, or dependency.
 - **Layout:** page head (breadcrumb, title, period badge, month control, Susun/Input actions) → run board (status line + four hairline-separated phases: Susun = unpaid auto, Koreksi = unpaid manual/null, Bayar = paid, Bonus/Lembur = period-scoped kas keluar) → KPI unit strip (score/100, total, meter, tepat/terlambat/menunggu counts) → payroll ledger → bonus/lembur ledger. “Semua bulan” hides the board and KPI, empties the month input, and shows a notice.

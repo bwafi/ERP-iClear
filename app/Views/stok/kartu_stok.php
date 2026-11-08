@@ -1,169 +1,169 @@
-<!-- Page Breadcrumb & Header -->
-<div class="card shadow-none position-relative overflow-hidden mb-4 bg-light-subtle border">
-    <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 p-4">
-        <div>
-            <h4 class="fw-semibold mb-1 text-dark">Kartu Stok</h4>
-            <p class="fs-3 text-muted mb-0">Rekapitulasi stok per barang & unit (pembelian, penjualan, retur, mutasi)</p>
-        </div>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0 bg-transparent p-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Stok</a>
-                </li>
-                <li class="breadcrumb-item text-primary fw-medium" aria-current="page">Kartu Stok</li>
-            </ol>
+<?= $this->include('stok/_kartu_theme') ?>
+
+<?php
+$unitAktif = session('ID_UNIT');
+$ringkasan = [
+    [
+        'label' => 'Total Barang',
+        'value' => number_format((float) $summary->total_barang, 0, ',', '.'),
+        'note'  => 'Baris produk per unit',
+    ],
+    [
+        'label' => 'Total Unit',
+        'value' => number_format((float) $summary->total_unit, 0, ',', '.'),
+        'note'  => 'Unit dengan stok tercatat',
+    ],
+    [
+        'label' => 'Stok Akhir',
+        'value' => number_format((float) $summary->total_stok, 0, ',', '.'),
+        'note'  => 'Jumlah unit barang',
+    ],
+    [
+        'label' => 'Nilai Stok (HPP)',
+        'value' => 'Rp ' . number_format((float) $summary->nilai_stok, 0, ',', '.'),
+        'note'  => 'Stok akhir × HPP per unit',
+    ],
+];
+?>
+
+<div class="kartu-stok">
+
+    <header class="ks-head">
+        <nav class="ks-crumb" aria-label="breadcrumb">
+            <a href="<?= base_url('/') ?>">Stok</a>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">Kartu Stok</span>
         </nav>
-    </div>
-</div>
+        <h1>Kartu Stok</h1>
+        <p>Rekap stok per barang dan unit — pembelian, penjualan, retur, dan mutasi dalam satu baris.</p>
+    </header>
 
-<!-- Summary Statistics Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border mb-0 h-100 hover-shadow transition">
-            <div class="card-body d-flex align-items-center gap-3 p-4">
-                <span class="btn p-3 bg-primary-subtle text-primary rounded-3 d-flex align-items-center justify-content-center flex-shrink-0">
-                    <iconify-icon icon="solar:box-minimalistic-line-duotone" class="fs-7"></iconify-icon>
-                </span>
-                <div>
-                    <h5 class="fs-5 fw-bold mb-1 text-dark"><?= number_format((float)$summary->total_barang, 0, ',', '.') ?></h5>
-                    <span class="fs-2 text-muted fw-medium d-block">Total Barang</span>
-                </div>
+    <section class="ks-stats" aria-label="Ringkasan kartu stok">
+        <?php foreach ($ringkasan as $item) : ?>
+            <div class="ks-stat">
+                <span class="ks-stat__label"><?= esc($item['label']) ?></span>
+                <span class="ks-stat__value"><?= $item['value'] ?></span>
+                <span class="ks-stat__note"><?= esc($item['note']) ?></span>
             </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border mb-0 h-100 hover-shadow transition">
-            <div class="card-body d-flex align-items-center gap-3 p-4">
-                <span class="btn p-3 bg-info-subtle text-info rounded-3 d-flex align-items-center justify-content-center flex-shrink-0">
-                    <iconify-icon icon="solar:buildings-2-line-duotone" class="fs-7"></iconify-icon>
-                </span>
-                <div>
-                    <h5 class="fs-5 fw-bold mb-1 text-dark"><?= number_format((float)$summary->total_unit, 0, ',', '.') ?></h5>
-                    <span class="fs-2 text-muted fw-medium d-block">Total Unit</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border mb-0 h-100 hover-shadow transition">
-            <div class="card-body d-flex align-items-center gap-3 p-4">
-                <span class="btn p-3 bg-warning-subtle text-warning rounded-3 d-flex align-items-center justify-content-center flex-shrink-0">
-                    <iconify-icon icon="solar:layers-minimalistic-line-duotone" class="fs-7"></iconify-icon>
-                </span>
-                <div>
-                    <h5 class="fs-5 fw-bold mb-1 text-dark"><?= number_format((float)$summary->total_stok, 0, ',', '.') ?></h5>
-                    <span class="fs-2 text-muted fw-medium d-block">Total Stok Akhir</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card shadow-none border mb-0 h-100 hover-shadow transition">
-            <div class="card-body d-flex align-items-center gap-3 p-4">
-                <span class="btn p-3 bg-success-subtle text-success rounded-3 d-flex align-items-center justify-content-center flex-shrink-0">
-                    <iconify-icon icon="solar:wallet-money-line-duotone" class="fs-7"></iconify-icon>
-                </span>
-                <div>
-                    <h5 class="fs-5 fw-bold mb-1 text-dark"><?= 'Rp ' . number_format((float)$summary->nilai_stok, 0, ',', '.') ?></h5>
-                    <span class="fs-2 text-muted fw-medium d-block">Nilai Stok (HPP)</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+        <?php endforeach; ?>
+    </section>
 
-<!-- Hidden Export Form -->
-<form id="exportForm" method="post" action="<?= base_url('export/kartu_stock') ?>">
-    <input type="hidden" name="unit" id="expUnit" value="">
-    <input type="hidden" name="status_ppn" id="expPpn" value="">
-</form>
+    <form id="exportForm" method="post" action="<?= base_url('export/kartu_stock') ?>">
+        <input type="hidden" name="unit" id="expUnit" value="">
+        <input type="hidden" name="status_ppn" id="expPpn" value="">
+    </form>
 
-<!-- Main Table Card -->
-<div class="card w-100 shadow-none border position-relative overflow-hidden">
-    <div class="card-body p-4">
-        <!-- Filter Controls Toolbar -->
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4 p-3 bg-body-tertiary rounded-3 border">
-            <div class="d-flex flex-wrap align-items-center gap-3">
-                <div class="d-flex align-items-center gap-2">
-                    <label class="fw-semibold fs-3 text-dark text-nowrap" for="unitFilter">Unit:</label>
-                    <select name="unit" id="unitFilter" class="form-select form-select-sm bg-white" style="width: 160px;">
-                        <option value="">Semua Unit</option>
-                        <?php
-                        $selectedUnit = session('ID_UNIT');
-                        foreach ($unit as $row) {
-                            $selected = ($row->idunit == $selectedUnit) ? 'selected' : '';
-                            echo '<option value="' . esc($row->idunit) . '" ' . $selected . '>' . esc($row->NAMA_UNIT) . '</option>';
-                        }
-                        ?>
-                    </select>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <label class="fw-semibold fs-3 text-dark text-nowrap" for="ppnFilter">Status PPN:</label>
-                    <select name="status_ppn" id="ppnFilter" class="form-select form-select-sm bg-white" style="width: 140px;">
-                        <option value="">Semua</option>
-                        <option value="PPN">PPN</option>
-                        <option value="Non PPN">Non PPN</option>
-                    </select>
-                </div>
+    <div class="ks-toolbar">
+        <div class="ks-filters">
+            <label class="ks-field" for="unitFilter">
+                <span>Unit</span>
+                <select class="form-select ks-select" id="unitFilter" name="unit">
+                    <option value="">Semua unit</option>
+                    <?php foreach ($unit as $row) : ?>
+                        <option value="<?= esc($row->idunit) ?>" <?= (string) $row->idunit === (string) $unitAktif ? 'selected' : '' ?>>
+                            <?= esc($row->NAMA_UNIT) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+
+            <label class="ks-field" for="ppnFilter">
+                <span>Status PPN</span>
+                <select class="form-select ks-select" id="ppnFilter" name="status_ppn">
+                    <option value="">Semua</option>
+                    <option value="PPN">PPN</option>
+                    <option value="Non PPN">Non PPN</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="ks-tools">
+            <div class="ks-search">
+                <iconify-icon icon="solar:magnifer-line-duotone" aria-hidden="true"></iconify-icon>
+                <label class="visually-hidden" for="ksSearch">Cari barang</label>
+                <input type="search" id="ksSearch" placeholder="Cari kode, nama, unit…" autocomplete="off">
             </div>
-            <button type="button" id="exportBtn" class="btn btn-danger btn-sm d-inline-flex align-items-center gap-2 px-3 py-2 shadow-sm">
-                <iconify-icon icon="solar:export-broken" width="18" height="18"></iconify-icon>
-                <span>Export Data</span>
+
+            <button type="button" id="exportBtn" class="ks-btn">
+                <iconify-icon icon="solar:download-minimalistic-line-duotone" aria-hidden="true"></iconify-icon>
+                <span>Export</span>
             </button>
         </div>
+    </div>
 
-        <!-- DataTable Container -->
-        <div class="table-responsive">
-            <table class="table border text-nowrap mb-0 align-middle w-100" id="ks-datatable">
-                <thead class="table-light text-dark fs-4">
+    <section class="ks-sheet" aria-label="Daftar kartu stok">
+        <div class="ks-table-wrap">
+            <table class="ks-table" id="ks-datatable">
+                <thead>
                     <tr>
-                        <th>Kode Barang</th>
-                        <th>Nama Barang</th>
-                        <th>Unit</th>
-                        <th>Kategori</th>
-                        <th>Supplier</th>
-                        <th>Status PPN</th>
-                        <th class="text-end">Stok Akhir</th>
-                        <th class="text-center">Detail</th>
-                        <th class="text-center">Action</th>
+                        <th scope="col">Kode</th>
+                        <th scope="col">Barang</th>
+                        <th scope="col">Unit</th>
+                        <th scope="col">Kategori</th>
+                        <th scope="col" class="ks-center">PPN</th>
+                        <th scope="col" class="ks-num">Stok akhir</th>
+                        <th scope="col" class="ks-num">Aksi</th>
                     </tr>
                 </thead>
             </table>
         </div>
-    </div>
-</div>
+    </section>
 
-<?php if (!empty($can_manage_produk_unit)): ?>
-<input type="hidden" id="hpp-csrf" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>">
-<div class="modal fade" id="modal-hpp" tabindex="-1" aria-labelledby="modal-hpp-label" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <form id="form-hpp" method="post" action="<?= base_url('kartu_stok/hpp') ?>" class="modal-content">
-            <?= csrf_field() ?>
-            <input type="hidden" name="idbarang" id="hpp-idbarang">
-            <input type="hidden" name="id_unit" id="hpp-idunit">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modal-hpp-label">Ubah HPP</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted mb-3" id="hpp-target"></p>
-                <label for="hpp-value" class="form-label">HPP</label>
-                <div class="input-group">
-                    <span class="input-group-text">Rp</span>
-                    <input type="number" class="form-control" id="hpp-value" name="hpp" min="1" step="1" required>
+<?php if (!empty($can_manage_produk_unit)) : ?>
+    <input type="hidden" id="hpp-csrf" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>">
+    <div class="modal fade" id="modal-hpp" tabindex="-1" aria-labelledby="modal-hpp-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form id="form-hpp" method="post" action="<?= base_url('kartu_stok/hpp') ?>" class="modal-content">
+                <?= csrf_field() ?>
+                <input type="hidden" name="idbarang" id="hpp-idbarang">
+                <input type="hidden" name="id_unit" id="hpp-idunit">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modal-hpp-label">Ubah HPP</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
-                <div class="form-text">Hanya berlaku untuk unit ini. Riwayat transaksi lama tidak berubah.</div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
-                <button type="submit" class="btn btn-primary">Simpan</button>
-            </div>
-        </form>
+                <div class="modal-body">
+                    <p class="text-muted mb-3" id="hpp-target"></p>
+                    <label for="hpp-value" class="form-label">HPP</label>
+                    <div class="input-group">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" class="form-control" id="hpp-value" name="hpp" min="1" step="1" required>
+                    </div>
+                    <div class="form-text">Hanya berlaku untuk unit ini. Riwayat transaksi lama tidak berubah.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
     </div>
-</div>
-<?php endif; ?>
 
-<!-- Script Configurations -->
+    <div class="modal fade" id="modal-stok-warning" tabindex="-1" aria-labelledby="modal-stok-warning-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modal-stok-warning-label">Belum bisa dinonaktifkan</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="ks-warn">
+                        <iconify-icon icon="solar:danger-triangle-line-duotone" aria-hidden="true"></iconify-icon>
+                        <div>
+                            <p class="ks-warn__target" id="warn-target"></p>
+                            <p class="ks-warn__text">Produk masih punya stok
+                                <strong class="ks-warn__figure" id="warn-stok"></strong> di unit ini.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+</div>
+
 <script>
     $(document).ready(function() {
         const csrfName = '<?= csrf_token() ?>';
@@ -186,33 +186,63 @@
             return 'Rp ' + fmt(n);
         }
 
+        function detailRow(label, value, cls) {
+            return '<div class="ks-detail__row"><dt>' + label + '</dt><dd' +
+                (cls ? ' class="' + cls + '"' : '') + '>' + value + '</dd></div>';
+        }
+
+        function movementRow(label, n, sign) {
+            const value = Number(n || 0);
+            if (value === 0) {
+                return detailRow(label, '<span class="ks-none">0</span>');
+            }
+            return detailRow(label, sign + ' ' + fmt(Math.abs(value)), sign === '+' ? 'is-pos' : 'is-neg');
+        }
+
+        function detailGroup(title, rows) {
+            return '<section class="ks-detail__group"><h2>' + title + '</h2><dl class="ks-detail__list">' +
+                rows + '</dl></section>';
+        }
+
         function childHtml(d) {
-            const rows = [
-                ['IMEI', d.imei ? esc(d.imei) : 'Tidak ada IMEI'],
-                ['Jenis / Warna', esc(d.jenis_hp || '-') + ' / ' + esc(d.warna || '-')],
-                ['HPP (Harga Beli)', money(d.harga_beli) + (canManageUnit ? ' <button type="button" class="btn btn-sm btn-light-primary text-primary ms-2 py-0 px-2 js-edit-hpp" data-idbarang="' + attr(d.idbarang) + '" data-idunit="' + attr(d.id_unit) + '" data-hpp="' + attr(d.harga_beli) + '" data-nama="' + attr(d.nama_barang) + '" data-unit="' + attr(d.nama_unit) + '">Ubah</button>' : '')],
-                ['Harga Jual', money(d.harga)],
-                ['Stok Awal', fmt(d.stok_awal)],
-                ['Stok Akhir', '<b>' + fmt(d.stok_akhir) + '</b>'],
-                ['Total Pembelian', fmt(d.total_pembelian)],
-                ['Total Penjualan', fmt(d.total_penjualan)],
-                ['Total Mutasi Masuk', fmt(d.total_mutasi_masuk)],
-                ['Total Mutasi Keluar', fmt(d.total_mutasi_keluar)],
-                ['Total Retur Pelanggan', fmt(d.total_retur_pelanggan)],
-                ['Total Retur Supplier', fmt(d.total_retur_supplier)],
-            ];
-            let html = '<div class="p-3 bg-white border rounded-2 my-2"><table class="table table-sm table-borderless mb-0"><tbody>';
-            rows.forEach(function(r) {
-                html += '<tr><td class="text-muted fw-medium py-1 px-2" style="width: 200px;">' + r[0] +
-                    '</td><td class="py-1 px-2 text-dark fw-normal">' + r[1] + '</td></tr>';
-            });
-            html += '</tbody></table></div>';
-            return html;
+            const identitas = detailRow('IMEI', d.imei ?
+                    '<span class="ks-mono">' + esc(d.imei) + '</span>' :
+                    '<span class="ks-none">Tidak ada IMEI</span>') +
+                detailRow('Jenis / warna', esc(d.jenis_hp || '-') + ' / ' + esc(d.warna || '-')) +
+                detailRow('Supplier', esc(d.nama_supplier || '-'));
+
+            const nilai = detailRow('HPP (harga beli)', money(d.harga_beli) +
+                    (canManageUnit ?
+                        ' <button type="button" class="ks-edit-hpp js-edit-hpp"' +
+                        ' data-idbarang="' + attr(d.idbarang) + '"' +
+                        ' data-idunit="' + attr(d.id_unit) + '"' +
+                        ' data-hpp="' + attr(d.harga_beli) + '"' +
+                        ' data-nama="' + attr(d.nama_barang) + '"' +
+                        ' data-unit="' + attr(d.nama_unit) + '">Ubah</button>' : '')) +
+                detailRow('Harga jual', money(d.harga)) +
+                detailRow('Stok awal', fmt(d.stok_awal)) +
+                detailRow('Stok akhir', fmt(d.stok_akhir), 'is-strong');
+
+            const masuk = movementRow('Pembelian', d.total_pembelian, '+') +
+                movementRow('Mutasi masuk', d.total_mutasi_masuk, '+') +
+                movementRow('Retur pelanggan', d.total_retur_pelanggan, '+');
+
+            const keluar = movementRow('Penjualan', d.total_penjualan, '−') +
+                movementRow('Mutasi keluar', d.total_mutasi_keluar, '−') +
+                movementRow('Retur supplier', d.total_retur_supplier, '−');
+
+            return '<div class="ks-detail"><div class="ks-detail__grid">' +
+                detailGroup('Identitas', identitas) +
+                detailGroup('Harga &amp; stok', nilai) +
+                detailGroup('Stok masuk', masuk) +
+                detailGroup('Stok keluar', keluar) +
+                '</div></div>';
         }
 
         const table = $('#ks-datatable').DataTable({
             serverSide: true,
             processing: true,
+            autoWidth: false,
             ajax: {
                 url: '<?= base_url('kartu_stok/dt') ?>',
                 type: 'GET',
@@ -231,17 +261,32 @@
                 [10, 25, 50, 100],
                 [10, 25, 50, 100]
             ],
-            searchDelay: 500,
-            scrollX: true,
+            dom: 'rt<"ks-dt-foot"lip>',
+            language: {
+                processing: 'Memuat…',
+                lengthMenu: 'Tampil _MENU_ baris',
+                info: 'Menampilkan _START_–_END_ dari _TOTAL_ baris',
+                infoEmpty: 'Tidak ada baris',
+                infoFiltered: '(dari _MAX_ baris)',
+                zeroRecords: 'Tidak ada barang yang cocok dengan filter ini.',
+                emptyTable: 'Belum ada data kartu stok.',
+                paginate: {
+                    previous: '‹',
+                    next: '›'
+                }
+            },
             columns: [{
-                    data: 'kode_barang'
+                    data: 'kode_barang',
+                    render: function(data) {
+                        return '<span class="ks-code">' + esc(data) + '</span>';
+                    }
                 },
                 {
                     data: 'nama_barang',
                     render: function(data, type, row) {
-                        let html = '<span class="fw-medium text-dark">' + esc(data) + '</span>';
+                        let html = '<span class="ks-name">' + esc(data) + '</span>';
                         if (row.imei) {
-                            html += '<br><small class="text-muted font-monospace">' + esc(row.imei) + '</small>';
+                            html += '<span class="ks-sub ks-sub--mono">' + esc(row.imei) + '</span>';
                         }
                         return html;
                     }
@@ -253,55 +298,61 @@
                     data: 'nama_kategori'
                 },
                 {
-                    data: 'nama_supplier',
-                    orderable: false
-                },
-                {
                     data: 'status_ppn',
-                    className: 'text-center',
+                    className: 'ks-center',
                     render: function(data) {
-                        return data == 1 ?
-                            '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">PPN</span>' :
-                            '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1">Non PPN</span>';
+                        return Number(data) === 1 ?
+                            '<span class="ks-tag ks-tag--on">PPN</span>' :
+                            '<span class="ks-tag ks-tag--off">Non PPN</span>';
                     }
                 },
                 {
                     data: 'stok_akhir',
-                    className: 'text-end fw-semibold text-dark',
+                    className: 'ks-num',
                     render: function(data) {
-                        return fmt(data);
+                        const value = Number(data || 0);
+                        const cls = value < 0 ? ' is-neg' : (value === 0 ? ' is-zero' : '');
+                        return '<span class="ks-stock' + cls + '">' + fmt(value) + '</span>';
                     }
-                },
-                {
-                    data: null,
-                    className: 'text-center',
-                    orderable: false,
-                    searchable: false,
-                    defaultContent: '<button class="js-detail btn btn-sm btn-light-primary text-primary d-inline-flex align-items-center justify-content-center p-2 rounded-circle transition"><iconify-icon icon="solar:alt-arrow-down-line-duotone" class="fs-6"></iconify-icon></button>'
                 },
                 {
                     data: 'aktif',
-                    className: 'text-center',
+                    className: 'ks-num',
                     orderable: false,
                     searchable: false,
                     render: function(data, type, row) {
+                        const detail = '<button type="button" class="js-detail ks-detail-btn"' +
+                            ' aria-label="Lihat detail ' + attr(row.nama_barang) + '">' +
+                            '<iconify-icon icon="solar:alt-arrow-down-line-duotone" aria-hidden="true"></iconify-icon>' +
+                            '</button>';
+
                         if (!canManageUnit) {
-                            return '<span class="text-muted">-</span>';
+                            return '<div class="ks-actions">' + detail + '</div>';
                         }
+
                         const aktif = Number(data) === 1;
-                        const badge = aktif ?
-                            '<span class="badge bg-success-subtle text-success border border-success-subtle me-1">Aktif</span>' :
-                            '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">Nonaktif</span>';
-                        const tombol = '<button type="button" class="js-toggle-status btn btn-sm py-1 px-2 ' +
-                            (aktif ? 'btn-light-danger text-danger' : 'btn-light-success text-success') +
-                            '" data-aktif="' + (aktif ? 1 : 0) + '">' + (aktif ? 'Nonaktifkan' : 'Aktifkan') + '</button>';
-                        return badge + tombol;
+                        const status = '<button type="button" role="switch" aria-checked="' + (aktif ? 'true' : 'false') +
+                            '" class="js-toggle-status ks-switch" data-aktif="' + (aktif ? 1 : 0) +
+                            '" title="' + (aktif ? 'Nonaktifkan produk di unit ini' : 'Aktifkan produk di unit ini') + '">' +
+                            '<span class="ks-switch__track"><span class="ks-switch__thumb"></span></span>' +
+                            '<span class="ks-switch__label">' + (aktif ? 'Aktif' : 'Nonaktif') + '</span></button>';
+
+                        return '<div class="ks-actions">' + detail + status + '</div>';
                     }
                 }
             ],
-            createdRow: function(row, data, dataIndex) {
+            createdRow: function(row, data) {
                 $(row).attr('data-idbarang', data.idbarang);
             }
+        });
+
+        let searchTimer = null;
+        $('#ksSearch').on('input', function() {
+            const value = this.value;
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function() {
+                table.search(value).draw();
+            }, 350);
         });
 
         $('#ks-datatable tbody').on('click', '.js-detail', function() {
@@ -330,6 +381,7 @@
             const modalHppEl = document.getElementById('modal-hpp');
             const modalHpp = new bootstrap.Modal(modalHppEl);
             const formHpp = document.getElementById('form-hpp');
+            const modalWarn = new bootstrap.Modal(document.getElementById('modal-stok-warning'));
 
             $('#ks-datatable').on('click', '.js-edit-hpp', function() {
                 const btn = $(this);
@@ -377,8 +429,9 @@
                 const aktifBaru = Number(btn.data('aktif')) === 1 ? 0 : 1;
 
                 if (aktifBaru === 0 && Number(row.stok_akhir) !== 0) {
-                    alert('Produk masih punya stok ' + fmt(row.stok_akhir) + ' di unit ini. '
-                        + 'Sesuaikan stok lewat stok opname sebelum menonaktifkan.');
+                    $('#warn-target').text(row.nama_barang + ' · ' + row.nama_unit);
+                    $('#warn-stok').text(fmt(row.stok_akhir));
+                    modalWarn.show();
                     return;
                 }
 

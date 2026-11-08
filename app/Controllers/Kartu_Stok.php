@@ -138,7 +138,7 @@ class Kartu_Stok extends BaseController
             return $this->response->setStatusCode(422)->setJSON([
                 'status'  => 'error',
                 'message' => 'Produk masih punya stok ' . rtrim(rtrim(number_format($stok, 2, ',', '.'), '0'), ',')
-                    . ' di unit ini. Kosongkan/sesuaikan stok lewat stok opname sebelum menonaktifkan.',
+                    . ' di unit ini.',
             ]);
         }
 
@@ -176,8 +176,8 @@ class Kartu_Stok extends BaseController
             1 => 'stok_barang.nama_barang',
             2 => 'stok_barang.nama_unit',
             3 => 'kategori.nama_kategori',
-            5 => 'barang.status_ppn',
-            6 => 'stok_barang.stok_akhir',
+            4 => 'barang.status_ppn',
+            5 => 'stok_barang.stok_akhir',
         ];
         $orderCol = $columnMap[$orderCol] ?? 'stok_barang.kode_barang';
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
