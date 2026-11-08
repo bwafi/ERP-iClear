@@ -248,6 +248,29 @@ class PresensiAttendanceSyncServiceTest extends CIUnitTestCase
         $this->assertSame(49, (int) $off->evaluator_id);
     }
 
+    public function testRosterDiubahDariOffKeShiftKerjaMenghapusMarkerOff(): void
+    {
+        $this->karyawan(10, 2);
+        $this->spv(49, 2);
+        $this->roster(10, '2026-11-09', 'OFF');
+
+        $svc = new PresensiAttendanceSyncService();
+        $svc->syncDay(10, '2026-11-09');
+        $this->assertSame(1, (int) $this->db->table('kpi_attendance_off')->countAllResults());
+
+        // Jadwal diubah menjadi SIANG, hari itu belum ada punch.
+        $this->db->table('presensi_roster')
+            ->where('akun_idakun', 10)
+            ->where('tanggal', '2026-11-09')
+            ->update(['shift' => 'SIANG']);
+
+        $hasil = $svc->syncDay(10, '2026-11-09');
+
+        $this->assertSame('skipped', $hasil['status']);
+        $this->assertSame('no_punch', $hasil['reason']);
+        $this->assertSame(0, (int) $this->db->table('kpi_attendance_off')->countAllResults());
+    }
+
     public function testRosterIzinTidakDihitungWalauAdaPunch(): void
     {
         $this->karyawan(10, 2);

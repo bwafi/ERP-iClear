@@ -104,6 +104,15 @@ class PresensiAttendanceSyncService
             return ['status' => 'off'];
         }
 
+        // Roster shift kerja membatalkan marker OFF lama, termasuk saat jadwal
+        // diubah dari OFF ke shift dan hari itu belum punya punch.
+        if ($roster) {
+            $this->db->table('kpi_attendance_off')
+                ->where('employee_id', $employeeId)
+                ->where('evaluation_date', $date)
+                ->delete();
+        }
+
         $punches = $this->db->table('presensi')
             ->where('akun_idakun', $employeeId)
             ->where('waktu_masuk >=', $date . ' 00:00:00')
@@ -120,13 +129,6 @@ class PresensiAttendanceSyncService
         if (empty($sessions)) {
             return ['status' => 'skipped', 'reason' => 'no_session'];
         }
-
-        // Punch nyata = hadir; penanda OFF otomatis pada tanggal ini tidak berlaku.
-        $this->db->table('kpi_attendance_off')
-            ->where('employee_id', $employeeId)
-            ->where('evaluation_date', $date)
-            ->where('evaluator_id', $evaluatorId)
-            ->delete();
 
         try {
             $result = $this->attendance->saveDailyAttendance($employeeId, $date, $evaluatorId, $sessions);
