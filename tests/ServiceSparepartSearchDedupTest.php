@@ -76,7 +76,8 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
             warna VARCHAR(64) NULL,
             imei VARCHAR(64) NULL,
             stok_akhir INT NULL DEFAULT 0,
-            stok_minimum INT NULL DEFAULT 0
+            stok_minimum INT NULL DEFAULT 0,
+            aktif_unit INT NULL DEFAULT 1
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_unit (

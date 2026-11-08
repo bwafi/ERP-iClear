@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Models\ModelAuth;
+use App\Models\ModelBarangUnit;
 use App\Models\ModelHppUnit;
 use App\Models\ModelKartuStok;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -20,6 +21,7 @@ class Kartu_Stok extends BaseController
     protected $AuthModel;
     protected $KartuStokModel;
     protected $HppUnitModel;
+    protected $BarangUnitModel;
     protected $UnitModel;
 
     public function __construct()
@@ -27,6 +29,7 @@ class Kartu_Stok extends BaseController
         $this->AuthModel = new ModelAuth();
         $this->KartuStokModel = new ModelKartuStok();
         $this->HppUnitModel = new ModelHppUnit();
+        $this->BarangUnitModel = new ModelBarangUnit();
         $this->UnitModel = new ModelUnit();
     }
 
@@ -38,16 +41,16 @@ class Kartu_Stok extends BaseController
             'summary' => $this->KartuStokModel->getSummaryKartuStok(),
             'body'  => 'stok/kartu_stok',
             'unit' => $this->UnitModel->getUnit(),
-            'can_edit_hpp' => self::bolehUbahHpp((int) session('ID_JABATAN')),
+            'can_manage_produk_unit' => self::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
         );
         return view('template', $data);
     }
 
     /**
-     * Role yang boleh mengoreksi HPP per unit: Finance (0), Admin root (1),
-     * Manager (34), ADMIN/KASIR (35 & 47), dan Kepala Toko (41).
+     * Role yang boleh mengelola HPP dan status produk per unit: Finance (0),
+     * Admin root (1), Manager (34), ADMIN/KASIR (35 & 47), dan Kepala Toko (41).
      */
-    public static function bolehUbahHpp(int $idJabatan): bool
+    public static function bolehKelolaProdukUnit(int $idJabatan): bool
     {
         return in_array($idJabatan, [0, 1, 34, 35, 41, 47], true);
     }
@@ -61,7 +64,7 @@ class Kartu_Stok extends BaseController
      */
     public function updateHpp()
     {
-        if (!self::bolehUbahHpp((int) session('ID_JABATAN'))) {
+        if (!self::bolehKelolaProdukUnit((int) session('ID_JABATAN'))) {
             return $this->response->setStatusCode(403)->setJSON([
                 'status'  => 'error',
                 'message' => 'Role Anda tidak dapat mengubah HPP.',
@@ -91,6 +94,59 @@ class Kartu_Stok extends BaseController
         return $this->response->setJSON([
             'status' => 'success',
             'hpp'    => $hpp,
+            'csrf'   => csrf_hash(),
+        ]);
+    }
+
+    /**
+     * Aktif/nonaktif produk pada satu unit.
+     *
+     * Nonaktif ditolak bila unit masih punya stok (termasuk stok negatif),
+     * karena produk yang tersembunyi dari stok opname tidak akan pernah
+     * dikoreksi. Aktivasi selalu boleh.
+     */
+    public function updateStatus()
+    {
+        if (!self::bolehKelolaProdukUnit((int) session('ID_JABATAN'))) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'status'  => 'error',
+                'message' => 'Role Anda tidak dapat mengubah status produk unit.',
+            ]);
+        }
+
+        $idbarang = (int) $this->request->getPost('idbarang');
+        $idunit   = (int) $this->request->getPost('id_unit');
+        $aktif    = (int) $this->request->getPost('aktif') === 1;
+
+        if ($idbarang <= 0 || $idunit <= 0) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk/unit tidak valid.',
+            ]);
+        }
+
+        $row = $this->KartuStokModel->getPair($idbarang, $idunit);
+        if ($row === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk/unit tidak ditemukan.',
+            ]);
+        }
+
+        $stok = (float) ($row->stok_akhir ?? 0);
+        if (!$aktif && $stok != 0.0) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk masih punya stok ' . rtrim(rtrim(number_format($stok, 2, ',', '.'), '0'), ',')
+                    . ' di unit ini. Kosongkan/sesuaikan stok lewat stok opname sebelum menonaktifkan.',
+            ]);
+        }
+
+        $this->BarangUnitModel->setAktif($idbarang, $idunit, $aktif, (int) session('ID_AKUN'));
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'aktif'  => $aktif ? 1 : 0,
             'csrf'   => csrf_hash(),
         ]);
     }
@@ -138,6 +194,7 @@ class Kartu_Stok extends BaseController
             $data[] = [
                 'idbarang'            => (int)$row->idbarang,
                 'id_unit'             => (int)$row->id_unit,
+                'aktif'               => (int)($row->aktif_unit ?? 1),
                 'kode_barang'         => $row->kode_barang,
                 'nama_barang'         => $row->nama_barang,
                 'imei'                => $row->imei,

@@ -125,6 +125,7 @@
                         <th>Status PPN</th>
                         <th class="text-end">Stok Akhir</th>
                         <th class="text-center">Detail</th>
+                        <th class="text-center">Action</th>
                     </tr>
                 </thead>
             </table>
@@ -132,7 +133,8 @@
     </div>
 </div>
 
-<?php if (!empty($can_edit_hpp)): ?>
+<?php if (!empty($can_manage_produk_unit)): ?>
+<input type="hidden" id="hpp-csrf" name="<?= csrf_token() ?>" value="<?= csrf_hash() ?>">
 <div class="modal fade" id="modal-hpp" tabindex="-1" aria-labelledby="modal-hpp-label" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <form id="form-hpp" method="post" action="<?= base_url('kartu_stok/hpp') ?>" class="modal-content">
@@ -174,7 +176,7 @@
             return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
-        const canEditHpp = <?= !empty($can_edit_hpp) ? 'true' : 'false' ?>;
+        const canManageUnit = <?= !empty($can_manage_produk_unit) ? 'true' : 'false' ?>;
 
         function fmt(n) {
             return new Intl.NumberFormat('id-ID').format(n || 0);
@@ -188,7 +190,7 @@
             const rows = [
                 ['IMEI', d.imei ? esc(d.imei) : 'Tidak ada IMEI'],
                 ['Jenis / Warna', esc(d.jenis_hp || '-') + ' / ' + esc(d.warna || '-')],
-                ['HPP (Harga Beli)', money(d.harga_beli) + (canEditHpp ? ' <button type="button" class="btn btn-sm btn-light-primary text-primary ms-2 py-0 px-2 js-edit-hpp" data-idbarang="' + attr(d.idbarang) + '" data-idunit="' + attr(d.id_unit) + '" data-hpp="' + attr(d.harga_beli) + '" data-nama="' + attr(d.nama_barang) + '" data-unit="' + attr(d.nama_unit) + '">Ubah</button>' : '')],
+                ['HPP (Harga Beli)', money(d.harga_beli) + (canManageUnit ? ' <button type="button" class="btn btn-sm btn-light-primary text-primary ms-2 py-0 px-2 js-edit-hpp" data-idbarang="' + attr(d.idbarang) + '" data-idunit="' + attr(d.id_unit) + '" data-hpp="' + attr(d.harga_beli) + '" data-nama="' + attr(d.nama_barang) + '" data-unit="' + attr(d.nama_unit) + '">Ubah</button>' : '')],
                 ['Harga Jual', money(d.harga)],
                 ['Stok Awal', fmt(d.stok_awal)],
                 ['Stok Akhir', '<b>' + fmt(d.stok_akhir) + '</b>'],
@@ -275,7 +277,26 @@
                     className: 'text-center',
                     orderable: false,
                     searchable: false,
-                    defaultContent: '<button class="btn btn-sm btn-light-primary text-primary d-inline-flex align-items-center justify-content-center p-2 rounded-circle transition"><iconify-icon icon="solar:alt-arrow-down-line-duotone" class="fs-6"></iconify-icon></button>'
+                    defaultContent: '<button class="js-detail btn btn-sm btn-light-primary text-primary d-inline-flex align-items-center justify-content-center p-2 rounded-circle transition"><iconify-icon icon="solar:alt-arrow-down-line-duotone" class="fs-6"></iconify-icon></button>'
+                },
+                {
+                    data: 'aktif',
+                    className: 'text-center',
+                    orderable: false,
+                    searchable: false,
+                    render: function(data, type, row) {
+                        if (!canManageUnit) {
+                            return '<span class="text-muted">-</span>';
+                        }
+                        const aktif = Number(data) === 1;
+                        const badge = aktif ?
+                            '<span class="badge bg-success-subtle text-success border border-success-subtle me-1">Aktif</span>' :
+                            '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">Nonaktif</span>';
+                        const tombol = '<button type="button" class="js-toggle-status btn btn-sm py-1 px-2 ' +
+                            (aktif ? 'btn-light-danger text-danger' : 'btn-light-success text-success') +
+                            '" data-aktif="' + (aktif ? 1 : 0) + '">' + (aktif ? 'Nonaktifkan' : 'Aktifkan') + '</button>';
+                        return badge + tombol;
+                    }
                 }
             ],
             createdRow: function(row, data, dataIndex) {
@@ -283,7 +304,7 @@
             }
         });
 
-        $('#ks-datatable tbody').on('click', 'td:last-child button', function() {
+        $('#ks-datatable tbody').on('click', '.js-detail', function() {
             const tr = $(this).closest('tr');
             const row = table.row(tr);
             if (row.child.isShown()) {
@@ -305,7 +326,7 @@
             $('#exportForm').submit();
         });
 
-        if (canEditHpp) {
+        if (canManageUnit) {
             const modalHppEl = document.getElementById('modal-hpp');
             const modalHpp = new bootstrap.Modal(modalHppEl);
             const formHpp = document.getElementById('form-hpp');
@@ -347,6 +368,50 @@
                     })
                     .catch(function() {
                         alert('Gagal menyimpan HPP.');
+                    });
+            });
+
+            $('#ks-datatable').on('click', '.js-toggle-status', function() {
+                const btn = $(this);
+                const row = table.row(btn.closest('tr')).data();
+                const aktifBaru = Number(btn.data('aktif')) === 1 ? 0 : 1;
+
+                if (aktifBaru === 0 && Number(row.stok_akhir) !== 0) {
+                    alert('Produk masih punya stok ' + fmt(row.stok_akhir) + ' di unit ini. '
+                        + 'Sesuaikan stok lewat stok opname sebelum menonaktifkan.');
+                    return;
+                }
+
+                const body = new URLSearchParams();
+                body.set('idbarang', row.idbarang);
+                body.set('id_unit', row.id_unit);
+                body.set('aktif', aktifBaru);
+                body.set(csrfName, $('#hpp-csrf').val());
+
+                fetch('<?= base_url('kartu_stok/status') ?>', {
+                        method: 'POST',
+                        body: body,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(function(r) {
+                        return r.json();
+                    })
+                    .then(function(res) {
+                        if (res.status !== 'success') {
+                            alert(res.message || 'Gagal mengubah status produk.');
+                            return;
+                        }
+
+                        if (res.csrf) {
+                            $('#hpp-csrf').val(res.csrf);
+                        }
+
+                        table.ajax.reload(null, false);
+                    })
+                    .catch(function() {
+                        alert('Gagal mengubah status produk.');
                     });
             });
         }

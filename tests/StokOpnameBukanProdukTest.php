@@ -56,7 +56,8 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
         // kolom yang dibaca StokOpnameService::createPeriode().
         $q('CREATE TABLE stok_barang (
                 idbarang INTEGER, id_unit INTEGER, kode_barang TEXT NULL,
-                nama_barang TEXT NULL, stok_akhir REAL NULL)');
+                nama_barang TEXT NULL, stok_akhir REAL NULL,
+                aktif_unit INTEGER NULL DEFAULT 1)');
 
         $q('CREATE TABLE stok_awal (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT, barang_idbarang INTEGER NULL,
@@ -126,6 +127,23 @@ class StokOpnameBukanProdukTest extends CIUnitTestCase
 
         $this->assertSame([101, 105, 106], $ids, 'Barang jasa PUP/JASA/MESIN tidak boleh ikut ter-seed');
         $this->assertSame(3, (int) $r['periode']->total_barang);
+    }
+
+    public function testMulaiOpnameMelewatiProdukNonaktifUnit(): void
+    {
+        $this->db->query('UPDATE stok_barang SET aktif_unit = 0 WHERE idbarang = 105 AND id_unit = 1');
+
+        $svc = new StokOpnameService($this->db);
+        $r = $svc->createPeriode(1, '2026-10-11', 43);
+
+        $this->assertTrue($r['success'], implode(' ', $r['errors']));
+        $this->assertSame(2, $r['jumlah'], 'Produk nonaktif di unit ini tidak ikut diopname');
+
+        $ids = array_map(
+            static fn ($row) => (int) $row['barang_idbarang'],
+            $this->db->table('stok_opname_draft')->orderBy('barang_idbarang', 'ASC')->get()->getResultArray()
+        );
+        $this->assertSame([101, 106], $ids);
     }
 
     public function testBuangBukanProdukMembersihkanDraftLama(): void

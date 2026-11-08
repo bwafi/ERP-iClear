@@ -58,7 +58,7 @@ class ModelStokBarang extends Model
 
     public function getSparepart()
     {
-        return $this->where('idkategori', 3)->findAll();
+        return $this->where('idkategori', 3)->where('aktif_unit', 1)->findAll();
     }
 
 
@@ -88,6 +88,7 @@ class ModelStokBarang extends Model
             ->where('barang.deleted', 0)
             ->where('kategori.delete', 0)
             ->where('stok_barang.id_unit', (int)$id_unit)
+            ->where('stok_barang.aktif_unit', 1)
             ->where('stok_barang.stok_akhir >', 0)
             ->findAll();
     }

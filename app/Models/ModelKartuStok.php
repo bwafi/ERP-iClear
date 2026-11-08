@@ -52,6 +52,7 @@ class ModelKartuStok extends Model
                 stok_barang.total_retur_supplier,
                 stok_barang.total_mutasi_masuk,
                 stok_barang.total_mutasi_keluar,
+                stok_barang.aktif_unit,
                 COALESCE(hpp_unit.hpp, hpp_barang.hpp, barang.harga_beli) AS harga_beli,
                 barang.jenis_hp,
                 barang.warna,
@@ -182,6 +183,18 @@ class ModelKartuStok extends Model
         return $this->db->table('stok_barang')
             ->where(['idbarang' => $idbarang, 'id_unit' => $idunit])
             ->countAllResults() > 0;
+    }
+
+    /**
+     * Satu baris produk+unit untuk validasi status (stok dan status aktif).
+     */
+    public function getPair(int $idbarang, int $idunit)
+    {
+        return $this->db->table('stok_barang')
+            ->select('idbarang, id_unit, stok_akhir, aktif_unit')
+            ->where(['idbarang' => $idbarang, 'id_unit' => $idunit])
+            ->get()
+            ->getRow();
     }
 
     public function insert_getKartuStok($data)

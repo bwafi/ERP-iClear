@@ -152,7 +152,8 @@ class StokOpnameService
         }
 
         $stocks = $this->db->table('stok_barang')
-            ->where('id_unit', $unit);
+            ->where('id_unit', $unit)
+            ->where('aktif_unit', 1);
         $this->kecualikanBukanProduk($stocks);
         $stocks = $stocks->orderBy('kode_barang', 'ASC')
             ->get()

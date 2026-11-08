@@ -829,6 +829,7 @@ class Service extends BaseController
 
         $sparepart = $builder
             ->where('sb.id_unit', $unitId)
+            ->where('sb.aktif_unit', 1)
             ->where('sb.stok_akhir >', 0)
             ->groupStart()
                 ->like('b.kode_barang', 'sprt')

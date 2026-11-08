@@ -37,6 +37,7 @@ class ModelBarang extends Model
             ->join('stok_barang', 'stok_barang.idbarang = barang.idbarang AND stok_barang.id_unit = ' . (int)$id_unit, 'left')
             ->where('barang.deleted', 0)
             ->where('kategori.delete', 0)
+            ->where('(stok_barang.aktif_unit IS NULL OR stok_barang.aktif_unit = 1)', null, false)
             ->findAll();
     }
 
@@ -159,6 +160,7 @@ class ModelBarang extends Model
             LEFT JOIN suplier s ON s.id_suplier = sa2.suplier_id_suplier
             WHERE sb.id_unit = ?
               AND sb.stok_akhir > 0
+              AND sb.aktif_unit = 1
               AND sb.deleted = '0'
               AND k.`delete` = '0'";
         $params = [$idUnit, $idUnit];

@@ -11,17 +11,17 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 class KartuStokHppRoleTest extends CIUnitTestCase
 {
-    public function testRoleYangBolehUbahHpp(): void
+    public function testRoleYangBolehKelolaProdukUnit(): void
     {
         foreach ([0, 1, 34, 35, 41, 47] as $role) {
-            $this->assertTrue(Kartu_Stok::bolehUbahHpp($role), 'role ' . $role);
+            $this->assertTrue(Kartu_Stok::bolehKelolaProdukUnit($role), 'role ' . $role);
         }
     }
 
-    public function testRoleYangTidakBolehUbahHpp(): void
+    public function testRoleYangTidakBolehKelolaProdukUnit(): void
     {
         foreach ([2, 36, 37, 38, 39, 40, 42, 43, 44, 45, 46, 48] as $role) {
-            $this->assertFalse(Kartu_Stok::bolehUbahHpp($role), 'role ' . $role);
+            $this->assertFalse(Kartu_Stok::bolehKelolaProdukUnit($role), 'role ' . $role);
         }
     }
 }
