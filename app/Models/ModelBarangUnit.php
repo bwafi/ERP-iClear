@@ -35,4 +35,23 @@ class ModelBarangUnit extends Model
             'updated_at'      => date('Y-m-d H:i:s'),
         ]);
     }
+
+    /**
+     * Aktifkan lagi produk yang nonaktif di satu unit tanpa membuat baris baru
+     * untuk produk yang memang sudah aktif.
+     */
+    public function aktifkanJikaNonaktif(int $idbarang, int $idunit, ?int $userId = null): bool
+    {
+        return $this->db->table($this->table)
+            ->where([
+                'barang_idbarang' => $idbarang,
+                'unit_idunit'     => $idunit,
+                'aktif'           => 0,
+            ])
+            ->update([
+                'aktif'      => 1,
+                'updated_by' => $userId,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+    }
 }
