@@ -7,12 +7,15 @@ use CodeIgniter\Test\FeatureTestTrait;
 use Config\Database;
 
 /**
- * Picker sparepart service (tab Sparepart di /service dan
- * /detail/riwayat_service/{id}?tab=sparepart) harus tetap memuat jasa.
+ * Picker service (tab Sparepart di /service dan
+ * /detail/riwayat_service/{id}?tab=sparepart) punya dua tombol: "Pilih
+ * Sparepart" dan "Pilih Jasa". Endpoint `service/search_sparepart` memilah
+ * hasil dari parameter `jenis`:
+ * - sparepart (default): produk berstok dari view `stok_barang`, kode sprt/acc;
+ * - jasa: master `barang.jenis_barang='jasa'` tanpa syarat stok.
  *
  * Jasa tidak ada di view stok_barang (bukan persediaan), tetapi teknisi
- * memakainya sebagai item service — PUP, mesin, cleaning. Endpoint
- * `service/search_sparepart` menggabungkan produk berstok dengan jasa.
+ * memakainya sebagai item service — PUP, mesin, cleaning.
  */
 final class ServiceSparepartJasaTest extends CIUnitTestCase
 {
@@ -88,7 +91,7 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
         parent::tearDown();
     }
 
-    private function cari(string $search): array
+    private function cari(string $search, string $jenis = 'sparepart'): array
     {
         $this->withSession([
             'logged_in' => true,
@@ -98,7 +101,7 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
         ]);
 
         $result = $this->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-            ->post('service/search_sparepart', ['search' => $search]);
+            ->post('service/search_sparepart', ['search' => $search, 'jenis' => $jenis]);
 
         $result->assertStatus(200);
 
@@ -118,7 +121,7 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
 
     public function testJasaMunculWalauTidakAdaDiViewStok(): void
     {
-        $peta = $this->peta($this->cari('PUP'));
+        $peta = $this->peta($this->cari('PUP', 'jasa'));
 
         $this->assertArrayHasKey(3, $peta);
         $this->assertSame('jasa', $peta[3]->jenis_barang);
@@ -128,15 +131,31 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
 
     public function testJasaBerawalanSprtJugaTetapBisaDipilih(): void
     {
-        $peta = $this->peta($this->cari('CLEANING'));
+        $peta = $this->peta($this->cari('CLEANING', 'jasa'));
 
         $this->assertArrayHasKey(4, $peta, 'jasa kode sprt tidak boleh hilang dari picker service');
         $this->assertSame('jasa', $peta[4]->jenis_barang);
     }
 
+    public function testProdukTidakMunculDiModeJasa(): void
+    {
+        $peta = $this->peta($this->cari('LCD', 'jasa'));
+
+        $this->assertArrayNotHasKey(1, $peta, 'mode jasa hanya menampilkan master jasa');
+        $this->assertSame([], $peta);
+    }
+
+    public function testJasaTidakMunculDiModeSparepart(): void
+    {
+        $peta = $this->peta($this->cari('IPHONE', 'sparepart'));
+
+        $this->assertArrayNotHasKey(3, $peta);
+        $this->assertArrayNotHasKey(4, $peta);
+    }
+
     public function testProdukSparepartBerstokTetapMuncul(): void
     {
-        $peta = $this->peta($this->cari('LCD'));
+        $peta = $this->peta($this->cari('LCD', 'sparepart'));
 
         $this->assertArrayHasKey(1, $peta);
         $this->assertSame('produk', $peta[1]->jenis_barang);
@@ -145,8 +164,27 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
 
     public function testProdukStokNolTidakMuncul(): void
     {
-        $peta = $this->peta($this->cari('Anti Gores'));
+        $peta = $this->peta($this->cari('Anti Gores', 'sparepart'));
 
         $this->assertArrayNotHasKey(2, $peta, 'produk stok 0 tetap disaring seperti sebelumnya');
+    }
+
+    public function testTanpaJenisDianggapModeSparepart(): void
+    {
+        $this->withSession([
+            'logged_in' => true,
+            'ID_AKUN'   => 1,
+            'ID_UNIT'   => 1,
+            'NAMA_UNIT' => 'Unit 1',
+        ]);
+
+        $result = $this->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+            ->post('service/search_sparepart', ['search' => 'LCD']);
+
+        $result->assertStatus(200);
+        $peta = $this->peta(json_decode((string) $result->response()->getBody(), true) ?: []);
+
+        $this->assertArrayHasKey(1, $peta);
+        $this->assertArrayNotHasKey(3, $peta);
     }
 }

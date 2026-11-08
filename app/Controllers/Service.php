@@ -797,8 +797,38 @@ class Service extends BaseController
 
         $search = $this->request->getPost('search') ?? '';
         $unitId = session('ID_UNIT');
+        // Picker service punya dua tombol: sparepart (produk berstok) dan jasa
+        // (master tanpa stok). Default sparepart agar pemanggil lama tetap sama.
+        $jenis = $this->request->getPost('jenis') === 'jasa' ? 'jasa' : 'sparepart';
 
         $db = \Config\Database::connect();
+
+        if ($jenis === 'jasa') {
+            $jasa = $db->table('barang b')
+                ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei')
+                ->where('b.jenis_barang', 'jasa')
+                ->where('b.deleted', 0);
+
+            if (!empty($search)) {
+                $jasa->groupStart()
+                    ->like('b.nama_barang', $search)
+                    ->orLike('b.kode_barang', $search)
+                    ->orLike('b.warna', $search)
+                    ->groupEnd();
+            }
+
+            $rows = [];
+            foreach ($jasa->orderBy('b.nama_barang', 'ASC')->limit(50)->get()->getResult() as $row) {
+                $row->jenis_barang = 'jasa';
+                $row->stok_akhir   = 0;
+                $row->nama_suplier = null;
+                $row->NAMA_UNIT    = session('NAMA_UNIT');
+                $rows[] = $row;
+            }
+
+            return $this->response->setJSON($rows);
+        }
+
         // Nama suplier diambil lewat subquery agregat (GROUP_CONCAT) yang
         // dikorelasi per (barang, unit). Satu barang bisa punya stok_awal dari
         // beberapa suplier; kalau di-join langsung, hasilnya menggandakan baris
@@ -840,34 +870,7 @@ class Service extends BaseController
             ->get()
             ->getResult();
 
-        // Jasa (PUP/mesin/cleaning) dipakai teknisi sebagai item service, tetapi
-        // sejak `barang.jenis_barang` ada ia tidak lagi muncul di view
-        // stok_barang. Ambil dari master tanpa syarat stok dan tanpa filter kode
-        // sprt/acc — jenisnya sudah eksplisit jasa.
-        $jasa = $db->table('barang b')
-            ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei')
-            ->where('b.jenis_barang', 'jasa')
-            ->where('b.deleted', 0);
-
-        if (!empty($search)) {
-            $jasa->groupStart()
-                ->like('b.nama_barang', $search)
-                ->orLike('b.kode_barang', $search)
-                ->orLike('b.warna', $search)
-                ->groupEnd();
-        }
-
-        foreach ($jasa->orderBy('b.nama_barang', 'ASC')->limit(50)->get()->getResult() as $row) {
-            $row->jenis_barang = 'jasa';
-            $row->stok_akhir   = 0;
-            $row->nama_suplier = null;
-            $row->NAMA_UNIT    = session('NAMA_UNIT');
-            $sparepart[] = $row;
-        }
-
-        usort($sparepart, static fn ($a, $b) => strcasecmp((string) $a->nama_barang, (string) $b->nama_barang));
-
-        return $this->response->setJSON(array_slice($sparepart, 0, 50));
+        return $this->response->setJSON($sparepart);
     }
 
     public function search_pelanggan_ajax()
