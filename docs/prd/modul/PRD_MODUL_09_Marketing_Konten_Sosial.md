@@ -44,6 +44,7 @@ Mengelola KPI divisi pemasaran & kreatif: (1) Content Management / KPI Multimedi
 ### 4.6 Marketing
 - Leads manual (detail prospek): status `PROSPEK|DATANG|CLOSING|BATAL`; CLOSING wajib service SELESAI (`status_service=4`) & seluruh field diambil dari service; `tanggal_won` diisi.
 - Rekap harian (`MarketingRekapService::save`) = source of truth KPI lead (upsert per unit+tanggal, replace detail, transaksi).
+- Halaman rekap menyediakan filter cabang, ringkasan bulanan (non iklan, iklan, lead, prospek, datang, rate, WA/DM), dan pembanding dua bulan yang bisa dipilih. Filter hanya memengaruhi tampilan/agregasi, bukan data tersimpan. ✅ `Marketing::rekap`, `MarketingRekapService::monthlySummary/listByMonth`.
 - Ads performa: campaign wajib; `amount`/`hasil`; channel ganda JSON.
 - Laporan read-only: spending/PPN/CTR/CPC/CPM/freq/CPR.
 - Campaign marketing: tolak hapus bila masih dipakai `marketing_ads_performance`.

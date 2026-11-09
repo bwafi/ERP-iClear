@@ -80,6 +80,20 @@ class Marketing extends BaseController
         return $bulan >= 1 && $bulan <= 12 && $tahun >= 2000 && $tahun <= 2100;
     }
 
+    /** Normalisasi input bulan `YYYY-MM`; null bila tidak valid. */
+    private function parseMonth(?string $value): ?string
+    {
+        if (!preg_match('/^(\d{4})-(\d{2})$/', trim((string)$value), $m)) {
+            return null;
+        }
+        $bulan = (int)$m[2];
+        $tahun = (int)$m[1];
+        if (!$this->validPeriod($bulan, $tahun)) {
+            return null;
+        }
+        return sprintf('%04d-%02d', $tahun, $bulan);
+    }
+
     // ── Dashboard KPI ─────────────────────────────────────────────
 
     public function index()
@@ -138,10 +152,30 @@ class Marketing extends BaseController
             $tahunR = (int)date('Y');
         }
 
+        $units = $this->units();
+        $validUnitIds = array_map(fn($u) => (int)$u->idunit, $units);
+
+        // Filter tampilan (daftar/ringkasan/pembanding), terpisah dari unit input harian.
+        $filterUnitId = (int)($this->request->getGet('f_unit_id') ?? 0);
+        if ($filterUnitId > 0 && !in_array($filterUnitId, $validUnitIds, true)) {
+            $filterUnitId = 0;
+        }
+        $filterUnitName = 'Semua Cabang';
+        if ($filterUnitId > 0) {
+            foreach ($units as $u) {
+                if ((int)$u->idunit === $filterUnitId) {
+                    $filterUnitName = (string)$u->NAMA_UNIT;
+                    break;
+                }
+            }
+        }
+
+        $rekapSvc = new MarketingRekapService();
+
         $data = null;
         if ($unitId > 0) {
             try {
-                $data = (new MarketingRekapService())->getByDate($unitId, $tanggal);
+                $data = $rekapSvc->getByDate($unitId, $tanggal);
             } catch (\InvalidArgumentException $e) {
                 $tanggal = date('Y-m-d');
             }
@@ -150,17 +184,38 @@ class Marketing extends BaseController
             $data = ['header' => null, 'details' => []];
         }
 
+        $unitFilter = $filterUnitId ?: null;
+        $summary = $rekapSvc->monthlySummary($bulanR, $tahunR, $unitFilter);
+
+        // Pembanding dua bulan bebas; default bulan terpilih vs bulan sebelumnya.
+        $defaultCmpA = sprintf('%04d-%02d', $tahunR, $bulanR);
+        $defaultCmpB = date('Y-m', strtotime($defaultCmpA . '-01 -1 month'));
+        $cmpA = $this->parseMonth($this->request->getGet('cmp_a')) ?? $defaultCmpA;
+        $cmpB = $this->parseMonth($this->request->getGet('cmp_b')) ?? $defaultCmpB;
+
+        $cmpSummaryA = $cmpA === $defaultCmpA
+            ? $summary
+            : $rekapSvc->monthlySummary((int)substr($cmpA, 5, 2), (int)substr($cmpA, 0, 4), $unitFilter);
+        $cmpSummaryB = $rekapSvc->monthlySummary((int)substr($cmpB, 5, 2), (int)substr($cmpB, 0, 4), $unitFilter);
+
         return view('template', [
             'body'    => 'marketing/rekap',
             'akun'    => (new \App\Models\ModelAuth())->getById(session('ID_AKUN')),
             'tanggal' => $tanggal,
             'unitId'  => $unitId,
-            'units'   => $this->units(),
+            'units'   => $units,
             'rekap'   => $data,
+            'summary' => $summary,
+            'filterUnitId' => $filterUnitId,
+            'filterUnitName' => $filterUnitName,
+            'cmpA'    => $cmpA,
+            'cmpB'    => $cmpB,
+            'cmpSummaryA' => $cmpSummaryA,
+            'cmpSummaryB' => $cmpSummaryB,
             'platforms' => (new ModelMarketingPlatform())->active(),
             'bulanR'  => $bulanR,
             'tahunR'  => $tahunR,
-            'rekaps'  => (new MarketingRekapService())->listByMonth($bulanR, $tahunR),
+            'rekaps'  => $rekapSvc->listByMonth($bulanR, $tahunR, $unitFilter),
             'canWrite' => $this->canWrite(),
         ]);
     }

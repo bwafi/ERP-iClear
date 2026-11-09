@@ -176,17 +176,22 @@ class MarketingRekapService
     }
 
     /**
-     * Ringkasan bulanan rekap semua cabang (format kartu dashboard):
+     * Ringkasan bulanan rekap (format kartu dashboard):
      * non_iklan, iklan, total, prospek, datang, rate, total_lead_wa_dm,
      * lead_total_iklan_dashboard, + rincian per cabang.
+     *
+     * @param int|null $unitId Filter satu cabang; null/0 = semua cabang.
      */
-    public function monthlySummary(int $month, int $year): array
+    public function monthlySummary(int $month, int $year, ?int $unitId = null): array
     {
         $m = sprintf('%04d-%02d', $year, $month);
+        $unitSql = $unitId !== null && $unitId > 0
+            ? ' AND marketing_rekap_harian.unit_id = ' . (int)$unitId
+            : '';
 
         $agg = $this->detailModel
             ->join('marketing_rekap_harian', 'marketing_rekap_harian.id = marketing_rekap_harian_detail.rekap_id', 'inner')
-            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'", null, false)
+            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
             ->selectSum('non_iklan', 'non_iklan')
             ->selectSum('iklan', 'iklan')
             ->selectSum('total', 'total')
@@ -198,7 +203,7 @@ class MarketingRekapService
         // kolom header — menjamin konsistensi walau ada data lama.
         $waDm = (int)$this->detailModel
             ->join('marketing_rekap_harian', 'marketing_rekap_harian.id = marketing_rekap_harian_detail.rekap_id', 'inner')
-            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'", null, false)
+            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
             ->where("UPPER(TRIM(marketing_rekap_harian_detail.platform)) IN ('WHATSAPP','INSTAGRAM')", null, false)
             ->selectSum('total', 'wa_dm')
             ->first()->wa_dm ?? 0;
@@ -206,7 +211,7 @@ class MarketingRekapService
         // Lead Total Iklan (Dashboard) adalah angka terpisah yang dikelola
         // di section khusus — dibaca dari header (bukan diturunkan).
         $headerAgg = $this->headerModel
-            ->where("DATE_FORMAT(tanggal, '%Y-%m') = '{$m}'", null, false)
+            ->where("DATE_FORMAT(tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
             ->selectSum('lead_total_iklan_dashboard', 'iklan_dash')
             ->first();
 
@@ -226,7 +231,7 @@ class MarketingRekapService
             'total_lead_wa_dm'           => (int)$waDm,
             'lead_total_iklan_dashboard' => (int)($headerAgg->iklan_dash ?? 0),
             'total_days' => (int)$this->headerModel
-                ->where("DATE_FORMAT(tanggal, '%Y-%m') = '{$m}'", null, false)
+                ->where("DATE_FORMAT(tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
                 ->countAllResults(),
         ];
     }
@@ -313,16 +318,21 @@ class MarketingRekapService
      * Daftar rekap harian dalam satu bulan (untuk halaman rekap), urut
      * tanggal terbaru. Per rekap: agregat header + rincian per platform.
      *
+     * @param int|null $unitId Filter satu cabang; null/0 = semua cabang.
+     *
      * @return list<array{tanggal:string, unit_id:int, unit_name:string, wa_dm:int, iklan_dash:int, platforms:list<array>, total:int, non_iklan:int, iklan:int, prospek:int, datang:int, rate:float}>
      */
-    public function listByMonth(int $month, int $year): array
+    public function listByMonth(int $month, int $year, ?int $unitId = null): array
     {
         $m = sprintf('%04d-%02d', $year, $month);
+        $unitSql = $unitId !== null && $unitId > 0
+            ? ' AND marketing_rekap_harian.unit_id = ' . (int)$unitId
+            : '';
 
         $rows = $this->detailModel
             ->join('marketing_rekap_harian', 'marketing_rekap_harian.id = marketing_rekap_harian_detail.rekap_id', 'inner')
             ->join('unit', 'unit.idunit = marketing_rekap_harian.unit_id', 'inner')
-            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'", null, false)
+            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
             ->select('marketing_rekap_harian.tanggal AS tanggal')
             ->select('marketing_rekap_harian.unit_id AS unit_id')
             ->select('unit.NAMA_UNIT AS unit_name')
