@@ -159,7 +159,7 @@
         const unit = item.NAMA_UNIT || item.nama_unit || '';
         const suplier = item.nama_suplier || '';
         const harga = Number(item.harga) || 0;
-        const hpp = Number(item.harga_beli) || 0;
+        const hpp = Number(item.hpp) || 0;
         const stok = Number(item.stok_akhir) || 0;
         const isJasa = item.jenis_barang === 'jasa';
         const isChecked = document.getElementById('row-' + id) ? ' checked' : '';

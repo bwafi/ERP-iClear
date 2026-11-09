@@ -24,7 +24,7 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
     protected $db;
     private string $prefixAsli = '';
 
-    private const TABEL = ['barang', 'stok_barang', 'stok_awal', 'suplier', 'unit', 'akun', 'jabatan', 'menu', 'service', 'pelanggan'];
+    private const TABEL = ['barang', 'stok_barang', 'stok_awal', 'suplier', 'unit', 'akun', 'jabatan', 'menu', 'service', 'pelanggan', 'hpp_unit', 'hpp_barang'];
 
     protected function setUp(): void
     {
@@ -66,6 +66,10 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
                 tanggal_claim_garansi TEXT NULL, status_proses INT NULL,
                 keterangan TEXT NULL, garansi_hari INT NULL)');
         $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL, deleted INT NULL DEFAULT 0)');
+
+        // HPP per unit; kosong berarti fallback ke master barang.harga_beli.
+        $q('CREATE TABLE hpp_unit (id INT PRIMARY KEY AUTO_INCREMENT, barang_idbarang INT NULL, unit_idunit INT NULL, hpp REAL NULL DEFAULT 0)');
+        $q('CREATE TABLE hpp_barang (idbarang INT NULL, hpp REAL NULL DEFAULT 0)');
 
         $q('INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, "Unit 1")');
         $q('INSERT INTO jabatan VALUES (35, "ADMIN / KASIR", "[]")');
@@ -160,6 +164,8 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
         $this->assertArrayHasKey(1, $peta);
         $this->assertSame('produk', $peta[1]->jenis_barang);
         $this->assertSame(5.0, (float) $peta[1]->stok_akhir);
+        $this->assertSame(100000.0, (float) $peta[1]->hpp,
+            'tanpa hpp_unit/hpp_barang, HPP picker fallback ke master');
     }
 
     public function testProdukStokNolTidakMuncul(): void

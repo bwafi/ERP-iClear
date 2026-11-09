@@ -31,15 +31,21 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
         'unit',
         'stok_awal',
         'suplier',
+        'hpp_unit',
+        'hpp_barang',
         'service',
         'pelanggan',
         'akun',
         'jabatan',
     ];
 
+    private $testDb;
+
     private function db()
     {
-        return \Config\Database::connect('tests', false);
+        // Satu koneksi per test. connect(..., false) tidak shared; kalau dipanggil
+        // di setiap DDL, koneksi menumpuk sampai "Too many connections".
+        return $this->testDb ??= \Config\Database::connect('tests', false);
     }
 
     protected function setUp(): void
@@ -85,6 +91,21 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
             idunit INT UNSIGNED NOT NULL AUTO_INCREMENT,
             NAMA_UNIT VARCHAR(150) NULL,
             PRIMARY KEY (idunit)
+        ) ENGINE=InnoDB');
+
+        // HPP per unit + HPP global. `hpp_barang` di produksi adalah VIEW;
+        // untuk endpoint cukup kolom yang dipakai ModelHppUnit::resolveMany.
+        $q('CREATE TABLE db_hpp_unit (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            barang_idbarang INT NULL,
+            unit_idunit INT NULL,
+            hpp DECIMAL(15,2) NULL DEFAULT 0,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB');
+
+        $q('CREATE TABLE db_hpp_barang (
+            idbarang INT NULL,
+            hpp DECIMAL(15,2) NULL DEFAULT 0
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_stok_awal (
@@ -145,6 +166,17 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
         $q("INSERT INTO db_suplier (id_suplier, nama_suplier) VALUES (1, 'Suplier A'), (2, 'Suplier B')");
         $q('INSERT INTO db_stok_awal (barang_idbarang, suplier_id_suplier, unit_idunit, jumlah)
             VALUES (1, 1, 1, 3), (1, 2, 1, 4)');
+
+        // HPP per unit: LCD punya override 350rb (master 400rb), jasa 25rb
+        // (master 20rb). "Anti Gores" hanya punya hpp_barang 380rb (master 30rb).
+        $q('INSERT INTO db_hpp_unit (barang_idbarang, unit_idunit, hpp) VALUES (1, 1, 350000), (2, 1, 25000)');
+        $q('INSERT INTO db_hpp_barang (idbarang, hpp) VALUES (1, 380000), (3, 380000)');
+        $q("INSERT INTO db_barang (idbarang, kode_barang, nama_barang, harga, harga_beli, jenis_barang, deleted)
+            VALUES (2, 'JASA-0001', 'Servis Mesin', 100000, 20000, 'jasa', '0')");
+        $q("INSERT INTO db_barang (idbarang, kode_barang, nama_barang, harga, harga_beli, warna, deleted)
+            VALUES (3, 'ACC-0001', 'Anti Gores', 50000, 30000, 'Bening', '0')");
+        $q("INSERT INTO db_stok_barang (idbarang, id_unit, kode_barang, nama_barang, harga, harga_beli, warna, stok_akhir, stok_minimum)
+            VALUES (3, 1, 'ACC-0001', 'Anti Gores', 50000, 30000, 'Bening', 5, 0)");
         $q("INSERT INTO db_akun (ID_AKUN, ID_JABATAN, ID_UNIT, NAMA_AKUN) VALUES (43, 1, 1, 'Admin')");
         $q("INSERT INTO db_jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES (1, 'Admin', '[]')");
     }
@@ -182,5 +214,35 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
             $data[0]['nama_suplier'] ?? null,
             'nama suplier digabung (GROUP_CONCAT) tanpa menggandakan baris'
         );
+    }
+
+    public function testHppPickerSparepartMemakaiHppUnit(): void
+    {
+        $result = $this->sesi()->post(self::URI, ['search' => 'lcd']);
+
+        $data = json_decode($result->getJSON(), true);
+        $this->assertSame(350000.0, (float) ($data[0]['hpp'] ?? -1),
+            'hpp_unit menang atas hpp_barang dan master barang.harga_beli');
+        $this->assertSame(400000.0, (float) ($data[0]['harga_beli'] ?? -1),
+            'field master tetap dikirim apa adanya');
+    }
+
+    public function testHppPickerSparepartFallbackKeHppBarang(): void
+    {
+        $result = $this->sesi()->post(self::URI, ['search' => 'anti']);
+
+        $data = json_decode($result->getJSON(), true);
+        $this->assertSame(380000.0, (float) ($data[0]['hpp'] ?? -1),
+            'tanpa hpp_unit, pakai hpp_barang sebelum master');
+    }
+
+    public function testHppPickerJasaMemakaiHppUnit(): void
+    {
+        $result = $this->sesi()->post(self::URI, ['search' => 'servis', 'jenis' => 'jasa']);
+
+        $data = json_decode($result->getJSON(), true);
+        $this->assertSame('JASA-0001', $data[0]['kode_barang'] ?? null);
+        $this->assertSame(25000.0, (float) ($data[0]['hpp'] ?? -1),
+            'picker jasa juga memakai HPP per unit');
     }
 }

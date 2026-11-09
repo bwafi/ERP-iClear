@@ -826,6 +826,8 @@ class Service extends BaseController
                 $rows[] = $row;
             }
 
+            $this->lampirkanHppPicker($rows, (int) $unitId);
+
             return $this->response->setJSON($rows);
         }
 
@@ -870,7 +872,30 @@ class Service extends BaseController
             ->get()
             ->getResult();
 
+        $this->lampirkanHppPicker($sparepart, (int) $unitId);
+
         return $this->response->setJSON($sparepart);
+    }
+
+    /**
+     * HPP picker mengikuti jalur simpan: per unit, lalu global, lalu master.
+     * Dibuat sama dengan HppUnitModel::resolve() supaya angka di modal tidak
+     * berbeda dengan yang tersimpan saat sparepart/jasa dipilih.
+     *
+     * @param array<int, object> $rows
+     */
+    private function lampirkanHppPicker(array $rows, int $unitId): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        $ids = array_map(static fn ($row) => (int) $row->idbarang, $rows);
+        $hpp = $this->HppUnitModel->resolveMany($ids, $unitId);
+
+        foreach ($rows as $row) {
+            $row->hpp = $hpp[(int) $row->idbarang] ?? 0.0;
+        }
     }
 
     public function search_pelanggan_ajax()
