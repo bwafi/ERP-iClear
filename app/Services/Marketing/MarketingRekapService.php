@@ -178,61 +178,118 @@ class MarketingRekapService
     /**
      * Ringkasan bulanan rekap (format kartu dashboard):
      * non_iklan, iklan, total, prospek, datang, rate, total_lead_wa_dm,
-     * lead_total_iklan_dashboard, + rincian per cabang.
+     * lead_total_iklan_dashboard, total_days, + rincian per platform.
      *
      * @param int|null $unitId Filter satu cabang; null/0 = semua cabang.
      */
     public function monthlySummary(int $month, int $year, ?int $unitId = null): array
     {
-        $m = sprintf('%04d-%02d', $year, $month);
-        $unitSql = $unitId !== null && $unitId > 0
-            ? ' AND marketing_rekap_harian.unit_id = ' . (int)$unitId
-            : '';
+        $start = sprintf('%04d-%02d-01', $year, $month);
+        return $this->rangeSummary($start, date('Y-m-t', strtotime($start)), $unitId);
+    }
 
-        $agg = $this->detailModel
+    /**
+     * Ringkasan rekap untuk rentang tanggal bebas (dipakai pembanding periode).
+     * Kunci agregat sama dengan monthlySummary; `platforms` berisi rincian per
+     * platform yang dinormalisasi (WhatsApp == whatsapp).
+     *
+     * @param int|null $unitId Filter satu cabang; null/0 = semua cabang.
+     */
+    public function rangeSummary(string $start, string $end, ?int $unitId = null): array
+    {
+        $start = $this->validTanggal($start);
+        $end   = $this->validTanggal($end);
+        if ($start > $end) {
+            throw new \InvalidArgumentException('Rentang tanggal terbalik.');
+        }
+
+        $detail = $this->detailModel
             ->join('marketing_rekap_harian', 'marketing_rekap_harian.id = marketing_rekap_harian_detail.rekap_id', 'inner')
-            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
+            ->where('marketing_rekap_harian.tanggal >=', $start)
+            ->where('marketing_rekap_harian.tanggal <=', $end);
+        if ($unitId !== null && $unitId > 0) {
+            $detail->where('marketing_rekap_harian.unit_id', (int)$unitId);
+        }
+        $rows = $detail
+            ->select('marketing_rekap_harian_detail.platform AS platform')
             ->selectSum('non_iklan', 'non_iklan')
             ->selectSum('iklan', 'iklan')
             ->selectSum('total', 'total')
             ->selectSum('prospek', 'prospek')
             ->selectSum('datang', 'datang')
-            ->first();
+            ->groupBy('marketing_rekap_harian_detail.platform')
+            ->get()
+            ->getResultArray();
 
-        // Total Lead WA/DM dihitung dari detail (WhatsApp + Instagram), bukan
-        // kolom header — menjamin konsistensi walau ada data lama.
-        $waDm = (int)$this->detailModel
-            ->join('marketing_rekap_harian', 'marketing_rekap_harian.id = marketing_rekap_harian_detail.rekap_id', 'inner')
-            ->where("DATE_FORMAT(marketing_rekap_harian.tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
-            ->where("UPPER(TRIM(marketing_rekap_harian_detail.platform)) IN ('WHATSAPP','INSTAGRAM')", null, false)
-            ->selectSum('total', 'wa_dm')
-            ->first()->wa_dm ?? 0;
+        $platforms = [];
+        $totals = ['non_iklan' => 0, 'iklan' => 0, 'total' => 0, 'prospek' => 0, 'datang' => 0];
+        $waDm = 0;
+        foreach ($rows as $r) {
+            $name = trim((string)$r['platform']);
+            $key  = $this->normalizePlatform($name) ?: 'TANPAPLATFORM';
+            if (!isset($platforms[$key])) {
+                $platforms[$key] = [
+                    'platform'  => $name !== '' ? $name : 'Tanpa platform',
+                    'non_iklan' => 0,
+                    'iklan'     => 0,
+                    'total'     => 0,
+                    'prospek'   => 0,
+                    'datang'    => 0,
+                    'rate'      => 0.0,
+                ];
+            }
+            $total    = (int)$r['total'];
+            $datang   = (int)$r['datang'];
+            $platforms[$key]['non_iklan'] += (int)$r['non_iklan'];
+            $platforms[$key]['iklan']     += (int)$r['iklan'];
+            $platforms[$key]['total']     += $total;
+            $platforms[$key]['prospek']   += (int)$r['prospek'];
+            $platforms[$key]['datang']    += $datang;
 
-        // Lead Total Iklan (Dashboard) adalah angka terpisah yang dikelola
-        // di section khusus — dibaca dari header (bukan diturunkan).
-        $headerAgg = $this->headerModel
-            ->where("DATE_FORMAT(tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
-            ->selectSum('lead_total_iklan_dashboard', 'iklan_dash')
-            ->first();
+            $totals['non_iklan'] += (int)$r['non_iklan'];
+            $totals['iklan']     += (int)$r['iklan'];
+            $totals['total']     += $total;
+            $totals['prospek']   += (int)$r['prospek'];
+            $totals['datang']    += $datang;
+            if ($this->isWaDmPlatform($name)) {
+                $waDm += $total;
+            }
+        }
+        foreach ($platforms as &$p) {
+            $p['rate'] = $p['total'] > 0 ? round($p['datang'] / $p['total'] * 100, 2) : 0.0;
+        }
+        unset($p);
 
-        $total  = (int)($agg->total ?? 0);
-        $datang = (int)($agg->datang ?? 0);
+        // Lead Total Iklan (Dashboard) adalah angka terpisah di header.
+        $header = $this->headerModel
+            ->where('tanggal >=', $start)
+            ->where('tanggal <=', $end);
+        if ($unitId !== null && $unitId > 0) {
+            $header->where('unit_id', (int)$unitId);
+        }
+        $headerAgg = $header->selectSum('lead_total_iklan_dashboard', 'iklan_dash')->first();
 
-        // Omzet & customer dari rekap? TIDAK — KPI closing tetap dari CRM
-        // (marketing_lead). Rekap hanya angka harian/kuantitas.
+        $days = $this->headerModel
+            ->where('tanggal >=', $start)
+            ->where('tanggal <=', $end);
+        if ($unitId !== null && $unitId > 0) {
+            $days->where('unit_id', (int)$unitId);
+        }
+
+        $total  = $totals['total'];
+        $datang = $totals['datang'];
 
         return [
-            'non_iklan' => (int)($agg->non_iklan ?? 0),
-            'iklan'     => (int)($agg->iklan ?? 0),
+            'non_iklan' => $totals['non_iklan'],
+            'iklan'     => $totals['iklan'],
             'total'     => $total,
-            'prospek'   => (int)($agg->prospek ?? 0),
+            'prospek'   => $totals['prospek'],
             'datang'    => $datang,
             'rate'      => $total > 0 ? round($datang / $total * 100, 2) : 0.0,
-            'total_lead_wa_dm'           => (int)$waDm,
+            'total_lead_wa_dm'           => $waDm,
             'lead_total_iklan_dashboard' => (int)($headerAgg->iklan_dash ?? 0),
-            'total_days' => (int)$this->headerModel
-                ->where("DATE_FORMAT(tanggal, '%Y-%m') = '{$m}'{$unitSql}", null, false)
-                ->countAllResults(),
+            'total_days' => (int)$days->countAllResults(),
+            'platforms'  => $platforms,
         ];
     }
 

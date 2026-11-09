@@ -93,16 +93,44 @@ $fmtCmp = function ($value, $isPct) {
         : number_format((float)$value, 0, ',', '.');
 };
 
-$cmpChartKeys   = ['non_iklan', 'iklan', 'total', 'prospek', 'datang'];
-$cmpChartLabels = ['Non Iklan', 'Iklan', 'Total Lead', 'Prospek', 'Datang'];
-$cmpChartA      = array_map(fn($k) => (int)($cmpSummaryA[$k] ?? 0), $cmpChartKeys);
-$cmpChartB      = array_map(fn($k) => (int)($cmpSummaryB[$k] ?? 0), $cmpChartKeys);
-$cmpLabelA      = date('M Y', strtotime($cmpA . '-01'));
-$cmpLabelB      = date('M Y', strtotime($cmpB . '-01'));
+$rangeLabel = function (string $start, string $end): string {
+    return date('d M', strtotime($start)) . ' - ' . date('d M Y', strtotime($end));
+};
+$rangeInput = function (string $start, string $end): string {
+    return date('d/m/Y', strtotime($start)) . ' - ' . date('d/m/Y', strtotime($end));
+};
+$cmpLabelA  = $rangeLabel($cmpAStart, $cmpAEnd);
+$cmpLabelB  = $rangeLabel($cmpBStart, $cmpBEnd);
+$cmpInputA  = $rangeInput($cmpAStart, $cmpAEnd);
+$cmpInputB  = $rangeInput($cmpBStart, $cmpBEnd);
+
+// Gabungkan platform dari kedua periode; platform yang hanya ada di salah
+// satu periode tetap tampil dengan nilai 0 di periode lainnya.
+$platformCompare = [];
+foreach ([['a', $cmpSummaryA], ['b', $cmpSummaryB]] as [$side, $cmpSummary]) {
+    foreach (($cmpSummary['platforms'] ?? []) as $key => $p) {
+        if (!isset($platformCompare[$key])) {
+            $platformCompare[$key] = [
+                'platform' => (string)($p['platform'] ?? $key),
+                'non_iklan_a' => 0, 'iklan_a' => 0, 'total_a' => 0, 'prospek_a' => 0, 'datang_a' => 0,
+                'non_iklan_b' => 0, 'iklan_b' => 0, 'total_b' => 0, 'prospek_b' => 0, 'datang_b' => 0,
+            ];
+        }
+        foreach (['non_iklan', 'iklan', 'total', 'prospek', 'datang'] as $metric) {
+            $platformCompare[$key][$metric . '_' . $side] = (int)($p[$metric] ?? 0);
+        }
+    }
+}
+usort($platformCompare, fn($x, $y) => ($y['total_a'] + $y['total_b']) <=> ($x['total_a'] + $x['total_b']));
+$cmpChartLabels = array_column($platformCompare, 'platform');
+$cmpChartA      = array_column($platformCompare, 'total_a');
+$cmpChartB      = array_column($platformCompare, 'total_b');
+$hasPlatformCompare = !empty($platformCompare);
 
 $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 ?>
 
+<link rel="stylesheet" href="<?= base_url('template/assets/libs/daterangepicker/daterangepicker.css') ?>">
 <style>
     .mkt-rekap { --mkt-organic: #20c997; --mkt-paid: #0d6efd; --mkt-accent: #fd7e14; }
     .mkt-rekap .mkt-scope { border: 1px solid var(--bs-border-color); border-radius: .9rem; }
@@ -135,6 +163,14 @@ $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
     .mkt-rekap .mkt-panel__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .9rem; }
     .mkt-rekap .mkt-panel__head h5 { margin: 0; font-size: .95rem; font-weight: 650; }
     .mkt-rekap .mkt-panel__head p { margin: .15rem 0 0; font-size: .76rem; color: var(--bs-secondary-color); }
+    .mkt-rekap .mkt-range-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; }
+    .mkt-rekap .mkt-range { display: flex; flex-direction: column; gap: .25rem; }
+    .mkt-rekap .mkt-range__label { font-size: .68rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--bs-secondary-color); }
+    .mkt-rekap .mkt-range .mkt-range__input { width: 210px; cursor: pointer; }
+    @media (max-width: 767.98px) {
+        .mkt-rekap .mkt-range .mkt-range__input { width: 100%; }
+        .daterangepicker { max-width: calc(100vw - 24px); overflow-x: auto; }
+    }
     .mkt-rekap .mkt-empty-chart { display: grid; place-items: center; min-height: 220px; padding: 1rem; text-align: center; border: 1px dashed var(--bs-border-color); border-radius: .75rem; color: var(--bs-secondary-color); }
     .mkt-rekap .mkt-funnel-meta { display: grid; gap: .5rem; margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--bs-border-color); }
     .mkt-rekap .mkt-funnel-meta > div { display: flex; justify-content: space-between; gap: 1rem; font-size: .78rem; }
@@ -155,8 +191,10 @@ $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
         <form method="get" class="mkt-scope__form">
             <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
             <input type="hidden" name="unit_id" value="<?= (int)$unitId ?>">
-            <input type="hidden" name="cmp_a" value="<?= esc($cmpA) ?>">
-            <input type="hidden" name="cmp_b" value="<?= esc($cmpB) ?>">
+            <input type="hidden" name="cmp_a_start" value="<?= esc($cmpAStart) ?>">
+            <input type="hidden" name="cmp_a_end" value="<?= esc($cmpAEnd) ?>">
+            <input type="hidden" name="cmp_b_start" value="<?= esc($cmpBStart) ?>">
+            <input type="hidden" name="cmp_b_end" value="<?= esc($cmpBEnd) ?>">
             <div class="mkt-field">
                 <label for="mktFilterUnit">Cabang laporan</label>
                 <select name="f_unit_id" id="mktFilterUnit" class="form-select form-select-sm">
@@ -310,24 +348,39 @@ $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
             <div class="card-body">
                 <div class="mkt-panel__head">
                     <div>
-                        <h5>Bandingkan Bulan</h5>
-                        <p>Selisih dihitung bulan pertama dikurangi bulan kedua.</p>
+                        <h5>Bandingkan Periode</h5>
+                        <p>Pilih rentang tanggal bebas. Selisih = periode A dikurangi periode B.</p>
                     </div>
-                    <form method="get" class="d-flex flex-wrap align-items-center gap-2 m-0">
+                    <form method="get" class="mkt-range-form m-0">
                         <input type="hidden" name="tanggal" value="<?= esc($tanggal) ?>">
                         <input type="hidden" name="unit_id" value="<?= (int)$unitId ?>">
                         <input type="hidden" name="bulan" value="<?= (int)$bulanR ?>">
                         <input type="hidden" name="tahun" value="<?= (int)$tahunR ?>">
                         <input type="hidden" name="f_unit_id" value="<?= (int)$filterUnitId ?>">
-                        <input type="month" name="cmp_a" class="form-control form-control-sm" style="width:140px;" value="<?= esc($cmpA) ?>" aria-label="Bulan pertama" required>
-                        <span class="text-muted small">vs</span>
-                        <input type="month" name="cmp_b" class="form-control form-control-sm" style="width:140px;" value="<?= esc($cmpB) ?>" aria-label="Bulan kedua" required>
-                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-arrow-left-right me-1"></i>Bandingkan</button>
+                        <div class="mkt-range">
+                            <span class="mkt-range__label">Periode A</span>
+                            <input type="text" id="cmpA" class="form-control form-control-sm mkt-range__input" value="<?= esc($cmpInputA) ?>" aria-label="Rentang tanggal periode A" readonly>
+                            <input type="hidden" name="cmp_a_start" id="cmpAStart" value="<?= esc($cmpAStart) ?>">
+                            <input type="hidden" name="cmp_a_end" id="cmpAEnd" value="<?= esc($cmpAEnd) ?>">
+                        </div>
+                        <div class="mkt-range">
+                            <span class="mkt-range__label">Periode B</span>
+                            <input type="text" id="cmpB" class="form-control form-control-sm mkt-range__input" value="<?= esc($cmpInputB) ?>" aria-label="Rentang tanggal periode B" readonly>
+                            <input type="hidden" name="cmp_b_start" id="cmpBStart" value="<?= esc($cmpBStart) ?>">
+                            <input type="hidden" name="cmp_b_end" id="cmpBEnd" value="<?= esc($cmpBEnd) ?>">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary align-self-end"><i class="bi bi-arrow-left-right me-1"></i>Bandingkan</button>
                     </form>
                 </div>
                 <div class="row g-3">
                     <div class="col-lg-7">
-                        <div id="mktCompareChart" role="img" aria-label="Grafik perbandingan dua bulan terpilih"></div>
+                        <?php if ($hasPlatformCompare) : ?>
+                            <div id="mktCompareChart" role="img" aria-label="Grafik perbandingan total lead per platform"></div>
+                        <?php else : ?>
+                            <div class="mkt-empty-chart" style="min-height:220px;">
+                                <div class="small">Belum ada data platform pada periode ini.</div>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div class="col-lg-5">
                         <div class="table-responsive">
@@ -364,6 +417,55 @@ $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
                         <p class="small text-muted mb-0 mt-2">Untuk <?= esc($filterUnitName) ?>.</p>
                     </div>
                 </div>
+
+                <div class="mt-3 pt-3 border-top">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                        <div>
+                            <h6 class="mb-0">Rincian per Platform</h6>
+                            <div class="small text-muted">Total lead, prospek, dan datang tiap platform pada kedua periode.</div>
+                        </div>
+                        <span class="badge text-bg-light border"><?= count($platformCompare) ?> platform</span>
+                    </div>
+                    <?php if ($hasPlatformCompare) : ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0 mkt-compare__table">
+                                <thead>
+                                    <tr>
+                                        <th>Platform</th>
+                                        <th class="text-end">Lead A</th>
+                                        <th class="text-end">Lead B</th>
+                                        <th class="text-end">Δ Lead</th>
+                                        <th class="text-end">Prospek A</th>
+                                        <th class="text-end">Prospek B</th>
+                                        <th class="text-end">Datang A</th>
+                                        <th class="text-end">Datang B</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($platformCompare as $p) :
+                                        $deltaLead = (int)$p['total_a'] - (int)$p['total_b'];
+                                        $deltaLeadClass = $deltaLead > 0 ? 'text-success' : ($deltaLead < 0 ? 'text-danger' : 'text-muted');
+                                    ?>
+                                        <tr>
+                                            <td class="fw-semibold"><?= esc($p['platform']) ?></td>
+                                            <td class="text-end"><?= $fmtNum($p['total_a']) ?></td>
+                                            <td class="text-end"><?= $fmtNum($p['total_b']) ?></td>
+                                            <td class="text-end fw-semibold <?= $deltaLeadClass ?>">
+                                                <?= ($deltaLead > 0 ? '+' : ($deltaLead < 0 ? '-' : '')) . $fmtNum(abs($deltaLead)) ?>
+                                            </td>
+                                            <td class="text-end"><?= $fmtNum($p['prospek_a']) ?></td>
+                                            <td class="text-end"><?= $fmtNum($p['prospek_b']) ?></td>
+                                            <td class="text-end"><?= $fmtNum($p['datang_a']) ?></td>
+                                            <td class="text-end"><?= $fmtNum($p['datang_b']) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else : ?>
+                        <div class="small text-muted">Belum ada data platform pada kedua periode.</div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -382,8 +484,10 @@ $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
                 <input type="hidden" name="bulan" value="<?= (int)$bulanR ?>">
                 <input type="hidden" name="tahun" value="<?= (int)$tahunR ?>">
                 <input type="hidden" name="f_unit_id" value="<?= (int)$filterUnitId ?>">
-                <input type="hidden" name="cmp_a" value="<?= esc($cmpA) ?>">
-                <input type="hidden" name="cmp_b" value="<?= esc($cmpB) ?>">
+                <input type="hidden" name="cmp_a_start" value="<?= esc($cmpAStart) ?>">
+                <input type="hidden" name="cmp_a_end" value="<?= esc($cmpAEnd) ?>">
+                <input type="hidden" name="cmp_b_start" value="<?= esc($cmpBStart) ?>">
+                <input type="hidden" name="cmp_b_end" value="<?= esc($cmpBEnd) ?>">
                 <input type="hidden" name="edit" value="1">
                 <div>
                     <label class="form-label mb-1 small text-muted" for="mktInputTanggal">Tanggal</label>
@@ -776,5 +880,55 @@ document.addEventListener('DOMContentLoaded', function () {
 
     recalcAll();
 })();
+</script>
+
+<script src="<?= base_url('template/assets/js/extra-libs/moment/moment.min.js') ?>"></script>
+<script src="<?= base_url('template/assets/libs/daterangepicker/daterangepicker.js') ?>"></script>
+<script>
+// vendor.min.js memuat jQuery lain dan menimpa window.jQuery setelah view ini,
+// jadi simpan instance yang sudah memasang plugin daterangepicker.
+window.__mktRangeJQuery = window.jQuery;
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
+    var $range = window.__mktRangeJQuery;
+    if (!$range || !$range.fn || !$range.fn.daterangepicker || typeof moment === 'undefined') {
+        return;
+    }
+
+    function initRange(inputSelector, startSelector, endSelector) {
+        var $input = $range(inputSelector);
+        var $start = $range(startSelector);
+        var $end = $range(endSelector);
+        if (!$input.length) { return; }
+
+        $input.daterangepicker({
+            autoApply: true,
+            showDropdowns: true,
+            linkedCalendars: false,
+            locale: {
+                format: 'DD/MM/YYYY',
+                separator: ' - ',
+                applyLabel: 'Terapkan',
+                cancelLabel: 'Batal',
+                customRangeLabel: 'Pilih sendiri',
+                weekLabel: 'M',
+                daysOfWeek: ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'],
+                monthNames: ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'],
+                firstDay: 1
+            },
+            startDate: moment($start.val(), 'YYYY-MM-DD').format('DD/MM/YYYY'),
+            endDate: moment($end.val(), 'YYYY-MM-DD').format('DD/MM/YYYY')
+        }, function (start, end) {
+            $start.val(start.format('YYYY-MM-DD'));
+            $end.val(end.format('YYYY-MM-DD'));
+            $input.val(start.format('DD/MM/YYYY') + ' - ' + end.format('DD/MM/YYYY'));
+        });
+    }
+
+    initRange('#cmpA', '#cmpAStart', '#cmpAEnd');
+    initRange('#cmpB', '#cmpBStart', '#cmpBEnd');
+});
 </script>
 </div>

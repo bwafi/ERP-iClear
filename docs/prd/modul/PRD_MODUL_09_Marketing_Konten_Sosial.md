@@ -44,7 +44,7 @@ Mengelola KPI divisi pemasaran & kreatif: (1) Content Management / KPI Multimedi
 ### 4.6 Marketing
 - Leads manual (detail prospek): status `PROSPEK|DATANG|CLOSING|BATAL`; CLOSING wajib service SELESAI (`status_service=4`) & seluruh field diambil dari service; `tanggal_won` diisi.
 - Rekap harian (`MarketingRekapService::save`) = source of truth KPI lead (upsert per unit+tanggal, replace detail, transaksi).
-- Halaman rekap menyediakan filter cabang, ringkasan bulanan (non iklan, iklan, lead, prospek, datang, rate, WA/DM), dan pembanding dua bulan yang bisa dipilih. Filter hanya memengaruhi tampilan/agregasi, bukan data tersimpan. ✅ `Marketing::rekap`, `MarketingRekapService::monthlySummary/listByMonth`.
+- Halaman rekap menyediakan filter cabang, ringkasan bulanan (non iklan, iklan, lead, prospek, datang, rate, WA/DM), dan pembanding dua **rentang tanggal bebas**, masing-masing dipilih lewat satu kontrol kalender rentang (`cmp_a_start/end`, `cmp_b_start/end`; default bulan terpilih vs bulan sebelumnya). Pembanding menampilkan grafik dan tabel total lead per platform; platform yang hanya muncul di salah satu periode tetap tampil dengan nilai 0 di periode lain. Rentang tidak valid atau terbalik jatuh ke default. Filter hanya memengaruhi tampilan/agregasi, bukan data tersimpan. ✅ `Marketing::rekap`, `MarketingRekapService::rangeSummary/monthlySummary/listByMonth`.
 - Ads performa: campaign wajib; `amount`/`hasil`; channel ganda JSON.
 - Laporan read-only: spending/PPN/CTR/CPC/CPM/freq/CPR.
 - Campaign marketing: tolak hapus bila masih dipakai `marketing_ads_performance`.
@@ -67,6 +67,7 @@ Mengelola KPI divisi pemasaran & kreatif: (1) Content Management / KPI Multimedi
 - [ ] Akun & target sosial media dikelola; job scrape idempoten; snapshot tidak overwrite.
 - [ ] Leads manual CRUD; CLOSING menyinkronkan data service.
 - [ ] Rekap harian tersimpan atomik dan menjadi sumber KPI lead.
+- [ ] Pembanding rekap memakai rentang tanggal bebas dan merinci lead/prospek/datang per platform untuk kedua periode.
 - [ ] Performa ads & laporan terhitung; hapus campaign dicegah bila terpakai.
 - [ ] Dashboard KPI konten/marketing/sosial menampilkan achievement.
 

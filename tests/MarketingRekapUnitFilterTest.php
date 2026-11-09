@@ -129,6 +129,32 @@ class MarketingRekapUnitFilterTest extends CIUnitTestCase
         $this->assertSame([], (new MarketingRekapService())->listByMonth(9, 2026, 999));
     }
 
+    public function testRingkasanRentangTanggalDanPlatform(): void
+    {
+        $summary = (new MarketingRekapService())->rangeSummary('2026-09-01', '2026-09-01', 1);
+
+        $this->assertSame(8, $summary['total']);
+        $this->assertSame(1, $summary['total_days']);
+        $this->assertSame(5, $summary['platforms']['WHATSAPP']['non_iklan']);
+        $this->assertSame(7, $summary['platforms']['WHATSAPP']['total']);
+        $this->assertSame(1, $summary['platforms']['INSTAGRAM']['total']);
+    }
+
+    public function testRingkasanRentangLintasCabang(): void
+    {
+        $summary = (new MarketingRekapService())->rangeSummary('2026-09-01', '2026-09-02');
+
+        $this->assertSame(18, $summary['total']);
+        $this->assertSame(2, $summary['total_days']);
+        $this->assertSame(17, $summary['platforms']['WHATSAPP']['total']);
+    }
+
+    public function testRentangTerbalikDitolak(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new MarketingRekapService())->rangeSummary('2026-09-02', '2026-09-01');
+    }
+
     public function testViewMerenderRingkasanDanPembanding(): void
     {
         $summary = [
@@ -145,10 +171,16 @@ class MarketingRekapUnitFilterTest extends CIUnitTestCase
             'summary' => $summary,
             'filterUnitId' => 1,
             'filterUnitName' => 'ICLEAR Jember',
-            'cmpA' => '2026-09',
-            'cmpB' => '2026-08',
-            'cmpSummaryA' => $summary,
-            'cmpSummaryB' => array_merge($summary, ['total' => 5, 'rate' => 25.0]),
+            'cmpAStart' => '2026-10-01',
+            'cmpAEnd' => '2026-10-07',
+            'cmpBStart' => '2026-11-01',
+            'cmpBEnd' => '2026-11-10',
+            'cmpSummaryA' => array_merge($summary, ['platforms' => [
+                'WHATSAPP' => ['platform' => 'WhatsApp', 'non_iklan' => 5, 'iklan' => 2, 'total' => 7, 'prospek' => 3, 'datang' => 2],
+            ]]),
+            'cmpSummaryB' => array_merge($summary, ['total' => 5, 'rate' => 25.0, 'platforms' => [
+                'TIKTOK' => ['platform' => 'TikTok', 'non_iklan' => 3, 'iklan' => 2, 'total' => 5, 'prospek' => 2, 'datang' => 1],
+            ]]),
             'platforms' => [(object)['name' => 'WhatsApp']],
             'bulanR' => 9,
             'tahunR' => 2026,
@@ -157,7 +189,14 @@ class MarketingRekapUnitFilterTest extends CIUnitTestCase
         ]);
 
         $this->assertStringContainsString('Ringkasan September 2026', $html);
-        $this->assertStringContainsString('Bandingkan Bulan', $html);
+        $this->assertStringContainsString('Bandingkan Periode', $html);
+        $this->assertStringContainsString('Rincian per Platform', $html);
+        $this->assertStringContainsString('TikTok', $html);
+        $this->assertStringContainsString('01 Oct - 07 Oct 2026', $html);
         $this->assertStringContainsString('ICLEAR Jember', $html);
+        $this->assertStringContainsString('id="cmpA"', $html);
+        $this->assertStringContainsString('id="cmpB"', $html);
+        $this->assertStringContainsString('name="cmp_a_start"', $html);
+        $this->assertStringNotContainsString('type="date" name="cmp_a_start"', $html);
     }
 }

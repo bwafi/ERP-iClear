@@ -80,18 +80,16 @@ class Marketing extends BaseController
         return $bulan >= 1 && $bulan <= 12 && $tahun >= 2000 && $tahun <= 2100;
     }
 
-    /** Normalisasi input bulan `YYYY-MM`; null bila tidak valid. */
-    private function parseMonth(?string $value): ?string
+    /** Normalisasi input tanggal `YYYY-MM-DD`; null bila tidak valid. */
+    private function parseDate(?string $value): ?string
     {
-        if (!preg_match('/^(\d{4})-(\d{2})$/', trim((string)$value), $m)) {
+        $value = trim((string)$value);
+        $date  = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        if (!$date || $date->format('Y-m-d') !== $value) {
             return null;
         }
-        $bulan = (int)$m[2];
-        $tahun = (int)$m[1];
-        if (!$this->validPeriod($bulan, $tahun)) {
-            return null;
-        }
-        return sprintf('%04d-%02d', $tahun, $bulan);
+        $tahun = (int)$date->format('Y');
+        return $tahun >= 2000 && $tahun <= 2100 ? $value : null;
     }
 
     // ── Dashboard KPI ─────────────────────────────────────────────
@@ -187,16 +185,30 @@ class Marketing extends BaseController
         $unitFilter = $filterUnitId ?: null;
         $summary = $rekapSvc->monthlySummary($bulanR, $tahunR, $unitFilter);
 
-        // Pembanding dua bulan bebas; default bulan terpilih vs bulan sebelumnya.
-        $defaultCmpA = sprintf('%04d-%02d', $tahunR, $bulanR);
-        $defaultCmpB = date('Y-m', strtotime($defaultCmpA . '-01 -1 month'));
-        $cmpA = $this->parseMonth($this->request->getGet('cmp_a')) ?? $defaultCmpA;
-        $cmpB = $this->parseMonth($this->request->getGet('cmp_b')) ?? $defaultCmpB;
+        // Pembanding dua rentang tanggal bebas; default bulan terpilih vs sebelumnya.
+        $defaultAStart = sprintf('%04d-%02d-01', $tahunR, $bulanR);
+        $defaultAEnd   = date('Y-m-t', strtotime($defaultAStart));
+        $defaultBStart = date('Y-m-01', strtotime($defaultAStart . ' -1 month'));
+        $defaultBEnd   = date('Y-m-t', strtotime($defaultBStart));
 
-        $cmpSummaryA = $cmpA === $defaultCmpA
+        $cmpAStart = $this->parseDate($this->request->getGet('cmp_a_start'));
+        $cmpAEnd   = $this->parseDate($this->request->getGet('cmp_a_end'));
+        if ($cmpAStart === null || $cmpAEnd === null || $cmpAStart > $cmpAEnd) {
+            $cmpAStart = $defaultAStart;
+            $cmpAEnd   = $defaultAEnd;
+        }
+
+        $cmpBStart = $this->parseDate($this->request->getGet('cmp_b_start'));
+        $cmpBEnd   = $this->parseDate($this->request->getGet('cmp_b_end'));
+        if ($cmpBStart === null || $cmpBEnd === null || $cmpBStart > $cmpBEnd) {
+            $cmpBStart = $defaultBStart;
+            $cmpBEnd   = $defaultBEnd;
+        }
+
+        $cmpSummaryA = ($cmpAStart === $defaultAStart && $cmpAEnd === $defaultAEnd)
             ? $summary
-            : $rekapSvc->monthlySummary((int)substr($cmpA, 5, 2), (int)substr($cmpA, 0, 4), $unitFilter);
-        $cmpSummaryB = $rekapSvc->monthlySummary((int)substr($cmpB, 5, 2), (int)substr($cmpB, 0, 4), $unitFilter);
+            : $rekapSvc->rangeSummary($cmpAStart, $cmpAEnd, $unitFilter);
+        $cmpSummaryB = $rekapSvc->rangeSummary($cmpBStart, $cmpBEnd, $unitFilter);
 
         return view('template', [
             'body'    => 'marketing/rekap',
@@ -208,8 +220,10 @@ class Marketing extends BaseController
             'summary' => $summary,
             'filterUnitId' => $filterUnitId,
             'filterUnitName' => $filterUnitName,
-            'cmpA'    => $cmpA,
-            'cmpB'    => $cmpB,
+            'cmpAStart' => $cmpAStart,
+            'cmpAEnd'   => $cmpAEnd,
+            'cmpBStart' => $cmpBStart,
+            'cmpBEnd'   => $cmpBEnd,
             'cmpSummaryA' => $cmpSummaryA,
             'cmpSummaryB' => $cmpSummaryB,
             'platforms' => (new ModelMarketingPlatform())->active(),
