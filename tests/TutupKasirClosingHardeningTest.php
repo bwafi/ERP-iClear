@@ -1558,13 +1558,13 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
     }
 
     // =================================================================
-    // 15. BUSINESS WINDOW WIB (20:45 / 23:00)
+    // 15. BUSINESS WINDOW WIB (19:45 / 23:00)
     // =================================================================
 
     /**
      * BUSINESS RULE yang dikunci di sini:
-     *   <  20:45  tombol mati
-     *   20:45 - 22:59  tombol aktif (window normal)
+     *   <  19:45  tombol mati
+     *   19:45 - 22:59  tombol aktif (window normal)
      *   >= 23:00  tombol tetap aktif + warning "closing terlambat"
      *
      * dua hal yang TIDAK boleh terjadi:
@@ -1582,9 +1582,9 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
         $src = (string) file_get_contents(APPPATH . 'Views/jurnal/tutup_kasir.php');
 
         $this->assertStringContainsString(
-            'const MULAI_NORMAL = 20 * 60 + 45;',
+            'const MULAI_NORMAL = 19 * 60 + 45;',
             $src,
-            'Batas bawah window tetap 20:45 WIB'
+            'Batas bawah window tetap 19:45 WIB'
         );
 
         $this->assertStringContainsString(
@@ -1648,7 +1648,7 @@ class TutupKasirClosingHardeningTest extends CIUnitTestCase
                 . 'getUTC*() yang sudah digeser offset, bukan dari string UTC.'
         );
 
-        // Guard: kalau dipindah ke getHours() tanpa offset, jam 20:45 WIB
+        // Guard: kalau dipindah ke getHours() tanpa offset, jam 19:45 WIB
         // akan salah di browser yang tidak di Asia/Jakarta.
         $this->assertStringNotContainsString(
             'getHours()',

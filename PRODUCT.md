@@ -24,7 +24,7 @@ ERP operasional kasir dengan validasi ketat saldo awal, rekonsiliasi server-side
 
 ## Operating Context
 
-Dipakai di kasir/admin cabang saat closing toko (window operasional 20:45 - 23:00 WIB). Kasir menghitung uang fisik dalam laci lalu menginputkannya ke sistem untuk melihat status selisih kas sebelum mengunci buku kasir.
+Dipakai di kasir/admin cabang saat closing toko (window operasional 19:45 - 23:00 WIB). Kasir menghitung uang fisik dalam laci lalu menginputkannya ke sistem untuk melihat status selisih kas sebelum mengunci buku kasir.
 
 ## Capabilities and Constraints
 

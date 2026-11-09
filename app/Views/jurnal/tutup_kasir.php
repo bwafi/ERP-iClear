@@ -361,8 +361,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const now = waktuWib();
         const totalMenit = now.jam * 60 + now.menit;
 
-        // Window: <20:45 disabled, 20:45-22:59 normal, >=23:00 enabled + warning
-        const MULAI_NORMAL = 20 * 60 + 45;
+        // Window: <19:45 disabled, 19:45-22:59 normal, >=23:00 enabled + warning
+        const MULAI_NORMAL = 19 * 60 + 45;
         const BATAS_TERLAMBAT = 23 * 60;
         const terlambat = totalMenit >= BATAS_TERLAMBAT;
         btn.innerHTML = terlambat
