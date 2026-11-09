@@ -104,6 +104,15 @@
 - **Detail row:** four groups — Identitas, Harga & stok, Stok masuk, Stok keluar. Movement values carry `+`/`−` and stay muted at zero; HPP carries the role-gated Ubah button.
 - **Rules:** one accent for focus and the primary action, no gradients, no colored left borders, no card around the table; status is never color-only (dot + label, switch + label); footer, pagination, and processing share the same tokens; the detail grid steps 4 → 2 → 1 columns and filters stack below `767.98px`.
 
+### Tarif Jasa (`.tj-*`)
+- **Scope:** `app/Views/jasa/tarif.php` + `app/Views/jasa/_tarif_theme.php`; semua selector di bawah `.tarif-jasa` dan `.tj-modal`, token `--tj-*` diturunkan dari tema aplikasi. Tanpa palet, font, atau dependency baru.
+- **Layout:** kepala halaman ber-hairline (breadcrumb kecil, judul `1.6rem`/600 `-0.03em`, satu baris deskripsi, aksi primary) → strip empat angka berhairline (Total Jasa, Harga Terendah, Harga Tertinggi, Rata-rata) → lembar tarif (toolbar cari/urutkan/jumlah → tabel → footer DataTables). Angka ringkasan dihitung dari data yang sudah dimuat, tanpa query baru.
+- **Kerataan:** tanpa bayangan dan tanpa gradien; kedalaman datang dari hairline dan ruang. Satu aksen primary untuk aksi/fokus. Header tabel uppercase `0.6875rem`, harga rata kanan `tabular-nums`, kode mono, tombol Ubah bergaya ghost.
+- **Tabel:** lima kolom (Kode, Nama Jasa, HPP, Harga Jual, Aksi). HPP dan harga membawa `data-order` numerik supaya sortir DataTables benar; pencarian memakai input sendiri, DataTables hanya untuk sortir/paging.
+- **Responsif:** di bawah `768px` baris menjadi kartu berlabel `data-label`, strip angka 2×2, toolbar menumpuk, info/pagination di tengah.
+- **Modal:** tambah/ubah memakai token tema; input Harga Jual dan HPP diformat ribuan saat mengetik (`1.000.000`) dengan pratinjau `Rp …`. HPP bisa diisi nominal atau persen dari harga jual (persen hanya alat bantu input; server menghitung nominalnya). Field, route, CSRF, dan validasi server mengikuti kontrak yang sama.
+- **Motion:** hanya `tj-settle` (fade + `4px`) saat halaman dimuat dan transisi state kontrol, dimatikan under `prefers-reduced-motion`.
+
 ### Payroll Run Sheet (`.pay-*`)
 - **Scope:** `app/Views/jurnal/payroll.php` + `app/Views/jurnal/_payroll_theme.php`; every selector lives under `.payroll-page` and derives from `--pay-*` tokens tied to the app theme. No new palette, font, or dependency.
 - **Layout:** page head (breadcrumb, title, period badge, month control, Susun/Input actions) → run board (status line + four hairline-separated phases: Susun = unpaid auto, Koreksi = unpaid manual/null, Bayar = paid, Bonus/Lembur = period-scoped kas keluar) → KPI unit strip (score/100, total, meter, tepat/terlambat/menunggu counts) → payroll ledger → bonus/lembur ledger. “Semua bulan” hides the board and KPI, empties the month input, and shows a notice.
