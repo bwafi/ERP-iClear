@@ -93,7 +93,7 @@ class KasBankControllerTest extends CIUnitTestCase
 
         // LOGO dipakai inc/left_vertical.php saat merender halaman. Tanpa kolom
         // ini, test yang me-render view (bukan hanya POST) gagal di baris view.
-        $q('CREATE TABLE db_unit (idunit INTEGER PRIMARY KEY AUTO_INCREMENT, NAMA_UNIT TEXT NULL, LOGO TEXT NULL)');
+        $q('CREATE TABLE db_unit (idunit INTEGER PRIMARY KEY AUTO_INCREMENT, NAMA_UNIT TEXT NULL, LOGO TEXT NULL, is_operational INT NULL DEFAULT 1, is_trial INT NULL DEFAULT 0)');
         $q('CREATE TABLE db_bank (idbank VARCHAR(20) PRIMARY KEY, jenis_bank TEXT NULL, nama_bank TEXT NULL, atas_nama TEXT NULL, norek TEXT NULL, isppn INT NULL, gambar_qris TEXT NULL)');
         $q('CREATE TABLE db_akun (ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL, NAMA_AKUN TEXT NULL, ROLES TEXT NULL)');
         $q('CREATE TABLE db_akun_kas_bank (
@@ -3414,6 +3414,84 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
             (int) $db->table('alokasi_saldo_kas_bank')->countAllResults(),
             'Tidak ada alokasi yang tersimpan dari permintaan yang ditolak'
         );
+    }
+
+    /**
+     * Arus kas operasional dihitung per unit, bukan per rekening. Memilih
+     * rekening Finance/HO (tanpa alokasi unit) tidak boleh membuat
+     * Pemasukan/Pengeluaran selalu 0 untuk tanggal apa pun (refs #194).
+     */
+    public function testArusKasMengikutiTanggalSaatRekeningFinanceHoDipilih(): void
+    {
+        $this->sesi();
+
+        $this->db->query("INSERT INTO db_akun_kas_bank
+            (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank, no_akun_coa, status, is_shared, is_finance_ho)
+            VALUES (7, NULL, 'BANK', 'BCA Finance HO', 'BCA-001', '1010202099', 'aktif', 1, 1)");
+        $this->db->query("INSERT INTO db_penjualan
+            (kode_invoice, tanggal, unit_idunit, bayar_tunai, bayar_bank, total)
+            VALUES ('INV-1', '{$this->tglMulai} 10:00:00', 1, 100000, 0, 100000),
+                   ('INV-2', '{$this->tglBerikut} 10:00:00', 2, 50000, 0, 50000)");
+
+        $hariIni = (string) $this->get(
+            'kas_bank?akun_id=7&tanggal_awal=' . $this->tglMulai . '&tanggal_akhir=' . $this->tglMulai
+        )->getBody();
+        $besok = (string) $this->get(
+            'kas_bank?akun_id=7&tanggal_awal=' . $this->tglBerikut . '&tanggal_akhir=' . $this->tglBerikut
+        )->getBody();
+
+        $this->assertStringContainsString('+Rp 100.000', $hariIni, 'Pemasukan hari pertama harus muncul walau rekening Finance/HO dipilih');
+        $this->assertStringContainsString('+Rp 50.000', $besok, 'Pemasukan harus mengikuti tanggal');
+        $this->assertStringNotContainsString('+Rp 100.000', $besok, 'Angka hari pertama tidak boleh ikut di rentang hari kedua');
+    }
+
+    /**
+     * Posisi (hak unit, kas, bank, buku rekening) mengikuti tanggal "Sampai".
+     *
+     * Bug yang dicegah: `index()` memanggil getSaldoFisikAkun()/getSaldoUnitAkun()
+     * tanpa tanggal, sehingga filter tanggal hanya mengubah panel Arus kas.
+     */
+    public function testPosisiMengikutiTanggalSampai(): void
+    {
+        $this->sesi();
+
+        // Penjualan transfer unit 1 dialokasikan ke rekening bank default
+        // unit (BNI Unit A, akun 2) oleh KasBankSourceMovement.
+        $this->db->query("INSERT INTO db_penjualan
+            (kode_invoice, tanggal, unit_idunit, bayar_tunai, bayar_bank, total)
+            VALUES ('INV-1', '{$this->tglMulai} 10:00:00', 1, 0, 100000, 100000),
+                   ('INV-2', '{$this->tglBerikut} 10:00:00', 1, 0, 50000, 50000)");
+
+        $sampaiAwal = (string) $this->get(
+            'kas_bank?unit_id=1&akun_id=2&tanggal_awal=' . $this->tglMulai . '&tanggal_akhir=' . $this->tglMulai
+        )->getBody();
+        $sampaiAkhir = (string) $this->get(
+            'kas_bank?unit_id=1&akun_id=2&tanggal_awal=' . $this->tglMulai . '&tanggal_akhir=' . $this->tglBerikut
+        )->getBody();
+
+        $this->assertStringContainsString(
+            'Posisi per <b>' . $this->fmtTglView($this->tglMulai) . '</b>',
+            $sampaiAwal,
+            'Label posisi harus memakai tanggal Sampai'
+        );
+        $this->assertStringContainsString(
+            'Posisi per <b>' . $this->fmtTglView($this->tglBerikut) . '</b>',
+            $sampaiAkhir,
+            'Label posisi harus mengikuti tanggal Sampai'
+        );
+
+        $this->assertStringContainsString('Rp 100.000', $sampaiAwal, 'Posisi harus berhenti di tanggal Sampai');
+        $this->assertStringNotContainsString('Rp 150.000', $sampaiAwal, 'Mutasi setelah Sampai tidak boleh ikut');
+        $this->assertStringContainsString('Rp 150.000', $sampaiAkhir, 'Posisi harus mencakup mutasi sampai tanggal Sampai');
+    }
+
+    /** Format tanggal yang sama dengan `$fmtTgl` di view dashboard. */
+    private function fmtTglView(string $ymd): string
+    {
+        $bulan = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        $ts = strtotime($ymd);
+
+        return date('j', $ts) . ' ' . $bulan[(int) date('n', $ts)] . ' ' . date('Y', $ts);
     }
 
     /** 7. Konfigurasi cutoff Finance global & Kas/Bank tidak berubah. */

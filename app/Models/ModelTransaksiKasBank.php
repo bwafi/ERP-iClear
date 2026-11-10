@@ -57,17 +57,19 @@ class ModelTransaksiKasBank extends Model
      * dua kali. Transaksi sebelum periode (1–7 Okt ketika cut-off 7 Okt) pun
      * tidak ikut dihitung — saldonya sudah terserap di baseline.
      */
-    public function getSaldoAkun(int $akunId): int
+    public function getSaldoAkun(int $akunId, ?string $tanggal = null): int
     {
-        return $this->cutoffService()->saldoFisik($akunId);
+        return $this->cutoffService()->saldoFisik($akunId, $tanggal);
     }
 
     /**
      * Alias getSaldoAkun: saldo fisik rekening (seluruh unit).
+     *
+     * $tanggal opsional = saldo as-of tanggal itu (dashboard Kas & Bank).
      */
-    public function getSaldoFisikAkun(int $akunId): int
+    public function getSaldoFisikAkun(int $akunId, ?string $tanggal = null): int
     {
-        return $this->getSaldoAkun($akunId);
+        return $this->getSaldoAkun($akunId, $tanggal);
     }
 
     /**
@@ -103,9 +105,9 @@ class ModelTransaksiKasBank extends Model
      * mencegah total per unit terlihat asynchronous dengan saldo fisik, dan
      * mencegah saldo LEGACY ikut terhitung sebagai saldo seseorang.
      */
-    public function getSaldoUnitAkun(int $akunId, int $unitId): int
+    public function getSaldoUnitAkun(int $akunId, int $unitId, ?string $tanggal = null): int
     {
-        return $this->cutoffService()->posisiUnit($akunId, $unitId);
+        return $this->cutoffService()->posisiUnit($akunId, $unitId, $tanggal);
     }
 
     /**

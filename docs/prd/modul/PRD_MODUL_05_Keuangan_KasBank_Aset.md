@@ -78,6 +78,10 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 
 26. ✅ **Dropdown transaksi hanya menampilkan bank yang punya rekening aktif.** `ModelBank::getBank()` melakukan inner join ke `akun_kas_bank` (`tipe = 'BANK'`, `status = 'aktif'`), sehingga bank tanpa rekening aktif atau dengan rekening nonaktif tidak muncul di dropdown pembayaran, kas masuk/keluar, penjualan, pembelian, service, payroll, dan H/P. Halaman master `/bank` dan `/kas_bank/akun` memakai `getBankSemua()` agar rekening baru tetap bisa didaftarkan. — `app/Models/ModelBank.php`; `app/Controllers/Bank.php`; `app/Controllers/KasBank.php`
 
+27. ✅ **Arus kas dashboard `/kas_bank` dihitung per unit, bukan per rekening.** `Pemasukan`/`Pengeluaran` memakai `TutupKasirSourceDefinition::ringkasanRange()` untuk unit terpilih (atau seluruh unit dalam scope user saat konsolidasi). Filter `akun_id` tetap menyaring saldo/rekening, `Buku rekening`, dan baris `Transfer internal`, tetapi tidak lagi menurunkan daftar unit: tabel sumber (`penjualan`, `service`, `kas_keluar`) tidak punya dimensi rekening. Sebelumnya rekening Finance/HO tanpa alokasi unit membuat kedua angka selalu Rp 0 untuk tanggal apa pun. — `KasBank::index`; `tests/KasBankControllerTest::testArusKasMengikutiTanggalSaatRekeningFinanceHoDipilih`
+
+28. ✅ **Posisi dashboard `/kas_bank` dihitung as-of tanggal "Sampai".** Hero (hak unit / total fisik), Kas tunai, Saldo bank, dan seluruh baris `Buku rekening` memakai `getSaldoFisikAkun($akun, $sampai)` dan `getSaldoUnitAkun($akun, $unit, $sampai)`; label panel menjadi "Posisi per <tanggal Sampai>". Sebelumnya posisi selalu dihitung per hari ini sehingga filter tanggal hanya terasa di panel Arus kas. `alokasi_total` tetap opening allocation statis, sehingga `belum_dialokasikan = fisik - alokasi` bisa negatif pada tanggal historis dan peringatan "alokasi > fisik" dapat muncul — konsekuensi yang diterima. Halaman konfigurasi akun dan form setor/tarik tetap memakai saldo hari ini. — `KasBank::index`; `ModelTransaksiKasBank::getSaldoAkun/getSaldoFisikAkun/getSaldoUnitAkun`; `Views/kas_bank/dashboard.php`; `tests/KasBankControllerTest::testPosisiMengikutiTanggalSampai`
+
 **Catatan UI `/kas_keluar`:** input dan edit dibuka di modal di atas daftar; satu kartu transaksi = satu baris `kas_keluar`. Simpan yang ditolak mengembalikan isian lewat flashdata `kk_old`, dan hanya badge "6%" yang diwarnai — bukan seluruh nama kategori.
 
 ## 6. Acceptance Criteria
@@ -93,6 +97,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - [ ] Unit pribadi dapat mencetak Rincian Gaji (gaji unit + HO) tanpa royalti/nomor invoice; unit franchise tetap memakai Cetak Invoice (BR 24).
 - [ ] Cut-off BANK (`2026-11-01`) tidak menggeser cut-off laci KAS (`2026-10-09`); statement bank diinput pada cut-off BANK (BR 25).
 - [ ] Bank tanpa rekening aktif tidak muncul di dropdown transaksi, tetapi tetap tampil di halaman master bank (BR 26).
+- [ ] Posisi (hak unit/kas/bank/buku rekening) mengikuti tanggal "Sampai" dan labelnya menyebut tanggal tersebut (BR 28).
 - [ ] Laporan posisi keuangan & laba rugi dapat dicetak (PDF/Excel).
 
 ## 7. Dependensi

@@ -19,7 +19,6 @@ use App\Services\Finance\FinanceScopeService;
 use App\Services\Finance\KasBankScopeService;
 use App\Services\Finance\KasBankCutoffService;
 use App\Services\Finance\KasBankSetorTarikService;
-use App\Services\Finance\KasBankSourceMovement;
 use App\Services\Finance\TutupKasirSourceDefinition;
 
 /**
@@ -344,6 +343,10 @@ class KasBank extends BaseController
         $tanggalAkhir = $this->request->getGet('tanggal_akhir') ?: date('Y-m-d');
         $akunId       = (int)$this->request->getGet('akun_id');
 
+        // Posisi (hak unit, kas, bank, buku rekening) mengikuti tanggal
+        // "Sampai", bukan hari ini — satu tanggal dengan panel Arus kas.
+        $sampai = $tanggalAkhir;
+
         // Dashboard menampilkan rekening yang bisa dipakai (aktif saja) —
         // rekening nonaktif tidak bisa jadi sumber atau tujuan transaksi apa pun.
         $akun = $this->akunListUntuk($unitTerpilih, true, false);
@@ -373,7 +376,7 @@ class KasBank extends BaseController
 
         foreach ($akun as $a) {
             $aid = (int)$a->idakun_kas_bank;
-            $fisik = $this->TransaksiModel->getSaldoFisikAkun($aid);
+            $fisik = $this->TransaksiModel->getSaldoFisikAkun($aid, $sampai);
             $saldoFisikPerAkun[$aid] = $fisik;
             $alokasiTotal[$aid] = $this->TransaksiModel->getTotalAlokasiUnit($aid);
             if ($alokasiTotal[$aid] > $fisik) {
@@ -391,7 +394,7 @@ class KasBank extends BaseController
 
             if (! $konsolidasi) {
                 // Tampilan per unit: hak unit (alokasi + arus unit).
-                $unitSaldo = $this->TransaksiModel->getSaldoUnitAkun($aid, $unitTerpilih);
+                $unitSaldo = $this->TransaksiModel->getSaldoUnitAkun($aid, $unitTerpilih, $sampai);
                 $saldoUnitPerAkun[$aid] = $unitSaldo;
                 $totalSemua += $unitSaldo;
                 if ($a->tipe === 'KAS') {
@@ -430,29 +433,17 @@ class KasBank extends BaseController
         // -----------------------------------------------------------------
         $cutoff = FinanceScopeService::kasBankPeriodeMulaiDate();
         $dari   = $tanggalAwal !== '' ? max($tanggalAwal, $cutoff) : $cutoff;
-        $sampai = $tanggalAkhir !== '' ? $tanggalAkhir : date('Y-m-d');
 
-        // Unit yang boleh dihitung: unit terpilih, atau unit turunan dari
-        // rekening yang terlihat (KAS -> unit-nya, BANK -> unit yang punya
-        // alokasi). Setiap unit dihitung SATU kali walau rekeningnya banyak.
+        // Arus kas operasional berasal dari tabel sumber (penjualan, service,
+        // kas_keluar) yang TIDAK punya dimensi rekening. Karena itu unit
+        // dihitung dari scope user (unit terpilih / konsolidasi), bukan dari
+        // rekening terpilih: rekening Finance/HO tanpa alokasi unit tidak
+        // boleh membuat Pemasukan/Pengeluaran selalu 0 untuk tanggal apa pun.
         $unitIds = [];
-        if (! $konsolidasi && $unitTerpilih > 0) {
-            $unitIds = [$unitTerpilih];
-        } else {
-            $movementSrc = new KasBankSourceMovement();
-            foreach ($akun as $a) {
-                $aid = (int)$a->idakun_kas_bank;
-                if (($a->tipe ?? '') === 'KAS') {
-                    if (! empty($a->unit_id)) {
-                        $unitIds[(int)$a->unit_id] = true;
-                    }
-                } else {
-                    foreach ($movementSrc->unitDialokasikanKe($aid) as $uid) {
-                        $unitIds[(int)$uid] = true;
-                    }
-                }
-            }
-            $unitIds = array_keys($unitIds);
+        if (! empty($akun)) {
+            $unitIds = (! $konsolidasi && $unitTerpilih > 0)
+                ? [$unitTerpilih]
+                : $this->unitIdsUser();
         }
 
         $ringkasan = [];
@@ -473,20 +464,22 @@ class KasBank extends BaseController
         // (MASUK positif, KELUAR negatif). Kalau	source dan tujuan keduanya
         // terlihat, angkanya saling meniadakan — bukan terhitung dua kali
         // sebagai "+2x".
+        // Kolom sengaja tanpa qualifier: `transaksi_kas_bank.` akan gagal saat
+        // DBPrefix aktif (test memakai prefix `db_`).
         $builder = db_connect()->table('transaksi_kas_bank')
-            ->select("COALESCE(SUM(CASE WHEN transaksi_kas_bank.arah = 'MASUK' THEN transaksi_kas_bank.jumlah ELSE -transaksi_kas_bank.jumlah END), 0) AS total", false)
-            ->where('transaksi_kas_bank.transfer_ref IS NOT NULL', null, false)
+            ->select("COALESCE(SUM(CASE WHEN arah = 'MASUK' THEN jumlah ELSE -jumlah END), 0) AS total", false)
+            ->where('transfer_ref IS NOT NULL', null, false)
             // Mutasi hak atribusi (rekening SAMA) bukan transfer fisik: pasangan
             // KELUAR/MASUK-nya net-nol terhadap rekening, tapi per-unit bisa
             // tampil sebagai "Transfer" palsu. Tolak dari ringkasan Transfer.
             ->groupStart()
-                ->where('transaksi_kas_bank.sumber_tipe IS NULL', null, false)
-                ->orWhere('transaksi_kas_bank.sumber_tipe !=', 'antar_unit_atribusi')
+                ->where('sumber_tipe IS NULL', null, false)
+                ->orWhere('sumber_tipe !=', 'antar_unit_atribusi')
             ->groupEnd()
-            ->where('transaksi_kas_bank.tanggal >=', $dari);
+            ->where('tanggal >=', $dari);
 
         if ($sampai !== '') {
-            $builder->where('transaksi_kas_bank.tanggal <=', $sampai);
+            $builder->where('tanggal <=', $sampai);
         }
 
         // Ringkasan WAJIB dibatasi rekening dalam scope, kalau tidak
@@ -494,11 +487,11 @@ class KasBank extends BaseController
         if (empty($akunIds)) {
             $builder->where('1 = 0');
         } else {
-            $builder->whereIn('transaksi_kas_bank.akun_kas_bank_id', $akunIds);
+            $builder->whereIn('akun_kas_bank_id', $akunIds);
         }
 
         if (! $konsolidasi) {
-            $builder->where('transaksi_kas_bank.unit_id', $unitTerpilih);
+            $builder->where('unit_id', $unitTerpilih);
         }
 
         $netInternal = (int)($builder->get()->getRow()->total ?? 0);
@@ -557,12 +550,19 @@ class KasBank extends BaseController
         $db = db_connect();
         $out = [];
 
+        // Nama tabel lewat prefixTable(): query mentah tidak boleh mengunci
+        // nama tanpa DBPrefix (test memakai prefix `db_`).
+        $unitTbl    = $db->prefixTable('unit');
+        $akunTbl    = $db->prefixTable('akun_kas_bank');
+        $bankTbl    = $db->prefixTable('bank');
+        $alokasiTbl = $db->prefixTable('alokasi_saldo_kas_bank');
+
         // 1. Unit tanpa akun KAS -> transaksi tunai unit itu tidak bisa diposting.
         $unitTanpaKas = $db->query(
-            'SELECT u.idunit, u.NAMA_UNIT FROM unit u
+            'SELECT u.idunit, u.NAMA_UNIT FROM ' . $unitTbl . ' u
               WHERE u.idunit > 0
                 AND NOT EXISTS (
-                    SELECT 1 FROM akun_kas_bank a
+                    SELECT 1 FROM ' . $akunTbl . ' a
                      WHERE a.unit_id = u.idunit AND a.tipe = \'KAS\'
                        AND a.status = \'aktif\' AND a.is_finance_ho = 0
                 )
@@ -581,10 +581,10 @@ class KasBank extends BaseController
 
         // 2. Rekening bank di master yang belum dipetakan ke akun fisik.
         $bankTanpaAkun = $db->query(
-            'SELECT b.idbank, b.nama_bank, b.norek, b.atas_nama FROM bank b
+            'SELECT b.idbank, b.nama_bank, b.norek, b.atas_nama FROM ' . $bankTbl . ' b
               WHERE b.jenis_bank = \'bank\'
                 AND NOT EXISTS (
-                    SELECT 1 FROM akun_kas_bank a WHERE a.bank_idbank = b.idbank
+                    SELECT 1 FROM ' . $akunTbl . ' a WHERE a.bank_idbank = b.idbank
                 )
               ORDER BY b.idbank'
         )->getResult();
@@ -606,10 +606,10 @@ class KasBank extends BaseController
         // 3. Rekening shared tanpa alokasi unit -> tidak ada unit yang berhak,
         //    jadi resolveAkun() selalu gagal padahal rekeningnya aktif.
         $sharedTanpaAlokasi = $db->query(
-            'SELECT a.idakun_kas_bank, a.nama_akun FROM akun_kas_bank a
+            'SELECT a.idakun_kas_bank, a.nama_akun FROM ' . $akunTbl . ' a
               WHERE a.is_shared = 1 AND a.is_finance_ho = 0 AND a.status = \'aktif\'
                 AND NOT EXISTS (
-                    SELECT 1 FROM alokasi_saldo_kas_bank al WHERE al.akun_kas_bank_id = a.idakun_kas_bank
+                    SELECT 1 FROM ' . $alokasiTbl . ' al WHERE al.akun_kas_bank_id = a.idakun_kas_bank
                 )
               ORDER BY a.idakun_kas_bank'
         )->getResult();
@@ -628,7 +628,7 @@ class KasBank extends BaseController
         //    Hanya akun AKTIF: rekening nonaktif memang tidak bisa dipakai, dan
         //    itu status yang sudah disengaja, bukan konfigurasi rusak.
         $tanpaPemilik = $db->query(
-            'SELECT a.idakun_kas_bank, a.nama_akun FROM akun_kas_bank a
+            'SELECT a.idakun_kas_bank, a.nama_akun FROM ' . $akunTbl . ' a
               WHERE a.unit_id IS NULL AND a.is_shared = 0 AND a.status = \'aktif\'
               ORDER BY a.idakun_kas_bank'
         )->getResult();

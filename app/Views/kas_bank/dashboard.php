@@ -121,7 +121,7 @@ $jumlahRekening = count($akun_kas_bank ?? []);
         <h2 id="kbx-posisi" class="visually-hidden">Posisi kas dan bank</h2>
 
         <div class="kbx-meta">
-            <span>Posisi per <b><?= $fmtTgl(date('Y-m-d')) ?></b> · <b><?= esc($unitNama) ?></b></span>
+            <span>Posisi per <b><?= $fmtTgl($sampai !== '' ? $sampai : date('Y-m-d')) ?></b> · <b><?= esc($unitNama) ?></b></span>
             <span>Cut-off arus kas <b><?= $fmtTgl($cutoff) ?></b></span>
         </div>
 
