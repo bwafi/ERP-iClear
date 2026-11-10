@@ -125,20 +125,20 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             VALUES (1, 1, 5, 0), (1, 2, 5, 0)");
     }
 
-    private function sesi(): void
+    private function sesi(int $jabatan = 35): void
     {
         $this->withSession([
             'logged_in'    => true,
             'ID_AKUN'      => 43,
             'ID_UNIT'      => 1,
-            'ID_JABATAN'   => 35,
+            'ID_JABATAN'   => $jabatan,
             'NAMA'         => 'Tester',
             'NAMA_JABATAN' => 'Tester',
             'EMAIL'        => 'tester@example.com',
         ]);
     }
 
-    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '')
+    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000')
     {
         return $this->post('insert_pembelian', [
             'produk' => [
@@ -147,7 +147,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
                     'kode'           => 'P01',
                     'nama'           => 'LCD iPhone 11',
                     'kategori'       => 'Sparepart',
-                    'harga'          => '150000',
+                    'harga'          => $hargaJual,
                     'harga_beli'     => (string) $hargaBeli,
                     'jumlah'         => (string) $jumlah,
                     'biaya_tambahan' => (string) $biaya,
@@ -227,5 +227,39 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $hppUnit = $this->db->table('hpp_unit')
             ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow();
         $this->assertSame(100000.0, (float) $hppUnit->hpp, 'HPP lama dipertahankan');
+    }
+
+    public function testHargaJualDariPembelianMenimpaMaster(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '175000')->assertRedirect();
+
+        $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
+        $this->assertSame(175000.0, (float) $barang->harga);
+        $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults());
+    }
+
+    public function testHargaJualDiabaikanUntukRoleNonPengelola(): void
+    {
+        $this->sesi(99);
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '175000')->assertRedirect();
+
+        $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
+        $this->assertSame(150000.0, (float) $barang->harga, 'role non-pengelola tidak boleh mengubah harga jual');
+        $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults(), 'pembelian tetap tersimpan');
+    }
+
+    public function testPembelianBatalBilaHargaJualTidakValid(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '0')->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header dibatalkan');
+        $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults(), 'detail dibatalkan');
+        $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
+        $this->assertSame(150000.0, (float) $barang->harga, 'harga jual lama dipertahankan');
     }
 }

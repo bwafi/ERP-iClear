@@ -83,7 +83,8 @@ class Pembelian extends BaseController
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'body'  => 'transaksi/pembelian',
             'nama_handphone' => $this->NamaHandphoneModel->getNamaHandphone(),
-            'sub_kategori' => $this->SubKategoriModel->getSubKategori()
+            'sub_kategori' => $this->SubKategoriModel->getSubKategori(),
+            'can_manage_harga_jual' => Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
         );
         return view('template', $data);
     }
@@ -118,6 +119,7 @@ class Pembelian extends BaseController
         $total_ppn = $this->cleanRupiah($this->request->getPost('total-ppn'));
         $bayar_tunai = $this->cleanRupiah($this->request->getPost('bayar')); //ini tunai
         $bankData = $this->request->getPost('bank');
+        $bolehUbahHargaJual = Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN'));
 
         $jurnal = [];
         $bankPembayaran = [];
@@ -283,6 +285,11 @@ class Pembelian extends BaseController
             $produkjumlah = $produk['jumlah'];
             $produkdiskon = $this->cleanRupiah($produk['diskon']);
             $produkharga  = $this->cleanRupiah($produk['harga']);
+            if ($bolehUbahHargaJual && ($produkharga <= 0 || $produkharga > 9999999999999)) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Harga jual tidak valid.');
+                return redirect()->to(base_url('/pembelian'));
+            }
             $nilaidiskon = $produkdiskon;
             $produkppn = $produk['ppn'] ?? null;
             $subtotalAwal = $hrg_beli * $produkjumlah;
@@ -337,6 +344,13 @@ class Pembelian extends BaseController
             )) {
                 $db->transRollback();
                 session()->setFlashdata('gagal', 'HPP pembelian tidak valid.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+
+            if ($result2 && $bolehUbahHargaJual && (float) $databarang->harga !== (float) $produkharga
+                && !$this->BarangModel->update($produk['id'], ['harga' => $produkharga])) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Harga jual gagal disimpan.');
                 return redirect()->to(base_url('/pembelian'));
             }
         }

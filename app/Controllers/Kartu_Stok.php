@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Models\ModelAuth;
+use App\Models\ModelBarang;
 use App\Models\ModelBarangUnit;
 use App\Models\ModelHppUnit;
 use App\Models\ModelKartuStok;
@@ -20,6 +21,7 @@ class Kartu_Stok extends BaseController
 
     protected $AuthModel;
     protected $KartuStokModel;
+    protected $BarangModel;
     protected $HppUnitModel;
     protected $BarangUnitModel;
     protected $UnitModel;
@@ -28,6 +30,7 @@ class Kartu_Stok extends BaseController
     {
         $this->AuthModel = new ModelAuth();
         $this->KartuStokModel = new ModelKartuStok();
+        $this->BarangModel = new ModelBarang();
         $this->HppUnitModel = new ModelHppUnit();
         $this->BarangUnitModel = new ModelBarangUnit();
         $this->UnitModel = new ModelUnit();
@@ -94,6 +97,46 @@ class Kartu_Stok extends BaseController
         return $this->response->setJSON([
             'status' => 'success',
             'hpp'    => $hpp,
+            'csrf'   => csrf_hash(),
+        ]);
+    }
+
+    /**
+     * Ubah harga jual master. Harga jual disimpan di `barang.harga` sehingga
+     * berlaku global untuk semua unit dan transaksi berikutnya; transaksi lama
+     * tetap memakai snapshot harga di detailnya.
+     */
+    public function updateHargaJual()
+    {
+        if (!self::bolehKelolaProdukUnit((int) session('ID_JABATAN'))) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'status'  => 'error',
+                'message' => 'Role Anda tidak dapat mengubah harga jual.',
+            ]);
+        }
+
+        $idbarang = (int) $this->request->getPost('idbarang');
+        $harga    = (int) $this->request->getPost('harga');
+
+        if ($idbarang <= 0 || $harga <= 0 || $harga > 9999999999999) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'Harga jual tidak valid.',
+            ]);
+        }
+
+        if ($this->BarangModel->find($idbarang) === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk tidak ditemukan.',
+            ]);
+        }
+
+        $this->BarangModel->update($idbarang, ['harga' => $harga]);
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'harga'  => $harga,
             'csrf'   => csrf_hash(),
         ]);
     }

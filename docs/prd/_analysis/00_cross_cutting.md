@@ -62,7 +62,7 @@ Status: disusun dari kode yang benar-benar dibaca. Metode: verifikasi langsung t
 4. [VERIFIKASI] Route `insert_produk` menunjuk ke `Pembelian::insert_produk` (bukan `Produk::insert_produk`) — potensi konflik naming (lihat modul).
 5. [BELUM TERVERIFIKASI] Konsistensi penggunaan `session('ID_UNIT')` vs `ID_GEDUNG` lintas controller.
 6. [VERIFIKASI] `Kas_Masuk::update_kas_Masuk`/`delete_kas_Masuk` dan `Kas_Keluar::update_kas_keluar` tidak menyinkronkan `jurnal`; laporan berbasis jurnal dapat berbeda dari sumber/ledger. — X-07/FN-03/FN-04
-7. [VERIFIKASI] Projection hutang supplier memakai `pembelian.total_bayar`, bukan `total_transaksi`; total dan rekonsiliasi/aging salah untuk pembelian tidak lunas (sisa tetap dari sumber). — PI-05/HP-01
+7. [SELESAI] Projection hutang supplier diperbaiki: `pembelian.total_transaksi` dengan `total_dibayar = total − sisa`; `refreshProjections` ikut mengoreksi baris lama. — PI-05/HP-01; `HutangPiutangProjectionTotalTest`
 8. [VERIFIKASI] `Piutang::bayar_piutang` memakai `sisa` dari POST, tanpa jurnal/ledger kas, dan status Lunas tidak pernah tercapai. — SL-06/HP-02
 9. [VERIFIKASI] Penjualan kredit tidak membentuk piutang pelanggan; `Piutang` legacy adalah piutang pegawai. — SL-02
 10. [VERIFIKASI] `detail_penjualan.sub_total` bundle ditulis penuh per komponen; laporan omzet/laba dapat berlipat. — SL-03

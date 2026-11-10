@@ -138,6 +138,32 @@ $ringkasan = [
         </div>
     </div>
 
+    <div class="modal fade" id="modal-harga-jual" tabindex="-1" aria-labelledby="modal-harga-jual-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form id="form-harga-jual" method="post" action="<?= base_url('kartu_stok/harga-jual') ?>" class="modal-content">
+                <?= csrf_field() ?>
+                <input type="hidden" name="idbarang" id="harga-jual-idbarang">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modal-harga-jual-label">Ubah Harga Jual</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3" id="harga-jual-target"></p>
+                    <label for="harga-jual-value" class="form-label">Harga jual</label>
+                    <div class="input-group">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" class="form-control" id="harga-jual-value" name="harga" min="1" step="1" required>
+                    </div>
+                    <div class="form-text">Berlaku untuk semua unit dan transaksi berikutnya. Transaksi lama tidak berubah.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="modal fade" id="modal-stok-warning" tabindex="-1" aria-labelledby="modal-stok-warning-label" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -219,7 +245,13 @@ $ringkasan = [
                         ' data-hpp="' + attr(d.harga_beli) + '"' +
                         ' data-nama="' + attr(d.nama_barang) + '"' +
                         ' data-unit="' + attr(d.nama_unit) + '">Ubah</button>' : '')) +
-                detailRow('Harga jual', money(d.harga)) +
+                detailRow('Harga jual', money(d.harga) +
+                    (canManageUnit ?
+                        ' <button type="button" class="ks-edit-hpp js-edit-harga-jual"' +
+                        ' data-idbarang="' + attr(d.idbarang) + '"' +
+                        ' data-harga="' + attr(d.harga) + '"' +
+                        ' data-kode="' + attr(d.kode_barang) + '"' +
+                        ' data-nama="' + attr(d.nama_barang) + '">Ubah</button>' : '')) +
                 detailRow('Stok awal', fmt(d.stok_awal)) +
                 detailRow('Stok akhir', fmt(d.stok_akhir), 'is-strong');
 
@@ -398,6 +430,8 @@ $ringkasan = [
             const modalHppEl = document.getElementById('modal-hpp');
             const modalHpp = new bootstrap.Modal(modalHppEl);
             const formHpp = document.getElementById('form-hpp');
+            const modalHargaJual = new bootstrap.Modal(document.getElementById('modal-harga-jual'));
+            const formHargaJual = document.getElementById('form-harga-jual');
             const modalWarn = new bootstrap.Modal(document.getElementById('modal-stok-warning'));
 
             $('#ks-datatable').on('click', '.js-edit-hpp', function() {
@@ -437,6 +471,45 @@ $ringkasan = [
                     })
                     .catch(function() {
                         alert('Gagal menyimpan HPP.');
+                    });
+            });
+
+            $('#ks-datatable').on('click', '.js-edit-harga-jual', function() {
+                const btn = $(this);
+                $('#harga-jual-idbarang').val(btn.data('idbarang'));
+                $('#harga-jual-value').val(btn.data('harga'));
+                $('#harga-jual-target').text(btn.data('kode') + ' · ' + btn.data('nama'));
+                modalHargaJual.show();
+            });
+
+            formHargaJual.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                fetch(formHargaJual.action, {
+                        method: 'POST',
+                        body: new FormData(formHargaJual),
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(function(r) {
+                        return r.json();
+                    })
+                    .then(function(res) {
+                        if (res.status !== 'success') {
+                            alert(res.message || 'Gagal menyimpan harga jual.');
+                            return;
+                        }
+
+                        if (res.csrf) {
+                            formHargaJual.querySelector('input[name="<?= csrf_token() ?>"]').value = res.csrf;
+                        }
+
+                        modalHargaJual.hide();
+                        table.ajax.reload(null, false);
+                    })
+                    .catch(function() {
+                        alert('Gagal menyimpan harga jual.');
                     });
             });
 
