@@ -1306,20 +1306,21 @@ class HutangPiutangService
         $pembelianIds = array_filter(array_map('intval', array_column($pembelianIds, 'sumber_id')));
         if ($pembelianIds) {
             $rows = $this->db->table('pembelian')
-                ->select('idpembelian, total_bayar, bayar, sisa, jatuh_tempo')
+                ->select('idpembelian, total_transaksi, sisa, jatuh_tempo')
                 ->whereIn('idpembelian', $pembelianIds)
                 ->get()->getResult();
             foreach ($rows as $r) {
+                $total = (int) $r->total_transaksi;
                 $sisa = (int) $r->sisa;
-                $dibayar = (int) $r->bayar;
+                $dibayar = max(0, $total - $sisa);
                 $this->db->table('hutang_piutang')
                     ->where('sumber_tipe', self::SUMBER_PEMBELIAN)
                     ->where('sumber_id', (int) $r->idpembelian)
                     ->update([
-                        'total' => (int) $r->total_bayar,
+                        'total' => $total,
                         'total_dibayar' => $dibayar,
                         'sisa' => $sisa,
-                        'status' => self::statusFromSisa((int) $r->total_bayar, $sisa, $dibayar),
+                        'status' => self::statusFromSisa($total, $sisa, $dibayar),
                         'jatuh_tempo' => $r->jatuh_tempo,
                     ]);
             }
@@ -1691,8 +1692,9 @@ class HutangPiutangService
             return;
         }
 
+        $total = (int) $p->total_transaksi;
         $sisa = (int) $p->sisa;
-        $dibayar = (int) $p->bayar;
+        $dibayar = max(0, $total - $sisa);
         $data = [
             'jenis' => 'hutang',
             'sumber_tipe' => self::SUMBER_PEMBELIAN,
@@ -1704,10 +1706,10 @@ class HutangPiutangService
             'tanggal' => $p->tanggal_masuk,
             'jatuh_tempo' => $p->jatuh_tempo,
             'uraian' => $p->no_nota_supplier,
-            'total' => (int) $p->total_bayar,
+            'total' => $total,
             'total_dibayar' => $dibayar,
             'sisa' => $sisa,
-            'status' => self::statusFromSisa((int) $p->total_bayar, $sisa, $dibayar),
+            'status' => self::statusFromSisa($total, $sisa, $dibayar),
             'unit_id' => $p->unit_idunit,
             'deleted' => 0,
         ];

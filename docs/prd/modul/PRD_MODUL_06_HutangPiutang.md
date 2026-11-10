@@ -52,7 +52,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 6. Settlement kasbon dari payroll idempotent dan **mengikuti pegawai lintas unit**: kasbon aktif (bukan `scope = legacy`) di unit mana pun dipotong penuh dari gaji, dengan jurnal `hp_kasbon_potong_payroll` dibebankan ke unit kasbon. — `HutangPiutangService::settleKasbonFromPayroll`; `tests/PayrollKasbonDeductionTest.php`
 7. Jurnal H/P via `template_jurnal`; bila template absent → hanya log, transaksi tetap tersimpan. — `postJurnal`
 8. Settlement legacy bukan pembayaran (tidak ubah `total_dibayar`, tidak sentuh saldo/ledger). — `tandaiLunasLegacy`
-9. Projection disinkron dari sumber (`syncFromPembelian`, `syncFromPiutangLegacy`); lunas-legacy projection ditimpa sync → ditolak. — `refreshProjections`. **`syncFromPembelian` mengisi `total` dari `pembelian.total_bayar` (nilai yang sudah dibayar), bukan `total_transaksi`; untuk pembelian sebagian total tidak sama dengan sisa + dibayar (sisa tetap dari sumber).** — `HutangPiutangService::syncFromPembelian` (PI-05/HP-01)
+9. Projection disinkron dari sumber (`syncFromPembelian`, `syncFromPiutangLegacy`); lunas-legacy projection ditimpa sync → ditolak. — `refreshProjections`. `syncFromPembelian` dan `refreshProjections` mengisi `total` dari `pembelian.total_transaksi` dan `total_dibayar = total_transaksi − sisa`, sehingga pembelian sebagian tetap konsisten (total = dibayar + sisa). — `HutangPiutangService::syncFromPembelian`, `refreshProjections`; `tests/HutangPiutangProjectionTotalTest.php`
 10. Kode normalisasi `<SEG>-Ymd<unit><seq4>` untuk sumber authoritative/manual. — `generateKode`. Kode mutasi antar unit memakai `MUT-{unit asal}-{unit tujuan}-{yymmdd}-{urut3}`; `urut3` adalah urutan harian berdasarkan `tanggal_kirim`, dan kedua sisi (hutang & piutang) memakai urutan yang sama dengan arah dibalik. Kode mutasi lama `MUT-...-P/-H` tidak diubah. — `ModeKasBank::buatHutangPiutangDariMutasi`
 11. `Piutang::bayar_piutang` (legacy) mengambil `sisa` dari POST, menyimpan `pembayaran_piutang`, memperbarui `piutang.sisa_hutang` dengan nilai itu, memakai `if ($sisa >= 0) 0 else 1` sehingga status Lunas tidak pernah tercapai, dan tidak membuat jurnal/ledger kas. — `Piutang.php:153-190` (HP-02/SL-06)
 12. `syncFromPiutangLegacy` hanya menyinkronkan projection; tidak memperbaiki pembayaran legacy di atas. — `HutangPiutangService`
@@ -65,6 +65,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 - [ ] Kompensasi hanya untuk pihak yang sama; tercatat + audit 2 baris.
 - [ ] Lunas legacy konsisten (tanpa jurnal/movement) & dapat dibatalkan.
 - [ ] Dashboard/ringkasan tidak double counting; legacy dikecualikan.
+- [ ] Projection hutang supplier memakai total transaksi, bukan nominal yang sudah dibayar; total = dibayar + sisa.
 - [ ] Cetak bukti & ekspor umur hutang/piutang berfungsi.
 - [ ] Daftar piutang/hutang menampilkan arah asal → tujuan untuk baris mutasi antar unit.
 - [ ] Mutasi baru memakai kode `MUT-{asal}-{tujuan}-{yymmdd}-{urut3}` dengan urutan harian.
@@ -78,8 +79,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: aturan di atas (dengan bukti `HutangPiutangService::method`).
 - ⚠️ Gap terkonfirmasi:
-  1. **Projection pembelian memakai `total_bayar`**, bukan `total_transaksi`; total dan rekonsiliasi hutang supplier bisa salah. — HP-01/PI-05
-  2. **Pembayaran piutang legacy** memakai `sisa` dari POST, tidak memposting kas/jurnal, dan status Lunas tidak pernah tercapai. — HP-02/SL-06
-  3. **KPI Piutang selalu null** karena `pembayaran_piutang` tidak punya `tanggal_bayar` (status `gap_no_payment_date`). — `PiutangTimelinessCalculator` (HP-03)
+  1. **Pembayaran piutang legacy** memakai `sisa` dari POST, tidak memposting kas/jurnal, dan status Lunas tidak pernah tercapai. — HP-02/SL-06
+  2. **KPI Piutang selalu null** karena `pembayaran_piutang` tidak punya `tanggal_bayar` (status `gap_no_payment_date`). — `PiutangTimelinessCalculator` (HP-03)
 - ⚠️ Inferensi/risiko: pembayaran tanpa rincian metode dipaksa tunai; jurnal manual tidak terposting; dua mekanisme guard saldo paralel; enum `sumber` untuk `antar_unit/kas_bank/legacy` belum terkonfirmasi.
-- Test: `HutangPiutangDetailLinkTest`, `HutangPiutangListRedesignTest`, `ScopeConsolidasiTest`, `ScopeFinanceRoleTest`, `FinanceKpiTest`. Tidak ada test untuk projection `total_bayar`, pembayaran piutang legacy, dan KPI timeliness.
+- Test: `HutangPiutangDetailLinkTest`, `HutangPiutangListRedesignTest`, `HutangPiutangProjectionTotalTest`, `ScopeConsolidasiTest`, `ScopeFinanceRoleTest`, `FinanceKpiTest`. Tidak ada test untuk pembayaran piutang legacy dan KPI timeliness.
