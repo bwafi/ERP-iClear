@@ -125,12 +125,8 @@
 
                 <div class="col-md-6">
                     <label for="frontliner" class="form-label">Frontliner</label>
-                    <select class="form-control" id="frontliner" name="frontliner" required>
-                        <option value="">-- Pilih Frontliner --</option>
-                        <?php foreach ($frontliner as $akun): ?>
-                        <option value="<?= esc($akun->ID_AKUN) ?>"><?= esc($akun->NAMA_AKUN) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <input type="text" class="form-control" id="frontliner"
+                        value="<?= esc($akun->NAMA_AKUN ?? session('NAMA')) ?>" readonly>
                 </div>
 
 
@@ -200,14 +196,14 @@
                                                 <input type="checkbox" class="produk-checkbox"
                                                     data-id="<?= $p->idbarang ?>" data-kode="<?= $p->kode_barang ?>"
                                                     data-nama="<?= $p->nama_barang ?>" data-harga="<?= $p->harga ?>"
-                                                    data-harga_beli="<?= $p->harga_beli ?>"
+                                                    data-harga_beli="<?= $p->hpp_unit ?? $p->harga_beli ?>"
                                                     data-kategori="<?= $p->nama_kategori ?>"
                                                     data-input="<?= $p->input ?>" data-imei="<?= $p->imei ?>">
                                             </td>
                                             <td><?= $p->kode_barang ?></td>
                                             <td><?= $p->nama_barang ?></td>
                                             <td><?= 'Rp ' . number_format($p->harga, 0, ',', '.') ?></td>
-                                            <td><?= 'Rp ' . number_format($p->harga_beli, 0, ',', '.') ?></td>
+                                            <td><?= 'Rp ' . number_format($p->hpp_unit ?? $p->harga_beli, 0, ',', '.') ?></td>
                                             <td><?= $p->nama_kategori ?></td>
                                             <td><?= $p->imei ? $p->imei : 'Tidak Ada' ?></td>
                                             <td><?= $p->internal ? $p->internal : 'Tidak Ada' ?></td>

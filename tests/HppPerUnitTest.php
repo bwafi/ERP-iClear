@@ -191,4 +191,52 @@ class HppPerUnitTest extends CIUnitTestCase
         // Produk 2 tanpa hpp_unit: 5 x 500 (fallback hpp_barang).
         $this->assertSame(5100.0, (float) $summary->nilai_stok);
     }
+
+    public function testSyncPembelianMemakaiHargaBeliTerakhirHanyaUntukUnitItu(): void
+    {
+        $this->migrasi()->up();
+        $model = new ModelHppUnit();
+        $model->setManual(1, 1, 100.0, 99);
+
+        $this->assertTrue($model->syncFromPembelian(1, 1, 120000.0, 1, 0.0, 0.0, 7));
+
+        $this->assertSame(120000.0, (float) $model->getFor(1, 1)->hpp, 'harga beli terakhir menimpa HPP unit');
+        $this->assertSame('pembelian', $model->getFor(1, 1)->sumber);
+        $this->assertSame(120.0, (float) $model->getFor(1, 2)->hpp, 'unit lain tidak boleh berubah');
+        $this->assertSame(100.0, (float) $this->db->table('barang')->where('idbarang', 1)->get()->getRow()->harga_beli, 'master tidak boleh berubah');
+    }
+
+    public function testSyncPembelianMenghitungHargaBersihPerUnit(): void
+    {
+        $this->migrasi()->up();
+        $model = new ModelHppUnit();
+
+        // 2 x 120.000 - diskon 40.000 + biaya tambahan 20.000 = 220.000 / 2.
+        $this->assertTrue($model->syncFromPembelian(2, 2, 120000.0, 2, 40000.0, 20000.0, 7));
+
+        $this->assertSame(110000.0, (float) $model->getFor(2, 2)->hpp);
+    }
+
+    public function testSyncPembelianMembuatBarisUntukProdukTanpaHppUnit(): void
+    {
+        $this->migrasi()->up();
+        $model = new ModelHppUnit();
+
+        $this->assertNull($model->getFor(3, 2));
+        $this->assertTrue($model->syncFromPembelian(3, 2, 80000.0, 1, 0.0, 0.0, 7));
+
+        $this->assertSame(80000.0, (float) $model->getFor(3, 2)->hpp);
+        $this->assertSame('pembelian', $model->getFor(3, 2)->sumber);
+    }
+
+    public function testSyncPembelianMengabaikanQtyAtauHargaTidakValid(): void
+    {
+        $this->migrasi()->up();
+        $model = new ModelHppUnit();
+        $model->setManual(1, 1, 100.0, 99);
+
+        $this->assertFalse($model->syncFromPembelian(1, 1, 120000.0, 0));
+        $this->assertFalse($model->syncFromPembelian(1, 1, 0.0, 1));
+        $this->assertSame(100.0, (float) $model->getFor(1, 1)->hpp, 'nilai lama dipertahankan');
+    }
 }

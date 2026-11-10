@@ -18,6 +18,7 @@ use App\Models\ModelSuplier;
 use App\Models\ModelAuth;
 use App\Models\ModelPelanggan;
 use App\Models\ModelHppBarang;
+use App\Models\ModelHppUnit;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
@@ -35,6 +36,7 @@ class Pembelian extends BaseController
     protected $AuthModel;
     protected $PelangganModel;
     protected $HppBarangModel;
+    protected $HppUnitModel;
     protected $JurnalModel;
     protected $BankModel;
     protected $PembayaranBankModel;
@@ -51,6 +53,7 @@ class Pembelian extends BaseController
         $this->AuthModel = new ModelAuth();
         $this->PelangganModel = new ModelPelanggan();
         $this->HppBarangModel = new ModelHppBarang();
+        $this->HppUnitModel = new ModelHppUnit();
         $this->JurnalModel = new ModelJurnal();
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
@@ -61,12 +64,21 @@ class Pembelian extends BaseController
     public function index()
     {
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
+        $unitId = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
+        $produk = $this->BarangModel->getAllBarang();
+        $hppUnit = $this->HppUnitModel->resolveMany(
+            array_map(static fn ($p) => (int) $p->idbarang, $produk),
+            $unitId
+        );
+        foreach ($produk as $p) {
+            $p->hpp_unit = $hppUnit[(int) $p->idbarang] ?? (float) $p->harga_beli;
+        }
+
         $data =  array(
             'akun' => $akun,
-            'produk' => $this->BarangModel->getAllBarang(),
+            'produk' => $produk,
             'kategori' => $this->KategoriModel->getKategori(),
             'suplier' => $this->SuplierModel->getSuplier(),
-            'frontliner' => $this->AuthModel->getAkunFrontliner(),
             'bank' => $this->BankModel->getBank(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'body'  => 'transaksi/pembelian',
@@ -222,7 +234,8 @@ class Pembelian extends BaseController
             }
         }
 
-        $frontliner = $this->request->getPost('frontliner');
+        // Frontliner selalu akun yang login; nilai POST tidak dipercaya.
+        $frontliner = (int) $input_by;
 
 
         $data = array(
@@ -312,6 +325,20 @@ class Pembelian extends BaseController
             );
 
             $result2 = $this->DetailPembelianModel->insert_detail($data2);
+
+            if ($result2 && !$this->HppUnitModel->syncFromPembelian(
+                (int) $produk['id'],
+                (int) $useridunit,
+                (float) $hrg_beli,
+                (int) $produkjumlah,
+                (float) $nilaidiskon,
+                (float) $this->cleanRupiah($produk['biaya_tambahan'] ?? 0),
+                (int) $input_by
+            )) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'HPP pembelian tidak valid.');
+                return redirect()->to(base_url('/pembelian'));
+            }
         }
         if ($total_ppn > 0) {
             $jurnal[] = [

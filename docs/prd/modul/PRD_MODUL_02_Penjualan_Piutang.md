@@ -40,7 +40,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 2. Total & diskon disanitasi (`Rp/.`/spasi dihilangkan). — `Penjualan::sanitizeCurrency`
 3. Pembayaran terpecah tunai + bank; `bank_idbank` header menyimpan `kode_pembayaran` (bukan id bank asli). — `insert_penjualan`
 4. Status keterangan = `Lunas` bila `hutang==0`, else `Belum Lunas`. — `insert_penjualan`
-5. HPP per item diambil dari `hpp_unit` produk+unit transaksi; fallback `hpp_barang` (global) lalu `barang.harga_beli`. Bundle dipecah (jumlah × qty bundle) dan tiap komponen memakai HPP unit transaksi. — `ModelHppUnit::resolve`; `Penjualan::insert_penjualan`
+5. HPP per item diambil dari `hpp_unit` produk+unit transaksi; fallback `hpp_barang` (global) lalu `barang.harga_beli`. Baris `hpp_unit` unit itu diperbarui pembelian terbaru dengan harga beli terakhir (lihat PRD Modul 03 rule 15). Bundle dipecah (jumlah × qty bundle) dan tiap komponen memakai HPP unit transaksi. — `ModelHppUnit::resolve`; `Penjualan::insert_penjualan`
 6. Kategori akun jurnal dibedakan: HP baru PPN/non-PPN/second, sparepart, aksesoris, PPN, diskon. — `insert_penjualan`
 7. Penjualan berjalan dalam SATU transaksi (header+detail+jurnal+pembayaran bank). — `insert_penjualan`
 8. Kode pembayaran bank = `PJL{date}{unit}{rand4}`; di-refer ke `id_referensi` penjualan setelah insert. — `insert_penjualan`

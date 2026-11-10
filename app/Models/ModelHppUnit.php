@@ -9,6 +9,8 @@ use CodeIgniter\Model;
  *
  * Nilai `manual` berasal dari koreksi admin dan tidak boleh ditimpa sync stok
  * awal. Nilai `stok_awal` boleh diperbarui setiap ada input stok awal baru.
+ * Pembelian terbaru menimpa keduanya karena pembelian adalah sumber biaya
+ * terakhir per unit.
  */
 class ModelHppUnit extends Model
 {
@@ -77,6 +79,38 @@ class ModelHppUnit extends Model
         }
 
         return $map;
+    }
+
+    /**
+     * HPP unit mengikuti harga beli terakhir. Nilai manual ikut ditimpa karena
+     * pembelian adalah sumber biaya terbaru.
+     */
+    public function syncFromPembelian(
+        int $idbarang,
+        int $idunit,
+        float $hargaBeli,
+        int $jumlah,
+        float $diskon = 0.0,
+        float $biayaTambahan = 0.0,
+        ?int $userId = null
+    ): bool {
+        if ($idbarang <= 0 || $idunit <= 0 || $jumlah <= 0 || $hargaBeli <= 0) {
+            return false;
+        }
+
+        $hpp = ($hargaBeli * $jumlah - $diskon + $biayaTambahan) / $jumlah;
+        if ($hpp <= 0) {
+            return false;
+        }
+
+        return (bool) $this->db->table($this->table)->upsert([
+            'barang_idbarang' => $idbarang,
+            'unit_idunit'     => $idunit,
+            'hpp'             => $hpp,
+            'sumber'          => 'pembelian',
+            'updated_by'      => $userId,
+            'updated_at'      => date('Y-m-d H:i:s'),
+        ]);
     }
 
     /**
