@@ -50,12 +50,14 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 12. Setiap komponen bundle ditulis dengan `sub_total` penuh, sehingga laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet/laba. — `Penjualan.php:327-334`; `TutupKasir.php:360,610`; `ModelPenjualan.php:132` (SL-03)
 13. `kode_invoice` tidak memiliki unique constraint; dua transaksi bersamaan dapat memperoleh kode sama. Kode invoice service juga memakai `SRV{date('YmdHis')}` tanpa random. — migration `penjualan`; `Service.php:496` (SL-04)
 14. Picker kasir punya tab Produk/Bundle/Jasa. Tab Jasa memakai `ModelStokBarang::getJasa()` (`barang.jenis_barang='jasa'`) sehingga jasa bisa dijual tanpa stok awal; baris keranjang memakai kontrak `produk-checkbox` yang sama (harga, qty, diskon, PPN). Penjualan jasa tetap dicatat di `detail_penjualan` (omset/refund/DP/KPI tidak berubah) tetapi tidak menyentuh persediaan karena view `stok_barang` hanya memuat produk. HPP jasa mengikuti resolver yang sama (`hpp_unit` → `hpp_barang` → `barang.harga_beli`). HPP jasa (bagian teknisi) disimpan lewat field **HPP** di `/tarif_jasa`: nilai nominal masuk ke `barang.harga_beli` dan dicerminkan ke `hpp_barang.hpp` serta semua baris `hpp_unit` jasa itu (`sumber='manual'`), dengan validasi `0 ≤ HPP ≤ harga`. Field HPP juga menerima persen dari harga jual (mis. 10% × 1.000.000 = 100.000); persen hanya alat bantu input dan server yang menghitung nominalnya — yang disimpan tetap nominal, jadi perubahan harga jual tidak otomatis mengubah HPP sampai disimpan ulang. Kolom HPP tampil sebelum Harga Jual. Karena omzet = `sub_total − hpp_penjualan`, bagian teknisi tidak dihitung sebagai omzet pada transaksi baru; data historis tidak dihitung ulang. — `Penjualan::index`; `ModelStokBarang::getJasa`; `TarifJasa`; `ModelHppUnit::resolve`; `Views/transaksi/penjualan.php`; `Views/jasa/tarif.php`
+15. Harga jual picker POS mengikuti unit transaksi: `COALESCE(harga_jual_unit.harga_jual, barang.harga)`. Picker produk memakai `ModelStokBarang::getAllBarang2()` dan picker jasa `getJasa()`; keduanya mengekspos `harga_jual` (efektif) dan tetap menyimpan `harga` master. Tanpa baris `harga_jual_unit` = ikut master. Nilai yang dipilih masuk keranjang sebagai `detail_penjualan.harga_penjualan` (snapshot); transaksi lama tidak di-backfill dan tidak berubah saat override/master diubah. Bundle tetap memakai `bundle.harga_jual`. — `ModelHargaJualUnit::resolve`; `ModelStokBarang::getAllBarang2/getJasa`; `Views/transaksi/penjualan.php`; `HargaJualUnitTest`; `HargaJualPickerTest`
 
 ## 6. Acceptance Criteria
 - [ ] Input penjualan menyimpan header+detail+pembayaran bank+jurnal dalam satu transaksi.
 - [ ] Kode invoice unik per unit per hari.
 - [ ] Struk PDF dibuat & dapat diunduh.
 - [ ] Pembayaran tunai dan bank tercatat; total bayar = tunai + bank.
+- [ ] Harga jual picker POS mengikuti harga unit transaksi dan transaksi lama tidak berubah saat override diubah.
 - [ ] Jadwayat penjualan dapat dicari, dilihat detailnya, diekspor.
 
 ## 7. Dependensi
@@ -68,6 +70,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 - ✅ Terverifikasi: HPP detail penjualan baru memakai `hpp_unit` produk+unit; produk tanpa baris per unit tetap memakai `hpp_barang`/`barang.harga_beli`. — `HppPerUnitTest`
 - ✅ Terverifikasi: jasa dijual lewat tab Jasa tanpa stok; tercatat di `detail_penjualan` untuk omset tetapi tidak masuk persediaan. — `JasaBukanProdukTest`
 - ✅ Terverifikasi: HPP jasa (bagian teknisi) disimpan sebagai `barang.harga_beli` dan dicerminkan ke `hpp_barang`/`hpp_unit`, sehingga `hpp_penjualan` transaksi baru memuat HPP dan omzet = harga jual − HPP. — `TarifJasaPageTest`
+- ✅ Terverifikasi: picker POS produk dan jasa memakai harga jual efektif unit (`harga_jual_unit` fallback `barang.harga`); transaksi lama tetap snapshot. — `HargaJualUnitTest`, `HargaJualPickerTest`
 - ⚠️ Gap tinggi:
   1. Penjualan kredit tidak membentuk piutang pelanggan/registry H/P; `Piutang` legacy adalah piutang pegawai. — SL-02
   2. `detail_penjualan.sub_total` bundle digandakan per komponen; laporan omzet/laba dapat salah. — SL-03

@@ -72,6 +72,7 @@ class ModelStokBarang extends Model
                 barang.kode_barang,
                 barang.nama_barang,
                 barang.harga,
+                COALESCE(hju.harga_jual, barang.harga) AS harga_jual,
                 barang.harga_beli,
                 barang.imei,
                 barang.jenis_hp,
@@ -85,6 +86,7 @@ class ModelStokBarang extends Model
             ')
             ->join('barang', 'barang.idbarang = stok_barang.idbarang')
             ->join('kategori', 'kategori.id = barang.idkategori')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = stok_barang.idbarang AND hju.unit_idunit = ' . (int)$id_unit, 'left')
             ->where('barang.deleted', 0)
             ->where('kategori.delete', 0)
             ->where('stok_barang.id_unit', (int)$id_unit)
@@ -102,8 +104,12 @@ class ModelStokBarang extends Model
      */
     public function getJasa()
     {
+        $idUnit = (int) session('ID_UNIT');
+
         return $this->db->table('barang')
-            ->select('idbarang, kode_barang, nama_barang, harga, harga_beli, status_ppn')
+            ->select('barang.idbarang, barang.kode_barang, barang.nama_barang, barang.harga,
+                COALESCE(hju.harga_jual, barang.harga) AS harga_jual, barang.harga_beli, barang.status_ppn')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = barang.idbarang AND hju.unit_idunit = ' . $idUnit, 'left')
             ->where('jenis_barang', 'jasa')
             ->where('deleted', 0)
             ->orderBy('nama_barang', 'ASC')

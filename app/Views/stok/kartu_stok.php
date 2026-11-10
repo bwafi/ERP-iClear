@@ -126,7 +126,7 @@ $ringkasan = [
                     <label for="hpp-value" class="form-label">HPP</label>
                     <div class="input-group">
                         <span class="input-group-text">Rp</span>
-                        <input type="number" class="form-control" id="hpp-value" name="hpp" min="1" step="1" required>
+                        <input type="text" class="form-control" id="hpp-value" name="hpp" inputmode="numeric" autocomplete="off" required>
                     </div>
                     <div class="form-text">Hanya berlaku untuk unit ini. Riwayat transaksi lama tidak berubah.</div>
                 </div>
@@ -143,18 +143,20 @@ $ringkasan = [
             <form id="form-harga-jual" method="post" action="<?= base_url('kartu_stok/harga-jual') ?>" class="modal-content">
                 <?= csrf_field() ?>
                 <input type="hidden" name="idbarang" id="harga-jual-idbarang">
+                <input type="hidden" name="id_unit" id="harga-jual-idunit">
                 <div class="modal-header">
                     <h2 class="modal-title" id="modal-harga-jual-label">Ubah Harga Jual</h2>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted mb-3" id="harga-jual-target"></p>
+                    <p class="text-muted mb-2" id="harga-jual-master"></p>
                     <label for="harga-jual-value" class="form-label">Harga jual</label>
                     <div class="input-group">
                         <span class="input-group-text">Rp</span>
-                        <input type="number" class="form-control" id="harga-jual-value" name="harga" min="1" step="1" required>
+                        <input type="text" class="form-control" id="harga-jual-value" name="harga" inputmode="numeric" autocomplete="off" required>
                     </div>
-                    <div class="form-text">Berlaku untuk semua unit dan transaksi berikutnya. Transaksi lama tidak berubah.</div>
+                    <div class="form-text">Berlaku untuk unit ini dan transaksi berikutnya. Isi sama dengan harga master untuk mengikuti master. Transaksi lama tidak berubah.</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
@@ -208,6 +210,12 @@ $ringkasan = [
             return new Intl.NumberFormat('id-ID').format(n || 0);
         }
 
+        // Input nominal tampil dengan pemisah ribuan; server membuang pemisah.
+        $('#hpp-value, #harga-jual-value').on('input', function() {
+            const n = String($(this).val()).replace(/\D/g, '');
+            $(this).val(n === '' ? '' : fmt(n));
+        });
+
         function money(n) {
             return 'Rp ' + fmt(n);
         }
@@ -249,7 +257,9 @@ $ringkasan = [
                     (canManageUnit ?
                         ' <button type="button" class="ks-edit-hpp js-edit-harga-jual"' +
                         ' data-idbarang="' + attr(d.idbarang) + '"' +
+                        ' data-idunit="' + attr(d.id_unit) + '"' +
                         ' data-harga="' + attr(d.harga) + '"' +
+                        ' data-harga-master="' + attr(d.harga_master) + '"' +
                         ' data-kode="' + attr(d.kode_barang) + '"' +
                         ' data-nama="' + attr(d.nama_barang) + '">Ubah</button>' : '')) +
                 detailRow('Stok awal', fmt(d.stok_awal)) +
@@ -438,7 +448,7 @@ $ringkasan = [
                 const btn = $(this);
                 $('#hpp-idbarang').val(btn.data('idbarang'));
                 $('#hpp-idunit').val(btn.data('idunit'));
-                $('#hpp-value').val(btn.data('hpp'));
+                $('#hpp-value').val(fmt(btn.data('hpp')));
                 $('#hpp-target').text(btn.data('nama') + ' - ' + btn.data('unit'));
                 modalHpp.show();
             });
@@ -477,8 +487,10 @@ $ringkasan = [
             $('#ks-datatable').on('click', '.js-edit-harga-jual', function() {
                 const btn = $(this);
                 $('#harga-jual-idbarang').val(btn.data('idbarang'));
-                $('#harga-jual-value').val(btn.data('harga'));
+                $('#harga-jual-idunit').val(btn.data('idunit'));
+                $('#harga-jual-value').val(fmt(btn.data('harga')));
                 $('#harga-jual-target').text(btn.data('kode') + ' · ' + btn.data('nama'));
+                $('#harga-jual-master').text('Harga master: ' + money(btn.data('harga-master')));
                 modalHargaJual.show();
             });
 

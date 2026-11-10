@@ -33,9 +33,10 @@ class ModelBarang extends Model
     public function getAllBarang()
     {
         $id_unit = session('ID_UNIT');
-        return $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir')
+        return $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir, COALESCE(hju.harga_jual, barang.harga) AS harga_jual')
             ->join('kategori', 'kategori.id = barang.idkategori')
             ->join('stok_barang', 'stok_barang.idbarang = barang.idbarang AND stok_barang.id_unit = ' . (int)$id_unit, 'left')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = barang.idbarang AND hju.unit_idunit = ' . (int)$id_unit, 'left')
             ->where('barang.deleted', 0)
             ->where('barang.jenis_barang', 'produk')
             ->where('kategori.delete', 0)

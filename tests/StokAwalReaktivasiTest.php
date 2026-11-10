@@ -20,6 +20,7 @@ final class StokAwalReaktivasiTest extends CIUnitTestCase
     private const TABEL = [
         'unit', 'akun', 'jabatan', 'menu', 'barang', 'barang_unit',
         'stok_awal', 'hpp_unit', 'stok_barang', 'service', 'pelanggan',
+        'harga_jual_unit',
     ];
 
     protected function setUp(): void
@@ -73,6 +74,8 @@ final class StokAwalReaktivasiTest extends CIUnitTestCase
         $q('CREATE TABLE hpp_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
                 hpp REAL NULL, sumber TEXT NULL, updated_at DATETIME NULL,
                 UNIQUE KEY (barang_idbarang, unit_idunit))');
+        $q('CREATE TABLE harga_jual_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
+                harga_jual REAL NOT NULL, UNIQUE KEY (barang_idbarang, unit_idunit))');
 
         // BaseController::initController membaca notifikasi stok minimum.
         $q('CREATE TABLE stok_barang (idbarang INT NULL, id_unit INT NULL,

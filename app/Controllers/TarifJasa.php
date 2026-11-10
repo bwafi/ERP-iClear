@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\ModelBarang;
 use App\Models\ModelAuth;
+use App\Models\ModelHargaJualUnit;
 
 /**
  * Master Tarif Jasa (/tarif_jasa).
@@ -17,22 +18,28 @@ class TarifJasa extends BaseController
 {
     protected $BarangModel;
     protected $AuthModel;
+    protected $HargaJualUnitModel;
 
     public function __construct()
     {
         $this->BarangModel = new ModelBarang();
         $this->AuthModel   = new ModelAuth();
+        $this->HargaJualUnitModel = new ModelHargaJualUnit();
     }
 
     public function index()
     {
         $data = [
             'akun' => $this->AuthModel->getById(session('ID_AKUN')),
+            'can_manage_harga_jual' => Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
             'jasa' => $this->BarangModel
-                ->select('barang.*, COALESCE(NULLIF(barang.harga_beli, 0), NULLIF(hpp_barang.hpp, 0), NULLIF(fee_unit.hpp, 0), 0) AS fee_teknisi')
+                ->select('barang.*, COALESCE(NULLIF(barang.harga_beli, 0), NULLIF(hpp_barang.hpp, 0), NULLIF(fee_unit.hpp, 0), 0) AS fee_teknisi,
+                    COALESCE(hju.harga_jual, barang.harga) AS harga_jual_unit')
                 ->join('hpp_barang', 'hpp_barang.idbarang = barang.idbarang', 'left')
                 ->join('(SELECT barang_idbarang, MAX(hpp) AS hpp FROM hpp_unit GROUP BY barang_idbarang) fee_unit',
                     'fee_unit.barang_idbarang = barang.idbarang', 'left')
+                ->join('harga_jual_unit hju',
+                    'hju.barang_idbarang = barang.idbarang AND hju.unit_idunit = ' . (int) session('ID_UNIT'), 'left')
                 ->where('barang.jenis_barang', 'jasa')
                 ->where('barang.deleted', 0)
                 ->orderBy('barang.nama_barang', 'ASC')
@@ -126,6 +133,15 @@ class TarifJasa extends BaseController
             return redirect()->to(base_url('tarif_jasa'));
         }
 
+        // Harga unit opsional: kosong = ikut master, angka = override unit akun.
+        $bolehHargaUnit = Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN'));
+        $hargaUnitPost  = trim((string) $this->request->getPost('harga_unit'));
+        $hargaUnit      = $this->angka($hargaUnitPost);
+        if ($bolehHargaUnit && $hargaUnitPost !== '' && ($hargaUnit <= 0 || $hargaUnit > 9999999999999)) {
+            session()->setFlashdata('gagal', 'Harga jual unit tidak valid.');
+            return redirect()->to(base_url('tarif_jasa'));
+        }
+
         $this->BarangModel->update($id, [
             'nama_barang' => $nama,
             'harga'       => $harga,
@@ -133,6 +149,18 @@ class TarifJasa extends BaseController
         ]);
 
         $this->sinkronFeeTeknisi($id, $fee);
+
+        if ($bolehHargaUnit) {
+            $idunit = (int) session('ID_UNIT');
+            $ok = ($hargaUnitPost === '' || $hargaUnit === $harga)
+                ? $this->HargaJualUnitModel->clear($id, $idunit)
+                : $this->HargaJualUnitModel->setHarga($id, $idunit, (float) $hargaUnit, (int) session('ID_AKUN'));
+
+            if (!$ok) {
+                session()->setFlashdata('gagal', 'Harga jual unit gagal disimpan.');
+                return redirect()->to(base_url('tarif_jasa'));
+            }
+        }
 
         session()->setFlashdata('sukses', 'Jasa berhasil diubah.');
         return redirect()->to(base_url('tarif_jasa'));

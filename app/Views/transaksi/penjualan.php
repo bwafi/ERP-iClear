@@ -196,7 +196,7 @@
                                                                     data-id="<?= $p->idbarang ?>"
                                                                     data-kode="<?= $p->kode_barang ?>"
                                                                     data-nama="<?= $p->nama_barang ?>"
-                                                                    data-harga="<?= $p->harga ?>"
+                                                                    data-harga="<?= $p->harga_jual ?>"
                                                                     data-kategori="<?= $p->nama_kategori ?>"
                                                                     data-input="<?= $p->input ?>"
                                                                     data-kondisi_barang="<?= $p->status_barang ?>"
@@ -205,7 +205,7 @@
                                                             <td><?= $p->kode_barang ?></td>
                                                             <td><?= $p->nama_barang ?></td>
                                                             <td><?= (int)$p->kondisi === 1 ? 'Second' : 'Baru' ?></td>
-                                                            <td><?= 'Rp ' . number_format($p->harga, 0, ',', '.') ?></td>
+                                                            <td><?= 'Rp ' . number_format($p->harga_jual, 0, ',', '.') ?></td>
                                                             <td><?= $p->nama_kategori ?></td>
                                                             <td>
                                                                 <?= is_null($p->stok_akhir) ? '<span class="text-red-500">belum mengatur stok awal</span>' : $p->stok_akhir ?>
@@ -249,13 +249,13 @@
                                                                     data-id="<?= (int) $j->idbarang ?>"
                                                                     data-kode="<?= esc($j->kode_barang) ?>"
                                                                     data-nama="<?= esc($j->nama_barang) ?>"
-                                                                    data-harga="<?= (float) $j->harga ?>"
+                                                                    data-harga="<?= (float) $j->harga_jual ?>"
                                                                     data-kategori="Jasa"
                                                                     data-kondisi_barang="0">
                                                             </td>
                                                             <td><?= esc($j->kode_barang) ?></td>
                                                             <td><?= esc($j->nama_barang) ?></td>
-                                                            <td><?= 'Rp ' . number_format($j->harga, 0, ',', '.') ?></td>
+                                                            <td><?= 'Rp ' . number_format($j->harga_jual, 0, ',', '.') ?></td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                 </tbody>

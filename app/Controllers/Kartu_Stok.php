@@ -6,6 +6,7 @@ use Config\Database;
 use App\Models\ModelAuth;
 use App\Models\ModelBarang;
 use App\Models\ModelBarangUnit;
+use App\Models\ModelHargaJualUnit;
 use App\Models\ModelHppUnit;
 use App\Models\ModelKartuStok;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -24,6 +25,7 @@ class Kartu_Stok extends BaseController
     protected $BarangModel;
     protected $HppUnitModel;
     protected $BarangUnitModel;
+    protected $HargaJualUnitModel;
     protected $UnitModel;
 
     public function __construct()
@@ -33,6 +35,7 @@ class Kartu_Stok extends BaseController
         $this->BarangModel = new ModelBarang();
         $this->HppUnitModel = new ModelHppUnit();
         $this->BarangUnitModel = new ModelBarangUnit();
+        $this->HargaJualUnitModel = new ModelHargaJualUnit();
         $this->UnitModel = new ModelUnit();
     }
 
@@ -76,7 +79,7 @@ class Kartu_Stok extends BaseController
 
         $idbarang = (int) $this->request->getPost('idbarang');
         $idunit   = (int) $this->request->getPost('id_unit');
-        $hpp      = (float) $this->request->getPost('hpp');
+        $hpp      = (float) $this->rupiah($this->request->getPost('hpp'));
 
         if ($idbarang <= 0 || $idunit <= 0 || $hpp <= 0 || $hpp > 9999999999999) {
             return $this->response->setStatusCode(422)->setJSON([
@@ -102,9 +105,9 @@ class Kartu_Stok extends BaseController
     }
 
     /**
-     * Ubah harga jual master. Harga jual disimpan di `barang.harga` sehingga
-     * berlaku global untuk semua unit dan transaksi berikutnya; transaksi lama
-     * tetap memakai snapshot harga di detailnya.
+     * Ubah harga jual untuk satu produk+unit. Harga yang sama dengan master
+     * menghapus override supaya produk kembali mengikuti `barang.harga`.
+     * Transaksi lama tetap memakai snapshot harga di detailnya.
      */
     public function updateHargaJual()
     {
@@ -116,28 +119,45 @@ class Kartu_Stok extends BaseController
         }
 
         $idbarang = (int) $this->request->getPost('idbarang');
-        $harga    = (int) $this->request->getPost('harga');
+        $idunit   = (int) $this->request->getPost('id_unit');
+        $harga    = $this->rupiah($this->request->getPost('harga'));
 
-        if ($idbarang <= 0 || $harga <= 0 || $harga > 9999999999999) {
+        if ($idbarang <= 0 || $idunit <= 0 || $harga <= 0 || $harga > 9999999999999) {
             return $this->response->setStatusCode(422)->setJSON([
                 'status'  => 'error',
                 'message' => 'Harga jual tidak valid.',
             ]);
         }
 
-        if ($this->BarangModel->find($idbarang) === null) {
+        $barang = $this->BarangModel->find($idbarang);
+        if ($barang === null) {
             return $this->response->setStatusCode(404)->setJSON([
                 'status'  => 'error',
                 'message' => 'Produk tidak ditemukan.',
             ]);
         }
 
-        $this->BarangModel->update($idbarang, ['harga' => $harga]);
+        if (!$this->KartuStokModel->existsPair($idbarang, $idunit)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk tidak ada di unit tersebut.',
+            ]);
+        }
+
+        if ($harga === (int) $barang->harga) {
+            $this->HargaJualUnitModel->clear($idbarang, $idunit);
+        } elseif (!$this->HargaJualUnitModel->setHarga($idbarang, $idunit, (float) $harga, (int) session('ID_AKUN'))) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status'  => 'error',
+                'message' => 'Harga jual gagal disimpan.',
+            ]);
+        }
 
         return $this->response->setJSON([
-            'status' => 'success',
-            'harga'  => $harga,
-            'csrf'   => csrf_hash(),
+            'status'          => 'success',
+            'harga'           => $this->HargaJualUnitModel->resolve($idbarang, $idunit),
+            'harga_jual_unit' => $this->HargaJualUnitModel->hargaJualUnit($idbarang, $idunit),
+            'csrf'            => csrf_hash(),
         ]);
     }
 
@@ -247,6 +267,8 @@ class Kartu_Stok extends BaseController
                 'jenis_hp'            => $row->jenis_hp,
                 'warna'               => $row->warna,
                 'harga'               => (float)$row->harga,
+                'harga_jual_unit'     => $row->harga_jual_unit === null ? null : (float)$row->harga_jual_unit,
+                'harga_master'        => (float)$row->harga_master,
                 'harga_beli'          => (float)$row->harga_beli,
                 'status_ppn'          => (int)$row->status_ppn,
                 'stok_awal'           => (float)$row->stok_awal,
@@ -266,6 +288,15 @@ class Kartu_Stok extends BaseController
             'recordsFiltered' => $filteredRecords,
             'data'            => $data,
         ]);
+    }
+
+    /**
+     * Nominal dari input modal ("Rp 175.000") menjadi angka. Tanda minus
+     * dipertahankan supaya nilai negatif tetap ditolak validasi.
+     */
+    private function rupiah($nilai): int
+    {
+        return (int) str_replace(['Rp', '.', ' ', ','], '', (string) $nilai);
     }
 
     public function export()

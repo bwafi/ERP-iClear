@@ -37,7 +37,7 @@ final class BarangNonaktifUnitTest extends CIUnitTestCase
     private const TABEL = [
         'unit', 'akun', 'jabatan', 'menu', 'barang', 'kategori',
         'stok_barang', 'barang_unit', 'stok_awal', 'suplier',
-        'service', 'pelanggan',
+        'service', 'pelanggan', 'harga_jual_unit',
     ];
 
     protected function tearDown(): void
@@ -94,6 +94,12 @@ final class BarangNonaktifUnitTest extends CIUnitTestCase
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
                 aktif TINYINT NOT NULL DEFAULT 1,
+                updated_by INT NULL, updated_at DATETIME NULL,
+                UNIQUE KEY (barang_idbarang, unit_idunit))');
+        $q('CREATE TABLE harga_jual_unit (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
+                harga_jual DECIMAL(15,2) NOT NULL,
                 updated_by INT NULL, updated_at DATETIME NULL,
                 UNIQUE KEY (barang_idbarang, unit_idunit))');
 

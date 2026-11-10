@@ -20,7 +20,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         'unit', 'jabatan', 'akun', 'pelanggan', 'suplier', 'barang',
         'stok_awal', 'hpp_barang', 'hpp_unit', 'stok_barang', 'service',
         'pembelian', 'detail_pembelian', 'pembayaran_bank', 'template_jurnal',
-        'hutang_piutang',
+        'hutang_piutang', 'harga_jual_unit',
     ];
 
     protected function setUp(): void
@@ -69,6 +69,9 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $q('CREATE TABLE hpp_barang (idbarang INT PRIMARY KEY, hpp REAL NULL)');
         $q('CREATE TABLE hpp_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
                 hpp REAL NULL, sumber TEXT NULL, updated_by INT NULL, updated_at DATETIME NULL,
+                UNIQUE KEY (barang_idbarang, unit_idunit))');
+        $q('CREATE TABLE harga_jual_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
+                harga_jual DECIMAL(15,2) NOT NULL, updated_by INT NULL, updated_at DATETIME NULL,
                 UNIQUE KEY (barang_idbarang, unit_idunit))');
         $q('CREATE TABLE stok_barang (idbarang INT NULL, id_unit INT NULL,
                 stok_akhir REAL NULL, stok_minimum REAL NULL)');
@@ -229,15 +232,50 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $this->assertSame(100000.0, (float) $hppUnit->hpp, 'HPP lama dipertahankan');
     }
 
-    public function testHargaJualDariPembelianMenimpaMaster(): void
+    private function override(int $unit = 1): ?float
+    {
+        $row = $this->db->table('harga_jual_unit')
+            ->where(['barang_idbarang' => 1, 'unit_idunit' => $unit])->get()->getRow();
+
+        return $row === null ? null : (float) $row->harga_jual;
+    }
+
+    private function hargaMaster(): float
+    {
+        return (float) $this->db->table('barang')->where('idbarang', 1)->get()->getRow()->harga;
+    }
+
+    public function testHargaJualPembelianDisimpanPerUnit(): void
     {
         $this->sesi();
 
         $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '175000')->assertRedirect();
 
-        $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
-        $this->assertSame(175000.0, (float) $barang->harga);
+        $this->assertSame(175000.0, $this->override());
+        $this->assertSame(150000.0, $this->hargaMaster(), 'harga master tidak berubah');
         $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults());
+    }
+
+    public function testHargaJualPembelianTidakMengubahUnitLain(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '175000')->assertRedirect();
+
+        $this->assertSame(175000.0, $this->override(1));
+        $this->assertNull($this->override(2));
+    }
+
+    public function testHargaJualSamaDenganMasterMenghapusOverride(): void
+    {
+        $this->db->table('harga_jual_unit')->insert([
+            'barang_idbarang' => 1, 'unit_idunit' => 1, 'harga_jual' => 175000,
+        ]);
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000')->assertRedirect();
+
+        $this->assertNull($this->override());
     }
 
     public function testHargaJualDiabaikanUntukRoleNonPengelola(): void
@@ -246,8 +284,8 @@ final class PembelianHppUnitTest extends CIUnitTestCase
 
         $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '175000')->assertRedirect();
 
-        $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
-        $this->assertSame(150000.0, (float) $barang->harga, 'role non-pengelola tidak boleh mengubah harga jual');
+        $this->assertNull($this->override(), 'role non-pengelola tidak menulis override');
+        $this->assertSame(150000.0, $this->hargaMaster());
         $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults(), 'pembelian tetap tersimpan');
     }
 
@@ -259,7 +297,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
 
         $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header dibatalkan');
         $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults(), 'detail dibatalkan');
-        $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
-        $this->assertSame(150000.0, (float) $barang->harga, 'harga jual lama dipertahankan');
+        $this->assertNull($this->override());
+        $this->assertSame(150000.0, $this->hargaMaster());
     }
 }

@@ -805,7 +805,8 @@ class Service extends BaseController
 
         if ($jenis === 'jasa') {
             $jasa = $db->table('barang b')
-                ->select('b.idbarang, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei')
+                ->select('b.idbarang, b.kode_barang, b.nama_barang, COALESCE(hju.harga_jual, b.harga) AS harga, b.harga_beli, b.warna, b.imei')
+                ->join('harga_jual_unit hju', 'hju.barang_idbarang = b.idbarang AND hju.unit_idunit = ' . (int) $unitId, 'left')
                 ->where('b.jenis_barang', 'jasa')
                 ->where('b.deleted', 0);
 
@@ -847,8 +848,9 @@ class Service extends BaseController
               AND sa.suplier_id_suplier != 0) AS nama_suplier";
 
         $builder = $db->table('stok_barang sb')
-            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, b.jenis_barang, u.NAMA_UNIT, {$namaSuplier}")
+            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, b.jenis_barang, u.NAMA_UNIT, COALESCE(hju.harga_jual, b.harga) AS harga_jual, {$namaSuplier}")
             ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = sb.idbarang AND hju.unit_idunit = sb.id_unit', 'left')
             ->join('unit u', 'u.idunit = sb.id_unit', 'left');
         
         if (!empty($search)) {
@@ -871,6 +873,10 @@ class Service extends BaseController
             ->limit(50)
             ->get()
             ->getResult();
+
+        foreach ($sparepart as $row) {
+            $row->harga = (float) $row->harga_jual;
+        }
 
         $this->lampirkanHppPicker($sparepart, (int) $unitId);
 

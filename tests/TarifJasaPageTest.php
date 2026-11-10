@@ -19,6 +19,7 @@ final class TarifJasaPageTest extends CIUnitTestCase
     private const TABEL = [
         'unit', 'akun', 'jabatan', 'menu', 'barang', 'barang_unit',
         'stok_awal', 'hpp_unit', 'hpp_barang', 'stok_barang', 'service', 'pelanggan',
+        'harga_jual_unit',
     ];
 
     protected function setUp(): void
@@ -72,6 +73,9 @@ final class TarifJasaPageTest extends CIUnitTestCase
                 suplier_id_suplier VARCHAR(45) NULL, pelanggan_id_pelanggan INT NULL)');
         $q('CREATE TABLE hpp_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
                 hpp REAL NULL, sumber TEXT NULL, updated_at DATETIME NULL,
+                UNIQUE KEY (barang_idbarang, unit_idunit))');
+        $q('CREATE TABLE harga_jual_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
+                harga_jual REAL NOT NULL, updated_by INT NULL, updated_at DATETIME NULL,
                 UNIQUE KEY (barang_idbarang, unit_idunit))');
         $q('CREATE TABLE hpp_barang (idbarang INT PRIMARY KEY, kode_barang TEXT NOT NULL,
                 nama_barang TEXT NOT NULL, harga INT NOT NULL, harga_beli INT NULL,
@@ -295,5 +299,81 @@ final class TarifJasaPageTest extends CIUnitTestCase
 
         $barang = $this->db->table('barang')->where('idbarang', 1)->get()->getRow();
         $this->assertSame(15000, (int) $barang->harga_beli, 'fee lama tetap');
+    }
+
+    private function override(int $idbarang = 1, int $unit = 1): ?float
+    {
+        $row = $this->db->table('harga_jual_unit')
+            ->where(['barang_idbarang' => $idbarang, 'unit_idunit' => $unit])->get()->getRow();
+
+        return $row === null ? null : (float) $row->harga_jual;
+    }
+
+    private function ubahJasa(string $hargaUnit): void
+    {
+        $this->post('tarif_jasa/ubah', $this->token() + [
+            'idbarang'    => 1,
+            'nama_barang' => 'Ganti LCD',
+            'harga'       => '150000',
+            'harga_beli'  => '15000',
+            'harga_unit'  => $hargaUnit,
+        ])->assertRedirect();
+    }
+
+    public function testHalamanMenampilkanHargaUnitUntukRolePengelola(): void
+    {
+        $this->sesi();
+        $this->db->table('harga_jual_unit')->insert([
+            'barang_idbarang' => 1, 'unit_idunit' => 1, 'harga_jual' => 175000,
+        ]);
+
+        $result = $this->get('tarif_jasa');
+
+        $result->assertStatus(200);
+        $result->assertSee('name="harga_unit"');
+        $result->assertSee('Rp 175.000');
+        $result->assertSee('khusus unit ini');
+    }
+
+    public function testUbahMenyimpanOverrideUnit(): void
+    {
+        $this->sesi();
+
+        $this->ubahJasa('175000');
+
+        $this->assertSame(175000.0, $this->override());
+        $this->assertSame(150000.0, (float) $this->db->table('barang')
+            ->where('idbarang', 1)->get()->getRow()->harga, 'harga master tidak berubah');
+    }
+
+    public function testUbahDenganHargaMasterMenghapusOverride(): void
+    {
+        $this->sesi();
+        $this->db->table('harga_jual_unit')->insert([
+            'barang_idbarang' => 1, 'unit_idunit' => 1, 'harga_jual' => 175000,
+        ]);
+
+        $this->ubahJasa('150000');
+
+        $this->assertNull($this->override());
+    }
+
+    public function testUbahRoleNonPengelolaTidakMenulisOverride(): void
+    {
+        $this->withSession([
+            'logged_in'    => true,
+            'ID_AKUN'      => 43,
+            'ID_UNIT'      => 1,
+            'ID_JABATAN'   => 99,
+            'NAMA'         => 'Tester',
+            'NAMA_JABATAN' => 'Tester',
+            'EMAIL'        => 'tester@example.com',
+        ]);
+
+        $this->ubahJasa('175000');
+
+        $this->assertNull($this->override());
+        $this->assertSame(150000.0, (float) $this->db->table('barang')
+            ->where('idbarang', 1)->get()->getRow()->harga, 'perubahan master tetap tersimpan');
     }
 }

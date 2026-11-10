@@ -23,6 +23,7 @@ final class PembelianPageTest extends CIUnitTestCase
             'kode_barang'    => 'P01',
             'nama_barang'    => 'LCD iPhone 11',
             'harga'          => 150000,
+            'harga_jual'     => 175000,
             'harga_beli'     => 100000,
             'hpp_unit'       => 120000,
             'nama_kategori'  => 'Sparepart',
@@ -158,10 +159,12 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString('const canEditHargaJual = true;', $terbuka);
         $this->assertStringContainsString('harga-jual-input', $terbuka);
         $this->assertStringContainsString('name="produk[${id}][harga]"', $terbuka);
-        $this->assertStringContainsString('Harga jual yang diubah berlaku untuk semua unit.', $terbuka);
+        $this->assertStringContainsString('Harga jual yang diubah berlaku untuk unit ini.', $terbuka);
+        $this->assertStringContainsString('data-harga="175000"', $terbuka);
+        $this->assertStringNotContainsString('data-harga="150000"', $terbuka);
 
         $tertutup = $this->render(false);
         $this->assertStringContainsString('const canEditHargaJual = false;', $tertutup);
-        $this->assertStringNotContainsString('Harga jual yang diubah berlaku untuk semua unit.', $tertutup);
+        $this->assertStringNotContainsString('Harga jual yang diubah berlaku untuk unit ini.', $tertutup);
     }
 }

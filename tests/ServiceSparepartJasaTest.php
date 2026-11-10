@@ -24,7 +24,7 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
     protected $db;
     private string $prefixAsli = '';
 
-    private const TABEL = ['barang', 'stok_barang', 'stok_awal', 'suplier', 'unit', 'akun', 'jabatan', 'menu', 'service', 'pelanggan', 'hpp_unit', 'hpp_barang'];
+    private const TABEL = ['barang', 'stok_barang', 'stok_awal', 'suplier', 'unit', 'akun', 'jabatan', 'menu', 'service', 'pelanggan', 'hpp_unit', 'hpp_barang', 'harga_jual_unit', 'service_sparepart'];
 
     protected function setUp(): void
     {
@@ -70,6 +70,10 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
         // HPP per unit; kosong berarti fallback ke master barang.harga_beli.
         $q('CREATE TABLE hpp_unit (id INT PRIMARY KEY AUTO_INCREMENT, barang_idbarang INT NULL, unit_idunit INT NULL, hpp REAL NULL DEFAULT 0)');
         $q('CREATE TABLE hpp_barang (idbarang INT NULL, hpp REAL NULL DEFAULT 0)');
+        $q('CREATE TABLE harga_jual_unit (id INT PRIMARY KEY AUTO_INCREMENT, barang_idbarang INT NULL,
+                unit_idunit INT NULL, harga_jual REAL NULL)');
+        $q('CREATE TABLE service_sparepart (id INT PRIMARY KEY AUTO_INCREMENT, service_idservice INT NULL,
+                barang_idbarang INT NULL, harga_penjualan REAL NULL)');
 
         $q('INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, "Unit 1")');
         $q('INSERT INTO jabatan VALUES (35, "ADMIN / KASIR", "[]")');
@@ -83,6 +87,10 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
         $q('INSERT INTO stok_barang (idbarang, id_unit, kode_barang, nama_barang, harga, harga_beli, warna, imei, stok_akhir, aktif_unit) VALUES
             (1, 1, "sprt001", "LCD Sparepart", 150000, 100000, "Hitam", NULL, 5, 1),
             (2, 1, "acc001", "Anti Gores", 20000, 10000, NULL, NULL, 0, 1)');
+
+        $q('INSERT INTO harga_jual_unit (barang_idbarang, unit_idunit, harga_jual) VALUES
+            (1, 1, 175000),
+            (3, 1, 300000)');
     }
 
     protected function tearDown(): void
@@ -192,5 +200,39 @@ final class ServiceSparepartJasaTest extends CIUnitTestCase
 
         $this->assertArrayHasKey(1, $peta);
         $this->assertArrayNotHasKey(3, $peta);
+    }
+
+    public function testSparepartPickerMemakaiHargaJualUnit(): void
+    {
+        $peta = $this->peta($this->cari('LCD', 'sparepart'));
+
+        $this->assertSame(175000.0, (float) $peta[1]->harga);
+    }
+
+    public function testJasaPickerMemakaiHargaJualUnit(): void
+    {
+        $peta = $this->peta($this->cari('PUP', 'jasa'));
+
+        $this->assertSame(300000.0, (float) $peta[3]->harga);
+    }
+
+    public function testJasaPickerFallbackHargaMaster(): void
+    {
+        $peta = $this->peta($this->cari('CLEANING', 'jasa'));
+
+        $this->assertSame(50000.0, (float) $peta[4]->harga, 'tanpa override memakai barang.harga');
+    }
+
+    public function testSnapshotServiceLamaTidakBerubahSaatOverrideBerubah(): void
+    {
+        $this->db->query('INSERT INTO service_sparepart (service_idservice, barang_idbarang, harga_penjualan) VALUES (9, 1, 150000)');
+
+        $this->db->table('harga_jual_unit')
+            ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])
+            ->update(['harga_jual' => 200000]);
+
+        $snapshot = $this->db->table('service_sparepart')->where('id', 1)->get()->getRow();
+        $this->assertSame(150000.0, (float) $snapshot->harga_penjualan);
+        $this->assertSame(200000.0, (new \App\Models\ModelHargaJualUnit())->resolve(1, 1));
     }
 }

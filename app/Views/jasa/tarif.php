@@ -111,13 +111,17 @@ $angka  = static fn (float $nilai): string => $jumlah > 0 ? number_format($nilai
                             <td data-label="HPP" class="tj-col-price" data-order="<?= (int) $j->fee_teknisi ?>">
                                 <span class="tj-fee"><?= (int) $j->fee_teknisi > 0 ? $rp((float) $j->fee_teknisi) : '—' ?></span>
                             </td>
-                            <td data-label="Harga Jual" class="tj-col-price" data-order="<?= (int) $j->harga ?>">
-                                <span class="tj-price"><?= $rp((float) $j->harga) ?></span>
+                            <td data-label="Harga Jual" class="tj-col-price" data-order="<?= (int) $j->harga_jual_unit ?>">
+                                <span class="tj-price"><?= $rp((float) $j->harga_jual_unit) ?></span>
+                                <?php if ((float) $j->harga_jual_unit !== (float) $j->harga): ?>
+                                    <span class="tj-sub">khusus unit ini</span>
+                                <?php endif; ?>
                             </td>
                             <td class="tj-col-action">
                                 <button type="button" class="tj-edit" data-bs-toggle="modal" data-bs-target="#tj-ubah"
                                     data-id="<?= (int) $j->idbarang ?>" data-nama="<?= esc($j->nama_barang) ?>"
-                                    data-harga="<?= (int) $j->harga ?>" data-fee="<?= (int) $j->fee_teknisi ?>">
+                                    data-harga="<?= (int) $j->harga ?>" data-harga-unit="<?= (int) $j->harga_jual_unit ?>"
+                                    data-fee="<?= (int) $j->fee_teknisi ?>">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M4 20h4L20 8l-4-4L4 16v4Z" />
@@ -204,6 +208,13 @@ $angka  = static fn (float $nilai): string => $jumlah > 0 ? number_format($nilai
                     <input type="text" id="tj-ubah-harga" name="harga" inputmode="numeric" autocomplete="off" required>
                     <p class="tj-preview" data-preview-for="tj-ubah-harga"></p>
                 </div>
+                <?php if (!empty($can_manage_harga_jual)): ?>
+                    <div class="tj-field">
+                        <label for="tj-ubah-harga-unit">Harga Jual Unit Ini (opsional)</label>
+                        <input type="text" id="tj-ubah-harga-unit" name="harga_unit" inputmode="numeric" autocomplete="off">
+                        <p class="tj-hint">Berlaku untuk unit akun Anda. Kosongkan atau samakan dengan harga master untuk mengikuti master.</p>
+                    </div>
+                <?php endif; ?>
                 <div class="tj-field">
                     <label for="tj-ubah-fee">HPP</label>
                     <div class="tj-pair">
@@ -318,6 +329,7 @@ $angka  = static fn (float $nilai): string => $jumlah > 0 ? number_format($nilai
             $('#tj-ubah-id').val(btn.data('id'));
             $('#tj-ubah-nama').val(btn.data('nama'));
             $('#tj-ubah-harga').val(formatRupiah(btn.data('harga')));
+            $('#tj-ubah-harga-unit').val(formatRupiah(btn.data('harga-unit')));
             $('#tj-ubah-fee').val(formatRupiah(btn.data('fee')));
             $('#tj-ubah-fee-persen').val('');
             if (tulisUbah) tulisUbah();

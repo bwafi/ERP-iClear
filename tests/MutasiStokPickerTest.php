@@ -49,7 +49,7 @@ class MutasiStokPickerTest extends CIUnitTestCase
         foreach ([
             'unit', 'akun', 'jabatan', 'menu',
             'stok_barang', 'stok_awal', 'suplier', 'barang', 'kategori',
-            'service', 'pelanggan',
+            'service', 'pelanggan', 'harga_jual_unit',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -93,6 +93,10 @@ class MutasiStokPickerTest extends CIUnitTestCase
                 idbarang INT PRIMARY KEY, kode_barang TEXT NULL, nama_barang TEXT NULL,
                 harga INT NULL, harga_beli INT NULL, idkategori INT NULL,
                 imei TEXT NULL, deleted TEXT NULL, status_ppn INT NULL)');
+        $q('CREATE TABLE harga_jual_unit (
+                id INT PRIMARY KEY AUTO_INCREMENT, barang_idbarang INT NOT NULL,
+                unit_idunit INT NOT NULL, harga_jual DECIMAL(15,2) NOT NULL,
+                UNIQUE KEY (barang_idbarang, unit_idunit))');
     }
 
     private function sebarData(): void

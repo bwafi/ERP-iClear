@@ -109,7 +109,7 @@
             <div class="pb-section__head">
                 <div>
                     <h2 id="pb-produk-title">Produk</h2>
-                    <p class="pb-section__hint">HPP mengikuti harga beli terakhir untuk unit ini, bukan rata-rata.<?= !empty($can_manage_harga_jual) ? ' Harga jual yang diubah berlaku untuk semua unit.' : '' ?></p>
+                    <p class="pb-section__hint">HPP mengikuti harga beli terakhir untuk unit ini, bukan rata-rata.<?= !empty($can_manage_harga_jual) ? ' Harga jual yang diubah berlaku untuk unit ini.' : '' ?></p>
                 </div>
                 <div class="pb-toolbar">
                     <button type="button" class="pb-btn pb-btn--primary" data-bs-toggle="modal"
@@ -282,7 +282,7 @@
                             <input type="checkbox" class="pb-produk-card__input produk-checkbox"
                                 aria-label="Pilih <?= esc($p->nama_barang) ?>"
                                 data-id="<?= $p->idbarang ?>" data-kode="<?= esc($p->kode_barang) ?>"
-                                data-nama="<?= esc($p->nama_barang) ?>" data-harga="<?= $p->harga ?>"
+                                data-nama="<?= esc($p->nama_barang) ?>" data-harga="<?= $p->harga_jual ?>"
                                 data-harga_beli="<?= $hpp ?>"
                                 data-kategori="<?= esc($p->nama_kategori) ?>" data-input="<?= esc($p->input) ?>"
                                 data-imei="<?= esc($p->imei) ?>">
@@ -324,7 +324,7 @@
                                     <span class="pb-produk-card__price">Rp
                                         <?= number_format($hpp, 0, ',', '.') ?></span>
                                     <span class="pb-produk-card__sub">HPP · jual Rp
-                                        <?= number_format($p->harga, 0, ',', '.') ?></span>
+                                        <?= number_format($p->harga_jual, 0, ',', '.') ?></span>
                                 </span>
                             </span>
                         </label>

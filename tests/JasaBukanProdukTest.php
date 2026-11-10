@@ -25,7 +25,7 @@ final class JasaBukanProdukTest extends CIUnitTestCase
         'barang', 'unit', 'mutasi', 'detail_mutasi', 'detail_pembelian',
         'stok_awal', 'detail_penjualan', 'retur_pelanggan', 'retur_suplier',
         'barang_rusak', 'stok_opname', 'service', 'service_sparepart',
-        'barang_unit', 'kategori',
+        'barang_unit', 'kategori', 'harga_jual_unit',
     ];
 
     protected function setUp(): void
@@ -105,6 +105,9 @@ final class JasaBukanProdukTest extends CIUnitTestCase
                 id INT AUTO_INCREMENT PRIMARY KEY, barang_idbarang INT, unit_idunit INT,
                 aktif TINYINT(1) DEFAULT 1, updated_by INT NULL, updated_at DATETIME NULL)');
         $q('CREATE TABLE kategori (id INT PRIMARY KEY, nama_kategori VARCHAR(100), `delete` VARCHAR(5))');
+        $q('CREATE TABLE harga_jual_unit (
+                id INT AUTO_INCREMENT PRIMARY KEY, barang_idbarang INT, unit_idunit INT,
+                harga_jual DECIMAL(15,2) NOT NULL)');
     }
 
     private function sebarData(): void

@@ -43,7 +43,9 @@ class ModelKartuStok extends Model
                 stok_barang.nama_barang,
                 stok_barang.imei,
                 stok_barang.nama_unit,
-                stok_barang.harga AS harga,
+                COALESCE(hju.harga_jual, stok_barang.harga) AS harga,
+                hju.harga_jual AS harga_jual_unit,
+                stok_barang.harga AS harga_master,
                 stok_barang.stok_awal,
                 stok_barang.stok_akhir,
                 stok_barang.total_pembelian,
@@ -79,6 +81,7 @@ class ModelKartuStok extends Model
             ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
             ->join('hpp_unit', 'hpp_unit.barang_idbarang = stok_barang.idbarang AND hpp_unit.unit_idunit = stok_barang.id_unit', 'left')
             ->join('hpp_barang', 'hpp_barang.idbarang = stok_barang.idbarang', 'left')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = stok_barang.idbarang AND hju.unit_idunit = stok_barang.id_unit', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0');

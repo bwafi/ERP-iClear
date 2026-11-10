@@ -33,6 +33,7 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
         'suplier',
         'hpp_unit',
         'hpp_barang',
+        'harga_jual_unit',
         'service',
         'pelanggan',
         'akun',
@@ -106,6 +107,14 @@ final class ServiceSparepartSearchDedupTest extends CIUnitTestCase
         $q('CREATE TABLE db_hpp_barang (
             idbarang INT NULL,
             hpp DECIMAL(15,2) NULL DEFAULT 0
+        ) ENGINE=InnoDB');
+
+        $q('CREATE TABLE db_harga_jual_unit (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            barang_idbarang INT NULL,
+            unit_idunit INT NULL,
+            harga_jual DECIMAL(15,2) NOT NULL,
+            PRIMARY KEY (id)
         ) ENGINE=InnoDB');
 
         $q('CREATE TABLE db_stok_awal (

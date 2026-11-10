@@ -19,6 +19,7 @@ use App\Models\ModelAuth;
 use App\Models\ModelPelanggan;
 use App\Models\ModelHppBarang;
 use App\Models\ModelHppUnit;
+use App\Models\ModelHargaJualUnit;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
@@ -37,6 +38,7 @@ class Pembelian extends BaseController
     protected $PelangganModel;
     protected $HppBarangModel;
     protected $HppUnitModel;
+    protected $HargaJualUnitModel;
     protected $JurnalModel;
     protected $BankModel;
     protected $PembayaranBankModel;
@@ -54,6 +56,7 @@ class Pembelian extends BaseController
         $this->PelangganModel = new ModelPelanggan();
         $this->HppBarangModel = new ModelHppBarang();
         $this->HppUnitModel = new ModelHppUnit();
+        $this->HargaJualUnitModel = new ModelHargaJualUnit();
         $this->JurnalModel = new ModelJurnal();
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
@@ -347,11 +350,21 @@ class Pembelian extends BaseController
                 return redirect()->to(base_url('/pembelian'));
             }
 
-            if ($result2 && $bolehUbahHargaJual && (float) $databarang->harga !== (float) $produkharga
-                && !$this->BarangModel->update($produk['id'], ['harga' => $produkharga])) {
-                $db->transRollback();
-                session()->setFlashdata('gagal', 'Harga jual gagal disimpan.');
-                return redirect()->to(base_url('/pembelian'));
+            if ($result2 && $bolehUbahHargaJual) {
+                $hargaTersimpan = (float) $produkharga === (float) $databarang->harga
+                    ? $this->HargaJualUnitModel->clear((int) $produk['id'], (int) $useridunit)
+                    : $this->HargaJualUnitModel->setHarga(
+                        (int) $produk['id'],
+                        (int) $useridunit,
+                        (float) $produkharga,
+                        (int) $input_by
+                    );
+
+                if (!$hargaTersimpan) {
+                    $db->transRollback();
+                    session()->setFlashdata('gagal', 'Harga jual gagal disimpan.');
+                    return redirect()->to(base_url('/pembelian'));
+                }
             }
         }
         if ($total_ppn > 0) {
