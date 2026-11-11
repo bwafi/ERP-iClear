@@ -110,7 +110,7 @@ Untuk produk jenis **jasa** (bukan sparepart):
 
 ## 5. Di kasir (POS) dan Service: otomatis
 
-**Tidak ada langkah baru.** Waktu kasir memilih produk di **Penjualan - POS**, atau teknisi memilih sparepart/jasa di **Service**, sistem otomatis memakai **harga jual dan HPP milik unit tersebut** (bukan harga master).
+**Tidak ada langkah baru untuk harga.** Waktu kasir memilih produk di **Penjualan - POS**, atau teknisi memilih sparepart/jasa di **Service**, sistem otomatis memakai **harga jual dan HPP milik unit tersebut** (bukan harga master). Langkah memilih jasa di Service ada di bagian 6.
 
 ![Picker produk di POS — kolom Harga otomatis sesuai unit](images/09-penjualan-picker-harga.png)
 
@@ -118,14 +118,64 @@ Untuk produk jenis **jasa** (bukan sparepart):
 
 ---
 
-## 6. Catatan penting
+## 6. Memilih jasa di Service (Terima & Proses Service)
+
+Di langkah **Sparepart** pada service ada dua tombol: **Pilih Sparepart** dan **Pilih Jasa**. Keduanya menambah baris ke tagihan service, tapi sumbernya berbeda:
+
+| Hal | Sparepart | Jasa |
+|---|---|---|
+| Sumber data | Produk/sparepart yang ada di stok unit | Master Jasa → Tarif Jasa |
+| Syarat tampil | Harus ada stok di unit tersebut | Tidak butuh stok |
+| Pengaruh stok | Mengurangi stok unit saat transaksi | **Tidak mengurangi stok** |
+| Harga | Harga jual unit (atau master) | Harga jual unit jasa (atau master) |
+
+Jadi kalau pekerjaannya berupa jasa (mis. ganti LCD, cleaning, jasa mesin), pilih lewat **Pilih Jasa**. Kalau barangnya sparepart fisik yang diambil dari stok, pilih lewat **Pilih Sparepart**. Jasa hanya muncul kalau sudah dibuat di **Master Jasa → Tarif Jasa** (bagian 4c).
+
+### 6a. Saat Terima Service
+
+1. Buka menu **Terima Service**.
+2. Lengkapi langkah **1 Pelanggan** lalu **2 Kerusakan** seperti biasa (klik **Selanjutnya** di tiap langkah).
+3. Di langkah **3 Sparepart**, klik tombol **Pilih Jasa**.
+4. Ketik minimal 2 karakter nama atau kode jasa, lalu **centang** jasa yang dipakai.
+5. Klik **Tambahkan**. Ulangi kalau ada lebih dari satu jasa.
+6. Klik **Selanjutnya** untuk menyimpan dan lanjut ke langkah Pembayaran.
+
+Di daftar, baris jasa ditandai **Jasa**, bukan angka stok. Total harga ikut dihitung setelah jasa ditambahkan.
+
+### 6b. Saat edit di Proses Service
+
+1. Buka menu **Proses Service** (atau **Riwayat Service**).
+2. Cari service yang mau diubah.
+3. Klik tombol **Edit kerusakan & sparepart** pada baris service tersebut — halaman detail terbuka di tab **Sparepart**.
+4. Klik **Pilih Jasa**, ketik nama/kode jasa, centang jasanya, lalu **Tambahkan**.
+5. Klik **Selanjutnya** untuk menyimpan perubahan.
+
+Menyimpan langkah Sparepart akan **menyusun ulang rincian tagihan/invoice service** dari pilihan terbaru (sparepart + jasa). Pastikan centang pilihan sudah benar sebelum menyimpan.
+
+### 6c. Yang perlu diketahui
+
+- **Jasa tidak menyentuh stok.** Jasa tidak muncul di Kartu Stok, tidak ikut stok opname, dan tidak menambah/mengurangi stok unit.
+- **Service yang sudah direfund tidak bisa diubah.** Muncul pesan *“Service sudah direfund; sparepart tidak dapat diubah.”* — hubungi admin/keuangan untuk penanganannya.
+- **Sparepart hanya yang ada stoknya.** Kalau sparepart tidak muncul, cek stok unit dan status produk di Kartu Stok. Jasa tidak terpengaruh stok.
+- Harga dan HPP jasa tetap mengikuti setelan unit (bagian 5); transaksi lama tidak berubah.
+
+### 6d. Kalau jasa tidak muncul di picker
+
+1. Pastikan kamu menekan tombol **Pilih Jasa**, bukan **Pilih Sparepart**.
+2. Ketik minimal **2 karakter** nama atau kode jasa.
+3. Pastikan jasanya sudah dibuat di **Master Jasa → Tarif Jasa**.
+4. Kalau tetap kosong, hubungi admin untuk mengecek master jasa.
+
+---
+
+## 7. Catatan penting
 
 - **Transaksi lama tidak berubah.** Harga yang sudah tercatat di nota/transaksi sebelumnya tetap seperti aslinya.
 - **HPP dan harga jual itu terpisah.** Mengubah harga jual tidak mengubah HPP, dan sebaliknya.
 - **Harga master aman.** Setelan harga per unit tidak menimpa harga master di master Produk/Tarif Jasa.
 - Nilai stok di dashboard dan laporan HPP kini memakai **HPP per unit**.
 
-## 7. FAQ singkat
+## 8. FAQ singkat
 
 **Kenapa harga di kasir beda dengan harga di master produk?**
 Karena unit tersebut punya harga jual khusus. Cek di Kartu Stok (klik baris produk, lihat *Harga jual* vs *Harga master*).
