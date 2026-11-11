@@ -272,4 +272,36 @@ final class KartuStokHargaJualTest extends CIUnitTestCase
         $this->assertSame(175000.0, (float) $unitSatu->harga_jual_unit);
         $this->assertSame(150000.0, (float) $unitSatu->harga_master);
     }
+
+    /**
+     * Token CSRF yang dirender saat halaman dibuka harus tetap berlaku untuk
+     * aksi berikutnya di halaman yang sama (mis. simpan HPP lalu harga jual).
+     */
+    public function testTokenCsrfYangSamaDiterimaUntukDuaSimpanBerurutan(): void
+    {
+        $this->withSession([
+            'logged_in'  => true,
+            'ID_AKUN'    => 43,
+            'ID_UNIT'    => 1,
+            'ID_JABATAN' => 35,
+        ]);
+
+        $token = service('security')->getHash();
+
+        $this->post('kartu_stok/harga-jual', [
+            'idbarang'       => 1,
+            'id_unit'        => 1,
+            'harga'          => '175000',
+            'csrf_test_name' => $token,
+        ])->assertStatus(200);
+
+        $this->post('kartu_stok/harga-jual', [
+            'idbarang'       => 1,
+            'id_unit'        => 1,
+            'harga'          => '180000',
+            'csrf_test_name' => $token,
+        ])->assertStatus(200);
+
+        $this->assertSame(180000.0, $this->override());
+    }
 }
