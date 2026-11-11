@@ -176,6 +176,16 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString("harga_beli: parseInt(cb.getAttribute('data-harga_beli')) || 0,", $html);
     }
 
+    public function testTombolSimpanPembelianDikunciSaatSubmit(): void
+    {
+        $html = $this->render();
+
+        // Klik/Enter ganda tidak boleh mengirim form pembelian dua kali.
+        $this->assertStringContainsString('let pembelianTersimpan = false;', $html);
+        $this->assertStringContainsString('tombol.disabled = true;', $html);
+        $this->assertStringContainsString("tombol.setAttribute('aria-busy', 'true')", $html);
+    }
+
     public function testHargaJualEditHanyaUntukRolePengelola(): void
     {
         $terbuka = $this->render(true);

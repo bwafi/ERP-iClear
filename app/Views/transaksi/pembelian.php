@@ -1114,6 +1114,8 @@
     </script>
 
     <script>
+    let pembelianTersimpan = false;
+
     document.getElementById('form_pembelian').addEventListener('submit', function(e) {
         const tipe = document.getElementById('tipe_pihak').value;
         const pelanggan = document.getElementById('pelanggan').value.trim();
@@ -1122,6 +1124,19 @@
             e.preventDefault();
             alert('Pelanggan belum dipilih!');
             return false;
+        }
+
+        // Cegah double submit: submit kedua diabaikan dan tombol dikunci.
+        if (pembelianTersimpan) {
+            e.preventDefault();
+            return false;
+        }
+        pembelianTersimpan = true;
+
+        const tombol = this.querySelector('button[type="submit"]');
+        if (tombol) {
+            tombol.disabled = true;
+            tombol.setAttribute('aria-busy', 'true');
         }
     });
     </script>
