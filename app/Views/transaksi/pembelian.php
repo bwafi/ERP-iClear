@@ -1143,6 +1143,15 @@
         typeWrapper.style.display = 'none';
         sizeWrapper.style.display = 'none';
 
+        // Harga PL & HPP di modal: tampilkan pemisah ribuan titik. Tanpa "Rp "
+        // di dalam value karena server hanya membuang titik (Pembelian::insert_produk).
+        document.querySelectorAll('#input-produk-modal .currency').forEach(function (el) {
+            el.addEventListener('input', function () {
+                const numeric = this.value.replace(/[^\d]/g, '');
+                this.value = numeric ? Number(numeric).toLocaleString('id-ID') : '';
+            });
+        });
+
         kategori.addEventListener('change', function() {
             if (this.value === 'Handphone') {
                 namaBarangInput.parentElement.style.display = 'block';

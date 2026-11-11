@@ -153,6 +153,19 @@ final class PembelianPageTest extends CIUnitTestCase
         );
     }
 
+    public function testHargaModalTambahProdukDiformatRibuan(): void
+    {
+        $html = $this->render();
+
+        // Modal Tambah Produk Baru: Harga PL & HPP tampil dengan pemisah ribuan
+        // titik (bukan "Rp " di dalam value) agar server hanya perlu membuang titik.
+        $this->assertStringContainsString('class="form-control currency" id="harga"', $html);
+        $this->assertStringContainsString('class="form-control currency" id="harga_beli"', $html);
+        $this->assertStringContainsString("#input-produk-modal .currency", $html);
+        $this->assertStringNotContainsString("#input_produk_modal", $html);
+        $this->assertStringContainsString("Number(numeric).toLocaleString('id-ID')", $html);
+    }
+
     public function testHargaJualEditHanyaUntukRolePengelola(): void
     {
         $terbuka = $this->render(true);
