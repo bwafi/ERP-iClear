@@ -166,6 +166,16 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString("Number(numeric).toLocaleString('id-ID')", $html);
     }
 
+    public function testHargaJualDesimalDariDatabaseDikirimBulat(): void
+    {
+        $html = $this->render();
+
+        // harga_jual_unit bertipe decimal(15,2) -> "50000.00". Kalau nilai itu
+        // dikirim mentah, cleanRupiah() membuang titiknya menjadi 5000000.
+        $this->assertStringContainsString("harga: parseInt(cb.getAttribute('data-harga')) || 0,", $html);
+        $this->assertStringContainsString("harga_beli: parseInt(cb.getAttribute('data-harga_beli')) || 0,", $html);
+    }
+
     public function testHargaJualEditHanyaUntukRolePengelola(): void
     {
         $terbuka = $this->render(true);

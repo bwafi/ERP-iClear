@@ -557,8 +557,8 @@
             id: cb.getAttribute('data-id'),
             kode: cb.getAttribute('data-kode'),
             nama: cb.getAttribute('data-nama'),
-            harga: cb.getAttribute('data-harga'),
-            harga_beli: cb.getAttribute('data-harga_beli'),
+            harga: parseInt(cb.getAttribute('data-harga')) || 0,
+            harga_beli: parseInt(cb.getAttribute('data-harga_beli')) || 0,
             kategori: cb.getAttribute('data-kategori'),
             imei: cb.getAttribute('data-imei'),
         };
