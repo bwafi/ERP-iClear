@@ -108,7 +108,8 @@
 
 ### Kartu Stok (`.ks-*`)
 - **Scope:** `app/Views/stok/_kartu_theme.php`; every selector lives under `.kartu-stok` (modal HPP included) and derives from `--ks-*` tokens tied to the app theme.
-- **Layout:** page head on its own white surface → four-figure summary strip (Total Barang, Total Unit, Stok Akhir, Nilai Stok/HPP) separated by 1px rules → one filter row (unit, status PPN, search, Export) → ledger sheet with sticky headings and a `lip` footer.
+- **Layout:** page head on its own white surface → four-figure summary strip (Total Barang, Total Unit, Stok Akhir, Nilai Stok/HPP) separated by 1px rules → one filter row (unit, kategori, stok akhir, status PPN, search, Export) → ledger sheet with sticky headings and a `lip` footer.
+- **Filters:** unit, kategori (`barang.idkategori`), stok akhir (semua, minus `< 0`, minus & nol `<= 0`, nol `= 0`, ada stok `> 0`), dan status PPN, semuanya server-side dan dapat digabung dengan pencarian. Nilai stok di luar daftar diabaikan server. Tombol Export mengirim filter yang sedang aktif sehingga isi Excel sama dengan daftar yang tampil; ringkasan di atas tabel tetap global.
 - **Header surface:** `.ks-head` is a white card (hairline border, `14px` radius, same shadow token as the sheet), never transparent over the page canvas — the title block must read as a surface, not as text floating on the blue background. Dark theme uses the same card background token.
 - **Ledger rows:** kode (mono), barang (+IMEI subline), unit, kategori, PPN dot + text, stok akhir (right, tabular; zero muted, negative danger), actions (detail chevron + status switch). Supplier lives in the detail row, not the main row.
 - **Detail row:** four groups — Identitas, Harga & stok, Stok masuk, Stok keluar. Movement values carry `+`/`−` and stay muted at zero; HPP carries the role-gated Ubah button.
