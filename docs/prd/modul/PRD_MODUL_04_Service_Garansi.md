@@ -50,6 +50,11 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - Riwayat garansi: `Riwayat_Service::index2`, `riwayat_service_garansi/export2`; `Status_Service::index/{id}`.
 ### 4.6 DP & Refund
 - `dp_service` + `dp_service_ajax`; `refund_dp_service` (`ServiceDpService`); `DP_SERVICE_MENU` migration.
+- **Refund DP**: `Riwayat_Service::refund_dp_service` (POST `dp_service/refund`, filter `['auth','csrf']`) → `ServiceDpService::refund()`. Refund penuh membatalkan service dan mencatat `kas_keluar` kategori `REFUND` + jurnal pembalik `refund_dp_service_tunai`/`refund_dp_service_bank`; penerimaan DP asal tetap tersimpan sebagai histori.
+  - Metode refund wajib dipilih di modal dan boleh berbeda dari metode DP asal (mis. DP tunai → refund transfer). Bila metode tidak dikirim, service default mengikuti metode DP asal (kompatibilitas pemanggil lama).
+  - Refund `transfer` wajib rekening dalam scope unit service (divalidasi `BankRekeningValidator::validateUntukUnit()`) dan referensi transfer; refund `tunai` mengosongkan rekening/referensi.
+  - `kas_keluar.idbank`, template jurnal, dan audit `refund_metode`/`refund_bank_idbank`/`refund_referensi` mengikuti metode refund yang dipilih, bukan metode DP asal.
+  - Daftar rekening modal refund mengikuti hak refund: role 0/1 semua unit, role lain unit sesi. Tombol Refund untuk non-HO hanya tampil pada baris unit sendiri; server tetap menolak unit lain.
 - **Filter unit Service**: Admin Root/Finance (`0/1`), **Manager (34)**, dan **Customer Service (42)** boleh memilih unit (termasuk "Semua Unit") di `proses_service`/`proses_service_ajax`, `riwayat_service`/`riwayat_service_ajax`, dan `dp_service`/`dp_service_ajax`; role lain terkunci ke `ID_UNIT` sesi. Refund DP tetap dibatasi unit sendiri untuk non-HO (34/42 tidak termasuk), jadi perluasan ini hanya untuk baca.
 - **Koreksi DP salah catat**: `Riwayat_Service::koreksi_dp_service` (POST `dp_service/koreksi`, filter `['auth','csrf']`) → `ServiceDpService::koreksiDp()`. Hanya **Admin Root** (`ID_JABATAN = 1`); role lain tidak melihat tombol "Koreksi" dan ditolak server.
   - Yang bisa dikoreksi: `metode` (`tunai`/`transfer`), `bank_idbank` + `referensi` (wajib saat transfer, dikosongkan saat tunai), dan `jumlah` (> 0). Tanggal DP tidak diubah.
@@ -106,6 +111,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - ✅ Terverifikasi: guard transaksi aktif, DP ledger, garansi sparepart, route NET dinonaktifkan, klaim garansi.
 - ✅ Refund klaim garansi: tunai/bank, keputusan kondisi sparepart per baris, kunci sekali refund, dan guard retur supplier. — `GaransiRefundService`; test `GaransiRefundServiceTest`, `GaransiServiceViewTest`, `ReturBarangRusakTest`.
 - ✅ Koreksi DP salah catat: Admin Root saja, jurnal DP diperbaiki in-place, audit `service_dp_koreksi`, nominal terkunci setelah service diambil. — `ServiceDpService::koreksiDp`; test `ServiceDpKoreksiTest`.
+- ✅ Refund DP memilih metode/rekening sendiri yang boleh berbeda dari DP asal; transfer wajib rekening scope unit + referensi, tunai mengosongkan rekening/referensi. — `ServiceDpService::refund`; test `tests/unit/ServiceDpRefundTest.php`.
 - ✅ Kembalikan service sudah diambil ke Proses Service: Admin Root saja, jurnal pengambilan dihapus, pembayaran lama dihapus, DP tetap, guard tutup kasir. Test `tests/unit/ServiceKembalikanKeProsesTest.php`.
 - ⚠️ Koreksi DP tidak menghitung ulang Tutup Kasir yang sudah tersimpan; koreksi Tutup Kasir belum tersedia.
 - ⚠️ Gap tinggi:

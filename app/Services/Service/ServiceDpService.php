@@ -227,9 +227,11 @@ class ServiceDpService
      * Refund penuh DP sekaligus membatalkan service yang belum dikerjakan.
      *
      * Satu transaksi atomik membuat sumber kas keluar, jurnal pembalik DP,
-     * metadata audit, dan proyeksi `service.dp_bayar`. Dana dikembalikan melalui
-     * metode/rekening asal; syarat status aktif + conditional update mencegah
-     * refund ganda saat request bersamaan.
+     * metadata audit, dan proyeksi `service.dp_bayar`. Dana dapat dikembalikan
+     * melalui metode/rekening pilihan yang berbeda dari DP asal (mis. DP tunai
+     * lalu refund transfer); bila metode tidak ditentukan, perilaku lama tetap
+     * dipakai, yaitu mengikuti metode/rekening DP asal. Syarat status aktif +
+     * conditional update mencegah refund ganda saat request bersamaan.
      *
      * @return array{status:string,idkas_keluar:int,jumlah:int,metode:string}
      */
@@ -238,10 +240,17 @@ class ServiceDpService
         string $alasan,
         ?string $referensi,
         int $inputBy,
-        ?int $unitDiizinkan = null
+        ?int $unitDiizinkan = null,
+        ?string $metodeRefund = null,
+        ?string $bankRefund = null
     ): array {
         $alasan = trim($alasan);
         $referensi = $referensi === null ? null : trim($referensi);
+        $metodeDiminta = $metodeRefund === null ? null : strtolower(trim($metodeRefund));
+        if ($metodeDiminta === '') {
+            $metodeDiminta = null;
+        }
+        $bankDiminta = $this->teksOpsional($bankRefund);
 
         if ($idDp <= 0) {
             throw new \RuntimeException('DP tidak valid.');
@@ -251,6 +260,9 @@ class ServiceDpService
         }
         if ($referensi !== null && mb_strlen($referensi) > 100) {
             throw new \RuntimeException('Referensi refund maksimal 100 karakter.');
+        }
+        if ($metodeDiminta !== null && ! isset(self::TEMPLATE_REFUND[$metodeDiminta])) {
+            throw new \RuntimeException('Metode refund harus "tunai" atau "transfer".');
         }
 
         if (! $this->refundSiap()) {
@@ -328,9 +340,11 @@ class ServiceDpService
             }
 
             $jumlah = (int) ($dp->jumlah ?? 0);
-            $metode = strtolower(trim((string) ($dp->metode ?? '')));
+            // Tanpa pilihan eksplisit, refund mengikuti metode DP asal agar
+            // pemanggil lama tetap kompatibel.
+            $metode = $metodeDiminta ?? strtolower(trim((string) ($dp->metode ?? '')));
             if ($jumlah <= 0 || ! isset(self::TEMPLATE_REFUND[$metode])) {
-                throw new \RuntimeException('Nominal atau metode DP tidak valid untuk refund.');
+                throw new \RuntimeException('Nominal atau metode refund tidak valid untuk refund.');
             }
             if ($metode === 'transfer' && ($referensi === null || $referensi === '')) {
                 throw new \RuntimeException('Referensi transfer refund wajib diisi.');
@@ -338,9 +352,9 @@ class ServiceDpService
 
             $bankId = null;
             if ($metode === 'transfer') {
-                $bankId = trim((string) ($dp->bank_idbank ?? ''));
+                $bankId = $bankDiminta ?? trim((string) ($dp->bank_idbank ?? ''));
                 if ($bankId === '') {
-                    throw new \RuntimeException('Rekening asal DP transfer tidak tersedia. Refund dibatalkan.');
+                    throw new \RuntimeException('Rekening refund transfer wajib dipilih.');
                 }
 
                 $validasiBank = (new BankRekeningValidator())->validateUntukUnit(
@@ -352,8 +366,11 @@ class ServiceDpService
                     false
                 );
                 if (! $validasiBank['ok']) {
-                    throw new \RuntimeException('Rekening asal DP tidak dapat digunakan untuk refund: ' . $validasiBank['alasan']);
+                    throw new \RuntimeException('Rekening refund tidak dapat digunakan: ' . $validasiBank['alasan']);
                 }
+            } else {
+                // Refund tunai tidak boleh membawa rekening/referensi transfer.
+                $referensi = null;
             }
 
             $kategoriRefund = $this->db->table('kategori_kas')

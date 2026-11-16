@@ -21,7 +21,14 @@ final class ServiceDpRefundTest extends CIUnitTestCase
         $this->prefixAsli = (string) $this->db->DBPrefix;
         $this->db->setPrefix('');
 
-        foreach (['sparepart_invoice_guard', 'detail_penjualan', 'penjualan', 'service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun'] as $table) {
+        // CI4 tidak mereset transStatus setelah query gagal di dalam transaksi
+        // (mis. test FK guard), padahal koneksi dipakai ulang antar test.
+        // Bersihkan agar test sukses setelah test kegagalan tidak ikut gagal.
+        $this->db->transStrict(false);
+        $this->db->transComplete();
+        $this->db->transStrict(true);
+
+        foreach (['sparepart_invoice_guard', 'detail_penjualan', 'penjualan', 'service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun', 'bank', 'akun_kas_bank', 'alokasi_saldo_kas_bank'] as $table) {
             $this->db->query("DROP TABLE IF EXISTS {$table}");
         }
 
@@ -124,6 +131,24 @@ final class ServiceDpRefundTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE no_akun (
             no_akun VARCHAR(20) PRIMARY KEY,
             nama_akun VARCHAR(100) NULL)');
+        $this->db->query('CREATE TABLE bank (
+            idbank VARCHAR(20) NOT NULL PRIMARY KEY,
+            jenis_bank VARCHAR(20) NULL,
+            nama_bank VARCHAR(255) NULL)');
+        $this->db->query('CREATE TABLE akun_kas_bank (
+            idakun_kas_bank INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            unit_id INT NULL,
+            tipe VARCHAR(20) NULL,
+            nama_akun VARCHAR(255) NULL,
+            bank_idbank VARCHAR(20) NULL,
+            no_akun_coa VARCHAR(20) NULL,
+            status VARCHAR(20) NULL,
+            is_shared INT DEFAULT 0,
+            is_finance_ho INT DEFAULT 0)');
+        $this->db->query('CREATE TABLE alokasi_saldo_kas_bank (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            akun_kas_bank_id INT NULL,
+            unit_id INT NULL)');
 
         $this->db->table('pelanggan')->insert(['id_pelanggan' => 1, 'nama' => 'Ayu']);
         $this->db->table('service')->insert([
@@ -159,11 +184,24 @@ final class ServiceDpRefundTest extends CIUnitTestCase
             ['kode_template' => 'refund_dp_service_bank', 'no_akun' => '2010302000', 'nama_akun' => 'Pendapatan Diterima di Muka', 'debet_kredit' => 'debet', 'array_value' => 0],
             ['kode_template' => 'refund_dp_service_bank', 'no_akun' => '1010102000', 'nama_akun' => 'Kas di Bank', 'debet_kredit' => 'kredit', 'array_value' => 0],
         ]);
+
+        $this->db->table('bank')->insertBatch([
+            ['idbank' => '2', 'jenis_bank' => 'bank', 'nama_bank' => 'BCA Unit 1'],
+            ['idbank' => '9', 'jenis_bank' => 'bank', 'nama_bank' => 'Bank Unit 2'],
+        ]);
+        $this->db->table('akun_kas_bank')->insertBatch([
+            ['idakun_kas_bank' => 10, 'unit_id' => 1, 'tipe' => 'BANK', 'nama_akun' => 'BCA Unit 1', 'bank_idbank' => '2', 'status' => 'aktif', 'is_shared' => 0, 'is_finance_ho' => 0],
+            ['idakun_kas_bank' => 11, 'unit_id' => 2, 'tipe' => 'BANK', 'nama_akun' => 'Bank Unit 2', 'bank_idbank' => '9', 'status' => 'aktif', 'is_shared' => 0, 'is_finance_ho' => 0],
+        ]);
+        $this->db->table('alokasi_saldo_kas_bank')->insert([
+            'akun_kas_bank_id' => 10,
+            'unit_id' => 1,
+        ]);
     }
 
     protected function tearDown(): void
     {
-        foreach (['sparepart_invoice_guard', 'detail_penjualan', 'penjualan', 'service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun'] as $table) {
+        foreach (['sparepart_invoice_guard', 'detail_penjualan', 'penjualan', 'service_dp', 'service', 'pelanggan', 'service_sparepart', 'kategori_kas', 'pembayaran_bank', 'kas_keluar', 'jurnal', 'template_jurnal', 'no_akun', 'bank', 'akun_kas_bank', 'alokasi_saldo_kas_bank'] as $table) {
             $this->db->query("DROP TABLE IF EXISTS {$table}");
         }
         $this->db->setPrefix($this->prefixAsli);
@@ -341,5 +379,100 @@ final class ServiceDpRefundTest extends CIUnitTestCase
         $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
         $this->assertNull($this->db->table('service_dp')->where('id', 1)->get()->getRow()->refund_idkas_keluar);
         $this->assertSame(2, (int) $this->db->table('service')->where('idservice', 1)->get()->getRow()->status_service);
+    }
+
+    public function testRefundTunaiBisaDikirimLewatTransferDenganRekeningPilihan(): void
+    {
+        $refund = $this->service()->refund(1, 'Pelanggan minta transfer', 'TRF-REFUND-1', 7, 1, 'transfer', '2');
+
+        $this->assertSame('ok', $refund['status']);
+        $this->assertSame('transfer', $refund['metode']);
+
+        $dp = $this->db->table('service_dp')->where('id', 1)->get()->getRow();
+        $this->assertSame('tunai', $dp->metode, 'Metode DP asal tidak boleh ikut berubah.');
+        $this->assertSame('transfer', $dp->refund_metode);
+        $this->assertSame('2', (string) $dp->refund_bank_idbank);
+        $this->assertSame('TRF-REFUND-1', $dp->refund_referensi);
+
+        $keluar = $this->db->table('kas_keluar')->where('idkas_keluar', $refund['idkas_keluar'])->get()->getRow();
+        $this->assertSame('2', (string) $keluar->idbank, 'Kas keluar refund mengikuti rekening refund pilihan.');
+
+        $jurnal = $this->db->table('jurnal')->where('tabel_referensi', 'kas_keluar')->get()->getResult();
+        $this->assertCount(2, $jurnal);
+        $kredit = array_values(array_filter($jurnal, static function ($row) {
+            return (int) $row->kredit > 0;
+        }));
+        $this->assertCount(1, $kredit);
+        $this->assertSame('1010102000', $kredit[0]->no_akun, 'Template jurnal refund bank dipakai.');
+    }
+
+    public function testRefundTransferBisaDikembalikanTunai(): void
+    {
+        $this->db->table('service_dp')->where('id', 1)->update([
+            'metode'      => 'transfer',
+            'bank_idbank' => '2',
+            'referensi'   => 'TRF-ASAL',
+        ]);
+
+        $refund = $this->service()->refund(1, 'Dikembalikan tunai', null, 7, 1, 'tunai');
+
+        $this->assertSame('ok', $refund['status']);
+        $this->assertSame('tunai', $refund['metode']);
+
+        $dp = $this->db->table('service_dp')->where('id', 1)->get()->getRow();
+        $this->assertSame('transfer', $dp->metode, 'Metode DP asal tetap transfer.');
+        $this->assertSame('tunai', $dp->refund_metode);
+        $this->assertNull($dp->refund_bank_idbank);
+        $this->assertNull($dp->refund_referensi);
+
+        $keluar = $this->db->table('kas_keluar')->where('idkas_keluar', $refund['idkas_keluar'])->get()->getRow();
+        $this->assertNull($keluar->idbank, 'Refund tunai mengurangi laci kas, bukan rekening asal.');
+
+        $jurnal = $this->db->table('jurnal')->where('tabel_referensi', 'kas_keluar')->get()->getResult();
+        $kredit = array_values(array_filter($jurnal, static function ($row) {
+            return (int) $row->kredit > 0;
+        }));
+        $this->assertSame('1010101000', $kredit[0]->no_akun, 'Template jurnal refund tunai dipakai.');
+    }
+
+    public function testRefundDefaultTetapMengikutiMetodeDpAsalTransfer(): void
+    {
+        $this->db->table('service_dp')->where('id', 1)->update([
+            'metode'      => 'transfer',
+            'bank_idbank' => '2',
+            'referensi'   => 'TRF-ASAL',
+        ]);
+
+        $refund = $this->service()->refund(1, 'Refund tanpa pilihan metode', 'TRF-REFUND-2', 7, 1);
+
+        $this->assertSame('transfer', $refund['metode']);
+        $dp = $this->db->table('service_dp')->where('id', 1)->get()->getRow();
+        $this->assertSame('transfer', $dp->refund_metode);
+        $this->assertSame('2', (string) $dp->refund_bank_idbank);
+    }
+
+    public function testRefundTransferTanpaReferensiDitolak(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->service()->refund(1, 'Tanpa referensi', null, 7, 1, 'transfer', '2');
+    }
+
+    public function testRefundTransferDenganRekeningDiLuarScopeUnitDitolak(): void
+    {
+        try {
+            $this->service()->refund(1, 'Rekening unit lain', 'TRF-LUAR', 7, 1, 'transfer', '9');
+            $this->fail('Rekening unit lain harus ditolak.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('Rekening refund tidak dapat digunakan', $e->getMessage());
+        }
+
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertNull($this->db->table('service_dp')->where('id', 1)->get()->getRow()->refund_idkas_keluar);
+    }
+
+    public function testMetodeRefundTidakDikenalDitolak(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->service()->refund(1, 'Metode tidak dikenal', null, 7, 1, 'qris');
     }
 }

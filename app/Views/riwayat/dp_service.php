@@ -78,7 +78,7 @@
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
                 <div>
                     <h5 class="fw-semibold mb-1">Riwayat Penerimaan DP</h5>
-                    <small class="text-muted">Refund DP penuh sekaligus membatalkan service; penerimaan DP tetap tersimpan di histori.</small>
+                    <small class="text-muted">Refund DP penuh sekaligus membatalkan service; metode refund dapat berbeda dari DP asal dan penerimaan DP tetap tersimpan di histori.</small>
                 </div>
                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2">
                     <iconify-icon icon="solar:hand-money-bold" class="me-1" aria-hidden="true"></iconify-icon>
@@ -130,15 +130,29 @@
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-warning py-2 px-3 mb-3" role="note">
-                            Refund membatalkan service dan mengembalikan DP lewat metode/rekening asal. Jika ada sparepart, detail keluar, invoice kosong, dan jurnal terkait otomatis dihapus seperti aksi hard delete di Sparepart Keluar.
+                            Refund membatalkan service dan dapat dikembalikan lewat metode/rekening yang berbeda dari DP asal (mis. DP tunai, refund transfer). Jika ada sparepart, detail keluar, invoice kosong, dan jurnal terkait otomatis dihapus seperti aksi hard delete di Sparepart Keluar.
                         </div>
                         <div class="d-flex justify-content-between gap-3 py-2 border-bottom">
                             <span class="text-muted">Nominal refund</span>
                             <strong class="text-dark text-nowrap" id="refundDpAmount">Rp 0</strong>
                         </div>
-                        <div class="d-flex justify-content-between gap-3 py-2 mb-3">
-                            <span class="text-muted">Dikembalikan via</span>
-                            <strong class="text-dark text-end" id="refundDpMethod">-</strong>
+                        <div class="d-flex justify-content-between gap-3 py-2 border-bottom">
+                            <span class="text-muted">DP asal</span>
+                            <strong class="text-dark text-end" id="refundDpOrigin">-</strong>
+                        </div>
+                        <div class="mb-3 mt-3">
+                            <label for="refundDpMetode" class="form-label fw-semibold">Metode refund</label>
+                            <select class="form-select" name="refund_metode" id="refundDpMetode" required>
+                                <option value="">Pilih metode refund</option>
+                                <option value="tunai">Tunai</option>
+                                <option value="transfer">Transfer</option>
+                            </select>
+                            <small class="form-text text-muted">Metode refund boleh berbeda dari metode DP asal.</small>
+                        </div>
+                        <div class="mb-3 d-none" id="refundDpBankWrap">
+                            <label for="refundDpBank" class="form-label fw-semibold">Rekening sumber refund</label>
+                            <select class="form-select" name="refund_bank_idbank" id="refundDpBank"></select>
+                            <small class="form-text text-muted">Hanya rekening yang menjadi hak unit service ini.</small>
                         </div>
                         <div class="mb-3 d-none" id="refundDpReferenceWrap">
                             <label for="refundDpBankReference" class="form-label fw-semibold">Referensi transfer refund</label>
@@ -228,8 +242,16 @@
             const resetButton = document.getElementById('dpResetFilter');
             const refundForm = document.getElementById('refundDpForm');
             const refundSubmit = document.getElementById('refundDpSubmit');
+            const refundMetode = document.getElementById('refundDpMetode');
+            const refundBank = document.getElementById('refundDpBank');
+            const refundBankWrap = document.getElementById('refundDpBankWrap');
+            const refundReferenceWrap = document.getElementById('refundDpReferenceWrap');
+            const refundReferenceInput = document.getElementById('refundDpBankReference');
             const koreksiForm = document.getElementById('koreksiDpForm');
             const tableSelector = '#dpServiceTable';
+            const bankByUnit = <?= json_encode($bank_by_unit ?? [], JSON_UNESCAPED_UNICODE) ?>;
+            const isRefundHO = <?= ! empty($is_refund_ho) ? 'true' : 'false' ?>;
+            const userUnit = <?= (int) ($user_unit ?? 0) ?>;
 
             const toDateInputValue = (date) => {
                 const year = date.getFullYear();
@@ -312,7 +334,12 @@
                         data: 'status',
                         render: function (data, type, row) {
                             if (Number(row.refund_idkas_keluar)) {
-                                return '<span class="badge bg-success-subtle text-success">Direfund</span>';
+                                const metodeRefund = String(row.refund_metode || '').toLowerCase();
+                                const bankRefund = row.refund_nama_bank || row.refund_bank_idbank || '';
+                                const via = metodeRefund === 'transfer'
+                                    ? `Transfer${bankRefund ? ` · ${bankRefund}` : ''}`
+                                    : (metodeRefund === 'tunai' ? 'Tunai' : '');
+                                return `<span class="badge bg-success-subtle text-success">Direfund</span>${via ? `<small class="text-muted d-block mt-1">${escapeHtml(via)}</small>` : ''}`;
                             }
                             const dibatalkan = String(data).toLowerCase() === 'dibatalkan';
                             return `<span class="badge ${dibatalkan ? 'bg-danger-subtle text-danger' : 'bg-warning-subtle text-warning-emphasis'}">${dibatalkan ? 'Dibatalkan' : 'Aktif'}</span>`;
@@ -324,6 +351,7 @@
                         searchable: false,
                         render: function (data, type, row) {
                             const serviceAktif = [1, 2].includes(Number(row.status_service));
+                            const unitBolehRefund = isRefundHO || Number(row.unit_idunit) === userUnit;
                             const prosesButton = serviceAktif
                                 ? `<a class="btn btn-sm btn-outline-primary" href="<?= base_url('proses_service') ?>?search=${encodeURIComponent(row.no_service || '')}" title="Buka Proses Service untuk ${escapeHtml(row.no_service || '')}">
                                     <iconify-icon icon="solar:arrow-right-up-linear" class="me-1" aria-hidden="true"></iconify-icon>Proses Service
@@ -360,6 +388,9 @@
                             if (![1, 2, 90].includes(Number(row.status_service))) {
                                 return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${koreksiButton}<span class="text-muted small">Service siap diambil/selesai</span></div>`;
                             }
+                            if (!unitBolehRefund) {
+                                return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}${koreksiButton}<span class="text-muted small">Refund hanya unit sendiri</span></div>`;
+                            }
                             const sparepartBelumDiretur = Number(row.sparepart_belum_diretur) || 0;
                             if (sparepartBelumDiretur > 0 && Number(row.sparepart_retur_siap) !== 1) {
                                 return `<div class="d-inline-flex flex-nowrap align-items-center gap-2">${prosesButton}${koreksiButton}<span class="text-warning-emphasis small" title="Jalankan migrasi penghubung invoice service sebelum refund sparepart.">Skema retur perlu diperbarui</span></div>`;
@@ -372,6 +403,7 @@
                                 data-sparepart-pending="${sparepartBelumDiretur}"
                                 data-metode="${escapeHtml(row.metode)}"
                                 data-bank="${escapeHtml(row.nama_bank || row.bank_idbank || '')}"
+                                data-unit="${Number(row.unit_idunit) || 0}"
                                 data-bs-toggle="modal" data-bs-target="#refundDpModal">
                                 <iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>${sparepartBelumDiretur > 0 ? 'Refund + Retur' : 'Refund'}
                             </button></div>`;
@@ -403,14 +435,28 @@
                 datatable.page.len(10).draw();
             });
 
+            const toggleRefundMetode = () => {
+                const transfer = refundMetode.value === 'transfer';
+                refundBankWrap.classList.toggle('d-none', !transfer);
+                refundReferenceWrap.classList.toggle('d-none', !transfer);
+                refundBank.required = transfer;
+                refundReferenceInput.required = transfer;
+                if (!transfer) {
+                    refundBank.value = '';
+                    refundReferenceInput.value = '';
+                }
+            };
+            refundMetode.addEventListener('change', toggleRefundMetode);
+
             $(document).on('click', '.btn-refund-dp', function () {
                 const button = this;
                 const metode = String(button.dataset.metode || '').toLowerCase();
                 const bank = button.dataset.bank || '';
+                const unit = String(button.dataset.unit || '');
                 document.getElementById('refundDpId').value = button.dataset.dpId || '';
                 document.getElementById('refundDpReference').textContent = `${button.dataset.service || '-'} · ${button.dataset.kode || '-'}`;
                 document.getElementById('refundDpAmount').textContent = `Rp ${new Intl.NumberFormat('id-ID').format(Number(button.dataset.jumlah) || 0)}`;
-                document.getElementById('refundDpMethod').textContent = metode === 'transfer'
+                document.getElementById('refundDpOrigin').textContent = metode === 'transfer'
                     ? `Transfer${bank ? ` · ${bank}` : ''}`
                     : 'Tunai';
 
@@ -419,12 +465,15 @@
                     ? '<iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>Konfirmasi Refund + Retur Sparepart'
                     : '<iconify-icon icon="solar:undo-left-bold" class="me-1" aria-hidden="true"></iconify-icon>Konfirmasi Refund Penuh';
 
-                const referenceWrap = document.getElementById('refundDpReferenceWrap');
-                const referenceInput = document.getElementById('refundDpBankReference');
-                const perluReferensi = metode === 'transfer';
-                referenceWrap.classList.toggle('d-none', !perluReferensi);
-                referenceInput.required = perluReferensi;
-                referenceInput.value = '';
+                const bankList = bankByUnit[unit] || [];
+                refundBank.innerHTML = bankList.length
+                    ? '<option value="">Pilih rekening</option>'
+                        + bankList.map((item) => `<option value="${escapeHtml(item.idbank)}">${escapeHtml(item.nama)}</option>`).join('')
+                    : '<option value="">Tidak ada rekening dalam scope unit</option>';
+                refundMetode.value = '';
+                refundBank.value = '';
+                refundReferenceInput.value = '';
+                toggleRefundMetode();
                 document.getElementById('refundDpReason').value = '';
             });
 
@@ -434,7 +483,6 @@
             });
 
             if (koreksiForm) {
-                const bankByUnit = <?= json_encode($bank_by_unit ?? [], JSON_UNESCAPED_UNICODE) ?>;
                 const koreksiSubmit = document.getElementById('koreksiDpSubmit');
                 const koreksiMetode = document.getElementById('koreksiDpMetode');
                 const koreksiJumlah = document.getElementById('koreksiDpJumlah');

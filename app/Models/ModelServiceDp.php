@@ -148,14 +148,17 @@ class ModelServiceDp extends Model
             'refund_idkas_keluar',
             'refund_tanggal',
             'refund_metode',
+            'refund_bank_idbank',
             'refund_referensi',
         ];
+        $adaRefundBank = $this->db->fieldExists('refund_bank_idbank', $this->table);
         $refundSelect = [];
         foreach ($refundFields as $field) {
             $refundSelect[] = $this->db->fieldExists($field, $this->table)
                 ? 'sd.' . $field
                 : 'NULL AS ' . $field;
         }
+        $refundBankSelect = $adaRefundBank ? ', rb.nama_bank AS refund_nama_bank' : ', NULL AS refund_nama_bank';
 
         $penjualanPunyaLinkService = $this->db->fieldExists('service_idservice', 'penjualan');
         $adaTabelServiceSparepart = $this->db->tableExists($this->db->getPrefix() . 'service_sparepart', false);
@@ -177,13 +180,17 @@ class ModelServiceDp extends Model
         }
 
         $builder = $this->db->table($this->table . ' sd')
-            ->select('sd.id, sd.kode_dp, sd.tanggal, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.status, sd.keterangan, s.idservice, s.no_service, s.status_service, s.unit_idunit, s.tipe_hp, p.nama AS nama_pelanggan, u.NAMA_UNIT AS nama_unit, b.nama_bank, ' . implode(', ', $refundSelect))
+            ->select('sd.id, sd.kode_dp, sd.tanggal, sd.jumlah, sd.metode, sd.bank_idbank, sd.referensi, sd.status, sd.keterangan, s.idservice, s.no_service, s.status_service, s.unit_idunit, s.tipe_hp, p.nama AS nama_pelanggan, u.NAMA_UNIT AS nama_unit, b.nama_bank, ' . implode(', ', $refundSelect) . $refundBankSelect)
             ->select($sparepartPendingSelect, false)
             ->select(((int) $penjualanPunyaLinkService) . ' AS sparepart_retur_siap', false)
             ->join('service s', 's.idservice = sd.service_idservice')
             ->join('pelanggan p', 'p.id_pelanggan = s.pelanggan_id_pelanggan', 'left')
             ->join('unit u', 'u.idunit = s.unit_idunit', 'left')
             ->join('bank b', 'b.idbank = sd.bank_idbank', 'left');
+
+        if ($adaRefundBank) {
+            $builder->join('bank rb', 'rb.idbank = sd.refund_bank_idbank', 'left');
+        }
 
         if ($unitId !== null && $unitId > 0) {
             $builder->where('s.unit_idunit', $unitId);

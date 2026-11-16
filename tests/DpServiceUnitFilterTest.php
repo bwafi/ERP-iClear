@@ -79,7 +79,10 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
                 id INT PRIMARY KEY AUTO_INCREMENT, service_idservice INT NULL,
                 kode_dp TEXT NULL, tanggal TEXT NULL, jumlah REAL NULL,
                 metode TEXT NULL, bank_idbank TEXT NULL, referensi TEXT NULL,
-                status TEXT NULL, keterangan TEXT NULL, unit_id INT NULL)');
+                status TEXT NULL, keterangan TEXT NULL, unit_id INT NULL,
+                refund_idkas_keluar INT NULL, refund_tanggal TEXT NULL,
+                refund_metode TEXT NULL, refund_bank_idbank TEXT NULL,
+                refund_referensi TEXT NULL)');
         $q('CREATE TABLE bank (idbank INT PRIMARY KEY, nama_bank TEXT NULL)');
         $q('CREATE TABLE penjualan (idpenjualan INT PRIMARY KEY)');
         $q('CREATE TABLE service_sparepart (idservice_sparepart INT PRIMARY KEY, service_idservice INT NULL)');
@@ -241,6 +244,40 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
         foreach ($body['data'] as $row) {
             $this->assertSame(1, (int) $row['unit_idunit'], 'Kasir tidak boleh melihat unit lain');
         }
+    }
+
+    public function testAjaxMenampilkanMetodeDanRekeningRefund(): void
+    {
+        $this->sesi(350, 1, 35);
+
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO bank (idbank, nama_bank) VALUES (7, 'BCA Probolinggo')");
+        $this->db->query("UPDATE service_dp
+            SET status = 'direfund', refund_idkas_keluar = 99, refund_tanggal = '2026-10-05',
+                refund_metode = 'transfer', refund_bank_idbank = '7', refund_referensi = 'TRF-001'
+            WHERE id = 1");
+
+        $body = $this->ajaxDp(1);
+
+        $this->assertCount(1, $body['data']);
+        $row = $body['data'][0];
+        $this->assertSame('DP-UNIT1', $row['kode_dp']);
+        $this->assertSame('transfer', $row['refund_metode']);
+        $this->assertSame('BCA Probolinggo', $row['refund_nama_bank']);
+        $this->assertSame('TRF-001', $row['refund_referensi']);
+    }
+
+    public function testAjaxMengosongkanRefundUntukDpBelumDirefund(): void
+    {
+        $this->sesi(350, 1, 35);
+
+        $body = $this->ajaxDp(1);
+
+        $this->assertCount(1, $body['data']);
+        $row = $body['data'][0];
+        $this->assertNull($row['refund_idkas_keluar']);
+        $this->assertNull($row['refund_metode']);
+        $this->assertNull($row['refund_nama_bank']);
     }
 
     private function ajax(string $route, int $unitFilter): array

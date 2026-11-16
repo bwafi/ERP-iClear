@@ -987,27 +987,37 @@ class Riwayat_Service extends BaseController
         $isAdminRoot = ((int) $idJabatan === 1);
         $unitList = $this->UnitModel->getUnit();
 
-        // Rekening untuk modal koreksi, dibatasi ke scope tiap unit. Hanya
-        // Admin root yang bisa membuka modal, jadi hanya dia yang butuh daftar.
-        $bankByUnit = [];
-        if ($isAdminRoot) {
-            foreach ($unitList as $u) {
-                $bankByUnit[(int) $u->idunit] = array_map(static function ($bank) {
-                    $nama = trim((string) ($bank->nama_bank ?? ''));
-                    $norek = trim((string) ($bank->norek ?? ''));
+        // Rekening untuk modal refund/koreksi. Koreksi hanya Admin Root, tetapi
+        // refund bisa dilakukan role HO maupun user unit sendiri, jadi daftar
+        // rekening mengikuti hak refund: role 0/1 semua unit, role lain unit
+        // sesi saja (server tetap menolak unit lain).
+        $isRefundHO = in_array((int) $idJabatan, [0, 1], true);
+        $unitUntukBank = $unitList;
+        if (! $isRefundHO) {
+            $unitSendiri = (int) session('ID_UNIT');
+            $unitUntukBank = array_values(array_filter($unitList, static function ($u) use ($unitSendiri) {
+                return (int) $u->idunit === $unitSendiri;
+            }));
+        }
 
-                    return [
-                        'idbank' => (string) $bank->idbank,
-                        'nama'   => $norek !== '' ? ($nama . ' - ' . $norek) : $nama,
-                    ];
-                }, $this->BankModel->getBankDalamScopeUnit((int) $u->idunit));
-            }
+        $bankByUnit = [];
+        foreach ($unitUntukBank as $u) {
+            $bankByUnit[(int) $u->idunit] = array_map(static function ($bank) {
+                $nama = trim((string) ($bank->nama_bank ?? ''));
+                $norek = trim((string) ($bank->norek ?? ''));
+
+                return [
+                    'idbank' => (string) $bank->idbank,
+                    'nama'   => $norek !== '' ? ($nama . ' - ' . $norek) : $nama,
+                ];
+            }, $this->BankModel->getBankDalamScopeUnit((int) $u->idunit));
         }
 
         return view('template', [
             'unit'           => $unitList,
             'is_ho'          => $isHO,
             'is_admin_root'  => $isAdminRoot,
+            'is_refund_ho'   => $isRefundHO,
             'bank_by_unit'   => $bankByUnit,
             'user_unit'      => (int) session('ID_UNIT'),
             'dp_ledger_ada'  => $this->DpService->punyaTabelLedger(),
@@ -1089,8 +1099,12 @@ class Riwayat_Service extends BaseController
         $idDp = is_scalar($rawId) ? (int) $rawId : 0;
         $alasan = $this->request->getPost('refund_alasan');
         $referensi = $this->request->getPost('refund_referensi');
+        $rawMetode = $this->request->getPost('refund_metode');
+        $rawBank = $this->request->getPost('refund_bank_idbank');
         $alasan = is_string($alasan) ? $alasan : '';
         $referensi = is_string($referensi) ? $referensi : null;
+        $metodeRefund = is_string($rawMetode) ? strtolower(trim($rawMetode)) : '';
+        $bankRefund = is_string($rawBank) ? trim($rawBank) : '';
 
         $idJabatan = session()->get('ID_JABATAN');
         $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0);
@@ -1101,18 +1115,28 @@ class Riwayat_Service extends BaseController
             return redirect()->to(base_url('dp_service'));
         }
 
+        if ($metodeRefund === '') {
+            session()->setFlashdata('gagal', 'Pilih metode refund (tunai/transfer) sebelum memproses.');
+
+            return redirect()->to(base_url('dp_service'));
+        }
+
         try {
             $hasil = $this->DpService->refund(
                 $idDp,
                 $alasan,
                 $referensi,
                 (int) session('ID_AKUN'),
-                $unitDiizinkan
+                $unitDiizinkan,
+                $metodeRefund,
+                $bankRefund === '' ? null : $bankRefund
             );
 
             session()->setFlashdata(
                 'sukses',
-                'Refund DP berhasil dicatat sebesar Rp ' . number_format($hasil['jumlah'], 0, ',', '.') . '; service ditandai dibatalkan.'
+                'Refund DP berhasil dicatat sebesar Rp ' . number_format($hasil['jumlah'], 0, ',', '.')
+                . ' via ' . ($hasil['metode'] === 'transfer' ? 'transfer' : 'tunai')
+                . '; service ditandai dibatalkan.'
             );
         } catch (\Throwable $e) {
             log_message('error', 'Refund DP service #' . $idDp . ' gagal: ' . $e->getMessage());
