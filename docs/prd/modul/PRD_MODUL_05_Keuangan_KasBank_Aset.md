@@ -45,6 +45,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - `Asset::insert/update/delete_asset/export_asset/pulihkan_asset/prosesPenyusutan` (cron), `KategoriAsset`, `TemplateJurnalAsset`, `RiwayatPenyusutanAsset`.
 ### 4.7 Dashboard Finance
 - `DashboardFinance::index/entryOmzetSheet/entryManual/entryPayroll/rekonsiliasi/rekonSave/rekonSubmit/rekonApprove`.
+- Rekonsiliasi Harian memakai `RekonDailyCalculator`: Cash/Transfer Masuk mengikuti Tutup Kasir, sedangkan Kas Keluar = `kas_keluar` + leg KELUAR `PEMBAYARAN_ANTAR_UNIT` non-atribusi. Leg MASUK tidak dihitung dan Tutup Kasir tidak ikut berubah. — BR 29.
 
 ## 5. Business Rules (Bukti)
 1. **Ledger idempotent** dengan guard `sumber_tipe+sumber_id+akun+arah`. — `ModeKasBank::insertIdempotent/sudahTerposting`
@@ -81,6 +82,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 27. ✅ **Arus kas dashboard `/kas_bank` dihitung per unit, bukan per rekening.** `Pemasukan`/`Pengeluaran` memakai `TutupKasirSourceDefinition::ringkasanRange()` untuk unit terpilih (atau seluruh unit dalam scope user saat konsolidasi). Filter `akun_id` tetap menyaring saldo/rekening, `Buku rekening`, dan baris `Transfer internal`, tetapi tidak lagi menurunkan daftar unit: tabel sumber (`penjualan`, `service`, `kas_keluar`) tidak punya dimensi rekening. Sebelumnya rekening Finance/HO tanpa alokasi unit membuat kedua angka selalu Rp 0 untuk tanggal apa pun. — `KasBank::index`; `tests/KasBankControllerTest::testArusKasMengikutiTanggalSaatRekeningFinanceHoDipilih`
 
 28. ✅ **Posisi dashboard `/kas_bank` dihitung as-of tanggal "Sampai".** Hero (hak unit / total fisik), Kas tunai, Saldo bank, dan seluruh baris `Buku rekening` memakai `getSaldoFisikAkun($akun, $sampai)` dan `getSaldoUnitAkun($akun, $unit, $sampai)`; label panel menjadi "Posisi per <tanggal Sampai>". Sebelumnya posisi selalu dihitung per hari ini sehingga filter tanggal hanya terasa di panel Arus kas. `alokasi_total` tetap opening allocation statis, sehingga `belum_dialokasikan = fisik - alokasi` bisa negatif pada tanggal historis dan peringatan "alokasi > fisik" dapat muncul — konsekuensi yang diterima. Halaman konfigurasi akun dan form setor/tarik tetap memakai saldo hari ini. — `KasBank::index`; `ModelTransaksiKasBank::getSaldoAkun/getSaldoFisikAkun/getSaldoUnitAkun`; `Views/kas_bank/dashboard.php`; `tests/KasBankControllerTest::testPosisiMengikutiTanggalSampai`
+29. ✅ **Rekonsiliasi Harian menghitung pelunasan antar unit sebagai Kas Keluar.** `RekonDailyCalculator::erpValues()`/`erpValuesRange()` menjumlahkan `kas_keluar` per unit+tanggal dengan leg KELUAR `PEMBAYARAN_ANTAR_UNIT` di `transaksi_kas_bank`, karena pelunasan tidak disalin ke `kas_keluar` (BR 19). Leg `sumber_tipe = 'antar_unit_atribusi'` (rekening fisik sama, hanya mutasi hak) dan leg MASUK tidak dihitung; Setor/Tarik tetap bukan kas keluar rekon. **Tutup Kasir tidak berubah** (tetap posisi laci), sehingga pengeluaran Tutup Kasir dan Kas Keluar rekon dapat berbeda pada hari dengan pelunasan antar unit. Baris `finance_rekon_daily` lama tidak diubah; panel ERP memakai angka terkini. — `RekonDailyCalculator::erpKasKeluar/erpValuesRange/antarUnitKeluarRange`; `tests/unit/RekonAntarUnitTest.php`
 
 **Catatan UI `/kas_keluar`:** input dan edit dibuka di modal di atas daftar; satu kartu transaksi = satu baris `kas_keluar`. Simpan yang ditolak mengembalikan isian lewat flashdata `kk_old`, dan hanya badge "6%" yang diwarnai — bukan seluruh nama kategori.
 
@@ -93,6 +95,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - [ ] Transfer internal & antar unit serta setor/tarik tunai tercatat di ledger dan dapat di-reversal.
 - [ ] Pelunasan antar unit menawarkan rekening unit berpiutang; admin cabang dapat melunasi hutang unitnya walau unit lawan di luar scope (BR 18).
 - [ ] Pelunasan antar unit muncul sebagai baris read-only di `/kas_keluar` dan ikut total, tanpa membuat baris `kas_keluar` baru (BR 19).
+- [ ] Rekonsiliasi memasukkan pelunasan antar unit (leg KELUAR fisik) ke Kas Keluar ERP; leg MASUK/atribusi dan Tutup Kasir tidak berubah (BR 29).
 - [ ] Riwayat Pindah Saldo mengikuti unit terpilih walau rekeningnya dipakai bersama unit lain; mode konsolidasi tetap menampilkan semua unit (BR 23).
 - [ ] Unit pribadi dapat mencetak Rincian Gaji (gaji unit + HO) tanpa royalti/nomor invoice; unit franchise tetap memakai Cetak Invoice (BR 24).
 - [ ] Cut-off BANK (`2026-11-01`) tidak menggeser cut-off laci KAS (`2026-10-09`); statement bank diinput pada cut-off BANK (BR 25).

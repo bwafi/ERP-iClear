@@ -2,17 +2,27 @@
 
 namespace App\Services\Finance;
 
+use App\Libraries\ModeKasBank;
 use App\Models\ModelFinanceRekonDaily;
 use Config\Database;
 
 /**
  * Rekonsiliasi Harian Finance — ERP query + KPI scoring.
  *
- * 3 kelompok transaksi harian — sama persis dengan TutupKasir:
+ * 3 kelompok transaksi harian:
  *  1. Cash Masuk     = penjualan.bayar_tunai + service.bayar_tunai + DP tunai diterima hari itu
  *  2. Transfer Masuk = penjualan.bayar_bank + service.(harus_dibayar - bayar_tunai)
  *                      + DP transfer diterima - DP service yang selesai hari itu
  *  3. Kas Keluar     = kas_keluar.jumlah (cash + transfer, dijumlahkan utuh)
+ *                      + leg KELUAR pelunasan antar unit (non-atribusi)
+ *
+ * Cash Masuk dan Transfer Masuk mengikuti Tutup Kasir. Kas Keluar sengaja
+ * DITAMBAH leg KELUAR `PEMBAYARAN_ANTAR_UNIT`: pelunasan antar unit tidak
+ * disalin ke `kas_keluar` (lihat `ModelKasKeluar`), padahal dari sisi unit
+ * pembayar uangnya benar-benar keluar. Leg MASUK dan leg
+ * `sumber_tipe = antar_unit_atribusi` (rekening fisik sama, hanya mutasi hak)
+ * tidak dihitung. Ini keputusan bisnis rekon; Tutup Kasir tetap tidak
+ * memuat antar unit.
  *
  * Komponen DP TIDAK dihitung ulang di sini: semuanya dibaca dari
  * `TutupKasirSourceDefinition` (`kasMasukDp` / `transferMasukDp` /
@@ -188,6 +198,16 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
             $out[$d]['kas_keluar'] += (int) ($r['total'] ?? 0);
         }
 
+        // Pelunasan antar unit tidak disalin ke kas_keluar, jadi leg KELUAR
+        // fisiknya ditambahkan terpisah agar arus keluar unit pembayar ikut
+        // terpantau di rekon.
+        foreach ($this->antarUnitKeluarRange($unitId, $startDate, $endDate) as $d => $total) {
+            if (! isset($out[$d])) {
+                $out[$d] = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+            }
+            $out[$d]['kas_keluar'] += $total;
+        }
+
         // DP service: diakui di TANGGAL PENERIMAAN (tunai/transfer), dan DP
         // service yang SELESAI dikurangi dari transfer agar tidak dobel —
         // sama persis dengan `TutupKasirSourceDefinition::kasMasukDp()` dkk.
@@ -229,10 +249,12 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Kas Keluar = SUM(kas_keluar.jumlah) per unit per tanggal.
-     * TutupKasir::index() memecahnya cash (idbank null) vs transfer (idbank
-     * != null); karena keduanya tidak disaring lagi di modul ini, hasil
-     * penjumlahan keduanya identik dengan penjumlahan utuh.
+     * Kas Keluar = SUM(kas_keluar.jumlah) + leg KELUAR pelunasan antar unit
+     * (non-atribusi) per unit per tanggal.
+     *
+     * TutupKasir::index() memecah kas_keluar menjadi cash (idbank null) vs
+     * transfer (idbank != null); karena keduanya tidak disaring lagi di modul
+     * ini, hasil penjumlahan keduanya identik dengan penjumlahan utuh.
      */
     protected function erpKasKeluar(int $unitId, string $tanggal): int
     {
@@ -243,7 +265,50 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
             ->get()
             ->getRow();
 
-        return (int) ($row->total ?? 0);
+        $antarUnit = $this->antarUnitKeluarRange($unitId, $tanggal, $tanggal);
+
+        return (int) ($row->total ?? 0) + (int) ($antarUnit[$tanggal] ?? 0);
+    }
+
+    /**
+     * Leg KELUAR pelunasan antar unit per tanggal dalam rentang.
+     *
+     * Pelunasan antar unit tidak disalin ke `kas_keluar` (lihat
+     * `ModelKasKeluar::unionSumber()`), jadi rekon membaca ledger langsung.
+     * Hanya uang yang benar-benar keluar: leg `antar_unit_atribusi`
+     * (rekening fisik sama, hanya mutasi hak) dan leg MASUK dikecualikan.
+     *
+     * @return array<string,int>
+     */
+    private function antarUnitKeluarRange(int $unitId, string $startDate, string $endDate): array
+    {
+        if ($unitId <= 0
+            || ! $this->db->tableExists($this->db->getPrefix() . 'transaksi_kas_bank', false)) {
+            return [];
+        }
+
+        $rows = $this->db->table('transaksi_kas_bank')
+            ->select('DATE(tanggal) AS tgl', false)
+            ->selectSum('jumlah', 'total')
+            ->where('jenis', ModeKasBank::JENIS_ANTAR_UNIT)
+            ->where('arah', ModeKasBank::ARAH_KELUAR)
+            ->where('unit_id', $unitId)
+            ->where('DATE(tanggal) >=', $startDate)
+            ->where('DATE(tanggal) <=', $endDate)
+            ->groupStart()
+                ->where('sumber_tipe', null)
+                ->orWhere('sumber_tipe !=', KasBankSourceMovement::SUMBER_TIPE_ATRIBUSI)
+            ->groupEnd()
+            ->groupBy('tgl')
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(string) $r['tgl']] = (int) ($r['total'] ?? 0);
+        }
+
+        return $out;
     }
 
     /** Status hasil per komponen (dipakai form & list). */
