@@ -49,7 +49,7 @@ class MutasiStokPickerTest extends CIUnitTestCase
         foreach ([
             'unit', 'akun', 'jabatan', 'menu',
             'stok_barang', 'stok_awal', 'suplier', 'barang', 'kategori',
-            'service', 'pelanggan',
+            'service', 'pelanggan', 'harga_jual_unit',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -72,6 +72,7 @@ class MutasiStokPickerTest extends CIUnitTestCase
                 imei TEXT NULL, deleted TEXT NULL,
                 stok_akhir REAL NULL, stok_minimum REAL NULL,
                 total_penjualan REAL NULL, nama_unit TEXT NULL,
+                aktif_unit INT NULL DEFAULT 1,
                 PRIMARY KEY (idbarang, id_unit))');
         $q('CREATE TABLE kategori (id INT PRIMARY KEY, nama_kategori TEXT NULL, `delete` TEXT NULL)');
         $q('CREATE TABLE stok_awal (
@@ -92,6 +93,10 @@ class MutasiStokPickerTest extends CIUnitTestCase
                 idbarang INT PRIMARY KEY, kode_barang TEXT NULL, nama_barang TEXT NULL,
                 harga INT NULL, harga_beli INT NULL, idkategori INT NULL,
                 imei TEXT NULL, deleted TEXT NULL, status_ppn INT NULL)');
+        $q('CREATE TABLE harga_jual_unit (
+                id INT PRIMARY KEY AUTO_INCREMENT, barang_idbarang INT NOT NULL,
+                unit_idunit INT NOT NULL, harga_jual DECIMAL(15,2) NOT NULL,
+                UNIQUE KEY (barang_idbarang, unit_idunit))');
     }
 
     private function sebarData(): void
@@ -179,6 +184,23 @@ class MutasiStokPickerTest extends CIUnitTestCase
     private function idDariResponse(array $json): array
     {
         return array_map(fn(array $row) => $this->idDariBaris($row[0]), $json['data']);
+    }
+
+    public function testPickerMelewatiProdukNonaktifUnit(): void
+    {
+        $this->db->table('stok_barang')
+            ->where(['idbarang' => 1, 'id_unit' => 1])
+            ->update(['aktif_unit' => 0]);
+        $this->sesi(1, 1, 1);
+
+        $json = $this->picker([
+            'draw' => 1, 'start' => 0, 'length' => 20, 'unit' => 1,
+            'order' => [0 => ['column' => 1, 'dir' => 'asc']],
+            'search' => ['value' => ''],
+        ]);
+
+        $this->assertSame(11, $json['recordsTotal']);
+        $this->assertNotContains(1, $this->idDariResponse($json));
     }
 
     public function testPickerServerSide(): void

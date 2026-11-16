@@ -5,9 +5,10 @@ namespace Tests;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
- * Modal "Pilih Sparepart" (/service dan /detail/riwayat_service?tab=sparepart)
- * menampilkan kode, stok akhir, dan suplier sparepart supaya teknisi bisa
- * memilih dengan yakin. Tampilan memakai daftar pilihan (bukan tabel padat),
+ * Modal picker service (/service dan /detail/riwayat_service?tab=sparepart)
+ * punya dua tombol — "Pilih Sparepart" dan "Pilih Jasa" — dan menampilkan
+ * kode, stok akhir, serta suplier sparepart supaya teknisi bisa memilih
+ * dengan yakin. Tampilan memakai daftar pilihan (bukan tabel padat),
  * sedangkan tabel sparepart yang terpilih tetap menampilkan stok akhir.
  */
 class ServiceSparepartColumnRenderTest extends CIUnitTestCase
@@ -47,6 +48,8 @@ class ServiceSparepartColumnRenderTest extends CIUnitTestCase
                 $html,
                 "stok akhir dirender sebagai penanda di item ({$view})"
             );
+            $this->assertStringContainsString('data-picker-jenis="sparepart"', $html, "tombol Pilih Sparepart harus ada ({$view})");
+            $this->assertStringContainsString('data-picker-jenis="jasa"', $html, "tombol Pilih Jasa harus ada ({$view})");
         }
     }
 

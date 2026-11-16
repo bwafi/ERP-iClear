@@ -2,9 +2,11 @@
 
 namespace App\Controllers;
 
+use App\Models\ModelHppUnit;
 use App\Models\ModelKategori;
 use App\Models\ModelStokAwal;
 use App\Models\ModelBarang;
+use App\Models\ModelBarangUnit;
 use App\Models\ModelPelanggan;
 use App\Models\ModelSuplier;
 use App\Models\ModelAuth;
@@ -16,6 +18,8 @@ class StokAwal extends BaseController
     protected $KategoriModel;
     protected $StokAwalModel;
     protected $BarangModel;
+    protected $HppUnitModel;
+    protected $BarangUnitModel;
 
     protected $UnitModel;
     protected $SuplierModel;
@@ -29,6 +33,8 @@ class StokAwal extends BaseController
         $this->KategoriModel = new ModelKategori();
         $this->StokAwalModel = new ModelStokAwal();
         $this->BarangModel = new ModelBarang();
+        $this->HppUnitModel = new ModelHppUnit();
+        $this->BarangUnitModel = new ModelBarangUnit();
         $this->UnitModel = new ModelUnit();
         $this->SuplierModel = new ModelSuplier();
         $this->PelangganModel = new ModelPelanggan();
@@ -138,7 +144,7 @@ class StokAwal extends BaseController
     public function insert()
     {
         $selectedProducts = $this->request->getPost('selected_products');
-        $idUnit = $this->request->getPost('global_unit') ?? '';
+        $idUnit = (int) ($this->request->getPost('global_unit') ?? 0);
 
         if ($selectedProducts) {
             foreach ($selectedProducts as $kodeBarang) {
@@ -169,7 +175,10 @@ class StokAwal extends BaseController
                     'pelanggan_id_pelanggan' => $tipeRelasi === 'pelanggan' ? $idPelanggan : 0,
                 ];
 
-                $this->StokAwalModel->insert_Stok($data);
+                if ($this->StokAwalModel->insert_Stok($data) && $idUnit > 0) {
+                    $this->BarangUnitModel->aktifkanJikaNonaktif((int) $idbarang, $idUnit, (int) session('ID_AKUN'));
+                    $this->HppUnitModel->syncFromStokAwal((int) $idbarang, $idUnit, (float) $hargaBeli);
+                }
             }
 
             session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');

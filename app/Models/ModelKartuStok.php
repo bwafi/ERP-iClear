@@ -43,7 +43,9 @@ class ModelKartuStok extends Model
                 stok_barang.nama_barang,
                 stok_barang.imei,
                 stok_barang.nama_unit,
-                stok_barang.harga AS harga,
+                COALESCE(hju.harga_jual, stok_barang.harga) AS harga,
+                hju.harga_jual AS harga_jual_unit,
+                stok_barang.harga AS harga_master,
                 stok_barang.stok_awal,
                 stok_barang.stok_akhir,
                 stok_barang.total_pembelian,
@@ -52,7 +54,8 @@ class ModelKartuStok extends Model
                 stok_barang.total_retur_supplier,
                 stok_barang.total_mutasi_masuk,
                 stok_barang.total_mutasi_keluar,
-                barang.harga_beli,
+                stok_barang.aktif_unit,
+                COALESCE(hpp_unit.hpp, hpp_barang.hpp, barang.harga_beli) AS harga_beli,
                 barang.jenis_hp,
                 barang.warna,
                 barang.status_ppn,
@@ -76,12 +79,15 @@ class ModelKartuStok extends Model
                 ) AS nama_supplier
             ')
             ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('hpp_unit', 'hpp_unit.barang_idbarang = stok_barang.idbarang AND hpp_unit.unit_idunit = stok_barang.id_unit', 'left')
+            ->join('hpp_barang', 'hpp_barang.idbarang = stok_barang.idbarang', 'left')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = stok_barang.idbarang AND hju.unit_idunit = stok_barang.id_unit', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0');
     }
 
-    private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '')
+    private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '', $kategori = '', $stok = '')
     {
         if ($search !== '') {
             $builder->groupStart()
@@ -103,13 +109,32 @@ class ModelKartuStok extends Model
             $builder->where('barang.status_ppn', '0');
         }
 
+        if ($kategori !== '' && ctype_digit((string) $kategori)) {
+            $builder->where('barang.idkategori', (int) $kategori);
+        }
+
+        switch ($stok) {
+            case 'minus':
+                $builder->where('stok_barang.stok_akhir <', 0);
+                break;
+            case 'nol':
+                $builder->where('stok_barang.stok_akhir', 0);
+                break;
+            case 'non_positif':
+                $builder->where('stok_barang.stok_akhir <=', 0);
+                break;
+            case 'positif':
+                $builder->where('stok_barang.stok_akhir >', 0);
+                break;
+        }
+
         return $builder;
     }
 
     /**
      * Server-side processing DataTables Kartu Stok.
      */
-    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'stok_barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '')
+    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'stok_barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '', $kategori = '', $stok = '')
     {
         $allowedOrder = [
             'stok_barang.kode_barang',
@@ -124,7 +149,7 @@ class ModelKartuStok extends Model
         }
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
 
-        $builder = $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn);
+        $builder = $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn, $kategori, $stok);
 
         return $builder->orderBy($orderCol, $orderDir)
             ->limit($limit, $offset)
@@ -141,11 +166,11 @@ class ModelKartuStok extends Model
     }
 
     /**
-     * Total data setelah filter search/unit/ppn.
+     * Total data setelah filter search/unit/ppn/kategori/stok akhir.
      */
-    public function countKartuStokDT($search = '', $unit = '', $ppn = '')
+    public function countKartuStokDT($search = '', $unit = '', $ppn = '', $kategori = '', $stok = '')
     {
-        return $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn)->countAllResults(false);
+        return $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn, $kategori, $stok)->countAllResults(false);
     }
 
     /**
@@ -158,9 +183,11 @@ class ModelKartuStok extends Model
                 COUNT(*) AS total_barang,
                 COUNT(DISTINCT stok_barang.id_unit) AS total_unit,
                 COALESCE(SUM(stok_barang.stok_akhir), 0) AS total_stok,
-                COALESCE(SUM(stok_barang.stok_akhir * barang.harga_beli), 0) AS nilai_stok
+                COALESCE(SUM(stok_barang.stok_akhir * COALESCE(hpp_unit.hpp, hpp_barang.hpp, barang.harga_beli)), 0) AS nilai_stok
             ')
             ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
+            ->join('hpp_unit', 'hpp_unit.barang_idbarang = stok_barang.idbarang AND hpp_unit.unit_idunit = stok_barang.id_unit', 'left')
+            ->join('hpp_barang', 'hpp_barang.idbarang = stok_barang.idbarang', 'left')
             ->join('kategori', 'kategori.id = barang.idkategori', 'left')
             ->where('barang.deleted', '0')
             ->where('kategori.delete', '0')
@@ -169,6 +196,28 @@ class ModelKartuStok extends Model
     }
 
 
+
+    /**
+     * Pastikan produk+unit benar-benar ada sebelum HPP ditulis.
+     */
+    public function existsPair(int $idbarang, int $idunit): bool
+    {
+        return $this->db->table('stok_barang')
+            ->where(['idbarang' => $idbarang, 'id_unit' => $idunit])
+            ->countAllResults() > 0;
+    }
+
+    /**
+     * Satu baris produk+unit untuk validasi status (stok dan status aktif).
+     */
+    public function getPair(int $idbarang, int $idunit)
+    {
+        return $this->db->table('stok_barang')
+            ->select('idbarang, id_unit, stok_akhir, aktif_unit')
+            ->where(['idbarang' => $idbarang, 'id_unit' => $idunit])
+            ->get()
+            ->getRow();
+    }
 
     public function insert_getKartuStok($data)
     {
@@ -239,7 +288,7 @@ class ModelKartuStok extends Model
     //     return $builder->get()->getResult();
     // }
 
-    public function exportfilter($namaUnit = null, $statusPpn = null)
+    public function exportfilter($namaUnit = null, $statusPpn = null, $kategori = null, $stok = null)
 {
     $builder = $this->select('stok_barang.*, barang.imei, barang.status_ppn, kategori.nama_kategori')
         ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
@@ -257,6 +306,27 @@ class ModelKartuStok extends Model
         $builder->where('barang.status_ppn', '1');
     } elseif ($statusPpn === 'Non PPN') {
         $builder->where('barang.status_ppn', '0');
+    }
+
+    // Filter kategori (id kategori)
+    if (!empty($kategori) && ctype_digit((string) $kategori)) {
+        $builder->where('barang.idkategori', (int) $kategori);
+    }
+
+    // Filter stok akhir
+    switch ($stok) {
+        case 'minus':
+            $builder->where('stok_barang.stok_akhir <', 0);
+            break;
+        case 'nol':
+            $builder->where('stok_barang.stok_akhir', 0);
+            break;
+        case 'non_positif':
+            $builder->where('stok_barang.stok_akhir <=', 0);
+            break;
+        case 'positif':
+            $builder->where('stok_barang.stok_akhir >', 0);
+            break;
     }
 
     return $builder->get()->getResult();

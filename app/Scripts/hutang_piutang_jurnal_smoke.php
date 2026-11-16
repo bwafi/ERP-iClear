@@ -179,15 +179,16 @@ if ($suplier) {
         'jatuh_tempo'         => date('Y-m-d', strtotime('+14 day')),
         'sisa'                => 500000,
         'status'              => 'Belum Lunas',
+        'total_transaksi'     => 1000000,
         'total_bayar'         => 500000,
-        'bayar'               => 0,
+        'bayar'               => 500000,
         'suplier_id_suplier'  => (int) $suplier->id_suplier,
         'unit_idunit'         => $unitId,
     ]);
     $pbId = (int) $db->insertID();
     $svc->syncFromPembelian($pbId);
     $projPb = $db->table('hutang_piutang')->where('sumber_tipe', 'pembelian')->where('sumber_id', $pbId)->get()->getRow();
-    ok('syncFromPembelian projection', $projPb && (int) $projPb->is_projection === 1 && (int) $projPb->sisa === 500000);
+    ok('syncFromPembelian projection', $projPb && (int) $projPb->is_projection === 1 && (int) $projPb->sisa === 500000 && (int) $projPb->total === 1000000);
 } else {
     echo "  SKIP  syncFromPembelian (tidak ada data suplier)\n";
 }

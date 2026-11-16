@@ -629,10 +629,27 @@
                     $uri = \Config\Services::request()->getUri()->getPath();
                     // remove index.php
                     $uri = str_replace('/index.php/', '', $uri);
+                    // `menu.url` disimpan tanpa garis miring di awal (mis. "kartu_stok"),
+                    // sedangkan getPath() mengembalikan "/kartu_stok".
+                    $uri = trim($uri, '/');
                     $manualbook = db_connect()->table('menu')->where(array("url" => $uri))->get()->getFirstRow();
-                    if (!empty($manualbook) && $manualbook->manualbook != null): ?>
-                        <h4><?= $manualbook->nama_menu ?></h4>
-                        <embed type="application/pdf" src="<?= base_url() . "/manualbook/" . $manualbook->manualbook ?>"
+                    $manualFiles = \App\Libraries\ManualBook::daftarBerkas($manualbook->manualbook ?? null);
+                    ?>
+                    <?php if ($manualFiles !== []): ?>
+                        <h4><?= esc($manualbook->nama_menu) ?></h4>
+                        <?php if (count($manualFiles) > 1): ?>
+                            <div class="d-flex justify-content-center mb-3">
+                                <select class="form-select w-auto" id="manualbook-pilih" aria-label="Pilih manual book">
+                                    <?php foreach ($manualFiles as $manualFile): ?>
+                                        <option value="<?= esc(base_url('manualbook/' . rawurlencode($manualFile)), 'attr') ?>">
+                                            <?= esc(\App\Libraries\ManualBook::judul($manualFile)) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        <?php endif; ?>
+                        <embed id="manualbook-embed" type="application/pdf"
+                            src="<?= esc(base_url('manualbook/' . rawurlencode($manualFiles[0])), 'attr') ?>"
                             width="100%" height="800"></embed>
                     <?php else: ?>
                         <h4>Manual Book Tidak Tersedia</h4>
@@ -647,6 +664,19 @@
             </div>
         </div>
     </div>
+
+    <script>
+    (function() {
+        var pilih = document.getElementById('manualbook-pilih');
+        var embed = document.getElementById('manualbook-embed');
+        if (!pilih || !embed) {
+            return;
+        }
+        pilih.addEventListener('change', function() {
+            embed.setAttribute('src', pilih.value);
+        });
+    })();
+    </script>
 
 
 

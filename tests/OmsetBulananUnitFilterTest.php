@@ -103,7 +103,7 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
                 iddetail_penjualan INTEGER PRIMARY KEY AUTO_INCREMENT,
                 penjualan_idpenjualan INT NULL, barang_idbarang INT NULL,
                 sub_total REAL NULL, hpp_penjualan REAL NULL)');
-        $q('CREATE TABLE barang (idbarang INT PRIMARY KEY, nama_barang TEXT NULL, idkategori INT NULL)');
+        $q('CREATE TABLE barang (idbarang INT PRIMARY KEY, nama_barang TEXT NULL, idkategori INT NULL, jenis_barang TEXT NULL DEFAULT "produk")');
     }
 
     private function sebarData(): void

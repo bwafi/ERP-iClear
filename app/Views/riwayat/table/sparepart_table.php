@@ -1,9 +1,12 @@
 <?= $this->include('partials/sparepart_picker_style') ?>
 
 <form id="service-sparepart-form" action="<?php echo base_url('update_service/saveSparepart') ?>" enctype="multipart/form-data" method="post">
-    <div class="mt-3">
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal">
-            Tambah Sparepart
+    <div class="mt-3 d-flex gap-2">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal" data-picker-jenis="sparepart">
+            <i class="bi bi-box-seam me-1"></i> Pilih Sparepart
+        </button>
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sparepartModal" data-picker-jenis="jasa">
+            <i class="bi bi-tools me-1"></i> Pilih Jasa
         </button>
     </div>
     <br>
@@ -18,7 +21,7 @@
                         </span>
                         <div>
                             <h5 class="modal-title" id="sparepartModalLabel">Pilih Sparepart</h5>
-                            <p class="text-muted fs-3 mb-0">Cari nama atau kode, lalu centang yang dipakai.</p>
+                            <p class="text-muted fs-3 mb-0" id="sparepartModalHint">Cari nama atau kode, lalu centang yang dipakai.</p>
                         </div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
@@ -126,6 +129,7 @@
 
 <script>
     let searchTimeout;
+    let sparepartJenis = 'sparepart';
     const oldSpareparts = <?= json_encode($oldsparepart) ?>;
     const sparepartFormatter = new Intl.NumberFormat('id-ID');
 
@@ -156,8 +160,9 @@
         const unit = item.NAMA_UNIT || item.nama_unit || '';
         const suplier = item.nama_suplier || '';
         const harga = Number(item.harga) || 0;
-        const hpp = Number(item.harga_beli) || 0;
+        const hpp = Number(item.hpp) || 0;
         const stok = Number(item.stok_akhir) || 0;
+        const isJasa = item.jenis_barang === 'jasa';
         const isChecked = document.getElementById('row-' + id) ? ' checked' : '';
 
         let meta = '<span class="service-sp-code">' + escapeSparepart(kode || '-') + '</span>';
@@ -180,7 +185,8 @@
             ' data-kode="' + escapeSparepart(kode) + '"' +
             ' data-nama="' + escapeSparepart(nama) + '"' +
             ' data-harga="' + harga + '"' +
-            ' data-stok="' + stok + '"' + isChecked + '>' +
+            ' data-stok="' + stok + '"' +
+            ' data-jenis="' + (isJasa ? 'jasa' : 'produk') + '"' + isChecked + '>' +
             '<span class="service-sp-item__box">' +
             '<span class="service-sp-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>' +
             '<span class="service-sp-item__main">' +
@@ -189,7 +195,9 @@
             '</span>' +
             '<span class="service-sp-side">' +
             '<span class="service-sp-price">Rp ' + sparepartFormatter.format(harga) + '</span>' +
-            '<span class="service-sp-stock' + (stok <= 2 ? ' is-low' : '') + '">Stok ' + sparepartFormatter.format(stok) + '</span>' +
+            (isJasa
+                ? '<span class="service-sp-stock">Jasa</span>'
+                : '<span class="service-sp-stock' + (stok <= 2 ? ' is-low' : '') + '">Stok ' + sparepartFormatter.format(stok) + '</span>') +
             '</span>' +
             '</span>' +
             '</label>';
@@ -200,7 +208,7 @@
         const label = document.getElementById('sparepart-selected-count');
         const button = document.getElementById('add-selected-sparepart');
         if (label) {
-            label.textContent = count > 0 ? count + ' sparepart dipilih' : 'Belum ada yang dipilih';
+            label.textContent = count > 0 ? count + ' ' + sparepartJenis + ' dipilih' : 'Belum ada yang dipilih';
         }
         if (button) {
             button.disabled = count === 0;
@@ -253,11 +261,11 @@
             const query = this.value.trim();
 
             if (query.length < 2) {
-                modalBody.innerHTML = sparepartState('bi-search', 'Ketik minimal 2 karakter untuk mencari sparepart.');
+                modalBody.innerHTML = sparepartState('bi-search', 'Ketik minimal 2 karakter untuk mencari ' + sparepartJenis + '.');
                 return;
             }
 
-            modalBody.innerHTML = sparepartState('spinner-border spinner-border-sm text-primary', 'Mencari sparepart...');
+            modalBody.innerHTML = sparepartState('spinner-border spinner-border-sm text-primary', 'Mencari ' + sparepartJenis + '...');
 
             searchTimeout = setTimeout(function() {
                 fetch('<?= base_url('service/search_sparepart') ?>', {
@@ -266,12 +274,12 @@
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: 'search=' + encodeURIComponent(query)
+                    body: 'search=' + encodeURIComponent(query) + '&jenis=' + sparepartJenis
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (!Array.isArray(data) || data.length === 0) {
-                        modalBody.innerHTML = sparepartState('bi-inbox', 'Tidak ada sparepart yang cocok dengan "' + query + '".');
+                        modalBody.innerHTML = sparepartState('bi-inbox', 'Tidak ada ' + sparepartJenis + ' yang cocok dengan "' + query + '".');
                         return;
                     }
 
@@ -280,17 +288,32 @@
                 })
                 .catch(err => {
                     console.error(err);
-                    modalBody.innerHTML = sparepartState('bi-exclamation-triangle', 'Gagal memuat data sparepart. Coba lagi.', true);
+                    modalBody.innerHTML = sparepartState('bi-exclamation-triangle', 'Gagal memuat data ' + sparepartJenis + '. Coba lagi.', true);
                 });
             }, 300);
+        });
+
+        // Dua tombol membuka modal yang sama; jenis picker ditentukan tombolnya.
+        document.querySelectorAll('[data-picker-jenis]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                sparepartJenis = this.getAttribute('data-picker-jenis') === 'jasa' ? 'jasa' : 'sparepart';
+            });
+        });
+
+        $('#sparepartModal').on('show.bs.modal', function () {
+            const isJasa = sparepartJenis === 'jasa';
+
+            document.getElementById('sparepartModalLabel').textContent = isJasa ? 'Pilih Jasa' : 'Pilih Sparepart';
+            document.getElementById('sparepartModalHint').textContent = isJasa
+                ? 'Cari nama atau kode jasa, lalu centang yang dipakai.'
+                : 'Cari nama atau kode, lalu centang yang dipakai.';
+            searchInput.value = '';
+            modalBody.innerHTML = sparepartState('bi-search', 'Ketik minimal 2 karakter untuk mencari ' + sparepartJenis + '.');
         });
 
         // Load initial data when modal opens
         $('#sparepartModal').on('shown.bs.modal', function () {
             searchInput.focus();
-            if (!searchInput.value) {
-                searchInput.dispatchEvent(new Event('input'));
-            }
         });
 
         updateSparepartSelection();
@@ -302,7 +325,9 @@
             const id = checkbox.getAttribute('data-id');
             const nama = checkbox.getAttribute('data-nama');
             const harga = parseFloat(checkbox.getAttribute('data-harga'));
-            const stokAkhir = parseFloat(checkbox.getAttribute('data-stok')) || 0;
+            const stokAkhir = checkbox.getAttribute('data-jenis') === 'jasa'
+                ? '-'
+                : (parseFloat(checkbox.getAttribute('data-stok')) || 0);
 
             // Cek apakah sparepart sudah ada di tabel
             if (!document.getElementById(`row-${id}`)) {

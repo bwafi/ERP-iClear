@@ -81,6 +81,16 @@
 - **Table:** six columns (Dokumen, Pihak, Jatuh tempo, Nilai, Status, Aksi); money and dates use `tabular-nums`; at `767.98px` the table becomes stacked cards with `data-label` captions.
 - **Rules:** no gradients, no colored left borders, no page-level font changes; muted text stays ≥4.5:1 in both themes; hover motion is limited to background/button state and disabled under `prefers-reduced-motion`.
 
+### Daftar Tagihan Hutang (`.dt-*`)
+- **Scope:** `app/Views/hutang/daftar_tagihan.php` + `app/Views/hutang/_daftar_tagihan_theme.php`; semua selector di bawah `.dt-page` / `.dt-pay-modal` dan memakai token `--dt-*` dari tema aplikasi. Tanpa palet, font, atau dependency baru.
+- **Header:** `.dt-head` adalah kartu putih ber-hairline (`14px` radius, `18px 20px` padding) di atas kanvas, bukan teks transparan yang menyatu dengan body background. Tema gelap memakai token kartu yang sama.
+- **Header tabel:** `.dt-table th` memakai permukaan putih (`--dt-surface`) dengan label uppercase `0.66rem`; bukan pita abu-abu di atas lembar.
+- **Layout:** header kartu (breadcrumb, title, tautan Umur hutang/Riwayat) → strip empat sel berhairline (tagihan terbuka, sisa hutang, jatuh tempo ≤7 hari, terlambat) → satu lembar dengan toolbar (search, rentang tanggal, unit, reset, export) → tabel tagihan → footer jumlah tampil. Tabel jatuh tempo terdekat lebih dulu dan menjadi daftar bertumpuk di bawah `768px` dengan label `data-label`.
+- **Status tempo:** chip Terlambat/Hari ini/≤7 hari/Aman diturunkan dari `jatuh_tempo`; tanggal tanpa tempo tidak dihitung sebagai terlambat. Filter tanggal default kosong agar tagihan lama tidak tersembunyi.
+- **Modal bayar:** ringkasan sisa → pemilih metode **Tunai / Bank** (hanya field metode aktif yang tampil; metode lain dikirim 0) → nominal + rekening bila bank. Label rekening memakai `nama bank · atas nama`; nomor rekening tidak ditampilkan (hanya jadi fallback bila nama pemilik kosong). Rekening wajib bila memilih bank; tanpa rekening aktif pilihan Bank dinonaktifkan. Tombol simpan nonaktif selama total 0. Perhitungan sisa/kembalian tetap di klien, posting dan status lunas tetap milik server.
+- **Scope rekening:** role unit hanya melihat rekening yang boleh dipakai unitnya (`ModelBank::getBankDalamScopeUnit`: rekening milik unit + shared yang dialokasikan, tanpa rekening Finance/HO); role lintas unit (0/1/2/34) tetap melihat semua. `bayar_bank` pada submit divalidasi ulang lewat `BankRekeningValidator::validateUntukUnit`, jadi dropdown bukan satu-satunya pengaman.
+- **Rules:** route, `export_daftar_hutang` (`tanggal_awal`, `tanggal_akhir`, `nama_unit`), `update_cicilan_hutang` (`idpembelian`, `bayar_tunai`, `bayar_bank`, `bank_idbank`, `sisa`), dan alur ledger tidak berubah. Satu aksen HUTANG (danger) untuk aksi/fokus; tanpa gradien atau border kiri berwarna; muted text ≥4.5:1 di kedua tema; motion hanya transisi kontrol dan dimatikan under `prefers-reduced-motion`.
+
 ### Mutasi Stok (`.ms-*`)
 - **Scope:** `app/Views/stok/_mutasi_theme.php`; every selector lives under `.mutasi-stok` and derives from `--ms-*` tokens tied to the app theme.
 - **Layout:** page head (breadcrumb, title, active-unit chip) → route panel (sender → receiver, send date) → items panel (empty state → line table → summary action). The receive date is not entered here; it is recorded when the receiving unit confirms on `/mutasi_stok/masuk`.
@@ -95,6 +105,33 @@
 - **Modals:** Terima (receipt block, line table, total, H/P due-date notice, `Terima & buat H/P`) and Batal (stacked receipt, danger callout, required reason). `asal` keeps filter+page on the redirect; the JS escapes product names before injecting detail rows.
 - **Rules:** same accent/no-gradient rules, no color-only states, focus visible, motion limited to control transitions and the detail caret.
 
+
+### Kartu Stok (`.ks-*`)
+- **Scope:** `app/Views/stok/_kartu_theme.php`; every selector lives under `.kartu-stok` (modal HPP included) and derives from `--ks-*` tokens tied to the app theme.
+- **Layout:** page head on its own white surface → four-figure summary strip (Total Barang, Total Unit, Stok Akhir, Nilai Stok/HPP) separated by 1px rules → one filter row (unit, kategori, stok akhir, status PPN, search, Export) → ledger sheet with sticky headings and a `lip` footer.
+- **Filters:** unit, kategori (`barang.idkategori`), stok akhir (semua, minus `< 0`, minus & nol `<= 0`, nol `= 0`, ada stok `> 0`), dan status PPN, semuanya server-side dan dapat digabung dengan pencarian. Nilai stok di luar daftar diabaikan server. Tombol Export mengirim filter yang sedang aktif sehingga isi Excel sama dengan daftar yang tampil; ringkasan di atas tabel tetap global.
+- **Header surface:** `.ks-head` is a white card (hairline border, `14px` radius, same shadow token as the sheet), never transparent over the page canvas — the title block must read as a surface, not as text floating on the blue background. Dark theme uses the same card background token.
+- **Ledger rows:** kode (mono), barang (+IMEI subline), unit, kategori, PPN dot + text, stok akhir (right, tabular; zero muted, negative danger), actions (detail chevron + status switch). Supplier lives in the detail row, not the main row.
+- **Detail row:** four groups — Identitas, Harga & stok, Stok masuk, Stok keluar. Movement values carry `+`/`−` and stay muted at zero; HPP carries the role-gated Ubah button.
+- **Rules:** one accent for focus and the primary action, no gradients, no colored left borders, no card around the table; status is never color-only (dot + label, switch + label); footer, pagination, and processing share the same tokens; the detail grid steps 4 → 2 → 1 columns and filters stack below `767.98px`.
+
+### Pembelian (`.pb-*`)
+- **Scope:** `app/Views/transaksi/pembelian.php` + `app/Views/transaksi/_pembelian_theme.php`; semua selector di bawah `.pembelian-page` / `.pb-modal`, token `--pb-*` diturunkan dari tema aplikasi. Tanpa palet, font, atau dependency baru.
+- **Layout:** kepala halaman tipis (breadcrumb, judul, satu baris deskripsi, chip unit) → satu lembar dengan tiga bagian berhairline: Pihak & Dokumen (sumber, supplier/pelanggan, nota, tanggal, frontliner read-only), Produk (toolbar Pilih/Tambah Produk + tabel ledger), Pembayaran (metode, tunai, bank, catatan hutang) → dock pembayaran sticky (Diskon, PPN, Total, Dibayar, Hutang, Kembalian, Simpan).
+- **Tabel produk:** input inline untuk harga beli, jumlah, biaya tambahan, keterangan, diskon, dan PPN; kolom uang `tabular-nums` dan `nowrap`; baris kosong memakai empty state, bukan tabel kosong. Tabel tetap bisa digeser horizontal di layar sempit.
+- **Dock:** selalu terlihat saat menggulir; Total satu-satunya angka yang dinaikkan skalanya, Hutang memakai warna danger, satu aksi primary di kanan. Di bawah `768px` angka menjadi grid 2–3 kolom dan tombol Simpan selebar dock.
+- **Bank:** baris bank bertumpuk di bawah `576px` (select penuh, nominal + hapus di baris kedua) supaya nominal tidak terpotong.
+- **Pilih produk:** modal `modal-lg` mengikuti pola picker Sparepart pada Terima Service: header ikon + judul + hint, satu kolom pencarian dengan badge unit, lalu daftar kartu yang bisa di-scroll — tick bulat, nama produk, kode tebal, metadata kategori/IMEI/penyimpanan/warna berikon, serta HPP tebal dengan `Jual` kecil di kanan. Kartu terpilih memakai border dan latar aksen dengan tick terisi. Footer menampilkan jumlah produk + Total HPP serta tombol `Batal`/`Tambahkan`; tombol nonaktif selama belum ada pilihan. Filter berjalan di sisi klien dan pilihan disimpan di `Map` sehingga tidak hilang saat daftar disaring. Di bawah `576px` badge unit disembunyikan dan baris harga turun ke bawah kartu.
+- **Rules:** semua `id`, `name`, hook JS, modal, route, dan alur POST lama dipertahankan; tanpa bayangan/gradien, satu aksen untuk fokus dan aksi utama; motion hanya `pb-settle` (fade + `4px`) dan transisi kontrol, dimatikan under `prefers-reduced-motion`.
+
+### Tarif Jasa (`.tj-*`)
+- **Scope:** `app/Views/jasa/tarif.php` + `app/Views/jasa/_tarif_theme.php`; semua selector di bawah `.tarif-jasa` dan `.tj-modal`, token `--tj-*` diturunkan dari tema aplikasi. Tanpa palet, font, atau dependency baru.
+- **Layout:** kepala halaman ber-hairline (breadcrumb kecil, judul `1.6rem`/600 `-0.03em`, satu baris deskripsi, aksi primary) → strip empat angka berhairline (Total Jasa, Harga Terendah, Harga Tertinggi, Rata-rata) → lembar tarif (toolbar cari/urutkan/jumlah → tabel → footer DataTables). Angka ringkasan dihitung dari data yang sudah dimuat, tanpa query baru.
+- **Kerataan:** tanpa bayangan dan tanpa gradien; kedalaman datang dari hairline dan ruang. Satu aksen primary untuk aksi/fokus. Header tabel uppercase `0.6875rem`, harga rata kanan `tabular-nums`, kode mono, tombol Ubah bergaya ghost.
+- **Tabel:** lima kolom (Kode, Nama Jasa, HPP, Harga Jual, Aksi). HPP dan harga membawa `data-order` numerik supaya sortir DataTables benar; pencarian memakai input sendiri, DataTables hanya untuk sortir/paging.
+- **Responsif:** di bawah `768px` baris menjadi kartu berlabel `data-label`, strip angka 2×2, toolbar menumpuk, info/pagination di tengah.
+- **Modal:** tambah/ubah memakai token tema; input Harga Jual dan HPP diformat ribuan saat mengetik (`1.000.000`) dengan pratinjau `Rp …`. HPP bisa diisi nominal atau persen dari harga jual (persen hanya alat bantu input; server menghitung nominalnya). Field, route, CSRF, dan validasi server mengikuti kontrak yang sama.
+- **Motion:** hanya `tj-settle` (fade + `4px`) saat halaman dimuat dan transisi state kontrol, dimatikan under `prefers-reduced-motion`.
 
 ### Payroll Run Sheet (`.pay-*`)
 - **Scope:** `app/Views/jurnal/payroll.php` + `app/Views/jurnal/_payroll_theme.php`; every selector lives under `.payroll-page` and derives from `--pay-*` tokens tied to the app theme. No new palette, font, or dependency.

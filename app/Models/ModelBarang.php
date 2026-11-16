@@ -9,7 +9,7 @@ class ModelBarang extends Model
     protected $table = 'barang';
     protected $primaryKey = 'idbarang';
     protected $returnType = 'object';
-    protected $allowedFields = ['kode_barang', 'nama_barang', 'harga', 'harga_beli', 'input', 'idkategori', 'id_sub_kategori', 'imei', 'stok_minimum', 'jenis_hp', 'internal', 'warna', 'status', 'status_barang', 'deleted', 'status_ppn', 'nama_barang_id'];
+    protected $allowedFields = ['kode_barang', 'nama_barang', 'harga', 'harga_beli', 'input', 'idkategori', 'id_sub_kategori', 'imei', 'stok_minimum', 'jenis_hp', 'internal', 'warna', 'status', 'status_barang', 'deleted', 'status_ppn', 'nama_barang_id', 'jenis_barang'];
 
     public function getBarang()
     {
@@ -17,6 +17,7 @@ class ModelBarang extends Model
             ->join('kategori', 'kategori.id = barang.idkategori')
             ->join('sub_kategori', 'sub_kategori.id = barang.id_sub_kategori', 'left')
             ->where('barang.deleted', '0')
+            ->where('barang.jenis_barang', 'produk')
             ->where('kategori.delete', '0')
             ->where('barang.idkategori !=', 1)
             ->findAll();
@@ -29,15 +30,34 @@ class ModelBarang extends Model
             ->findAll();
     }
 
-    public function getAllBarang()
+    /**
+     * Daftar produk beserta stok & harga jual untuk satu unit.
+     *
+     * $idUnit diisi bila pemanggil menyediakan pilihan unit (mis. /pembelian
+     * untuk Finance/Root/Manager). Tanpa argumen, perilakunya tetap memakai
+     * unit sesi seperti sebelumnya.
+     *
+     * $termasukNonaktif dipakai /pembelian: produk nonaktif tetap tampil
+     * (dengan `aktif_unit = 0`) supaya bisa dibeli lagi, dan pembelian yang
+     * tersimpan akan mengaktifkannya kembali di unit itu. Pemanggil lain
+     * memakai default agar produk nonaktif tetap tersaring.
+     */
+    public function getAllBarang(?int $idUnit = null, bool $termasukNonaktif = false)
     {
-        $id_unit = session('ID_UNIT');
-        return $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir')
+        $id_unit = $idUnit ?? session('ID_UNIT');
+        $builder = $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir, stok_barang.aktif_unit, COALESCE(hju.harga_jual, barang.harga) AS harga_jual')
             ->join('kategori', 'kategori.id = barang.idkategori')
             ->join('stok_barang', 'stok_barang.idbarang = barang.idbarang AND stok_barang.id_unit = ' . (int)$id_unit, 'left')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = barang.idbarang AND hju.unit_idunit = ' . (int)$id_unit, 'left')
             ->where('barang.deleted', 0)
-            ->where('kategori.delete', 0)
-            ->findAll();
+            ->where('barang.jenis_barang', 'produk')
+            ->where('kategori.delete', 0);
+
+        if (! $termasukNonaktif) {
+            $builder->where('(stok_barang.aktif_unit IS NULL OR stok_barang.aktif_unit = 1)', null, false);
+        }
+
+        return $builder->findAll();
     }
 
     /**
@@ -159,6 +179,7 @@ class ModelBarang extends Model
             LEFT JOIN suplier s ON s.id_suplier = sa2.suplier_id_suplier
             WHERE sb.id_unit = ?
               AND sb.stok_akhir > 0
+              AND sb.aktif_unit = 1
               AND sb.deleted = '0'
               AND k.`delete` = '0'";
         $params = [$idUnit, $idUnit];

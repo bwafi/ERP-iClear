@@ -13,6 +13,7 @@ use App\Models\ModelServiceKerusakan;
 use App\Models\ModelServiceSparepart;
 use App\Models\ModelStokAwal;
 use App\Models\ModelHppBarang;
+use App\Models\ModelHppUnit;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelDetailPenjualan;
@@ -37,6 +38,7 @@ class Service extends BaseController
     protected $ServiceSparepartModel;
     protected $StokAwalModel;
     protected $HppBarangModel;
+    protected $HppUnitModel;
     protected $JurnalModel;
     protected $BankModel;
     protected $PembayaranBankModel;
@@ -60,6 +62,7 @@ class Service extends BaseController
         $this->ServiceSparepartModel = new ModelServiceSparepart();
         $this->StokAwalModel = new ModelStokAwal();
         $this->HppBarangModel = new ModelHppBarang();
+        $this->HppUnitModel = new ModelHppUnit();
         $this->JurnalModel = new ModelJurnal();
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
@@ -418,19 +421,19 @@ class Service extends BaseController
                 $total = $this->rupiahToInt($produk['total'] ?? '0');
                 $submittedIds[] = $id;
 
-                $dataHppBarang = $this->HppBarangModel->getById($id);
+                $unitHpp = (int) ($service->unit_idunit ?? session('ID_UNIT'));
                 $stokAwal = $this->StokAwalModel->getById($id);
                 $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,
                     'harga_penjualan_garansi' => 0,
                     'sub_total' => $total,
-                    'hpp_penjualan' => $dataHppBarang->hpp ?? 0,
+                    'hpp_penjualan' => $this->HppUnitModel->resolve((int) $id, $unitHpp),
                     'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
                     'diskon_penjualan' => $diskonItem,
                     'service_idservice' => $idservice,
                     'barang_idbarang' => $id,
-                    'unit_idunit' => (int) ($service->unit_idunit ?? session('ID_UNIT')),
+                    'unit_idunit' => $unitHpp,
                     'diskon_penjualan_garansi' => 0,
                     'jumlah_tambahan_garansi' => 0,
                     'sub_total_garansi' => 0,
@@ -542,15 +545,13 @@ class Service extends BaseController
 
             $subtotal = ($harga * $qty) - $diskon;
 
-            $hpp = $this->HppBarangModel->getById($produkid);
-
             if (! $this->DetailPenjualanModel->insert_detail([
                 'barang_idbarang' => $produkid,
                 'jumlah' => $qty,
                 'harga_penjualan' => $harga,
                 'sub_total' => $subtotal,
                 'penjualan_idpenjualan' => $idPenjualan,
-                'hpp_penjualan' => $hpp->hpp ?? 0,
+                'hpp_penjualan' => $this->HppUnitModel->resolve((int) $produkid, (int) session('ID_UNIT')),
                 'unit_idunit' => session('ID_UNIT'),
             ])) {
                 throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');
@@ -796,8 +797,41 @@ class Service extends BaseController
 
         $search = $this->request->getPost('search') ?? '';
         $unitId = session('ID_UNIT');
+        // Picker service punya dua tombol: sparepart (produk berstok) dan jasa
+        // (master tanpa stok). Default sparepart agar pemanggil lama tetap sama.
+        $jenis = $this->request->getPost('jenis') === 'jasa' ? 'jasa' : 'sparepart';
 
         $db = \Config\Database::connect();
+
+        if ($jenis === 'jasa') {
+            $jasa = $db->table('barang b')
+                ->select('b.idbarang, b.kode_barang, b.nama_barang, COALESCE(hju.harga_jual, b.harga) AS harga, b.harga_beli, b.warna, b.imei')
+                ->join('harga_jual_unit hju', 'hju.barang_idbarang = b.idbarang AND hju.unit_idunit = ' . (int) $unitId, 'left')
+                ->where('b.jenis_barang', 'jasa')
+                ->where('b.deleted', 0);
+
+            if (!empty($search)) {
+                $jasa->groupStart()
+                    ->like('b.nama_barang', $search)
+                    ->orLike('b.kode_barang', $search)
+                    ->orLike('b.warna', $search)
+                    ->groupEnd();
+            }
+
+            $rows = [];
+            foreach ($jasa->orderBy('b.nama_barang', 'ASC')->limit(50)->get()->getResult() as $row) {
+                $row->jenis_barang = 'jasa';
+                $row->stok_akhir   = 0;
+                $row->nama_suplier = null;
+                $row->NAMA_UNIT    = session('NAMA_UNIT');
+                $rows[] = $row;
+            }
+
+            $this->lampirkanHppPicker($rows, (int) $unitId);
+
+            return $this->response->setJSON($rows);
+        }
+
         // Nama suplier diambil lewat subquery agregat (GROUP_CONCAT) yang
         // dikorelasi per (barang, unit). Satu barang bisa punya stok_awal dari
         // beberapa suplier; kalau di-join langsung, hasilnya menggandakan baris
@@ -814,8 +848,9 @@ class Service extends BaseController
               AND sa.suplier_id_suplier != 0) AS nama_suplier";
 
         $builder = $db->table('stok_barang sb')
-            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, u.NAMA_UNIT, {$namaSuplier}")
+            ->select("sb.*, b.kode_barang, b.nama_barang, b.harga, b.harga_beli, b.warna, b.imei, b.jenis_barang, u.NAMA_UNIT, COALESCE(hju.harga_jual, b.harga) AS harga_jual, {$namaSuplier}")
             ->join('barang b', 'b.idbarang = sb.idbarang', 'left')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = sb.idbarang AND hju.unit_idunit = sb.id_unit', 'left')
             ->join('unit u', 'u.idunit = sb.id_unit', 'left');
         
         if (!empty($search)) {
@@ -828,6 +863,7 @@ class Service extends BaseController
 
         $sparepart = $builder
             ->where('sb.id_unit', $unitId)
+            ->where('sb.aktif_unit', 1)
             ->where('sb.stok_akhir >', 0)
             ->groupStart()
                 ->like('b.kode_barang', 'sprt')
@@ -838,7 +874,34 @@ class Service extends BaseController
             ->get()
             ->getResult();
 
+        foreach ($sparepart as $row) {
+            $row->harga = (float) $row->harga_jual;
+        }
+
+        $this->lampirkanHppPicker($sparepart, (int) $unitId);
+
         return $this->response->setJSON($sparepart);
+    }
+
+    /**
+     * HPP picker mengikuti jalur simpan: per unit, lalu global, lalu master.
+     * Dibuat sama dengan HppUnitModel::resolve() supaya angka di modal tidak
+     * berbeda dengan yang tersimpan saat sparepart/jasa dipilih.
+     *
+     * @param array<int, object> $rows
+     */
+    private function lampirkanHppPicker(array $rows, int $unitId): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        $ids = array_map(static fn ($row) => (int) $row->idbarang, $rows);
+        $hpp = $this->HppUnitModel->resolveMany($ids, $unitId);
+
+        foreach ($rows as $row) {
+            $row->hpp = $hpp[(int) $row->idbarang] ?? 0.0;
+        }
     }
 
     public function search_pelanggan_ajax()

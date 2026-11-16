@@ -17,6 +17,7 @@ use App\Models\ModelServiceKerusakan;
 use App\Models\ModelServiceSparepart;
 use App\Models\ModelStokBarang;
 use App\Models\ModelHppBarang;
+use App\Models\ModelHppUnit;
 use App\Models\ModelStokAwal;
 use App\Models\ModelProsesService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -47,6 +48,7 @@ class StatusGaransi extends BaseController
     protected $ServiceSparepartModel;
     protected $StokBarangModel;
     protected $HppBarangModel;
+    protected $HppUnitModel;
     protected $StokAwalModel;
     protected $ProsesServiceModel;
     protected $BankModel;
@@ -70,6 +72,7 @@ class StatusGaransi extends BaseController
         $this->ServiceSparepartModel = new ModelServiceSparepart();
         $this->StokBarangModel = new ModelStokBarang();
         $this->HppBarangModel = new ModelHppBarang();
+        $this->HppUnitModel = new ModelHppUnit();
         $this->StokAwalModel = new ModelStokAwal();
         $this->ProsesServiceModel = new ModelProsesService();
         $this->BankModel = new ModelBank();
@@ -335,12 +338,9 @@ class StatusGaransi extends BaseController
         ));
 
         $sparepartIds = array_map(static fn ($barang) => (int) ($barang->idbarang ?? 0), $sparepart);
-        $hppMap = [];
-        if ($sparepartIds !== []) {
-            foreach ($this->HppBarangModel->whereIn('idbarang', $sparepartIds)->findAll() as $hpp) {
-                $hppMap[(int) $hpp->idbarang] = (int) ($hpp->hpp ?? 0);
-            }
-        }
+        $hppMap = $sparepartIds !== []
+            ? $this->HppUnitModel->resolveMany($sparepartIds, $unitId)
+            : [];
         $supplierMap = $this->BarangModel->getSuplierPerUnit($unitId)[$unitId] ?? [];
         foreach ($sparepart as $barang) {
             $id = (int) $barang->idbarang;
@@ -648,6 +648,7 @@ class StatusGaransi extends BaseController
                 if ($dataHpp === null) {
                     throw new \RuntimeException('Sparepart tidak ditemukan.');
                 }
+                $hppUnit = $this->HppUnitModel->resolve((int) $id, $unitId);
 
                 $stokUnit = $this->StokBarangModel->where('idbarang', $id)->where('id_unit', $unitId)->first();
                 if ($stokUnit === null) {
@@ -660,7 +661,7 @@ class StatusGaransi extends BaseController
                     'jumlah_tambahan_garansi' => $jumlahTambahan,
                     'harga_penjualan_garansi' => $harga,
                     'sub_total_garansi' => max(0, $harga * $jumlahTambahan - $diskonItem),
-                    'hpp_penjualan_garansi' => (int) ($dataHpp->hpp ?? 0),
+                    'hpp_penjualan_garansi' => (int) $hppUnit,
                     'satuan_jual' => $dataStokAwal->satuan_terkecil ?? 'pcs',
                     'diskon_penjualan_garansi' => $diskonItem,
                     'service_idservice' => $idservice,
@@ -669,7 +670,7 @@ class StatusGaransi extends BaseController
                 ];
 
                 if ($statusRetur === 'tidak_bisa') {
-                    $datas['hpp_omset_garansi'] = (int) ($dataHpp->hpp ?? 0);
+                    $datas['hpp_omset_garansi'] = (int) $hppUnit;
                     $datas['tanggal_hpp_klaim'] = $existingMap[$id]->tanggal_hpp_klaim
                         ?? date('Y-m-d', strtotime((string) ($service->tanggal_claim_garansi ?: 'now')));
                 }
@@ -948,7 +949,7 @@ class StatusGaransi extends BaseController
                 $statusRetur = 'bisa';
             }
 
-            $hpp = (int) ($dataHpp->hpp ?? 0);
+            $hpp = (int) $this->HppUnitModel->resolve((int) $id, $unitId);
             $hppOmset = $statusRetur === 'tidak_bisa' ? $hpp : 0;
             $tanggalHppKlaim = $statusRetur === 'tidak_bisa' ? $claimTime->format('Y-m-d') : null;
 

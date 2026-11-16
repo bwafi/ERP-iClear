@@ -27,7 +27,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 2. Generate kode invoice: `SLL{idunit}{Ymd}{seq4}` (per unit per hari; last invoice hari itu).
 3. Potong pembayaran: `bayar_tunai` (POST `bayar`) dan `bank[]` (per baris → `pembayaran_bank`).
 4. Susun jurnal: tunai (`penjualan_lunas_tunai`), bank (`penjualan_lunas_bank_{bankid}`), PPN, diskon, aksesoris/sparepart (`penjualan_acc_cash`), HP baru PPN/non-PPN, HP second.
-5. Insert header `penjualan` + detail `detail_penjualan` (HPP per item dari `ModelHppBarang`; bundle dipecah per barang penyusun).
+5. Insert header `penjualan` + detail `detail_penjualan` (HPP per item dari `hpp_unit` unit transaksi, fallback `hpp_barang` lalu `barang.harga_beli`; bundle dipecah per barang penyusun).
 6. Eksekusi dalam satu transaksi `transStart/transComplete`; bila gagal `transRollback` + flashdata.
 7. Cetak struk/invoice mPDF (thermal/default) ke `uploads/Struk-{invoice}.pdf` + output ke browser.
 ### 4.2 Riwayat & Cetak
@@ -40,7 +40,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 2. Total & diskon disanitasi (`Rp/.`/spasi dihilangkan). — `Penjualan::sanitizeCurrency`
 3. Pembayaran terpecah tunai + bank; `bank_idbank` header menyimpan `kode_pembayaran` (bukan id bank asli). — `insert_penjualan`
 4. Status keterangan = `Lunas` bila `hutang==0`, else `Belum Lunas`. — `insert_penjualan`
-5. HPP per item diambil dari `ModelHppBarang`; bundle dipecah (jumlah × qty bundle). — `insert_penjualan`
+5. HPP per item diambil dari `hpp_unit` produk+unit transaksi; fallback `hpp_barang` (global) lalu `barang.harga_beli`. Baris `hpp_unit` unit itu diperbarui pembelian terbaru dengan harga beli terakhir (lihat PRD Modul 03 rule 15). Bundle dipecah (jumlah × qty bundle) dan tiap komponen memakai HPP unit transaksi. — `ModelHppUnit::resolve`; `Penjualan::insert_penjualan`
 6. Kategori akun jurnal dibedakan: HP baru PPN/non-PPN/second, sparepart, aksesoris, PPN, diskon. — `insert_penjualan`
 7. Penjualan berjalan dalam SATU transaksi (header+detail+jurnal+pembayaran bank). — `insert_penjualan`
 8. Kode pembayaran bank = `PJL{date}{unit}{rand4}`; di-refer ke `id_referensi` penjualan setelah insert. — `insert_penjualan`
@@ -49,21 +49,32 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 11. Penjualan kredit hanya mengisi `keterangan='Belum Lunas'`; tidak membentuk piutang pelanggan dan tidak memanggil `HutangPiutangService`. — `Penjualan::insert_penjualan` (SL-02)
 12. Setiap komponen bundle ditulis dengan `sub_total` penuh, sehingga laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet/laba. — `Penjualan.php:327-334`; `TutupKasir.php:360,610`; `ModelPenjualan.php:132` (SL-03)
 13. `kode_invoice` tidak memiliki unique constraint; dua transaksi bersamaan dapat memperoleh kode sama. Kode invoice service juga memakai `SRV{date('YmdHis')}` tanpa random. — migration `penjualan`; `Service.php:496` (SL-04)
+14. Picker kasir punya tab Produk/Bundle/Jasa. Tab Jasa memakai `ModelStokBarang::getJasa()` (`barang.jenis_barang='jasa'`) sehingga jasa bisa dijual tanpa stok awal; baris keranjang memakai kontrak `produk-checkbox` yang sama (harga, qty, diskon, PPN). Penjualan jasa tetap dicatat di `detail_penjualan` (omset/refund/DP/KPI tidak berubah) tetapi tidak menyentuh persediaan karena view `stok_barang` hanya memuat produk. HPP jasa mengikuti resolver yang sama (`hpp_unit` → `hpp_barang` → `barang.harga_beli`). HPP jasa (bagian teknisi) disimpan lewat field **HPP** di `/tarif_jasa`: nilai nominal masuk ke `barang.harga_beli` dan dicerminkan ke `hpp_barang.hpp` serta semua baris `hpp_unit` jasa itu (`sumber='manual'`), dengan validasi `0 ≤ HPP ≤ harga`. Field HPP juga menerima persen dari harga jual (mis. 10% × 1.000.000 = 100.000); persen hanya alat bantu input dan server yang menghitung nominalnya — yang disimpan tetap nominal, jadi perubahan harga jual tidak otomatis mengubah HPP sampai disimpan ulang. Kolom HPP tampil sebelum Harga Jual. Karena omzet = `sub_total − hpp_penjualan`, bagian teknisi tidak dihitung sebagai omzet pada transaksi baru; data historis tidak dihitung ulang. — `Penjualan::index`; `ModelStokBarang::getJasa`; `TarifJasa`; `ModelHppUnit::resolve`; `Views/transaksi/penjualan.php`; `Views/jasa/tarif.php`
+15. Harga jual picker POS mengikuti unit transaksi: `COALESCE(harga_jual_unit.harga_jual, barang.harga)`. Picker produk memakai `ModelStokBarang::getAllBarang2()` dan picker jasa `getJasa()`; keduanya mengekspos `harga_jual` (efektif) dan tetap menyimpan `harga` master. Tanpa baris `harga_jual_unit` = ikut master. Nilai yang dipilih masuk keranjang sebagai `detail_penjualan.harga_penjualan` (snapshot); transaksi lama tidak di-backfill dan tidak berubah saat override/master diubah. Bundle tetap memakai `bundle.harga_jual`. — `ModelHargaJualUnit::resolve`; `ModelStokBarang::getAllBarang2/getJasa`; `Views/transaksi/penjualan.php`; `HargaJualUnitTest`; `HargaJualPickerTest`
+
+16. Harga di markup picker wajib berupa rupiah bulat tanpa pemisah ribuan dan tanpa desimal. `harga_jual_unit.harga_jual` bertipe `decimal(15,2)`, sehingga MySQL mengembalikan string `"55000.00"`; `formatToRupiah()`/`unformatRupiah()` di halaman membuang semua karakter non-digit, jadi nilai desimal mentah terbaca ×100 (`"55000.00"` → `5.500.000`). Picker produk mengirim `(int) round((float) $p->harga_jual)` — pembulatan yang sama dengan `number_format($p->harga_jual, 0)` pada kolom harga di tabel itu; picker jasa memakai `(float)`. Bundle tetap memakai `bundle.harga_jual` (`varchar`) apa adanya. Normalisasi dilakukan saat render, bukan dengan mengubah regex JS, karena regex yang sama juga membersihkan titik ribuan pada input kasir. — `Views/transaksi/penjualan.php`; `PenjualanPickerMoneyTest`
 
 ## 6. Acceptance Criteria
 - [ ] Input penjualan menyimpan header+detail+pembayaran bank+jurnal dalam satu transaksi.
 - [ ] Kode invoice unik per unit per hari.
 - [ ] Struk PDF dibuat & dapat diunduh.
 - [ ] Pembayaran tunai dan bank tercatat; total bayar = tunai + bank.
+- [ ] Harga jual picker POS mengikuti harga unit transaksi dan transaksi lama tidak berubah saat override diubah.
+- [ ] Harga produk/jasa yang tersimpan sebagai `decimal(15,2)` tampil dan masuk keranjang sebagai rupiah bulat (tidak dikali 100).
 - [ ] Jadwayat penjualan dapat dicari, dilihat detailnya, diekspor.
 
 ## 7. Dependensi
-- `ModelPenjualan`, `ModelDetailPenjualan`, `ModelPembayaranBank`, `ModelHppBarang`, `ModelJurnal`, `ModelBundle/ModelDetailBundle`, `ModelPelanggan`, `ModelUnit`, `ModelAuth`.
+- `ModelPenjualan`, `ModelDetailPenjualan`, `ModelPembayaranBank`, `ModelHppUnit`/`ModelHppBarang`, `ModelJurnal`, `ModelBundle/ModelDetailBundle`, `ModelPelanggan`, `ModelUnit`, `ModelAuth`.
 - Modul: Master Data (produk/pelanggan/bank), Hutang Piutang (piutang legacy), Jurnal, KPI (omzet).
 
 ## 8. Status & Tandai
 - ✅ Terverifikasi: alur input, invoice, pembayaran, jurnal, transaksi atomik.
 - ✅ Terverifikasi: stok penjualan dihitung oleh VIEW `stok_barang` dari `detail_penjualan` (bukan update stok eksplisit).
+- ✅ Terverifikasi: HPP detail penjualan baru memakai `hpp_unit` produk+unit; produk tanpa baris per unit tetap memakai `hpp_barang`/`barang.harga_beli`. — `HppPerUnitTest`
+- ✅ Terverifikasi: jasa dijual lewat tab Jasa tanpa stok; tercatat di `detail_penjualan` untuk omset tetapi tidak masuk persediaan. — `JasaBukanProdukTest`
+- ✅ Terverifikasi: HPP jasa (bagian teknisi) disimpan sebagai `barang.harga_beli` dan dicerminkan ke `hpp_barang`/`hpp_unit`, sehingga `hpp_penjualan` transaksi baru memuat HPP dan omzet = harga jual − HPP. — `TarifJasaPageTest`
+- ✅ Terverifikasi: picker POS produk dan jasa memakai harga jual efektif unit (`harga_jual_unit` fallback `barang.harga`); transaksi lama tetap snapshot. — `HargaJualUnitTest`, `HargaJualPickerTest`
+- ✅ Terverifikasi: harga picker POS dikirim ke markup sebagai rupiah bulat, sehingga `decimal(15,2)` `"55000.00"` tidak berubah menjadi `5.500.000` di keranjang. — `PenjualanPickerMoneyTest`
 - ⚠️ Gap tinggi:
   1. Penjualan kredit tidak membentuk piutang pelanggan/registry H/P; `Piutang` legacy adalah piutang pegawai. — SL-02
   2. `detail_penjualan.sub_total` bundle digandakan per komponen; laporan omzet/laba dapat salah. — SL-03

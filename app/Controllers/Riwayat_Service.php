@@ -12,6 +12,7 @@ use App\Models\ModelServiceKerusakan;
 use App\Models\ModelServiceSparepart;
 use App\Models\ModelStokBarang;
 use App\Models\ModelHppBarang;
+use App\Models\ModelHppUnit;
 use App\Models\ModelStokAwal;
 use App\Models\ModelProsesService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -45,6 +46,7 @@ class Riwayat_Service extends BaseController
     protected $ServiceSparepartModel;
     protected $StokBarangModel;
     protected $HppBarangModel;
+    protected $HppUnitModel;
     protected $StokAwalModel;
     protected $ProsesServiceModel;
     protected $JurnalModel;
@@ -70,6 +72,7 @@ class Riwayat_Service extends BaseController
         $this->ServiceSparepartModel = new ModelServiceSparepart();
         $this->StokBarangModel = new ModelStokBarang();
         $this->HppBarangModel = new ModelHppBarang();
+        $this->HppUnitModel = new ModelHppUnit();
         $this->StokAwalModel = new ModelStokAwal();
         $this->ProsesServiceModel = new ModelProsesService();
         $this->JurnalModel = new ModelJurnal();
@@ -415,18 +418,18 @@ class Riwayat_Service extends BaseController
                 $total = $this->rupiahToInt($produk['total'] ?? '0');
                 $submittedIds[] = $id;
 
-                $dataHppBarang = $this->HppBarangModel->getById($id);
+                $unitHpp = (int) ($service->unit_idunit ?? session('ID_UNIT'));
                 $stokAwal = $this->StokAwalModel->getById($id);
                 $data = [
                     'jumlah' => $jumlah,
                     'harga_penjualan' => $harga,
                     'sub_total' => $total,
-                    'hpp_penjualan' => $dataHppBarang->hpp ?? 0,
+                    'hpp_penjualan' => $this->HppUnitModel->resolve((int) $id, $unitHpp),
                     'satuan_jual' => $stokAwal->satuan_terkecil ?? 'pcs',
                     'diskon_penjualan' => $diskonItem,
                     'service_idservice' => $idservice,
                     'barang_idbarang' => $id,
-                    'unit_idunit' => (int) ($service->unit_idunit ?? session('ID_UNIT')),
+                    'unit_idunit' => $unitHpp,
                 ];
 
                 $saved = array_key_exists($id, $existingMap)
@@ -535,15 +538,13 @@ class Riwayat_Service extends BaseController
 
             $subtotal = ($harga * $qty) - $diskon;
 
-            $hpp = $this->HppBarangModel->getById($produkid);
-
             if (! $this->DetailPenjualanModel->insert_detail([
                 'barang_idbarang' => $produkid,
                 'jumlah' => $qty,
                 'harga_penjualan' => $harga,
                 'sub_total' => $subtotal,
                 'penjualan_idpenjualan' => $idPenjualan,
-                'hpp_penjualan' => $hpp->hpp ?? 0,
+                'hpp_penjualan' => $this->HppUnitModel->resolve((int) $produkid, (int) session('ID_UNIT')),
                 'unit_idunit' => session('ID_UNIT'),
             ])) {
                 throw new \RuntimeException('Gagal menyimpan detail invoice sparepart service.');

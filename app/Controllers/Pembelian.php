@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\ModelBarang;
 
+use App\Models\ModelBarangUnit;
 use App\Models\ModelKategori;
 use App\Models\ModelNamaHandphone;
 use App\Models\ModelPembelian;
@@ -18,15 +19,21 @@ use App\Models\ModelSuplier;
 use App\Models\ModelAuth;
 use App\Models\ModelPelanggan;
 use App\Models\ModelHppBarang;
+use App\Models\ModelHppUnit;
+use App\Models\ModelHargaJualUnit;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
+use App\Models\ModelUnit;
+use App\Models\ModelKasKeluar;
+use App\Services\Finance\BankRekeningValidator;
 
 class Pembelian extends BaseController
 
 {
 
     protected $BarangModel;
+    protected $BarangUnitModel;
     protected $KategoriModel;
     protected $SuplierModel;
     protected $PembelianModel;
@@ -35,14 +42,35 @@ class Pembelian extends BaseController
     protected $AuthModel;
     protected $PelangganModel;
     protected $HppBarangModel;
+    protected $HppUnitModel;
+    protected $HargaJualUnitModel;
     protected $JurnalModel;
     protected $BankModel;
     protected $PembayaranBankModel;
     protected $NamaHandphoneModel;
     protected $SubKategoriModel;
+    protected $UnitModel;
+    protected $KasKeluarModel;
+
+    /**
+     * ID_JABATAN yang boleh memilih unit saat mencatat pembelian.
+     *
+     * 0 = Finance, 1 = Admin root, 34 = Manager. Tim toko (kasir, kepala toko,
+     * frontliner, teknisi) SELALU memakai unit akunnya dan tidak boleh
+     * menggantinya lewat request.
+     */
+    private const UNIT_PILIH_ROLES = [0, 1, 34];
+
+    /** Kategori kas keluar untuk pembelian Lunas (kategori_kas: HPP). */
+    private const KATEGORI_KAS_HPP = 7;
+
+    /** Akun debit pembelian barang (no_akun: Persediaan Barang Dagang). */
+    private const AKUN_PERSEDIAAN = '1030100000';
+
     public function __construct()
     {
         $this->BarangModel = new ModelBarang();
+        $this->BarangUnitModel = new ModelBarangUnit();
         $this->KategoriModel = new ModelKategori();
         $this->SuplierModel = new ModelSuplier();
         $this->PembelianModel = new ModelPembelian();
@@ -51,27 +79,198 @@ class Pembelian extends BaseController
         $this->AuthModel = new ModelAuth();
         $this->PelangganModel = new ModelPelanggan();
         $this->HppBarangModel = new ModelHppBarang();
+        $this->HppUnitModel = new ModelHppUnit();
+        $this->HargaJualUnitModel = new ModelHargaJualUnit();
         $this->JurnalModel = new ModelJurnal();
         $this->BankModel = new ModelBank();
         $this->PembayaranBankModel = new ModelPembayaranBank();
         $this->NamaHandphoneModel = new ModelNamaHandphone();
         $this->SubKategoriModel = new ModelSubKategori();
+        $this->UnitModel = new ModelUnit();
+        $this->KasKeluarModel = new ModelKasKeluar();
+    }
+
+    /**
+     * Apakah role ini boleh mengganti unit pada form pembelian.
+     */
+    public static function bolehPilihUnitUntukRole(int $role): bool
+    {
+        return in_array($role, self::UNIT_PILIH_ROLES, true);
+    }
+
+    /**
+     * Unit final untuk input /pembelian.
+     *
+     * Murni (tanpa database) supaya aturannya bisa diuji langsung. Request
+     * dari role terbatas TIDAK dipercaya: nilainya diabaikan dan unit akun
+     * yang dipakai. Role yang boleh memilih tetap dibatasi ke unit yang ada.
+     *
+     * @param int             $role         ID_JABATAN akun login
+     * @param int             $accountUnit  ID_UNIT akun login
+     * @param mixed           $requested    nilai unit dari GET/POST (tidak dipercaya)
+     * @param array<int,int>  $validUnitIds daftar idunit yang boleh dipilih
+     */
+    public static function resolveUnitInput(int $role, int $accountUnit, $requested, array $validUnitIds): int
+    {
+        $akunUnit = (int) $accountUnit;
+
+        if (! self::bolehPilihUnitUntukRole($role)) {
+            return $akunUnit;
+        }
+
+        $req = (int) $requested;
+        $valid = array_map('intval', $validUnitIds);
+
+        if ($req > 0 && in_array($req, $valid, true)) {
+            return $req;
+        }
+
+        return $akunUnit;
+    }
+
+    /**
+     * Jatuh tempo wajib diisi manual oleh penginput; form tidak lagi memakai
+     * nilai default hari ini. Nilai harus `YYYY-MM-DD` yang benar-benar ada.
+     */
+    public static function tanggalJatuhTempoValid(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        $parsed = date_parse_from_format('Y-m-d', $value);
+
+        return ($parsed['error_count'] ?? 1) === 0
+            && ($parsed['warning_count'] ?? 1) === 0
+            && checkdate(
+                (int) ($parsed['month'] ?? 0),
+                (int) ($parsed['day'] ?? 0),
+                (int) ($parsed['year'] ?? 0)
+            );
+    }
+
+    /**
+     * @return int[] idunit operasional (unit.is_operational = 1)
+     */
+    private function daftarIdUnitOperasional(): array
+    {
+        return array_map(
+            static fn ($u) => (int) $u->idunit,
+            $this->UnitModel->getUnitOperasional()
+        );
+    }
+
+    /**
+     * Nama pihak pada nota pembelian: supplier kalau sumbernya supplier,
+     * kalau tidak nama pelanggan yang diketik/dipilih.
+     */
+    private function namaPihakPembelian($idSuplier, $namaPelanggan, $namaBaru): string
+    {
+        $idSuplier = trim((string) $idSuplier);
+        if ($idSuplier !== '') {
+            $suplier = $this->SuplierModel->getById($idSuplier);
+            if ($suplier && trim((string) ($suplier->nama_suplier ?? '')) !== '') {
+                return (string) $suplier->nama_suplier;
+            }
+        }
+
+        $namaPelanggan = trim((string) $namaPelanggan);
+        if ($namaPelanggan !== '') {
+            return $namaPelanggan;
+        }
+
+        $namaBaru = trim((string) $namaBaru);
+
+        return $namaBaru !== '' ? $namaBaru : '-';
+    }
+
+    /**
+     * Kategori Kas Keluar untuk pembelian Lunas. Dicari lewat nama supaya
+     * tidak bergantung pada auto increment; id 7 adalah fallback data lokal.
+     */
+    private function idKategoriKasHpp($db): int
+    {
+        if ($db->tableExists('kategori_kas')) {
+            $row = $db->table('kategori_kas')->where('kategori', 'HPP')->get()->getRow();
+            if ($row && (int) ($row->idkategori_kas ?? 0) > 0) {
+                return (int) $row->idkategori_kas;
+            }
+        }
+
+        return self::KATEGORI_KAS_HPP;
+    }
+
+    /**
+     * Unit final untuk halaman /pembelian.
+     *
+     * Role lintas unit hanya boleh memakai unit operasional: kalau unit akun
+     * (atau unit dari request) bukan unit operasional — mis. akun Finance yang
+     * bernaung di Head Office — dipakai unit operasional pertama. Tim toko tidak
+     * berubah: selalu unit akunnya.
+     *
+     * @param array<int,int> $operationalUnitIds
+     */
+    public static function resolveUnitPembelian(int $role, int $accountUnit, $requested, array $operationalUnitIds): int
+    {
+        $unit = self::resolveUnitInput($role, $accountUnit, $requested, $operationalUnitIds);
+
+        if (! self::bolehPilihUnitUntukRole($role) || $operationalUnitIds === []) {
+            return $unit;
+        }
+
+        $valid = array_map('intval', $operationalUnitIds);
+
+        return in_array($unit, $valid, true) ? $unit : (int) $valid[0];
     }
 
     public function index()
     {
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
+        $role = (int) ($akun->ID_JABATAN ?? session('ID_JABATAN'));
+        $unitAkun = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
+        $bolehPilihUnit = self::bolehPilihUnitUntukRole($role);
+        // Head Office bukan unit operasional, jadi tidak ikut di pemilih unit.
+        $unitList = $bolehPilihUnit ? $this->UnitModel->getUnitOperasional() : [];
+        $unitId = self::resolveUnitPembelian(
+            $role,
+            $unitAkun,
+            $this->request->getGet('unit'),
+            $bolehPilihUnit ? array_map(static fn ($u) => (int) $u->idunit, $unitList) : []
+        );
+
+        // Stok, harga jual, dan HPP mengikuti unit yang dipilih, bukan unit sesi,
+        // supaya role lintas unit tidak melihat angka unit lain.
+        // Produk nonaktif tetap tampil: pembelian adalah pintu stok masuk, dan
+        // produk yang dibeli akan diaktifkan kembali di unit ini.
+        $produk = $this->BarangModel->getAllBarang($unitId, true);
+        $hppUnit = $this->HppUnitModel->resolveMany(
+            array_map(static fn ($p) => (int) $p->idbarang, $produk),
+            $unitId
+        );
+        foreach ($produk as $p) {
+            $p->hpp_unit = $hppUnit[(int) $p->idbarang] ?? (float) $p->harga_beli;
+        }
+
+        $unitTerpilih = $this->UnitModel->getById($unitId);
+        $unitTerpilihNama = $unitTerpilih->NAMA_UNIT ?? ('Unit ' . $unitId);
+
+        // Rekening bank mengikuti scope unit halaman, sama seperti Kas &
+        // Keluar: rekening unit lain dan Finance/HO tidak boleh muncul.
         $data =  array(
             'akun' => $akun,
-            'produk' => $this->BarangModel->getAllBarang(),
+            'produk' => $produk,
             'kategori' => $this->KategoriModel->getKategori(),
             'suplier' => $this->SuplierModel->getSuplier(),
-            'frontliner' => $this->AuthModel->getAkunFrontliner(),
-            'bank' => $this->BankModel->getBank(),
+            'bank' => $this->BankModel->getBankDalamScopeUnit($unitId),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'body'  => 'transaksi/pembelian',
             'nama_handphone' => $this->NamaHandphoneModel->getNamaHandphone(),
-            'sub_kategori' => $this->SubKategoriModel->getSubKategori()
+            'sub_kategori' => $this->SubKategoriModel->getSubKategori(),
+            'can_manage_harga_jual' => Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
+            'boleh_pilih_unit' => $bolehPilihUnit,
+            'unit_list' => $unitList,
+            'unit_terpilih' => $unitId,
+            'unit_terpilih_nama' => $unitTerpilihNama,
         );
         return view('template', $data);
     }
@@ -90,7 +289,18 @@ class Pembelian extends BaseController
         date_default_timezone_set('Asia/Jakarta');
 
         $datauser = $this->AuthModel->getById(session('ID_AKUN'));
-        $useridunit = $datauser->ID_UNIT;
+        $role = (int) ($datauser->ID_JABATAN ?? session('ID_JABATAN'));
+        $unitAkun = (int) ($datauser->ID_UNIT ?? session('ID_UNIT'));
+
+        // Unit pembelian: role lintas unit memakai unit operasional dari form
+        // (divalidasi ke master unit operasional), tim toko selalu memakai unit
+        // akunnya walaupun POST berisi unit lain.
+        $useridunit = self::resolveUnitPembelian(
+            $role,
+            $unitAkun,
+            $this->request->getPost('unit_idunit'),
+            self::bolehPilihUnitUntukRole($role) ? $this->daftarIdUnitOperasional() : []
+        );
         $namauser = $datauser->NAMA_AKUN;
         $suplier = $this->request->getPost('suplier');
         $id_suplier_text = $this->request->getPost('id_suplier_text');
@@ -99,18 +309,87 @@ class Pembelian extends BaseController
         $tanggal_masuk = $this->request->getPost('tanggal_masuk');
         $jam_sekarang = date('H:i:s');
         $tanggal_masuk_full = $tanggal_masuk . ' ' . $jam_sekarang;
-        $jatuh_tempot = $this->request->getPost('jatuh_tempo');
-        $sisa = $this->cleanRupiah($this->request->getPost('hutang'));
+
+        // Jenis pembayaran hanya Tempo atau Lunas. Nilai dibaca dari POST,
+        // jadi tetap divalidasi di server walaupun form sudah membatasi.
+        $jenisPembayaran = strtolower(trim((string) $this->request->getPost('jenis_pembayaran')));
+        $metodeBayar = strtolower(trim((string) $this->request->getPost('metode_bayar')));
+        if (! in_array($jenisPembayaran, ['tempo', 'lunas'], true)) {
+            session()->setFlashdata('gagal', 'Jenis pembayaran wajib dipilih: Tempo atau Lunas.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+        if ($jenisPembayaran === 'lunas' && ! in_array($metodeBayar, ['tunai', 'transfer'], true)) {
+            session()->setFlashdata('gagal', 'Metode pembayaran Lunas wajib dipilih: Tunai atau Transfer.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+
+        // Jatuh tempo hanya dipakai Tempo. Form tidak memberi nilai default
+        // supaya penginput tidak tanpa sadar menyimpan tanggal hari ini dan
+        // merusak aging hutang.
+        $jatuhTempo = trim((string) $this->request->getPost('jatuh_tempo'));
+        if ($jenisPembayaran === 'tempo' && ! self::tanggalJatuhTempoValid($jatuhTempo)) {
+            session()->setFlashdata('gagal', 'Jatuh tempo wajib diisi dengan tanggal yang valid.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+        if ($jenisPembayaran === 'lunas') {
+            // Lunas tidak punya jatuh tempo terpisah. Kolom tetap diisi
+            // tanggal masuk supaya baris baru selalu punya jatuh tempo.
+            $jatuhTempo = self::tanggalJatuhTempoValid((string) $tanggal_masuk)
+                ? (string) $tanggal_masuk
+                : date('Y-m-d');
+        }
+
         $total_harga = $this->cleanRupiah($this->request->getPost('total-harga'));
         $total_diskon = $this->cleanRupiah($this->request->getPost('total-diskon'));
         $total_ppn = $this->cleanRupiah($this->request->getPost('total-ppn'));
-        $bayar_tunai = $this->cleanRupiah($this->request->getPost('bayar')); //ini tunai
         $bankData = $this->request->getPost('bank');
+        $bolehUbahHargaJual = Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN'));
+
+        // Normalisasi pembayaran: Tempo tidak menerima uang sekarang; Lunas
+        // selalu membayar penuh (tunai atau satu rekening bank). Nominal tidak
+        // dipercaya dari POST supaya sisa dan kas keluar tidak bisa dipisah.
+        $bayar_tunai = 0;
+        if ($jenisPembayaran === 'tempo') {
+            $sisa = $total_harga;
+            $bankData = [];
+        } else {
+            if ($total_harga <= 0) {
+                session()->setFlashdata('gagal', 'Total pembelian harus lebih dari 0 untuk pembayaran Lunas.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+            $sisa = 0;
+            if ($metodeBayar === 'tunai') {
+                $bayar_tunai = $total_harga;
+                $bankData = [];
+            } else {
+                $barisBank = is_array($bankData)
+                    ? array_values(array_filter($bankData, static function ($b) {
+                        return trim((string) ($b['id'] ?? '')) !== '';
+                    }))
+                    : [];
+                if (count($barisBank) !== 1) {
+                    session()->setFlashdata('gagal', 'Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.');
+                    return redirect()->to(base_url('/pembelian'));
+                }
+
+                $idbankLunas = trim((string) $barisBank[0]['id']);
+                $cekRekening = (new BankRekeningValidator())->validateUntukUnit($idbankLunas, $useridunit, $role);
+                if (! $cekRekening['ok']) {
+                    session()->setFlashdata('gagal', 'Rekening pembayaran tidak valid: ' . $cekRekening['alasan']);
+                    return redirect()->to(base_url('/pembelian'));
+                }
+
+                $bankData = [[
+                    'id' => (string) $cekRekening['idbank'],
+                    'jumlah' => $total_harga,
+                ]];
+            }
+        }
 
         $jurnal = [];
         $bankPembayaran = [];
         $totalBayarBank = 0;
-        $kodePembayaran = 'PBL' . date('Ymd') . session('ID_UNIT') . rand(1000, 9999);
+        $kodePembayaran = 'PBL' . date('Ymd') . $useridunit . rand(1000, 9999);
 
         $db = \Config\Database::connect();
         $db->transStart();
@@ -222,7 +501,8 @@ class Pembelian extends BaseController
             }
         }
 
-        $frontliner = $this->request->getPost('frontliner');
+        // Frontliner selalu akun yang login; nilai POST tidak dipercaya.
+        $frontliner = (int) $input_by;
 
 
         $data = array(
@@ -240,7 +520,7 @@ class Pembelian extends BaseController
             'bayar_tunai' => $bayar_tunai,
             'bayar_bank' => $totalBayarBank,
             'bank_idbank' => $kodePembayaran,
-            'jatuh_tempo' => $this->request->getPost('jatuh_tempo'),
+            'jatuh_tempo' => $jatuhTempo,
             'bayar' => $total_bayar,
             'unit_idunit' => $useridunit,
             'pelanggan_id_pelanggan' => $id_pelanggan ?? null,
@@ -253,6 +533,43 @@ class Pembelian extends BaseController
             'id_referensi' => $idPembelian
         );
         $this->PembayaranBankModel->updateByKodePembayaran($kodePembayaran, $pelengkap_pembayaranbank);
+
+        // Pembelian Lunas langsung dicatat sebagai arus kas keluar supaya
+        // terlihat di menu Kas Keluar, Tutup Kasir, dan saldo Kas & Bank.
+        // Baris ini sengaja TIDAK membuat jurnal kedua: jurnal pembelian di
+        // bawah adalah catatan akuntansinya. no_akun berisi sisi debit
+        // persediaan; lawan kas/bank-nya dibaca dari idbank.
+        if ($jenisPembayaran === 'lunas' && (int) round($total_bayar) > 0) {
+            $penerimaKasKeluar = $this->namaPihakPembelian(
+                $id_suplier_text,
+                $this->request->getPost('pelanggan'),
+                $nama
+            );
+
+            $idbankKasKeluar = null;
+            if ($metodeBayar === 'transfer') {
+                $idbankKasKeluar = trim((string) ($bankData[0]['id'] ?? ''));
+            }
+
+            $kasKeluarTersimpan = $this->KasKeluarModel->insert_KasKeluar([
+                'tanggal' => $jatuhTempo,
+                'kategori_idkategori' => $this->idKategoriKasHpp($db),
+                'deskripsi' => 'Pembelian ' . $no_nota . ' - ' . $penerimaKasKeluar,
+                'jumlah' => (int) round($total_bayar),
+                'penerima' => $penerimaKasKeluar,
+                'idunit' => $useridunit,
+                'jenis' => 'debet',
+                'idbank' => $idbankKasKeluar === '' ? null : $idbankKasKeluar,
+                'created_on' => date('Y-m-d H:i:s'),
+                'no_akun' => self::AKUN_PERSEDIAAN,
+            ]);
+
+            if (! $kasKeluarTersimpan) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Kas keluar pembelian gagal disimpan.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+        }
 
         $total_aksesoris = 0;
         $total_sparepart = 0;
@@ -270,6 +587,11 @@ class Pembelian extends BaseController
             $produkjumlah = $produk['jumlah'];
             $produkdiskon = $this->cleanRupiah($produk['diskon']);
             $produkharga  = $this->cleanRupiah($produk['harga']);
+            if ($bolehUbahHargaJual && ($produkharga <= 0 || $produkharga > 9999999999999)) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Harga jual tidak valid.');
+                return redirect()->to(base_url('/pembelian'));
+            }
             $nilaidiskon = $produkdiskon;
             $produkppn = $produk['ppn'] ?? null;
             $subtotalAwal = $hrg_beli * $produkjumlah;
@@ -312,6 +634,49 @@ class Pembelian extends BaseController
             );
 
             $result2 = $this->DetailPembelianModel->insert_detail($data2);
+
+            // Stok masuk lewat pembelian mengaktifkan kembali produk yang
+            // sebelumnya nonaktif di unit ini (pola sama dengan input stok awal).
+            // Unit lain tidak tersentuh dan produk yang sudah aktif tidak
+            // dibuatkan baris `barang_unit` baru.
+            if ($result2) {
+                $this->BarangUnitModel->aktifkanJikaNonaktif(
+                    (int) $produk['id'],
+                    (int) $useridunit,
+                    (int) $input_by
+                );
+            }
+
+            if ($result2 && !$this->HppUnitModel->syncFromPembelian(
+                (int) $produk['id'],
+                (int) $useridunit,
+                (float) $hrg_beli,
+                (int) $produkjumlah,
+                (float) $nilaidiskon,
+                (float) $this->cleanRupiah($produk['biaya_tambahan'] ?? 0),
+                (int) $input_by
+            )) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'HPP pembelian tidak valid.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+
+            if ($result2 && $bolehUbahHargaJual) {
+                $hargaTersimpan = (float) $produkharga === (float) $databarang->harga
+                    ? $this->HargaJualUnitModel->clear((int) $produk['id'], (int) $useridunit)
+                    : $this->HargaJualUnitModel->setHarga(
+                        (int) $produk['id'],
+                        (int) $useridunit,
+                        (float) $produkharga,
+                        (int) $input_by
+                    );
+
+                if (!$hargaTersimpan) {
+                    $db->transRollback();
+                    session()->setFlashdata('gagal', 'Harga jual gagal disimpan.');
+                    return redirect()->to(base_url('/pembelian'));
+                }
+            }
         }
         if ($total_ppn > 0) {
             $jurnal[] = [

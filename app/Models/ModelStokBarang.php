@@ -58,7 +58,7 @@ class ModelStokBarang extends Model
 
     public function getSparepart()
     {
-        return $this->where('idkategori', 3)->findAll();
+        return $this->where('idkategori', 3)->where('aktif_unit', 1)->findAll();
     }
 
 
@@ -72,6 +72,7 @@ class ModelStokBarang extends Model
                 barang.kode_barang,
                 barang.nama_barang,
                 barang.harga,
+                COALESCE(hju.harga_jual, barang.harga) AS harga_jual,
                 barang.harga_beli,
                 barang.imei,
                 barang.jenis_hp,
@@ -85,10 +86,34 @@ class ModelStokBarang extends Model
             ')
             ->join('barang', 'barang.idbarang = stok_barang.idbarang')
             ->join('kategori', 'kategori.id = barang.idkategori')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = stok_barang.idbarang AND hju.unit_idunit = ' . (int)$id_unit, 'left')
             ->where('barang.deleted', 0)
             ->where('kategori.delete', 0)
             ->where('stok_barang.id_unit', (int)$id_unit)
+            ->where('stok_barang.aktif_unit', 1)
             ->where('stok_barang.stok_akhir >', 0)
             ->findAll();
+    }
+
+    /**
+     * Barang jasa (jenis_barang = 'jasa') untuk picker kasir.
+     *
+     * Jasa tidak punya stok — sejak view stok_barang difilter produk, jasa
+     * tidak lagi butuh stok awal agar bisa dijual. Harga jual/HPP diambil
+     * dari master barang yang dikelola di /tarif_jasa.
+     */
+    public function getJasa()
+    {
+        $idUnit = (int) session('ID_UNIT');
+
+        return $this->db->table('barang')
+            ->select('barang.idbarang, barang.kode_barang, barang.nama_barang, barang.harga,
+                COALESCE(hju.harga_jual, barang.harga) AS harga_jual, barang.harga_beli, barang.status_ppn')
+            ->join('harga_jual_unit hju', 'hju.barang_idbarang = barang.idbarang AND hju.unit_idunit = ' . $idUnit, 'left')
+            ->where('jenis_barang', 'jasa')
+            ->where('deleted', 0)
+            ->orderBy('nama_barang', 'ASC')
+            ->get()
+            ->getResult();
     }
 }

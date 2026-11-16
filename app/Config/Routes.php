@@ -93,6 +93,13 @@ $routes->group('kategori', ['filter' => 'auth'], function ($routes) {
     $routes->post('update_sub_kategori', 'Kategori::update_sub_kategori', ['filter' => 'auth']);
     $routes->post('delete_sub_kategori', 'Kategori::delete_sub_kategori', ['filter' => 'auth']);
 });
+
+//tarif jasa (master jasa; jenis_barang = 'jasa')
+$routes->group('tarif_jasa', ['filter' => ['auth', 'csrf']], function ($routes) {
+    $routes->get('/', 'TarifJasa::index');
+    $routes->post('simpan', 'TarifJasa::simpan');
+    $routes->post('ubah', 'TarifJasa::ubah');
+});
 //phone
 $routes->get('/phone', 'Phone::index', ['filter' => 'auth']);
 $routes->post('insert_phone', 'Phone::insert_phone', ['filter' => 'auth']);
@@ -266,6 +273,9 @@ $routes->post('insert/stokopnamefix', 'StokOpname::finalisasi', ['filter' => ['a
 $routes->get('kartu_stok', 'Kartu_Stok::index', ['filter' => 'auth']);
 $routes->post('export/kartu_stock', 'Kartu_Stok::export', ['filter' => 'auth']);
 $routes->get('kartu_stok/dt', 'Kartu_Stok::dt', ['filter' => 'auth']);
+$routes->post('kartu_stok/hpp', 'Kartu_Stok::updateHpp', ['filter' => ['auth', 'csrf']]);
+$routes->post('kartu_stok/harga-jual', 'Kartu_Stok::updateHargaJual', ['filter' => ['auth', 'csrf']]);
+$routes->post('kartu_stok/status', 'Kartu_Stok::updateStatus', ['filter' => ['auth', 'csrf']]);
 
 //stok hp
 $routes->get('stok_hp', 'StokHP::index', ['filter' => 'auth']);

@@ -4,7 +4,12 @@ namespace App\Controllers;
 
 use Config\Database;
 use App\Models\ModelAuth;
+use App\Models\ModelBarang;
+use App\Models\ModelBarangUnit;
+use App\Models\ModelHargaJualUnit;
+use App\Models\ModelHppUnit;
 use App\Models\ModelKartuStok;
+use App\Models\ModelKategori;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -18,13 +23,23 @@ class Kartu_Stok extends BaseController
 
     protected $AuthModel;
     protected $KartuStokModel;
+    protected $BarangModel;
+    protected $HppUnitModel;
+    protected $BarangUnitModel;
+    protected $HargaJualUnitModel;
     protected $UnitModel;
+    protected $KategoriModel;
 
     public function __construct()
     {
         $this->AuthModel = new ModelAuth();
         $this->KartuStokModel = new ModelKartuStok();
+        $this->BarangModel = new ModelBarang();
+        $this->HppUnitModel = new ModelHppUnit();
+        $this->BarangUnitModel = new ModelBarangUnit();
+        $this->HargaJualUnitModel = new ModelHargaJualUnit();
         $this->UnitModel = new ModelUnit();
+        $this->KategoriModel = new ModelKategori();
     }
 
     public function index()
@@ -34,9 +49,173 @@ class Kartu_Stok extends BaseController
             'akun' => $akun,
             'summary' => $this->KartuStokModel->getSummaryKartuStok(),
             'body'  => 'stok/kartu_stok',
-            'unit' => $this->UnitModel->getUnit()
+            'unit' => $this->UnitModel->getUnit(),
+            'kategori' => $this->KategoriModel->getKategori(),
+            'can_manage_produk_unit' => self::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
         );
         return view('template', $data);
+    }
+
+    /**
+     * Role yang boleh mengelola HPP dan status produk per unit: Finance (0),
+     * Admin root (1), Manager (34), ADMIN/KASIR (35 & 47), dan Kepala Toko (41).
+     */
+    public static function bolehKelolaProdukUnit(int $idJabatan): bool
+    {
+        return in_array($idJabatan, [0, 1, 34, 35, 41, 47], true);
+    }
+
+    /**
+     * Koreksi HPP satu produk pada satu unit.
+     *
+     * Unit diambil dari baris Kartu Stok yang dipilih, bukan dari master, dan
+     * hanya baris itu yang berubah. Nilai disimpan sebagai sumber `manual`
+     * supaya sync stok awal berikutnya tidak menimpanya.
+     */
+    public function updateHpp()
+    {
+        if (!self::bolehKelolaProdukUnit((int) session('ID_JABATAN'))) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'status'  => 'error',
+                'message' => 'Role Anda tidak dapat mengubah HPP.',
+            ]);
+        }
+
+        $idbarang = (int) $this->request->getPost('idbarang');
+        $idunit   = (int) $this->request->getPost('id_unit');
+        $hpp      = (float) $this->rupiah($this->request->getPost('hpp'));
+
+        if ($idbarang <= 0 || $idunit <= 0 || $hpp <= 0 || $hpp > 9999999999999) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'HPP tidak valid.',
+            ]);
+        }
+
+        if (!$this->KartuStokModel->existsPair($idbarang, $idunit)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk/unit tidak ditemukan.',
+            ]);
+        }
+
+        $this->HppUnitModel->setManual($idbarang, $idunit, $hpp, (int) session('ID_AKUN'));
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'hpp'    => $hpp,
+            'csrf'   => csrf_hash(),
+        ]);
+    }
+
+    /**
+     * Ubah harga jual untuk satu produk+unit. Harga yang sama dengan master
+     * menghapus override supaya produk kembali mengikuti `barang.harga`.
+     * Transaksi lama tetap memakai snapshot harga di detailnya.
+     */
+    public function updateHargaJual()
+    {
+        if (!self::bolehKelolaProdukUnit((int) session('ID_JABATAN'))) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'status'  => 'error',
+                'message' => 'Role Anda tidak dapat mengubah harga jual.',
+            ]);
+        }
+
+        $idbarang = (int) $this->request->getPost('idbarang');
+        $idunit   = (int) $this->request->getPost('id_unit');
+        $harga    = $this->rupiah($this->request->getPost('harga'));
+
+        if ($idbarang <= 0 || $idunit <= 0 || $harga <= 0 || $harga > 9999999999999) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'Harga jual tidak valid.',
+            ]);
+        }
+
+        $barang = $this->BarangModel->find($idbarang);
+        if ($barang === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk tidak ditemukan.',
+            ]);
+        }
+
+        if (!$this->KartuStokModel->existsPair($idbarang, $idunit)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk tidak ada di unit tersebut.',
+            ]);
+        }
+
+        if ($harga === (int) $barang->harga) {
+            $this->HargaJualUnitModel->clear($idbarang, $idunit);
+        } elseif (!$this->HargaJualUnitModel->setHarga($idbarang, $idunit, (float) $harga, (int) session('ID_AKUN'))) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status'  => 'error',
+                'message' => 'Harga jual gagal disimpan.',
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status'          => 'success',
+            'harga'           => $this->HargaJualUnitModel->resolve($idbarang, $idunit),
+            'harga_jual_unit' => $this->HargaJualUnitModel->hargaJualUnit($idbarang, $idunit),
+            'csrf'            => csrf_hash(),
+        ]);
+    }
+
+    /**
+     * Aktif/nonaktif produk pada satu unit.
+     *
+     * Nonaktif ditolak bila unit masih punya stok (termasuk stok negatif),
+     * karena produk yang tersembunyi dari stok opname tidak akan pernah
+     * dikoreksi. Aktivasi selalu boleh.
+     */
+    public function updateStatus()
+    {
+        if (!self::bolehKelolaProdukUnit((int) session('ID_JABATAN'))) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'status'  => 'error',
+                'message' => 'Role Anda tidak dapat mengubah status produk unit.',
+            ]);
+        }
+
+        $idbarang = (int) $this->request->getPost('idbarang');
+        $idunit   = (int) $this->request->getPost('id_unit');
+        $aktif    = (int) $this->request->getPost('aktif') === 1;
+
+        if ($idbarang <= 0 || $idunit <= 0) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk/unit tidak valid.',
+            ]);
+        }
+
+        $row = $this->KartuStokModel->getPair($idbarang, $idunit);
+        if ($row === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk/unit tidak ditemukan.',
+            ]);
+        }
+
+        $stok = (float) ($row->stok_akhir ?? 0);
+        if (!$aktif && $stok != 0.0) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'status'  => 'error',
+                'message' => 'Produk masih punya stok ' . rtrim(rtrim(number_format($stok, 2, ',', '.'), '0'), ',')
+                    . ' di unit ini.',
+            ]);
+        }
+
+        $this->BarangUnitModel->setAktif($idbarang, $idunit, $aktif, (int) session('ID_AKUN'));
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'aktif'  => $aktif ? 1 : 0,
+            'csrf'   => csrf_hash(),
+        ]);
     }
 
     /**
@@ -64,24 +243,30 @@ class Kartu_Stok extends BaseController
             1 => 'stok_barang.nama_barang',
             2 => 'stok_barang.nama_unit',
             3 => 'kategori.nama_kategori',
-            5 => 'barang.status_ppn',
-            6 => 'stok_barang.stok_akhir',
+            4 => 'barang.status_ppn',
+            5 => 'stok_barang.stok_akhir',
         ];
         $orderCol = $columnMap[$orderCol] ?? 'stok_barang.kode_barang';
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
 
         $unit = trim((string)$this->request->getGet('unit'));
         $ppn  = trim((string)$this->request->getGet('status_ppn'));
+        $kategori = trim((string)$this->request->getGet('kategori'));
+        $stok = trim((string)$this->request->getGet('stok'));
+        if (!in_array($stok, ['minus', 'nol', 'non_positif', 'positif'], true)) {
+            $stok = '';
+        }
 
         $totalRecords = $this->KartuStokModel->countKartuStokAll();
-        $filteredRecords = $this->KartuStokModel->countKartuStokDT($search, $unit, $ppn);
-        $rows = $this->KartuStokModel->getKartuStokDT($length, $start, $search, $orderCol, $orderDir, $unit, $ppn);
+        $filteredRecords = $this->KartuStokModel->countKartuStokDT($search, $unit, $ppn, $kategori, $stok);
+        $rows = $this->KartuStokModel->getKartuStokDT($length, $start, $search, $orderCol, $orderDir, $unit, $ppn, $kategori, $stok);
 
         $data = [];
         foreach ($rows as $row) {
             $data[] = [
                 'idbarang'            => (int)$row->idbarang,
                 'id_unit'             => (int)$row->id_unit,
+                'aktif'               => (int)($row->aktif_unit ?? 1),
                 'kode_barang'         => $row->kode_barang,
                 'nama_barang'         => $row->nama_barang,
                 'imei'                => $row->imei,
@@ -91,6 +276,8 @@ class Kartu_Stok extends BaseController
                 'jenis_hp'            => $row->jenis_hp,
                 'warna'               => $row->warna,
                 'harga'               => (float)$row->harga,
+                'harga_jual_unit'     => $row->harga_jual_unit === null ? null : (float)$row->harga_jual_unit,
+                'harga_master'        => (float)$row->harga_master,
                 'harga_beli'          => (float)$row->harga_beli,
                 'status_ppn'          => (int)$row->status_ppn,
                 'stok_awal'           => (float)$row->stok_awal,
@@ -112,12 +299,23 @@ class Kartu_Stok extends BaseController
         ]);
     }
 
+    /**
+     * Nominal dari input modal ("Rp 175.000") menjadi angka. Tanda minus
+     * dipertahankan supaya nilai negatif tetap ditolak validasi.
+     */
+    private function rupiah($nilai): int
+    {
+        return (int) str_replace(['Rp', '.', ' ', ','], '', (string) $nilai);
+    }
+
     public function export()
     {
         // $tanggalAwal = $this->request->getPost('tanggal_awal');
         // $tanggalAkhir = $this->request->getPost('tanggal_akhir');
         $unit = $this->request->getPost('unit');
         $statusPpn = $this->request->getPost('status_ppn');
+        $kategori = $this->request->getPost('kategori');
+        $stokAkhir = $this->request->getPost('stok_akhir');
 
         // if (empty($tanggalAwal)) {
         //     $tanggalAwal = $this->KartuStokModel->getMinTanggalStok();
@@ -127,7 +325,7 @@ class Kartu_Stok extends BaseController
         //     $tanggalAkhir = date('Y-m-d');
         // }
 
-        $stok = $this->KartuStokModel->exportfilter( $unit, $statusPpn);
+        $stok = $this->KartuStokModel->exportfilter( $unit, $statusPpn, $kategori, $stokAkhir);
         // $stok = $this->KartuStokModel->exportfilter($tanggalAwal, $tanggalAkhir, $unit, $statusPpn);
 
         $spreadsheet = new Spreadsheet();

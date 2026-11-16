@@ -53,7 +53,7 @@ Baseline repository yang diverifikasi: **88 controller · 127 model · 86 servic
 - `csrf` hanya aktif pada route yang eksplisit memakainya: refund DP, sebagian route `StatusGaransi`, `StokOpname`, `ReturBarangRusak`, setor/tarik tunai `KasBank`, dan `tutupkasir/tutup`. Dari 254 route `POST`, mayoritas transaksi (kas masuk/keluar, pembelian, penjualan, aset, transfer internal) **tidak** memakai CSRF. Lihat X-04.
 
 ### 3.5 Audit & Anti-Double-Counting
-- Hutang/piutang terpusat memiliki guard double counting pada jalur authoritative, tetapi projection dari pembelian memakai `total_bayar` (bukan `total_transaksi`) sehingga total dan rekonsiliasi dapat salah (PI-05/HP-01).
+- Hutang/piutang terpusat memiliki guard double counting pada jalur authoritative. Projection dari pembelian memakai `total_transaksi` dengan `total_dibayar = total_transaksi − sisa`, sehingga konsisten untuk pembelian sebagian (PI-05/HP-01 selesai).
 - Detail penjualan bundle menulis `sub_total` penuh untuk setiap komponen; laporan yang menjumlahkan `detail_penjualan.sub_total` dapat menggandakan omzet (SL-03).
 - KPI memakai sumber achievement (rekap/lead/snapshot) pada engine aktif `KpiCalculationService`; sebagian istilah “omzet” sebenarnya berarti gross profit (KPI-06).
 - Refund garansi mengurangi KPI omset Toko/Cabang/Teknisi pada bulan `refund_garansi_tanggal`, sedangkan HPP sparepart rusak tetap memakai `hpp_omset_garansi`/`tanggal_hpp_klaim` dan hanya mengurangi Omset Teknisi. — `ModelRefundGaransiLoss`; test `GaransiRefundKpiTest`.
@@ -79,7 +79,7 @@ Status ✅ di tabel ini berarti “dokumen sudah diperiksa”, **bukan** “fitu
 1. **Otorisasi tidak terpusat** — `AuthFilter` hanya cek login; endpoint tanpa filter `auth` dan controller tanpa guard role adalah risiko utama (X-03, X-05, MD-05).
 2. **CSRF tidak seluas klaim** — hanya sebagian route tulis yang memakai `csrf` (X-04, FN-02).
 3. **Jurnal/ledger dapat divergen** — update/hapus kas tidak selalu menghapus/menulis ulang jurnal (X-07, FN-03, FN-04).
-4. **Projection hutang supplier salah total** — `syncFromPembelian` memakai `total_bayar` (PI-05, HP-01).
+4. ~~**Projection hutang supplier salah total**~~ — selesai: `syncFromPembelian`/`refreshProjections` memakai `total_transaksi` dan `total_dibayar = total − sisa` (PI-05, HP-01; `HutangPiutangProjectionTotalTest`).
 5. **KPI Piutang selalu null** — `pembayaran_piutang` tanpa `tanggal_bayar` (HP-03).
 6. **Payroll/KPI membocorkan data** — view payroll lintas unit; `slip_gaji`, `gaji`, dan `attendance_save` kurang guard (PR-01, PR-06, PR-07, KPI-04).
 7. **Penjualan kredit tidak membentuk piutang pelanggan** — hanya `keterangan='Belum Lunas'`; `Piutang` legacy adalah piutang pegawai (SL-02).
