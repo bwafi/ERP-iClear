@@ -445,6 +445,28 @@
         color: var(--dt-muted);
     }
 
+    /* Ringkasan barang di baris tagihan: satu baris, dipotong dengan elipsis;
+       daftar lengkap tersedia di title dan di modal pembayaran. */
+    .dt-doc__items {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        max-width: 100%;
+        margin-top: 2px;
+        font-size: .72rem;
+        color: var(--dt-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .dt-doc__items iconify-icon {
+        flex: none;
+        font-size: 1em;
+        opacity: .75;
+    }
+
     .dt-money {
         display: flex;
         flex-direction: column;
@@ -622,6 +644,109 @@
         font-size: .74rem;
         color: var(--dt-muted);
         margin-bottom: 14px;
+    }
+
+    /* ---------- Rincian barang di modal bayar ---------- */
+    .dt-modal-items {
+        border: 1px solid var(--dt-rule);
+        border-radius: var(--dt-radius-sm);
+        margin-bottom: 16px;
+        overflow: hidden;
+    }
+
+    .dt-modal-items__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 12px;
+        background: var(--dt-subtle);
+        border-bottom: 1px solid var(--dt-rule);
+        font-size: .72rem;
+        color: var(--dt-muted);
+    }
+
+    .dt-modal-items__head span:first-child {
+        font-weight: 650;
+        color: var(--dt-ink);
+        letter-spacing: .01em;
+    }
+
+    .dt-items {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 208px;
+        overflow-y: auto;
+    }
+
+    .dt-items[hidden],
+    .dt-modal-items__empty[hidden] {
+        display: none;
+    }
+
+    .dt-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 12px;
+        border-top: 1px solid var(--dt-rule);
+    }
+
+    .dt-item:first-child {
+        border-top: 0;
+    }
+
+    .dt-item__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .dt-item__name {
+        font-size: .8rem;
+        font-weight: 600;
+        color: var(--dt-ink);
+        overflow-wrap: anywhere;
+    }
+
+    .dt-item__subtotal {
+        flex: none;
+        font-size: .8rem;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        color: var(--dt-ink);
+        white-space: nowrap;
+    }
+
+    .dt-item__meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px;
+        font-size: .7rem;
+        color: var(--dt-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .dt-item__code {
+        padding: 0 5px;
+        border: 1px solid var(--dt-rule);
+        border-radius: 4px;
+        font-size: .66rem;
+        letter-spacing: .02em;
+    }
+
+    .dt-item__disc {
+        color: var(--dt-warn-ink);
+    }
+
+    .dt-modal-items__empty {
+        margin: 0;
+        padding: 12px;
+        font-size: .74rem;
+        color: var(--dt-muted);
     }
 
     .dt-methods {
@@ -894,6 +1019,12 @@
 
         .dt-money {
             align-items: flex-end;
+        }
+
+        /* Di kartu HP, ringkasan barang boleh turun baris agar tidak terpotong. */
+        .dt-doc__items {
+            white-space: normal;
+            text-align: left;
         }
 
         .dt-modal-calc {

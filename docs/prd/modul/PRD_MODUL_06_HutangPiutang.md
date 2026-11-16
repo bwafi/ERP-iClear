@@ -37,6 +37,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 3. `batalkanLunasLegacy`: kembalikan sisa, status dihitung ulang, cabut penanda.
 ### 4.5 Cetak & umur
 `cetak/{id}` (mPDF); `umur_hutang/umur_piutang` + ekspor; `daftar_tagihan/daftar_piutang`.
+`daftar_tagihan` (hutang supplier, `PembayaranHutang::daftar_tagihan`) menampilkan ringkasan barang per nota di baris (`N barang · nama, nama +X`, nama lengkap di `title`) dan rincian lengkap di modal **Bayar tagihan** (nama + kode, qty × satuan × harga beli, diskon, subtotal). Rincian diambil sekali untuk semua nota lewat `ModelDetailPembelian::getRingkasanPembelian()` — bukan satu query per baris — dan hanya menjadi informasi; alur pembayaran, perhitungan sisa, ledger, serta validasi rekening tidak berubah. Nota lama tanpa `detail_pembelian` menampilkan `Rincian barang tidak tersedia`.
 ### 4.6 Ubah jatuh tempo (Admin Root)
 1. Hanya `ID_JABATAN = 1` (Admin Root); guard di controller, bukan hanya UI.
 2. `HutangPiutangService::ubahJatuhTempo()` menolak baris projection dan legacy; baris lunas tetap bisa diubah Admin Root.
@@ -68,6 +69,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 - [ ] Projection hutang supplier memakai total transaksi, bukan nominal yang sudah dibayar; total = dibayar + sisa.
 - [ ] Cetak bukti & ekspor umur hutang/piutang berfungsi.
 - [ ] Daftar piutang/hutang menampilkan arah asal → tujuan untuk baris mutasi antar unit.
+- [ ] Daftar tagihan supplier menampilkan ringkasan barang per nota dan rincian lengkap di modal bayar (nama, kode, qty × satuan × harga, diskon, subtotal); nota tanpa `detail_pembelian` menampilkan `Rincian barang tidak tersedia` tanpa mengubah alur pembayaran/sisa/ledger.
 - [ ] Mutasi baru memakai kode `MUT-{asal}-{tujuan}-{yymmdd}-{urut3}` dengan urutan harian.
 - [ ] Hanya Admin Root yang bisa mengubah jatuh tempo; pasangan mutasi tetap sinkron, termasuk baris yang sudah lunas.
 

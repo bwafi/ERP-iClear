@@ -16,6 +16,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPembelian;
+use App\Models\ModelDetailPembelian;
 use App\Libraries\ModeKasBank;
 use App\Exceptions\PostingLedgerException;
 use App\Services\Finance\BankRekeningValidator;
@@ -34,6 +35,7 @@ class PembayaranHutang extends BaseController
     protected $JurnalModel;
     protected $PembayaranHutangModel;
     protected $PembelianModel;
+    protected $DetailPembelianModel;
     protected $KasBankLib;
 
     public function __construct()
@@ -48,6 +50,7 @@ class PembayaranHutang extends BaseController
         $this->JurnalModel = new ModelJurnal();
         $this->PembayaranHutangModel = new ModelPembayaranHutang;
         $this->PembelianModel = new ModelPembelian();
+        $this->DetailPembelianModel = new ModelDetailPembelian();
     }
 
     /**
@@ -177,15 +180,47 @@ class PembayaranHutang extends BaseController
 
     //halaman daftar tagihan
 
+    /**
+     * Peta rincian barang per nota: [idpembelian => object[]].
+     *
+     * Satu query untuk semua nota yang tampil, bukan satu query per baris.
+     * Nota yang tidak punya `detail_pembelian` tidak muncul sebagai key;
+     * view menampilkan fallback untuknya.
+     *
+     * @param  object[] $tagihan
+     * @return array<int, object[]>
+     */
+    protected function rincianPerNota(array $tagihan): array
+    {
+        if ($tagihan === []) {
+            return [];
+        }
+
+        $ids = array_map(
+            static fn ($row): int => (int) ($row->idpembelian ?? 0),
+            $tagihan
+        );
+
+        $rincian = [];
+        foreach ($this->DetailPembelianModel->getRingkasanPembelian($ids) as $item) {
+            $rincian[(int) $item->pembelian_idpembelian][] = $item;
+        }
+
+        return $rincian;
+    }
+
     public function daftar_tagihan()
     {
+        $hutang = $this->PembelianModel->getBelumLunas();
+
         $data = array(
             'body' => 'hutang/daftar_tagihan',
             'bank' => $this->bankUntukPembayaran(
                 (int) session('ID_JABATAN'),
                 (int) session('ID_UNIT')
             ),
-            'hutang' => $this->PembelianModel->getBelumLunas()
+            'hutang' => $hutang,
+            'rincian' => $this->rincianPerNota($hutang)
         );
         return view('template', $data);
     }

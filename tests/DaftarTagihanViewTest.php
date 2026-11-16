@@ -54,12 +54,13 @@ class DaftarTagihanViewTest extends CIUnitTestCase
         ];
     }
 
-    private function render(array $rows): string
+    private function render(array $rows, array $rincian = []): string
     {
         helper('url');
 
         return (string) view('hutang/daftar_tagihan', [
             'hutang' => $rows,
+            'rincian' => $rincian,
             'bank'   => [
                 (object) [
                     'idbank'     => 7,
@@ -140,6 +141,69 @@ class DaftarTagihanViewTest extends CIUnitTestCase
             '/\.dt-table th\s*\{[^}]*background:\s*var\(--dt-surface\)/s',
             $html
         );
+    }
+
+    public function testRingkasanBarangAdaDiBarisDanRincianLengkapDiModal(): void
+    {
+        $html = $this->render($this->rows(), [
+            11 => [
+                (object) [
+                    'pembelian_idpembelian' => 11,
+                    'nama_barang' => 'LCD iPhone 11',
+                    'kode_barang' => 'P01',
+                    'jumlah' => 2,
+                    'satuan_beli' => 'Pcs',
+                    'hrg_beli' => 100000,
+                    'diskon' => 0,
+                    'total_harga' => 200000,
+                ],
+                (object) [
+                    'pembelian_idpembelian' => 11,
+                    'nama_barang' => 'Baterai iPhone 11',
+                    'kode_barang' => 'P02',
+                    'jumlah' => 3,
+                    'satuan_beli' => 'Pcs',
+                    'hrg_beli' => 50000,
+                    'diskon' => 5000,
+                    'total_harga' => 0, // legacy: subtotal dihitung ulang
+                ],
+                (object) [
+                    'pembelian_idpembelian' => 11,
+                    'nama_barang' => 'Konektor Charger',
+                    'kode_barang' => 'P03',
+                    'jumlah' => 1,
+                    'satuan_beli' => '',
+                    'hrg_beli' => 75000,
+                    'diskon' => 0,
+                    'total_harga' => 75000,
+                ],
+            ],
+        ]);
+
+        // Ringkasan baris: jumlah + dua nama pertama, sisanya diringkas.
+        $this->assertStringContainsString('3 barang · LCD iPhone 11, Baterai iPhone 11 +1', $html);
+        $this->assertStringContainsString('title="LCD iPhone 11, Baterai iPhone 11, Konektor Charger"', $html);
+
+        // Sumber rincian untuk modal: satu template per nota, hanya nota berisi detail.
+        $this->assertStringContainsString('id="dt-items-store"', $html);
+        $this->assertStringContainsString('data-items-for="11"', $html);
+        $this->assertStringNotContainsString('data-items-for="12"', $html);
+
+        // Rincian item: nama, kode, qty × satuan × harga, diskon, subtotal.
+        $this->assertStringContainsString('LCD iPhone 11', $html);
+        $this->assertStringContainsString('P01', $html);
+        $this->assertStringContainsString('2 Pcs', $html);
+        $this->assertStringContainsString('× Rp 100.000', $html);
+        $this->assertStringContainsString('Rp 200.000', $html);
+        $this->assertStringContainsString('Diskon Rp 5.000', $html);
+        $this->assertStringContainsString('Rp 145.000', $html);
+        $this->assertStringContainsString('Konektor Charger', $html);
+
+        // Kontainer modal dan fallback nota tanpa detail.
+        $this->assertStringContainsString('id="dt-pay-items"', $html);
+        $this->assertStringContainsString('id="dt-pay-items-count"', $html);
+        $this->assertStringContainsString('Rincian barang tidak tersedia untuk nota ini.', $html);
+        $this->assertStringContainsString('Rincian barang tidak tersedia', $html);
     }
 
     public function testTanpaTagihanMenampilkanEmptyStateTanpaTabel(): void

@@ -28,6 +28,42 @@ $bankLabel = static function ($b): string {
     return $norek !== '' ? $nama . ' · ' . $norek : $nama;
 };
 
+/**
+ * Peta rincian barang per nota dari controller: [idpembelian => object[]].
+ * View ini tetap bisa dirender tanpa `rincian` (test view lama).
+ */
+$rincian = is_array($rincian ?? null) ? $rincian : [];
+
+/** Nama barang untuk ringkasan; fallback memakai id barang bila master kosong. */
+$namaBarang = static function ($item): string {
+    $nama = trim((string) ($item->nama_barang ?? ''));
+
+    return $nama !== '' ? $nama : 'Barang #' . (int) ($item->barang_idbarang ?? 0);
+};
+
+/** Kuantitas tanpa nol desimal yang tidak perlu: 2, 1,5, 0,25. */
+$qty = static function ($value): string {
+    $teks = number_format((float) ($value ?? 0), 2, ',', '.');
+    $teks = rtrim(rtrim($teks, '0'), ',');
+
+    return $teks === '' ? '0' : $teks;
+};
+
+/**
+ * Subtotal baris detail. `total_harga` legacy bisa 0, jadi dihitung ulang
+ * dari jumlah × harga beli − diskon agar nominal tidak tampil Rp 0.
+ */
+$subtotalItem = static function ($item): float {
+    $total = (float) ($item->total_harga ?? 0);
+    if ($total > 0) {
+        return $total;
+    }
+
+    $kotor = (float) ($item->jumlah ?? 0) * (float) ($item->hrg_beli ?? 0);
+
+    return max(0, $kotor - (float) ($item->diskon ?? 0));
+};
+
 $bulan = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 $tgl = static function ($value) use ($bulan): array {
     $value = trim((string) ($value ?? ''));
@@ -160,8 +196,8 @@ $jumlahTagihan = count($rows);
         <div class="dt-toolbar">
             <div class="dt-search">
                 <iconify-icon icon="solar:magnifer-linear" aria-hidden="true"></iconify-icon>
-                <label class="visually-hidden" for="dt-search">Cari nota atau unit</label>
-                <input type="search" id="dt-search" placeholder="Cari nota atau unit…" autocomplete="off">
+                <label class="visually-hidden" for="dt-search">Cari nota, unit, atau barang</label>
+                <input type="search" id="dt-search" placeholder="Cari nota, unit, atau barang…" autocomplete="off">
             </div>
 
             <form class="dt-filters" id="dt-filter" method="post" action="<?= base_url('export_daftar_hutang') ?>">
@@ -224,16 +260,28 @@ $jumlahTagihan = count($rows);
                             $masuk = $tgl($row->tanggal_masuk ?? null);
                             $nota = trim((string) ($row->no_nota_supplier ?? '')) ?: ('#' . (int) $row->idpembelian);
                             $unit = trim((string) ($row->NAMA_UNIT ?? '')) ?: 'Tanpa unit';
+                            $items = $rincian[(int) $row->idpembelian] ?? [];
+                            $namaItems = array_map($namaBarang, $items);
+                            $jumlahItem = count($namaItems);
+                            $ringkas = $jumlahItem === 0
+                                ? 'Rincian barang tidak tersedia'
+                                : $jumlahItem . ' barang · ' . implode(', ', array_slice($namaItems, 0, 2))
+                                    . ($jumlahItem > 2 ? ' +' . ($jumlahItem - 2) : '');
+                            $ringkasTitle = $jumlahItem === 0 ? '' : implode(', ', $namaItems);
                         ?>
                             <tr data-row
                                 data-tanggal="<?= esc($masuk['ymd']) ?>"
                                 data-jatuh="<?= esc($due['ymd']) ?>"
                                 data-unit="<?= esc($unit) ?>"
-                                data-search="<?= esc(strtolower($nota . ' ' . $unit)) ?>">
+                                data-search="<?= esc(strtolower($nota . ' ' . $unit . ' ' . $ringkasTitle)) ?>">
                                 <td data-label="Tagihan">
                                     <span class="dt-doc">
                                         <span class="dt-doc__code"><?= esc($nota) ?></span>
                                         <span class="dt-doc__meta">Masuk <?= esc($masuk['label']) ?></span>
+                                        <span class="dt-doc__items" title="<?= esc($ringkasTitle) ?>">
+                                            <iconify-icon icon="solar:box-linear" aria-hidden="true"></iconify-icon>
+                                            <?= esc($ringkas) ?>
+                                        </span>
                                     </span>
                                 </td>
                                 <td data-label="Unit">
@@ -274,6 +322,44 @@ $jumlahTagihan = count($rows);
                 </table>
             </div>
 
+            <?php /* Sumber rincian modal: satu template per nota, diisi JS. */ ?>
+            <div id="dt-items-store" hidden>
+                <?php foreach ($rows as $row) :
+                    $items = $rincian[(int) $row->idpembelian] ?? [];
+                    if ($items === []) {
+                        continue;
+                    }
+                ?>
+                    <template data-items-for="<?= (int) $row->idpembelian ?>">
+                        <?php foreach ($items as $item) :
+                            $nama = $namaBarang($item);
+                            $kode = trim((string) ($item->kode_barang ?? ''));
+                            $satuan = trim((string) ($item->satuan_beli ?? ''));
+                            $diskon = (float) ($item->diskon ?? 0);
+                        ?>
+                            <li class="dt-item">
+                                <div class="dt-item__head">
+                                    <span class="dt-item__name"><?= esc($nama) ?></span>
+                                    <span class="dt-item__subtotal"><?= $rp($subtotalItem($item)) ?></span>
+                                </div>
+                                <div class="dt-item__meta">
+                                    <?php if ($kode !== '') : ?>
+                                        <span class="dt-item__code"><?= esc($kode) ?></span>
+                                    <?php endif; ?>
+                                    <span class="dt-item__calc">
+                                        <?= esc($qty($item->jumlah ?? 0)) ?><?= $satuan !== '' ? ' ' . esc($satuan) : '' ?>
+                                        × <?= $rp($item->hrg_beli ?? 0) ?>
+                                    </span>
+                                    <?php if ($diskon > 0) : ?>
+                                        <span class="dt-item__disc">Diskon <?= $rp($diskon) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </li>
+                        <?php endforeach; ?>
+                    </template>
+                <?php endforeach; ?>
+            </div>
+
             <div class="dt-empty" id="dt-empty" hidden>
                 <iconify-icon icon="solar:magnifer-zoom-out-linear" aria-hidden="true"></iconify-icon>
                 <h2>Tidak ada tagihan yang cocok</h2>
@@ -311,6 +397,17 @@ $jumlahTagihan = count($rows);
                 </div>
 
                 <p class="dt-modal-meta" id="dt-pay-detail">—</p>
+
+                <div class="dt-modal-items">
+                    <div class="dt-modal-items__head">
+                        <span>Rincian barang</span>
+                        <span id="dt-pay-items-count">0 barang</span>
+                    </div>
+                    <ul class="dt-items" id="dt-pay-items" hidden></ul>
+                    <p class="dt-modal-items__empty" id="dt-pay-items-empty">
+                        Rincian barang tidak tersedia untuk nota ini.
+                    </p>
+                </div>
 
                 <div class="dt-methods" role="group" aria-label="Metode pembayaran">
                     <button type="button" class="dt-method is-active" data-dt-method="tunai"
@@ -486,6 +583,10 @@ $jumlahTagihan = count($rows);
         var errorLabel = document.getElementById('dt-pay-error');
         var submit = document.getElementById('dt-pay-submit');
         var fullButton = document.getElementById('dt-pay-full');
+        var itemsList = document.getElementById('dt-pay-items');
+        var itemsStore = document.getElementById('dt-items-store');
+        var itemsCount = document.getElementById('dt-pay-items-count');
+        var itemsEmpty = document.getElementById('dt-pay-items-empty');
         var methodButtons = Array.prototype.slice.call(modal.querySelectorAll('[data-dt-method]'));
         var methodPanels = Array.prototype.slice.call(modal.querySelectorAll('[data-dt-panel]'));
         var metode = 'tunai';
@@ -501,6 +602,37 @@ $jumlahTagihan = count($rows);
 
         function formatRupiah(value) {
             return 'Rp ' + (value || 0).toLocaleString('id-ID');
+        }
+
+        // Salin rincian barang nota yang dibuka dari #dt-items-store ke modal.
+        // Nota tanpa detail dibiarkan memakai pesan fallback.
+        function isiRincian(id) {
+            if (!itemsList) {
+                return;
+            }
+
+            while (itemsList.firstChild) {
+                itemsList.removeChild(itemsList.firstChild);
+            }
+
+            var template = itemsStore && id
+                ? itemsStore.querySelector('template[data-items-for="' + id + '"]')
+                : null;
+            var jumlah = 0;
+
+            if (template && template.content) {
+                itemsList.appendChild(template.content.cloneNode(true));
+                jumlah = itemsList.querySelectorAll('.dt-item').length;
+            }
+
+            itemsList.hidden = jumlah === 0;
+
+            if (itemsCount) {
+                itemsCount.textContent = jumlah + ' barang';
+            }
+            if (itemsEmpty) {
+                itemsEmpty.hidden = jumlah !== 0;
+            }
         }
 
         function refreshTotal() {
@@ -615,6 +747,7 @@ $jumlahTagihan = count($rows);
 
             idInput.value = button.getAttribute('data-idpembelian') || '';
             notaLabel.textContent = button.getAttribute('data-nota') || '—';
+            isiRincian(idInput.value);
             detailLabel.textContent = [
                 button.getAttribute('data-unit') || '',
                 'Masuk ' + (button.getAttribute('data-masuk') || '—'),

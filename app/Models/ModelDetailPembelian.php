@@ -85,6 +85,45 @@ class ModelDetailPembelian extends Model
             ->getResult();
     }
 
+    /**
+     * Rincian barang untuk sekumpulan nota pembelian.
+     *
+     * Dipakai /daftar_tagihan supaya baris tagihan dan modal pembayaran bisa
+     * menampilkan sparepart/barang per nota tanpa query per baris (N+1).
+     * Hasil tetap datar; pemanggil mengelompokkannya per
+     * `pembelian_idpembelian`.
+     *
+     * @param  int[] $idPembelian
+     * @return object[]
+     */
+    public function getRingkasanPembelian(array $idPembelian): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $idPembelian),
+            static fn (int $id): bool => $id > 0
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return $this->select('
+                detail_pembelian.pembelian_idpembelian,
+                detail_pembelian.jumlah,
+                detail_pembelian.hrg_beli,
+                detail_pembelian.diskon,
+                detail_pembelian.total_harga,
+                detail_pembelian.satuan_beli,
+                barang.nama_barang,
+                barang.kode_barang
+            ')
+            ->join('barang', 'barang.idbarang = detail_pembelian.barang_idbarang', 'left')
+            ->whereIn('detail_pembelian.pembelian_idpembelian', $ids)
+            ->orderBy('detail_pembelian.pembelian_idpembelian', 'ASC')
+            ->orderBy('detail_pembelian.iddetail_pembelian', 'ASC')
+            ->findAll();
+    }
+
     public function insert_detail($data)
     {
         return $this->insert($data);
