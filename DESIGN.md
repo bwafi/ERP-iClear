@@ -81,6 +81,15 @@
 - **Table:** six columns (Dokumen, Pihak, Jatuh tempo, Nilai, Status, Aksi); money and dates use `tabular-nums`; at `767.98px` the table becomes stacked cards with `data-label` captions.
 - **Rules:** no gradients, no colored left borders, no page-level font changes; muted text stays ≥4.5:1 in both themes; hover motion is limited to background/button state and disabled under `prefers-reduced-motion`.
 
+### Daftar Tagihan Hutang (`.dt-*`)
+- **Scope:** `app/Views/hutang/daftar_tagihan.php` + `app/Views/hutang/_daftar_tagihan_theme.php`; semua selector di bawah `.dt-page` / `.dt-pay-modal` dan memakai token `--dt-*` dari tema aplikasi. Tanpa palet, font, atau dependency baru.
+- **Header:** `.dt-head` adalah kartu putih ber-hairline (`14px` radius, `18px 20px` padding) di atas kanvas, bukan teks transparan yang menyatu dengan body background. Tema gelap memakai token kartu yang sama.
+- **Header tabel:** `.dt-table th` memakai permukaan putih (`--dt-surface`) dengan label uppercase `0.66rem`; bukan pita abu-abu di atas lembar.
+- **Layout:** header kartu (breadcrumb, title, tautan Umur hutang/Riwayat) → strip empat sel berhairline (tagihan terbuka, sisa hutang, jatuh tempo ≤7 hari, terlambat) → satu lembar dengan toolbar (search, rentang tanggal, unit, reset, export) → tabel tagihan → footer jumlah tampil. Tabel jatuh tempo terdekat lebih dulu dan menjadi daftar bertumpuk di bawah `768px` dengan label `data-label`.
+- **Status tempo:** chip Terlambat/Hari ini/≤7 hari/Aman diturunkan dari `jatuh_tempo`; tanggal tanpa tempo tidak dihitung sebagai terlambat. Filter tanggal default kosong agar tagihan lama tidak tersembunyi.
+- **Modal bayar:** ringkasan sisa, tunai + bank, dan rekening. Rekening wajib bila nominal bank > 0; tanpa rekening aktif input bank dinonaktifkan. Tombol simpan nonaktif selama total 0. Perhitungan sisa/kembalian tetap di klien, posting dan status lunas tetap milik server.
+- **Rules:** route, `export_daftar_hutang` (`tanggal_awal`, `tanggal_akhir`, `nama_unit`), `update_cicilan_hutang` (`idpembelian`, `bayar_tunai`, `bayar_bank`, `bank_idbank`, `sisa`), dan alur ledger tidak berubah. Satu aksen HUTANG (danger) untuk aksi/fokus; tanpa gradien atau border kiri berwarna; muted text ≥4.5:1 di kedua tema; motion hanya transisi kontrol dan dimatikan under `prefers-reduced-motion`.
+
 ### Mutasi Stok (`.ms-*`)
 - **Scope:** `app/Views/stok/_mutasi_theme.php`; every selector lives under `.mutasi-stok` and derives from `--ms-*` tokens tied to the app theme.
 - **Layout:** page head (breadcrumb, title, active-unit chip) → route panel (sender → receiver, send date) → items panel (empty state → line table → summary action). The receive date is not entered here; it is recorded when the receiving unit confirms on `/mutasi_stok/masuk`.

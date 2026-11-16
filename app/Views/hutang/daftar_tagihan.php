@@ -1,407 +1,571 @@
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<?php
 
+/**
+ * Daftar tagihan hutang supplier + pencatatan pembayaran.
+ *
+ * Alur pembayaran tetap milik server: form ini hanya mengirim tunai/bank dan
+ * sisa hasil perhitungan ke `PembayaranHutang::insert_cicilan`, yang menyimpan
+ * pembayaran, posting ledger, memperbarui `pembelian`, lalu menyinkronkan
+ * proyeksi `hutang_piutang`.
+ */
 
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Riwayat Pembayaran Hutang</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Riwayat</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">Pembayaran Hutang</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+$rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
 
-<div class="card w-100 position-relative overflow-hidden">
-    <div class="px-4 py-3 border-bottom"></div>
+$bulan = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+$tgl = static function ($value) use ($bulan): array {
+    $value = trim((string) ($value ?? ''));
+    if ($value === '' || substr($value, 0, 10) === '0000-00-00') {
+        return ['ymd' => '', 'label' => '—'];
+    }
 
-    <form action="<?= base_url('export_daftar_hutang') ?>" method="post" enctype="multipart/form-data">
-        <div class="px-4 py-3 border-bottom">
-            <button type="submit" class="btn btn-danger"
-                style="margin-left: 20px; display: inline-flex; align-items: center;">
-                <iconify-icon icon="solar:export-broken" width="24" height="24" style="margin-right: 8px;">
-                </iconify-icon>
-                Export
-            </button>
+    $ts = strtotime(substr($value, 0, 10));
+    if ($ts === false) {
+        return ['ymd' => '', 'label' => '—'];
+    }
 
+    return [
+        'ymd'   => date('Y-m-d', $ts),
+        'label' => date('j', $ts) . ' ' . $bulan[(int) date('n', $ts)] . ' ' . date('Y', $ts),
+    ];
+};
 
+$hariIni = strtotime(date('Y-m-d'));
 
+$dueMeta = static function ($value) use ($hariIni, $tgl): array {
+    $info = $tgl($value);
+    if ($info['ymd'] === '') {
+        return $info + ['note' => 'Tanpa jatuh tempo', 'class' => '', 'status' => 'Tanpa tempo', 'tone' => 'is-ok'];
+    }
+
+    $hari = (int) floor((strtotime($info['ymd']) - $hariIni) / 86400);
+
+    if ($hari < 0) {
+        $note = 'Terlambat ' . abs($hari) . ' hari';
+
+        return $info + ['note' => $note, 'class' => 'is-danger', 'status' => 'Terlambat', 'tone' => 'is-danger', 'days' => $hari];
+    }
+
+    if ($hari === 0) {
+        return $info + ['note' => 'Jatuh tempo hari ini', 'class' => 'is-warn', 'status' => 'Hari ini', 'tone' => 'is-warn', 'days' => 0];
+    }
+
+    if ($hari === 1) {
+        return $info + ['note' => 'Besok', 'class' => 'is-warn', 'status' => '≤7 hari', 'tone' => 'is-warn', 'days' => 1];
+    }
+
+    if ($hari <= 7) {
+        return $info + ['note' => $hari . ' hari lagi', 'class' => 'is-warn', 'status' => '≤7 hari', 'tone' => 'is-warn', 'days' => $hari];
+    }
+
+    return $info + ['note' => $hari . ' hari lagi', 'class' => '', 'status' => 'Aman', 'tone' => 'is-ok', 'days' => $hari];
+};
+
+$rows = is_array($hutang ?? null) ? $hutang : [];
+
+$totalSisa = 0;
+$terlambat = 0;
+$segera = 0;
+$unitList = [];
+
+foreach ($rows as $row) {
+    $sisa = (float) ($row->sisa ?? 0);
+    $totalSisa += $sisa;
+
+    $due = $dueMeta($row->jatuh_tempo ?? null);
+    if (($due['days'] ?? null) !== null) {
+        if ($due['days'] < 0) {
+            $terlambat++;
+        } elseif ($due['days'] <= 7) {
+            $segera++;
+        }
+    }
+
+    $unit = trim((string) ($row->NAMA_UNIT ?? ''));
+    if ($unit !== '' && !in_array($unit, $unitList, true)) {
+        $unitList[] = $unit;
+    }
+}
+
+sort($unitList);
+$jumlahTagihan = count($rows);
+?>
+
+<?= view('hutang/_daftar_tagihan_theme') ?>
+
+<div class="dt-page">
+    <header class="dt-head">
+        <div>
+            <nav class="dt-crumb" aria-label="Breadcrumb">
+                <a href="<?= base_url('hutangpiutang/hutang') ?>">Hutang</a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Tagihan Supplier</span>
+            </nav>
+            <h1>Tagihan Supplier</h1>
+            <p class="dt-head__desc">
+                Pelunasan hutang pembelian. Cari nota, cek jatuh tempo, lalu catat pembayaran tunai atau bank —
+                pembayaran langsung memperbarui sisa hutang dan kas/bank unit.
+            </p>
         </div>
-
-
-        <div class="row my-3 mx-1">
-            <div class="mb-3 px-4">
-                <label class="ms-3 me-2">Tanggal Awal:</label>
-                <input name="tanggal_awal" type="date" id="startDate" class="form-control d-inline"
-                    style="width: auto; display: inline-block;" onchange="filterData()">
-
-                <label class="ms-3 me-2">Tanggal Akhir:</label>
-                <input name="tanggal_akhir" type="date" id="endDate" class="form-control d-inline"
-                    style="width: auto; display: inline-block;" onchange="filterData()">
-
-                <label class="ms-3 me-2">Nama Unit:</label>
-                <select name="nama_unit" id="unitSelect" class="form-control d-inline"
-                    style="width: auto; display: inline-block;" onchange="filterData()">
-                    <option value="">Semua Unit</option>
-                    <?php
-                    $unitList = [];
-                    foreach ($hutang as $row) {
-                        if (!in_array($row->NAMA_UNIT, $unitList)) {
-                            $unitList[] = $row->NAMA_UNIT;
-                            echo '<option value="' . esc($row->NAMA_UNIT) . '">' . esc($row->NAMA_UNIT) . '</option>';
-                        }
-                    }
-                    ?>
-                </select>
-
-                <button type="button" onclick="resetFilter()" class="btn btn-sm btn-secondary ms-3">Reset</button>
-                <input type="hidden" id="hiddenNamaUnit" name="hiddenNamaUnit">
-            </div>
+        <div class="dt-head__actions">
+            <a class="dt-btn dt-btn--ghost" href="<?= base_url('umur_hutang') ?>">
+                <iconify-icon icon="solar:clock-circle-linear" aria-hidden="true"></iconify-icon>
+                Umur hutang
+            </a>
+            <a class="dt-btn dt-btn--ghost" href="<?= base_url('riwayat_pembayaran_hutang') ?>">
+                <iconify-icon icon="solar:history-linear" aria-hidden="true"></iconify-icon>
+                Riwayat
+            </a>
         </div>
-    </form>
+    </header>
 
+    <section class="dt-summary" aria-label="Ringkasan tagihan">
+        <div class="dt-summary__cell">
+            <span class="dt-summary__label">Tagihan terbuka</span>
+            <span class="dt-summary__value"><?= number_format($jumlahTagihan, 0, ',', '.') ?></span>
+        </div>
+        <div class="dt-summary__cell">
+            <span class="dt-summary__label">Sisa hutang</span>
+            <span class="dt-summary__value dt-summary__value--lead"><?= $rp($totalSisa) ?></span>
+        </div>
+        <div class="dt-summary__cell">
+            <span class="dt-summary__label">Jatuh tempo ≤7 hari</span>
+            <span class="dt-summary__value <?= $segera > 0 ? 'is-warn' : '' ?>"><?= number_format($segera, 0, ',', '.') ?></span>
+        </div>
+        <div class="dt-summary__cell">
+            <span class="dt-summary__label">Terlambat</span>
+            <span class="dt-summary__value <?= $terlambat > 0 ? 'is-danger' : '' ?>"><?= number_format($terlambat, 0, ',', '.') ?></span>
+        </div>
+    </section>
 
+    <section class="dt-sheet" aria-labelledby="dt-list-title">
+        <h2 id="dt-list-title" class="visually-hidden">Daftar tagihan terbuka</h2>
 
-
-
-    <div class="table-responsive mb-4 px-4">
-        <table class="table border text-nowrap mb-0 align-middle" id="zero_config">
-            <thead class="text-dark fs-4">
-                <tr>
-                    <th>Tanggal Pembelian</th>
-                    <th>Unit</th>
-                    <th>Nota Pembelian</th>
-                    <th>Tanggal Jatuh Tempo</th>
-                    <th>Sisa Hutang</th>
-                    <th>action</th>
-
-
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($hutang)): ?>
-                    <?php foreach ($hutang as $row): ?>
-                        <tr>
-                            <td><?= esc(date('d-m-Y', strtotime($row->tanggal_masuk))) ?></td>
-                            <td><?= esc($row->NAMA_UNIT) ?></td>
-                            <td><?= esc($row->no_nota_supplier) ?></td>
-                            <td><?= esc(date('d-m-Y', strtotime($row->jatuh_tempo))) ?></td>
-                            <td><?= esc('Rp ' . number_format($row->sisa, 0, ',', '.')) ?></td>
-
-                            <td>
-                                <button type="button" class="btn btn-warning edit-button" style="display: flex; gap: 5px; justify-content: center; padding-top: 16px;" data-bs-toggle="modal"
-                                    data-bs-target="#bayar-tagihan-modal"
-                                    data-idpembelian="<?= esc($row->idpembelian) ?>"
-                                    data-no_nota_supplier="<?= esc($row->no_nota_supplier) ?>"
-                                    data-tanggal_masuk="<?= esc($row->tanggal_masuk) ?>"
-                                    data-sisa="<?= esc($row->sisa) ?>">
-                                    <iconify-icon icon="solar:clapperboard-edit-broken" width="24" height="24"></iconify-icon>
-                                    <p>Bayar Tagihan</p>
-                                </button>
-                            </td>
-
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="6" class="text-center">Tidak ada data</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- Modal Bayar Tagihan -->
-<div class="modal fade" id="bayar-tagihan-modal" tabindex="-1" aria-labelledby="bayarTagihanModalLabel"
-    aria-hidden="true">
-    <div class="modal-dialog modal-xl" role="document">
-        <div class="modal-content">
-            <div class="modal-header d-flex align-items-center">
-                <h4 class="modal-title" id="bayarTagihanModalLabel">Bayar Tagihan</h4>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="dt-toolbar">
+            <div class="dt-search">
+                <iconify-icon icon="solar:magnifer-linear" aria-hidden="true"></iconify-icon>
+                <label class="visually-hidden" for="dt-search">Cari nota atau unit</label>
+                <input type="search" id="dt-search" placeholder="Cari nota atau unit…" autocomplete="off">
             </div>
 
-            <form action="<?= base_url('update_cicilan_hutang') ?>" enctype="multipart/form-data" method="post">
-                <div class="modal-body">
-                    <!-- ID Pembelian -->
-                    <input type="hidden" id="edit_idpembelian" name="idpembelian">
-                    <div style="display: flex; gap: 20px;">
-                        <div class="mb-3">
-                            <label for="edit_no_nota_supplier" class="form-label">No Nota Supplier</label>
-                            <input style="width: 400px;" type="text" class="form-control" id="edit_no_nota_supplier" name="no_nota_supplier" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="edit_tanggal_masuk" class="form-label">Tanggal Masuk</label>
-                            <input type="date" style="width: 400px;" class="form-control" id="edit_tanggal_masuk" name="tanggal_masuk" readonly>
-                        </div>
-                    </div>
-
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="metode_bayar" class="form-label">Metode Pembayaran</label>
-                            <select id="metode_bayar" name="metode_bayar" class="form-control">
-                                <option disabled selected>Pilih Metode</option>
-                                <option value="tunai">Tunai</option>
-                                <option value="transfer">Transfer</option>
-                                <option value="tunai_transfer">Tunai + Transfer</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="bayar_tunai" class="form-label">Bayar Tunai</label>
-                        <input type="text" class="form-control" id="bayar_tunai" name="bayar_tunai" value="Rp 0">
-                    </div>
-
-                    <div class="row mb-3 transfer-section">
-                        <div class="col-md-6">
-                            <label for="bayar_bank" class="form-label">Bayar Bank</label>
-                            <input type="text" class="form-control" id="bayar_bank" name="bayar_bank" value="Rp 0">
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="bank_idbank" class="form-label">Pilih Bank</label>
-                            <select id="bank_idbank" name="bank_idbank" class="select2 form-control" style="width: 100%;">
-                                <option disabled selected>Pilih Bank</option>
-                                <?php foreach ($bank as $p): ?>
-                                    <option value="<?= htmlspecialchars($p->idbank) ?>">
-                                        <?= htmlspecialchars($p->nama_bank) ?> : <?= htmlspecialchars($p->norek) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="row mb-3 ">
-                        <div class="col-md-6">
-                            <label for="edit_sisa" class="form-label">Sisa Hutang</label>
-                            <input type="text" class="form-control" id="edit_sisa" name="sisa" readonly>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="kembalian" class="form-label">Kembalian</label>
-                            <input type="text" class="form-control" id="kembalian" name="kembalian" readonly>
-                        </div>
-                    </div>
-
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn bg-danger-subtle text-danger" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Bayar</button>
+            <form class="dt-filters" id="dt-filter" method="post" action="<?= base_url('export_daftar_hutang') ?>">
+                <label class="dt-field dt-field--date">
+                    <span>Dari</span>
+                    <input type="date" name="tanggal_awal" id="dt-start">
+                </label>
+                <label class="dt-field dt-field--date">
+                    <span>Sampai</span>
+                    <input type="date" name="tanggal_akhir" id="dt-end">
+                </label>
+                <label class="dt-field">
+                    <span>Unit</span>
+                    <select name="nama_unit" id="dt-unit">
+                        <option value="">Semua unit</option>
+                        <?php foreach ($unitList as $unit) : ?>
+                            <option value="<?= esc($unit) ?>"><?= esc($unit) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <div class="dt-toolbar__actions">
+                    <button type="button" class="dt-btn dt-btn--ghost" id="dt-reset">Reset</button>
+                    <button type="submit" class="dt-btn dt-btn--ghost">
+                        <iconify-icon icon="solar:download-minimalistic-linear" aria-hidden="true"></iconify-icon>
+                        Export
+                    </button>
                 </div>
             </form>
         </div>
+
+        <?php if ($rows === []) : ?>
+            <div class="dt-empty">
+                <iconify-icon icon="solar:bill-list-linear" aria-hidden="true"></iconify-icon>
+                <h2>Tidak ada tagihan terbuka</h2>
+                <p>Semua pembelian sudah lunas, atau belum ada pembelian yang tercatat.</p>
+            </div>
+        <?php else : ?>
+            <div class="dt-table-wrap" id="dt-table-wrap">
+                <table class="dt-table" id="tagihan-table">
+                    <caption>Daftar tagihan hutang supplier yang belum lunas</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Tagihan</th>
+                            <th scope="col">Unit</th>
+                            <th scope="col">Jatuh tempo</th>
+                            <th scope="col" class="is-num">Sisa</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="is-num"><span class="visually-hidden">Aksi</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="dt-rows">
+                        <?php foreach ($rows as $row) :
+                            $sisa = (float) ($row->sisa ?? 0);
+                            $dibayar = (float) ($row->total_bayar ?? $row->bayar ?? 0);
+                            $total = (float) ($row->total_transaksi ?? 0);
+                            if ($total <= 0) {
+                                $total = $sisa + $dibayar;
+                            }
+                            $due = $dueMeta($row->jatuh_tempo ?? null);
+                            $masuk = $tgl($row->tanggal_masuk ?? null);
+                            $nota = trim((string) ($row->no_nota_supplier ?? '')) ?: ('#' . (int) $row->idpembelian);
+                            $unit = trim((string) ($row->NAMA_UNIT ?? '')) ?: 'Tanpa unit';
+                        ?>
+                            <tr data-row
+                                data-tanggal="<?= esc($masuk['ymd']) ?>"
+                                data-jatuh="<?= esc($due['ymd']) ?>"
+                                data-unit="<?= esc($unit) ?>"
+                                data-search="<?= esc(strtolower($nota . ' ' . $unit)) ?>">
+                                <td data-label="Tagihan">
+                                    <span class="dt-doc">
+                                        <span class="dt-doc__code"><?= esc($nota) ?></span>
+                                        <span class="dt-doc__meta">Masuk <?= esc($masuk['label']) ?></span>
+                                    </span>
+                                </td>
+                                <td data-label="Unit">
+                                    <span><?= esc($unit) ?></span>
+                                </td>
+                                <td data-label="Jatuh tempo">
+                                    <span class="dt-due <?= esc($due['class']) ?>">
+                                        <span class="dt-due__date"><?= esc($due['label']) ?></span>
+                                        <span class="dt-due__note"><?= esc($due['note']) ?></span>
+                                    </span>
+                                </td>
+                                <td data-label="Sisa" class="is-num">
+                                    <span class="dt-money">
+                                        <span class="dt-money__value"><?= $rp($sisa) ?></span>
+                                        <span class="dt-money__meta">Dibayar <?= $rp($dibayar) ?> dari <?= $rp($total) ?></span>
+                                    </span>
+                                </td>
+                                <td data-label="Status">
+                                    <span class="dt-status <?= esc($due['tone']) ?>"><?= esc($due['status']) ?></span>
+                                </td>
+                                <td data-label="Aksi" class="is-num">
+                                    <button type="button" class="dt-btn dt-btn--solid dt-btn--pay"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#bayar-tagihan-modal"
+                                        data-idpembelian="<?= (int) $row->idpembelian ?>"
+                                        data-nota="<?= esc($nota) ?>"
+                                        data-unit="<?= esc($unit) ?>"
+                                        data-masuk="<?= esc($masuk['label']) ?>"
+                                        data-jatuh="<?= esc($due['label']) ?>"
+                                        data-sisa="<?= (int) round($sisa) ?>">
+                                        <iconify-icon icon="solar:wallet-money-linear" aria-hidden="true"></iconify-icon>
+                                        Bayar
+                                    </button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="dt-empty" id="dt-empty" hidden>
+                <iconify-icon icon="solar:magnifer-zoom-out-linear" aria-hidden="true"></iconify-icon>
+                <h2>Tidak ada tagihan yang cocok</h2>
+                <p>Ubah kata kunci, rentang tanggal, atau pilihan unit.</p>
+            </div>
+
+            <footer class="dt-table__foot">
+                <span><strong id="dt-count"><?= number_format($jumlahTagihan, 0, ',', '.') ?></strong> tagihan tampil</span>
+                <span>Diurutkan dari jatuh tempo terdekat</span>
+            </footer>
+        <?php endif; ?>
+    </section>
+</div>
+
+<div class="modal fade dt-pay-modal" id="bayar-tagihan-modal" tabindex="-1"
+    aria-labelledby="bayarTagihanLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="dt-pay-form" method="post"
+            action="<?= base_url('update_cicilan_hutang') ?>" novalidate>
+            <input type="hidden" name="idpembelian" id="dt-pay-id">
+            <input type="hidden" name="sisa" id="dt-pay-sisa-input" value="0">
+
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title" id="bayarTagihanLabel">Bayar tagihan</h2>
+                    <div class="dt-modal-meta" id="dt-pay-nota">—</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="dt-modal-summary">
+                    <span>Sisa tagihan</span>
+                    <strong id="dt-pay-sisa-label">Rp 0</strong>
+                </div>
+
+                <p class="dt-modal-meta" id="dt-pay-detail">—</p>
+
+                <div class="mb-3">
+                    <label class="dt-modal-label" for="dt-pay-tunai">Bayar tunai</label>
+                    <input type="text" class="dt-modal-input" id="dt-pay-tunai" name="bayar_tunai"
+                        inputmode="numeric" autocomplete="off" value="Rp 0">
+                    <div class="dt-modal-hint">
+                        <button type="button" class="dt-link-btn" id="dt-pay-full">Isi sisa penuh</button>
+                    </div>
+                </div>
+
+                <div class="dt-modal-grid">
+                    <div>
+                        <label class="dt-modal-label" for="dt-pay-bank">Bayar bank</label>
+                        <input type="text" class="dt-modal-input" id="dt-pay-bank" name="bayar_bank"
+                            inputmode="numeric" autocomplete="off" value="Rp 0"
+                            <?= empty($bank) ? 'disabled' : '' ?>>
+                    </div>
+                    <div>
+                        <label class="dt-modal-label" for="dt-pay-rekening">Rekening bank</label>
+                        <?php if (empty($bank)) : ?>
+                            <input type="text" class="dt-modal-input" value="Belum ada rekening" disabled>
+                            <input type="hidden" name="bank_idbank" id="dt-pay-rekening" value="">
+                            <div class="dt-modal-hint">Pembayaran bank nonaktif sampai rekening ditambahkan.</div>
+                        <?php else : ?>
+                            <select class="dt-modal-input" id="dt-pay-rekening" name="bank_idbank">
+                                <option value="">Pilih rekening (opsional)</option>
+                                <?php foreach ($bank as $b) : ?>
+                                    <option value="<?= esc($b->idbank) ?>">
+                                        <?= esc($b->nama_bank) ?><?= !empty($b->norek) ? ' · ' . esc($b->norek) : '' ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="dt-modal-calc">
+                    <div class="dt-modal-calc__row">
+                        <span>Sisa setelah bayar</span>
+                        <strong id="dt-pay-after">Rp 0</strong>
+                    </div>
+                    <div class="dt-modal-calc__row">
+                        <span>Kembalian</span>
+                        <strong id="dt-pay-change">Rp 0</strong>
+                    </div>
+                </div>
+
+                <p class="dt-modal-error" id="dt-pay-error" role="alert"></p>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="dt-btn dt-btn--ghost" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="dt-btn dt-btn--solid" id="dt-pay-submit" disabled>
+                    Simpan pembayaran
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
-
-
 <script>
-    function formatRupiah(angka) {
-        let number_string = angka.replace(/[^,\d]/g, ''),
-            split = number_string.split(','),
-            sisa = split[0].length % 3,
-            rupiah = split[0].substr(0, sisa),
-            ribuan = split[0].substr(sisa).match(/\d{3}/gi);
-
-        if (ribuan) {
-            let separator = sisa ? '.' : '';
-            rupiah += separator + ribuan.join('.');
+    document.addEventListener('DOMContentLoaded', function () {
+        var page = document.querySelector('.dt-page');
+        if (!page) {
+            return;
         }
 
-        rupiah = split[1] !== undefined ? rupiah + ',' + split[1] : rupiah;
-        return rupiah ? 'Rp ' + rupiah : '';
-    }
+        var rows = Array.prototype.slice.call(document.querySelectorAll('#dt-rows [data-row]'));
+        var tbody = document.getElementById('dt-rows');
+        var search = document.getElementById('dt-search');
+        var start = document.getElementById('dt-start');
+        var end = document.getElementById('dt-end');
+        var unit = document.getElementById('dt-unit');
+        var reset = document.getElementById('dt-reset');
+        var tableWrap = document.getElementById('dt-table-wrap');
+        var empty = document.getElementById('dt-empty');
+        var count = document.getElementById('dt-count');
 
-    function unformatRupiah(rupiah) {
-        return parseInt(rupiah.replace(/[^0-9]/g, '')) || 0;
-    }
+        function applyFilter() {
+            var q = (search.value || '').trim().toLowerCase();
+            var from = start.value || '';
+            var to = end.value || '';
+            var selectedUnit = unit.value || '';
+            var shown = 0;
 
-    document.addEventListener('DOMContentLoaded', function() {
-        const bayarTunai = document.getElementById('bayar_tunai');
-        const bayarBank = document.getElementById('bayar_bank');
-        const sisa = document.getElementById('edit_sisa');
-        const kembalian = document.getElementById('kembalian');
+            rows.forEach(function (row) {
+                var matchQ = q === '' || (row.getAttribute('data-search') || '').indexOf(q) !== -1;
+                var tanggal = row.getAttribute('data-tanggal') || '';
+                var matchFrom = from === '' || (tanggal !== '' && tanggal >= from);
+                var matchTo = to === '' || (tanggal !== '' && tanggal <= to);
+                var matchUnit = selectedUnit === '' || row.getAttribute('data-unit') === selectedUnit;
+                var visible = matchQ && matchFrom && matchTo && matchUnit;
 
-        let totalHutang = 0; // akan diisi dari data-sisa tombol edit
-
-        $('#bank_idbank').select2({
-            dropdownParent: $('#bayar-tagihan-modal')
-        });
-
-        // fungsi hitung sisa hutang & kembalian
-        function hitung() {
-            let tunai = unformatRupiah(bayarTunai.value);
-            let bank = unformatRupiah(bayarBank.value);
-
-            let totalBayar = tunai + bank;
-
-            let sisaHutang = totalHutang - totalBayar;
-            let kembali = totalBayar - totalHutang;
-
-            if (sisaHutang < 0) sisaHutang = 0;
-            if (kembali < 0) kembali = 0;
-
-            sisa.value = formatRupiah(sisaHutang.toString());
-            kembalian.value = formatRupiah(kembali.toString());
-        }
-
-        // event input untuk format & hitung
-        [bayarTunai, bayarBank].forEach(el => {
-            el.addEventListener('input', function() {
-                let angka = unformatRupiah(el.value);
-                el.value = angka > 0 ? formatRupiah(angka.toString()) : '';
-                hitung();
+                row.hidden = !visible;
+                if (visible) {
+                    shown++;
+                }
             });
 
-            el.addEventListener('blur', function() {
-                if (el.value === '') el.value = 'Rp 0';
-                hitung();
-            });
-
-            el.addEventListener('focus', function() {
-                if (unformatRupiah(el.value) === 0) el.value = '';
-            });
-        });
-
-        // saat tombol edit ditekan
-        document.querySelector('#zero_config').addEventListener('click', function(e) {
-            if (e.target.closest('.edit-button')) {
-                const button = e.target.closest('.edit-button');
-                const idpembelian = button.getAttribute('data-idpembelian');
-                const no_nota_supplier = button.getAttribute('data-no_nota_supplier');
-                const tanggal_masuk = button.getAttribute('data-tanggal_masuk');
-                const sisaAwal = button.getAttribute('data-sisa'); // ambil sisa dari tombol
-
-                document.getElementById('edit_idpembelian').value = idpembelian;
-                document.getElementById('edit_no_nota_supplier').value = no_nota_supplier;
-                document.getElementById('edit_tanggal_masuk').value = tanggal_masuk;
-
-                // set total hutang = sisa awal dari database
-                totalHutang = unformatRupiah(sisaAwal);
-
-                // isi form awal
-                bayarTunai.value = 'Rp 0';
-                bayarBank.value = 'Rp 0';
-                sisa.value = formatRupiah(totalHutang.toString());
-                kembalian.value = 'Rp 0';
+            if (count) {
+                count.textContent = shown.toLocaleString('id-ID');
             }
-        });
-    });
-</script>
-
-
-
-
-
-
-
-
-<script>
-    window.onload = function() {
-        const endDateInput = document.getElementById('endDate');
-        const startDateInput = document.getElementById('startDate');
-
-        const today = new Date();
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(today.getDate() - 15);
-
-
-        const toDateInputValue = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        startDateInput.value = toDateInputValue(fifteenDaysAgo);
-        endDateInput.value = toDateInputValue(today);
-
-        const unitSelect = document.getElementById('unitSelect');
-        if (unitSelect.options.length > 1) {
-            unitSelect.selectedIndex = 1;
-        }
-
-        filterData();
-    };
-
-    function filterData() {
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-        const selectedUnit = document.getElementById('unitSelect').value.toLowerCase();
-
-        const rows = document.querySelectorAll('#zero_config tbody tr');
-        rows.forEach(row => {
-            const dateCell = row.children[0];
-            const unitCell = row.children[1];
-            if (!dateCell || !unitCell) return;
-
-            // Ambil dan parsing tanggal
-            const dateText = dateCell.textContent.trim();
-            const parts = dateText.split('-');
-            const rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); // ubah ke Y-m-d
-
-            const startDate = start ? new Date(start) : null;
-            const endDate = end ? new Date(end) : null;
-
-            // Ambil dan cocokan nama unit
-            const unitName = unitCell.textContent.trim().toLowerCase();
-            const unitMatch = selectedUnit === "" || unitName === selectedUnit;
-
-            let dateMatch = true;
-            if (startDate && rowDate < startDate) dateMatch = false;
-            if (endDate && rowDate > endDate) dateMatch = false;
-
-            // Tampilkan baris jika dua-duanya match
-            row.style.display = (unitMatch && dateMatch) ? '' : 'none';
-        });
-    }
-
-    function resetFilter() {
-        document.getElementById('startDate').value = '';
-        document.getElementById('endDate').value = '';
-        document.getElementById('unitSelect').value = '';
-        filterData();
-    }
-</script>
-
-
-
-
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const metodeBayar = document.getElementById("metode_bayar");
-        const bayarTunaiDiv = document.getElementById("bayar_tunai").closest(".mb-3");
-        const transferSection = document.querySelector(".transfer-section");
-
-        function toggleMetode() {
-            const val = metodeBayar.value;
-
-            if (val === "tunai") {
-                bayarTunaiDiv.style.display = "block";
-                transferSection.style.display = "none";
-            } else if (val === "transfer") {
-                bayarTunaiDiv.style.display = "none";
-                transferSection.style.display = "flex";
-            } else if (val === "tunai_transfer") {
-                bayarTunaiDiv.style.display = "block";
-                transferSection.style.display = "flex";
-            } else {
-                bayarTunaiDiv.style.display = "none";
-                transferSection.style.display = "none";
+            if (tableWrap) {
+                tableWrap.hidden = shown === 0;
+            }
+            if (empty) {
+                empty.hidden = shown !== 0;
             }
         }
 
+        // Urutkan dari jatuh tempo terdekat supaya tagihan mendesak tampil dulu.
+        rows.sort(function (a, b) {
+            return (a.getAttribute('data-jatuh') || '9999-12-31')
+                .localeCompare(b.getAttribute('data-jatuh') || '9999-12-31');
+        }).forEach(function (row) {
+            if (tbody) {
+                tbody.appendChild(row);
+            }
+        });
 
-        toggleMetode();
+        [search, start, end, unit].forEach(function (el) {
+            if (el) {
+                el.addEventListener('input', applyFilter);
+                el.addEventListener('change', applyFilter);
+            }
+        });
 
+        if (reset) {
+            reset.addEventListener('click', function () {
+                search.value = '';
+                start.value = '';
+                end.value = '';
+                unit.value = '';
+                applyFilter();
+                search.focus();
+            });
+        }
 
-        metodeBayar.addEventListener("change", toggleMetode);
+        applyFilter();
+
+        // ---------- Modal pembayaran ----------
+        var modal = document.getElementById('bayar-tagihan-modal');
+        if (!modal) {
+            return;
+        }
+
+        var form = document.getElementById('dt-pay-form');
+        var idInput = document.getElementById('dt-pay-id');
+        var sisaInput = document.getElementById('dt-pay-sisa-input');
+        var notaLabel = document.getElementById('dt-pay-nota');
+        var detailLabel = document.getElementById('dt-pay-detail');
+        var sisaLabel = document.getElementById('dt-pay-sisa-label');
+        var tunaiInput = document.getElementById('dt-pay-tunai');
+        var bankInput = document.getElementById('dt-pay-bank');
+        var rekeningSelect = document.getElementById('dt-pay-rekening');
+        var afterLabel = document.getElementById('dt-pay-after');
+        var changeLabel = document.getElementById('dt-pay-change');
+        var errorLabel = document.getElementById('dt-pay-error');
+        var submit = document.getElementById('dt-pay-submit');
+        var fullButton = document.getElementById('dt-pay-full');
+        var sisaHutang = 0;
+
+        function digits(value) {
+            return String(value || '').replace(/\D/g, '');
+        }
+
+        function toNumber(value) {
+            return parseInt(digits(value), 10) || 0;
+        }
+
+        function formatRupiah(value) {
+            return 'Rp ' + (value || 0).toLocaleString('id-ID');
+        }
+
+        function refreshTotal() {
+            var tunai = toNumber(tunaiInput.value);
+            var bank = toNumber(bankInput.value);
+            var total = tunai + bank;
+            var setelah = Math.max(0, sisaHutang - total);
+            var kembali = Math.max(0, total - sisaHutang);
+            var bankDipilih = !rekeningSelect || rekeningSelect.tagName !== 'SELECT' || rekeningSelect.value !== '';
+            var bankKurang = bank > 0 && !bankDipilih;
+
+            sisaInput.value = setelah;
+            afterLabel.textContent = formatRupiah(setelah);
+            changeLabel.textContent = formatRupiah(kembali);
+            errorLabel.textContent = bankKurang ? 'Pilih rekening bank untuk pembayaran lewat bank.' : '';
+
+            if (rekeningSelect && rekeningSelect.tagName === 'SELECT') {
+                rekeningSelect.classList.toggle('is-invalid', bankKurang);
+            }
+
+            submit.disabled = total <= 0 || bankKurang;
+        }
+
+        function bindRupiahInput(input) {
+            if (!input) {
+                return;
+            }
+
+            input.addEventListener('input', function () {
+                var value = toNumber(input.value);
+                input.value = formatRupiah(value);
+                refreshTotal();
+            });
+
+            input.addEventListener('focus', function () {
+                if (toNumber(input.value) === 0) {
+                    input.value = '';
+                }
+            });
+
+            input.addEventListener('blur', function () {
+                input.value = formatRupiah(toNumber(input.value));
+                refreshTotal();
+            });
+        }
+
+        bindRupiahInput(tunaiInput);
+        bindRupiahInput(bankInput);
+
+        if (rekeningSelect) {
+            rekeningSelect.addEventListener('change', refreshTotal);
+        }
+
+        if (fullButton) {
+            fullButton.addEventListener('click', function () {
+                var bank = toNumber(bankInput.value);
+                tunaiInput.value = formatRupiah(Math.max(0, sisaHutang - bank));
+                refreshTotal();
+                tunaiInput.focus();
+            });
+        }
+
+        modal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            if (!button) {
+                return;
+            }
+
+            sisaHutang = parseInt(button.getAttribute('data-sisa'), 10) || 0;
+
+            idInput.value = button.getAttribute('data-idpembelian') || '';
+            notaLabel.textContent = button.getAttribute('data-nota') || '—';
+            detailLabel.textContent = [
+                button.getAttribute('data-unit') || '',
+                'Masuk ' + (button.getAttribute('data-masuk') || '—'),
+                'Jatuh tempo ' + (button.getAttribute('data-jatuh') || '—')
+            ].filter(Boolean).join(' · ');
+
+            sisaLabel.textContent = formatRupiah(sisaHutang);
+            tunaiInput.value = 'Rp 0';
+            bankInput.value = 'Rp 0';
+            if (rekeningSelect && rekeningSelect.tagName === 'SELECT') {
+                rekeningSelect.value = '';
+                rekeningSelect.classList.remove('is-invalid');
+            }
+            errorLabel.textContent = '';
+            refreshTotal();
+        });
+
+        form.addEventListener('submit', function (event) {
+            var total = toNumber(tunaiInput.value) + toNumber(bankInput.value);
+            var bank = toNumber(bankInput.value);
+            var bankKurang = bank > 0 && rekeningSelect && rekeningSelect.tagName === 'SELECT' && rekeningSelect.value === '';
+
+            if (total <= 0 || bankKurang) {
+                event.preventDefault();
+                if (total <= 0) {
+                    errorLabel.textContent = 'Isi nominal tunai atau bank terlebih dahulu.';
+                }
+            }
+        });
     });
 </script>
