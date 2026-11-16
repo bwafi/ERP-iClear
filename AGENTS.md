@@ -56,7 +56,7 @@ Setelah approval, urutannya:
    gh project item-edit --project-id PVT_kwHOBrFnns4BmskD --id <item-id> --field-id PVTSSF_lAHOBrFnns4BmskDzhlUhds --single-select-option-id f75ad846
    ```
 3. Setelah implementasi dan test, pindahkan ke **Testing** (`7dc918ef`) dan komentari hash commit + hasil test. Setelah verifikasi manual, pindahkan ke **Done** (`98236657`).
-4. Sebut nomor issue di pesan commit: `... (refs #<nomor>)`.
+4. Sebut nomor issue di pesan commit dengan format di D.1: `... (refs #<nomor>)`.
 
 ## C. Change safety
 
@@ -94,6 +94,44 @@ Setelah approval, urutannya:
 - Tidak ada script lint/format khusus di `composer.json`; minimal jalankan `php -l` pada file PHP yang diubah bila tidak ada pemeriksaan lain.
 - Sebelum selesai, periksa `git diff --check` dan `git diff` untuk memastikan tidak ada perubahan yang tidak terkait.
 - **Jangan melakukan `git commit` sebelum user menginstruksikannya secara eksplisit.**
+
+### D.1 Format commit message (wajib)
+
+Gunakan Conventional Commits agar riwayat konsisten dan mudah difilter:
+
+```
+<type>(<scope>): <ringkasan> (refs #<nomor-issue>)
+```
+
+- `type` wajib, lowercase:
+  - `feat` — fitur atau perilaku baru.
+  - `fix` — perbaikan bug atau perilaku salah.
+  - `refactor` — perubahan struktur tanpa mengubah perilaku.
+  - `perf` — peningkatan performa.
+  - `docs` — dokumentasi, PRD, atau `AGENTS.md` saja.
+  - `test` — menambah atau memperbaiki test saja.
+  - `style` — format, spasi, atau CSS tampilan tanpa mengubah logika.
+  - `chore` — tooling, dependency, atau konfigurasi non-produksi.
+  - `build` — build system atau dependency build.
+  - `ci` — pipeline CI.
+  - `revert` — membatalkan commit lain.
+- `scope` lowercase dan sedekat mungkin dengan area yang berubah, mis. `service`, `service_dp`, `kas_bank`, `penjualan`, `pembelian`, `finance`, `payroll`, `kpi`, `marketing`, `master`, `auth`, `ui`, `docs`.
+- `ringkasan` berbahasa Indonesia, imperatif, huruf kecil, tanpa titik akhir, maksimal ~72 karakter. Tulis apa yang berubah, bukan cara implementasinya.
+- Cantumkan `(refs #<nomor>)` di akhir subject bila ada issue. Jangan gunakan `closes` kecuali issue memang harus tertutup otomatis saat merge.
+- Body opsional, dipisahkan satu baris kosong. Jelaskan alasan, dampak, migrasi, atau perilaku yang berubah; bungkus ~72 karakter dan boleh berupa bullet.
+- Breaking change: tambahkan `!` setelah scope (mis. `feat(api)!: ...`) dan footer `BREAKING CHANGE: <dampak>`.
+- Satu commit satu tujuan. Jangan mencampur modul atau perubahan tidak terkait; pisahkan refactor dari fix/feat.
+- Jika commit di-amend/rebase sehingga hash berubah, perbarui komentar hash di issue.
+
+Contoh:
+
+```
+feat(service): pilih metode dan rekening refund DP (refs #218)
+fix(service): sisa tagihan berkurang live saat pembayaran diketik (refs #219)
+fix(kas_bank): arus kas dan posisi mengikuti filter tanggal
+docs(prd): perbarui aturan refund DP Modul 04 (refs #218)
+refactor(kpi): ekstrak formula penilaian ke service
+```
 
 ## E. PRD maintenance
 
