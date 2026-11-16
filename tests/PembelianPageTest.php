@@ -14,7 +14,8 @@ final class PembelianPageTest extends CIUnitTestCase
         bool $canManageHargaJual = false,
         bool $bolehPilihUnit = false,
         array $unitList = [],
-        ?int $unitTerpilih = null
+        ?int $unitTerpilih = null,
+        ?array $bank = null
     ): string {
         service('session')->set([
             'ID_AKUN' => 43,
@@ -42,7 +43,7 @@ final class PembelianPageTest extends CIUnitTestCase
             'produk'         => [$produk],
             'kategori'       => [(object) ['id' => 3, 'nama_kategori' => 'Sparepart']],
             'suplier'        => [(object) ['id_suplier' => 1, 'nama_suplier' => 'Supplier']],
-            'bank'           => [(object) ['idbank' => 1, 'nama_bank' => 'BCA', 'atas_nama' => 'Toko', 'norek' => '123']],
+            'bank'           => $bank ?? [(object) ['idbank' => 1, 'nama_bank' => 'BCA', 'atas_nama' => 'Toko', 'norek' => '123']],
             'pelanggan'      => [(object) ['id_pelanggan' => 1, 'nama' => 'Pelanggan', 'no_hp' => '0812']],
             'nama_handphone' => [],
             'sub_kategori'   => [],
@@ -60,6 +61,9 @@ final class PembelianPageTest extends CIUnitTestCase
 
         $this->assertStringContainsString('pembelian-page', $html);
         $this->assertStringContainsString('pb-head', $html);
+        $this->assertStringContainsString('pb-sheet', $html);
+        $this->assertStringContainsString('pb-party-grid', $html);
+        $this->assertStringContainsString('pb-pay-grid', $html);
         $this->assertStringContainsString('pb-section', $html);
         $this->assertStringContainsString('pb-dock', $html);
         $this->assertStringContainsString('Ringkasan pembayaran', $html);
@@ -91,7 +95,9 @@ final class PembelianPageTest extends CIUnitTestCase
             'id="notaFileInput"',
             'id="previewNota"',
             'id="tanggal_masuk"',
+            'id="jatuh-tempo-field"',
             'id="jatuh_tempo"',
+            'id="jenis_pembayaran"',
             'id="metode_bayar"',
             'id="frontliner"',
             'id="produk-table-wrap"',
@@ -132,6 +138,7 @@ final class PembelianPageTest extends CIUnitTestCase
             'name="nota_file"',
             'name="tanggal_masuk"',
             'name="jatuh_tempo"',
+            'name="jenis_pembayaran"',
             'name="metode_bayar"',
             'name="bayar"',
             'name="bank[${index}][id]"',
@@ -144,6 +151,36 @@ final class PembelianPageTest extends CIUnitTestCase
         ] as $name) {
             $this->assertStringContainsString($name, $html, $name . ' hilang dari halaman');
         }
+    }
+
+    public function testPembayaranBankDisusunVertikal(): void
+    {
+        $html = $this->render();
+
+        // Baris bank kini kartu vertikal: rekening di atas, nominal di bawah.
+        $this->assertStringContainsString('bank-rekening-${index}', $html);
+        $this->assertStringContainsString('bank-nominal-${index}', $html);
+        $this->assertStringContainsString('class="pb-subfield"', $html);
+        $this->assertStringContainsString('.pb-bank-row .pb-subfield__label', $html);
+        $this->assertStringNotContainsString('grid-template-columns: minmax(0, 1fr) 120px;', $html);
+
+        // Chevron select2 dipusatkan, tidak lagi memakai `top: 24px` global.
+        $this->assertStringContainsString('.select2-selection__arrow b', $html);
+        $this->assertStringNotContainsString('top: 24px;', $html);
+    }
+
+    public function testCatatanRekeningKosongMunculSaatTidakAdaBankUnit(): void
+    {
+        $this->assertStringNotContainsString(
+            'Belum ada rekening aktif untuk unit ini.',
+            $this->render(),
+            'Catatan kosong tidak boleh muncul saat unit punya rekening'
+        );
+
+        $html = $this->render(false, false, [], null, []);
+
+        $this->assertStringContainsString('pb-bank-note', $html);
+        $this->assertStringContainsString('Belum ada rekening aktif untuk unit ini.', $html);
     }
 
     public function testTemaDanModalMemakaiScopeBaru(): void
@@ -290,5 +327,22 @@ final class PembelianPageTest extends CIUnitTestCase
 
         $this->assertStringNotContainsString('value=', $tag, 'jatuh_tempo tidak boleh punya default');
         $this->assertStringContainsString('required', $tag, 'jatuh_tempo wajib diisi');
+    }
+
+    public function testJenisPembayaranHanyaTempoDanLunas(): void
+    {
+        $html = $this->render();
+
+        $this->assertMatchesRegularExpression(
+            '/<select[^>]*id="jenis_pembayaran"[^>]*>.*?<\/select>/s',
+            $html,
+            'select jenis_pembayaran hilang'
+        );
+        preg_match('/<select[^>]*id="jenis_pembayaran"[^>]*>.*?<\/select>/s', $html, $m);
+        $select = $m[0];
+
+        $this->assertStringContainsString('value="lunas"', $select);
+        $this->assertStringContainsString('value="tempo"', $select);
+        $this->assertStringNotContainsString('tunai_transfer', $html, 'pilihan lama harus hilang');
     }
 }

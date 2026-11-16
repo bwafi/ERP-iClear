@@ -18,29 +18,30 @@ related_targets: ["app/Views/transaksi/pembelian.php","app/Views/transaksi/_pemb
 
 ## Chosen direction & memorable moment
 
-**Lembar Nota** (purchase sheet): satu lembar tenang dengan header tipis, tiga bagian bernapas — Pihak & Dokumen, Produk, Pembayaran — dan satu ringkasan pembayaran yang menempel di bawah. Tidak ada tumpukan card, tidak ada header kosong, tidak ada tabel penuh border.
+**Satu Lembar** (one purchase sheet): satu alur vertikal tanpa kolom kedua. Header tipis, lalu lembar yang mengalir dari **Pihak & Dokumen → Produk → Pembayaran → Ringkasan/Simpan**. Padat tetapi tenang: satu aksen, hairline sebagai pemisah, dan angka uang selalu tabular.
 
-Memorable moment: dock pembayaran yang selalu terlihat — Total, Dibayar, Hutang, Kembalian, dan Simpan dalam satu baris, sehingga angka akhir tidak pernah hilang saat menggulir daftar produk.
+Memorable moment: footer ringkasan di kaki lembar. Total tampil paling besar, disusul Dibayar, Hutang, dan Kembalian, dengan Simpan Pembelian di ujung kanan—semua keputusan akhir terbaca sebelum submit tanpa memecah halaman.
 
 ## Direction contract
 
-THESIS: A purchase entry is a nota, not a dashboard; the page is one sheet with three quiet sections and a payment dock that never leaves the viewport, refusing the incumbent's nested cards, empty header strip, and scattered totals.
+THESIS: A purchase entry is one continuous sheet, not a dashboard and not a split workspace; party, products, payment, and the final money answer follow in a single vertical read, refusing the incumbent's nested cards and the two-column rail.
 
 OWN-WORLD: Established module world inherited from `.tj-*`/`.ks-*`: resolved theme tokens (`--bs-card-bg`, `--bs-border-color`, `--bs-body-color`), 16px sheet radius, 9–10px controls, hairline rules instead of card borders, `tabular-nums` on every money figure, Iconify `solar:*` glyphs only. One accent (`#0077c4` / `#8ab4ff` dark) for focus and the primary action; status reads as text, not badges. No gradients, no colored left borders, no new palette, no new fonts.
 
-STORY: The operator lands, sees where they are, fills the party and document fields, picks products into a ledger table, sets cash/bank, watches the dock settle the totals, and saves once with the balance visible.
+STORY: The operator lands, fills party and document in one compact row, picks products into a ledger where identity (name, code, category, IMEI) is one cell, sets Lunas/Tempo, checks the footer totals, and saves once.
 
-FIRST VIEWPORT: At 1440×900 the thin header (breadcrumb, title, one-line description) sits above the sheet; Pihak & Dokumen is already filled out in one compact grid; the Produk toolbar and the first rows are visible before the fold; the payment dock is pinned at the bottom edge with the primary Simpan action at its right.
+FIRST VIEWPORT: At 1440×900 the thin header (breadcrumb, title, one-line description, unit scope) sits above the sheet; Pihak & Dokumen is one compact row, the Produk toolbar and first rows are visible before the fold, and the footer totals are one short scroll away.
 
-UNIT SCOPE: Unit pembelian milik role lintas unit (Finance/Root/Manager) adalah konteks halaman, bukan field nota. Kontrolnya tinggal di kolom kanan header — label mikro `Unit pembelian`, satu trigger berikon toko + nama unit + chevron, dan hint `Stok & HPP mengikuti unit ini.` Trigger membuka menu Bootstrap (`.pb-scope__menu`): header `Pilih unit` + jumlah unit, lalu daftar unit operasional (`unit.is_operational = 1`; Head Office tidak tampil) sebagai tautan `?unit=` dengan tanda centang pada unit aktif. Menu memakai permukaan `--pb-surface` dan teks `--pb-strong` sendiri supaya tetap terbaca di tema gelap, tanpa shadow. Role tim toko melihat bentuk statis (`pb-scope--static`). Grid Pihak & Dokumen tidak lagi memuat field unit; nilai unit dikirim lewat hidden input `unit_idunit` di dalam form.
+UNIT SCOPE: Unit pembelian milik role lintas unit (Finance/Root/Manager) adalah konteks halaman, bukan field nota. Kontrolnya tinggal di kolom kanan header — label mikro `Unit pembelian`, satu trigger berikon toko + nama unit + chevron, dan hint `Stok & HPP mengikuti unit ini.` Trigger membuka menu Bootstrap (`.pb-scope__menu`): header `Pilih unit` + jumlah unit, lalu daftar unit operasional (`unit.is_operational = 1`; Head Office tidak tampil) sebagai tautan `?unit=` dengan tanda centang pada unit aktif. Menu memakai permukaan `--pb-surface` dan teks `--pb-strong` sendiri supaya tetap terbaca di tema gelap, tanpa shadow. Role tim toko melihat bentuk statis (`pb-scope--static`). Nilai unit dikirim lewat hidden input `unit_idunit` di dalam form. Daftar rekening pada **Pembayaran via Bank** mengikuti unit ini: hanya rekening milik unit dan rekening shared yang dialokasikan ke unit (`ModelBank::getBankDalamScopeUnit`), tanpa rekening unit lain, Finance/HO, atau rekening nonaktif.
 
-FORM: Lembar nota — page inside the established purchase/stok module world (inherits `.pb-*` composition), not a new-world concept roll; no seed key.
+FORM: Satu lembar (`.pb-sheet`). Urutan: `Pihak & Dokumen` (grid lima kolom: sumber, supplier/pelanggan, tanggal masuk, frontliner, nota), `Produk` (toolbar + ledger sembilan kolom), `Pembayaran` (grid tiga kolom: jenis, metode, jatuh tempo, tunai/bank, catatan), lalu footer `.pb-dock` (Diskon, PPN, Total, Dibayar, Hutang, Kembalian, Simpan). Grid melipat ke 3/2/1 kolom pada 1200/992/576px.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
 
 ## Unresolved decisions
 
-- Mobile keeps the product table horizontally scrollable with a 1080px min width; converting each row to a stacked card is left for a later pass if mobile becomes a primary input path.
-- The dock shows Kembalian inline; if overpay becomes rare in practice it can collapse to a secondary line without changing IDs.
+- The product table keeps its nine-column compact shape; at narrow widths it stays horizontally scrollable rather than converting rows to stacked cards.
+- The footer `.pb-dock` is a normal part of the sheet, not a floating sticky bar; it wraps at tablet widths and becomes a two-column figure grid with a full-width save action on phones.
+- Diskon and PPN stay computed summary inputs in the footer (same `readonly` contract as before); per-row Diskon remains the editable source.
 - The product picker mirrors the Terima Service sparepart picker: icon-plus-heading header, one search field with a unit badge, and a scrollable card list (round tick, name, bold code, icon metadata, HPP as the strong figure with the sale price beneath). The footer pairs a count and Total HPP with `Batal` / `Tambahkan`, disabled until something is picked. Filtering is client-side and selection lives in a `Map`, so picks survive a search. On small screens the unit badge hides and the price row drops below the card text.
-- Payment method sits at the top of the Pembayaran section, next to Bayar Tunai, so the cash/bank fields it controls appear directly below it.
+- Payment method sits directly under Jenis Pembayaran; Jatuh Tempo appears in the same grid only for Tempo, and the cash/bank field appears only for the chosen Lunas method. The bank field is one compact card in a payment column: `Rekening Bank` select sits above `Nominal`, stacked vertically with micro labels instead of a horizontal select+amount row.

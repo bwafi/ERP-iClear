@@ -68,15 +68,17 @@
         enctype="multipart/form-data">
         <?php // Unit adalah konteks halaman (dipilih di header), bukan field nota. ?>
         <input type="hidden" name="unit_idunit" value="<?= $unitTerpilih ?>">
-        <section class="pb-section" aria-labelledby="pb-pihak-title">
+
+        <section class="pb-section pb-parties" aria-labelledby="pb-pihak-title">
             <div class="pb-section__head">
                 <div>
                     <h2 id="pb-pihak-title">Pihak &amp; Dokumen</h2>
-                    <p class="pb-section__hint">Tentukan asal barang dan bukti nota sebelum memilih produk.</p>
+                    <p class="pb-section__hint">Asal barang, tanggal masuk, dan bukti nota dalam satu baris.</p>
                 </div>
             </div>
 
-            <div class="pb-grid">
+            <?php $idUnit = $unitTerpilih; $tanggalHariIni = date('Y-m-d'); ?>
+            <div class="pb-party-grid">
                 <div class="pb-field">
                     <label for="tipe_pihak">Sumber</label>
                     <select id="tipe_pihak" class="form-select" required>
@@ -110,23 +112,6 @@
                     </div>
                 </div>
 
-                <div class="pb-field pb-field--span2">
-                    <label for="notaFileInput">Upload Gambar Nota</label>
-                    <div class="pb-file">
-                        <input type="file" name="nota_file" id="notaFileInput" class="pb-file__input"
-                            accept="image/*" aria-label="Upload gambar nota, maksimal 10 MB">
-                        <span class="pb-file__icon">
-                            <iconify-icon icon="solar:cloud-upload-outline" width="20" height="20"></iconify-icon>
-                        </span>
-                        <div>
-                            <p class="pb-file__title">Letakkan file di sini atau klik untuk memilih</p>
-                            <p class="pb-file__hint">JPG atau PNG, maksimal 10 MB.</p>
-                        </div>
-                        <img id="previewNota" class="pb-file__preview" src="#" alt="Preview gambar nota">
-                    </div>
-                </div>
-
-                <?php $idUnit = $unitTerpilih; $tanggalHariIni = date('Y-m-d'); ?>
                 <div class="pb-field">
                     <label for="tanggal_masuk">Tanggal Masuk</label>
                     <?php if ($idUnit == 1): ?>
@@ -140,19 +125,30 @@
                 </div>
 
                 <div class="pb-field">
-                    <label for="jatuh_tempo">Jatuh Tempo</label>
-                    <input type="date" class="form-control" id="jatuh_tempo" name="jatuh_tempo" required>
-                </div>
-
-                <div class="pb-field pb-field--span2">
                     <label for="frontliner">Frontliner</label>
                     <input type="text" class="form-control" id="frontliner"
                         value="<?= esc($akun->NAMA_AKUN ?? session('NAMA')) ?>" readonly>
                 </div>
+
+                <div class="pb-field pb-doc__nota">
+                    <label for="notaFileInput">Upload Gambar Nota</label>
+                    <div class="pb-file">
+                        <input type="file" name="nota_file" id="notaFileInput" class="pb-file__input"
+                            accept="image/*" aria-label="Upload gambar nota, maksimal 10 MB">
+                        <span class="pb-file__icon">
+                            <iconify-icon icon="solar:cloud-upload-outline" width="20" height="20"></iconify-icon>
+                        </span>
+                        <div class="pb-file__body">
+                            <p class="pb-file__title">Klik untuk memilih foto nota</p>
+                            <p class="pb-file__hint">JPG atau PNG, maksimal 10 MB.</p>
+                        </div>
+                        <img id="previewNota" class="pb-file__preview" src="#" alt="Preview gambar nota">
+                    </div>
+                </div>
             </div>
         </section>
 
-        <section class="pb-section" aria-labelledby="pb-produk-title">
+        <section class="pb-section pb-products" aria-labelledby="pb-produk-title">
             <div class="pb-section__head">
                 <div>
                     <h2 id="pb-produk-title">Produk</h2>
@@ -177,17 +173,14 @@
                 <table class="pb-table">
                     <thead>
                         <tr>
-                            <th>Kode Barang</th>
-                            <th>Nama Barang</th>
-                            <th>Kategori</th>
-                            <th>IMEI</th>
+                            <th>Barang</th>
                             <th>Hrg. Jual</th>
                             <th>Hrg. Beli</th>
                             <th>Qty</th>
-                            <th>Biaya Tambahan</th>
+                            <th>Biaya</th>
                             <th>Keterangan</th>
-                            <th>Diskon (Rp)</th>
-                            <th>
+                            <th>Diskon</th>
+                            <th class="text-center">
                                 <input type="checkbox" id="select-all-ppn" class="form-check-input"> PPN 11%
                             </th>
                             <th>Aksi</th>
@@ -195,7 +188,7 @@
                     </thead>
                     <tbody id="selected-produk-table">
                         <tr class="pb-empty" id="produk-empty">
-                            <td colspan="12">
+                            <td colspan="9">
                                 <span class="pb-empty__title">Belum ada produk dipilih</span>
                                 Gunakan Pilih Produk untuk menambahkan barang dari master.
                             </td>
@@ -205,42 +198,63 @@
             </div>
         </section>
 
-        <section class="pb-section" aria-labelledby="pb-bayar-title">
+        <section class="pb-section pb-payment" aria-labelledby="pb-bayar-title">
             <div class="pb-section__head">
                 <div>
                     <h2 id="pb-bayar-title">Pembayaran</h2>
-                    <p class="pb-section__hint">Isi tunai dan/atau bank. Selisih terhadap total otomatis menjadi hutang.</p>
+                    <p class="pb-section__hint">Pilih Lunas atau Tempo; nominal Lunas mengikuti total pembelian.</p>
                 </div>
             </div>
 
-            <div class="pb-pay">
+            <div class="pb-pay-grid">
                 <div class="pb-field">
+                    <label for="jenis_pembayaran">Jenis Pembayaran</label>
+                    <select id="jenis_pembayaran" name="jenis_pembayaran" class="form-select" required>
+                        <option value="" disabled selected>Pilih Jenis</option>
+                        <option value="lunas">Lunas</option>
+                        <option value="tempo">Tempo</option>
+                    </select>
+                </div>
+
+                <div class="pb-field lunas-section">
                     <label for="metode_bayar">Metode Pembayaran</label>
                     <select id="metode_bayar" name="metode_bayar" class="form-select">
-                        <option disabled selected>Pilih Metode</option>
+                        <option value="" disabled selected>Pilih Metode</option>
                         <option value="tunai">Tunai</option>
                         <option value="transfer">Transfer</option>
-                        <option value="tunai_transfer">Tunai + Transfer</option>
                     </select>
+                </div>
+
+                <div class="pb-field" id="jatuh-tempo-field">
+                    <label for="jatuh_tempo">Jatuh Tempo</label>
+                    <input type="date" class="form-control" id="jatuh_tempo" name="jatuh_tempo" required>
                 </div>
 
                 <div class="pb-field tunai-section">
                     <label for="bayar">Bayar Tunai</label>
                     <input type="text" class="form-control pb-num" id="bayar" name="bayar" value="Rp 0"
-                        inputmode="numeric">
+                        inputmode="numeric" readonly>
                 </div>
 
-                <div class="pb-field pb-field--span2 transfer-section">
+                <div class="pb-field pb-field--bank transfer-section">
                     <label for="tambah-bank">Pembayaran via Bank</label>
                     <div id="bank-payment-container"></div>
-                    <button type="button" class="pb-btn pb-btn--outline" id="tambah-bank">
+                    <button type="button" class="pb-btn pb-btn--outline" id="tambah-bank" hidden>
                         <iconify-icon icon="solar:add-circle-outline" width="18" height="18"></iconify-icon>
                         Tambah Bank
                     </button>
+                    <?php if (empty($bank)): ?>
+                    <p class="pb-bank-note">
+                        <iconify-icon icon="solar:danger-triangle-outline" width="15" height="15"></iconify-icon>
+                        Belum ada rekening aktif untuk unit ini.
+                    </p>
+                    <?php endif; ?>
                 </div>
 
-                <p class="pb-pay__note">Hutang muncul di menu Hutang Piutang sebagai hutang supplier dan dapat
-                    dicicil lewat Daftar Tagihan sampai jatuh tempo.</p>
+                <p class="pb-pay-note" id="pb-pay-note">
+                    <b>Lunas</b> langsung dicatat sebagai Kas Keluar sebesar total pembelian.
+                    <b>Tempo</b> menjadikan seluruh total sebagai hutang supplier dan wajib punya jatuh tempo.
+                </p>
             </div>
         </section>
 
@@ -590,6 +604,39 @@
         return parseInt(rupiah.replace(/[^\d]/g, '')) || 0;
     }
 
+    function totalPembelian() {
+        const totalInput = document.getElementById('total-harga');
+        return totalInput ? unformatRupiah(totalInput.value || 'Rp 0') : 0;
+    }
+
+    /**
+     * Untuk Lunas, nominal pembayaran selalu mengikuti total pembelian.
+     * Tempo tidak menerima pembayaran di muka, jadi tidak disentuh di sini.
+     */
+    function sinkronPembayaranOtomatis() {
+        const jenisEl = document.getElementById('jenis_pembayaran');
+        const metodeEl = document.getElementById('metode_bayar');
+        if (!jenisEl || !metodeEl || jenisEl.value !== 'lunas') {
+            return;
+        }
+
+        const total = totalPembelian();
+        if (metodeEl.value === 'tunai') {
+            const bayar = document.getElementById('bayar');
+            if (bayar) {
+                bayar.value = formatToRupiah(String(total));
+            }
+            return;
+        }
+
+        if (metodeEl.value === 'transfer') {
+            const amounts = document.querySelectorAll('#bank-payment-container .bank-amount');
+            amounts.forEach((input, index) => {
+                input.value = index === 0 ? formatToRupiah(String(total)) : 'Rp 0';
+            });
+        }
+    }
+
     function updateEmptyState() {
         const empty = document.getElementById('produk-empty');
         if (!empty) return;
@@ -691,50 +738,46 @@
                     const row = document.createElement('tr');
                     row.id = 'produk-row-' + id;
                     row.innerHTML = `
-                        <td>
-                            ${kode}
+                        <td class="pb-cell-item">
+                            <span class="pb-item__name">${nama}</span>
+                            <span class="pb-item__meta">
+                                <span class="pb-item__code">${kode}</span>
+                                ${kategori ? `<span>${kategori}</span>` : ''}
+                                ${hasImei ? `<span>${imei}</span>` : ''}
+                            </span>
                             <input type="hidden" name="produk[${id}][id]" value="${id}">
                             <input type="hidden" name="produk[${id}][kode]" value="${kode}">
-                        </td>
-                        <td>
-                            ${nama}
                             <input type="hidden" name="produk[${id}][nama]" value="${nama}">
-                        </td>
-                        <td>
-                            ${kategori}
                             <input type="hidden" name="produk[${id}][kategori]" value="${kategori}">
-                        </td>
-                        <td>
-                            ${imei}
                             <input type="hidden" name="produk[${id}][imei]" value="${imei}">
                         </td>
                         <td>
                             ${canEditHargaJual
-                                ? `<input class="form-control harga-jual-input" data-id="${id}" value="Rp ${parseInt(harga).toLocaleString('id-ID')}">
+                                ? `<input class="form-control harga-jual-input" data-id="${id}" value="Rp ${parseInt(harga).toLocaleString('id-ID')}" aria-label="Harga jual">
                                    <input type="hidden" name="produk[${id}][harga]" id="harga-jual-hidden-${id}" value="${harga}">`
-                                : `Rp ${parseInt(harga).toLocaleString('id-ID')}
+                                : `<span class="pb-money">Rp ${parseInt(harga).toLocaleString('id-ID')}</span>
                                    <input type="hidden" name="produk[${id}][harga]" value="${harga}">`}
                         </td>
                         <td>
-                            <input class="form-control harga-beli-input" data-id="${id}" value="Rp ${parseInt(harga_beli).toLocaleString('id-ID')}">
+                            <input class="form-control harga-beli-input" data-id="${id}" value="Rp ${parseInt(harga_beli).toLocaleString('id-ID')}" aria-label="Harga beli">
                             <input type="hidden" name="produk[${id}][harga_beli]" id="harga-beli-hidden-${id}" value="${parseInt(harga_beli)}">
                         </td>
                         <td>
                             <input type="number" name="produk[${id}][jumlah]" class="form-control jumlah-input" data-id="${id}" value="1" min="1">
                         </td>
                         <td>
-                            <input class="form-control biaya-tambahan-input" data-id="${id}" value="Rp 0">
+                            <input class="form-control biaya-tambahan-input" data-id="${id}" value="Rp 0" aria-label="Biaya tambahan">
                             <input type="hidden" name="produk[${id}][biaya_tambahan]" id="biaya-tambahan-hidden-${id}" value="0">
                         </td>
                         <td>
-                            <input type="text" name="produk[${id}][keterangan]" class="form-control keterangan-input" data-id="${id}" placeholder="">
+                            <input type="text" name="produk[${id}][keterangan]" class="form-control keterangan-input" data-id="${id}" placeholder="Opsional" aria-label="Keterangan">
                         </td>
                         <td>
-                            <input class="form-control diskon-input" data-id="${id}" value="Rp 0">
+                            <input class="form-control diskon-input" data-id="${id}" value="Rp 0" aria-label="Diskon">
                             <input type="hidden" name="produk[${id}][diskon]" id="diskon-hidden-${id}" value="0">
                         </td>
                         <td class="text-center">
-                            <input type="checkbox" name="produk[${id}][ppn]" class="form-check-input ppn-checkbox" data-id="${id}">
+                            <input type="checkbox" name="produk[${id}][ppn]" class="form-check-input ppn-checkbox" data-id="${id}" aria-label="PPN 11%">
                         </td>
                         <td>
                             <button type="button" class="pb-btn pb-btn--danger pb-btn--icon" onclick="hapusProduk('${id}')" aria-label="Hapus ${nama}">
@@ -873,6 +916,7 @@
         document.getElementById('total-ppn').value = 'Rp ' + totalPPN.toLocaleString('id-ID');
         document.getElementById('total-harga').value = 'Rp ' + total.toLocaleString('id-ID');
 
+        sinkronPembayaranOtomatis();
         updateHutang();
     }
 
@@ -898,6 +942,11 @@
 
         hutangInput.value = 'Rp ' + hutang.toLocaleString('id-ID');
         kembalianInput.value = 'Rp ' + kembalian.toLocaleString('id-ID');
+
+        const debtRow = hutangInput.closest('.pb-figure--debt');
+        if (debtRow) {
+            debtRow.classList.toggle('is-zero', hutang === 0);
+        }
 
         const dibayarEl = document.getElementById('pb-dibayar');
         if (dibayarEl) {
@@ -1092,71 +1141,93 @@
 
     <script>
     $(document).ready(function() {
-        $('.tunai-section, .transfer-section').hide();
-
-        $('#metode_bayar').on('change', function() {
-            var metode = $(this).val();
-
-            if (metode === 'tunai') {
-                $('.tunai-section').show();
-                $('.transfer-section').hide();
-            } else if (metode === 'transfer') {
-                $('.tunai-section').hide();
-                $('.transfer-section').show();
-            } else if (metode === 'tunai_transfer') {
-                $('.tunai-section').show();
-                $('.transfer-section').show();
-            } else {
-                $('.tunai-section, .transfer-section').hide();
-            }
-        });
-
         function tambahBarisBank() {
             const container = $('#bank-payment-container');
             const index = container.children('.bank-row').length;
 
             const newRow = $(`
             <div class="pb-bank-row bank-row">
-                <select name="bank[${index}][id]" class="select2 form-select bank-select" style="width: 100%;" required>
-                    <option disabled selected>Pilih Bank</option>
-                    <?php foreach ($bank as $p): ?>
-                        <option value="<?= htmlspecialchars($p->idbank) ?>">
-                            <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <input type="text" class="form-control bank-amount" name="bank[${index}][jumlah]" value="Rp 0">
-                <button type="button" class="pb-btn pb-btn--danger pb-btn--icon hapus-bank" aria-label="Hapus bank">&times;</button>
+                <div class="pb-subfield">
+                    <label class="pb-subfield__label" for="bank-rekening-${index}">Rekening Bank</label>
+                    <select id="bank-rekening-${index}" name="bank[${index}][id]" class="select2 form-select bank-select" style="width: 100%;" required>
+                        <option disabled selected>Pilih Bank</option>
+                        <?php foreach ($bank as $p): ?>
+                            <option value="<?= htmlspecialchars($p->idbank) ?>">
+                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="pb-subfield">
+                    <label class="pb-subfield__label" for="bank-nominal-${index}">Nominal</label>
+                    <input type="text" id="bank-nominal-${index}" class="form-control bank-amount" name="bank[${index}][jumlah]" value="Rp 0" readonly>
+                </div>
             </div>
         `);
 
             container.append(newRow);
-
-            newRow.find('.bank-amount').on('input', function() {
-                const numeric = this.value.replace(/[^\d]/g, '');
-                this.value = formatToRupiah(numeric);
-                updateHutang();
-            });
-
-            newRow.find('.hapus-bank').on('click', function() {
-                $(this).closest('.bank-row').remove();
-                updateHutang();
-            });
 
             newRow.find('.bank-select').select2({
                 dropdownParent: $('body')
             });
         }
 
-        $('#tambah-bank').on('click', tambahBarisBank);
+        function kosongkanBank() {
+            $('#bank-payment-container').empty();
+        }
 
-        $('#metode_bayar').on('change', function() {
-            if ($(this).val() === 'transfer' || $(this).val() === 'tunai_transfer') {
+        /**
+         * Tempo: tanpa pembayaran, jatuh tempo wajib.
+         * Lunas: bayar penuh lewat tunai atau satu rekening bank.
+         */
+        function aturPembayaran() {
+            const jenis = $('#jenis_pembayaran').val() || '';
+            const metode = $('#metode_bayar').val() || '';
+            const lunas = jenis === 'lunas';
+
+            // Required dilepas saat field disembunyikan supaya browser tidak
+            // memblokir submit karena kontrol tidak terlihat.
+            $('#jatuh-tempo-field').toggle(jenis === 'tempo');
+            $('#jatuh_tempo').prop('required', jenis === 'tempo');
+            $('#metode_bayar').prop('required', lunas);
+            $('.lunas-section').toggle(lunas);
+
+            if (!lunas) {
+                $('.tunai-section, .transfer-section').hide();
+                kosongkanBank();
+                $('#bayar').val('Rp 0').prop('readonly', true);
+                updateHutang();
+                return;
+            }
+
+            $('.tunai-section').toggle(metode === 'tunai');
+            $('.transfer-section').toggle(metode === 'transfer');
+            $('#bayar').prop('readonly', true);
+            $('#tambah-bank').prop('hidden', true);
+
+            if (metode === 'tunai') {
+                kosongkanBank();
+                $('#bayar').val(formatToRupiah(String(totalPembelian())));
+            } else if (metode === 'transfer') {
+                $('#bayar').val('Rp 0');
                 if ($('#bank-payment-container .bank-row').length === 0) {
                     tambahBarisBank();
                 }
+                sinkronPembayaranOtomatis();
+            } else {
+                kosongkanBank();
+                $('#bayar').val('Rp 0');
             }
-        });
+
+            updateHutang();
+        }
+
+        $('#jenis_pembayaran').on('change', aturPembayaran);
+        $('#metode_bayar').on('change', aturPembayaran);
+
+        // Belum ada jenis terpilih: sembunyikan semua section pembayaran
+        // dan lepas required jatuh tempo.
+        aturPembayaran();
     });
     </script>
 

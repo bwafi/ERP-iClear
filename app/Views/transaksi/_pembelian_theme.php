@@ -78,7 +78,7 @@
 
     /* ===== Kepala halaman ===== */
     .pb-head {
-        padding: 22px 24px;
+        padding: 18px 22px;
         border: 1px solid var(--pb-rule);
         border-radius: var(--pb-radius);
         background: var(--pb-surface);
@@ -127,7 +127,7 @@
 
     .pb-head h1 {
         margin: 0;
-        font-size: 1.5rem;
+        font-size: 1.375rem;
         font-weight: 600;
         letter-spacing: -.03em;
         color: var(--pb-strong);
@@ -135,9 +135,9 @@
 
     .pb-sub {
         max-width: 68ch;
-        margin: 6px 0 0;
+        margin: 4px 0 0;
         font-size: .8125rem;
-        line-height: 1.6;
+        line-height: 1.55;
         color: var(--pb-muted);
     }
 
@@ -336,11 +336,25 @@
     }
 
     .pb-section {
-        padding: 22px 24px 24px;
+        padding: 20px 22px 22px;
     }
 
     .pb-section + .pb-section {
         border-top: 1px solid var(--pb-rule);
+    }
+
+    /* ===== Pihak & Dokumen ===== */
+    .pb-party-grid {
+        display: grid;
+        grid-template-columns:
+            minmax(0, .9fr) minmax(0, 1.35fr) minmax(0, 1fr)
+            minmax(0, 1fr) minmax(0, 1.25fr);
+        align-items: start;
+        gap: 14px 16px;
+    }
+
+    .pb-doc__nota {
+        min-width: 0;
     }
 
     .pb-section__head {
@@ -454,11 +468,11 @@
         position: relative;
         display: flex;
         align-items: center;
-        gap: 12px;
-        min-height: 72px;
-        padding: 14px;
+        gap: 10px;
+        min-height: 58px;
+        padding: 10px 12px;
         border: 1px dashed var(--pb-rule-strong);
-        border-radius: 12px;
+        border-radius: 11px;
         background: var(--pb-subtle);
         cursor: pointer;
         transition: border-color .15s ease, background .15s ease;
@@ -482,35 +496,43 @@
     .pb-file__icon {
         display: grid;
         place-items: center;
-        width: 38px;
-        height: 38px;
+        width: 32px;
+        height: 32px;
         flex: none;
         border: 1px solid var(--pb-rule);
-        border-radius: 10px;
+        border-radius: 9px;
         background: var(--pb-surface);
         color: var(--pb-accent);
     }
 
+    .pb-file__body {
+        min-width: 0;
+    }
+
     .pb-file__title {
         margin: 0;
-        font-size: .8125rem;
+        font-size: .78rem;
         font-weight: 600;
         color: var(--pb-strong);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .pb-file__hint {
-        margin: 2px 0 0;
-        font-size: .75rem;
+        margin: 1px 0 0;
+        font-size: .6875rem;
         color: var(--pb-muted);
     }
 
     .pb-file__preview {
         display: none;
-        max-width: 100%;
-        max-height: 160px;
-        margin-top: 10px;
-        border-radius: 10px;
-        object-fit: contain;
+        flex: none;
+        max-width: 72px;
+        max-height: 40px;
+        margin-left: auto;
+        border-radius: 7px;
+        object-fit: cover;
     }
 
     /* ===== Tombol ===== */
@@ -594,7 +616,7 @@
 
     .pb-table {
         width: 100%;
-        min-width: 1120px;
+        min-width: 880px;
         margin: 0;
         border-collapse: collapse;
         font-size: .8125rem;
@@ -602,11 +624,11 @@
     }
 
     .pb-table th {
-        padding: 9px 10px;
+        padding: 8px 9px;
         border-bottom: 1px solid var(--pb-rule-strong);
         background: var(--pb-subtle);
         color: var(--pb-muted);
-        font-size: .6875rem;
+        font-size: .65rem;
         font-weight: 650;
         letter-spacing: .04em;
         text-align: left;
@@ -615,7 +637,7 @@
     }
 
     .pb-table td {
-        padding: 8px 10px;
+        padding: 7px 9px;
         border-bottom: 1px solid var(--pb-rule);
         vertical-align: middle;
         white-space: nowrap;
@@ -630,7 +652,7 @@
     }
 
     .pb-table .form-control {
-        height: 34px;
+        height: 32px;
         padding: 0 8px;
         border-color: var(--pb-rule);
         border-radius: 8px;
@@ -645,7 +667,25 @@
     }
 
     .pb-table input[type="number"] {
-        width: 76px;
+        width: 58px;
+    }
+
+    .pb-table .harga-jual-input,
+    .pb-table .harga-beli-input,
+    .pb-table .biaya-tambahan-input,
+    .pb-table .diskon-input {
+        width: 100%;
+        min-width: 86px;
+    }
+
+    .pb-table .keterangan-input {
+        width: 100%;
+        min-width: 118px;
+    }
+
+    .pb-table .pb-btn--icon {
+        width: 30px;
+        height: 30px;
     }
 
     .pb-table .form-check-input {
@@ -653,6 +693,34 @@
         height: 16px;
         margin: 0;
         accent-color: var(--pb-accent);
+    }
+
+    /* Identitas barang: nama kuat, kode/kategori/IMEI sebagai meta. */
+    .pb-cell-item {
+        min-width: 186px;
+        white-space: normal !important;
+    }
+
+    .pb-item__name {
+        display: block;
+        color: var(--pb-strong);
+        font-weight: 600;
+        line-height: 1.35;
+    }
+
+    .pb-item__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 8px;
+        margin-top: 2px;
+        color: var(--pb-muted);
+        font-size: .6875rem;
+        line-height: 1.35;
+    }
+
+    .pb-item__code {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: .01em;
     }
 
     .pb-money {
@@ -674,49 +742,84 @@
     }
 
     /* ===== Pembayaran ===== */
-    .pb-pay {
+    .pb-pay-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px 16px;
     }
 
     .pb-bank-row {
         display: grid;
-        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
-        gap: 8px;
-        align-items: center;
-        margin-bottom: 8px;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--pb-rule);
+        border-radius: var(--pb-radius-sm);
+        background: var(--pb-subtle);
     }
 
-    .pb-pay__note {
+    .pb-bank-row + .pb-bank-row {
+        margin-top: 10px;
+    }
+
+    .pb-bank-row .pb-subfield {
+        min-width: 0;
+    }
+
+    .pb-bank-row .pb-subfield__label {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--pb-muted);
+        font-size: .65rem;
+        font-weight: 650;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .pb-bank-row .select2-container {
+        width: 100% !important;
+    }
+
+    .pb-bank-row .bank-amount {
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pb-bank-note {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 8px 0 0;
+        color: var(--pb-danger);
+        font-size: .72rem;
+        line-height: 1.4;
+    }
+
+    .pb-pay-note {
         grid-column: 1 / -1;
         margin: 0;
         padding-top: 2px;
-        font-size: .75rem;
-        line-height: 1.55;
+        font-size: .72rem;
+        line-height: 1.5;
         color: var(--pb-muted);
     }
 
-    /* ===== Dock pembayaran ===== */
+    /* ===== Ringkasan & simpan ===== */
     .pb-dock {
-        position: sticky;
-        bottom: 14px;
-        z-index: 20;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: space-between;
         gap: 18px;
-        margin: 8px 24px 24px;
-        padding: 14px 16px;
-        border: 1px solid var(--pb-rule-strong);
-        border-radius: 14px;
-        background: var(--pb-surface);
+        flex-wrap: wrap;
+        padding: 16px 22px 18px;
+        border-top: 1px solid var(--pb-rule-strong);
+        border-radius: 0 0 var(--pb-radius) var(--pb-radius);
+        background: var(--pb-subtle);
     }
 
     .pb-dock__figures {
         display: flex;
         align-items: flex-end;
-        gap: 22px;
+        gap: 16px;
         flex-wrap: wrap;
         min-width: 0;
     }
@@ -724,13 +827,13 @@
     .pb-figure {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 4px;
         min-width: 0;
     }
 
     .pb-figure > span:first-child {
         color: var(--pb-muted);
-        font-size: .6875rem;
+        font-size: .65rem;
         font-weight: 650;
         letter-spacing: .04em;
         text-transform: uppercase;
@@ -739,10 +842,11 @@
     .pb-figure input,
     .pb-figure__value {
         display: block;
-        width: 8.5rem;
+        width: 7.4rem;
         height: auto;
         padding: 0;
         border: 0;
+        border-radius: 0;
         background: transparent;
         color: var(--pb-strong);
         font-size: .95rem;
@@ -759,14 +863,18 @@
     }
 
     .pb-figure--total input {
-        width: 10rem;
-        font-size: 1.15rem;
+        width: 9.4rem;
+        font-size: 1.3rem;
         font-weight: 650;
         letter-spacing: -.02em;
     }
 
     .pb-figure--debt input {
         color: var(--pb-danger);
+    }
+
+    .pb-figure--debt.is-zero input {
+        color: var(--pb-ink);
     }
 
     .pb-dock__save {
@@ -1197,7 +1305,18 @@
 
     .pembelian-page .select2-container--default .select2-selection--single .select2-selection__arrow,
     .pb-modal .select2-container--default .select2-selection--single .select2-selection__arrow {
-        height: 38px;
+        top: 0;
+        right: 10px;
+        width: 24px;
+        height: 100%;
+    }
+
+    .pembelian-page .select2-container--default .select2-selection--single .select2-selection__arrow b,
+    .pb-modal .select2-container--default .select2-selection--single .select2-selection__arrow b {
+        top: 50%;
+        left: 50%;
+        margin: -2px 0 0 -4px;
+        border-width: 5px 4px 0;
     }
 
     .pembelian-page .select2-container--default.select2-container--focus .select2-selection--single,
@@ -1208,8 +1327,12 @@
 
     /* ===== Responsive ===== */
     @media (max-width: 1199.98px) {
-        .pb-dock__figures {
-            gap: 16px;
+        .pb-party-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .pb-party-grid .pb-doc__nota {
+            grid-column: span 2;
         }
     }
 
@@ -1222,13 +1345,20 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .pb-dock {
-            align-items: flex-end;
-            flex-wrap: wrap;
+        .pb-party-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .pb-dock__figures {
-            gap: 18px;
+        .pb-party-grid .pb-doc__nota {
+            grid-column: 1 / -1;
+        }
+
+        .pb-pay-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .pb-dock {
+            align-items: flex-end;
         }
 
         .pb-dock__save {
@@ -1238,11 +1368,11 @@
 
     @media (max-width: 767.98px) {
         .pb-head {
-            padding: 18px 16px;
+            padding: 16px;
         }
 
         .pb-head h1 {
-            font-size: 1.35rem;
+            font-size: 1.3rem;
         }
 
         .pb-scope {
@@ -1269,13 +1399,11 @@
         }
 
         .pb-section {
-            padding: 18px 16px;
+            padding: 16px;
         }
 
         .pb-dock {
-            bottom: 8px;
-            margin: 8px 16px 16px;
-            padding: 12px 14px;
+            padding: 14px 16px 16px;
         }
 
         .pb-dock__figures {
@@ -1288,25 +1416,15 @@
         .pb-figure input,
         .pb-figure__value {
             width: 100%;
-            font-size: .875rem;
         }
 
         .pb-figure--total input {
             width: 100%;
-            font-size: 1rem;
         }
 
         .pb-dock__save {
             width: 100%;
             margin-left: 0;
-        }
-
-        .pb-pay {
-            grid-template-columns: minmax(0, 1fr);
-        }
-
-        .pb-bank-row {
-            grid-template-columns: minmax(0, 1fr) 88px auto;
         }
     }
 
@@ -1320,8 +1438,16 @@
             grid-column: span 1;
         }
 
-        .pb-dock__figures {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+        .pb-party-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .pb-party-grid .pb-doc__nota {
+            grid-column: span 1;
+        }
+
+        .pb-pay-grid {
+            grid-template-columns: minmax(0, 1fr);
         }
 
         .pb-toolbar {
@@ -1332,13 +1458,8 @@
             flex: 1;
         }
 
-        .pb-bank-row {
-            grid-template-columns: minmax(0, 1fr) auto;
-        }
-
-        .pb-bank-row .bank-select,
-        .pb-bank-row .select2-container {
-            grid-column: 1 / -1;
+        .pb-dock__figures {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .pb-picker .modal-header {

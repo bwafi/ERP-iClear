@@ -24,6 +24,8 @@ use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelUnit;
+use App\Models\ModelKasKeluar;
+use App\Services\Finance\BankRekeningValidator;
 
 class Pembelian extends BaseController
 
@@ -46,6 +48,7 @@ class Pembelian extends BaseController
     protected $NamaHandphoneModel;
     protected $SubKategoriModel;
     protected $UnitModel;
+    protected $KasKeluarModel;
 
     /**
      * ID_JABATAN yang boleh memilih unit saat mencatat pembelian.
@@ -55,6 +58,12 @@ class Pembelian extends BaseController
      * menggantinya lewat request.
      */
     private const UNIT_PILIH_ROLES = [0, 1, 34];
+
+    /** Kategori kas keluar untuk pembelian Lunas (kategori_kas: HPP). */
+    private const KATEGORI_KAS_HPP = 7;
+
+    /** Akun debit pembelian barang (no_akun: Persediaan Barang Dagang). */
+    private const AKUN_PERSEDIAAN = '1030100000';
 
     public function __construct()
     {
@@ -75,6 +84,7 @@ class Pembelian extends BaseController
         $this->NamaHandphoneModel = new ModelNamaHandphone();
         $this->SubKategoriModel = new ModelSubKategori();
         $this->UnitModel = new ModelUnit();
+        $this->KasKeluarModel = new ModelKasKeluar();
     }
 
     /**
@@ -148,6 +158,46 @@ class Pembelian extends BaseController
     }
 
     /**
+     * Nama pihak pada nota pembelian: supplier kalau sumbernya supplier,
+     * kalau tidak nama pelanggan yang diketik/dipilih.
+     */
+    private function namaPihakPembelian($idSuplier, $namaPelanggan, $namaBaru): string
+    {
+        $idSuplier = trim((string) $idSuplier);
+        if ($idSuplier !== '') {
+            $suplier = $this->SuplierModel->getById($idSuplier);
+            if ($suplier && trim((string) ($suplier->nama_suplier ?? '')) !== '') {
+                return (string) $suplier->nama_suplier;
+            }
+        }
+
+        $namaPelanggan = trim((string) $namaPelanggan);
+        if ($namaPelanggan !== '') {
+            return $namaPelanggan;
+        }
+
+        $namaBaru = trim((string) $namaBaru);
+
+        return $namaBaru !== '' ? $namaBaru : '-';
+    }
+
+    /**
+     * Kategori Kas Keluar untuk pembelian Lunas. Dicari lewat nama supaya
+     * tidak bergantung pada auto increment; id 7 adalah fallback data lokal.
+     */
+    private function idKategoriKasHpp($db): int
+    {
+        if ($db->tableExists('kategori_kas')) {
+            $row = $db->table('kategori_kas')->where('kategori', 'HPP')->get()->getRow();
+            if ($row && (int) ($row->idkategori_kas ?? 0) > 0) {
+                return (int) $row->idkategori_kas;
+            }
+        }
+
+        return self::KATEGORI_KAS_HPP;
+    }
+
+    /**
      * Unit final untuk halaman /pembelian.
      *
      * Role lintas unit hanya boleh memakai unit operasional: kalau unit akun
@@ -199,12 +249,14 @@ class Pembelian extends BaseController
         $unitTerpilih = $this->UnitModel->getById($unitId);
         $unitTerpilihNama = $unitTerpilih->NAMA_UNIT ?? ('Unit ' . $unitId);
 
+        // Rekening bank mengikuti scope unit halaman, sama seperti Kas &
+        // Keluar: rekening unit lain dan Finance/HO tidak boleh muncul.
         $data =  array(
             'akun' => $akun,
             'produk' => $produk,
             'kategori' => $this->KategoriModel->getKategori(),
             'suplier' => $this->SuplierModel->getSuplier(),
-            'bank' => $this->BankModel->getBank(),
+            'bank' => $this->BankModel->getBankDalamScopeUnit($unitId),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'body'  => 'transaksi/pembelian',
             'nama_handphone' => $this->NamaHandphoneModel->getNamaHandphone(),
@@ -252,22 +304,82 @@ class Pembelian extends BaseController
         $tanggal_masuk = $this->request->getPost('tanggal_masuk');
         $jam_sekarang = date('H:i:s');
         $tanggal_masuk_full = $tanggal_masuk . ' ' . $jam_sekarang;
-        // Jatuh tempo sengaja tidak diberi nilai default di form: penginput
-        // harus menentukan sendiri, supaya tanggal hari ini tidak terpakai
-        // tanpa sadar dan merusak aging hutang.
-        $jatuhTempo = trim((string) $this->request->getPost('jatuh_tempo'));
-        if (! self::tanggalJatuhTempoValid($jatuhTempo)) {
-            session()->setFlashdata('gagal', 'Jatuh tempo wajib diisi dengan tanggal yang valid.');
+
+        // Jenis pembayaran hanya Tempo atau Lunas. Nilai dibaca dari POST,
+        // jadi tetap divalidasi di server walaupun form sudah membatasi.
+        $jenisPembayaran = strtolower(trim((string) $this->request->getPost('jenis_pembayaran')));
+        $metodeBayar = strtolower(trim((string) $this->request->getPost('metode_bayar')));
+        if (! in_array($jenisPembayaran, ['tempo', 'lunas'], true)) {
+            session()->setFlashdata('gagal', 'Jenis pembayaran wajib dipilih: Tempo atau Lunas.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+        if ($jenisPembayaran === 'lunas' && ! in_array($metodeBayar, ['tunai', 'transfer'], true)) {
+            session()->setFlashdata('gagal', 'Metode pembayaran Lunas wajib dipilih: Tunai atau Transfer.');
             return redirect()->to(base_url('/pembelian'));
         }
 
-        $sisa = $this->cleanRupiah($this->request->getPost('hutang'));
+        // Jatuh tempo hanya dipakai Tempo. Form tidak memberi nilai default
+        // supaya penginput tidak tanpa sadar menyimpan tanggal hari ini dan
+        // merusak aging hutang.
+        $jatuhTempo = trim((string) $this->request->getPost('jatuh_tempo'));
+        if ($jenisPembayaran === 'tempo' && ! self::tanggalJatuhTempoValid($jatuhTempo)) {
+            session()->setFlashdata('gagal', 'Jatuh tempo wajib diisi dengan tanggal yang valid.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+        if ($jenisPembayaran === 'lunas') {
+            // Lunas tidak punya jatuh tempo terpisah. Kolom tetap diisi
+            // tanggal masuk supaya baris baru selalu punya jatuh tempo.
+            $jatuhTempo = self::tanggalJatuhTempoValid((string) $tanggal_masuk)
+                ? (string) $tanggal_masuk
+                : date('Y-m-d');
+        }
+
         $total_harga = $this->cleanRupiah($this->request->getPost('total-harga'));
         $total_diskon = $this->cleanRupiah($this->request->getPost('total-diskon'));
         $total_ppn = $this->cleanRupiah($this->request->getPost('total-ppn'));
-        $bayar_tunai = $this->cleanRupiah($this->request->getPost('bayar')); //ini tunai
         $bankData = $this->request->getPost('bank');
         $bolehUbahHargaJual = Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN'));
+
+        // Normalisasi pembayaran: Tempo tidak menerima uang sekarang; Lunas
+        // selalu membayar penuh (tunai atau satu rekening bank). Nominal tidak
+        // dipercaya dari POST supaya sisa dan kas keluar tidak bisa dipisah.
+        $bayar_tunai = 0;
+        if ($jenisPembayaran === 'tempo') {
+            $sisa = $total_harga;
+            $bankData = [];
+        } else {
+            if ($total_harga <= 0) {
+                session()->setFlashdata('gagal', 'Total pembelian harus lebih dari 0 untuk pembayaran Lunas.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+            $sisa = 0;
+            if ($metodeBayar === 'tunai') {
+                $bayar_tunai = $total_harga;
+                $bankData = [];
+            } else {
+                $barisBank = is_array($bankData)
+                    ? array_values(array_filter($bankData, static function ($b) {
+                        return trim((string) ($b['id'] ?? '')) !== '';
+                    }))
+                    : [];
+                if (count($barisBank) !== 1) {
+                    session()->setFlashdata('gagal', 'Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.');
+                    return redirect()->to(base_url('/pembelian'));
+                }
+
+                $idbankLunas = trim((string) $barisBank[0]['id']);
+                $cekRekening = (new BankRekeningValidator())->validateUntukUnit($idbankLunas, $useridunit, $role);
+                if (! $cekRekening['ok']) {
+                    session()->setFlashdata('gagal', 'Rekening pembayaran tidak valid: ' . $cekRekening['alasan']);
+                    return redirect()->to(base_url('/pembelian'));
+                }
+
+                $bankData = [[
+                    'id' => (string) $cekRekening['idbank'],
+                    'jumlah' => $total_harga,
+                ]];
+            }
+        }
 
         $jurnal = [];
         $bankPembayaran = [];
@@ -416,6 +528,43 @@ class Pembelian extends BaseController
             'id_referensi' => $idPembelian
         );
         $this->PembayaranBankModel->updateByKodePembayaran($kodePembayaran, $pelengkap_pembayaranbank);
+
+        // Pembelian Lunas langsung dicatat sebagai arus kas keluar supaya
+        // terlihat di menu Kas Keluar, Tutup Kasir, dan saldo Kas & Bank.
+        // Baris ini sengaja TIDAK membuat jurnal kedua: jurnal pembelian di
+        // bawah adalah catatan akuntansinya. no_akun berisi sisi debit
+        // persediaan; lawan kas/bank-nya dibaca dari idbank.
+        if ($jenisPembayaran === 'lunas' && (int) round($total_bayar) > 0) {
+            $penerimaKasKeluar = $this->namaPihakPembelian(
+                $id_suplier_text,
+                $this->request->getPost('pelanggan'),
+                $nama
+            );
+
+            $idbankKasKeluar = null;
+            if ($metodeBayar === 'transfer') {
+                $idbankKasKeluar = trim((string) ($bankData[0]['id'] ?? ''));
+            }
+
+            $kasKeluarTersimpan = $this->KasKeluarModel->insert_KasKeluar([
+                'tanggal' => $jatuhTempo,
+                'kategori_idkategori' => $this->idKategoriKasHpp($db),
+                'deskripsi' => 'Pembelian ' . $no_nota . ' - ' . $penerimaKasKeluar,
+                'jumlah' => (int) round($total_bayar),
+                'penerima' => $penerimaKasKeluar,
+                'idunit' => $useridunit,
+                'jenis' => 'debet',
+                'idbank' => $idbankKasKeluar === '' ? null : $idbankKasKeluar,
+                'created_on' => date('Y-m-d H:i:s'),
+                'no_akun' => self::AKUN_PERSEDIAAN,
+            ]);
+
+            if (! $kasKeluarTersimpan) {
+                $db->transRollback();
+                session()->setFlashdata('gagal', 'Kas keluar pembelian gagal disimpan.');
+                return redirect()->to(base_url('/pembelian'));
+            }
+        }
 
         $total_aksesoris = 0;
         $total_sparepart = 0;

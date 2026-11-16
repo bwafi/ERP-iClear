@@ -20,7 +20,8 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         'unit', 'jabatan', 'akun', 'pelanggan', 'suplier', 'barang',
         'stok_awal', 'hpp_barang', 'hpp_unit', 'stok_barang', 'service',
         'pembelian', 'detail_pembelian', 'pembayaran_bank', 'template_jurnal',
-        'hutang_piutang', 'harga_jual_unit',
+        'hutang_piutang', 'harga_jual_unit', 'kas_keluar', 'kategori_kas',
+        'bank', 'akun_kas_bank', 'alokasi_saldo_kas_bank',
     ];
 
     protected function setUp(): void
@@ -53,7 +54,8 @@ final class PembelianHppUnitTest extends CIUnitTestCase
     {
         $q = fn (string $sql) => $this->db->query($sql);
 
-        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL)');
+        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL,
+                is_operational INT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL, ROLES_JABATAN TEXT NULL)');
         $q('CREATE TABLE akun (ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
                 NAMA_AKUN TEXT NULL, STATUS_PEGAWAI INT NULL)');
@@ -106,13 +108,32 @@ final class PembelianHppUnitTest extends CIUnitTestCase
                 uraian TEXT NULL, total INT NULL, total_dibayar INT NULL, sisa INT NULL,
                 status TEXT NULL, unit_id INT NULL, input_by INT NULL, deleted INT NULL,
                 created_at DATETIME NULL, updated_at DATETIME NULL)');
+        $q('CREATE TABLE kategori_kas (idkategori_kas INT PRIMARY KEY, kategori TEXT NULL,
+                kode_template_jurnal TEXT NULL, jenis_kas TEXT NULL)');
+        $q('CREATE TABLE kas_keluar (idkas_keluar INT PRIMARY KEY AUTO_INCREMENT,
+                tanggal DATE NULL, kategori_idkategori INT NULL, deskripsi TEXT NULL,
+                jumlah INT NULL, penerima VARCHAR(255) NULL, idunit INT NULL,
+                jenis VARCHAR(255) NULL, idbank VARCHAR(11) NULL, created_on VARCHAR(255) NULL,
+                updated_on DATETIME NULL, no_akun VARCHAR(255) NULL)');
+        $q('CREATE TABLE bank (idbank VARCHAR(20) PRIMARY KEY, jenis_bank TEXT NULL,
+                nama_bank TEXT NULL, atas_nama TEXT NULL, isppn TEXT NULL, norek TEXT NULL,
+                gambar_qris TEXT NULL, created_on DATETIME NULL, updated_on DATETIME NULL)');
+        $q('CREATE TABLE akun_kas_bank (idakun_kas_bank INT PRIMARY KEY AUTO_INCREMENT,
+                unit_id INT NULL, tipe VARCHAR(10) NULL, nama_akun TEXT NULL,
+                bank_idbank VARCHAR(20) NULL, no_akun_coa VARCHAR(255) NULL,
+                status VARCHAR(10) NULL, is_shared INT NULL, is_finance_ho INT NULL,
+                created_by INT NULL, created_at DATETIME NULL, updated_at DATETIME NULL)');
+        $q('CREATE TABLE alokasi_saldo_kas_bank (id INT PRIMARY KEY AUTO_INCREMENT,
+                akun_kas_bank_id INT NULL, unit_id INT NULL, nominal INT NULL,
+                keterangan TEXT NULL, input_by INT NULL, created_at DATETIME NULL,
+                updated_at DATETIME NULL)');
     }
 
     private function sebarData(): void
     {
         $q = fn (string $sql) => $this->db->query($sql);
 
-        $q("INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, 'Unit Satu'), (2, 'Unit Dua')");
+        $q("INSERT INTO unit (idunit, NAMA_UNIT, is_operational) VALUES (1, 'Unit Satu', 1), (2, 'Unit Dua', 1)");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES (0, 'Finance', '[]'), (35, 'ADMIN / KASIR', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, STATUS_PEGAWAI)
             VALUES (43, 1, 35, 'Kasir Satu', 1), (44, 1, 0, 'Finance Satu', 1)");
@@ -126,6 +147,16 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             VALUES (1, 1, 100000, 'manual'), (1, 2, 90000, 'manual')");
         $q("INSERT INTO stok_barang (idbarang, id_unit, stok_akhir, stok_minimum)
             VALUES (1, 1, 5, 0), (1, 2, 5, 0)");
+        $q("INSERT INTO kategori_kas (idkategori_kas, kategori, jenis_kas) VALUES (7, 'HPP', 'kas_keluar')");
+        // Rekening resmi bank '2' (config) dialokasikan ke unit 1 & 2, supaya
+        // jalur Lunas transfer bisa diuji end-to-end tanpa bypass validator.
+        $q("INSERT INTO bank (idbank, jenis_bank, nama_bank, atas_nama, norek)
+            VALUES ('2', 'bank', 'BCA', 'ICLEAR DIGITAL SOLUSI CV', '0393778773')");
+        $q("INSERT INTO akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank,
+                status, is_shared, is_finance_ho)
+            VALUES (2, NULL, 'BANK', 'BCA CV', '2', 'aktif', 1, 0)");
+        $q("INSERT INTO alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal)
+            VALUES (2, 1, 0), (2, 2, 0)");
     }
 
     private function sesi(int $jabatan = 35, int $idAkun = 43): void
@@ -141,7 +172,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         ]);
     }
 
-    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null)
+    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null, string $jenis = 'lunas', string $metode = 'tunai', array $bank = [])
     {
         $payload = [
             'produk' => [
@@ -163,6 +194,8 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             'id_suplier_text' => '1',
             'id_pelanggan'    => '1',
             'tanggal_masuk'   => date('Y-m-d'),
+            'jenis_pembayaran' => $jenis,
+            'metode_bayar'    => $metode,
             'hutang'          => 'Rp 0',
             'total-harga'     => 'Rp ' . number_format($hargaBeli * $jumlah, 0, ',', '.'),
             'total-diskon'    => 'Rp ' . number_format($diskon, 0, ',', '.'),
@@ -171,6 +204,10 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             'frontliner'      => $frontliner,
             'unit_idunit'     => $unitId === null ? null : (string) $unitId,
         ];
+
+        if ($bank !== []) {
+            $payload['bank'] = $bank;
+        }
 
         // $jatuhTempo = '' berarti field sengaja TIDAK dikirim (kasus ditolak).
         if ($jatuhTempo !== '') {
@@ -270,7 +307,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $this->sesi();
 
         // Field jatuh_tempo sengaja tidak dikirim (form tidak lagi prefill).
-        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, '')->assertRedirect();
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, '', 'tempo')->assertRedirect();
 
         $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
         $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults(), 'detail tidak tersimpan');
@@ -284,7 +321,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
     {
         $this->sesi();
 
-        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, '2026-02-30')->assertRedirect();
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, '2026-02-30', 'tempo')->assertRedirect();
 
         $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
         $this->assertSame(
@@ -299,7 +336,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
     {
         $this->sesi();
 
-        $result = $this->postPembelian(120000.0, 0);
+        $result = $this->postPembelian(120000.0, 0, 0.0, 0.0, '', '150000', null, date('Y-m-d'), 'tempo');
 
         $result->assertRedirect();
         $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
@@ -307,6 +344,110 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $hppUnit = $this->db->table('hpp_unit')
             ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow();
         $this->assertSame(100000.0, (float) $hppUnit->hpp, 'HPP lama dipertahankan');
+    }
+
+    public function testTempoMenjadikanSeluruhTotalHutangTanpaKasKeluar(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 2, 0.0, 0.0, '', '150000', null, '2026-12-31', 'tempo')
+            ->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame('Belum Lunas', $pembelian->status);
+        $this->assertSame(240000, (int) $pembelian->sisa);
+        $this->assertSame(0, (int) $pembelian->total_bayar);
+        $this->assertSame('2026-12-31', $pembelian->jatuh_tempo);
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults(), 'Tempo tidak boleh keluar kas');
+    }
+
+    public function testLunasTunaiMencatatKasKeluarPenuh(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 2)->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame('Lunas', $pembelian->status);
+        $this->assertSame(0, (int) $pembelian->sisa);
+        $this->assertSame(240000, (int) $pembelian->total_bayar);
+        $this->assertSame(240000, (int) $pembelian->bayar_tunai);
+        $this->assertSame(0, (int) $pembelian->bayar_bank);
+
+        $kasKeluar = $this->db->table('kas_keluar')->get()->getRow();
+        $this->assertNotNull($kasKeluar);
+        $this->assertSame(240000, (int) $kasKeluar->jumlah);
+        $this->assertSame(1, (int) $kasKeluar->idunit);
+        $this->assertSame(7, (int) $kasKeluar->kategori_idkategori);
+        $this->assertNull($kasKeluar->idbank, 'tunai tidak boleh menunjuk rekening bank');
+        $this->assertSame('debet', $kasKeluar->jenis);
+        $this->assertSame('1030100000', $kasKeluar->no_akun);
+        $this->assertSame(date('Y-m-d'), $kasKeluar->tanggal);
+        $this->assertStringContainsString('Supplier', $kasKeluar->penerima);
+    }
+
+    public function testLunasTransferValidMencatatKasKeluarDenganIdbank(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0,
+            2,
+            0.0,
+            0.0,
+            '',
+            '150000',
+            null,
+            null,
+            'lunas',
+            'transfer',
+            [['id' => '2', 'jumlah' => '240000']]
+        )->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame('Lunas', $pembelian->status);
+        $this->assertSame(0, (int) $pembelian->sisa);
+        $this->assertSame(240000, (int) $pembelian->total_bayar);
+        $this->assertSame(0, (int) $pembelian->bayar_tunai);
+        $this->assertSame(240000, (int) $pembelian->bayar_bank);
+
+        $pembayaran = $this->db->table('pembayaran_bank')->get()->getRow();
+        $this->assertSame('2', (string) $pembayaran->bank_idbank);
+        $this->assertSame(240000, (int) $pembayaran->jumlah);
+
+        $kasKeluar = $this->db->table('kas_keluar')->get()->getRow();
+        $this->assertNotNull($kasKeluar);
+        $this->assertSame('2', (string) $kasKeluar->idbank, 'transfer harus menunjuk rekening bank');
+        $this->assertSame(240000, (int) $kasKeluar->jumlah);
+        $this->assertSame('1030100000', $kasKeluar->no_akun);
+    }
+
+    public function testLunasTransferTanpaRekeningDitolak(): void
+    {        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, null, 'lunas', 'transfer')
+            ->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults(), 'kas keluar tidak tersimpan');
+        $this->assertSame(
+            'Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.',
+            session()->getFlashdata('gagal')
+        );
+    }
+
+    public function testJenisPembayaranTidakDikenalDitolak(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, null, 'kredit')
+            ->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
+        $this->assertSame(
+            'Jenis pembayaran wajib dipilih: Tempo atau Lunas.',
+            session()->getFlashdata('gagal')
+        );
     }
 
     private function override(int $unit = 1): ?float
