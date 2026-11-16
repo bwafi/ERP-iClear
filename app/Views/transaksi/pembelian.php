@@ -328,6 +328,7 @@
                         <?php foreach ($produk as $p): ?>
                         <?php
                         $hpp = (int) ($p->hpp_unit ?? $p->harga_beli);
+                        $nonaktif = isset($p->aktif_unit) && (int) $p->aktif_unit === 0;
                         $meta = trim(implode(' ', [
                             $p->nama_barang,
                             $p->kode_barang,
@@ -338,7 +339,7 @@
                             $p->input ?? '',
                         ]));
                         ?>
-                        <label class="pb-produk-card"
+                        <label class="pb-produk-card<?= $nonaktif ? ' is-nonaktif' : '' ?>"
                             data-search="<?= esc(strtolower($meta), 'attr') ?>">
                             <input type="checkbox" class="pb-produk-card__input produk-checkbox"
                                 aria-label="Pilih <?= esc($p->nama_barang) ?>"
@@ -353,6 +354,12 @@
                                 </span>
                                 <span class="pb-produk-card__main">
                                     <span class="pb-produk-card__name"><?= esc($p->nama_barang) ?></span>
+                                    <?php if ($nonaktif): ?>
+                                    <span class="pb-produk-card__badge">
+                                        <iconify-icon icon="solar:eye-closed-outline" width="12" height="12"></iconify-icon>
+                                        Nonaktif &middot; aktif otomatis saat dibeli
+                                    </span>
+                                    <?php endif; ?>
                                     <span class="pb-produk-card__meta">
                                         <span class="pb-produk-card__code"><?= esc($p->kode_barang) ?></span>
                                         <?php if (!empty($p->nama_kategori)): ?>

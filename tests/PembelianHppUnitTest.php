@@ -21,7 +21,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         'stok_awal', 'hpp_barang', 'hpp_unit', 'stok_barang', 'service',
         'pembelian', 'detail_pembelian', 'pembayaran_bank', 'template_jurnal',
         'hutang_piutang', 'harga_jual_unit', 'kas_keluar', 'kategori_kas',
-        'bank', 'akun_kas_bank', 'alokasi_saldo_kas_bank',
+        'bank', 'akun_kas_bank', 'alokasi_saldo_kas_bank', 'barang_unit',
     ];
 
     protected function setUp(): void
@@ -127,6 +127,12 @@ final class PembelianHppUnitTest extends CIUnitTestCase
                 akun_kas_bank_id INT NULL, unit_id INT NULL, nominal INT NULL,
                 keterangan TEXT NULL, input_by INT NULL, created_at DATETIME NULL,
                 updated_at DATETIME NULL)');
+        $q('CREATE TABLE barang_unit (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
+                aktif TINYINT NOT NULL DEFAULT 1,
+                updated_by INT NULL, updated_at DATETIME NULL,
+                UNIQUE KEY (barang_idbarang, unit_idunit))');
     }
 
     private function sebarData(): void
@@ -517,5 +523,37 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults(), 'detail dibatalkan');
         $this->assertNull($this->override());
         $this->assertSame(150000.0, $this->hargaMaster());
+    }
+
+    public function testPembelianMengaktifkanKembaliProdukNonaktifDiUnitItu(): void
+    {
+        $this->db->query('INSERT INTO barang_unit (barang_idbarang, unit_idunit, aktif) VALUES (1, 1, 0), (1, 2, 0)');
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1)->assertRedirect();
+
+        $unitSatu = $this->db->table('barang_unit')
+            ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow();
+        $unitDua = $this->db->table('barang_unit')
+            ->where(['barang_idbarang' => 1, 'unit_idunit' => 2])->get()->getRow();
+
+        $this->assertSame(1, (int) $unitSatu->aktif, 'produk aktif kembali di unit pembelian');
+        $this->assertSame(43, (int) $unitSatu->updated_by, 'pengubah tercatat dari sesi');
+        $this->assertSame(0, (int) $unitDua->aktif, 'unit lain tidak berubah');
+        $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults());
+    }
+
+    public function testPembelianProdukAktifTidakMembuatBarisBarangUnit(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1)->assertRedirect();
+
+        $this->assertSame(
+            0,
+            $this->db->table('barang_unit')->countAllResults(),
+            'produk yang sudah aktif tidak perlu baris baru'
+        );
+        $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults());
     }
 }

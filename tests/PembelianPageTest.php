@@ -15,7 +15,8 @@ final class PembelianPageTest extends CIUnitTestCase
         bool $bolehPilihUnit = false,
         array $unitList = [],
         ?int $unitTerpilih = null,
-        ?array $bank = null
+        ?array $bank = null,
+        ?int $aktifUnit = null
     ): string {
         service('session')->set([
             'ID_AKUN' => 43,
@@ -36,6 +37,7 @@ final class PembelianPageTest extends CIUnitTestCase
             'imei'           => 'IMEI-1',
             'internal'       => '128GB',
             'warna'          => 'Hitam',
+            'aktif_unit'     => $aktifUnit,
         ];
 
         return view('transaksi/pembelian', [
@@ -344,5 +346,19 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString('value="lunas"', $select);
         $this->assertStringContainsString('value="tempo"', $select);
         $this->assertStringNotContainsString('tunai_transfer', $html, 'pilihan lama harus hilang');
+    }
+
+    public function testProdukNonaktifTetapTampilDenganBadgeDiModalPembelian(): void
+    {
+        $nonaktif = $this->render(false, false, [], null, null, 0);
+
+        $this->assertStringContainsString('pb-produk-card is-nonaktif', $nonaktif);
+        $this->assertStringContainsString('Nonaktif', $nonaktif);
+        $this->assertStringContainsString('aktif otomatis saat dibeli', $nonaktif);
+
+        // Produk aktif tidak diberi badge/tanda apa pun.
+        $aktif = $this->render(false, false, [], null, null, 1);
+        $this->assertStringNotContainsString('pb-produk-card is-nonaktif', $aktif);
+        $this->assertStringNotContainsString('aktif otomatis saat dibeli', $aktif);
     }
 }

@@ -36,19 +36,28 @@ class ModelBarang extends Model
      * $idUnit diisi bila pemanggil menyediakan pilihan unit (mis. /pembelian
      * untuk Finance/Root/Manager). Tanpa argumen, perilakunya tetap memakai
      * unit sesi seperti sebelumnya.
+     *
+     * $termasukNonaktif dipakai /pembelian: produk nonaktif tetap tampil
+     * (dengan `aktif_unit = 0`) supaya bisa dibeli lagi, dan pembelian yang
+     * tersimpan akan mengaktifkannya kembali di unit itu. Pemanggil lain
+     * memakai default agar produk nonaktif tetap tersaring.
      */
-    public function getAllBarang(?int $idUnit = null)
+    public function getAllBarang(?int $idUnit = null, bool $termasukNonaktif = false)
     {
         $id_unit = $idUnit ?? session('ID_UNIT');
-        return $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir, COALESCE(hju.harga_jual, barang.harga) AS harga_jual')
+        $builder = $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir, stok_barang.aktif_unit, COALESCE(hju.harga_jual, barang.harga) AS harga_jual')
             ->join('kategori', 'kategori.id = barang.idkategori')
             ->join('stok_barang', 'stok_barang.idbarang = barang.idbarang AND stok_barang.id_unit = ' . (int)$id_unit, 'left')
             ->join('harga_jual_unit hju', 'hju.barang_idbarang = barang.idbarang AND hju.unit_idunit = ' . (int)$id_unit, 'left')
             ->where('barang.deleted', 0)
             ->where('barang.jenis_barang', 'produk')
-            ->where('kategori.delete', 0)
-            ->where('(stok_barang.aktif_unit IS NULL OR stok_barang.aktif_unit = 1)', null, false)
-            ->findAll();
+            ->where('kategori.delete', 0);
+
+        if (! $termasukNonaktif) {
+            $builder->where('(stok_barang.aktif_unit IS NULL OR stok_barang.aktif_unit = 1)', null, false);
+        }
+
+        return $builder->findAll();
     }
 
     /**

@@ -1173,6 +1173,21 @@
         overflow-wrap: anywhere;
     }
 
+    .pb-produk-card__badge {
+        display: inline-flex;
+        align-items: center;
+        align-self: flex-start;
+        gap: 4px;
+        margin-top: 2px;
+        padding: 1px 7px;
+        border: 1px solid var(--pb-rule-strong);
+        border-radius: 999px;
+        background: var(--pb-subtle);
+        color: var(--pb-muted);
+        font-size: .66rem;
+        font-weight: 650;
+    }
+
     .pb-produk-card__meta {
         display: flex;
         flex-wrap: wrap;

@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\ModelBarang;
 
+use App\Models\ModelBarangUnit;
 use App\Models\ModelKategori;
 use App\Models\ModelNamaHandphone;
 use App\Models\ModelPembelian;
@@ -32,6 +33,7 @@ class Pembelian extends BaseController
 {
 
     protected $BarangModel;
+    protected $BarangUnitModel;
     protected $KategoriModel;
     protected $SuplierModel;
     protected $PembelianModel;
@@ -68,6 +70,7 @@ class Pembelian extends BaseController
     public function __construct()
     {
         $this->BarangModel = new ModelBarang();
+        $this->BarangUnitModel = new ModelBarangUnit();
         $this->KategoriModel = new ModelKategori();
         $this->SuplierModel = new ModelSuplier();
         $this->PembelianModel = new ModelPembelian();
@@ -237,7 +240,9 @@ class Pembelian extends BaseController
 
         // Stok, harga jual, dan HPP mengikuti unit yang dipilih, bukan unit sesi,
         // supaya role lintas unit tidak melihat angka unit lain.
-        $produk = $this->BarangModel->getAllBarang($unitId);
+        // Produk nonaktif tetap tampil: pembelian adalah pintu stok masuk, dan
+        // produk yang dibeli akan diaktifkan kembali di unit ini.
+        $produk = $this->BarangModel->getAllBarang($unitId, true);
         $hppUnit = $this->HppUnitModel->resolveMany(
             array_map(static fn ($p) => (int) $p->idbarang, $produk),
             $unitId
@@ -629,6 +634,18 @@ class Pembelian extends BaseController
             );
 
             $result2 = $this->DetailPembelianModel->insert_detail($data2);
+
+            // Stok masuk lewat pembelian mengaktifkan kembali produk yang
+            // sebelumnya nonaktif di unit ini (pola sama dengan input stok awal).
+            // Unit lain tidak tersentuh dan produk yang sudah aktif tidak
+            // dibuatkan baris `barang_unit` baru.
+            if ($result2) {
+                $this->BarangUnitModel->aktifkanJikaNonaktif(
+                    (int) $produk['id'],
+                    (int) $useridunit,
+                    (int) $input_by
+                );
+            }
 
             if ($result2 && !$this->HppUnitModel->syncFromPembelian(
                 (int) $produk['id'],

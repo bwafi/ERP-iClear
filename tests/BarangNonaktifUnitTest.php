@@ -262,6 +262,16 @@ final class BarangNonaktifUnitTest extends CIUnitTestCase
         $this->assertNotContains(2, $pembelian);
         $this->assertContains(1, $pembelian);
 
+        // Halaman /pembelian meminta daftar termasuk nonaktif supaya produk
+        // tetap bisa dibeli; statusnya dibawa untuk badge di modal.
+        $pembelianTermasukNonaktif = [];
+        foreach ((new ModelBarang())->getAllBarang(null, true) as $row) {
+            $pembelianTermasukNonaktif[(int) $row->idbarang] = $row;
+        }
+        $this->assertArrayHasKey(2, $pembelianTermasukNonaktif);
+        $this->assertSame(0, (int) $pembelianTermasukNonaktif[2]->aktif_unit);
+        $this->assertSame(1, (int) $pembelianTermasukNonaktif[3]->aktif_unit);
+
         $picker = (new ModelBarang())->getProdukPicker(1, '', 'nama', 'asc', 20, 0);
         $this->assertNotContains(2, array_map(static fn ($row) => (int) $row->idbarang, $picker));
 
