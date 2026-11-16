@@ -196,7 +196,7 @@
                                                                     data-id="<?= $p->idbarang ?>"
                                                                     data-kode="<?= $p->kode_barang ?>"
                                                                     data-nama="<?= $p->nama_barang ?>"
-                                                                    data-harga="<?= $p->harga_jual ?>"
+                                                                    data-harga="<?= (int) round((float) $p->harga_jual) ?>"
                                                                     data-kategori="<?= $p->nama_kategori ?>"
                                                                     data-input="<?= $p->input ?>"
                                                                     data-kondisi_barang="<?= $p->status_barang ?>"
