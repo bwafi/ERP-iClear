@@ -92,5 +92,8 @@ phpunit.xml
 # Database dumps (snapshot produksi: berisi data & credential asli)
 /icleargr_erp_backup*.sql
 
+# Backup lokal (dump DB + arsip upload) — dibuat docker/scripts/backup-db.sh
+/backups/
+
 # Brainstorm companion (mockup lokal, tidak ikut repo)
 .superpowers/

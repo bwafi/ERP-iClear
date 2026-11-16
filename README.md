@@ -1,68 +1,135 @@
-# CodeIgniter 4 Application Starter
+# ERP iClear
 
-## What is CodeIgniter?
+ERP operasional untuk toko/cabang: penjualan (POS), pembelian & persediaan,
+service & garansi, keuangan (kas-bank, jurnal, aset), hutang-piutang, HR/payroll,
+KPI, marketing/konten, serta integrasi Kommo/CRM.
 
-CodeIgniter is a PHP full-stack web framework that is light, fast, flexible and secure.
-More information can be found at the [official site](https://codeigniter.com).
+Dibangun dengan **CodeIgniter 4.4.8** (PHP), **Bootstrap 5**, jQuery/DataTables,
+dan **MariaDB/MySQL**.
 
-This repository holds a composer-installable app starter.
-It has been built from the
-[development repository](https://github.com/codeigniter4/CodeIgniter4).
+---
 
-More information about the plans for version 4 can be found in [CodeIgniter 4](https://forum.codeigniter.com/forumdisplay.php?fid=28) on the forums.
+## Kebutuhan (Requirements)
 
-You can read the [user guide](https://codeigniter.com/user_guide/)
-corresponding to the latest version of the framework.
+### Jalur utama: Docker (disarankan)
 
-## Installation & updates
+| Kebutuhan | Versi / catatan |
+|---|---|
+| Docker Engine | aktif, user punya akses `docker.sock` (group `docker`) |
+| Docker Compose | plugin v2 (`docker compose`, bukan `docker-compose`) |
+| Port host | **8080** (aplikasi) dan **8081** (Adminer) harus bebas |
 
-`composer create-project codeigniter4/appstarter` then `composer update` whenever
-there is a new release of the framework.
+Stack menjalankan PHP **7.4.33**, MariaDB **10.6**, dan Adminer di dalam
+container, jadi PHP di host tidak dipakai untuk proyek ini.
 
-When updating, check the release notes to see if there are any changes you might need to apply
-to your `app` folder. The affected files can be copied or merged from
-`vendor/codeigniter4/framework/app`.
+### Alternatif: PHP di host
 
-## Setup
+| Kebutuhan | Versi / catatan |
+|---|---|
+| PHP | **7.4.x** (paling aman, sama dengan container) |
+| Ekstensi PHP | `intl`, `mbstring`, `mysqli`, `pdo_mysql`, `gd`, `zip`, `bcmath`, `exif`, `curl`, `json` |
+| Composer | 2.x |
+| Database | MariaDB 10.6 atau MySQL 8 |
 
-Copy `env` to `.env` and tailor for your app, specifically the baseURL
-and any database settings.
+> [!IMPORTANT]
+> **PHP 8.4 dan 8.5 tidak bisa dipakai.** CodeIgniter 4.4.8 gagal start dengan
+> `Declaration of CodeIgniter\I18n\Time::createFromTimestamp(...) must be compatible
+> with DateTimeImmutable::createFromTimestamp(...)`. Selain itu, tanpa ekstensi
+> `intl` seluruh test berhenti di `Class "Locale" not found`.
+>
+> PHP 8.0/8.1 secara teori masih diterima `composer.json` (`^7.4 || ^8.0`), tetapi
+> **belum diverifikasi** di repo ini. Gunakan container bila ragu.
 
-## Important Change with index.php
+---
 
-`index.php` is no longer in the root of the project! It has been moved inside the *public* folder,
-for better security and separation of components.
+## Quickstart (Docker)
 
-This means that you should configure your web server to "point" to your project's *public* folder, and
-not to the project root. A better practice would be to configure a virtual host to point there. A poor practice would be to point your web server to the project root and expect to enter *public/...*, as the rest of your logic and the
-framework are exposed.
+```bash
+git clone <url-repo> ERP-iClear
+cd ERP-iClear
 
-**Please** read the user guide for a better explanation of how CI4 works!
+cp .env.example .env          # konfigurasi lokal; file ini TIDAK ikut Git
+./docker/scripts/start.sh     # build image + buat volume + jalankan stack
+```
 
-## Repository Management
+Buka:
 
-We use GitHub issues, in our main repository, to track **BUGS** and to track approved **DEVELOPMENT** work packages.
-We use our [forum](http://forum.codeigniter.com) to provide SUPPORT and to discuss
-FEATURE REQUESTS.
+- Aplikasi: <http://localhost:8080>
+- Adminer: <http://localhost:8081> → server `erp-db`, user `erp`, db `erp_local`
 
-This repository is a "distribution" one, built by our release preparation script.
-Problems with it can be raised on our forum, or as issues in the main repository.
+Database yang baru dibuat masih kosong. Isi dengan migrasi dan/atau restore dump:
 
-## Server Requirements
+```bash
+docker compose exec erp-app php spark migrate
 
-PHP version 7.4 or higher is required, with the following extensions installed:
+# restore dari backup (./docker/scripts/backup-db.sh)
+gunzip -c backups/xxx.sql.gz | docker compose exec -T erp-db \
+  mariadb -uerp -perp erp_local
+```
 
-- [intl](http://php.net/manual/en/intl.requirements.php)
-- [mbstring](http://php.net/manual/en/mbstring.installation.php)
+Perintah harian (`start`, `stop`, `logs`, `shell`, `backup-db`, `backup-files`)
+dan troubleshooting ada di **[`docker/README.md`](docker/README.md)**.
 
-> [!WARNING]
-> The end of life date for PHP 7.4 was November 28, 2022.
-> The end of life date for PHP 8.0 was November 26, 2023.
-> If you are still using PHP 7.4 or 8.0, you should upgrade immediately.
-> The end of life date for PHP 8.1 will be November 25, 2024.
+---
 
-Additionally, make sure that the following extensions are enabled in your PHP:
+## Menjalankan test
 
-- json (enabled by default - don't turn it off)
-- [mysqlnd](http://php.net/manual/en/mysqlnd.install.php) if you plan to use MySQL
-- [libcurl](http://php.net/manual/en/curl.requirements.php) if you plan to use the HTTP\CURLRequest library
+Semua perintah dijalankan **di dalam container** (PHP host tidak dipakai):
+
+```bash
+# satu file
+docker compose exec erp-app vendor/bin/phpunit -c phpunit.xml.dist tests/PenjualanPickerMoneyTest.php
+
+# seluruh suite
+docker compose exec erp-app vendor/bin/phpunit -c phpunit.xml.dist
+```
+
+Hal yang perlu diketahui:
+
+- `phpunit.xml` **tidak** di-commit (lihat `.gitignore`). Kalau tidak ada, gunakan
+  `-c phpunit.xml.dist`.
+- Konfigurasi default memakai SQLite `:memory:`. Test yang butuh MySQL (misalnya
+  yang membaca `information_schema`) akan gagal dan memerlukan database test
+  terpisah dengan nama berakhiran `_test`.
+- **Jangan** mengarahkan test ke `erp_local` atau database produksi.
+  `app/Config/Database.php` akan menolak (fail-closed) bila group `tests` menunjuk
+  database yang sama dengan `default`.
+- Aturan isolasi database test selengkapnya: [`tests/README.md`](tests/README.md).
+
+---
+
+## Struktur proyek
+
+```
+app/
+  Controllers/          # controller per modul (extends App\Controllers\BaseController)
+  Models/               # model berprefix Model*, mis. ModelPenjualan
+  Services/             # business logic domain: Finance/, Kpi/, Payroll/
+  Views/                # halaman (layout: Views/template.php, partial: Views/inc, Views/partials)
+  Database/Migrations/  # migrasi schema
+  Config/               # route, database, filter, dll.
+public/                 # document root (index.php ada di sini)
+tests/                  # PHPUnit
+docs/                   # PRD & analisis
+docker/                 # stack development lokal (Dockerfile, script, README)
+```
+
+Beberapa aturan kerja yang mengikat (arsitektur, keamanan, alur perubahan,
+konvensi test) ada di **[`AGENTS.md`](AGENTS.md)** — baca sebelum mengubah kode.
+
+---
+
+## Dokumentasi
+
+| Dokumen | Isi |
+|---|---|
+| [`docs/prd/README.md`](docs/prd/README.md) | indeks PRD |
+| [`docs/prd/PRD_MASTER.md`](docs/prd/PRD_MASTER.md) | aturan lintas modul |
+| `docs/prd/modul/PRD_MODUL_01..10_*.md` | PRD per modul |
+| [`docs/architecture/kpi-business-rules.md`](docs/architecture/kpi-business-rules.md) | formula KPI |
+| [`docker/README.md`](docker/README.md) | operasional stack development |
+| [`PRODUCT.md`](PRODUCT.md) | konteks produk alur Tutup Kasir |
+| [`DESIGN.md`](DESIGN.md) | visual system Kas & Bank |
+
+PRD adalah dokumentasi, bukan bukti implementasi. Bukti aktual ada di kode,
+route, schema, dan test.
