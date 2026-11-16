@@ -110,6 +110,39 @@ class ServiceDpBankDropdownRenderTest extends CIUnitTestCase
     }
 
     /**
+     * Nominal tunai/transfer yang sedang diketik harus langsung mengurangi
+     * "Sisa tagihan" di recap, tanpa mengubah nilai `due` yang dipakai hidden
+     * field/validasi simpan. Mode koreksi tetap memakai nominal pengganti.
+     */
+    public function testSisaTagihanBerkurangLiveSaatNominalDiketik(): void
+    {
+        $html = $this->render($this->vars([$this->bank('1', 'Bank BCA Pandaan', '0391796181', 'SABRINA')]));
+
+        $this->assertStringContainsString('var dibayarSekarang = totalDibayar();', $html);
+        $this->assertStringContainsString(
+            'var sisaLive = correctionNow ? due : Math.max(0, due - dibayarSekarang);',
+            $html,
+            'input pembayaran berjalan harus mengurangi sisa tagihan'
+        );
+        $this->assertStringContainsString('setText("sv-harus-dibayar", formatRp(sisaLive));', $html);
+        $this->assertStringContainsString(
+            'total - dpTercatat - bayarTercatat - dpBaru',
+            $html,
+            'nilai due untuk hidden/validasi tidak boleh ikut dikurangi input berjalan'
+        );
+        $this->assertStringContainsString(
+            'if (el("total_harga_pembayaran_akhir")) el("total_harga_pembayaran_akhir").value = formatRp(due);',
+            $html,
+            'hidden field tetap memakai sisa sebelum input berjalan'
+        );
+        $this->assertStringContainsString(
+            'correctionNow ? "Nominal pembayaran pengganti" : "Sisa tagihan"',
+            $html,
+            'mode koreksi tidak memakai label sisa berjalan'
+        );
+    }
+
+    /**
      * Saat operator hanya mencatat DP (tanpa pembayaran ke tagihan), metode
      * pembayaran utama boleh dikosongkan: kolom tunai/transfer memang tidak
      * terbuka, dan metode DP sudah menandai cara pembayarannya.

@@ -837,6 +837,14 @@
                 ? Math.max(0, total - dpTercatat)
                 : Math.max(0, total - dpTercatat - bayarTercatat - dpBaru);
 
+            // Nominal tunai/transfer yang sedang diketik di step ini ikut
+            // mengurangi "Sisa tagihan" secara live. `due` tetap menjadi nilai
+            // hidden/validasi simpan agar perhitungan server tidak berubah.
+            // Mode koreksi memakai label "Nominal pembayaran pengganti", jadi
+            // nilainya tidak dikurangi input berjalan.
+            var dibayarSekarang = totalDibayar();
+            var sisaLive = correctionNow ? due : Math.max(0, due - dibayarSekarang);
+
             if (el("diskon_pembayaran")) el("diskon_pembayaran").value = formatRp(diskon);
             if (el("total_harga_pembayaran")) el("total_harga_pembayaran").value = formatRp(total);
             if (el("total_harga_pembayaran_akhir")) el("total_harga_pembayaran_akhir").value = formatRp(due);
@@ -850,7 +858,7 @@
             var pembayaranTercatatRow = el("sv-pembayaran-tercatat-row");
             if (pembayaranTercatatRow) pembayaranTercatatRow.hidden = bayarTercatat <= 0;
             setText("sv-pembayaran-tercatat", formatRp(bayarTercatat));
-            setText("sv-harus-dibayar", formatRp(due));
+            setText("sv-harus-dibayar", formatRp(sisaLive));
 
             // Sparepart dapat berubah di tab sebelumnya tanpa reload halaman.
             // Status hanya benar-benar lunas bila total tercatat sama persis.
