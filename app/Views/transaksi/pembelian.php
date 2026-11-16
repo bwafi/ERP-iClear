@@ -13,18 +13,61 @@
             </div>
             <?php
             $unitTerpilih = (int) ($unit_terpilih ?? session('ID_UNIT'));
-            $bolehPilihUnit = !empty($boleh_pilih_unit);
             $unitList = $unit_list ?? [];
+            $bolehPilihUnit = !empty($boleh_pilih_unit) && $unitList !== [];
             $unitTerpilihNama = $unit_terpilih_nama ?? ('Unit ' . $unitTerpilih);
             ?>
             <?php if ($unitTerpilih > 0): ?>
-            <span class="pb-head__unit"><?= esc($unitTerpilihNama) ?></span>
+            <?php if ($bolehPilihUnit): ?>
+            <div class="pb-scope">
+                <span class="pb-scope__label" id="pb-scope-label">Unit pembelian</span>
+                <div class="dropdown pb-scope__picker" id="unit_idunit">
+                    <button type="button" class="pb-scope__field" data-bs-toggle="dropdown" aria-expanded="false"
+                        aria-controls="pb-unit-menu" aria-labelledby="pb-scope-label pb-scope-name">
+                        <iconify-icon icon="solar:shop-2-outline" width="16" height="16" class="pb-scope__icon"
+                            aria-hidden="true"></iconify-icon>
+                        <span class="pb-scope__name" id="pb-scope-name"><?= esc($unitTerpilihNama) ?></span>
+                        <iconify-icon icon="solar:alt-arrow-down-outline" width="16" height="16"
+                            class="pb-scope__chevron" aria-hidden="true"></iconify-icon>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end pb-scope__menu" id="pb-unit-menu">
+                        <div class="pb-scope__menu-head">
+                            <span>Pilih unit</span>
+                            <span class="pb-scope__menu-count"><?= count($unitList) ?> unit</span>
+                        </div>
+                        <?php foreach ($unitList as $u): ?>
+                        <?php $unitAktif = (int) $u->idunit === $unitTerpilih; ?>
+                        <a class="dropdown-item pb-scope__option<?= $unitAktif ? ' is-active' : '' ?>"
+                            href="<?= base_url('pembelian') ?>?unit=<?= (int) $u->idunit ?>"
+                            <?= $unitAktif ? 'aria-current="true"' : '' ?>>
+                            <span class="pb-scope__option-name"><?= esc((string) $u->NAMA_UNIT) ?></span>
+                            <?php if ($unitAktif): ?>
+                            <iconify-icon icon="solar:check-circle-bold" width="16" height="16"
+                                class="pb-scope__option-mark" aria-hidden="true"></iconify-icon>
+                            <?php endif; ?>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <span class="pb-scope__hint">Stok &amp; HPP mengikuti unit ini.</span>
+            </div>
+            <?php else: ?>
+            <div class="pb-scope pb-scope--static">
+                <span class="pb-scope__label">Unit pembelian</span>
+                <span class="pb-scope__value">
+                    <iconify-icon icon="solar:shop-2-outline" width="16" height="16" aria-hidden="true"></iconify-icon>
+                    <?= esc($unitTerpilihNama) ?>
+                </span>
+            </div>
+            <?php endif; ?>
             <?php endif; ?>
         </div>
     </header>
 
     <form action="<?= base_url('insert_pembelian') ?>" method="post" id="form_pembelian" class="pb-sheet"
         enctype="multipart/form-data">
+        <?php // Unit adalah konteks halaman (dipilih di header), bukan field nota. ?>
+        <input type="hidden" name="unit_idunit" value="<?= $unitTerpilih ?>">
         <section class="pb-section" aria-labelledby="pb-pihak-title">
             <div class="pb-section__head">
                 <div>
@@ -34,24 +77,6 @@
             </div>
 
             <div class="pb-grid">
-                <?php if ($bolehPilihUnit): ?>
-                <div class="pb-field">
-                    <label for="unit_idunit">Unit Pembelian</label>
-                    <select id="unit_idunit" name="unit_idunit" class="form-select" required
-                        onchange="if (this.value) { window.location.href = '<?= base_url('pembelian') ?>?unit=' + encodeURIComponent(this.value); }">
-                        <?php foreach ($unitList as $u): ?>
-                        <option value="<?= (int) $u->idunit ?>"
-                            <?= (int) $u->idunit === $unitTerpilih ? 'selected' : '' ?>>
-                            <?= esc((string) $u->NAMA_UNIT) ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <span class="form-text">Stok, HPP, dan harga jual mengikuti unit ini. Ganti unit akan memuat ulang halaman.</span>
-                </div>
-                <?php else: ?>
-                <input type="hidden" name="unit_idunit" value="<?= $unitTerpilih ?>">
-                <?php endif; ?>
-
                 <div class="pb-field">
                     <label for="tipe_pihak">Sumber</label>
                     <select id="tipe_pihak" class="form-select" required>

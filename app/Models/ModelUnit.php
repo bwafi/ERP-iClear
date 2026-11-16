@@ -42,6 +42,19 @@ class ModelUnit extends Model
             ->get()->getResult();
     }
 
+    /**
+     * Unit yang benar-benar beroperasi (unit.is_operational = 1).
+     *
+     * Head Office (unit 50) ber-flag 0, jadi tidak ikut. Dipakai pemilih unit
+     * pada transaksi operasional seperti /pembelian.
+     */
+    public function getUnitOperasional(): array
+    {
+        return $this->where('is_operational', 1)
+            ->orderBy('idunit', 'ASC')
+            ->findAll();
+    }
+
 
     public function insert_Unit($data)
     {

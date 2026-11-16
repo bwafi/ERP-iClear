@@ -201,23 +201,41 @@ final class PembelianPageTest extends CIUnitTestCase
             (object) ['idunit' => 3, 'NAMA_UNIT' => 'ICLEAR Banyuwangi'],
         ];
 
-        // Finance/Root/Manager: pilihan unit tampil dan unit aktif terpilih.
+        // Finance/Root/Manager: unit adalah konteks halaman di header, bukan
+        // field di grid Pihak & Dokumen.
         $terbuka = $this->render(false, true, $unitList, 3);
-        $this->assertStringContainsString('id="unit_idunit" name="unit_idunit"', $terbuka);
-        $this->assertStringContainsString('<option value="1"', $terbuka);
-        $this->assertStringContainsString('<option value="3"', $terbuka);
+        $unitHref = base_url('pembelian') . '?unit=';
+        $this->assertStringContainsString('id="unit_idunit"', $terbuka);
+        $this->assertStringContainsString('data-bs-toggle="dropdown"', $terbuka);
+        $this->assertStringContainsString('href="' . $unitHref . '1"', $terbuka);
+        $this->assertStringContainsString('href="' . $unitHref . '3"', $terbuka);
+        $this->assertStringContainsString('2 unit', $terbuka);
+        $this->assertStringContainsString('id="pb-scope-name">ICLEAR Banyuwangi<', $terbuka);
         $this->assertSame(
             1,
-            preg_match('/<option value="3"\s+selected>/', $terbuka),
-            'unit yang sedang dipilih harus ter-selected'
+            preg_match(
+                '/<a class="dropdown-item pb-scope__option is-active"\s+href="[^"]*pembelian\?unit=3"\s+aria-current="true">/',
+                $terbuka
+            ),
+            'unit yang sedang dipilih harus ditandai aktif di menu'
         );
-        $this->assertStringNotContainsString('type="hidden" name="unit_idunit"', $terbuka);
+        $this->assertLessThan(
+            strpos($terbuka, 'id="form_pembelian"'),
+            strpos($terbuka, 'id="unit_idunit"'),
+            'pemilih unit tampil di header, sebelum form nota'
+        );
+        $this->assertStringContainsString('class="pb-scope"', $terbuka);
+        $this->assertStringNotContainsString('pb-head__unit', $terbuka);
+        // Unit tetap terkirim bersama POST walau menu dipindah ke header.
+        $this->assertStringContainsString('type="hidden" name="unit_idunit" value="3"', $terbuka);
 
-        // Tim toko: unit dari akun, tidak ada pilihan yang bisa diganti.
+        // Tim toko: unit dari akun, hanya tampil sebagai label statis.
         $terkunci = $this->render();
         $this->assertStringContainsString('type="hidden" name="unit_idunit" value="1"', $terkunci);
         $this->assertStringNotContainsString('id="unit_idunit"', $terkunci);
-        $this->assertStringNotContainsString('<option value="3"', $terkunci);
+        $this->assertStringNotContainsString('id="pb-unit-menu"', $terkunci);
+        $this->assertStringContainsString('pb-scope--static', $terkunci);
+        $this->assertStringContainsString('Unit 1', $terkunci);
     }
 
     public function testUnitTerpilihDipakaiUntukBatasTanggalMasuk(): void

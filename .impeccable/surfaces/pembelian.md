@@ -32,6 +32,8 @@ STORY: The operator lands, sees where they are, fills the party and document fie
 
 FIRST VIEWPORT: At 1440×900 the thin header (breadcrumb, title, one-line description) sits above the sheet; Pihak & Dokumen is already filled out in one compact grid; the Produk toolbar and the first rows are visible before the fold; the payment dock is pinned at the bottom edge with the primary Simpan action at its right.
 
+UNIT SCOPE: Unit pembelian milik role lintas unit (Finance/Root/Manager) adalah konteks halaman, bukan field nota. Kontrolnya tinggal di kolom kanan header — label mikro `Unit pembelian`, satu trigger berikon toko + nama unit + chevron, dan hint `Stok & HPP mengikuti unit ini.` Trigger membuka menu Bootstrap (`.pb-scope__menu`): header `Pilih unit` + jumlah unit, lalu daftar unit operasional (`unit.is_operational = 1`; Head Office tidak tampil) sebagai tautan `?unit=` dengan tanda centang pada unit aktif. Menu memakai permukaan `--pb-surface` dan teks `--pb-strong` sendiri supaya tetap terbaca di tema gelap, tanpa shadow. Role tim toko melihat bentuk statis (`pb-scope--static`). Grid Pihak & Dokumen tidak lagi memuat field unit; nilai unit dikirim lewat hidden input `unit_idunit` di dalam form.
+
 FORM: Lembar nota — page inside the established purchase/stok module world (inherits `.pb-*` composition), not a new-world concept roll; no seed key.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.

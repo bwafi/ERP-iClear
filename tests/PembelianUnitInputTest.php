@@ -55,4 +55,27 @@ final class PembelianUnitInputTest extends CIUnitTestCase
         $this->assertSame(2, Pembelian::resolveUnitInput(1, 2, '0', [1, 2, 3]));
         $this->assertSame(2, Pembelian::resolveUnitInput(1, 2, '3', []));
     }
+
+    public function testRoleLintasUnitSelaluMendapatUnitOperasional(): void
+    {
+        // Hanya unit toko yang operasional; Head Office (50) tidak ikut.
+        $operasional = [1, 2, 3, 4, 5];
+
+        // Akun Finance/Manager di Head Office: default ke unit operasional
+        // pertama, bukan Head Office yang bukan unit operasional.
+        $this->assertSame(1, Pembelian::resolveUnitPembelian(0, 50, null, $operasional));
+        $this->assertSame(1, Pembelian::resolveUnitPembelian(34, 50, '', $operasional));
+
+        // Unit operasional yang dipilih tetap dipakai; Head Office dari request
+        // tidak boleh lolos.
+        $this->assertSame(3, Pembelian::resolveUnitPembelian(0, 50, '3', $operasional));
+        $this->assertSame(1, Pembelian::resolveUnitPembelian(0, 50, '50', $operasional));
+
+        // Unit akun yang sudah operasional tetap jadi default.
+        $this->assertSame(2, Pembelian::resolveUnitPembelian(0, 2, null, $operasional));
+
+        // Tim toko tidak berubah: selalu unit akunnya.
+        $this->assertSame(50, Pembelian::resolveUnitPembelian(35, 50, '3', $operasional));
+        $this->assertSame(2, Pembelian::resolveUnitPembelian(41, 2, '3', $operasional));
+    }
 }

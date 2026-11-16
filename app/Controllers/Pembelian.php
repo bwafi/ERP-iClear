@@ -137,14 +137,37 @@ class Pembelian extends BaseController
     }
 
     /**
-     * @return int[] idunit yang tersedia di master unit
+     * @return int[] idunit operasional (unit.is_operational = 1)
      */
-    private function daftarIdUnit(): array
+    private function daftarIdUnitOperasional(): array
     {
         return array_map(
             static fn ($u) => (int) $u->idunit,
-            $this->UnitModel->getUnit()
+            $this->UnitModel->getUnitOperasional()
         );
+    }
+
+    /**
+     * Unit final untuk halaman /pembelian.
+     *
+     * Role lintas unit hanya boleh memakai unit operasional: kalau unit akun
+     * (atau unit dari request) bukan unit operasional — mis. akun Finance yang
+     * bernaung di Head Office — dipakai unit operasional pertama. Tim toko tidak
+     * berubah: selalu unit akunnya.
+     *
+     * @param array<int,int> $operationalUnitIds
+     */
+    public static function resolveUnitPembelian(int $role, int $accountUnit, $requested, array $operationalUnitIds): int
+    {
+        $unit = self::resolveUnitInput($role, $accountUnit, $requested, $operationalUnitIds);
+
+        if (! self::bolehPilihUnitUntukRole($role) || $operationalUnitIds === []) {
+            return $unit;
+        }
+
+        $valid = array_map('intval', $operationalUnitIds);
+
+        return in_array($unit, $valid, true) ? $unit : (int) $valid[0];
     }
 
     public function index()
@@ -153,8 +176,9 @@ class Pembelian extends BaseController
         $role = (int) ($akun->ID_JABATAN ?? session('ID_JABATAN'));
         $unitAkun = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
         $bolehPilihUnit = self::bolehPilihUnitUntukRole($role);
-        $unitList = $bolehPilihUnit ? $this->UnitModel->getUnit() : [];
-        $unitId = self::resolveUnitInput(
+        // Head Office bukan unit operasional, jadi tidak ikut di pemilih unit.
+        $unitList = $bolehPilihUnit ? $this->UnitModel->getUnitOperasional() : [];
+        $unitId = self::resolveUnitPembelian(
             $role,
             $unitAkun,
             $this->request->getGet('unit'),
@@ -211,14 +235,14 @@ class Pembelian extends BaseController
         $role = (int) ($datauser->ID_JABATAN ?? session('ID_JABATAN'));
         $unitAkun = (int) ($datauser->ID_UNIT ?? session('ID_UNIT'));
 
-        // Unit pembelian: role lintas unit mengambil unit dari form (divalidasi
-        // ke master unit), tim toko selalu memakai unit akunnya walaupun POST
-        // berisi unit lain.
-        $useridunit = self::resolveUnitInput(
+        // Unit pembelian: role lintas unit memakai unit operasional dari form
+        // (divalidasi ke master unit operasional), tim toko selalu memakai unit
+        // akunnya walaupun POST berisi unit lain.
+        $useridunit = self::resolveUnitPembelian(
             $role,
             $unitAkun,
             $this->request->getPost('unit_idunit'),
-            $this->daftarIdUnit()
+            self::bolehPilihUnitUntukRole($role) ? $this->daftarIdUnitOperasional() : []
         );
         $namauser = $datauser->NAMA_AKUN;
         $suplier = $this->request->getPost('suplier');

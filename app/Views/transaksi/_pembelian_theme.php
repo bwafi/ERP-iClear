@@ -82,7 +82,9 @@
         border: 1px solid var(--pb-rule);
         border-radius: var(--pb-radius);
         background: var(--pb-surface);
-        animation: pb-settle .24s cubic-bezier(.2, .7, .3, 1) both;
+        /* Tanpa `fill both`: transform identitas yang tertinggal membuat
+           .pb-head jadi stacking context dan menu unit tertimbun lembar nota. */
+        animation: pb-settle .24s cubic-bezier(.2, .7, .3, 1);
     }
 
     @keyframes pb-settle {
@@ -117,6 +119,7 @@
 
     .pb-head__row {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-start;
         justify-content: space-between;
         gap: 16px;
@@ -138,16 +141,190 @@
         color: var(--pb-muted);
     }
 
-    .pb-head__unit {
+    /* Unit scope di kepala halaman: konteks data, bukan field nota. */
+    .pb-scope {
         flex: none;
-        padding: 5px 10px;
-        border: 1px solid var(--pb-rule);
-        border-radius: 999px;
-        font-size: .75rem;
-        font-weight: 600;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+        max-width: 260px;
+    }
+
+    .pb-scope__label {
+        font-size: .625rem;
+        font-weight: 700;
+        letter-spacing: .09em;
+        text-transform: uppercase;
         color: var(--pb-muted);
-        letter-spacing: .01em;
+    }
+
+    .pb-scope__picker {
+        display: inline-flex;
+    }
+
+    .pb-scope__field {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        max-width: 100%;
+        padding: 0 10px 0 12px;
+        border: 1px solid var(--pb-rule);
+        border-radius: var(--pb-radius-sm);
+        background: var(--pb-surface);
+        color: var(--pb-muted);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+    }
+
+    .pb-scope__field:hover {
+        border-color: var(--pb-rule-strong);
+        background: var(--pb-subtle);
+    }
+
+    .pb-scope__field:focus-visible {
+        outline: none;
+        border-color: var(--pb-accent);
+        background: var(--pb-surface);
+        box-shadow: 0 0 0 3px var(--pb-accent-soft);
+    }
+
+    .pb-scope__field[aria-expanded="true"] {
+        border-color: var(--pb-accent);
+    }
+
+    .pb-scope__name {
+        max-width: 190px;
+        overflow: hidden;
+        color: var(--pb-strong);
+        font-size: .8125rem;
+        font-weight: 600;
+        letter-spacing: -.01em;
+        text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .pb-scope__chevron {
+        flex: none;
+        opacity: .7;
+        transition: transform .18s ease;
+    }
+
+    .pb-scope__field[aria-expanded="true"] .pb-scope__chevron {
+        transform: rotate(180deg);
+    }
+
+    /* Menu unit: permukaan sendiri supaya teks tetap terbaca di tema gelap. */
+    .pb-scope__menu {
+        --bs-dropdown-bg: var(--pb-surface);
+        --bs-dropdown-color: var(--pb-strong);
+        --bs-dropdown-link-color: var(--pb-strong);
+        --bs-dropdown-font-size: .8125rem;
+        min-width: 248px;
+        max-height: 332px;
+        margin-top: 6px;
+        padding: 6px;
+        overflow-y: auto;
+        border: 1px solid var(--pb-rule);
+        border-radius: 12px;
+        background: var(--pb-surface);
+        box-shadow: none;
+    }
+
+    .pb-scope__menu-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin: 0 0 6px;
+        padding: 4px 10px 9px;
+        border-bottom: 1px solid var(--pb-rule);
+    }
+
+    .pb-scope__menu-head span:first-child {
+        font-size: .625rem;
+        font-weight: 700;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+        color: var(--pb-muted);
+    }
+
+    .pb-scope__menu-count {
+        color: var(--pb-muted);
+        font-size: .6875rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pb-scope__option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 34px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        color: var(--pb-strong);
+        font-size: .8125rem;
+        white-space: nowrap;
+    }
+
+    .pb-scope__option-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pb-scope__option + .pb-scope__option {
+        margin-top: 2px;
+    }
+
+    .pb-scope__option:hover,
+    .pb-scope__option:focus {
+        background: var(--pb-accent-soft);
+        color: var(--pb-strong);
+    }
+
+    .pb-scope__option:focus-visible {
+        outline: 2px solid var(--pb-accent);
+        outline-offset: -2px;
+    }
+
+    .pb-scope__option.is-active {
+        font-weight: 650;
+    }
+
+    .pb-scope__option-mark {
+        flex: none;
+        color: var(--pb-accent);
+    }
+
+    .pb-scope__hint {
+        font-size: .6875rem;
+        color: var(--pb-muted);
+    }
+
+    .pb-scope__value {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        max-width: 100%;
+        padding: 0 14px;
+        border: 1px solid var(--pb-rule);
+        border-radius: var(--pb-radius-sm);
+        background: var(--pb-subtle);
+        color: var(--pb-strong);
+        font-size: .8125rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .pb-scope--static .pb-scope__value iconify-icon {
+        color: var(--pb-muted);
     }
 
     /* ===== Lembar ===== */
@@ -1066,6 +1243,29 @@
 
         .pb-head h1 {
             font-size: 1.35rem;
+        }
+
+        .pb-scope {
+            width: 100%;
+            max-width: none;
+        }
+
+        .pb-scope__picker {
+            width: 100%;
+        }
+
+        .pb-scope__field {
+            width: 100%;
+        }
+
+        .pb-scope__name {
+            flex: 1 1 auto;
+            max-width: none;
+        }
+
+        .pb-scope__menu {
+            width: 100%;
+            min-width: 0;
         }
 
         .pb-section {
