@@ -10,8 +10,12 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class PembelianPageTest extends CIUnitTestCase
 {
-    private function render(bool $canManageHargaJual = false): string
-    {
+    private function render(
+        bool $canManageHargaJual = false,
+        bool $bolehPilihUnit = false,
+        array $unitList = [],
+        ?int $unitTerpilih = null
+    ): string {
         service('session')->set([
             'ID_AKUN' => 43,
             'ID_UNIT' => 1,
@@ -43,6 +47,10 @@ final class PembelianPageTest extends CIUnitTestCase
             'nama_handphone' => [],
             'sub_kategori'   => [],
             'can_manage_harga_jual' => $canManageHargaJual,
+            'boleh_pilih_unit' => $bolehPilihUnit,
+            'unit_list' => $unitList,
+            'unit_terpilih' => $unitTerpilih ?? 1,
+            'unit_terpilih_nama' => $unitTerpilih === 3 ? 'ICLEAR Banyuwangi' : 'Unit 1',
         ]);
     }
 
@@ -56,6 +64,16 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString('pb-dock', $html);
         $this->assertStringContainsString('Ringkasan pembayaran', $html);
         $this->assertStringContainsString('Simpan Pembelian', $html);
+    }
+
+    public function testKolomJumlahBerlabelQty(): void
+    {
+        $html = $this->render();
+
+        // Kolom isinya input `produk[..][jumlah]` (qty), bukan nominal uang.
+        $this->assertStringContainsString('<th>Qty</th>', $html);
+        $this->assertStringNotContainsString('<th>Nominal</th>', $html);
+        $this->assertStringContainsString('name="produk[${id}][jumlah]"', $html);
     }
 
     public function testHookFormDanProdukTetapAda(): void
@@ -176,6 +194,43 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString("harga_beli: parseInt(cb.getAttribute('data-harga_beli')) || 0,", $html);
     }
 
+    public function testUnitSelectorHanyaUntukRoleLintasUnit(): void
+    {
+        $unitList = [
+            (object) ['idunit' => 1, 'NAMA_UNIT' => 'ICLEAR Probolinggo'],
+            (object) ['idunit' => 3, 'NAMA_UNIT' => 'ICLEAR Banyuwangi'],
+        ];
+
+        // Finance/Root/Manager: pilihan unit tampil dan unit aktif terpilih.
+        $terbuka = $this->render(false, true, $unitList, 3);
+        $this->assertStringContainsString('id="unit_idunit" name="unit_idunit"', $terbuka);
+        $this->assertStringContainsString('<option value="1"', $terbuka);
+        $this->assertStringContainsString('<option value="3"', $terbuka);
+        $this->assertSame(
+            1,
+            preg_match('/<option value="3"\s+selected>/', $terbuka),
+            'unit yang sedang dipilih harus ter-selected'
+        );
+        $this->assertStringNotContainsString('type="hidden" name="unit_idunit"', $terbuka);
+
+        // Tim toko: unit dari akun, tidak ada pilihan yang bisa diganti.
+        $terkunci = $this->render();
+        $this->assertStringContainsString('type="hidden" name="unit_idunit" value="1"', $terkunci);
+        $this->assertStringNotContainsString('id="unit_idunit"', $terkunci);
+        $this->assertStringNotContainsString('<option value="3"', $terkunci);
+    }
+
+    public function testUnitTerpilihDipakaiUntukBatasTanggalMasuk(): void
+    {
+        // Unit 1 boleh backdate; unit lain tidak. Aturan harus mengikuti unit
+        // yang dipilih, bukan unit sesi (sesi = 1, pilihan = 3).
+        $unitList = [(object) ['idunit' => 3, 'NAMA_UNIT' => 'ICLEAR Banyuwangi']];
+        $html = $this->render(false, true, $unitList, 3);
+
+        $this->assertStringContainsString('id="tanggal_masuk" name="tanggal_masuk"', $html);
+        $this->assertStringContainsString('readonly required', $html);
+    }
+
     public function testTombolSimpanPembelianDikunciSaatSubmit(): void
     {
         $html = $this->render();
@@ -199,5 +254,23 @@ final class PembelianPageTest extends CIUnitTestCase
         $tertutup = $this->render(false);
         $this->assertStringContainsString('const canEditHargaJual = false;', $tertutup);
         $this->assertStringNotContainsString('Harga jual yang diubah berlaku untuk unit ini.', $tertutup);
+    }
+
+    public function testJatuhTempoTidakPunyaNilaiDefault(): void
+    {
+        $html = $this->render();
+
+        // Penginput harus mengisi sendiri; kalau form prefill tanggal hari ini,
+        // jatuh tempo tersimpan tanpa disadari dan aging hutang jadi salah.
+        $this->assertMatchesRegularExpression(
+            '/<input[^>]*id="jatuh_tempo"[^>]*>/',
+            $html,
+            'input jatuh_tempo hilang'
+        );
+        preg_match('/<input[^>]*id="jatuh_tempo"[^>]*>/', $html, $m);
+        $tag = $m[0];
+
+        $this->assertStringNotContainsString('value=', $tag, 'jatuh_tempo tidak boleh punya default');
+        $this->assertStringContainsString('required', $tag, 'jatuh_tempo wajib diisi');
     }
 }

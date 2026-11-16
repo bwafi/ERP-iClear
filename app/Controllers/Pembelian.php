@@ -23,6 +23,7 @@ use App\Models\ModelHargaJualUnit;
 use App\Models\ModelJurnal;
 use App\Models\ModelBank;
 use App\Models\ModelPembayaranBank;
+use App\Models\ModelUnit;
 
 class Pembelian extends BaseController
 
@@ -44,6 +45,17 @@ class Pembelian extends BaseController
     protected $PembayaranBankModel;
     protected $NamaHandphoneModel;
     protected $SubKategoriModel;
+    protected $UnitModel;
+
+    /**
+     * ID_JABATAN yang boleh memilih unit saat mencatat pembelian.
+     *
+     * 0 = Finance, 1 = Admin root, 34 = Manager. Tim toko (kasir, kepala toko,
+     * frontliner, teknisi) SELALU memakai unit akunnya dan tidak boleh
+     * menggantinya lewat request.
+     */
+    private const UNIT_PILIH_ROLES = [0, 1, 34];
+
     public function __construct()
     {
         $this->BarangModel = new ModelBarang();
@@ -62,13 +74,96 @@ class Pembelian extends BaseController
         $this->PembayaranBankModel = new ModelPembayaranBank();
         $this->NamaHandphoneModel = new ModelNamaHandphone();
         $this->SubKategoriModel = new ModelSubKategori();
+        $this->UnitModel = new ModelUnit();
+    }
+
+    /**
+     * Apakah role ini boleh mengganti unit pada form pembelian.
+     */
+    public static function bolehPilihUnitUntukRole(int $role): bool
+    {
+        return in_array($role, self::UNIT_PILIH_ROLES, true);
+    }
+
+    /**
+     * Unit final untuk input /pembelian.
+     *
+     * Murni (tanpa database) supaya aturannya bisa diuji langsung. Request
+     * dari role terbatas TIDAK dipercaya: nilainya diabaikan dan unit akun
+     * yang dipakai. Role yang boleh memilih tetap dibatasi ke unit yang ada.
+     *
+     * @param int             $role         ID_JABATAN akun login
+     * @param int             $accountUnit  ID_UNIT akun login
+     * @param mixed           $requested    nilai unit dari GET/POST (tidak dipercaya)
+     * @param array<int,int>  $validUnitIds daftar idunit yang boleh dipilih
+     */
+    public static function resolveUnitInput(int $role, int $accountUnit, $requested, array $validUnitIds): int
+    {
+        $akunUnit = (int) $accountUnit;
+
+        if (! self::bolehPilihUnitUntukRole($role)) {
+            return $akunUnit;
+        }
+
+        $req = (int) $requested;
+        $valid = array_map('intval', $validUnitIds);
+
+        if ($req > 0 && in_array($req, $valid, true)) {
+            return $req;
+        }
+
+        return $akunUnit;
+    }
+
+    /**
+     * Jatuh tempo wajib diisi manual oleh penginput; form tidak lagi memakai
+     * nilai default hari ini. Nilai harus `YYYY-MM-DD` yang benar-benar ada.
+     */
+    public static function tanggalJatuhTempoValid(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        $parsed = date_parse_from_format('Y-m-d', $value);
+
+        return ($parsed['error_count'] ?? 1) === 0
+            && ($parsed['warning_count'] ?? 1) === 0
+            && checkdate(
+                (int) ($parsed['month'] ?? 0),
+                (int) ($parsed['day'] ?? 0),
+                (int) ($parsed['year'] ?? 0)
+            );
+    }
+
+    /**
+     * @return int[] idunit yang tersedia di master unit
+     */
+    private function daftarIdUnit(): array
+    {
+        return array_map(
+            static fn ($u) => (int) $u->idunit,
+            $this->UnitModel->getUnit()
+        );
     }
 
     public function index()
     {
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
-        $unitId = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
-        $produk = $this->BarangModel->getAllBarang();
+        $role = (int) ($akun->ID_JABATAN ?? session('ID_JABATAN'));
+        $unitAkun = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
+        $bolehPilihUnit = self::bolehPilihUnitUntukRole($role);
+        $unitList = $bolehPilihUnit ? $this->UnitModel->getUnit() : [];
+        $unitId = self::resolveUnitInput(
+            $role,
+            $unitAkun,
+            $this->request->getGet('unit'),
+            $bolehPilihUnit ? array_map(static fn ($u) => (int) $u->idunit, $unitList) : []
+        );
+
+        // Stok, harga jual, dan HPP mengikuti unit yang dipilih, bukan unit sesi,
+        // supaya role lintas unit tidak melihat angka unit lain.
+        $produk = $this->BarangModel->getAllBarang($unitId);
         $hppUnit = $this->HppUnitModel->resolveMany(
             array_map(static fn ($p) => (int) $p->idbarang, $produk),
             $unitId
@@ -76,6 +171,9 @@ class Pembelian extends BaseController
         foreach ($produk as $p) {
             $p->hpp_unit = $hppUnit[(int) $p->idbarang] ?? (float) $p->harga_beli;
         }
+
+        $unitTerpilih = $this->UnitModel->getById($unitId);
+        $unitTerpilihNama = $unitTerpilih->NAMA_UNIT ?? ('Unit ' . $unitId);
 
         $data =  array(
             'akun' => $akun,
@@ -88,6 +186,10 @@ class Pembelian extends BaseController
             'nama_handphone' => $this->NamaHandphoneModel->getNamaHandphone(),
             'sub_kategori' => $this->SubKategoriModel->getSubKategori(),
             'can_manage_harga_jual' => Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
+            'boleh_pilih_unit' => $bolehPilihUnit,
+            'unit_list' => $unitList,
+            'unit_terpilih' => $unitId,
+            'unit_terpilih_nama' => $unitTerpilihNama,
         );
         return view('template', $data);
     }
@@ -106,7 +208,18 @@ class Pembelian extends BaseController
         date_default_timezone_set('Asia/Jakarta');
 
         $datauser = $this->AuthModel->getById(session('ID_AKUN'));
-        $useridunit = $datauser->ID_UNIT;
+        $role = (int) ($datauser->ID_JABATAN ?? session('ID_JABATAN'));
+        $unitAkun = (int) ($datauser->ID_UNIT ?? session('ID_UNIT'));
+
+        // Unit pembelian: role lintas unit mengambil unit dari form (divalidasi
+        // ke master unit), tim toko selalu memakai unit akunnya walaupun POST
+        // berisi unit lain.
+        $useridunit = self::resolveUnitInput(
+            $role,
+            $unitAkun,
+            $this->request->getPost('unit_idunit'),
+            $this->daftarIdUnit()
+        );
         $namauser = $datauser->NAMA_AKUN;
         $suplier = $this->request->getPost('suplier');
         $id_suplier_text = $this->request->getPost('id_suplier_text');
@@ -115,7 +228,15 @@ class Pembelian extends BaseController
         $tanggal_masuk = $this->request->getPost('tanggal_masuk');
         $jam_sekarang = date('H:i:s');
         $tanggal_masuk_full = $tanggal_masuk . ' ' . $jam_sekarang;
-        $jatuh_tempot = $this->request->getPost('jatuh_tempo');
+        // Jatuh tempo sengaja tidak diberi nilai default di form: penginput
+        // harus menentukan sendiri, supaya tanggal hari ini tidak terpakai
+        // tanpa sadar dan merusak aging hutang.
+        $jatuhTempo = trim((string) $this->request->getPost('jatuh_tempo'));
+        if (! self::tanggalJatuhTempoValid($jatuhTempo)) {
+            session()->setFlashdata('gagal', 'Jatuh tempo wajib diisi dengan tanggal yang valid.');
+            return redirect()->to(base_url('/pembelian'));
+        }
+
         $sisa = $this->cleanRupiah($this->request->getPost('hutang'));
         $total_harga = $this->cleanRupiah($this->request->getPost('total-harga'));
         $total_diskon = $this->cleanRupiah($this->request->getPost('total-diskon'));
@@ -127,7 +248,7 @@ class Pembelian extends BaseController
         $jurnal = [];
         $bankPembayaran = [];
         $totalBayarBank = 0;
-        $kodePembayaran = 'PBL' . date('Ymd') . session('ID_UNIT') . rand(1000, 9999);
+        $kodePembayaran = 'PBL' . date('Ymd') . $useridunit . rand(1000, 9999);
 
         $db = \Config\Database::connect();
         $db->transStart();
@@ -258,7 +379,7 @@ class Pembelian extends BaseController
             'bayar_tunai' => $bayar_tunai,
             'bayar_bank' => $totalBayarBank,
             'bank_idbank' => $kodePembayaran,
-            'jatuh_tempo' => $this->request->getPost('jatuh_tempo'),
+            'jatuh_tempo' => $jatuhTempo,
             'bayar' => $total_bayar,
             'unit_idunit' => $useridunit,
             'pelanggan_id_pelanggan' => $id_pelanggan ?? null,

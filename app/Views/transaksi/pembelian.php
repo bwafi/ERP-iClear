@@ -11,9 +11,14 @@
                 <h1>Pembelian</h1>
                 <p class="pb-sub">Catat barang masuk, atur harga beli per unit, lalu tentukan pembayaran supplier.</p>
             </div>
-            <?php $unitSesi = session('ID_UNIT'); ?>
-            <?php if ($unitSesi !== null): ?>
-            <span class="pb-head__unit">Unit <?= esc((string) $unitSesi) ?></span>
+            <?php
+            $unitTerpilih = (int) ($unit_terpilih ?? session('ID_UNIT'));
+            $bolehPilihUnit = !empty($boleh_pilih_unit);
+            $unitList = $unit_list ?? [];
+            $unitTerpilihNama = $unit_terpilih_nama ?? ('Unit ' . $unitTerpilih);
+            ?>
+            <?php if ($unitTerpilih > 0): ?>
+            <span class="pb-head__unit"><?= esc($unitTerpilihNama) ?></span>
             <?php endif; ?>
         </div>
     </header>
@@ -29,6 +34,24 @@
             </div>
 
             <div class="pb-grid">
+                <?php if ($bolehPilihUnit): ?>
+                <div class="pb-field">
+                    <label for="unit_idunit">Unit Pembelian</label>
+                    <select id="unit_idunit" name="unit_idunit" class="form-select" required
+                        onchange="if (this.value) { window.location.href = '<?= base_url('pembelian') ?>?unit=' + encodeURIComponent(this.value); }">
+                        <?php foreach ($unitList as $u): ?>
+                        <option value="<?= (int) $u->idunit ?>"
+                            <?= (int) $u->idunit === $unitTerpilih ? 'selected' : '' ?>>
+                            <?= esc((string) $u->NAMA_UNIT) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <span class="form-text">Stok, HPP, dan harga jual mengikuti unit ini. Ganti unit akan memuat ulang halaman.</span>
+                </div>
+                <?php else: ?>
+                <input type="hidden" name="unit_idunit" value="<?= $unitTerpilih ?>">
+                <?php endif; ?>
+
                 <div class="pb-field">
                     <label for="tipe_pihak">Sumber</label>
                     <select id="tipe_pihak" class="form-select" required>
@@ -78,7 +101,7 @@
                     </div>
                 </div>
 
-                <?php $idUnit = session('ID_UNIT'); $tanggalHariIni = date('Y-m-d'); ?>
+                <?php $idUnit = $unitTerpilih; $tanggalHariIni = date('Y-m-d'); ?>
                 <div class="pb-field">
                     <label for="tanggal_masuk">Tanggal Masuk</label>
                     <?php if ($idUnit == 1): ?>
@@ -93,8 +116,7 @@
 
                 <div class="pb-field">
                     <label for="jatuh_tempo">Jatuh Tempo</label>
-                    <input type="date" class="form-control" id="jatuh_tempo" name="jatuh_tempo"
-                        value="<?= date('Y-m-d') ?>" required>
+                    <input type="date" class="form-control" id="jatuh_tempo" name="jatuh_tempo" required>
                 </div>
 
                 <div class="pb-field pb-field--span2">
@@ -136,7 +158,7 @@
                             <th>IMEI</th>
                             <th>Hrg. Jual</th>
                             <th>Hrg. Beli</th>
-                            <th>Nominal</th>
+                            <th>Qty</th>
                             <th>Biaya Tambahan</th>
                             <th>Keterangan</th>
                             <th>Diskon (Rp)</th>

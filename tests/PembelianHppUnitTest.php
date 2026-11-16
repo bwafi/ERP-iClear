@@ -113,9 +113,9 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $q = fn (string $sql) => $this->db->query($sql);
 
         $q("INSERT INTO unit (idunit, NAMA_UNIT) VALUES (1, 'Unit Satu'), (2, 'Unit Dua')");
-        $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES (35, 'ADMIN / KASIR', '[]')");
+        $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES (0, 'Finance', '[]'), (35, 'ADMIN / KASIR', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, STATUS_PEGAWAI)
-            VALUES (43, 1, 35, 'Kasir Satu', 1)");
+            VALUES (43, 1, 35, 'Kasir Satu', 1), (44, 1, 0, 'Finance Satu', 1)");
         $q("INSERT INTO pelanggan (id_pelanggan, nama, deleted) VALUES (1, 'Pelanggan', '0')");
         $q("INSERT INTO suplier (id_suplier, nama_suplier) VALUES (1, 'Supplier')");
         $q("INSERT INTO barang (idbarang, kode_barang, nama_barang, harga, harga_beli,
@@ -128,11 +128,11 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             VALUES (1, 1, 5, 0), (1, 2, 5, 0)");
     }
 
-    private function sesi(int $jabatan = 35): void
+    private function sesi(int $jabatan = 35, int $idAkun = 43): void
     {
         $this->withSession([
             'logged_in'    => true,
-            'ID_AKUN'      => 43,
+            'ID_AKUN'      => $idAkun,
             'ID_UNIT'      => 1,
             'ID_JABATAN'   => $jabatan,
             'NAMA'         => 'Tester',
@@ -141,9 +141,9 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         ]);
     }
 
-    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000')
+    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null)
     {
-        return $this->post('insert_pembelian', [
+        $payload = [
             'produk' => [
                 1 => [
                     'id'             => '1',
@@ -163,14 +163,21 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             'id_suplier_text' => '1',
             'id_pelanggan'    => '1',
             'tanggal_masuk'   => date('Y-m-d'),
-            'jatuh_tempo'     => date('Y-m-d'),
             'hutang'          => 'Rp 0',
             'total-harga'     => 'Rp ' . number_format($hargaBeli * $jumlah, 0, ',', '.'),
             'total-diskon'    => 'Rp ' . number_format($diskon, 0, ',', '.'),
             'total-ppn'       => 'Rp 0',
             'bayar'           => 'Rp ' . number_format($hargaBeli * $jumlah - $diskon + $biaya, 0, ',', '.'),
             'frontliner'      => $frontliner,
-        ]);
+            'unit_idunit'     => $unitId === null ? null : (string) $unitId,
+        ];
+
+        // $jatuhTempo = '' berarti field sengaja TIDAK dikirim (kasus ditolak).
+        if ($jatuhTempo !== '') {
+            $payload['jatuh_tempo'] = $jatuhTempo ?? date('Y-m-d');
+        }
+
+        return $this->post('insert_pembelian', $payload);
     }
 
     public function testPembelianMemakaiHargaBeliTerakhirHanyaUntukUnitItu(): void
@@ -216,6 +223,76 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $pembelian = $this->db->table('pembelian')->get()->getRow();
         $this->assertSame(43, (int) $pembelian->frontliner, 'frontliner dari POST harus diabaikan');
         $this->assertSame(43, (int) $pembelian->input_by, 'frontliner sama dengan input_by');
+    }
+
+    public function testTimTokoTidakBisaMemilihUnitLewatPost(): void
+    {
+        $this->sesi(35, 43);
+
+        // Kasir unit 1 mengirim unit 2 lewat POST: harus diabaikan.
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', 2)->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(1, (int) $pembelian->unit_idunit, 'unit POST harus diabaikan untuk tim toko');
+        $this->assertSame(
+            120000.0,
+            (float) $this->db->table('hpp_unit')
+                ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow()->hpp,
+            'HPP tetap tercatat di unit akun kasir'
+        );
+    }
+
+    public function testFinanceBolehMemilihUnitLewatPost(): void
+    {
+        // Akun Finance (jabatan 0) boleh mencatat pembelian untuk unit lain.
+        $this->sesi(0, 44);
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', 2)->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(2, (int) $pembelian->unit_idunit, 'unit pilihan Finance harus dipakai');
+        $this->assertSame(
+            120000.0,
+            (float) $this->db->table('hpp_unit')
+                ->where(['barang_idbarang' => 1, 'unit_idunit' => 2])->get()->getRow()->hpp,
+            'HPP masuk ke unit yang dipilih'
+        );
+        $this->assertSame(
+            100000.0,
+            (float) $this->db->table('hpp_unit')
+                ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow()->hpp,
+            'unit akun Finance tidak ikut berubah'
+        );
+    }
+
+    public function testPembelianDitolakBilaJatuhTempoKosong(): void
+    {
+        $this->sesi();
+
+        // Field jatuh_tempo sengaja tidak dikirim (form tidak lagi prefill).
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, '')->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
+        $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults(), 'detail tidak tersimpan');
+        $this->assertSame(
+            'Jatuh tempo wajib diisi dengan tanggal yang valid.',
+            session()->getFlashdata('gagal')
+        );
+    }
+
+    public function testPembelianDitolakBilaJatuhTempoBukanTanggalSah(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, '2026-02-30')->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
+        $this->assertSame(
+            100000.0,
+            (float) $this->db->table('hpp_unit')
+                ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow()->hpp,
+            'HPP lama dipertahankan'
+        );
     }
 
     public function testPembelianBatalBilaHppTidakValid(): void

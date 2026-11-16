@@ -30,9 +30,16 @@ class ModelBarang extends Model
             ->findAll();
     }
 
-    public function getAllBarang()
+    /**
+     * Daftar produk beserta stok & harga jual untuk satu unit.
+     *
+     * $idUnit diisi bila pemanggil menyediakan pilihan unit (mis. /pembelian
+     * untuk Finance/Root/Manager). Tanpa argumen, perilakunya tetap memakai
+     * unit sesi seperti sebelumnya.
+     */
+    public function getAllBarang(?int $idUnit = null)
     {
-        $id_unit = session('ID_UNIT');
+        $id_unit = $idUnit ?? session('ID_UNIT');
         return $this->select('barang.*, kategori.nama_kategori, stok_barang.stok_akhir, COALESCE(hju.harga_jual, barang.harga) AS harga_jual')
             ->join('kategori', 'kategori.id = barang.idkategori')
             ->join('stok_barang', 'stok_barang.idbarang = barang.idbarang AND stok_barang.id_unit = ' . (int)$id_unit, 'left')
