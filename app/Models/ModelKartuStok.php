@@ -87,7 +87,7 @@ class ModelKartuStok extends Model
             ->where('kategori.delete', '0');
     }
 
-    private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '')
+    private function applyKartuStokFilters($builder, $search = '', $unit = '', $ppn = '', $kategori = '', $stok = '')
     {
         if ($search !== '') {
             $builder->groupStart()
@@ -109,13 +109,32 @@ class ModelKartuStok extends Model
             $builder->where('barang.status_ppn', '0');
         }
 
+        if ($kategori !== '' && ctype_digit((string) $kategori)) {
+            $builder->where('barang.idkategori', (int) $kategori);
+        }
+
+        switch ($stok) {
+            case 'minus':
+                $builder->where('stok_barang.stok_akhir <', 0);
+                break;
+            case 'nol':
+                $builder->where('stok_barang.stok_akhir', 0);
+                break;
+            case 'non_positif':
+                $builder->where('stok_barang.stok_akhir <=', 0);
+                break;
+            case 'positif':
+                $builder->where('stok_barang.stok_akhir >', 0);
+                break;
+        }
+
         return $builder;
     }
 
     /**
      * Server-side processing DataTables Kartu Stok.
      */
-    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'stok_barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '')
+    public function getKartuStokDT($limit, $offset, $search = '', $orderCol = 'stok_barang.kode_barang', $orderDir = 'ASC', $unit = '', $ppn = '', $kategori = '', $stok = '')
     {
         $allowedOrder = [
             'stok_barang.kode_barang',
@@ -130,7 +149,7 @@ class ModelKartuStok extends Model
         }
         $orderDir = strtolower($orderDir) === 'desc' ? 'DESC' : 'ASC';
 
-        $builder = $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn);
+        $builder = $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn, $kategori, $stok);
 
         return $builder->orderBy($orderCol, $orderDir)
             ->limit($limit, $offset)
@@ -147,11 +166,11 @@ class ModelKartuStok extends Model
     }
 
     /**
-     * Total data setelah filter search/unit/ppn.
+     * Total data setelah filter search/unit/ppn/kategori/stok akhir.
      */
-    public function countKartuStokDT($search = '', $unit = '', $ppn = '')
+    public function countKartuStokDT($search = '', $unit = '', $ppn = '', $kategori = '', $stok = '')
     {
-        return $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn)->countAllResults(false);
+        return $this->applyKartuStokFilters($this->kartuStokBuilder(), $search, $unit, $ppn, $kategori, $stok)->countAllResults(false);
     }
 
     /**
@@ -269,7 +288,7 @@ class ModelKartuStok extends Model
     //     return $builder->get()->getResult();
     // }
 
-    public function exportfilter($namaUnit = null, $statusPpn = null)
+    public function exportfilter($namaUnit = null, $statusPpn = null, $kategori = null, $stok = null)
 {
     $builder = $this->select('stok_barang.*, barang.imei, barang.status_ppn, kategori.nama_kategori')
         ->join('barang', 'barang.kode_barang = stok_barang.kode_barang', 'left')
@@ -287,6 +306,27 @@ class ModelKartuStok extends Model
         $builder->where('barang.status_ppn', '1');
     } elseif ($statusPpn === 'Non PPN') {
         $builder->where('barang.status_ppn', '0');
+    }
+
+    // Filter kategori (id kategori)
+    if (!empty($kategori) && ctype_digit((string) $kategori)) {
+        $builder->where('barang.idkategori', (int) $kategori);
+    }
+
+    // Filter stok akhir
+    switch ($stok) {
+        case 'minus':
+            $builder->where('stok_barang.stok_akhir <', 0);
+            break;
+        case 'nol':
+            $builder->where('stok_barang.stok_akhir', 0);
+            break;
+        case 'non_positif':
+            $builder->where('stok_barang.stok_akhir <=', 0);
+            break;
+        case 'positif':
+            $builder->where('stok_barang.stok_akhir >', 0);
+            break;
     }
 
     return $builder->get()->getResult();

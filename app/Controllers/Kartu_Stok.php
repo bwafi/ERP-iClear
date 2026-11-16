@@ -9,6 +9,7 @@ use App\Models\ModelBarangUnit;
 use App\Models\ModelHargaJualUnit;
 use App\Models\ModelHppUnit;
 use App\Models\ModelKartuStok;
+use App\Models\ModelKategori;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -27,6 +28,7 @@ class Kartu_Stok extends BaseController
     protected $BarangUnitModel;
     protected $HargaJualUnitModel;
     protected $UnitModel;
+    protected $KategoriModel;
 
     public function __construct()
     {
@@ -37,6 +39,7 @@ class Kartu_Stok extends BaseController
         $this->BarangUnitModel = new ModelBarangUnit();
         $this->HargaJualUnitModel = new ModelHargaJualUnit();
         $this->UnitModel = new ModelUnit();
+        $this->KategoriModel = new ModelKategori();
     }
 
     public function index()
@@ -47,6 +50,7 @@ class Kartu_Stok extends BaseController
             'summary' => $this->KartuStokModel->getSummaryKartuStok(),
             'body'  => 'stok/kartu_stok',
             'unit' => $this->UnitModel->getUnit(),
+            'kategori' => $this->KategoriModel->getKategori(),
             'can_manage_produk_unit' => self::bolehKelolaProdukUnit((int) session('ID_JABATAN')),
         );
         return view('template', $data);
@@ -247,10 +251,15 @@ class Kartu_Stok extends BaseController
 
         $unit = trim((string)$this->request->getGet('unit'));
         $ppn  = trim((string)$this->request->getGet('status_ppn'));
+        $kategori = trim((string)$this->request->getGet('kategori'));
+        $stok = trim((string)$this->request->getGet('stok'));
+        if (!in_array($stok, ['minus', 'nol', 'non_positif', 'positif'], true)) {
+            $stok = '';
+        }
 
         $totalRecords = $this->KartuStokModel->countKartuStokAll();
-        $filteredRecords = $this->KartuStokModel->countKartuStokDT($search, $unit, $ppn);
-        $rows = $this->KartuStokModel->getKartuStokDT($length, $start, $search, $orderCol, $orderDir, $unit, $ppn);
+        $filteredRecords = $this->KartuStokModel->countKartuStokDT($search, $unit, $ppn, $kategori, $stok);
+        $rows = $this->KartuStokModel->getKartuStokDT($length, $start, $search, $orderCol, $orderDir, $unit, $ppn, $kategori, $stok);
 
         $data = [];
         foreach ($rows as $row) {
@@ -305,6 +314,8 @@ class Kartu_Stok extends BaseController
         // $tanggalAkhir = $this->request->getPost('tanggal_akhir');
         $unit = $this->request->getPost('unit');
         $statusPpn = $this->request->getPost('status_ppn');
+        $kategori = $this->request->getPost('kategori');
+        $stokAkhir = $this->request->getPost('stok_akhir');
 
         // if (empty($tanggalAwal)) {
         //     $tanggalAwal = $this->KartuStokModel->getMinTanggalStok();
@@ -314,7 +325,7 @@ class Kartu_Stok extends BaseController
         //     $tanggalAkhir = date('Y-m-d');
         // }
 
-        $stok = $this->KartuStokModel->exportfilter( $unit, $statusPpn);
+        $stok = $this->KartuStokModel->exportfilter( $unit, $statusPpn, $kategori, $stokAkhir);
         // $stok = $this->KartuStokModel->exportfilter($tanggalAwal, $tanggalAkhir, $unit, $statusPpn);
 
         $spreadsheet = new Spreadsheet();

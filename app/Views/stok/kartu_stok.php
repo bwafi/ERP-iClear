@@ -51,6 +51,8 @@ $ringkasan = [
     <form id="exportForm" method="post" action="<?= base_url('export/kartu_stock') ?>">
         <input type="hidden" name="unit" id="expUnit" value="">
         <input type="hidden" name="status_ppn" id="expPpn" value="">
+        <input type="hidden" name="kategori" id="expKategori" value="">
+        <input type="hidden" name="stok_akhir" id="expStok" value="">
     </form>
 
     <div class="ks-toolbar">
@@ -64,6 +66,29 @@ $ringkasan = [
                             <?= esc($row->NAMA_UNIT) ?>
                         </option>
                     <?php endforeach; ?>
+                </select>
+            </label>
+
+            <label class="ks-field" for="kategoriFilter">
+                <span>Kategori</span>
+                <select class="form-select ks-select" id="kategoriFilter" name="kategori">
+                    <option value="">Semua kategori</option>
+                    <?php foreach ($kategori as $row) : ?>
+                        <option value="<?= esc($row->id) ?>">
+                            <?= esc($row->nama_kategori) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+
+            <label class="ks-field" for="stokFilter">
+                <span>Stok akhir</span>
+                <select class="form-select ks-select" id="stokFilter" name="stok">
+                    <option value="">Semua stok</option>
+                    <option value="minus">Minus (&lt; 0)</option>
+                    <option value="non_positif">Minus &amp; nol (≤ 0)</option>
+                    <option value="nol">Nol (= 0)</option>
+                    <option value="positif">Ada stok (&gt; 0)</option>
                 </select>
             </label>
 
@@ -290,6 +315,8 @@ $ringkasan = [
                 type: 'GET',
                 data: function(d) {
                     d.unit = $('#unitFilter').val();
+                    d.kategori = $('#kategoriFilter').val();
+                    d.stok = $('#stokFilter').val();
                     d.status_ppn = $('#ppnFilter').val();
                     d[csrfName] = document.querySelector('input[name="' + csrfName + '"]') ?
                         document.querySelector('input[name="' + csrfName + '"]').value : '';
@@ -426,12 +453,14 @@ $ringkasan = [
             toggleDetailRow($(this).closest('tr'));
         });
 
-        $('#unitFilter, #ppnFilter').on('change', function() {
+        $('#unitFilter, #kategoriFilter, #stokFilter, #ppnFilter').on('change', function() {
             table.draw();
         });
 
         $('#exportBtn').on('click', function() {
             $('#expUnit').val($('#unitFilter').val());
+            $('#expKategori').val($('#kategoriFilter').val());
+            $('#expStok').val($('#stokFilter').val());
             $('#expPpn').val($('#ppnFilter').val());
             $('#exportForm').submit();
         });
