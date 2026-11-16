@@ -42,33 +42,135 @@ container, jadi PHP di host tidak dipakai untuk proyek ini.
 
 ---
 
-## Quickstart (Docker)
+## Menjalankan aplikasi dengan Docker
+
+Panduan ini dimulai dari clone baru sampai aplikasi bisa dibuka di browser.
+Stack berisi 3 container: `erp-app` (PHP 7.4), `erp-db` (MariaDB 10.6), dan
+`erp-adminer` (GUI database). Source code di-mount dari folder proyek, jadi
+perubahan file langsung terlihat tanpa rebuild.
+
+### 1. Pastikan Docker siap
+
+```bash
+docker --version
+docker compose version   # harus plugin v2: "Docker Compose version v2.x"
+docker ps                # tidak boleh "permission denied"
+```
+
+Kalau belum ada:
+
+- **Arch Linux**
+  ```bash
+  sudo pacman -S docker docker-compose
+  sudo systemctl enable --now docker
+  sudo usermod -aG docker "$USER"   # logout/login agar group aktif
+  ```
+- **Ubuntu/Debian** — ikuti panduan resmi Docker Engine + plugin Compose,
+  lalu tambahkan user ke group `docker` dan login ulang.
+
+Port **8080** (aplikasi) dan **8081** (Adminer) harus bebas. Kalau ada container
+lama bernama `erp-app`, `erp-db`, atau `erp-adminer` yang masih jalan, hentikan
+dulu — `start.sh` sengaja menolak start agar tidak berebut port/volume.
+
+### 2. Clone dan siapkan `.env`
 
 ```bash
 git clone <url-repo> ERP-iClear
 cd ERP-iClear
-
-cp .env.example .env          # konfigurasi lokal; file ini TIDAK ikut Git
-./docker/scripts/start.sh     # build image + buat volume + jalankan stack
+cp .env.example .env
 ```
 
-Buka:
+`.env` berisi konfigurasi lokal dan **tidak ikut Git**. Nilai default sudah cocok
+dengan `compose.yaml`: host database `erp-db`, database `erp_local`, user/password
+`erp`/`erp`, dan `app.baseURL = http://localhost:8080/`.
+Kalau `.env` lupa dibuat, `start.sh` akan menyalinnya otomatis dari `.env.example`.
 
-- Aplikasi: <http://localhost:8080>
-- Adminer: <http://localhost:8081> → server `erp-db`, user `erp`, db `erp_local`
+### 3. Build image dan install dependency PHP
 
-Database yang baru dibuat masih kosong. Isi dengan migrasi dan/atau restore dump:
+Folder `vendor/` tidak di-commit dan tidak ikut image, jadi clone baru harus
+menginstalnya sekali. Jalankan **sebelum** stack dinyalakan supaya container
+aplikasi tidak restart terus karena autoload belum ada:
 
 ```bash
+docker volume create erp-db-data          # idempotent; dibutuhkan service database
+docker compose build erp-app
+docker compose run --rm --no-deps erp-app composer install
+```
+
+### 4. Jalankan stack
+
+```bash
+./docker/scripts/start.sh
+```
+
+Script ini membuat `.env` bila belum ada (langkah 2 bisa dilewati), membuat
+volume `erp-db-data` bila belum ada, lalu menjalankan
+`docker compose up -d --build`. Alternatif manual:
+
+```bash
+docker volume create erp-db-data
+docker compose up -d --build
+```
+
+Cek status: `docker compose ps` (semua service harus `running`/`healthy`).
+
+### 5. Siapkan database
+
+Database baru masih kosong. Pilih salah satu:
+
+```bash
+# a) buat schema dari migrasi
 docker compose exec erp-app php spark migrate
 
-# restore dari backup (./docker/scripts/backup-db.sh)
-gunzip -c backups/xxx.sql.gz | docker compose exec -T erp-db \
+# b) restore dump yang sudah ada (paling praktis untuk data lengkap)
+gunzip -c backups/erp_local_XXXX.sql.gz | docker compose exec -T erp-db \
   mariadb -uerp -perp erp_local
 ```
 
-Perintah harian (`start`, `stop`, `logs`, `shell`, `backup-db`, `backup-files`)
-dan troubleshooting ada di **[`docker/README.md`](docker/README.md)**.
+> [!NOTE]
+> Migrasi hanya membuat tabel. **Belum ada akun login** di database kosong, jadi
+> untuk bisa masuk gunakan restore dump, atau minta tim developer membuatkan akun
+> admin. Sebelum restore, backup database lama dulu — lihat bagian restore di
+> [`docker/README.md`](docker/README.md).
+
+### 6. Buka aplikasi
+
+- Aplikasi: <http://localhost:8080> (otomatis diarahkan ke halaman login)
+- Adminer: <http://localhost:8081> → server `erp-db`, user `erp`, password `erp`,
+  database `erp_local`
+
+Login memakai akun yang ada di database (hasil restore). Tidak ada akun default.
+
+### 7. Perintah harian
+
+| Perintah | Fungsi |
+|---|---|
+| `docker compose ps` | cek status container |
+| `./docker/scripts/logs.sh erp-app` | ikuti log aplikasi |
+| `./docker/scripts/shell.sh` | masuk shell container PHP |
+| `./docker/scripts/stop.sh` | hentikan stack (data tetap aman) |
+| `./docker/scripts/backup-db.sh` | dump database ke `backups/*.sql.gz` |
+
+Menjalankan ulang setelah reboot: `docker compose start` atau
+`./docker/scripts/start.sh`.
+
+> [!WARNING]
+> Jangan memakai `docker compose down -v` — opsi `-v` menghapus volume
+> `erp-db-data` beserta seluruh isi database. Untuk berhenti, pakai
+> `./docker/scripts/stop.sh`.
+
+### Troubleshooting singkat
+
+| Gejala | Solusi |
+|---|---|
+| `permission denied ... docker.sock` | logout/login setelah `usermod -aG docker`, atau sementara `newgrp docker` |
+| `docker: unknown command: docker compose` | plugin Compose belum ada: `sudo pacman -S docker-compose` (Arch) |
+| `port is already allocated` | hentikan container lama: `docker stop erp-adminer erp-app erp-db` |
+| Halaman 500 setelah start | cek `docker compose logs erp-app` dan `writable/logs/` |
+| Error koneksi database | pastikan `.env` memakai host `erp-db` (bukan `localhost`) dan `docker compose ps` menunjukkan `erp-db` healthy |
+
+Backup, restore, migrasi dari container lama, dan troubleshooting lengkap ada di
+**[`docker/README.md`](docker/README.md)**.
 
 ---
 

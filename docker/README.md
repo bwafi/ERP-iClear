@@ -32,7 +32,10 @@ kecuali `.env` (kredensial lokal) dan isi database (`backups/`).
 
 ```bash
 cp .env.example .env          # konfigurasi lokal (tidak ikut Git)
-./docker/scripts/start.sh     # build image + jalankan stack
+docker volume create erp-db-data   # idempotent; volume juga dibuat oleh start.sh
+docker compose build erp-app
+docker compose run --rm --no-deps erp-app composer install   # clone baru: vendor/ belum ada
+./docker/scripts/start.sh     # jalankan stack
 ```
 
 Lalu buka:
