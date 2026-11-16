@@ -61,7 +61,12 @@ class DaftarTagihanViewTest extends CIUnitTestCase
         return (string) view('hutang/daftar_tagihan', [
             'hutang' => $rows,
             'bank'   => [
-                (object) ['idbank' => 7, 'nama_bank' => 'BCA', 'norek' => '1234567890'],
+                (object) [
+                    'idbank'     => 7,
+                    'nama_bank'  => 'BCA',
+                    'atas_nama'  => 'SABRINA RATU SALSABILLA',
+                    'norek'      => '1234567890',
+                ],
             ],
         ]);
     }
@@ -102,6 +107,15 @@ class DaftarTagihanViewTest extends CIUnitTestCase
         $this->assertStringContainsString('data-sisa="500000"', $html);
         $this->assertStringContainsString('data-idpembelian="12"', $html);
         $this->assertStringContainsString('BCA', $html);
+        // Label rekening = nama bank + pemilik; norek tidak ditampilkan.
+        $this->assertStringContainsString('BCA · SABRINA RATU SALSABILLA', $html);
+        $this->assertStringNotContainsString('1234567890', $html);
+
+        // Hanya satu metode pembayaran yang tampil pada satu waktu.
+        $this->assertStringContainsString('data-dt-method="tunai"', $html);
+        $this->assertStringContainsString('data-dt-method="bank"', $html);
+        $this->assertStringContainsString('data-dt-panel="tunai"', $html);
+        $this->assertMatchesRegularExpression('/data-dt-panel="bank"[^>]*hidden/', $html);
 
         // Tidak memakai id DataTables global (hindari init ganda).
         $this->assertStringNotContainsString('id="zero_config"', $html);
@@ -149,5 +163,6 @@ class DaftarTagihanViewTest extends CIUnitTestCase
         $this->assertStringContainsString('Belum ada rekening', $html);
         $this->assertStringContainsString('Pembayaran bank nonaktif', $html);
         $this->assertMatchesRegularExpression('/id="dt-pay-bank"[^>]*disabled/', $html);
+        $this->assertMatchesRegularExpression('/data-dt-method="bank"[^>]*disabled/', $html);
     }
 }

@@ -11,6 +11,23 @@
 
 $rp = static fn($n) => 'Rp ' . number_format((float) ($n ?? 0), 0, ',', '.');
 
+/**
+ * Label rekening untuk dropdown pembayaran: nama bank + pemilik rekening.
+ * Nomor rekening sengaja tidak ditampilkan (opsional secara bisnis); norek
+ * hanya dipakai sebagai pembeda kalau nama pemilik belum diisi.
+ */
+$bankLabel = static function ($b): string {
+    $nama    = trim((string) ($b->nama_bank ?? '')) ?: 'Bank';
+    $pemilik = trim((string) ($b->atas_nama ?? ''));
+    $norek   = trim((string) ($b->norek ?? ''));
+
+    if ($pemilik !== '') {
+        return $nama . ' · ' . $pemilik;
+    }
+
+    return $norek !== '' ? $nama . ' · ' . $norek : $nama;
+};
+
 $bulan = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 $tgl = static function ($value) use ($bulan): array {
     $value = trim((string) ($value ?? ''));
@@ -295,17 +312,28 @@ $jumlahTagihan = count($rows);
 
                 <p class="dt-modal-meta" id="dt-pay-detail">—</p>
 
-                <div class="mb-3">
+                <div class="dt-methods" role="group" aria-label="Metode pembayaran">
+                    <button type="button" class="dt-method is-active" data-dt-method="tunai"
+                        aria-pressed="true" aria-controls="dt-panel-tunai">
+                        <iconify-icon icon="solar:wad-of-money-linear" aria-hidden="true"></iconify-icon>
+                        Tunai
+                    </button>
+                    <button type="button" class="dt-method" data-dt-method="bank"
+                        aria-pressed="false" aria-controls="dt-panel-bank"
+                        <?= empty($bank) ? 'disabled title="Belum ada rekening bank aktif"' : '' ?>>
+                        <iconify-icon icon="solar:card-linear" aria-hidden="true"></iconify-icon>
+                        Bank
+                    </button>
+                </div>
+
+                <div id="dt-panel-tunai" data-dt-panel="tunai" role="group" aria-label="Pembayaran tunai">
                     <label class="dt-modal-label" for="dt-pay-tunai">Bayar tunai</label>
                     <input type="text" class="dt-modal-input" id="dt-pay-tunai" name="bayar_tunai"
                         inputmode="numeric" autocomplete="off" value="Rp 0">
-                    <div class="dt-modal-hint">
-                        <button type="button" class="dt-link-btn" id="dt-pay-full">Isi sisa penuh</button>
-                    </div>
                 </div>
 
-                <div class="dt-modal-grid">
-                    <div>
+                <div id="dt-panel-bank" data-dt-panel="bank" role="group" aria-label="Pembayaran bank" hidden>
+                    <div class="mb-3">
                         <label class="dt-modal-label" for="dt-pay-bank">Bayar bank</label>
                         <input type="text" class="dt-modal-input" id="dt-pay-bank" name="bayar_bank"
                             inputmode="numeric" autocomplete="off" value="Rp 0"
@@ -316,18 +344,22 @@ $jumlahTagihan = count($rows);
                         <?php if (empty($bank)) : ?>
                             <input type="text" class="dt-modal-input" value="Belum ada rekening" disabled>
                             <input type="hidden" name="bank_idbank" id="dt-pay-rekening" value="">
-                            <div class="dt-modal-hint">Pembayaran bank nonaktif sampai rekening ditambahkan.</div>
+                            <div class="dt-modal-hint">Pembayaran bank nonaktif — tidak ada rekening yang bisa dipakai.</div>
                         <?php else : ?>
                             <select class="dt-modal-input" id="dt-pay-rekening" name="bank_idbank">
                                 <option value="">Pilih rekening (opsional)</option>
                                 <?php foreach ($bank as $b) : ?>
                                     <option value="<?= esc($b->idbank) ?>">
-                                        <?= esc($b->nama_bank) ?><?= !empty($b->norek) ? ' · ' . esc($b->norek) : '' ?>
+                                        <?= esc($bankLabel($b)) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                         <?php endif; ?>
                     </div>
+                </div>
+
+                <div class="dt-modal-hint">
+                    <button type="button" class="dt-link-btn" id="dt-pay-full">Isi sisa penuh</button>
                 </div>
 
                 <div class="dt-modal-calc">
@@ -454,6 +486,9 @@ $jumlahTagihan = count($rows);
         var errorLabel = document.getElementById('dt-pay-error');
         var submit = document.getElementById('dt-pay-submit');
         var fullButton = document.getElementById('dt-pay-full');
+        var methodButtons = Array.prototype.slice.call(modal.querySelectorAll('[data-dt-method]'));
+        var methodPanels = Array.prototype.slice.call(modal.querySelectorAll('[data-dt-panel]'));
+        var metode = 'tunai';
         var sisaHutang = 0;
 
         function digits(value) {
@@ -469,13 +504,14 @@ $jumlahTagihan = count($rows);
         }
 
         function refreshTotal() {
-            var tunai = toNumber(tunaiInput.value);
-            var bank = toNumber(bankInput.value);
+            // Hanya metode aktif yang dihitung; field metode lain di-nol-kan.
+            var tunai = metode === 'tunai' ? toNumber(tunaiInput.value) : 0;
+            var bank = metode === 'bank' ? toNumber(bankInput.value) : 0;
             var total = tunai + bank;
             var setelah = Math.max(0, sisaHutang - total);
             var kembali = Math.max(0, total - sisaHutang);
             var bankDipilih = !rekeningSelect || rekeningSelect.tagName !== 'SELECT' || rekeningSelect.value !== '';
-            var bankKurang = bank > 0 && !bankDipilih;
+            var bankKurang = metode === 'bank' && bank > 0 && !bankDipilih;
 
             sisaInput.value = setelah;
             afterLabel.textContent = formatRupiah(setelah);
@@ -487,6 +523,37 @@ $jumlahTagihan = count($rows);
             }
 
             submit.disabled = total <= 0 || bankKurang;
+        }
+
+        function setMethod(next, focus) {
+            metode = next;
+
+            methodButtons.forEach(function (button) {
+                var active = button.getAttribute('data-dt-method') === next;
+                button.classList.toggle('is-active', active);
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+
+            methodPanels.forEach(function (panel) {
+                panel.hidden = panel.getAttribute('data-dt-panel') !== next;
+            });
+
+            // Field metode yang tidak dipakai tidak boleh ikut terkirim.
+            if (next === 'tunai') {
+                bankInput.value = 'Rp 0';
+                if (rekeningSelect && rekeningSelect.tagName === 'SELECT') {
+                    rekeningSelect.value = '';
+                    rekeningSelect.classList.remove('is-invalid');
+                }
+            } else {
+                tunaiInput.value = 'Rp 0';
+            }
+
+            refreshTotal();
+
+            if (focus) {
+                (next === 'tunai' ? tunaiInput : bankInput).focus();
+            }
         }
 
         function bindRupiahInput(input) {
@@ -515,16 +582,26 @@ $jumlahTagihan = count($rows);
         bindRupiahInput(tunaiInput);
         bindRupiahInput(bankInput);
 
+        methodButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                if (button.disabled) {
+                    return;
+                }
+
+                setMethod(button.getAttribute('data-dt-method'), true);
+            });
+        });
+
         if (rekeningSelect) {
             rekeningSelect.addEventListener('change', refreshTotal);
         }
 
         if (fullButton) {
             fullButton.addEventListener('click', function () {
-                var bank = toNumber(bankInput.value);
-                tunaiInput.value = formatRupiah(Math.max(0, sisaHutang - bank));
+                var target = metode === 'tunai' ? tunaiInput : bankInput;
+                target.value = formatRupiah(sisaHutang);
                 refreshTotal();
-                tunaiInput.focus();
+                target.focus();
             });
         }
 
@@ -545,25 +622,23 @@ $jumlahTagihan = count($rows);
             ].filter(Boolean).join(' · ');
 
             sisaLabel.textContent = formatRupiah(sisaHutang);
-            tunaiInput.value = 'Rp 0';
-            bankInput.value = 'Rp 0';
-            if (rekeningSelect && rekeningSelect.tagName === 'SELECT') {
-                rekeningSelect.value = '';
-                rekeningSelect.classList.remove('is-invalid');
-            }
+            setMethod('tunai');
             errorLabel.textContent = '';
             refreshTotal();
         });
 
         form.addEventListener('submit', function (event) {
-            var total = toNumber(tunaiInput.value) + toNumber(bankInput.value);
-            var bank = toNumber(bankInput.value);
-            var bankKurang = bank > 0 && rekeningSelect && rekeningSelect.tagName === 'SELECT' && rekeningSelect.value === '';
+            var total = toNumber(metode === 'tunai' ? tunaiInput.value : bankInput.value);
+            var bank = metode === 'bank' ? toNumber(bankInput.value) : 0;
+            var bankKurang = metode === 'bank' && bank > 0 && rekeningSelect
+                && rekeningSelect.tagName === 'SELECT' && rekeningSelect.value === '';
 
             if (total <= 0 || bankKurang) {
                 event.preventDefault();
                 if (total <= 0) {
-                    errorLabel.textContent = 'Isi nominal tunai atau bank terlebih dahulu.';
+                    errorLabel.textContent = metode === 'tunai'
+                        ? 'Isi nominal tunai terlebih dahulu.'
+                        : 'Isi nominal bank terlebih dahulu.';
                 }
             }
         });

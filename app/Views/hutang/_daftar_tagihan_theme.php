@@ -624,10 +624,58 @@
         margin-bottom: 14px;
     }
 
-    .dt-modal-grid {
+    .dt-methods {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
+        gap: 4px;
+        padding: 4px;
+        margin-bottom: 14px;
+        border: 1px solid var(--dt-rule);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-subtle);
+    }
+
+    .dt-method {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 6px 10px;
+        border: 1px solid transparent;
+        border-radius: calc(var(--dt-radius-sm) - 2px);
+        background: transparent;
+        color: var(--dt-muted);
+        font-family: inherit;
+        font-size: .8rem;
+        font-weight: 650;
+        cursor: pointer;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+
+    .dt-method iconify-icon {
+        flex: none;
+        font-size: 1.1em;
+    }
+
+    .dt-method:hover:not(:disabled) {
+        color: var(--dt-ink);
+    }
+
+    .dt-method.is-active {
+        color: var(--dt-accent-ink);
+        background: var(--dt-surface);
+        border-color: var(--dt-rule);
+    }
+
+    .dt-method:focus-visible {
+        outline: 2px solid var(--dt-accent-ink);
+        outline-offset: 2px;
+    }
+
+    .dt-method:disabled {
+        opacity: .45;
+        cursor: not-allowed;
     }
 
     .dt-modal-label {
@@ -848,7 +896,6 @@
             align-items: flex-end;
         }
 
-        .dt-modal-grid,
         .dt-modal-calc {
             grid-template-columns: 1fr;
         }

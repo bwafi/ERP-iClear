@@ -18,6 +18,8 @@ use App\Models\ModelPembayaranHutang;
 use App\Models\ModelPembelian;
 use App\Libraries\ModeKasBank;
 use App\Exceptions\PostingLedgerException;
+use App\Services\Finance\BankRekeningValidator;
+use App\Services\Finance\FinanceScopeService;
 
 
 
@@ -46,6 +48,35 @@ class PembayaranHutang extends BaseController
         $this->JurnalModel = new ModelJurnal();
         $this->PembayaranHutangModel = new ModelPembayaranHutang;
         $this->PembelianModel = new ModelPembelian();
+    }
+
+    /**
+     * Rekening yang boleh dipilih pada pembayaran hutang.
+     *
+     * Role lintas unit (Finance/Root/Direktur/Manager — sama dengan
+     * `FinanceScopeService::inputRoles()`) tetap melihat semua rekening.
+     * Role unit hanya melihat rekening yang boleh dipakai unit login:
+     * milik unit itu sendiri atau shared yang dialokasikan ke unit itu.
+     * Rekening Finance/HO tidak ikut untuk role unit.
+     *
+     * @return object[]
+     */
+    protected function bankUntukPembayaran(int $role, int $unitId): array
+    {
+        if (in_array($role, FinanceScopeService::inputRoles(), true)) {
+            return $this->BankModel->getBank();
+        }
+
+        return $this->BankModel->getBankDalamScopeUnit($unitId);
+    }
+
+    /**
+     * Role unit wajib divalidasi ulang di server saat memilih rekening bank;
+     * role lintas unit tetap memakai semua rekening seperti sebelumnya.
+     */
+    protected function wajibValidasiBankUnit(int $role): bool
+    {
+        return ! in_array($role, FinanceScopeService::inputRoles(), true);
     }
 
     public function riwayat_pembayaran()
@@ -150,7 +181,10 @@ class PembayaranHutang extends BaseController
     {
         $data = array(
             'body' => 'hutang/daftar_tagihan',
-            'bank' => $this->BankModel->getBank(),
+            'bank' => $this->bankUntukPembayaran(
+                (int) session('ID_JABATAN'),
+                (int) session('ID_UNIT')
+            ),
             'hutang' => $this->PembelianModel->getBelumLunas()
         );
         return view('template', $data);
@@ -167,6 +201,28 @@ class PembayaranHutang extends BaseController
         $idpembelian = $this->request->getPost('idpembelian');
         $sisa_hutang = $this->sanitizeRupiah($this->request->getPost('sisa'));
         $idpembelian = $this->request->getPost('idpembelian');
+
+        // Role unit hanya boleh memakai rekening yang boleh dipakai unitnya.
+        // Divalidasi ulang di server: dropdown yang tersaring bukan pengaman.
+        $roleLogin = (int) session('ID_JABATAN');
+        $unitLogin = (int) session('ID_UNIT');
+
+        if ($bayar_bank > 0 && $this->wajibValidasiBankUnit($roleLogin)) {
+            $validasiBank = (new BankRekeningValidator())->validateUntukUnit(
+                is_string($bank_idbank) ? $bank_idbank : null,
+                $unitLogin,
+                $roleLogin,
+                false
+            );
+
+            if (! $validasiBank['ok']) {
+                session()->setFlashdata('gagal', $validasiBank['alasan']);
+
+                return redirect()->to(base_url('daftar_tagihan'));
+            }
+
+            $bank_idbank = $validasiBank['idbank'];
+        }
 
         $data = array(
             'tanggal_bayar' => date('Y-m-d'),
