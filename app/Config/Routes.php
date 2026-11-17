@@ -790,3 +790,5 @@ $routes->get('key_performance', 'KeyPerformance::index', ['filter' => 'auth']);
 $routes->post('insert_penilaian_Key', 'KeyPerformance::insert_penilaian', ['filter' => 'auth']);
 $routes->post('update_penilaian_Key', 'KeyPerformance::update_penilaian', ['filter' => 'auth']);
 $routes->post('delete_penilaian_KPI', 'KeyPerformance::delete_penilaian', ['filter' => 'auth']);
+
+$routes->get('ai-os/chat', 'AiOsChat::enter', ['filter' => 'auth']);
