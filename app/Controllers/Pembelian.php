@@ -28,6 +28,7 @@ use App\Models\ModelUnit;
 use App\Models\ModelKasKeluar;
 use App\Services\Finance\BankRekeningValidator;
 use App\Services\Pembelian\PembelianCalculator;
+use App\Services\Pembelian\PembelianPaymentSplit;
 
 class Pembelian extends BaseController
 
@@ -361,8 +362,8 @@ class Pembelian extends BaseController
         if (! in_array($jenisPembayaran, ['tempo', 'lunas'], true)) {
             return $gagal('Jenis pembayaran wajib dipilih: Tempo atau Lunas.');
         }
-        if ($jenisPembayaran === 'lunas' && ! in_array($metodeBayar, ['tunai', 'transfer'], true)) {
-            return $gagal('Metode pembayaran Lunas wajib dipilih: Tunai atau Transfer.');
+        if ($jenisPembayaran === 'lunas' && ! in_array($metodeBayar, ['tunai', 'transfer', 'tunai_transfer'], true)) {
+            return $gagal('Metode pembayaran Lunas wajib dipilih: Tunai, Transfer, atau Tunai + Transfer.');
         }
 
         // Jatuh tempo hanya dipakai Tempo. Form tidak memberi nilai default
@@ -400,42 +401,51 @@ class Pembelian extends BaseController
             }
         }
 
-        $bankData = $this->request->getPost('bank');
         $bolehUbahHargaJual = Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN'));
 
         // Normalisasi pembayaran: Tempo tidak menerima uang sekarang; Lunas
-        // selalu membayar penuh (tunai atau satu rekening bank). Nominal tidak
-        // dipercaya dari POST supaya sisa dan kas keluar tidak bisa dipisah.
+        // boleh tunai, transfer, atau keduanya. Total komponen dihitung ulang
+        // di server dan wajib tepat sama dengan total pembelian supaya sisa,
+        // kas keluar, dan jurnal tidak bisa dipisah dari nominal yang dibayar.
+        $bankTervalidasi = [];
         $bayar_tunai = 0;
         $totalBayarBank = 0;
         $idbankPembayaran = null;
+
         if ($jenisPembayaran === 'tempo') {
             $sisa = $total_harga;
-            $bankData = [];
         } else {
-            $sisa = 0;
-            if ($metodeBayar === 'tunai') {
-                $bayar_tunai = $total_harga;
-                $bankData = [];
-            } else {
-                $barisBank = is_array($bankData)
-                    ? array_values(array_filter($bankData, static function ($b) {
-                        return is_array($b) && trim((string) ($b['id'] ?? '')) !== '';
-                    }))
-                    : [];
-                if (count($barisBank) !== 1) {
-                    return $gagal('Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.');
-                }
+            $split = (new PembelianPaymentSplit())->normalize($this->request->getPost());
+            if ($split['errors'] !== []) {
+                return $gagal($split['errors'][0]);
+            }
 
-                $idbankLunas = trim((string) $barisBank[0]['id']);
-                $cekRekening = (new BankRekeningValidator())->validateUntukUnit($idbankLunas, $useridunit, $role);
+            if ($split['total'] !== $total_harga) {
+                $selisih = $total_harga - $split['total'];
+
+                return $gagal($selisih > 0
+                    ? 'Pembayaran Lunas kurang Rp ' . number_format($selisih, 0, ',', '.') . '. Lunas wajib dibayar penuh.'
+                    : 'Pembayaran Lunas melebihi total Rp ' . number_format(-$selisih, 0, ',', '.') . '.');
+            }
+
+            foreach ($split['banks'] as $baris) {
+                $cekRekening = (new BankRekeningValidator())->validateUntukUnit($baris['id'], $useridunit, $role, false);
                 if (! $cekRekening['ok']) {
                     return $gagal('Rekening pembayaran tidak valid: ' . $cekRekening['alasan']);
                 }
 
-                $idbankPembayaran = (string) $cekRekening['idbank'];
-                $totalBayarBank = $total_harga;
+                $bankTervalidasi[] = [
+                    'id'     => (string) $cekRekening['idbank'],
+                    'jumlah' => (int) $baris['jumlah'],
+                ];
             }
+
+            $bayar_tunai = (int) $split['cash'];
+            foreach ($bankTervalidasi as $baris) {
+                $totalBayarBank += $baris['jumlah'];
+            }
+            $sisa = 0;
+            $idbankPembayaran = count($bankTervalidasi) === 1 ? $bankTervalidasi[0]['id'] : null;
         }
 
         // Kategori persediaan untuk jurnal. Produk divalidasi di luar
@@ -509,14 +519,14 @@ class Pembelian extends BaseController
             if ($bayar_tunai > 0) {
                 $tambahJurnal('pembelian_lunas_tunai', $bayar_tunai, 'Pembayaran Tunai - Pembelian', 'pembayaran');
             }
-            if ($totalBayarBank > 0) {
+            foreach ($bankTervalidasi as $baris) {
                 // Template per rekening dipertahankan untuk kompatibilitas;
                 // rekening baru memakai template bank generik.
-                $templateBank = 'pembelian_lunas_bank_' . $idbankPembayaran;
+                $templateBank = 'pembelian_lunas_bank_' . $baris['id'];
                 if ($this->JurnalModel->templateRows($templateBank) === []) {
                     $templateBank = 'pembelian_lunas_bank';
                 }
-                $tambahJurnal($templateBank, $totalBayarBank, 'Pembayaran Bank - Pembelian', 'pembayaran');
+                $tambahJurnal($templateBank, (int) $baris['jumlah'], 'Pembayaran Bank - Pembelian', 'pembayaran');
             }
         }
 
@@ -600,16 +610,18 @@ class Pembelian extends BaseController
         }
         $idPembelian = (int) $idPembelian;
 
-        if ($jenisPembayaran === 'lunas' && $totalBayarBank > 0) {
-            $pembayaranTersimpan = $this->PembayaranBankModel->insertPembayaranBank([
-                'kode_pembayaran' => $kodePembayaran,
-                'bank_idbank' => $idbankPembayaran,
-                'jumlah' => $totalBayarBank,
-                'tabel_referensi' => 'pembelian',
-                'id_referensi' => $idPembelian,
-            ]);
-            if (! $pembayaranTersimpan) {
-                return $gagal('Pembayaran bank gagal disimpan.');
+        if ($jenisPembayaran === 'lunas') {
+            foreach ($bankTervalidasi as $baris) {
+                $pembayaranTersimpan = $this->PembayaranBankModel->insertPembayaranBank([
+                    'kode_pembayaran' => $kodePembayaran,
+                    'bank_idbank' => $baris['id'],
+                    'jumlah' => $baris['jumlah'],
+                    'tabel_referensi' => 'pembelian',
+                    'id_referensi' => $idPembelian,
+                ]);
+                if (! $pembayaranTersimpan) {
+                    return $gagal('Pembayaran bank gagal disimpan.');
+                }
             }
         }
 
@@ -686,21 +698,34 @@ class Pembelian extends BaseController
                 $nama
             );
 
-            $kasKeluarTersimpan = $this->KasKeluarModel->insert_KasKeluar([
-                'tanggal' => $tanggalMasuk,
-                'kategori_idkategori' => $this->idKategoriKasHpp($db),
-                'deskripsi' => 'Pembelian ' . $no_nota . ' - ' . $penerimaKasKeluar,
-                'jumlah' => (int) $total_bayar,
-                'penerima' => $penerimaKasKeluar,
-                'idunit' => $useridunit,
-                'jenis' => 'debet',
-                'idbank' => $idbankPembayaran,
-                'created_on' => date('Y-m-d H:i:s'),
-                'no_akun' => self::AKUN_PERSEDIAAN,
-            ]);
+            // Satu baris per komponen pembayaran: tunai memakai idbank NULL,
+            // tiap rekening bank memakai idbank-nya sendiri.
+            $komponenKas = [];
+            if ($bayar_tunai > 0) {
+                $komponenKas[] = ['jumlah' => $bayar_tunai, 'idbank' => null];
+            }
+            foreach ($bankTervalidasi as $baris) {
+                $komponenKas[] = ['jumlah' => $baris['jumlah'], 'idbank' => $baris['id']];
+            }
 
-            if (! $kasKeluarTersimpan) {
-                return $gagal('Kas keluar pembelian gagal disimpan.');
+            $kategoriKasHpp = $this->idKategoriKasHpp($db);
+            foreach ($komponenKas as $komponen) {
+                $kasKeluarTersimpan = $this->KasKeluarModel->insert_KasKeluar([
+                    'tanggal' => $tanggalMasuk,
+                    'kategori_idkategori' => $kategoriKasHpp,
+                    'deskripsi' => 'Pembelian ' . $no_nota . ' - ' . $penerimaKasKeluar,
+                    'jumlah' => (int) $komponen['jumlah'],
+                    'penerima' => $penerimaKasKeluar,
+                    'idunit' => $useridunit,
+                    'jenis' => 'debet',
+                    'idbank' => $komponen['idbank'],
+                    'created_on' => date('Y-m-d H:i:s'),
+                    'no_akun' => self::AKUN_PERSEDIAAN,
+                ]);
+
+                if (! $kasKeluarTersimpan) {
+                    return $gagal('Kas keluar pembelian gagal disimpan.');
+                }
             }
         }
 

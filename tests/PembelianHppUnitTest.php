@@ -39,10 +39,19 @@ final class PembelianHppUnitTest extends CIUnitTestCase
 
         $this->buatSkema();
         $this->sebarData();
+
+        // Simulasi mapping resmi untuk rekening kedua (bank 9019). Tanpa ini
+        // guard entitlement menolak rekening yang tidak ada di policy.
+        $finance = config(\Config\Finance::class);
+        $finance->rekeningResmiByBank['9019'] = [1, 2];
+        $finance->rekeningResmiMasterByBank['9019'] = ['unit_id' => null, 'is_shared' => 1];
     }
 
     protected function tearDown(): void
     {
+        $finance = config(\Config\Finance::class);
+        unset($finance->rekeningResmiByBank['9019'], $finance->rekeningResmiMasterByBank['9019']);
+
         foreach (self::TABEL as $tabel) {
             $this->db->query('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -171,6 +180,17 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             VALUES (2, NULL, 'BANK', 'BCA CV', '2', 'aktif', 1, 0)");
         $q("INSERT INTO alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal)
             VALUES (2, 1, 0), (2, 2, 0)");
+        // Rekening kedua untuk menguji transfer split ke lebih dari satu bank.
+        // Policy resmi hanya memberi satu rekening operasional per unit, jadi
+        // id test 9019 dipetakan sementara di setUp()/tearDown() — persis
+        // seperti Finance menambahkan mapping rekening kedua di produksi.
+        $q("INSERT INTO bank (idbank, jenis_bank, nama_bank, atas_nama, norek)
+            VALUES ('9019', 'bank', 'Mandiri', 'ICLEAR DIGITAL SOLUSI CV', '1234567890')");
+        $q("INSERT INTO akun_kas_bank (idakun_kas_bank, unit_id, tipe, nama_akun, bank_idbank,
+                status, is_shared, is_finance_ho)
+            VALUES (3, NULL, 'BANK', 'Mandiri CV', '9019', 'aktif', 1, 0)");
+        $q("INSERT INTO alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal)
+            VALUES (3, 1, 0), (3, 2, 0)");
 
         $this->sebarTemplateJurnal();
     }
@@ -243,7 +263,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         ]);
     }
 
-    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null, string $jenis = 'lunas', string $metode = 'tunai', array $bank = [], bool $ppn = false, array $override = [])
+    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null, string $jenis = 'lunas', string $metode = 'tunai', array $bank = [], bool $ppn = false, array $override = [], ?string $bayar = null)
     {
         $subtotal = $hargaBeli * $jumlah;
         $ppnAmount = $ppn ? (int) round(($subtotal - $diskon) * 0.11) : 0;
@@ -275,7 +295,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             'total-harga'     => 'Rp ' . number_format($total, 0, ',', '.'),
             'total-diskon'    => 'Rp ' . number_format($diskon, 0, ',', '.'),
             'total-ppn'       => 'Rp ' . number_format($ppnAmount, 0, ',', '.'),
-            'bayar'           => 'Rp ' . number_format($total, 0, ',', '.'),
+            'bayar'           => $bayar ?? 'Rp ' . number_format($total, 0, ',', '.'),
             'frontliner'      => $frontliner,
             'unit_idunit'     => $unitId === null ? null : (string) $unitId,
             'csrf_test_name'  => service('security')->getHash(),
@@ -509,7 +529,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
         $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults(), 'kas keluar tidak tersimpan');
         $this->assertSame(
-            'Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.',
+            'Pembayaran Lunas via Transfer wajib memilih minimal satu rekening bank.',
             session()->getFlashdata('gagal')
         );
     }
@@ -881,5 +901,196 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         }
 
         $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+    }
+
+    public function testSplitTunaiDanSatuBank(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'tunai_transfer',
+            [['id' => '2', 'jumlah' => '140000']],
+            false, [], 'Rp 100.000'
+        )->assertRedirect();
+
+        $p = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(100000, (int) $p->bayar_tunai);
+        $this->assertSame(140000, (int) $p->bayar_bank);
+        $this->assertSame(240000, (int) $p->total_bayar);
+        $this->assertSame(0, (int) $p->sisa);
+        $this->assertSame('Lunas', $p->status);
+        $this->assertSame('2', (string) $p->bank_idbank);
+
+        $this->assertSame(1, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(140000, (int) $this->db->table('pembayaran_bank')->get()->getRow()->jumlah);
+
+        $kas = $this->db->table('kas_keluar')->orderBy('idkas_keluar', 'ASC')->get()->getResult();
+        $this->assertCount(2, $kas);
+        $this->assertNull($kas[0]->idbank);
+        $this->assertSame(100000, (int) $kas[0]->jumlah);
+        $this->assertSame('2', (string) $kas[1]->idbank);
+        $this->assertSame(140000, (int) $kas[1]->jumlah);
+
+        $jurnal = $this->db->table('jurnal')
+            ->where(['tabel_referensi' => 'pembayaran_bank'])->get()->getResult();
+        $debet = 0;
+        $kredit = 0;
+        foreach ($jurnal as $row) {
+            $debet += (int) $row->debet;
+            $kredit += (int) $row->kredit;
+        }
+        $this->assertSame(240000, $debet);
+        $this->assertSame(240000, $kredit);
+    }
+
+    public function testSplitTunaiDanDuaBankMengosongkanBankIdbank(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'tunai_transfer',
+            [
+                ['id' => '2', 'jumlah' => '100000'],
+                ['id' => '9019', 'jumlah' => '90000'],
+            ],
+            false, [], 'Rp 50.000'
+        )->assertRedirect();
+
+        $p = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(50000, (int) $p->bayar_tunai);
+        $this->assertSame(190000, (int) $p->bayar_bank);
+        $this->assertNull($p->bank_idbank, 'multi-bank tidak punya satu id rekening');
+        $this->assertSame(2, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(3, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testSplitKurangDitolakTanpaSisaData(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'tunai_transfer',
+            [['id' => '2', 'jumlah' => '100000']],
+            false, [], 'Rp 50.000'
+        )->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertSame(0, $this->db->table('jurnal')->countAllResults());
+        $this->assertStringContainsString('kurang', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testSplitLebihDitolakTanpaSisaData(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'tunai_transfer',
+            [['id' => '2', 'jumlah' => '200000']],
+            false, [], 'Rp 100.000'
+        )->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertSame(0, $this->db->table('jurnal')->countAllResults());
+        $this->assertStringContainsString('melebihi', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testRekeningNolDitolakTanpaSisaData(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'transfer',
+            [['id' => '0', 'jumlah' => '240000']],
+            false, [], 'Rp 0'
+        )->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertStringContainsString('Rekening bank wajib dipilih', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testRekeningGandaDitolak(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'transfer',
+            [
+                ['id' => '2', 'jumlah' => '100000'],
+                ['id' => '2', 'jumlah' => '140000'],
+            ],
+            false, [], 'Rp 0'
+        )->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
+        $this->assertSame(0, $this->db->table('jurnal')->countAllResults());
+        $this->assertStringContainsString('lebih dari sekali', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testTunaiDenganBarisBankNyelipMengabaikanBank(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'tunai',
+            [['id' => '2', 'jumlah' => '240000']],
+            false, [], 'Rp 240.000'
+        )->assertRedirect();
+
+        $p = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(240000, (int) $p->bayar_tunai);
+        $this->assertSame(0, (int) $p->bayar_bank);
+        $this->assertSame(0, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(1, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testTunaiTransferDenganTunaiSajaDiterimaBilaPas(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, null,
+            'lunas', 'tunai_transfer', [], false, [], 'Rp 240.000'
+        )->assertRedirect();
+
+        $p = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(240000, (int) $p->bayar_tunai);
+        $this->assertSame(0, (int) $p->bayar_bank);
+        $this->assertSame(1, $this->db->table('kas_keluar')->countAllResults());
+    }
+
+    public function testTempoMengabaikanNominalPembayaran(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0, 2, 0.0, 0.0, '', '150000', null, '2026-12-31',
+            'tempo', 'tunai_transfer',
+            [['id' => '2', 'jumlah' => '240000']],
+            false, [], 'Rp 240.000'
+        )->assertRedirect();
+
+        $p = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(240000, (int) $p->sisa);
+        $this->assertSame('Belum Lunas', $p->status);
+        $this->assertSame(0, (int) $p->total_bayar);
+        $this->assertSame(0, $this->db->table('pembayaran_bank')->countAllResults());
+        $this->assertSame(0, $this->db->table('kas_keluar')->countAllResults());
     }
 }
