@@ -564,8 +564,12 @@
         background: transparent !important;
     }
 
+    /* Iconify menaruh <svg> sebagai display:block di dalam shadow DOM,
+       sehingga text-align:center tidak bisa memusatkannya saat host
+       melebar penuh. Host dibuat selebar ikon dan dipusatkan via margin. */
     .pj-empty iconify-icon {
         display: block !important;
+        width: fit-content;
         margin: 0 auto 8px !important;
         color: var(--pj-rule-strong);
     }
@@ -1272,6 +1276,7 @@
         .pj-empty td {
             display: block;
             padding: 28px 12px;
+            text-align: center;
         }
 
         .pj-empty td::before {

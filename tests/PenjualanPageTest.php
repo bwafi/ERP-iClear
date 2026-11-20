@@ -164,6 +164,21 @@ final class PenjualanPageTest extends CIUnitTestCase
         $this->assertStringNotContainsString('select-all-bundle', $html);
     }
 
+    public function testIkonEmptyStateDiTengah(): void
+    {
+        $html = $this->render();
+
+        preg_match('/\.pj-empty iconify-icon\s*\{([^}]*)\}/', $html, $rule);
+        $this->assertNotEmpty($rule, 'Aturan .pj-empty iconify-icon tidak ditemukan.');
+        $this->assertStringContainsString('width: fit-content', $rule[1]);
+        $this->assertStringContainsString('margin: 0 auto 8px', $rule[1]);
+
+        $this->assertMatchesRegularExpression(
+            '/\.pj-empty td \{\s*display: block;\s*padding: 28px 12px;\s*text-align: center;\s*\}/',
+            $html
+        );
+    }
+
     public function testPanahSelect2ModalSejajarDenganInput(): void
     {
         $html = $this->render();
