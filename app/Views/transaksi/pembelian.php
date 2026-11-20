@@ -66,6 +66,7 @@
 
     <form action="<?= base_url('insert_pembelian') ?>" method="post" id="form_pembelian" class="pb-sheet"
         enctype="multipart/form-data">
+        <?= csrf_field() ?>
         <?php // Unit adalah konteks halaman (dipilih di header), bukan field nota. ?>
         <input type="hidden" name="unit_idunit" value="<?= $unitTerpilih ?>">
 
@@ -221,7 +222,7 @@
                     <select id="metode_bayar" name="metode_bayar" class="form-select">
                         <option value="" disabled selected>Pilih Metode</option>
                         <option value="tunai">Tunai</option>
-                        <option value="transfer">Transfer</option>
+                        <option value="transfer" <?= empty($bank) ? 'disabled' : '' ?>>Transfer</option>
                     </select>
                 </div>
 
@@ -237,12 +238,8 @@
                 </div>
 
                 <div class="pb-field pb-field--bank transfer-section">
-                    <label for="tambah-bank">Pembayaran via Bank</label>
+                    <label>Pembayaran via Bank</label>
                     <div id="bank-payment-container"></div>
-                    <button type="button" class="pb-btn pb-btn--outline" id="tambah-bank" hidden>
-                        <iconify-icon icon="solar:add-circle-outline" width="18" height="18"></iconify-icon>
-                        Tambah Bank
-                    </button>
                     <?php if (empty($bank)): ?>
                     <p class="pb-bank-note">
                         <iconify-icon icon="solar:danger-triangle-outline" width="15" height="15"></iconify-icon>
@@ -900,12 +897,14 @@
                 const isPpn = ppnCheckbox?.checked;
 
                 let subtotal = hargaBeli * jumlah;
-                let setelahDiskon = subtotal - diskon + biayaTambahan;
-                let ppnAmount = isPpn ? setelahDiskon * 0.11 : 0;
+                // PPN hanya dari (subtotal - diskon). Biaya tambahan masuk
+                // nilai persediaan/total, bukan dasar PPN.
+                let dasarPpn = subtotal - diskon;
+                let ppnAmount = isPpn ? Math.round(dasarPpn * 0.11) : 0;
 
                 totalDiskon += diskon;
                 totalPPN += ppnAmount;
-                total += setelahDiskon + ppnAmount;
+                total += dasarPpn + biayaTambahan + ppnAmount;
             }
         });
 
@@ -1210,7 +1209,6 @@
             $('.tunai-section').toggle(metode === 'tunai');
             $('.transfer-section').toggle(metode === 'transfer');
             $('#bayar').prop('readonly', true);
-            $('#tambah-bank').prop('hidden', true);
 
             if (metode === 'tunai') {
                 kosongkanBank();
@@ -1248,6 +1246,13 @@
         if (tipe === 'pelanggan' && pelanggan === '') {
             e.preventDefault();
             alert('Pelanggan belum dipilih!');
+            return false;
+        }
+
+        const adaProduk = document.querySelectorAll('#selected-produk-table tr:not(#produk-empty)').length > 0;
+        if (!adaProduk) {
+            e.preventDefault();
+            alert('Pilih minimal satu produk sebelum menyimpan pembelian.');
             return false;
         }
 

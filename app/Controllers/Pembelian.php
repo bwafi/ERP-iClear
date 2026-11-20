@@ -27,6 +27,7 @@ use App\Models\ModelPembayaranBank;
 use App\Models\ModelUnit;
 use App\Models\ModelKasKeluar;
 use App\Services\Finance\BankRekeningValidator;
+use App\Services\Pembelian\PembelianCalculator;
 
 class Pembelian extends BaseController
 
@@ -134,7 +135,15 @@ class Pembelian extends BaseController
      */
     public static function tanggalJatuhTempoValid(string $value): bool
     {
-        if ($value === '') {
+        return self::tanggalValid($value);
+    }
+
+    /**
+     * Tanggal `YYYY-MM-DD` yang benar-benar ada di kalender.
+     */
+    public static function tanggalValid(string $value): bool
+    {
+        if (trim($value) === '') {
             return false;
         }
 
@@ -288,7 +297,27 @@ class Pembelian extends BaseController
 
         date_default_timezone_set('Asia/Jakarta');
 
+        $db = \Config\Database::connect();
+        $gagal = function (string $pesan) use ($db) {
+            $db->transRollback();
+            session()->setFlashdata('gagal', $pesan);
+
+            return redirect()->to(base_url('/pembelian'));
+        };
+
+        // Baris produk, diskon, PPN, dan total dihitung ulang di server.
+        // Nominal dari POST hanya dipakai untuk membandingkan, bukan sumber.
+        try {
+            $kalkulasi = PembelianCalculator::normalisasi($produkData);
+        } catch (\InvalidArgumentException $e) {
+            return $gagal($e->getMessage());
+        }
+
         $datauser = $this->AuthModel->getById(session('ID_AKUN'));
+        if (! $datauser) {
+            return $gagal('Akun pengguna tidak ditemukan.');
+        }
+
         $role = (int) ($datauser->ID_JABATAN ?? session('ID_JABATAN'));
         $unitAkun = (int) ($datauser->ID_UNIT ?? session('ID_UNIT'));
 
@@ -301,26 +330,39 @@ class Pembelian extends BaseController
             $this->request->getPost('unit_idunit'),
             self::bolehPilihUnitUntukRole($role) ? $this->daftarIdUnitOperasional() : []
         );
-        $namauser = $datauser->NAMA_AKUN;
-        $suplier = $this->request->getPost('suplier');
+        if ($useridunit <= 0) {
+            return $gagal('Unit pembelian tidak valid.');
+        }
+
         $id_suplier_text = $this->request->getPost('id_suplier_text');
         $id_pelanggan = $this->request->getPost('id_pelanggan');
         $nota_file = $this->request->getFile('nota_file');
-        $tanggal_masuk = $this->request->getPost('tanggal_masuk');
-        $jam_sekarang = date('H:i:s');
-        $tanggal_masuk_full = $tanggal_masuk . ' ' . $jam_sekarang;
+
+        // Tanggal masuk wajib tanggal sah dan tidak boleh masa depan. Hanya
+        // unit 1 yang boleh backdate; unit lain terkunci ke hari ini. Aturan
+        // ini sama dengan batas yang dipasang di form.
+        $tanggalMasuk = trim((string) $this->request->getPost('tanggal_masuk'));
+        $hariIni = date('Y-m-d');
+        if (! self::tanggalValid($tanggalMasuk)) {
+            return $gagal('Tanggal masuk wajib diisi dengan tanggal yang valid.');
+        }
+        if ($tanggalMasuk > $hariIni) {
+            return $gagal('Tanggal masuk tidak boleh melebihi hari ini.');
+        }
+        if ((int) $useridunit !== 1 && $tanggalMasuk !== $hariIni) {
+            return $gagal('Tanggal masuk unit ini harus hari ini.');
+        }
+        $tanggal_masuk_full = $tanggalMasuk . ' ' . date('H:i:s');
 
         // Jenis pembayaran hanya Tempo atau Lunas. Nilai dibaca dari POST,
         // jadi tetap divalidasi di server walaupun form sudah membatasi.
         $jenisPembayaran = strtolower(trim((string) $this->request->getPost('jenis_pembayaran')));
         $metodeBayar = strtolower(trim((string) $this->request->getPost('metode_bayar')));
         if (! in_array($jenisPembayaran, ['tempo', 'lunas'], true)) {
-            session()->setFlashdata('gagal', 'Jenis pembayaran wajib dipilih: Tempo atau Lunas.');
-            return redirect()->to(base_url('/pembelian'));
+            return $gagal('Jenis pembayaran wajib dipilih: Tempo atau Lunas.');
         }
         if ($jenisPembayaran === 'lunas' && ! in_array($metodeBayar, ['tunai', 'transfer'], true)) {
-            session()->setFlashdata('gagal', 'Metode pembayaran Lunas wajib dipilih: Tunai atau Transfer.');
-            return redirect()->to(base_url('/pembelian'));
+            return $gagal('Metode pembayaran Lunas wajib dipilih: Tunai atau Transfer.');
         }
 
         // Jatuh tempo hanya dipakai Tempo. Form tidak memberi nilai default
@@ -328,20 +370,36 @@ class Pembelian extends BaseController
         // merusak aging hutang.
         $jatuhTempo = trim((string) $this->request->getPost('jatuh_tempo'));
         if ($jenisPembayaran === 'tempo' && ! self::tanggalJatuhTempoValid($jatuhTempo)) {
-            session()->setFlashdata('gagal', 'Jatuh tempo wajib diisi dengan tanggal yang valid.');
-            return redirect()->to(base_url('/pembelian'));
+            return $gagal('Jatuh tempo wajib diisi dengan tanggal yang valid.');
         }
         if ($jenisPembayaran === 'lunas') {
-            // Lunas tidak punya jatuh tempo terpisah. Kolom tetap diisi
-            // tanggal masuk supaya baris baru selalu punya jatuh tempo.
-            $jatuhTempo = self::tanggalJatuhTempoValid((string) $tanggal_masuk)
-                ? (string) $tanggal_masuk
-                : date('Y-m-d');
+            $jatuhTempo = $tanggalMasuk;
         }
 
-        $total_harga = $this->cleanRupiah($this->request->getPost('total-harga'));
-        $total_diskon = $this->cleanRupiah($this->request->getPost('total-diskon'));
-        $total_ppn = $this->cleanRupiah($this->request->getPost('total-ppn'));
+        $total_harga = (int) $kalkulasi['total'];
+        $total_diskon = (int) $kalkulasi['diskon'];
+        $total_ppn = (int) $kalkulasi['ppn'];
+
+        // Total dari POST tidak dipercaya. Bila dikirim, nilainya harus sama
+        // dengan hasil hitung server supaya header, detail, jurnal, dan kas
+        // tidak bisa dipisah.
+        $totalServer = [
+            'total-harga'  => $total_harga,
+            'total-diskon' => $total_diskon,
+            'total-ppn'    => $total_ppn,
+        ];
+        foreach ($totalServer as $field => $nilaiServer) {
+            $mentah = $this->request->getPost($field);
+            if ($mentah === null || trim((string) $mentah) === '') {
+                continue;
+            }
+
+            $nilaiPost = PembelianCalculator::parseRupiah($mentah);
+            if ($nilaiPost === null || $nilaiPost !== $nilaiServer) {
+                return $gagal('Total pembelian tidak sesuai dengan rincian produk. Muat ulang halaman.');
+            }
+        }
+
         $bankData = $this->request->getPost('bank');
         $bolehUbahHargaJual = Kartu_Stok::bolehKelolaProdukUnit((int) session('ID_JABATAN'));
 
@@ -349,14 +407,12 @@ class Pembelian extends BaseController
         // selalu membayar penuh (tunai atau satu rekening bank). Nominal tidak
         // dipercaya dari POST supaya sisa dan kas keluar tidak bisa dipisah.
         $bayar_tunai = 0;
+        $totalBayarBank = 0;
+        $idbankPembayaran = null;
         if ($jenisPembayaran === 'tempo') {
             $sisa = $total_harga;
             $bankData = [];
         } else {
-            if ($total_harga <= 0) {
-                session()->setFlashdata('gagal', 'Total pembelian harus lebih dari 0 untuk pembayaran Lunas.');
-                return redirect()->to(base_url('/pembelian'));
-            }
             $sisa = 0;
             if ($metodeBayar === 'tunai') {
                 $bayar_tunai = $total_harga;
@@ -364,82 +420,354 @@ class Pembelian extends BaseController
             } else {
                 $barisBank = is_array($bankData)
                     ? array_values(array_filter($bankData, static function ($b) {
-                        return trim((string) ($b['id'] ?? '')) !== '';
+                        return is_array($b) && trim((string) ($b['id'] ?? '')) !== '';
                     }))
                     : [];
                 if (count($barisBank) !== 1) {
-                    session()->setFlashdata('gagal', 'Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.');
-                    return redirect()->to(base_url('/pembelian'));
+                    return $gagal('Pembayaran Lunas via Transfer wajib memilih tepat satu rekening bank.');
                 }
 
                 $idbankLunas = trim((string) $barisBank[0]['id']);
                 $cekRekening = (new BankRekeningValidator())->validateUntukUnit($idbankLunas, $useridunit, $role);
                 if (! $cekRekening['ok']) {
-                    session()->setFlashdata('gagal', 'Rekening pembayaran tidak valid: ' . $cekRekening['alasan']);
-                    return redirect()->to(base_url('/pembelian'));
+                    return $gagal('Rekening pembayaran tidak valid: ' . $cekRekening['alasan']);
                 }
 
-                $bankData = [[
-                    'id' => (string) $cekRekening['idbank'],
-                    'jumlah' => $total_harga,
-                ]];
+                $idbankPembayaran = (string) $cekRekening['idbank'];
+                $totalBayarBank = $total_harga;
             }
         }
 
-        $jurnal = [];
-        $bankPembayaran = [];
-        $totalBayarBank = 0;
-        $kodePembayaran = 'PBL' . date('Ymd') . $useridunit . rand(1000, 9999);
+        // Kategori persediaan untuk jurnal. Produk divalidasi di luar
+        // transaksi supaya kegagalan tidak meninggalkan header setengah jadi.
+        $total_aksesoris = 0;
+        $total_sparepart = 0;
+        $total_hp_ppn = 0;
+        $total_hp_non_ppn = 0;
+        $total_hp_second = 0;
+        $barangTerkait = [];
 
-        $db = \Config\Database::connect();
+        foreach ($kalkulasi['baris'] as $baris) {
+            $databarang = $this->BarangModel->getById($baris['id']);
+            if (! $databarang) {
+                return $gagal('Produk pembelian tidak ditemukan.');
+            }
+            $barangTerkait[(int) $baris['id']] = $databarang;
+
+            if ($bolehUbahHargaJual && ($baris['harga_jual'] <= 0 || $baris['harga_jual'] > 9999999999999)) {
+                return $gagal('Harga jual tidak valid.');
+            }
+
+            if ((int) $databarang->idkategori === 1 && (int) $databarang->status_barang === 1) {
+                $total_hp_second += $baris['dasar_persediaan'];
+            } elseif ((int) $databarang->idkategori === 1 && (int) $databarang->status_ppn === 0) {
+                $total_hp_non_ppn += $baris['dasar_persediaan'];
+            } elseif ((int) $databarang->idkategori === 1 && (int) $databarang->status_ppn === 1) {
+                $total_hp_ppn += $baris['dasar_persediaan'];
+            } elseif ((int) $databarang->idkategori === 3) {
+                $total_sparepart += $baris['dasar_persediaan'];
+            } else {
+                $total_aksesoris += $baris['dasar_persediaan'];
+            }
+        }
+
+        $total_bayar = $bayar_tunai + $totalBayarBank;
+        $status = $sisa === 0 ? 'Lunas' : 'Belum Lunas';
+
+        $kodePembayaran = $jenisPembayaran === 'lunas'
+            ? $this->buatKodePembayaran($db, (int) $useridunit)
+            : null;
+
+        //invoice otomatis
+        $no_nota = $this->buatNoNota((int) $useridunit, $tanggalMasuk);
+
+        // Rencana jurnal. Setiap template harus seimbang sendiri: jurnal
+        // persediaan/PPN mengkredit Utang Usaha, jurnal pembayaran mendebit
+        // Utang Usaha dan mengkredit kas/bank. Dengan begitu grup per
+        // referensi selalu seimbang dan Tempo menyisakan utang di 2010100000.
+        $rencanaJurnal = [];
+        $tambahJurnal = static function (string $template, int $nilai, string $keterangan, string $ref) use (&$rencanaJurnal) {
+            if ($nilai <= 0) {
+                return;
+            }
+            $rencanaJurnal[] = [
+                'template'   => $template,
+                'nilai'      => $nilai,
+                'keterangan' => $keterangan,
+                'ref'        => $ref,
+            ];
+        };
+
+        $tambahJurnal('pembelian_ppn_lunas', $total_ppn, 'Pembelian PPN: No.Nota ' . $no_nota, 'pembelian');
+        $tambahJurnal('pembelian_aksesoris', $total_aksesoris, 'Pembelian Aksesoris: No.Nota ' . $no_nota, 'pembelian');
+        $tambahJurnal('pembelian_sparepart', $total_sparepart, 'Pembelian Sparepart: No.Nota ' . $no_nota, 'pembelian');
+        $tambahJurnal('pembelian_lunas_hp_baru_ppn', $total_hp_ppn, 'Pembelian HP PPN: No.Nota ' . $no_nota, 'pembelian');
+        $tambahJurnal('pembelian_lunas_hp_baru', $total_hp_non_ppn, 'Pembelian HP NON PPN: No.Nota ' . $no_nota, 'pembelian');
+        $tambahJurnal('pembelian_lunas_hp_second', $total_hp_second, 'Pembelian HP Second : No.Nota ' . $no_nota, 'pembelian');
+
+        if ($jenisPembayaran === 'lunas') {
+            if ($bayar_tunai > 0) {
+                $tambahJurnal('pembelian_lunas_tunai', $bayar_tunai, 'Pembayaran Tunai - Pembelian', 'pembayaran');
+            }
+            if ($totalBayarBank > 0) {
+                // Template per rekening dipertahankan untuk kompatibilitas;
+                // rekening baru memakai template bank generik.
+                $templateBank = 'pembelian_lunas_bank_' . $idbankPembayaran;
+                if ($this->JurnalModel->templateRows($templateBank) === []) {
+                    $templateBank = 'pembelian_lunas_bank';
+                }
+                $tambahJurnal($templateBank, $totalBayarBank, 'Pembayaran Bank - Pembelian', 'pembayaran');
+            }
+        }
+
+        // Template hilang atau tidak seimbang harus menolak pembelian sebelum
+        // transaksi dibuka. Tanpa ini, jurnal bisa tidak tertulis sama sekali.
+        foreach ($rencanaJurnal as $rencana) {
+            $validasi = $this->JurnalModel->validasiTemplate($rencana['template'], [$rencana['nilai']]);
+            if (! $validasi['ok']) {
+                return $gagal('Jurnal pembelian tidak dapat disimpan: ' . $validasi['alasan']);
+            }
+        }
+
         $db->transStart();
 
-        if (!empty($bankData) && is_array($bankData)) {
-            foreach ($bankData as $b) {
-                $jumlah = $this->sanitizeCurrency($b['jumlah'] ?? '0');
-                if ($jumlah > 0) {
-                    $bankPembayaran = array(
-                        'kode_pembayaran' => $kodePembayaran,
-                        'bank_idbank' => $b['id'],
-                        'jumlah' => $jumlah,
-                        'tabel_referensi' => 'pembelian'
-                    );
+        $foto_nota_name = null;
+        if ($nota_file && $nota_file->isValid() && ! $nota_file->hasMoved()) {
+            $foto_nota_name = $nota_file->getRandomName();
+            if (! $nota_file->move(ROOTPATH . 'public/foto_nota', $foto_nota_name)) {
+                return $gagal('Foto nota gagal diunggah.');
+            }
+        }
+        $input_by = session('ID_AKUN');
 
-                    $this->PembayaranBankModel->insertPembayaranBank($bankPembayaran);
-                    $totalBayarBank += $jumlah;
-                    $jurnal[] = [
-                        'tanggal' => $tanggal_masuk_full,
-                        'kode_template' => 'pembelian_lunas_bank_' . $b['id'],
-                        'ar_value' => [$jumlah],
-                        'keterangan' => 'Pembayaran Bank - Pembelian',
-                        'id_referensi' => $kodePembayaran,
-                        'tabel_referensi' => 'pembayaran_bank'
-                    ];
+        $nama = $this->request->getPost('nama');
+        $alamat = $this->request->getPost('alamat');
+        $nik = $this->request->getPost('nik');
+        $nomor = $this->request->getPost('nomor');
+
+        if (empty($id_pelanggan)) {
+            // Pastikan ada data yang diinput sebelum insert
+            if (! empty($nama) || ! empty($alamat) || ! empty($nik) || ! empty($nomor)) {
+                $datapelanggan = $this->PelangganModel->getByNomor($nomor);
+
+                if (empty($datapelanggan)) {
+                    $resultp = $this->PelangganModel->insert_Pelanggan([
+                        'nama' => $nama,
+                        'alamat' => $alamat,
+                        'nik' => $nik,
+                        'no_hp' => $nomor,
+                        'deleted' => 0,
+                    ]);
+                    if (! $resultp) {
+                        return $gagal('Pelanggan baru gagal disimpan.');
+                    }
+                    $id_pelanggan = $this->PelangganModel->insertID();
+                } else {
+                    $id_pelanggan = $datapelanggan->id_pelanggan;
                 }
             }
         }
-        if ($bayar_tunai > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_lunas_tunai',
-                'ar_value' => [$bayar_tunai],
-                'keterangan' => 'Pembayaran Tunai - Pembelian',
-                'id_referensi' => $kodePembayaran,
-                'tabel_referensi' => 'pembayaran_bank'
-            ];
+
+        // Frontliner selalu akun yang login; nilai POST tidak dipercaya.
+        $frontliner = (int) $input_by;
+
+        $data = [
+            'suplier_id_suplier' => $id_suplier_text,
+            'no_nota_supplier' => $no_nota,
+            'foto_nota' => $foto_nota_name,
+            'tanggal_masuk' => $tanggal_masuk_full,
+            'sisa' => $sisa,
+            'status' => $status,
+            'total_transaksi' => $total_harga,
+            'total_diskon' => $total_diskon,
+            'total_ppn' => $total_ppn,
+            'total_bayar' => $total_bayar,
+            'frontliner' => $frontliner,
+            'bayar_tunai' => $bayar_tunai,
+            'bayar_bank' => $totalBayarBank,
+            // Kolom ini menyimpan rekening pembayaran, bukan kode pembayaran.
+            'bank_idbank' => $idbankPembayaran,
+            'jatuh_tempo' => $jatuhTempo,
+            'bayar' => $total_bayar,
+            'unit_idunit' => $useridunit,
+            'pelanggan_id_pelanggan' => $id_pelanggan ?? null,
+            'input_by' => $input_by,
+        ];
+
+        $idPembelian = $this->PembelianModel->insert_Pembelian($data);
+        if ($idPembelian === false || (int) $idPembelian <= 0) {
+            return $gagal('Data pembelian gagal disimpan.');
         }
-        $total_bayar = $bayar_tunai + $totalBayarBank;
-        // dd($id_suplier_text);
+        $idPembelian = (int) $idPembelian;
 
-        //invoice otomatis 
-        $ymd = date('Ymd');
-        $tgl_hari_ini = date('Y-m-d');
+        if ($jenisPembayaran === 'lunas' && $totalBayarBank > 0) {
+            $pembayaranTersimpan = $this->PembayaranBankModel->insertPembayaranBank([
+                'kode_pembayaran' => $kodePembayaran,
+                'bank_idbank' => $idbankPembayaran,
+                'jumlah' => $totalBayarBank,
+                'tabel_referensi' => 'pembelian',
+                'id_referensi' => $idPembelian,
+            ]);
+            if (! $pembayaranTersimpan) {
+                return $gagal('Pembayaran bank gagal disimpan.');
+            }
+        }
 
-        // Ambil nota pembelian terakhir hari ini berdasarkan unit
+        foreach ($kalkulasi['baris'] as $baris) {
+            $produkid = (int) $baris['id'];
+            $datastokawal = $this->StokAwalModel->getByIdBarang($produkid);
+            $datahpp = $this->HppBarangModel->getById($produkid);
+            $hitung_hpp = $datahpp->hpp ?? 0;
+            $satuan_beli = $datastokawal ? $datastokawal->satuan_terkecil : 'pcs';
+
+            $data2 = [
+                'no_batch' => $no_nota,
+                'tanggal' => $tanggal_masuk_full,
+                'jumlah' => $baris['jumlah'],
+                'hrg_beli' => $baris['harga_beli'],
+                'diskon' => $baris['diskon'],
+                'ppn' => $baris['ppn'],
+                'hitung_hpp' => $hitung_hpp,
+                'total_harga' => $baris['total'],
+                'satuan_beli' => $satuan_beli,
+                'barang_idbarang' => $produkid,
+                'biaya_tambahan' => $baris['biaya_tambahan'],
+                'keterangan_tambahan' => $baris['keterangan'],
+                'unit_idunit' => $useridunit,
+                'pembelian_idpembelian' => $idPembelian,
+            ];
+
+            if (! $this->DetailPembelianModel->insert_detail($data2)) {
+                return $gagal('Detail pembelian gagal disimpan.');
+            }
+
+            // Stok masuk lewat pembelian mengaktifkan kembali produk yang
+            // sebelumnya nonaktif di unit ini (pola sama dengan input stok awal).
+            $this->BarangUnitModel->aktifkanJikaNonaktif($produkid, (int) $useridunit, (int) $input_by);
+
+            if (! $this->HppUnitModel->syncFromPembelian(
+                $produkid,
+                (int) $useridunit,
+                (float) $baris['harga_beli'],
+                (int) $baris['jumlah'],
+                (float) $baris['diskon'],
+                (float) $baris['biaya_tambahan'],
+                (int) $input_by
+            )) {
+                return $gagal('HPP pembelian tidak valid.');
+            }
+
+            if ($bolehUbahHargaJual) {
+                $databarang = $barangTerkait[$produkid];
+                $hargaTersimpan = (float) $baris['harga_jual'] === (float) $databarang->harga
+                    ? $this->HargaJualUnitModel->clear($produkid, (int) $useridunit)
+                    : $this->HargaJualUnitModel->setHarga(
+                        $produkid,
+                        (int) $useridunit,
+                        (float) $baris['harga_jual'],
+                        (int) $input_by
+                    );
+
+                if (! $hargaTersimpan) {
+                    return $gagal('Harga jual gagal disimpan.');
+                }
+            }
+        }
+
+        // Pembelian Lunas langsung dicatat sebagai arus kas keluar supaya
+        // terlihat di menu Kas Keluar, Tutup Kasir, dan saldo Kas & Bank.
+        // Baris ini sengaja TIDAK membuat jurnal kedua: jurnal pembelian di
+        // bawah adalah catatan akuntansinya. no_akun berisi sisi debit
+        // persediaan; lawan kas/bank-nya dibaca dari idbank.
+        if ($jenisPembayaran === 'lunas' && (int) $total_bayar > 0) {
+            $penerimaKasKeluar = $this->namaPihakPembelian(
+                $id_suplier_text,
+                $this->request->getPost('pelanggan'),
+                $nama
+            );
+
+            $kasKeluarTersimpan = $this->KasKeluarModel->insert_KasKeluar([
+                'tanggal' => $tanggalMasuk,
+                'kategori_idkategori' => $this->idKategoriKasHpp($db),
+                'deskripsi' => 'Pembelian ' . $no_nota . ' - ' . $penerimaKasKeluar,
+                'jumlah' => (int) $total_bayar,
+                'penerima' => $penerimaKasKeluar,
+                'idunit' => $useridunit,
+                'jenis' => 'debet',
+                'idbank' => $idbankPembayaran,
+                'created_on' => date('Y-m-d H:i:s'),
+                'no_akun' => self::AKUN_PERSEDIAAN,
+            ]);
+
+            if (! $kasKeluarTersimpan) {
+                return $gagal('Kas keluar pembelian gagal disimpan.');
+            }
+        }
+
+        // insert jurnal pembelian
+        foreach ($rencanaJurnal as $rencana) {
+            $idReferensi = $rencana['ref'] === 'pembelian' ? $idPembelian : $kodePembayaran;
+            $tabelReferensi = $rencana['ref'] === 'pembelian' ? 'pembelian' : 'pembayaran_bank';
+
+            if (! $this->JurnalModel->insertJurnal(
+                $tanggal_masuk_full,
+                $rencana['template'],
+                [$rencana['nilai']],
+                $rencana['keterangan'],
+                $idReferensi,
+                $tabelReferensi,
+                (int) $useridunit
+            )) {
+                return $gagal('Jurnal pembelian gagal disimpan.');
+            }
+        }
+
+        // Verifikasi pasca-insert: jurnal per grup referensi harus ada dan
+        // seimbang. Kegagalan di sini membatalkan seluruh pembelian.
+        $grupReferensi = [['pembelian', $idPembelian]];
+        if ($jenisPembayaran === 'lunas' && $kodePembayaran !== null) {
+            $grupReferensi[] = ['pembayaran_bank', $kodePembayaran];
+        }
+        foreach ($grupReferensi as [$tabelReferensi, $idReferensi]) {
+            $ringkas = $this->JurnalModel->ringkasByReferensi($tabelReferensi, $idReferensi);
+            if ($ringkas['jumlah'] === 0 || ! $ringkas['seimbang']) {
+                return $gagal('Jurnal pembelian tidak seimbang. Pembelian dibatalkan.');
+            }
+        }
+
+        // Sinkronkan baris projection hutang supplier (best-effort, tidak
+        // menggagalkan pembelian bila modul hutang piutang bermasalah).
+        try {
+            (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian($idPembelian);
+        } catch (\Throwable $e) {
+            log_message('error', 'syncFromPembelian #' . $idPembelian . ' gagal: ' . $e->getMessage());
+        }
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            $db->transRollback();
+            session()->setFlashdata('gagal', 'Data Gagal Di Simpan');
+
+            return redirect()->to(base_url('/pembelian'));
+        }
+
+        $db->transCommit();
+        session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
+
+        return redirect()->to(base_url('/pembelian'));
+    }
+
+    /**
+     * Nomor nota unik per unit per hari: PCR{unit}{Ymd}{seq4}.
+     */
+    private function buatNoNota(int $unitId, string $tanggal): string
+    {
+        $ymd = str_replace('-', '', $tanggal);
         $lastNota = $this->PembelianModel
             ->select('no_nota_supplier')
-            ->where('DATE(tanggal_masuk)', $tgl_hari_ini)
-            ->where('unit_idunit', $useridunit)
+            ->where('DATE(tanggal_masuk)', $tanggal)
+            ->where('unit_idunit', $unitId)
             ->orderBy('no_nota_supplier', 'DESC')
             ->first();
 
@@ -451,328 +779,26 @@ class Pembelian extends BaseController
             $urutan = '0001';
         }
 
-        $no_nota = 'PCR' . $useridunit . $ymd . $urutan;
-
-        //end invoice otomatis
-
-
-        $status = '';
-        if ($sisa == 0) {
-            $status = 'Lunas';
-        } else {
-            $status = 'Belum Lunas';
-        }
-
-        $foto_nota_name = null;
-        if ($nota_file && $nota_file->isValid() && !$nota_file->hasMoved()) {
-            $foto_nota_name = $nota_file->getRandomName();
-            $nota_file->move(ROOTPATH . 'public/foto_nota', $foto_nota_name);
-        }
-        $input_by = session('ID_AKUN');
-
-
-        $nama = $this->request->getPost('nama');
-        $alamat = $this->request->getPost('alamat');
-        $nik = $this->request->getPost('nik');
-        $nomor = $this->request->getPost('nomor');
-
-        $resultp = true;
-        if (empty($id_pelanggan)) {
-            // Pastikan ada data yang diinput sebelum insert
-            if (!empty($nama) || !empty($alamat) || !empty($nik) || !empty($nomor)) {
-
-                $datapelanggan = $this->PelangganModel->getByNomor($nomor);
-
-                if (empty($datapelanggan)) {
-
-                    $datap = array(
-                        'nama' => $nama,
-                        'alamat' => $alamat,
-                        'nik' => $nik,
-                        'no_hp' => $nomor,
-                        'deleted' => 0
-                    );
-                    $resultp = $this->PelangganModel->insert_Pelanggan($datap);
-                    $id_pelanggan = $this->PelangganModel->insertID();
-                } else {
-
-                    $id_pelanggan = $datapelanggan->id_pelanggan;
-                }
-            }
-        }
-
-        // Frontliner selalu akun yang login; nilai POST tidak dipercaya.
-        $frontliner = (int) $input_by;
-
-
-        $data = array(
-            'suplier_id_suplier' => $id_suplier_text,
-            'no_nota_supplier' => $no_nota,
-            'foto_nota' =>  $foto_nota_name,
-            'tanggal_masuk' => $tanggal_masuk_full,
-            'sisa' => $sisa,
-            'status' => $status,
-            'total_transaksi' => $total_harga,
-            'total_diskon' => $total_diskon,
-            'total_ppn' => $total_ppn,
-            'total_bayar' => $total_bayar,
-            'frontliner' => $frontliner,
-            'bayar_tunai' => $bayar_tunai,
-            'bayar_bank' => $totalBayarBank,
-            'bank_idbank' => $kodePembayaran,
-            'jatuh_tempo' => $jatuhTempo,
-            'bayar' => $total_bayar,
-            'unit_idunit' => $useridunit,
-            'pelanggan_id_pelanggan' => $id_pelanggan ?? null,
-            'input_by' => $input_by
-        );
-
-        $result = $this->PembelianModel->insert_Pembelian($data);
-        $idPembelian = $this->PembelianModel->insertID();
-        $pelengkap_pembayaranbank = array(
-            'id_referensi' => $idPembelian
-        );
-        $this->PembayaranBankModel->updateByKodePembayaran($kodePembayaran, $pelengkap_pembayaranbank);
-
-        // Pembelian Lunas langsung dicatat sebagai arus kas keluar supaya
-        // terlihat di menu Kas Keluar, Tutup Kasir, dan saldo Kas & Bank.
-        // Baris ini sengaja TIDAK membuat jurnal kedua: jurnal pembelian di
-        // bawah adalah catatan akuntansinya. no_akun berisi sisi debit
-        // persediaan; lawan kas/bank-nya dibaca dari idbank.
-        if ($jenisPembayaran === 'lunas' && (int) round($total_bayar) > 0) {
-            $penerimaKasKeluar = $this->namaPihakPembelian(
-                $id_suplier_text,
-                $this->request->getPost('pelanggan'),
-                $nama
-            );
-
-            $idbankKasKeluar = null;
-            if ($metodeBayar === 'transfer') {
-                $idbankKasKeluar = trim((string) ($bankData[0]['id'] ?? ''));
-            }
-
-            $kasKeluarTersimpan = $this->KasKeluarModel->insert_KasKeluar([
-                'tanggal' => $jatuhTempo,
-                'kategori_idkategori' => $this->idKategoriKasHpp($db),
-                'deskripsi' => 'Pembelian ' . $no_nota . ' - ' . $penerimaKasKeluar,
-                'jumlah' => (int) round($total_bayar),
-                'penerima' => $penerimaKasKeluar,
-                'idunit' => $useridunit,
-                'jenis' => 'debet',
-                'idbank' => $idbankKasKeluar === '' ? null : $idbankKasKeluar,
-                'created_on' => date('Y-m-d H:i:s'),
-                'no_akun' => self::AKUN_PERSEDIAAN,
-            ]);
-
-            if (! $kasKeluarTersimpan) {
-                $db->transRollback();
-                session()->setFlashdata('gagal', 'Kas keluar pembelian gagal disimpan.');
-                return redirect()->to(base_url('/pembelian'));
-            }
-        }
-
-        $total_aksesoris = 0;
-        $total_sparepart = 0;
-        $total_hp_ppn = 0;
-        $total_hp_non_ppn = 0;
-        $total_hp_second = 0;
-
-        //gor push ulang
-
-        foreach ($produkData as $produk) {
-            $datastokawal = $this->StokAwalModel->getByIdBarang($produk['id']);
-            $databarang = $this->BarangModel->getById($produk['id']);
-
-            $hrg_beli = $this->cleanRupiah($produk['harga_beli']);
-            $produkjumlah = $produk['jumlah'];
-            $produkdiskon = $this->cleanRupiah($produk['diskon']);
-            $produkharga  = $this->cleanRupiah($produk['harga']);
-            if ($bolehUbahHargaJual && ($produkharga <= 0 || $produkharga > 9999999999999)) {
-                $db->transRollback();
-                session()->setFlashdata('gagal', 'Harga jual tidak valid.');
-                return redirect()->to(base_url('/pembelian'));
-            }
-            $nilaidiskon = $produkdiskon;
-            $produkppn = $produk['ppn'] ?? null;
-            $subtotalAwal = $hrg_beli * $produkjumlah;
-            $subtotalSetelahDiskon = $subtotalAwal - $nilaidiskon;
-            $nilaiPPN = !is_null($produkppn) ? $subtotalSetelahDiskon * 0.11 : 0;
-
-            $produktotalharga = $subtotalSetelahDiskon + $nilaiPPN;
-            $satuan_beli = $datastokawal ? $datastokawal->satuan_terkecil : 'pcs';
-            //
-            $datahpp = $this->HppBarangModel->getById($produk['id']);
-            $hitung_hpp  = $datahpp->hpp ?? 0;
-            if ($databarang->idkategori == 1 && $databarang->status_barang == 1) {
-                $total_hp_second += $subtotalSetelahDiskon;
-            } elseif ($databarang->idkategori == 1 && $databarang->status_ppn == 0) {
-                $total_hp_non_ppn += $subtotalSetelahDiskon;
-            } elseif ($databarang->idkategori == 1 && $databarang->status_ppn == 1) {
-                $total_hp_ppn += $subtotalSetelahDiskon;
-            } elseif ($databarang->idkategori == 3) {
-                $total_sparepart += $subtotalSetelahDiskon;
-            } else {
-                $total_aksesoris += $subtotalSetelahDiskon;
-            }
-
-            $data2 = array(
-                'no_batch' => $no_nota,
-                'tanggal' => $tanggal_masuk_full,
-                'jumlah' => $produkjumlah,
-                'hrg_beli' => $hrg_beli,
-                'diskon' => $nilaidiskon,
-                'ppn' => $nilaiPPN,
-                'hitung_hpp' => $hitung_hpp,
-                'total_harga' => $produktotalharga,
-                'satuan_beli' => $satuan_beli,
-                'barang_idbarang' => $produk['id'],
-                'biaya_tambahan' => $produk['biaya_tambahan'],
-                'keterangan_tambahan' => $produk['keterangan'],
-                'unit_idunit' => $useridunit,
-                'pembelian_idpembelian' => $idPembelian,
-
-            );
-
-            $result2 = $this->DetailPembelianModel->insert_detail($data2);
-
-            // Stok masuk lewat pembelian mengaktifkan kembali produk yang
-            // sebelumnya nonaktif di unit ini (pola sama dengan input stok awal).
-            // Unit lain tidak tersentuh dan produk yang sudah aktif tidak
-            // dibuatkan baris `barang_unit` baru.
-            if ($result2) {
-                $this->BarangUnitModel->aktifkanJikaNonaktif(
-                    (int) $produk['id'],
-                    (int) $useridunit,
-                    (int) $input_by
-                );
-            }
-
-            if ($result2 && !$this->HppUnitModel->syncFromPembelian(
-                (int) $produk['id'],
-                (int) $useridunit,
-                (float) $hrg_beli,
-                (int) $produkjumlah,
-                (float) $nilaidiskon,
-                (float) $this->cleanRupiah($produk['biaya_tambahan'] ?? 0),
-                (int) $input_by
-            )) {
-                $db->transRollback();
-                session()->setFlashdata('gagal', 'HPP pembelian tidak valid.');
-                return redirect()->to(base_url('/pembelian'));
-            }
-
-            if ($result2 && $bolehUbahHargaJual) {
-                $hargaTersimpan = (float) $produkharga === (float) $databarang->harga
-                    ? $this->HargaJualUnitModel->clear((int) $produk['id'], (int) $useridunit)
-                    : $this->HargaJualUnitModel->setHarga(
-                        (int) $produk['id'],
-                        (int) $useridunit,
-                        (float) $produkharga,
-                        (int) $input_by
-                    );
-
-                if (!$hargaTersimpan) {
-                    $db->transRollback();
-                    session()->setFlashdata('gagal', 'Harga jual gagal disimpan.');
-                    return redirect()->to(base_url('/pembelian'));
-                }
-            }
-        }
-        if ($total_ppn > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_ppn_lunas',
-                'ar_value' => [$total_ppn],
-                'keterangan' => 'Pembelian PPN: No.Nota ' . $no_nota,
-                'id_referensi' => $idPembelian,
-                'tabel_referensi' => 'pembelian'
-            ];
-        }
-        if ($total_aksesoris > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_aksesoris',
-                'ar_value' => [$total_aksesoris],
-                'keterangan' => 'Pembelian Aksesoris: No.Nota ' . $no_nota,
-                'id_referensi' => $idPembelian,
-                'tabel_referensi' => 'pembelian'
-            ];
-        }
-        if ($total_sparepart > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_sparepart',
-                'ar_value' => [$total_sparepart],
-                'keterangan' => 'Pembelian Sparepart: No.Nota ' . $no_nota,
-                'id_referensi' => $idPembelian,
-                'tabel_referensi' => 'pembelian'
-            ];
-        }
-        if ($total_hp_ppn > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_lunas_hp_baru_ppn',
-                'ar_value' => [$total_hp_ppn],
-                'keterangan' => 'Pembelian HP PPN: No.Nota ' . $no_nota,
-                'id_referensi' => $idPembelian,
-                'tabel_referensi' => 'pembelian'
-            ];
-        }
-        if ($total_hp_non_ppn > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_lunas_hp_baru',
-                'ar_value' => [$total_hp_non_ppn],
-                'keterangan' => 'Pembelian HP NON PPN: No.Nota ' . $no_nota,
-                'id_referensi' => $idPembelian,
-                'tabel_referensi' => 'pembelian'
-            ];
-        }
-        if ($total_hp_second > 0) {
-            $jurnal[] = [
-                'tanggal' => $tanggal_masuk_full,
-                'kode_template' => 'pembelian_lunas_hp_second',
-                'ar_value' => [$total_hp_second],
-                'keterangan' => 'Pembelian HP Second : No.Nota ' . $no_nota,
-                'id_referensi' => $idPembelian,
-                'tabel_referensi' => 'pembelian'
-            ];
-        }
-
-        // Sinkronkan baris projection hutang supplier (best-effort, tidak
-        // menggagalkan pembelian bila modul hutang piutang bermasalah).
-        try {
-            (new \App\Services\Finance\HutangPiutangService())->syncFromPembelian((int) $idPembelian);
-        } catch (\Throwable $e) {
-            log_message('error', 'syncFromPembelian #' . $idPembelian . ' gagal: ' . $e->getMessage());
-        }
-
-        // insert jurnal pembelian
-        foreach ($jurnal as $j) {
-            $this->JurnalModel->insertJurnal(
-                $j['tanggal'],
-                $j['kode_template'],
-                $j['ar_value'],
-                $j['keterangan'],
-                $j['id_referensi'],
-                $j['tabel_referensi']
-            );
-        }
-        // die(json_encode($jurnal));
-        $db->transComplete(); // Commits if all queries succeeded, rolls back otherwise
-
-        if ($db->transStatus() === FALSE) {
-            // Transaction failed, handle the error
-            $db->transRollback();
-            session()->setFlashdata('gagal', 'Data Gagal Di Simpan');
-            return redirect()->to(base_url('/pembelian'));
-        } else {
-            $db->transCommit();
-            session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
-            return redirect()->to(base_url('/pembelian'));
-        }
+        return 'PCR' . $unitId . $ymd . $urutan;
     }
 
+    /**
+     * Kode pembayaran unik per transaksi. Dicek ke tabel pembayaran_bank
+     * supaya dua pembelian pada detik yang sama tidak memakai kode yang sama.
+     */
+    private function buatKodePembayaran($db, int $unitId): string
+    {
+        $prefix = 'PBL' . date('Ymd') . $unitId;
+
+        for ($i = 0; $i < 20; $i++) {
+            $kode = $prefix . str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+            if ($db->table('pembayaran_bank')->where('kode_pembayaran', $kode)->countAllResults() === 0) {
+                return $kode;
+            }
+        }
+
+        return $prefix . random_int(10000, 99999);
+    }
 
     public function insert_produk()
     {

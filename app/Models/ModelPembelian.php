@@ -19,8 +19,11 @@ class ModelPembelian extends Model
 
     public function insert_Pembelian($data)
     {
-        $this->insert($data);
-        return $this->insertID();
+        if (! $this->insert($data)) {
+            return false;
+        }
+
+        return (int) $this->insertID();
     }
 
 

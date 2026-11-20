@@ -4,6 +4,7 @@ namespace Tests;
 
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
+use CodeIgniter\Security\Exceptions\SecurityException;
 
 /**
  * Pembelian adalah pintu stok masuk: HPP unit mengikuti harga beli terakhir,
@@ -20,6 +21,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         'unit', 'jabatan', 'akun', 'pelanggan', 'suplier', 'barang',
         'stok_awal', 'hpp_barang', 'hpp_unit', 'stok_barang', 'service',
         'pembelian', 'detail_pembelian', 'pembayaran_bank', 'template_jurnal',
+        'jurnal',
         'hutang_piutang', 'harga_jual_unit', 'kas_keluar', 'kategori_kas',
         'bank', 'akun_kas_bank', 'alokasi_saldo_kas_bank', 'barang_unit',
     ];
@@ -101,6 +103,12 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         $q('CREATE TABLE template_jurnal (idtemplate_jurnal INT PRIMARY KEY AUTO_INCREMENT,
                 kode_template TEXT NULL, no_akun TEXT NULL, nama_akun TEXT NULL,
                 array_value INT NULL, debet_kredit TEXT NULL)');
+        $q('CREATE TABLE jurnal (idjurnal INT PRIMARY KEY AUTO_INCREMENT,
+                tanggal DATE NULL, no_akun VARCHAR(255) NULL, nama_akun VARCHAR(255) NULL,
+                debet INT NULL, kredit INT NULL, keterangan TEXT NULL,
+                id_referensi VARCHAR(255) NULL, tabel_referensi VARCHAR(255) NULL,
+                id_unit INT NULL, id_akun INT NULL,
+                created_at DATETIME NULL, updated_at DATETIME NULL)');
         $q('CREATE TABLE hutang_piutang (id INT PRIMARY KEY AUTO_INCREMENT,
                 kode TEXT NULL, jenis TEXT NULL, sumber_tipe TEXT NULL, sumber_id INT NULL,
                 is_projection INT NULL, pihak_tipe TEXT NULL, pihak_id INT NULL,
@@ -163,6 +171,63 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             VALUES (2, NULL, 'BANK', 'BCA CV', '2', 'aktif', 1, 0)");
         $q("INSERT INTO alokasi_saldo_kas_bank (akun_kas_bank_id, unit_id, nominal)
             VALUES (2, 1, 0), (2, 2, 0)");
+
+        $this->sebarTemplateJurnal();
+    }
+
+    /**
+     * Template jurnal pembelian yang seimbang. Sama dengan migration
+     * SeedPembelianJurnal: persediaan/PPN mengkredit Utang Usaha, pembayaran
+     * mendebit Utang Usaha dan mengkredit kas/bank.
+     */
+    private function sebarTemplateJurnal(): void
+    {
+        $templates = [
+            'pembelian_lunas_tunai' => [
+                ['2010100000', 'Utang Usaha', 'debet'],
+                ['1010101000', 'Kas Besar (Cash on Hand)', 'kredit'],
+            ],
+            'pembelian_lunas_bank' => [
+                ['2010100000', 'Utang Usaha', 'debet'],
+                ['1010102000', 'Kas di Bank (Cash in Bank)', 'kredit'],
+            ],
+            'pembelian_ppn_lunas' => [
+                ['1040600000', 'Pajak Dibayar di Muka (PPN)', 'debet'],
+                ['2010100000', 'Utang Usaha', 'kredit'],
+            ],
+            'pembelian_aksesoris' => [
+                ['1030104000', 'Aksesoris Handphone', 'debet'],
+                ['2010100000', 'Utang Usaha', 'kredit'],
+            ],
+            'pembelian_sparepart' => [
+                ['1030105000', 'Sparepart Service Handphone', 'debet'],
+                ['2010100000', 'Utang Usaha', 'kredit'],
+            ],
+            'pembelian_lunas_hp_baru_ppn' => [
+                ['1030101000', 'Handphone Baru', 'debet'],
+                ['2010100000', 'Utang Usaha', 'kredit'],
+            ],
+            'pembelian_lunas_hp_baru' => [
+                ['1030101000', 'Handphone Baru', 'debet'],
+                ['2010100000', 'Utang Usaha', 'kredit'],
+            ],
+            'pembelian_lunas_hp_second' => [
+                ['1030102000', 'Handphone Second', 'debet'],
+                ['2010100000', 'Utang Usaha', 'kredit'],
+            ],
+        ];
+
+        foreach ($templates as $kode => $rows) {
+            foreach ($rows as $row) {
+                $this->db->table('template_jurnal')->insert([
+                    'kode_template' => $kode,
+                    'no_akun'       => $row[0],
+                    'nama_akun'     => $row[1],
+                    'debet_kredit'  => $row[2],
+                    'array_value'   => 0,
+                ]);
+            }
+        }
     }
 
     private function sesi(int $jabatan = 35, int $idAkun = 43): void
@@ -178,8 +243,12 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         ]);
     }
 
-    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null, string $jenis = 'lunas', string $metode = 'tunai', array $bank = [])
+    private function postPembelian(float $hargaBeli, int $jumlah, float $diskon = 0.0, float $biaya = 0.0, string $frontliner = '', string $hargaJual = '150000', ?int $unitId = null, ?string $jatuhTempo = null, string $jenis = 'lunas', string $metode = 'tunai', array $bank = [], bool $ppn = false, array $override = [])
     {
+        $subtotal = $hargaBeli * $jumlah;
+        $ppnAmount = $ppn ? (int) round(($subtotal - $diskon) * 0.11) : 0;
+        $total = $subtotal - $diskon + $biaya + $ppnAmount;
+
         $payload = [
             'produk' => [
                 1 => [
@@ -193,7 +262,7 @@ final class PembelianHppUnitTest extends CIUnitTestCase
                     'biaya_tambahan' => (string) $biaya,
                     'keterangan'     => '',
                     'diskon'         => (string) $diskon,
-                    'ppn'            => null,
+                    'ppn'            => $ppn ? '1' : null,
                 ],
             ],
             'suplier'         => 'Supplier',
@@ -203,12 +272,13 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             'jenis_pembayaran' => $jenis,
             'metode_bayar'    => $metode,
             'hutang'          => 'Rp 0',
-            'total-harga'     => 'Rp ' . number_format($hargaBeli * $jumlah, 0, ',', '.'),
+            'total-harga'     => 'Rp ' . number_format($total, 0, ',', '.'),
             'total-diskon'    => 'Rp ' . number_format($diskon, 0, ',', '.'),
-            'total-ppn'       => 'Rp 0',
-            'bayar'           => 'Rp ' . number_format($hargaBeli * $jumlah - $diskon + $biaya, 0, ',', '.'),
+            'total-ppn'       => 'Rp ' . number_format($ppnAmount, 0, ',', '.'),
+            'bayar'           => 'Rp ' . number_format($total, 0, ',', '.'),
             'frontliner'      => $frontliner,
             'unit_idunit'     => $unitId === null ? null : (string) $unitId,
+            'csrf_test_name'  => service('security')->getHash(),
         ];
 
         if ($bank !== []) {
@@ -219,6 +289,8 @@ final class PembelianHppUnitTest extends CIUnitTestCase
         if ($jatuhTempo !== '') {
             $payload['jatuh_tempo'] = $jatuhTempo ?? date('Y-m-d');
         }
+
+        $payload = array_replace($payload, $override);
 
         return $this->post('insert_pembelian', $payload);
     }
@@ -555,5 +627,259 @@ final class PembelianHppUnitTest extends CIUnitTestCase
             'produk yang sudah aktif tidak perlu baris baru'
         );
         $this->assertSame(1, $this->db->table('detail_pembelian')->countAllResults());
+    }
+
+    public function testProdukKosongDitolak(): void
+    {
+        $this->sesi();
+
+        $this->post('insert_pembelian', [
+            'suplier'          => 'Supplier',
+            'id_suplier_text'  => '1',
+            'id_pelanggan'     => '1',
+            'tanggal_masuk'    => date('Y-m-d'),
+            'jenis_pembayaran' => 'lunas',
+            'metode_bayar'     => 'tunai',
+            'total-harga'      => 'Rp 0',
+            'total-diskon'     => 'Rp 0',
+            'total-ppn'        => 'Rp 0',
+            'csrf_test_name'   => service('security')->getHash(),
+        ])->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertSame(
+            'Pembelian wajib memiliki minimal satu produk.',
+            session()->getFlashdata('gagal')
+        );
+    }
+
+    public function testTotalPostYangDimodifikasiDitolak(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, null, 'lunas', 'tunai', [], false, [
+            'total-harga' => 'Rp 1',
+        ])->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults(), 'header tidak tersimpan');
+        $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults(), 'detail tidak tersimpan');
+        $this->assertStringContainsString('tidak sesuai', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testJumlahNolDitolak(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 0)->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertStringContainsString('Jumlah produk', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testDiskonMelebihiSubtotalDitolak(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(100000.0, 1, 150000.0)->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertStringContainsString('Diskon', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testPpnDariSubtotalSetelahDiskonDanBiayaBukanDasarPpn(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(100000.0, 1, 0.0, 20000.0, '', '150000', null, null, 'lunas', 'tunai', [], true)
+            ->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(131000, (int) $pembelian->total_transaksi);
+        $this->assertSame(0, (int) $pembelian->total_diskon);
+        $this->assertSame(11000, (int) $pembelian->total_ppn, 'PPN 11% dari 100.000, bukan 120.000');
+
+        $detail = $this->db->table('detail_pembelian')->get()->getRow();
+        $this->assertSame(11000, (int) $detail->ppn);
+        $this->assertSame(20000, (int) $detail->biaya_tambahan);
+        $this->assertSame(131000, (int) $detail->total_harga);
+
+        $hpp = $this->db->table('hpp_unit')
+            ->where(['barang_idbarang' => 1, 'unit_idunit' => 1])->get()->getRow();
+        $this->assertSame(120000.0, (float) $hpp->hpp, 'biaya tambahan masuk HPP, PPN tidak');
+
+        $ppn = $this->db->table('jurnal')
+            ->where(['tabel_referensi' => 'pembelian', 'no_akun' => '1040600000'])->get()->getRow();
+        $this->assertNotNull($ppn);
+        $this->assertSame(11000, (int) $ppn->debet);
+        $this->assertSame(0, (int) $ppn->kredit);
+    }
+
+    public function testJurnalPembelianSeimbangDanMemakaiUnitPembelian(): void
+    {
+        $this->sesi(0, 44);
+
+        $this->postPembelian(120000.0, 2, 0.0, 0.0, '', '150000', 2, '2026-12-31', 'tempo')
+            ->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertSame(2, (int) $pembelian->unit_idunit);
+
+        $jurnal = $this->db->table('jurnal')
+            ->where(['tabel_referensi' => 'pembelian', 'id_referensi' => (string) $pembelian->idpembelian])
+            ->get()->getResult();
+
+        $this->assertNotEmpty($jurnal, 'jurnal pembelian harus tertulis');
+        $debet = 0;
+        $kredit = 0;
+        foreach ($jurnal as $row) {
+            $this->assertSame(2, (int) $row->id_unit, 'jurnal mengikuti unit pembelian, bukan unit sesi');
+            $debet += (int) $row->debet;
+            $kredit += (int) $row->kredit;
+        }
+        $this->assertSame(240000, $debet);
+        $this->assertSame(240000, $kredit);
+        $this->assertSame(
+            240000,
+            (int) $this->db->table('jurnal')
+                ->where(['tabel_referensi' => 'pembelian', 'no_akun' => '2010100000'])
+                ->get()->getRow()->kredit,
+            'Tempo menyisakan utang usaha sebesar total'
+        );
+    }
+
+    public function testTemplateJurnalHilangMembatalkanPembelian(): void
+    {
+        $this->db->table('template_jurnal')->where('kode_template', 'pembelian_sparepart')->delete();
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1)->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertSame(0, $this->db->table('detail_pembelian')->countAllResults());
+        $this->assertStringContainsString('tidak dapat disimpan', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testTemplateJurnalTidakSeimbangMembatalkanPembelian(): void
+    {
+        $this->db->table('template_jurnal')
+            ->where(['kode_template' => 'pembelian_sparepart', 'debet_kredit' => 'kredit'])
+            ->delete();
+        $this->sesi();
+
+        $this->postPembelian(120000.0, 1)->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertStringContainsString('tidak seimbang', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testBankIdbankMenyimpanRekeningDanKodePembayaranUnik(): void
+    {
+        $this->sesi();
+
+        $this->postPembelian(
+            120000.0,
+            1,
+            0.0,
+            0.0,
+            '',
+            '150000',
+            null,
+            null,
+            'lunas',
+            'transfer',
+            [['id' => '2', 'jumlah' => '120000']]
+        )->assertRedirect();
+
+        $pertama = $this->db->table('pembelian')->orderBy('idpembelian', 'ASC')->get()->getRow();
+        $pembayaranPertama = $this->db->table('pembayaran_bank')
+            ->where('id_referensi', (int) $pertama->idpembelian)->get()->getRow();
+
+        $this->assertSame('2', (string) $pertama->bank_idbank, 'bank_idbank menyimpan rekening, bukan kode pembayaran');
+        $this->assertNotNull($pembayaranPertama);
+        $this->assertStringStartsWith('PBL', (string) $pembayaranPertama->kode_pembayaran);
+        $this->assertSame((int) $pertama->idpembelian, (int) $pembayaranPertama->id_referensi);
+
+        $this->postPembelian(
+            120000.0,
+            1,
+            0.0,
+            0.0,
+            '',
+            '150000',
+            null,
+            null,
+            'lunas',
+            'transfer',
+            [['id' => '2', 'jumlah' => '120000']]
+        )->assertRedirect();
+
+        $kode = $this->db->table('pembayaran_bank')->select('kode_pembayaran')->get()->getResult();
+        $this->assertCount(2, $kode);
+        $this->assertNotSame($kode[0]->kode_pembayaran, $kode[1]->kode_pembayaran);
+    }
+
+    public function testTanggalMasukMasaDepanDitolak(): void
+    {
+        $this->sesi();
+
+        $besok = date('Y-m-d', strtotime('+1 day'));
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, null, 'lunas', 'tunai', [], false, [
+            'tanggal_masuk' => $besok,
+        ])->assertRedirect();
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
+        $this->assertStringContainsString('melebihi hari ini', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testBackdateHanyaBolehUntukUnitSatu(): void
+    {
+        $this->sesi();
+
+        $kemarin = date('Y-m-d', strtotime('-1 day'));
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', null, null, 'lunas', 'tunai', [], false, [
+            'tanggal_masuk' => $kemarin,
+        ])->assertRedirect();
+
+        $pembelian = $this->db->table('pembelian')->get()->getRow();
+        $this->assertNotNull($pembelian, 'unit 1 boleh backdate');
+        $this->assertStringStartsWith($kemarin, (string) $pembelian->tanggal_masuk);
+
+        // Finance memilih unit 2: tanggal masuk harus hari ini.
+        $this->sesi(0, 44);
+        $this->postPembelian(120000.0, 1, 0.0, 0.0, '', '150000', 2, null, 'lunas', 'tunai', [], false, [
+            'tanggal_masuk' => $kemarin,
+        ])->assertRedirect();
+
+        $this->assertSame(1, $this->db->table('pembelian')->countAllResults(), 'unit 2 tidak boleh backdate');
+        $this->assertStringContainsString('harus hari ini', (string) session()->getFlashdata('gagal'));
+    }
+
+    public function testPostTanpaCsrfDitolakSebelumController(): void
+    {
+        $this->sesi();
+
+        try {
+            $this->call('post', 'insert_pembelian', [
+                'produk' => [
+                    1 => [
+                        'id' => '1',
+                        'harga_beli' => '120000',
+                        'jumlah' => '1',
+                        'diskon' => '0',
+                        'biaya_tambahan' => '0',
+                        'harga' => '150000',
+                    ],
+                ],
+                'tanggal_masuk' => date('Y-m-d'),
+                'jenis_pembayaran' => 'lunas',
+                'metode_bayar' => 'tunai',
+                'id_suplier_text' => '1',
+            ]);
+            $this->fail('POST tanpa CSRF harus ditolak filter');
+        } catch (SecurityException $e) {
+            $this->assertStringContainsString('not allowed', $e->getMessage());
+        }
+
+        $this->assertSame(0, $this->db->table('pembelian')->countAllResults());
     }
 }

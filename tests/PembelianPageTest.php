@@ -110,7 +110,6 @@ final class PembelianPageTest extends CIUnitTestCase
             'id="pb-produk-list"',
             'id="pb-produk-empty"',
             'id="select-all-ppn"',
-            'id="tambah-bank"',
             'id="bank-payment-container"',
             'id="bayar"',
             'id="total-diskon"',
@@ -183,6 +182,30 @@ final class PembelianPageTest extends CIUnitTestCase
 
         $this->assertStringContainsString('pb-bank-note', $html);
         $this->assertStringContainsString('Belum ada rekening aktif untuk unit ini.', $html);
+        $this->assertMatchesRegularExpression(
+            '/<option value="transfer"\s+disabled\s*>/',
+            $html,
+            'Transfer harus nonaktif saat unit tidak punya rekening'
+        );
+    }
+
+    public function testCsrfTokenAdaDanTombolBankPalsuDihapus(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('name="csrf_test_name"', $html, 'form pembelian wajib membawa token CSRF');
+        $this->assertStringNotContainsString('id="tambah-bank"', $html, 'tombol Tambah Bank yang tidak berfungsi harus hilang');
+        $this->assertStringNotContainsString('Tambah Bank', $html);
+    }
+
+    public function testPerhitunganPpnTidakMemasukkanBiayaTambahan(): void
+    {
+        $html = $this->render();
+
+        // PPN = 11% x (subtotal - diskon), biaya tambahan hanya menambah total.
+        $this->assertStringContainsString('let dasarPpn = subtotal - diskon;', $html);
+        $this->assertStringContainsString('Math.round(dasarPpn * 0.11)', $html);
+        $this->assertStringContainsString('total += dasarPpn + biayaTambahan + ppnAmount;', $html);
     }
 
     public function testTemaDanModalMemakaiScopeBaru(): void

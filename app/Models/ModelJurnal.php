@@ -24,13 +24,85 @@ class ModelJurnal extends Model
             ->delete();
     }
 
-    public function insertJurnal($tanggal, $kode_template, $ar_value, $keterangan, $id_referensi, $tabel_referensi, $id_unit = null)    {
+    /**
+     * Baris template jurnal untuk satu kode_template.
+     *
+     * @return object[]
+     */
+    public function templateRows(string $kodeTemplate): array
+    {
+        return $this->db->table('template_jurnal')
+            ->where('kode_template', $kodeTemplate)
+            ->orderBy('idtemplate_jurnal', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    /**
+     * Validasi template terhadap nilai yang akan dipakai.
+     *
+     * Template hilang atau tidak seimbang HARUS terdeteksi sebelum transaksi
+     * ditulis. Tanpa ini, `insertJurnal()` lama diam-diam tidak menulis apa
+     * pun dan pembelian tetap dianggap berhasil.
+     *
+     * @return array{ok:bool, alasan:string, jumlah:int, debet:int, kredit:int}
+     */
+    public function validasiTemplate(string $kodeTemplate, array $arValue): array
+    {
+        $template = $this->templateRows($kodeTemplate);
+
+        if ($template === []) {
+            return [
+                'ok'     => false,
+                'alasan' => 'Template jurnal "' . $kodeTemplate . '" tidak ditemukan.',
+                'jumlah' => 0,
+                'debet'  => 0,
+                'kredit' => 0,
+            ];
+        }
+
+        $debet = 0;
+        $kredit = 0;
+
+        foreach ($template as $value) {
+            $index = (int) ($value->array_value ?? 0);
+            $nilai = isset($arValue[$index]) ? (int) round((float) $arValue[$index]) : 0;
+
+            if ($value->debet_kredit === 'debet') {
+                $debet += $nilai;
+            } else {
+                $kredit += $nilai;
+            }
+        }
+
+        $ok = $debet > 0 && $debet === $kredit;
+
+        return [
+            'ok'     => $ok,
+            'alasan' => $ok
+                ? ''
+                : 'Template jurnal "' . $kodeTemplate . '" tidak seimbang (debet '
+                    . $debet . ' vs kredit ' . $kredit . ').',
+            'jumlah' => count($template),
+            'debet'  => $debet,
+            'kredit' => $kredit,
+        ];
+    }
+
+    public function insertJurnal($tanggal, $kode_template, $ar_value, $keterangan, $id_referensi, $tabel_referensi, $id_unit = null)
+    {
         $id_akun = session('ID_AKUN');
         if ($id_unit == null) {
             $id_unit = session('ID_UNIT');
         }
-        $template = db_connect()->table('template_jurnal')->where('kode_template', $kode_template)->get()->getResult();
-        $ar_insert = array();
+
+        $template = $this->templateRows($kode_template);
+        if ($template === []) {
+            log_message('error', 'Template jurnal tidak ditemukan: ' . $kode_template);
+
+            return false;
+        }
+
         foreach ($template as $value) {
             $data = array(
                 'tanggal'           => date('Y-m-d', strtotime($tanggal)),
@@ -51,17 +123,22 @@ class ModelJurnal extends Model
                 $data['kredit'] = $nilai;
                 $data['debet'] = 0;
             }
-            $this->insert($data);
+
+            if (! $this->insert($data)) {
+                log_message('error', 'Gagal menyimpan baris jurnal untuk template: ' . $kode_template);
+
+                return false;
+            }
         }
+
         return true;
     }
 
     /**
      * Ringkasan jurnal untuk (tabel_referensi, id_referensi) tertentu.
      *
-     * `insertJurnal()` tidak memberi sinyal kegagalan (template hilang -> loop
-     * kosong -> return true). Pemanggil yang butuh jaminan jurnal benar-benar
-     * terbentuk dan seimbang memakai method ini.
+     * Dipakai pemanggil yang butuh jaminan jurnal benar-benar terbentuk dan
+     * seimbang setelah `insertJurnal()` menulis baris-barisnya.
      *
      * @param int|null $idjurnalDiAtas Bila diisi, hanya baris dengan
      *                                 idjurnal > nilai ini yang dihitung

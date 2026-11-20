@@ -55,13 +55,16 @@ class ModelHargaJualUnit extends Model
             return false;
         }
 
-        return (bool) $this->db->table($this->table)->upsert([
+        $hasil = $this->db->table($this->table)->upsert([
             'barang_idbarang' => $idbarang,
             'unit_idunit'     => $idunit,
             'harga_jual'      => $harga,
             'updated_by'      => $userId,
             'updated_at'      => date('Y-m-d H:i:s'),
         ]);
+
+        // upsert() mengembalikan 0 bila nilai tidak berubah; itu tetap sukses.
+        return $hasil !== false;
     }
 
     /**

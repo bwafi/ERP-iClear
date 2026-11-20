@@ -144,9 +144,9 @@ $routes->get('approve/phone/(:num)', 'Approval::approve/$1', ['filter' => 'auth'
 //Transaksi
 
 //pembelian
-$routes->post('insert_produk', 'Pembelian::insert_produk');
+$routes->post('insert_produk', 'Pembelian::insert_produk', ['filter' => 'auth']);
 $routes->get('/pembelian', 'Pembelian::index', ['filter' => 'auth']);
-$routes->post('insert_pembelian', 'Pembelian::insert', ['filter' => 'auth']);
+$routes->post('insert_pembelian', 'Pembelian::insert', ['filter' => ['auth', 'csrf']]);
 
 //penjualan
 $routes->get('/penjualan', 'Penjualan::index', ['filter' => 'auth']);
