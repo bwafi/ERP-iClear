@@ -203,53 +203,114 @@
             <div class="pb-section__head">
                 <div>
                     <h2 id="pb-bayar-title">Pembayaran</h2>
-                    <p class="pb-section__hint">Pilih Lunas atau Tempo; nominal Lunas mengikuti total pembelian.</p>
+                    <p class="pb-section__hint">Lunas bisa tunai, transfer, atau keduanya. Total harus tepat sama.</p>
                 </div>
             </div>
 
-            <div class="pb-pay-grid">
-                <div class="pb-field">
-                    <label for="jenis_pembayaran">Jenis Pembayaran</label>
-                    <select id="jenis_pembayaran" name="jenis_pembayaran" class="form-select" required>
-                        <option value="" disabled selected>Pilih Jenis</option>
-                        <option value="lunas">Lunas</option>
-                        <option value="tempo">Tempo</option>
-                    </select>
+            <div class="pb-pay-band">
+                <div class="pb-pay-head">
+                    <div class="pb-field">
+                        <label for="jenis_pembayaran">Jenis Pembayaran</label>
+                        <select id="jenis_pembayaran" name="jenis_pembayaran" class="form-select" required>
+                            <option value="" disabled selected>Pilih Jenis</option>
+                            <option value="lunas">Lunas</option>
+                            <option value="tempo">Tempo</option>
+                        </select>
+                    </div>
+
+                    <div class="pb-field" id="jatuh-tempo-field">
+                        <label for="jatuh_tempo">Jatuh Tempo</label>
+                        <input type="date" class="form-control" id="jatuh_tempo" name="jatuh_tempo" required>
+                    </div>
                 </div>
 
-                <div class="pb-field lunas-section">
-                    <label for="metode_bayar">Metode Pembayaran</label>
-                    <select id="metode_bayar" name="metode_bayar" class="form-select">
+                <div class="lunas-section pb-method-switch">
+                    <div class="pb-method-tabs" id="pb-method-tabs" role="tablist" aria-label="Metode pembayaran">
+                        <button type="button" class="pb-method-tab" id="pb-tab-tunai" data-metode="tunai" role="tab"
+                            aria-selected="false" aria-controls="pb-pay-split" tabindex="0">
+                            <iconify-icon icon="solar:wad-of-money-outline" width="17" height="17"></iconify-icon>
+                            <span>Tunai</span>
+                        </button>
+                        <button type="button" class="pb-method-tab" id="pb-tab-transfer" data-metode="transfer" role="tab"
+                            aria-selected="false" aria-controls="pb-pay-split" tabindex="-1" <?= empty($bank) ? 'disabled' : '' ?>>
+                            <iconify-icon icon="solar:card-transfer-outline" width="17" height="17"></iconify-icon>
+                            <span>Transfer</span>
+                        </button>
+                        <button type="button" class="pb-method-tab" id="pb-tab-tunai_transfer" data-metode="tunai_transfer" role="tab"
+                            aria-selected="false" aria-controls="pb-pay-split" tabindex="-1" <?= empty($bank) ? 'disabled' : '' ?>>
+                            <iconify-icon icon="solar:transfer-horizontal-bold-duotone" width="17" height="17"></iconify-icon>
+                            <span>Tunai + Transfer</span>
+                        </button>
+                    </div>
+
+                    <label class="pb-method-native-label" for="metode_bayar">Metode Pembayaran</label>
+                    <select id="metode_bayar" name="metode_bayar" class="form-select pb-method-native">
                         <option value="" disabled selected>Pilih Metode</option>
                         <option value="tunai">Tunai</option>
                         <option value="transfer" <?= empty($bank) ? 'disabled' : '' ?>>Transfer</option>
+                        <option value="tunai_transfer" <?= empty($bank) ? 'disabled' : '' ?>>Tunai + Transfer</option>
                     </select>
                 </div>
 
-                <div class="pb-field" id="jatuh-tempo-field">
-                    <label for="jatuh_tempo">Jatuh Tempo</label>
-                    <input type="date" class="form-control" id="jatuh_tempo" name="jatuh_tempo" required>
+                <div class="pb-pay-split" id="pb-pay-split" role="tabpanel" aria-labelledby="pb-method-tabs">
+                    <div class="pb-cash-panel tunai-section">
+                        <div class="pb-panel-head">
+                            <span class="pb-panel__label">Tunai</span>
+                            <span class="pb-panel__hint">Uang dari laci</span>
+                        </div>
+                        <label class="pb-subfield__label" for="bayar">Nominal tunai</label>
+                        <input type="text" class="form-control pb-num pb-cash-input" id="bayar" name="bayar" value="Rp 0"
+                            inputmode="numeric" autocomplete="off">
+                        <div class="pb-cash-actions">
+                            <button type="button" class="pb-btn pb-btn--outline" id="uang-pas">
+                                Uang pas
+                            </button>
+                            <?php if (! empty($bank)): ?>
+                            <button type="button" class="pb-btn pb-btn--outline" id="isi-sisa" hidden>
+                                Isi sisa
+                            </button>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="pb-bank-panel transfer-section">
+                        <div class="pb-bank-head">
+                            <span class="pb-panel__label">Transfer</span>
+                            <span class="pb-panel__hint">Masuk ke rekening bank</span>
+                        </div>
+                        <div id="bank-payment-container" class="pb-bank-list"></div>
+                        <?php if (! empty($bank)): ?>
+                        <button type="button" class="pb-btn pb-btn--outline pb-bank-add" id="tambah-bank">
+                            <iconify-icon icon="solar:add-circle-outline" width="16" height="16"></iconify-icon>
+                            Tambah rekening
+                        </button>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
-                <div class="pb-field tunai-section">
-                    <label for="bayar">Bayar Tunai</label>
-                    <input type="text" class="form-control pb-num" id="bayar" name="bayar" value="Rp 0"
-                        inputmode="numeric" readonly>
-                </div>
+                <p class="pb-pay-empty" id="pb-pay-empty" hidden>Pilih metode untuk membuka kolom nominal.</p>
 
-                <div class="pb-field pb-field--bank transfer-section">
-                    <label>Pembayaran via Bank</label>
-                    <div id="bank-payment-container"></div>
-                    <?php if (empty($bank)): ?>
+                <?php if (empty($bank)): ?>
+                <div class="lunas-section pb-bank-note-wrap">
                     <p class="pb-bank-note">
                         <iconify-icon icon="solar:danger-triangle-outline" width="15" height="15"></iconify-icon>
                         Belum ada rekening aktif untuk unit ini.
                     </p>
-                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <div class="pb-alloc">
+                    <div class="pb-alloc__figures">
+                        <span class="pb-alloc__fig">Total <b id="pb-alloc-total">Rp 0</b></span>
+                        <span class="pb-alloc__fig">Dibayar <b id="pb-alloc-dibayar">Rp 0</b></span>
+                        <span class="pb-alloc__fig">Sisa <b id="pb-alloc-sisa">Rp 0</b></span>
+                    </div>
+                    <p class="pb-pay-status" id="pb-pay-status" aria-live="polite"></p>
+                    <span class="pb-meter" aria-hidden="true"><i id="pb-meter"></i></span>
                 </div>
 
                 <p class="pb-pay-note" id="pb-pay-note">
-                    <b>Lunas</b> langsung dicatat sebagai Kas Keluar sebesar total pembelian.
+                    <b>Lunas</b> langsung dicatat sebagai Kas Keluar per komponen pembayaran (tunai dan/atau bank).
                     <b>Tempo</b> menjadikan seluruh total sebagai hutang supplier dan wajib punya jatuh tempo.
                 </p>
             </div>
@@ -269,15 +330,19 @@
                     <span>Total</span>
                     <input type="text" id="total-harga" name="total-harga" class="pb-num" value="Rp 0" readonly>
                 </label>
-                <div class="pb-figure">
+                <div class="pb-figure" data-dock="lunas">
                     <span>Dibayar</span>
                     <span class="pb-figure__value pb-num" id="pb-dibayar">Rp 0</span>
                 </div>
-                <label class="pb-figure pb-figure--debt" for="hutang">
+                <div class="pb-figure" data-dock="lunas">
+                    <span>Sisa</span>
+                    <span class="pb-figure__value pb-figure__value--danger pb-num" id="pb-dock-sisa">Rp 0</span>
+                </div>
+                <label class="pb-figure pb-figure--debt" data-dock="tempo" for="hutang">
                     <span>Hutang</span>
                     <input type="text" id="hutang" name="hutang" class="pb-num" value="Rp 0" readonly>
                 </label>
-                <label class="pb-figure" for="kembalian">
+                <label class="pb-figure" for="kembalian" hidden>
                     <span>Kembalian</span>
                     <input type="text" id="kembalian" name="kembalian" class="pb-num" value="Rp 0" readonly>
                 </label>
@@ -613,9 +678,97 @@
         return totalInput ? unformatRupiah(totalInput.value || 'Rp 0') : 0;
     }
 
+    // Tab metode hanya tersedia saat JS aktif; tanpa JS, select native tetap
+    // terlihat dan menjadi kontrol pembayaran.
+    document.documentElement.classList.add('pb-js');
+    const metodeNative = document.getElementById('metode_bayar');
+    if (metodeNative) metodeNative.setAttribute('tabindex', '-1');
+
+    function setMetode(value) {
+        const select = document.getElementById('metode_bayar');
+        if (!select || select.value === value) return;
+        select.value = value;
+        $(select).trigger('change');
+    }
+
+    function syncTabMetode() {
+        const select = document.getElementById('metode_bayar');
+        const aktif = select ? select.value : '';
+        const split = document.getElementById('pb-pay-split');
+        const tabs = Array.from(document.querySelectorAll('#pb-method-tabs [data-metode]'));
+        const firstEnabled = tabs.find(function(tab) {
+            return !tab.disabled;
+        }) || tabs[0] || null;
+
+        tabs.forEach(function(tab) {
+            const selected = tab.getAttribute('data-metode') === aktif;
+            const tabStop = selected || (!aktif && tab === firstEnabled);
+            tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+            tab.setAttribute('tabindex', tabStop ? '0' : '-1');
+            if (selected && split && tab.id) {
+                split.setAttribute('aria-labelledby', tab.id);
+            }
+        });
+
+        if (!aktif && split) {
+            split.setAttribute('aria-labelledby', firstEnabled && firstEnabled.id ? firstEnabled.id : 'pb-method-tabs');
+        }
+    }
+
+    function updateAlokasi() {
+        const total = totalPembelian();
+        let dibayar = unformatRupiah((document.getElementById('bayar') || {}).value || 'Rp 0');
+        document.querySelectorAll('.bank-amount').forEach(function(input) {
+            dibayar += unformatRupiah(input.value || 'Rp 0');
+        });
+
+        const sisa = Math.max(total - dibayar, 0);
+        const lebih = Math.max(dibayar - total, 0);
+
+        const totalEl = document.getElementById('pb-alloc-total');
+        const dibayarEl = document.getElementById('pb-alloc-dibayar');
+        const sisaEl = document.getElementById('pb-alloc-sisa');
+        const dockSisaEl = document.getElementById('pb-dock-sisa');
+        if (totalEl) totalEl.textContent = 'Rp ' + total.toLocaleString('id-ID');
+        if (dibayarEl) dibayarEl.textContent = 'Rp ' + dibayar.toLocaleString('id-ID');
+        if (sisaEl) sisaEl.textContent = 'Rp ' + sisa.toLocaleString('id-ID');
+        if (dockSisaEl) dockSisaEl.textContent = 'Rp ' + sisa.toLocaleString('id-ID');
+
+        const meter = document.getElementById('pb-meter');
+        if (meter) {
+            const rasio = total > 0 ? Math.min(dibayar / total, 1) : 0;
+            meter.style.width = (rasio * 100) + '%';
+            meter.classList.toggle('is-pas', dibayar === total);
+            meter.classList.toggle('is-lebih', lebih > 0);
+        }
+
+        const isiSisa = document.getElementById('isi-sisa');
+        if (isiSisa) isiSisa.disabled = sisa === 0;
+    }
+
+    function updateDockMode() {
+        const jenis = (document.getElementById('jenis_pembayaran') || {}).value || '';
+        document.querySelectorAll('.pb-dock [data-dock]').forEach(function(el) {
+            const mode = el.getAttribute('data-dock');
+            el.hidden = !(jenis === 'lunas' && mode === 'lunas') &&
+                !(jenis === 'tempo' && mode === 'tempo');
+        });
+    }
+
+    function tampilkanErrorPembayaran(pesan, fokusEl) {
+        const status = document.getElementById('pb-pay-status');
+        if (status) {
+            status.textContent = pesan;
+            status.classList.remove('is-pas', 'is-lebih');
+            status.classList.add('is-kurang');
+        }
+        if (fokusEl && typeof fokusEl.focus === 'function') fokusEl.focus();
+    }
+
     /**
-     * Untuk Lunas, nominal pembayaran selalu mengikuti total pembelian.
-     * Tempo tidak menerima pembayaran di muka, jadi tidak disentuh di sini.
+     * Untuk Lunas, nominal pembayaran mengikuti total pembelian. Pada
+     * Tunai + Transfer, isian pengguna tidak ditimpa; hanya baris bank yang
+     * dipastikan ada oleh aturPembayaran().
      */
     function sinkronPembayaranOtomatis() {
         const jenisEl = document.getElementById('jenis_pembayaran');
@@ -635,9 +788,12 @@
 
         if (metodeEl.value === 'transfer') {
             const amounts = document.querySelectorAll('#bank-payment-container .bank-amount');
-            amounts.forEach((input, index) => {
-                input.value = index === 0 ? formatToRupiah(String(total)) : 'Rp 0';
-            });
+            // Hanya satu rekening: aman mengikuti total. Lebih dari satu
+            // rekening jangan ditimpa, supaya alokasi pengguna tidak hilang
+            // saat total berubah.
+            if (amounts.length === 1) {
+                amounts[0].value = formatToRupiah(String(total));
+            }
         }
     }
 
@@ -958,6 +1114,46 @@
         if (dibayarEl) {
             dibayarEl.textContent = 'Rp ' + (bayar + bankTotal).toLocaleString('id-ID');
         }
+
+        updateAlokasi();
+        updateDockMode();
+        updateStatusPembayaran();
+    }
+
+    /**
+     * Status Pas/Kurang/Lebih untuk Lunas. Kurang dan lebih sama-sama tidak
+     * boleh dikirim karena Lunas wajib tepat sama dengan total pembelian.
+     */
+    function updateStatusPembayaran() {
+        const statusEl = document.getElementById('pb-pay-status');
+        if (!statusEl) return;
+
+        const jenisEl = document.getElementById('jenis_pembayaran');
+        if (!jenisEl || jenisEl.value !== 'lunas') {
+            statusEl.textContent = '';
+            statusEl.classList.remove('is-pas', 'is-kurang', 'is-lebih');
+            return;
+        }
+
+        const total = totalPembelian();
+        let dibayar = unformatRupiah((document.getElementById('bayar') || {}).value || 'Rp 0');
+        document.querySelectorAll('.bank-amount').forEach(input => {
+            dibayar += unformatRupiah(input.value || 'Rp 0');
+        });
+
+        const selisih = dibayar - total;
+        statusEl.classList.remove('is-pas', 'is-kurang', 'is-lebih');
+
+        if (selisih === 0) {
+            statusEl.textContent = 'Pas';
+            statusEl.classList.add('is-pas');
+        } else if (selisih < 0) {
+            statusEl.textContent = 'Kurang Rp ' + Math.abs(selisih).toLocaleString('id-ID');
+            statusEl.classList.add('is-kurang');
+        } else {
+            statusEl.textContent = 'Lebih Rp ' + selisih.toLocaleString('id-ID') + ' — Lunas tidak menerima kelebihan';
+            statusEl.classList.add('is-lebih');
+        }
     }
     </script>
 
@@ -1149,13 +1345,24 @@
     $(document).ready(function() {
         function tambahBarisBank() {
             const container = $('#bank-payment-container');
-            const index = container.children('.bank-row').length;
+            // Index baru harus lebih besar dari index yang sudah ada, supaya
+            // menghapus baris tengah tidak membuat name bank[i] bertabrakan.
+            let index = 0;
+            container.children('.bank-row').each(function() {
+                const cocok = ($(this).find('.bank-select').attr('name') || '').match(/bank\[(\d+)\]/);
+                if (cocok) {
+                    index = Math.max(index, parseInt(cocok[1], 10) + 1);
+                }
+            });
 
             const newRow = $(`
             <div class="pb-bank-row bank-row">
+                <button type="button" class="pb-row-del hapus-bank" aria-label="Hapus rekening">
+                    <iconify-icon icon="solar:close-circle-outline" width="18" height="18"></iconify-icon>
+                </button>
                 <div class="pb-subfield">
                     <label class="pb-subfield__label" for="bank-rekening-${index}">Rekening Bank</label>
-                    <select id="bank-rekening-${index}" name="bank[${index}][id]" class="select2 form-select bank-select" style="width: 100%;" required>
+                    <select id="bank-rekening-${index}" name="bank[${index}][id]" class="select2 form-select bank-select" style="width: 100%;">
                         <option disabled selected>Pilih Bank</option>
                         <?php foreach ($bank as $p): ?>
                             <option value="<?= htmlspecialchars($p->idbank) ?>">
@@ -1166,7 +1373,7 @@
                 </div>
                 <div class="pb-subfield">
                     <label class="pb-subfield__label" for="bank-nominal-${index}">Nominal</label>
-                    <input type="text" id="bank-nominal-${index}" class="form-control bank-amount" name="bank[${index}][jumlah]" value="Rp 0" readonly>
+                    <input type="text" id="bank-nominal-${index}" class="form-control bank-amount" name="bank[${index}][jumlah]" value="Rp 0" inputmode="numeric" autocomplete="off">
                 </div>
             </div>
         `);
@@ -1182,48 +1389,132 @@
             $('#bank-payment-container').empty();
         }
 
+        function formatNominal(input) {
+            input.value = formatToRupiah(input.value || 'Rp 0');
+        }
+
+        function totalBankTerisi() {
+            let total = 0;
+            $('#bank-payment-container .bank-amount').each(function() {
+                total += unformatRupiah(this.value || 'Rp 0');
+            });
+            return total;
+        }
+
+        $('#bank-payment-container').on('input', '.bank-amount', function() {
+            formatNominal(this);
+            updateHutang();
+        });
+
+        $('#bank-payment-container').on('click', '.hapus-bank', function() {
+            $(this).closest('.bank-row').remove();
+            updateHutang();
+        });
+
+        $('#tambah-bank').on('click', function() {
+            tambahBarisBank();
+            updateHutang();
+        });
+
+        $('#uang-pas').on('click', function() {
+            $('#bayar').val(formatToRupiah(String(totalPembelian())));
+            updateHutang();
+        });
+
+        $('#isi-sisa').on('click', function() {
+            const sisa = Math.max(totalPembelian() - totalBankTerisi(), 0);
+            $('#bayar').val(formatToRupiah(String(sisa)));
+            updateHutang();
+        });
+
+        $('#pb-method-tabs').on('click', '[data-metode]', function() {
+            if (this.disabled) return;
+            setMetode(this.getAttribute('data-metode'));
+        });
+
+        $('#pb-method-tabs').on('keydown', '[data-metode]', function(e) {
+            const tabs = Array.from(document.querySelectorAll('#pb-method-tabs [data-metode]:not(:disabled)'));
+            const index = tabs.indexOf(this);
+            if (index < 0) return;
+            let next = null;
+            if (e.key === 'ArrowRight') next = tabs[(index + 1) % tabs.length];
+            if (e.key === 'ArrowLeft') next = tabs[(index - 1 + tabs.length) % tabs.length];
+            if (e.key === 'Home') next = tabs[0];
+            if (e.key === 'End') next = tabs[tabs.length - 1];
+            if (!next) return;
+            e.preventDefault();
+            next.focus();
+            setMetode(next.getAttribute('data-metode'));
+        });
+
         /**
          * Tempo: tanpa pembayaran, jatuh tempo wajib.
-         * Lunas: bayar penuh lewat tunai atau satu rekening bank.
+         * Lunas: tunai, transfer, atau tunai + transfer (beberapa rekening).
          */
         function aturPembayaran() {
             const jenis = $('#jenis_pembayaran').val() || '';
             const metode = $('#metode_bayar').val() || '';
             const lunas = jenis === 'lunas';
+            const split = document.getElementById('pb-pay-split');
+            const empty = document.getElementById('pb-pay-empty');
 
             // Required dilepas saat field disembunyikan supaya browser tidak
             // memblokir submit karena kontrol tidak terlihat.
             $('#jatuh-tempo-field').toggle(jenis === 'tempo');
             $('#jatuh_tempo').prop('required', jenis === 'tempo');
-            $('#metode_bayar').prop('required', lunas);
+            // #metode_bayar diklip (bukan display:none), jadi required native
+            // akan memblokir submit sebelum guard inline sempat tampil.
             $('.lunas-section').toggle(lunas);
+            $('.pb-alloc').toggle(lunas);
 
             if (!lunas) {
                 $('.tunai-section, .transfer-section').hide();
+                if (split) split.hidden = true;
+                if (empty) empty.hidden = true;
                 kosongkanBank();
                 $('#bayar').val('Rp 0').prop('readonly', true);
+                $('#uang-pas, #isi-sisa').prop('hidden', true);
+                syncTabMetode();
                 updateHutang();
                 return;
             }
 
-            $('.tunai-section').toggle(metode === 'tunai');
-            $('.transfer-section').toggle(metode === 'transfer');
-            $('#bayar').prop('readonly', true);
+            const pakaiTunai = metode === 'tunai' || metode === 'tunai_transfer';
+            const pakaiBank = metode === 'transfer' || metode === 'tunai_transfer';
+
+            $('.tunai-section').toggle(pakaiTunai);
+            $('.transfer-section').toggle(pakaiBank);
+            $('#bayar').prop('readonly', !pakaiTunai);
+            $('#uang-pas').prop('hidden', metode !== 'tunai');
+            $('#isi-sisa').prop('hidden', metode !== 'tunai_transfer');
+
+            if (split) {
+                split.hidden = !(pakaiTunai || pakaiBank);
+                split.classList.toggle('is-tunai', pakaiTunai && !pakaiBank);
+                split.classList.toggle('is-transfer', pakaiBank && !pakaiTunai);
+            }
+            if (empty) empty.hidden = pakaiTunai || pakaiBank;
+
+            if (!pakaiBank) {
+                kosongkanBank();
+            } else if ($('#bank-payment-container .bank-row').length === 0) {
+                tambahBarisBank();
+            }
 
             if (metode === 'tunai') {
-                kosongkanBank();
                 $('#bayar').val(formatToRupiah(String(totalPembelian())));
             } else if (metode === 'transfer') {
                 $('#bayar').val('Rp 0');
-                if ($('#bank-payment-container .bank-row').length === 0) {
-                    tambahBarisBank();
-                }
                 sinkronPembayaranOtomatis();
+            } else if (metode === 'tunai_transfer') {
+                // Isi sisa awal; pengguna tetap bisa mengetik ulang.
+                $('#bayar').val(formatToRupiah(String(Math.max(totalPembelian() - totalBankTerisi(), 0))));
             } else {
                 kosongkanBank();
                 $('#bayar').val('Rp 0');
             }
 
+            syncTabMetode();
             updateHutang();
         }
 
@@ -1247,6 +1538,54 @@
             e.preventDefault();
             alert('Pelanggan belum dipilih!');
             return false;
+        }
+
+        const jenisPembayaran = document.getElementById('jenis_pembayaran').value;
+        if (jenisPembayaran === 'lunas') {
+            const metode = document.getElementById('metode_bayar').value;
+            if (!metode) {
+                e.preventDefault();
+                tampilkanErrorPembayaran(
+                    'Pilih metode pembayaran Lunas.',
+                    document.querySelector('#pb-method-tabs [data-metode]')
+                );
+                return false;
+            }
+
+            const total = totalPembelian();
+            let dibayar = unformatRupiah(document.getElementById('bayar').value || 'Rp 0');
+            document.querySelectorAll('.bank-amount').forEach(input => {
+                dibayar += unformatRupiah(input.value || 'Rp 0');
+            });
+
+            // Baris dengan nominal tetapi tanpa rekening tidak boleh lolos ke
+            // server; pesan inline menyebut field yang salah.
+            const barisBank = Array.from(document.querySelectorAll('#bank-payment-container .bank-row'));
+            for (const baris of barisBank) {
+                const nominalEl = baris.querySelector('.bank-amount');
+                const rekeningEl = baris.querySelector('.bank-select');
+                const nominal = unformatRupiah((nominalEl || {}).value || 'Rp 0');
+                if (nominal > 0 && rekeningEl && !rekeningEl.value) {
+                    e.preventDefault();
+                    tampilkanErrorPembayaran(
+                        'Rekening bank wajib dipilih untuk nominal transfer.',
+                        rekeningEl
+                    );
+                    return false;
+                }
+            }
+
+            if (dibayar !== total) {
+                e.preventDefault();
+                const fokus = metode === 'transfer'
+                    ? (document.querySelector('#bank-payment-container .bank-amount') || document.getElementById('bayar'))
+                    : document.getElementById('bayar');
+                tampilkanErrorPembayaran(
+                    'Pembayaran Lunas harus tepat Rp ' + total.toLocaleString('id-ID') + '.',
+                    fokus
+                );
+                return false;
+            }
         }
 
         const adaProduk = document.querySelectorAll('#selected-produk-table tr:not(#produk-empty)').length > 0;

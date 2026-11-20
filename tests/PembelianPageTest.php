@@ -65,7 +65,9 @@ final class PembelianPageTest extends CIUnitTestCase
         $this->assertStringContainsString('pb-head', $html);
         $this->assertStringContainsString('pb-sheet', $html);
         $this->assertStringContainsString('pb-party-grid', $html);
-        $this->assertStringContainsString('pb-pay-grid', $html);
+        $this->assertStringContainsString('pb-pay-band', $html);
+        $this->assertStringContainsString('pb-method-tabs', $html);
+        $this->assertStringNotContainsString('pb-pay-grid', $html);
         $this->assertStringContainsString('pb-section', $html);
         $this->assertStringContainsString('pb-dock', $html);
         $this->assertStringContainsString('Ringkasan pembayaran', $html);
@@ -159,6 +161,9 @@ final class PembelianPageTest extends CIUnitTestCase
         $html = $this->render();
 
         // Baris bank kini kartu vertikal: rekening di atas, nominal di bawah.
+        $this->assertStringContainsString('pb-bank-panel', $html);
+        $this->assertStringContainsString('pb-bank-list', $html);
+        $this->assertStringContainsString('pb-bank-head', $html);
         $this->assertStringContainsString('bank-rekening-${index}', $html);
         $this->assertStringContainsString('bank-nominal-${index}', $html);
         $this->assertStringContainsString('class="pb-subfield"', $html);
@@ -189,13 +194,75 @@ final class PembelianPageTest extends CIUnitTestCase
         );
     }
 
-    public function testCsrfTokenAdaDanTombolBankPalsuDihapus(): void
+    public function testCsrfTokenAdaDanTombolTambahBankBerfungsi(): void
     {
         $html = $this->render();
 
         $this->assertStringContainsString('name="csrf_test_name"', $html, 'form pembelian wajib membawa token CSRF');
-        $this->assertStringNotContainsString('id="tambah-bank"', $html, 'tombol Tambah Bank yang tidak berfungsi harus hilang');
-        $this->assertStringNotContainsString('Tambah Bank', $html);
+        $this->assertStringContainsString('id="tambah-bank"', $html, 'tombol Tambah rekening harus tersedia saat ada rekening');
+        $this->assertStringContainsString('Tambah rekening', $html);
+
+        // Tanpa rekening aktif, tombol tambah tidak boleh muncul.
+        $tanpaBank = $this->render(false, false, [], null, []);
+        $this->assertStringNotContainsString('id="tambah-bank"', $tanpaBank);
+    }
+
+    public function testMetodePembayaranMendukungTunaiTransfer(): void
+    {
+        $html = $this->render();
+
+        $this->assertMatchesRegularExpression(
+            '/<select[^>]*id="metode_bayar"[^>]*>.*?<\/select>/s',
+            $html
+        );
+        preg_match('/<select[^>]*id="metode_bayar"[^>]*>.*?<\/select>/s', $html, $m);
+        $this->assertStringContainsString('value="tunai_transfer"', $m[0]);
+        $this->assertStringContainsString('Tunai + Transfer', $m[0]);
+    }
+
+    public function testInputTunaiDanBankTidakReadonly(): void
+    {
+        $html = $this->render();
+
+        preg_match('/<input[^>]*id="bayar"[^>]*>/', $html, $m);
+        $this->assertNotEmpty($m);
+        $this->assertStringNotContainsString('readonly', $m[0], 'nominal tunai harus bisa diketik');
+
+        preg_match('/<input[^>]*id="bank-nominal-\$\{index\}"[^>]*>/', $html, $m);
+        $this->assertNotEmpty($m);
+        $this->assertStringNotContainsString('readonly', $m[0], 'nominal bank harus bisa diketik');
+    }
+
+    public function testAdaStatusPembayaranDanGuardSubmit(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('id="pb-pay-status"', $html);
+        $this->assertStringContainsString('Pembayaran Lunas harus tepat', $html);
+    }
+
+    public function testBarisBankTidakMemaksaRekeningSaatTunaiSaja(): void
+    {
+        $html = $this->render();
+
+        preg_match('/<select[^>]*class="[^"]*bank-select[^"]*"[^>]*>/', $html, $m);
+        $this->assertNotEmpty($m);
+        $this->assertStringNotContainsString(
+            'required',
+            $m[0],
+            'baris bank kosong tidak boleh memblokir Lunas tunai saja'
+        );
+    }
+
+    public function testSinkronTransferTidakMenimpaSplitBanyakRekening(): void
+    {
+        $html = $this->render();
+
+        $this->assertMatchesRegularExpression(
+            '/if \(amounts\.length === 1\)/',
+            $html,
+            'transfer multi-rekening tidak boleh ditimpa otomatis saat total berubah'
+        );
     }
 
     public function testPerhitunganPpnTidakMemasukkanBiayaTambahan(): void
@@ -368,7 +435,7 @@ final class PembelianPageTest extends CIUnitTestCase
 
         $this->assertStringContainsString('value="lunas"', $select);
         $this->assertStringContainsString('value="tempo"', $select);
-        $this->assertStringNotContainsString('tunai_transfer', $html, 'pilihan lama harus hilang');
+        $this->assertStringNotContainsString('tunai_transfer', $select, 'jenis pembayaran tetap hanya Tempo dan Lunas');
     }
 
     public function testProdukNonaktifTetapTampilDenganBadgeDiModalPembelian(): void
@@ -383,5 +450,110 @@ final class PembelianPageTest extends CIUnitTestCase
         $aktif = $this->render(false, false, [], null, null, 1);
         $this->assertStringNotContainsString('pb-produk-card is-nonaktif', $aktif);
         $this->assertStringNotContainsString('aktif otomatis saat dibeli', $aktif);
+    }
+
+    public function testPaymentConsoleMemilikiTabDanPanel(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('id="pb-method-tabs"', $html);
+        $this->assertStringContainsString('role="tablist"', $html);
+        $this->assertStringContainsString('role="tabpanel"', $html);
+        $this->assertStringContainsString('id="pb-tab-tunai"', $html);
+        $this->assertStringContainsString('id="pb-tab-transfer"', $html);
+        $this->assertStringContainsString('id="pb-tab-tunai_transfer"', $html);
+        $this->assertStringContainsString('data-metode="tunai"', $html);
+        $this->assertStringContainsString('data-metode="transfer"', $html);
+        $this->assertStringContainsString('data-metode="tunai_transfer"', $html);
+        $this->assertStringContainsString('class="pb-pay-split"', $html);
+        $this->assertStringContainsString('id="pb-pay-split"', $html);
+        $this->assertStringContainsString('id="pb-pay-empty"', $html);
+        $this->assertStringContainsString('class="pb-cash-panel', $html);
+        $this->assertStringContainsString('class="pb-bank-panel', $html);
+        $this->assertStringContainsString('id="pb-alloc-total"', $html);
+        $this->assertStringContainsString('id="pb-alloc-dibayar"', $html);
+        $this->assertStringContainsString('id="pb-alloc-sisa"', $html);
+        $this->assertStringContainsString('id="pb-meter"', $html);
+        $this->assertMatchesRegularExpression(
+            '/id="pb-tab-tunai"[^>]*tabindex="0"/s',
+            $html,
+            'tab pertama harus menjadi tab stop awal saat belum ada metode terpilih'
+        );
+        $this->assertStringContainsString('firstEnabled', $html, 'syncTabMetode harus punya fallback tab stop');
+    }
+
+    public function testSelectMetodeTersembunyiTidakMemakaiRequired(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringNotContainsString(
+            "\$('#metode_bayar').prop('required', lunas)",
+            $html,
+            'select metode yang diklip tidak boleh required karena memblokir submit sebelum guard JS'
+        );
+
+        preg_match('/<select[^>]*id="metode_bayar"[^>]*>/', $html, $m);
+        $this->assertNotEmpty($m);
+        $this->assertStringNotContainsString('required', $m[0]);
+    }
+
+    public function testCatatanRekeningKosongTerlihatDiLuarPanelTransfer(): void
+    {
+        $html = $this->render(false, false, [], null, []);
+
+        $this->assertStringContainsString('lunas-section pb-bank-note-wrap', $html);
+        $this->assertStringContainsString('Belum ada rekening aktif untuk unit ini.', $html);
+    }
+
+    public function testTabTransferNonaktifTanpaRekening(): void
+    {
+        $html = $this->render(false, false, [], null, []);
+
+        $this->assertMatchesRegularExpression(
+            '/<button[^>]*data-metode="transfer"[^>]*disabled/s',
+            $html
+        );
+        $this->assertMatchesRegularExpression(
+            '/<button[^>]*data-metode="tunai_transfer"[^>]*disabled/s',
+            $html
+        );
+        $this->assertStringContainsString('Belum ada rekening aktif untuk unit ini.', $html);
+    }
+
+    public function testDockMemilikiModeLunasDanTempo(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('data-dock="lunas"', $html);
+        $this->assertStringContainsString('data-dock="tempo"', $html);
+        $this->assertStringContainsString('id="hutang"', $html);
+        $this->assertStringContainsString('id="kembalian"', $html);
+        $this->assertStringContainsString('id="pb-dock-sisa"', $html);
+    }
+
+    public function testAlokasiDanDockMemilikiLogikaSinkron(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('function updateAlokasi(', $html);
+        $this->assertStringContainsString('function updateDockMode(', $html);
+        $this->assertStringContainsString('id="uang-pas"', $html);
+        $this->assertStringContainsString('id="isi-sisa"', $html);
+        $this->assertStringContainsString('Uang pas', $html);
+        $this->assertStringContainsString('Isi sisa', $html);
+    }
+
+    public function testValidasiPembayaranMemakaiPesanInline(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('function tampilkanErrorPembayaran(', $html);
+        $this->assertStringContainsString('Pembayaran Lunas harus tepat', $html);
+        $this->assertStringNotContainsString("alert('Pembayaran Lunas harus tepat", $html);
+        $this->assertStringContainsString('Rekening bank wajib dipilih', $html);
+        $this->assertStringContainsString('ArrowRight', $html);
+        $this->assertStringContainsString('ArrowLeft', $html);
+        $this->assertStringContainsString('Home', $html);
+        $this->assertStringContainsString('End', $html);
     }
 }

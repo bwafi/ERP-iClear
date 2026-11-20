@@ -742,17 +742,230 @@
     }
 
     /* ===== Pembayaran ===== */
-    .pb-pay-grid {
+    .pb-pay-band {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .pb-pay-head {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 14px 16px;
     }
 
+    .pb-method-switch {
+        display: grid;
+        gap: 8px;
+    }
+
+    .pb-method-native-label {
+        display: block;
+        color: var(--pb-muted);
+        font-size: .65rem;
+        font-weight: 650;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .pb-js .pb-method-native-label {
+        display: none;
+    }
+
+    .pb-method-tabs {
+        display: none;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--pb-rule);
+        border-radius: var(--pb-radius-sm);
+        background: var(--pb-subtle);
+    }
+
+    .pb-js .pb-method-tabs {
+        display: grid;
+    }
+
+    .pb-method-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 44px;
+        padding: 8px 10px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--pb-muted);
+        font-size: .8rem;
+        font-weight: 600;
+        line-height: 1.2;
+        cursor: pointer;
+        transition: background-color .15s ease, color .15s ease;
+    }
+
+    .pb-method-tab[aria-selected="true"] {
+        border-bottom-color: var(--pb-accent);
+        background: var(--pb-accent-soft);
+        color: var(--pb-accent);
+    }
+
+    .pb-method-tab:disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
+
+    .pb-method-tab:focus-visible {
+        outline: 2px solid var(--pb-accent);
+        outline-offset: 2px;
+    }
+
+    .pb-pay-split {
+        display: grid;
+        grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+        gap: 0;
+        border: 1px solid var(--pb-rule);
+        border-radius: var(--pb-radius-sm);
+        overflow: clip;
+    }
+
+    .pb-pay-split.is-tunai,
+    .pb-pay-split.is-transfer {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pb-pay-split.is-tunai .pb-bank-panel,
+    .pb-pay-split.is-transfer .pb-bank-panel {
+        border-left: 0;
+    }
+
+    .pb-cash-panel,
+    .pb-bank-panel {
+        min-width: 0;
+        padding: 16px;
+    }
+
+    .pb-bank-panel {
+        border-left: 1px solid var(--pb-rule);
+        background: var(--pb-subtle);
+    }
+
+    .pb-panel-head,
+    .pb-bank-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .pb-panel__label {
+        color: var(--pb-strong);
+        font-size: .8rem;
+        font-weight: 650;
+    }
+
+    .pb-panel__hint {
+        color: var(--pb-muted);
+        font-size: .68rem;
+    }
+
+    .pb-cash-input {
+        font-size: 1.35rem;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pb-cash-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .pb-cash-actions .pb-btn {
+        padding: 7px 12px;
+        font-size: .75rem;
+    }
+
+    .pb-pay-empty {
+        margin: 0;
+        padding: 18px 16px;
+        border: 1px dashed var(--pb-rule-strong);
+        border-radius: var(--pb-radius-sm);
+        color: var(--pb-muted);
+        font-size: .8rem;
+        text-align: center;
+    }
+
+    .pb-alloc {
+        display: grid;
+        gap: 8px;
+    }
+
+    .pb-alloc__figures {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px 20px;
+    }
+
+    .pb-alloc__fig {
+        display: inline-flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-width: 0;
+        color: var(--pb-muted);
+        font-size: .7rem;
+    }
+
+    .pb-alloc__fig b {
+        color: var(--pb-strong);
+        font-size: .82rem;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pb-meter {
+        display: block;
+        width: 100%;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--pb-rule);
+        overflow: hidden;
+    }
+
+    .pb-meter > i {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: var(--pb-danger);
+        transition: width .2s ease;
+    }
+
+    .pb-meter > i.is-pas {
+        background: var(--pb-ok);
+    }
+
+    .pb-js .pb-method-native {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
     .pb-bank-row {
+        position: relative;
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         gap: 10px;
-        padding: 12px;
+        padding: 12px 42px 12px 12px;
         border: 1px solid var(--pb-rule);
         border-radius: var(--pb-radius-sm);
         background: var(--pb-subtle);
@@ -760,6 +973,51 @@
 
     .pb-bank-row + .pb-bank-row {
         margin-top: 10px;
+    }
+
+    .pb-row-del {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--pb-danger);
+        cursor: pointer;
+    }
+
+    .pb-row-del:hover {
+        background: var(--pb-danger-soft);
+    }
+
+    .pb-bank-add {
+        width: 100%;
+        justify-content: center;
+        margin-top: 10px;
+        padding: 7px 12px;
+        font-size: .75rem;
+    }
+
+    .pb-pay-status {
+        margin: 0;
+        min-height: 1.2em;
+        font-size: .8rem;
+        font-weight: 700;
+    }
+
+    .pb-pay-status.is-pas {
+        color: var(--pb-ok);
+    }
+
+    .pb-pay-status.is-kurang,
+    .pb-pay-status.is-lebih {
+        color: var(--pb-danger);
     }
 
     .pb-bank-row .pb-subfield {
@@ -794,8 +1052,11 @@
         line-height: 1.4;
     }
 
+    .pb-bank-note-wrap {
+        margin-top: 2px;
+    }
+
     .pb-pay-note {
-        grid-column: 1 / -1;
         margin: 0;
         padding-top: 2px;
         font-size: .72rem;
@@ -875,6 +1136,10 @@
 
     .pb-figure--debt.is-zero input {
         color: var(--pb-ink);
+    }
+
+    .pb-figure__value--danger {
+        color: var(--pb-danger);
     }
 
     .pb-dock__save {
@@ -1349,6 +1614,10 @@
         .pb-party-grid .pb-doc__nota {
             grid-column: span 2;
         }
+
+        .pb-pay-head {
+            grid-template-columns: minmax(0, 1fr);
+        }
     }
 
     @media (max-width: 991.98px) {
@@ -1368,8 +1637,13 @@
             grid-column: 1 / -1;
         }
 
-        .pb-pay-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+        .pb-pay-split {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .pb-bank-panel {
+            border-left: 0;
+            border-top: 1px solid var(--pb-rule);
         }
 
         .pb-dock {
@@ -1441,6 +1715,26 @@
             width: 100%;
             margin-left: 0;
         }
+
+        .pb-method-tab {
+            flex-direction: column;
+            gap: 4px;
+            padding: 8px 4px;
+            font-size: .72rem;
+        }
+
+        .pb-row-del {
+            top: 4px;
+            right: 4px;
+            width: 44px;
+            height: 44px;
+        }
+
+        .pb-alloc__figures {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
     }
 
     @media (max-width: 575.98px) {
@@ -1461,8 +1755,16 @@
             grid-column: span 1;
         }
 
-        .pb-pay-grid {
+        .pb-pay-head {
             grid-template-columns: minmax(0, 1fr);
+        }
+
+        .pb-panel__hint {
+            display: none;
+        }
+
+        .pb-cash-input {
+            font-size: 1.2rem;
         }
 
         .pb-toolbar {
@@ -1540,7 +1842,9 @@
         }
 
         .pb-btn,
-        .pb-file {
+        .pb-file,
+        .pb-method-tab,
+        .pb-meter > i {
             transition: none;
         }
     }
