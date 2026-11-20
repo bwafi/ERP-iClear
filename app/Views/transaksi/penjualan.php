@@ -1,1160 +1,1490 @@
+<?= $this->include('transaksi/_penjualan_theme') ?>
+<?= $this->include('partials/sparepart_picker_style') ?>
+
 <script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
 
+<?php
+$tanggalHariIni = date('Y-m-d');
+$namaUnit = session('NAMA_UNIT') ?: 'Unit aktif';
+$bankOptions = [];
 
-<!-- Page Header -->
-<div class="card shadow-none position-relative overflow-hidden mb-4">
-    <div class="card-body d-flex align-items-center justify-content-between p-4">
-        <h4 class="fw-semibold mb-0">Penjualan</h4>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item">
-                    <a class="text-muted text-decoration-none" href="<?= base_url('/') ?>">Transaksi</a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">Penjualan</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+foreach (($bank ?? []) as $b) {
+    $label = trim((string) ($b->nama_bank ?? ''));
+    $atasNama = trim((string) ($b->atas_nama ?? ''));
 
-<!-- Form & Main Content -->
-<div class="card w-100 position-relative overflow-hidden">
-    <div class="px-4 py-3 border-bottom"></div>
+    if ($atasNama !== '') {
+        $label .= ' ' . $atasNama;
+    }
 
-    <div class="card-body px-4 pt-4 pb-2">
-        <form action="<?= base_url('insert_penjualan') ?>" method="post" id="form_penjualan"
-            enctype="multipart/form-data">
-            <div class="row mb-3">
-                <?php $tanggalHariIni = date('Y-m-d'); ?>
+    $label .= ' : ' . ($b->norek ?? '');
 
-                <div class="col-md-6">
-                    <label for="tanggal_masuk" class="form-label">Tanggal</label>
+    $bankOptions[] = [
+        'id' => (string) ($b->idbank ?? ''),
+        'label' => $label,
+    ];
+}
 
-                    <!-- Semua unit bebas memilih tanggal, termasuk backdate.
-                         Sebelumnya hanya unit 1 yang boleh; unit lain dikunci
-                         readonly + min/max = hari ini sehingga tidak bisa
-                         mengisi tanggal sendiri. -->
-                    <input type="date"
-                        class="form-control"
-                        id="tanggal_masuk"
-                        name="tanggal_masuk"
-                        value="<?= $tanggalHariIni ?>"
-                        required>
+$bankJson = json_encode(
+    $bankOptions,
+    JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE
+);
+?>
+
+<div class="penjualan-page">
+    <header class="pj-head">
+        <ol class="pj-crumb">
+            <li><a href="<?= base_url('/') ?>">Transaksi</a></li>
+            <li aria-current="page">Penjualan</li>
+        </ol>
+        <div class="pj-head__row">
+            <div>
+                <h1>Penjualan</h1>
+                <p class="pj-sub">Pilih pelanggan, masukkan produk, lalu bagi pembayaran tunai dan transfer.</p>
+            </div>
+            <span class="pj-unit">
+                <iconify-icon icon="solar:shop-outline" width="15" height="15"></iconify-icon>
+                <?= esc($namaUnit) ?>
+            </span>
+        </div>
+    </header>
+
+    <form action="<?= base_url('insert_penjualan') ?>" method="post" id="form_penjualan" class="pj-sheet"
+        enctype="multipart/form-data" novalidate>
+
+        <!-- ===== 1. Pihak & Dokumen ===== -->
+        <section class="pj-section" aria-labelledby="pj-pihak-title">
+            <div class="pj-section__head">
+                <div>
+                    <h2 class="pj-section__title" id="pj-pihak-title">Pihak &amp; Dokumen</h2>
+                    <p class="pj-section__hint">Tentukan tanggal, kasir yang melayani, dan pelanggan yang menerima
+                        nota.</p>
+                </div>
+            </div>
+
+            <div class="pj-grid">
+                <div class="pj-field">
+                    <label for="tanggal_masuk">Tanggal</label>
+                    <input type="date" class="pj-input" id="tanggal_masuk" name="tanggal_masuk"
+                        value="<?= $tanggalHariIni ?>" required>
+                    <p class="pj-hint">Semua unit boleh memilih tanggal, termasuk backdate.</p>
                 </div>
 
-
-                <div class="col-md-6">
-                    <label for="sales_by" class="form-label">Staff</label>
-                    <select class="form-control" id="sales_by" name="sales_by" required>
-                        <option value="">-- Pilih Staff --</option>
+                <div class="pj-field">
+                    <label for="sales_by">Staff</label>
+                    <select class="pj-select" id="sales_by" name="sales_by" required
+                        aria-describedby="pj-staff-error">
+                        <option value="">— Pilih staff —</option>
                         <?php foreach ($frontliner as $akun): ?>
                             <option value="<?= esc($akun->ID_AKUN) ?>"><?= esc($akun->NAMA_AKUN) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <p class="pj-error" id="pj-staff-error" hidden>Pilih staff yang melayani.</p>
+                </div>
+
+                <div class="pj-field">
+                    <label for="pelanggan">Pelanggan</label>
+                    <div class="pj-customer">
+                        <input type="text" class="pj-input" id="pelanggan" name="pelanggan"
+                            placeholder="Belum dipilih" readonly required aria-describedby="pj-customer-error">
+                        <button type="button" id="pelanggan-button" class="pj-btn pj-btn--outline"
+                            data-bs-toggle="modal" data-bs-target="#pelangganModal">
+                            <iconify-icon icon="solar:user-circle-outline" width="18" height="18"></iconify-icon>
+                            Pilih
+                        </button>
+                    </div>
+                    <span class="pj-customer__meta" id="pj-customer-meta">
+                        <iconify-icon icon="solar:map-point-outline" width="14" height="14"></iconify-icon>
+                        Alamat pelanggan akan tampil di sini.
+                    </span>
+                    <p class="pj-error" id="pj-customer-error" hidden>Pilih pelanggan terlebih dahulu.</p>
                 </div>
             </div>
+        </section>
 
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label for="metode_bayar" class="form-label">Metode Pembayaran</label>
-                    <select id="metode_bayar" name="metode_bayar" class="form-control">
-                        <option disabled selected>Pilih Metode</option>
-                        <option value="tunai">Tunai</option>
-                        <option value="transfer">Transfer</option>
-                        <option value="tunai_transfer">Tunai + Transfer</option>
-                    </select>
+        <!-- ===== 2. Produk ===== -->
+        <section class="pj-section" aria-labelledby="pj-produk-title">
+            <div class="pj-section__head">
+                <div>
+                    <h2 class="pj-section__title" id="pj-produk-title">Produk</h2>
+                    <p class="pj-section__hint">Harga jual mengikuti unit aktif. Centang PPN 11% bila barang kena
+                        pajak.</p>
                 </div>
-                <div class="col-md-4" id="pelanggan-container">
-                    <label for="pelanggan" class="form-label">Pelanggan</label>
-                    <input type="text" class="form-control" id="pelanggan" name="pelanggan" required readonly>
-                </div>
-                <div class="col-md-2">
-                    <br>
-                    <button type="button" id="pelanggan-button" class="btn btn-warning" data-bs-toggle="modal"
-                        data-bs-target="#pelangganModal"
-                        style="display: inline-flex; align-items: center; margin-bottom: 4px;">
-                        <iconify-icon icon="mdi:account" width="20" height="20" style="margin-right: 8px;">
+                <div class="pj-toolbar">
+                    <span class="pj-count" id="pj-item-count">0 item</span>
+                    <button type="button" class="pj-btn pj-btn--primary" id="pj-pilih-produk"
+                        data-bs-toggle="modal" data-bs-target="#pilih-produk-modal">
+                        <iconify-icon icon="solar:password-minimalistic-input-outline" width="18" height="18">
                         </iconify-icon>
-                        Pilih Pelanggan
-                    </button>
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <label for="form_provinsi" class="form-label">Provinsi</label>
-                    <select id="form_provinsi" name="domisili_provinsi"
-                        class="js-domisili form-control form-select" style="width: 100%;">
-                        <option value="">-- Pilih / Cari Provinsi --</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label for="form_kabupaten" class="form-label">Kabupaten</label>
-                    <select id="form_kabupaten" name="domisili_kabupaten"
-                        class="js-domisili form-control form-select" style="width: 100%;">
-                        <option value="">-- Pilih / Cari Kabupaten --</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label for="form_kecamatan" class="form-label">Kecamatan</label>
-                    <select id="form_kecamatan" name="domisili_kecamatan"
-                        class="js-domisili form-control form-select" style="width: 100%;">
-                        <option value="">-- Pilih / Cari Kecamatan --</option>
-                    </select>
-                </div>
-
-                <!-- Button Trigger Modal -->
-
-                <div class="mt-4">
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal"
-                        data-bs-target="#pilih-produk-modal" style="display: inline-flex; align-items: center;">
-                        <iconify-icon icon="solar:password-minimalistic-input-broken" width="24" height="24"
-                            style="margin-right: 8px;"></iconify-icon>
                         Pilih Produk
                     </button>
+                    <button type="button" class="pj-btn pj-btn--ghost" id="pj-clear-cart">Kosongkan</button>
                 </div>
+            </div>
 
+            <p class="pj-form-error" id="pj-produk-error" hidden>Tambahkan minimal satu produk sebelum
+                menyimpan.</p>
 
-                <!-- produk bundle modal -->
-
-                <div class="modal fade" id="pilih-produk-modal" tabindex="-1" aria-labelledby="produkModalLabel"
-                    aria-hidden="true">
-                    <div class="modal-dialog modal-xl">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Pilih Produk</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                    aria-label="Tutup"></button>
-                            </div>
-                            <div class="modal-body">
-                                <!-- Nav Tabs -->
-                                <ul class="nav nav-tabs mb-3" id="produkTab" role="tablist">
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link active" id="produk-tab" data-bs-toggle="tab"
-                                            data-bs-target="#produk-content" type="button" role="tab"
-                                            aria-controls="produk-content" aria-selected="true">Produk</button>
-                                    </li>
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link" id="bundle-tab" data-bs-toggle="tab"
-                                            data-bs-target="#bundle-content" type="button" role="tab"
-                                            aria-controls="bundle-content" aria-selected="false">Bundle</button>
-                                    </li>
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link" id="jasa-tab" data-bs-toggle="tab"
-                                            data-bs-target="#jasa-content" type="button" role="tab"
-                                            aria-controls="jasa-content" aria-selected="false">Jasa</button>
-                                    </li>
-                                </ul>
-
-                                <!-- Tab Content -->
-                                <div class="tab-content" id="produkTabContent">
-                                    <!-- Produk -->
-                                    <div class="tab-pane fade show active" id="produk-content" role="tabpanel"
-                                        aria-labelledby="produk-tab">
-                                        <div class="table-responsive mb-4 px- table-scroll">
-                                            <table class="table border text-nowrap mb-0 align-middle"
-                                                id="produk-modal-table">
-                                                <thead class="text-dark fs-4">
-                                                    <tr>
-                                                        <th><input type="checkbox" id="select-all-produk"></th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Kode Barang</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Nama Barang</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Kondisi Barang</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Harga</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Kategori</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Stok</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Imei</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Internal</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Warna</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Jenis</h6>
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($produk as $p): ?>
-                                                        <tr>
-                                                            <td>
-                                                                <input type="checkbox" class="produk-checkbox"
-                                                                    data-id="<?= $p->idbarang ?>"
-                                                                    data-kode="<?= $p->kode_barang ?>"
-                                                                    data-nama="<?= $p->nama_barang ?>"
-                                                                    data-harga="<?= (int) round((float) $p->harga_jual) ?>"
-                                                                    data-kategori="<?= $p->nama_kategori ?>"
-                                                                    data-input="<?= $p->input ?>"
-                                                                    data-kondisi_barang="<?= $p->status_barang ?>"
-                                                                    <?= (is_null($p->stok_akhir) || $p->stok_akhir <= 0) ? 'disabled' : '' ?>>
-                                                            </td>
-                                                            <td><?= $p->kode_barang ?></td>
-                                                            <td><?= $p->nama_barang ?></td>
-                                                            <td><?= (int)$p->kondisi === 1 ? 'Second' : 'Baru' ?></td>
-                                                            <td><?= 'Rp ' . number_format($p->harga_jual, 0, ',', '.') ?></td>
-                                                            <td><?= $p->nama_kategori ?></td>
-                                                            <td>
-                                                                <?= is_null($p->stok_akhir) ? '<span class="text-red-500">belum mengatur stok awal</span>' : $p->stok_akhir ?>
-                                                            </td>
-                                                            <td><?= $p->imei ? $p->imei : 'Tidak Ada' ?></td>
-                                                            <td><?= $p->internal ? $p->internal : 'Tidak Ada' ?></td>
-                                                            <td><?= $p->warna ? $p->warna : 'Tidak Ada' ?></td>
-                                                            <td><?= $p->jenis_hp ? $p->jenis_hp : 'Tidak Ada' ?></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    <!-- Jasa -->
-                                    <div class="tab-pane fade" id="jasa-content" role="tabpanel"
-                                        aria-labelledby="jasa-tab">
-                                        <div class="table-responsive mb-4 px-4">
-                                            <table class="table border text-nowrap mb-0 align-middle"
-                                                id="jasa-modal-table">
-                                                <thead class="text-dark fs-4">
-                                                    <tr>
-                                                        <th></th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Kode</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Nama Jasa</h6>
-                                                        </th>
-                                                        <th>
-                                                            <h6 class="fs-4 fw-semibold mb-0">Harga</h6>
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($jasa as $j): ?>
-                                                        <tr>
-                                                            <td>
-                                                                <input type="checkbox" class="produk-checkbox"
-                                                                    data-id="<?= (int) $j->idbarang ?>"
-                                                                    data-kode="<?= esc($j->kode_barang) ?>"
-                                                                    data-nama="<?= esc($j->nama_barang) ?>"
-                                                                    data-harga="<?= (float) $j->harga_jual ?>"
-                                                                    data-kategori="Jasa"
-                                                                    data-kondisi_barang="0">
-                                                            </td>
-                                                            <td><?= esc($j->kode_barang) ?></td>
-                                                            <td><?= esc($j->nama_barang) ?></td>
-                                                            <td><?= 'Rp ' . number_format($j->harga_jual, 0, ',', '.') ?></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <p class="form-text mb-0">Jasa tidak memiliki stok — qty di transaksi hanya
-                                            jumlah penjualan. Harga dikelola di menu Master Jasa → Tarif Jasa.</p>
-                                    </div>
-
-                                    <!-- Bundle -->
-                                    <div class="tab-pane fade" id="bundle-content" role="tabpanel"
-                                        aria-labelledby="bundle-tab">
-                                        <div class="table-responsive mb-4 px-4">
-                                            <table class="table border text-nowrap mb-0 align-middle"
-                                                id="bundle-modal-table">
-                                                <thead class="text-dark fs-4">
-                                                    <tr>
-                                                        <th><input type="checkbox" id="select-all-bundle"></th>
-                                                        <th>Nama Bundle</th>
-                                                        <th>Status Ketesediaan</th>
-                                                        <th>Harga</th>
-                                                        <th>Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($bundle as $p): ?>
-                                                        <tr>
-                                                            <td>
-                                                                <input type="checkbox" class="produk-checkbox"
-                                                                    data-id="bundle<?= $p->idbundle ?>" data-kode="Bundle"
-                                                                    data-nama="<?= $p->nama_bundle ?>"
-                                                                    data-harga="<?= $p->harga_jual ?>"
-                                                                    data-kategori="Bundle" data-input="Bundle"
-                                                                    <?= ($p->status_stok != 'Tersedia') ? 'disabled' : '' ?>>
-                                                            </td>
-                                                            <td><?= $p->nama_bundle ?></td>
-                                                            <td>
-                                                                <?php if ($p->status_stok == 'Tersedia'): ?>
-                                                                    <button
-                                                                        style="background-color: chartreuse; border-radius: 5px; color: black;">
-                                                                        <?= $p->status_stok ?>
-                                                                    </button>
-                                                                <?php else: ?>
-                                                                    <button
-                                                                        style="background-color: red; border-radius: 5px; color: white;">
-                                                                        <?= $p->status_stok ?>
-                                                                    </button>
-                                                                <?php endif; ?>
-                                                            </td>
-
-                                                            <td><?= 'Rp ' . number_format($p->harga_jual, 0, ',', '.') ?>
-                                                            </td>
-                                                            <td>
-                                                                <button class="btn btn-warning btn-check-bundle"
-                                                                    type="button" data-id="<?= $p->idbundle ?>"
-                                                                    data-nama="<?= $p->nama_bundle ?>"
-                                                                    data-detail='<?= json_encode($p->detail) ?>'>
-                                                                    Check Bundle
-                                                                </button>
-                                                            </td>
-
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
+            <div class="pj-table-wrap">
+                <table class="pj-table">
+                    <colgroup>
+                        <col>
+                        <col style="width: 180px;">
+                        <col style="width: 96px;">
+                        <col style="width: 160px;">
+                        <col style="width: 88px;">
+                        <col style="width: 150px;">
+                        <col style="width: 56px;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Produk</th>
+                            <th class="pj-num">Harga</th>
+                            <th class="pj-num">Qty</th>
+                            <th class="pj-num">Diskon</th>
+                            <th class="text-center">PPN</th>
+                            <th class="pj-num">Subtotal</th>
+                            <th><span class="visually-hidden">Aksi</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="selected-produk-table">
+                        <tr class="pj-empty" id="pj-empty-row">
+                            <td colspan="7">
+                                <iconify-icon icon="solar:cart-large-2-outline" width="30" height="30"></iconify-icon>
+                                <span class="pj-empty__title">Belum ada produk</span>
+                                Pilih barang, bundle, atau jasa untuk memulai nota.
+                                <div>
+                                    <button type="button" class="pj-btn pj-btn--outline pj-btn--sm"
+                                        data-bs-toggle="modal" data-bs-target="#pilih-produk-modal">
+                                        <iconify-icon icon="solar:add-circle-outline" width="16" height="16">
+                                        </iconify-icon>
+                                        Pilih Produk
+                                    </button>
                                 </div>
-                            </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
-                            <div class="modal-footer">
-                                <button type="button" id="confirm-produk-btn" class="btn btn-primary">Pilih</button>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                            </div>
-                        </div>
+        <!-- ===== 3. Pembayaran ===== -->
+        <section class="pj-section" aria-labelledby="pj-bayar-title">
+            <div class="pj-section__head">
+                <div>
+                    <h2 class="pj-section__title" id="pj-bayar-title">Pembayaran</h2>
+                    <p class="pj-section__hint">Pilih satu metode. Nominal yang tidak dipakai tidak akan
+                        dikirim.</p>
+                </div>
+            </div>
+
+            <div class="pj-methods" role="radiogroup" aria-label="Metode pembayaran">
+                <label class="pj-method">
+                    <input type="radio" name="metode_bayar" value="tunai" id="metode_tunai">
+                    <span class="pj-method__box">
+                        <span class="pj-method__icon">
+                            <iconify-icon icon="solar:wad-of-money-outline" width="20" height="20"></iconify-icon>
+                        </span>
+                        <span>
+                            <span class="pj-method__label">Tunai</span>
+                            <span class="pj-method__hint">Uang tunai dari laci</span>
+                        </span>
+                    </span>
+                </label>
+
+                <label class="pj-method">
+                    <input type="radio" name="metode_bayar" value="transfer" id="metode_transfer">
+                    <span class="pj-method__box">
+                        <span class="pj-method__icon">
+                            <iconify-icon icon="solar:card-transfer-outline" width="20" height="20"></iconify-icon>
+                        </span>
+                        <span>
+                            <span class="pj-method__label">Transfer</span>
+                            <span class="pj-method__hint">Masuk ke rekening bank</span>
+                        </span>
+                    </span>
+                </label>
+
+                <label class="pj-method">
+                    <input type="radio" name="metode_bayar" value="tunai_transfer" id="metode_tunai_transfer">
+                    <span class="pj-method__box">
+                        <span class="pj-method__icon">
+                            <iconify-icon icon="solar:wallet-money-outline" width="20" height="20"></iconify-icon>
+                        </span>
+                        <span>
+                            <span class="pj-method__label">Tunai + Transfer</span>
+                            <span class="pj-method__hint">Gabungan dua cara bayar</span>
+                        </span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="pj-zone" id="pj-zone-tunai" hidden>
+                <div class="pj-zone__head">
+                    <h3 class="pj-zone__title">Uang tunai</h3>
+                    <span class="pj-hint">Ketik nominal yang diterima dari pelanggan.</span>
+                </div>
+                <div class="pj-cash">
+                    <input type="text" class="pj-input pj-num" id="bayar" name="bayar" value="Rp 0"
+                        inputmode="numeric" autocomplete="off" aria-label="Nominal tunai">
+                    <div class="pj-quick">
+                        <button type="button" class="pj-btn pj-btn--outline" id="pj-uang-pas">Uang pas</button>
                     </div>
                 </div>
+            </div>
 
-
-
-                <!-- Selected Produk Table -->
-                <div class="table-responsive mt-3 mb-4">
-                    <table class="table table-bordered align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Kode Barang</th>
-                                <th>Nama Barang</th>
-                                <th>Kategori</th>
-                                <th>Harga</th>
-                                <th>Jumlah</th>
-                                <th>Diskon (Rp)</th>
-                                <th>PPN 11%</th>
-                                <th>Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody id="selected-produk-table">
-                            <!-- Rows will be dynamically added -->
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="2"><strong>Total Diskon (Rp.)</strong></td>
-                                <td colspan="7">
-                                    <input type="text" id="total-diskon" readonly value="Rp 0" name="total-diskon"
-                                        class="form-control">
-                                    <small id="total-diskon-alert" class="text-danger d-none">
-                                        Total diskon tidak boleh lebih kecil dari jumlah diskon per barang.
-                                    </small>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td colspan="2"><strong>Total PPN</strong></td>
-                                <td colspan="7">
-                                    <input type="text" id="total-ppn" name="total-ppn" class="form-control" readonly>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td colspan="2"><strong>Total Keseluruhan</strong></td>
-                                <td colspan="7">
-                                    <input type="text" id="total-harga" name="total-harga" class="form-control"
-                                        readonly>
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
-
-                    <div class="row mb-3 tunai-section">
-                        <div class="col-md-6">
-                            <label for="bayar" class="form-label">Bayar Tunai</label>
-                            <input type="text" class="form-control" id="bayar" name="bayar" value="Rp 0">
-                        </div>
-
-                    </div>
-
-                    <div class="row mb-3 transfer-section">
-                        <div class="col-12">
-                            <label class="form-label">Pembayaran via Bank</label>
-                            <div id="bank-payment-container">
-                                <!-- Baris bank akan ditambahkan secara dinamis -->
-                            </div>
-                            <button type="button" class="btn btn-sm btn-primary mt-2" id="tambah-bank">
-                                + Tambah Bank
-                            </button>
-                        </div>
-                    </div>
-
-
-
-
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="kembalian" class="form-label">Kembalian</label>
-                            <input type="text" class="form-control" id="kembalian" name="kembalian" value="Rp 0">
-                        </div>
-
-                        <div class="col-md-6">
-                            <label hidden for="hutang" class="form-label">Hutang</label>
-                            <input hidden type="text" class="form-control" id="hutang" name="hutang" readonly>
-                        </div>
-
-                    </div>
-
-                    <!-- Pelanggan Button -->
-                    <div class="table-responsive mt-3 mb-4">
-                        <!-- tabel produk -->
-                    </div>
-
-
-
-                    <div class="modal fade" id="pelangganModal" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Cari Data Pelanggan</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <select id="pelanggan-select" name="selectedidpelanggan"
-                                        class="select2 form-control" style="width: 100%;">
-                                        <option disabled selected>Select</option>
-                                        <?php foreach ($pelanggan as $p): ?>
-                                            <option value="<?= htmlspecialchars($p->id_pelanggan) ?>"
-                                                data-provinsi="<?= htmlspecialchars($p->provinsi ?? '') ?>"
-                                                data-kabupaten="<?= htmlspecialchars($p->kabupaten ?? '') ?>"
-                                                data-kecamatan="<?= htmlspecialchars($p->kecamatan ?? '') ?>">
-                                                <?= htmlspecialchars($p->nama) ?> : <?= htmlspecialchars($p->no_hp) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-
-                                    <!-- Tombol di bawah dropdown -->
-                                    <div style="display: flex; justify-content: right; gap: 10px; margin-top: 20px;">
-                                        <button id="btnTambahPelanggan" type="button" class="btn btn-success">Tambah
-                                            Pelanggan Baru</button>
-                                        <button id="btnPilihPelanggan" type="button"
-                                            class="btn btn-primary">Pilih</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Pindahkan tombol ke sini agar tidak acak -->
-                    <div id="pelanggan-section" class="mt-3">
-                        <button class="btn btn-success" type="submit" name="action" value="simpan">Simpan</button>
-                        <button class="btn btn-success" type="submit" name="action" value="simpan_thermal">
-                            Simpan (Cetak Thermal)
-                        </button>
-                    </div>
-
+            <div class="pj-zone" id="pj-zone-transfer" hidden>
+                <div class="pj-zone__head">
+                    <h3 class="pj-zone__title">Transfer bank</h3>
+                    <span class="pj-hint">Satu baris untuk satu rekening tujuan.</span>
                 </div>
+                <div class="pj-bank-list" id="bank-payment-container"></div>
+                <p class="pj-bank-note" id="pj-bank-empty" <?= empty($bankOptions) ? '' : 'hidden' ?>>
+                    <iconify-icon icon="solar:danger-triangle-outline" width="15" height="15"></iconify-icon>
+                    Belum ada rekening aktif untuk unit ini.
+                </p>
+                <p class="pj-error" id="pj-bank-error" hidden>Pilih rekening untuk setiap nominal transfer.</p>
+                <button type="button" class="pj-btn pj-btn--outline pj-btn--sm mt-2" id="tambah-bank"
+                    <?= empty($bankOptions) ? 'disabled' : '' ?>>
+                    <iconify-icon icon="solar:add-circle-outline" width="16" height="16"></iconify-icon>
+                    Tambah Bank
+                </button>
+            </div>
 
+            <div class="pj-pay-status is-empty" id="pj-pay-status" aria-live="polite">
+                <iconify-icon id="pj-pay-icon" icon="solar:info-circle-outline" width="17" height="17"></iconify-icon>
+                <span id="pj-pay-text">Pilih metode pembayaran untuk membuka kolom nominal.</span>
+            </div>
+        </section>
 
+        <!--
+            ID pelanggan dikirim lewat hidden input. Modal pelanggan berada di
+            luar <form> supaya tidak terpotong overflow/transform lembar dan
+            tidak membuat stacking context yang menutupi tombolnya sendiri.
+        -->
+        <input type="hidden" id="selectedidpelanggan" name="selectedidpelanggan" value="">
 
-                <!-- Modal Detail Bundle -->
-                <div class="modal fade" id="detailBundleModal" tabindex="-1" aria-labelledby="detailBundleLabel"
-                    aria-hidden="true">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content" style="background-color: antiquewhite;">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="detailBundleLabel">Detail Bundle</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                    aria-label="Tutup"></button>
-                            </div>
-                            <div class="modal-body">
-                                <table class="table table-bordered">
-                                    <thead>
-                                        <tr>
-                                            <th>Nama Barang</th>
-                                            <th>Jumlah</th>
-                                            <th>Stok Akhir</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="bundle-detail-body">
-
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                            </div>
-                        </div>
-                    </div>
+        <div class="pj-dock" role="group" aria-label="Ringkasan pembayaran">
+            <div class="pj-dock__figures">
+                <label class="pj-figure" for="total-diskon">
+                    <span>Diskon</span>
+                    <input type="text" id="total-diskon" name="total-diskon" class="pj-num" value="Rp 0" readonly>
+                </label>
+                <label class="pj-figure" for="total-ppn">
+                    <span>PPN</span>
+                    <input type="text" id="total-ppn" name="total-ppn" class="pj-num" value="Rp 0" readonly>
+                </label>
+                <label class="pj-figure pj-figure--total" for="total-harga">
+                    <span>Total</span>
+                    <input type="text" id="total-harga" name="total-harga" class="pj-num" value="Rp 0" readonly>
+                </label>
+                <div class="pj-figure">
+                    <span>Dibayar</span>
+                    <span class="pj-figure__value" id="pj-dibayar">Rp 0</span>
                 </div>
+                <div class="pj-figure pj-figure--debt">
+                    <span>Sisa</span>
+                    <span class="pj-figure__value" id="pj-sisa">Rp 0</span>
+                </div>
+                <label class="pj-figure" for="kembalian">
+                    <span>Kembalian</span>
+                    <input type="text" id="kembalian" name="kembalian" class="pj-num" value="Rp 0" readonly>
+                </label>
+            </div>
 
+            <div class="pj-dock__actions">
+                <div class="pj-dock__buttons">
+                    <button type="submit" name="action" value="simpan" class="pj-btn pj-btn--primary"
+                        id="pj-save">
+                        <iconify-icon icon="solar:check-circle-outline" width="18" height="18"></iconify-icon>
+                        Simpan
+                    </button>
+                    <button type="submit" name="action" value="simpan_thermal" class="pj-btn pj-btn--outline"
+                        id="pj-save-thermal">
+                        <iconify-icon icon="solar:printer-outline" width="18" height="18"></iconify-icon>
+                        Simpan &amp; Cetak
+                    </button>
+                </div>
+                <p class="pj-save-hint">Kedua tombol menyimpan lalu mencetak struk thermal.</p>
+            </div>
 
-                <script>
-                    function formatToRupiah(angka) {
-                        const cleaned = angka.replace(/[^\d]/g, '');
-                        const number = parseInt(cleaned) || 0;
-                        return 'Rp ' + number.toLocaleString('id-ID');
-                    }
+            <input type="hidden" id="hutang" name="hutang" value="Rp 0" readonly>
+        </div>
+    </form>
+</div>
 
-                    function unformatRupiah(rupiah) {
-                        return parseInt(rupiah.replace(/[^\d]/g, '')) || 0;
-                    }
+<!-- ===== Modal Pelanggan ===== -->
+<div class="modal fade pj-modal" id="pelangganModal" tabindex="-1" aria-labelledby="pelangganModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pelangganModalLabel">Cari Data Pelanggan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <p class="pj-modal-note">Cari berdasarkan nama atau nomor HP.</p>
+                <select id="pelanggan-select" class="select2 form-control" style="width: 100%;">
+                    <option value="" disabled selected>Pilih pelanggan</option>
+                    <?php foreach ($pelanggan as $p): ?>
+                        <option value="<?= htmlspecialchars($p->id_pelanggan) ?>"
+                            data-provinsi="<?= htmlspecialchars($p->provinsi ?? '') ?>"
+                            data-kabupaten="<?= htmlspecialchars($p->kabupaten ?? '') ?>"
+                            data-kecamatan="<?= htmlspecialchars($p->kecamatan ?? '') ?>">
+                            <?= htmlspecialchars($p->nama) ?> : <?= htmlspecialchars($p->no_hp) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
 
-                    document.addEventListener('DOMContentLoaded', function() {
-                        const selectedTable = document.getElementById('selected-produk-table');
-                        const confirmBtn = document.getElementById('confirm-produk-btn');
-                        const selectAll = document.getElementById('select-all-produk');
-                        const modalEl = document.getElementById('pilih-produk-modal');
-                        const modalInstance = new bootstrap.Modal(modalEl);
-                        const bayarInput = document.getElementById('bayar');
-                        const totalDiskonInput = document.getElementById('total-diskon');
-                        const bayarBank = document.getElementById('bayar_bank');
+                <p class="pj-modal-error" id="pj-pelanggan-error" hidden>Silakan pilih pelanggan terlebih dahulu.</p>
+                <p class="pj-modal-success" id="pj-pelanggan-success" hidden></p>
 
-                        selectAll.addEventListener('change', function() {
-                            document.querySelectorAll('#produkTabContent .tab-pane.active .produk-checkbox').forEach(cb => cb.checked = this
-                                .checked);
-                        });
-
-                        confirmBtn.addEventListener('click', function() {
-                            document.querySelectorAll('#produkTabContent .tab-pane.active .produk-checkbox:checked').forEach(cb => {
-                                const id = cb.getAttribute('data-id');
-                                const kode = cb.getAttribute('data-kode');
-                                const nama = cb.getAttribute('data-nama');
-                                const harga = cb.getAttribute('data-harga');
-                                const kategori = cb.getAttribute('data-kategori');
-                                const kondisi_barang = cb.getAttribute('data-kondisi_barang');
-
-                                if (!document.getElementById('produk-row-' + id)) {
-                                    const row = document.createElement('tr');
-                                    row.id = 'produk-row-' + id;
-                                    row.innerHTML = `
-                    <td>
-                        ${kode}
-                        <input type="hidden" name="produk[${id}][id]" value="${id}">
-                        <input type="hidden" name="produk[${id}][kode]" value="${kode}">
-                        <input type="hidden" name="produk[${id}][kondisi_barang]" value="${kondisi_barang}">
-                    </td>
-                    <td>
-                        ${nama}
-                        <input type="hidden" name="produk[${id}][nama]" value="${nama}">
-                    </td>
-                    <td>
-                        ${kategori}
-                        <input type="hidden" name="produk[${id}][kategori]" value="${kategori}">
-                    </td>
-                    <td>
-                        <input type="text" name="produk[${id}][harga]" class="form-control harga-input" data-id="${id}" value="${formatToRupiah(harga)}">
-                    </td>
-                    <td>
-                        <input type="number" name="produk[${id}][jumlah]" class="form-control jumlah-input" data-id="${id}" value="1" min="1">
-                    </td>
-                    <td>
-                        <input type="text" name="produk[${id}][diskon]" class="form-control diskon-input" data-id="${id}" value="0" min="0">
-                    </td>
-                    <td class="text-center">
-                        <input type="checkbox" name="produk[${id}][ppn]" class="form-check-input ppn-checkbox" data-id="${id}">
-                    </td>
-                    <td>
-                        <button type="button" class="btn btn-sm btn-danger" onclick="hapusProduk('${id}')">
-                            <iconify-icon icon="solar:trash-bin-minimalistic-broken" width="20" height="20"></iconify-icon>
-                        </button>
-                    </td>
-                `;
-                                    selectedTable.appendChild(row);
-
-                                    // Add event listeners
-                                    row.querySelector('.harga-input').addEventListener('input',
-                                        function() {
-                                            this.value = formatToRupiah(this.value);
-                                            updateTotals();
-                                        });
-                                    row.querySelector('.jumlah-input').addEventListener('input',
-                                        updateTotals);
-                                    row.querySelector('.diskon-input').addEventListener('input',
-                                        function() {
-                                            this.value = formatToRupiah(this.value);
-                                            updateTotals();
-                                        });
-                                    row.querySelector('.ppn-checkbox').addEventListener('change',
-                                        updateTotals);
-                                }
-                            });
-
-                            modalInstance.hide();
-                            setTimeout(() => {
-                                document.body.classList.remove('modal-open');
-                                document.body.style.removeProperty('padding-right');
-                                document.body.style.removeProperty('overflow');
-                                document.querySelectorAll('.modal-backdrop').forEach(b => b
-                                    .remove());
-                            }, 500);
-
-                            document.querySelectorAll('.produk-checkbox').forEach(cb => cb.checked = false);
-                            selectAll.checked = false;
-
-                            updateTotals();
-                        });
-
-                        totalDiskonInput.addEventListener('input', function() {
-                            const numeric = this.value.replace(/[^\d]/g, '');
-                            this.value = formatToRupiah(numeric);
-                            updateTotals();
-                        });
-
-                        bayarInput.addEventListener('input', function() {
-                            const numeric = this.value.replace(/[^\d]/g, '');
-                            this.value = formatToRupiah(numeric);
-                            updateHutang();
-                        });
-
-                        bayarBank.addEventListener('input', function() {
-                            const numeric = this.value.replace(/[^\d]/g, '');
-                            this.value = formatToRupiah(numeric);
-                            updateHutang();
-                        });
-
-                        updateTotals();
-
-
-                        const form_penjualan = document.getElementById('form_penjualan');
-
-                        form_penjualan.addEventListener('submit', function(e) {
-                            const total = unformatRupiah(document.getElementById('total-harga').value ||
-                                'Rp 0');
-                            const bayar = unformatRupiah(document.getElementById('bayar').value || 'Rp 0');
-                            const bayar_bankin = unformatRupiah(document.getElementById('bayar_bank')
-                                .value || 'Rp 0');
-
-                            if ((bayar + bayar_bankin) < total) {
-                                alert('Pembayaran kurang! Silakan periksa kembali.');
-                                e.preventDefault();
-                            }
-                        });
-
-                    });
-
-                    function hapusProduk(id) {
-                        const row = document.getElementById('produk-row-' + id);
-                        if (row) row.remove();
-                        updateTotals();
-                    }
-
-                    function updateTotals() {
-                        let total = 0;
-                        let totalDiskon = 0;
-                        let totalPPN = 0;
-
-                        document.querySelectorAll('#selected-produk-table tr').forEach(row => {
-                            const hargaInput = row.querySelector('.harga-input');
-                            const jumlahInput = row.querySelector('.jumlah-input');
-                            const diskonInput = row.querySelector('.diskon-input');
-                            const ppnCheckbox = row.querySelector('.ppn-checkbox');
-
-                            if (hargaInput && jumlahInput && diskonInput) {
-                                const harga = unformatRupiah(hargaInput.value) || 0;
-                                const jumlah = parseInt(jumlahInput.value) || 0;
-                                const diskon = unformatRupiah(diskonInput.value) || 0;
-                                const isPpn = ppnCheckbox?.checked;
-
-                                let subtotal = harga * jumlah;
-                                let setelahDiskon = subtotal - diskon;
-                                let ppnAmount = isPpn ? setelahDiskon * 0.11 : 0;
-
-                                totalDiskon += diskon;
-                                totalPPN += ppnAmount;
-                                total += setelahDiskon + ppnAmount;
-                            }
-                        });
-
-                        // ✔ TOTAL DISKON FOLLOW SUM OF ROW DISKON
-                        const totalDiskonInput = document.getElementById('total-diskon');
-                        totalDiskonInput.value = 'Rp ' + totalDiskon.toLocaleString('id-ID');
-
-                        // ✔ TOTAL FINAL
-                        document.getElementById('total-ppn').value = 'Rp ' + totalPPN.toLocaleString('id-ID');
-                        document.getElementById('total-harga').value = 'Rp ' + total.toLocaleString('id-ID');
-
-                        updateHutang();
-                    }
-
-
-                    function updateHutang() {
-                        const totalInput = document.getElementById('total-harga');
-                        const bayarEl = document.getElementById('bayar');
-                        const hutangInput = document.getElementById('hutang');
-                        const kembalianInput = document.getElementById('kembalian');
-
-                        if (!totalInput || !bayarEl || !hutangInput || !kembalianInput) return;
-
-                        const total = unformatRupiah(totalInput.value || 'Rp 0');
-                        const bayar = unformatRupiah(bayarEl.value || 'Rp 0');
-
-                        // **🔑 Ambil semua pembayaran bank**
-                        let bankTotal = 0;
-                        document.querySelectorAll('.bank-amount').forEach(input => {
-                            bankTotal += unformatRupiah(input.value || 'Rp 0');
-                        });
-
-                        const selisih = (bayar + bankTotal) - total;
-
-                        const hutang = Math.max(total - (bayar + bankTotal), 0);
-                        const kembalian = selisih > 0 ? selisih : 0;
-
-                        hutangInput.value = 'Rp ' + hutang.toLocaleString('id-ID');
-                        kembalianInput.value = 'Rp ' + kembalian.toLocaleString('id-ID');
-                    }
-                </script>
-        </form>
-
-        <div class="modal fade" id="modalTambahPelanggan" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form id="formTambahPelanggan">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Tambah Pelanggan Baru</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label>Nama</label>
-                                <input type="text" class="form-control" name="nama" required>
-                            </div>
-
-
-                            <div class="mb-3">
-                                <label>Nomor HP</label>
-                                <input type="text" class="form-control" name="no_hp" required>
-                            </div>
-
-                            <div class="mb-3">
-                                <label>Provinsi</label>
-                                <select name="provinsi" id="modal_provinsi"
-                                    class="js-domisili form-control form-select" style="width: 100%;" required>
-                                    <option value="">-- Pilih / Cari Provinsi --</option>
-                                    <?php foreach ($provinsi as $prov): ?>
-                                        <option value="<?= esc($prov->name) ?>"><?= esc($prov->name) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label>Kabupaten</label>
-                                <select name="kabupaten" id="modal_kabupaten"
-                                    class="js-domisili form-control form-select" style="width: 100%;" required>
-                                    <option value="">-- Pilih / Cari Kabupaten --</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label>Kecamatan</label>
-                                <select name="kecamatan" id="modal_kecamatan"
-                                    class="js-domisili form-control form-select" style="width: 100%;" required>
-                                    <option value="">-- Pilih / Cari Kecamatan --</option>
-                                </select>
-                            </div>
-                            
-                            
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">Simpan Pelanggan</button>
-                            <button type="button" id="btnbataltambah" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        </div>
-                    </form>
+                <div class="pj-modal-actions">
+                    <button id="btnTambahPelanggan" type="button" class="pj-btn pj-btn--outline">
+                        <iconify-icon icon="solar:user-plus-outline" width="17" height="17"></iconify-icon>
+                        Tambah Pelanggan
+                    </button>
+                    <button id="btnPilihPelanggan" type="button" class="pj-btn pj-btn--primary">Pilih</button>
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const pelangganModal = new bootstrap.Modal(document.getElementById('pelangganModal'));
-                const pelangganModalEl = document.getElementById('pelangganModal');
-                const modalTambah = new bootstrap.Modal(document.getElementById('modalTambahPelanggan'));
-                const modalTambahEl = document.getElementById('modalTambahPelanggan');
+<!-- ===== Modal Pilih Produk ===== -->
+<div class="modal fade pj-picker-modal" id="pilih-produk-modal" tabindex="-1" aria-labelledby="produkModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="bg-primary-subtle text-primary rounded-2 d-flex align-items-center justify-content-center"
+                        style="width: 36px; height: 36px;">
+                        <i class="bi bi-box-seam fs-5"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title" id="produkModalLabel">Pilih Produk</h5>
+                        <p class="text-muted fs-3 mb-0">Cari nama atau kode, lalu centang yang dipakai.</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
 
-                modalTambahEl.addEventListener('hidden.bs.modal', function() {
-                    setTimeout(() => {
-                        pelangganModal.show();
-                    }, 300);
+            <div class="modal-body pt-3">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <div class="service-sp-search flex-grow-1">
+                        <i class="bi bi-search service-sp-search-icon"></i>
+                        <input type="text" class="form-control" id="pj-picker-search"
+                            placeholder="Cari nama, kode, atau warna produk..." autocomplete="off">
+                    </div>
+                    <span class="service-sp-unit badge text-bg-light border d-none d-sm-inline-flex">
+                        <i class="bi bi-shop me-1"></i><?= esc($namaUnit) ?>
+                    </span>
+                </div>
+
+                <ul class="nav pj-picker-tabs" id="produkTab" role="tablist">
+                    <li role="presentation">
+                        <button class="nav-link active" id="produk-tab" data-bs-toggle="tab"
+                            data-bs-target="#produk-content" type="button" role="tab" aria-controls="produk-content"
+                            aria-selected="true">Produk</button>
+                    </li>
+                    <li role="presentation">
+                        <button class="nav-link" id="bundle-tab" data-bs-toggle="tab" data-bs-target="#bundle-content"
+                            type="button" role="tab" aria-controls="bundle-content" aria-selected="false">Bundle</button>
+                    </li>
+                    <li role="presentation">
+                        <button class="nav-link" id="jasa-tab" data-bs-toggle="tab" data-bs-target="#jasa-content"
+                            type="button" role="tab" aria-controls="jasa-content" aria-selected="false">Jasa</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="produkTabContent">
+                    <!-- Produk -->
+                    <div class="tab-pane fade show active" id="produk-content" role="tabpanel"
+                        aria-labelledby="produk-tab">
+                        <div class="service-sp-list" id="produk-modal-table">
+                            <?php foreach ($produk as $p): ?>
+                                <?php
+                                $stok = $p->stok_akhir;
+                                $stokHabis = $stok === null || (int) $stok <= 0;
+                                $stokRendah = !$stokHabis && (int) $stok <= 2;
+                                $cariProduk = implode(' ', [
+                                    $p->kode_barang ?? '',
+                                    $p->nama_barang ?? '',
+                                    $p->nama_kategori ?? '',
+                                    $p->imei ?? '',
+                                    $p->warna ?? '',
+                                    $p->jenis_hp ?? '',
+                                    $p->nama_suplier ?? '',
+                                ]);
+                                $hppUnit = (float) ($p->hpp_unit ?? $p->harga_beli ?? 0);
+                                $namaSuplier = trim((string) ($p->nama_suplier ?? ''));
+                                $warna = trim((string) ($p->warna ?? ''));
+                                $jenisHp = trim((string) ($p->jenis_hp ?? ''));
+                                ?>
+                                <label
+                                    class="service-sp-item <?= $stokHabis ? 'is-disabled' : '' ?>"
+                                    data-search="<?= esc(strtolower($cariProduk)) ?>">
+                                    <input type="checkbox" class="produk-checkbox service-sp-item__input"
+                                        id="pick-produk-<?= $p->idbarang ?>"
+                                        data-id="<?= $p->idbarang ?>"
+                                        data-kode="<?= esc($p->kode_barang) ?>"
+                                        data-nama="<?= esc($p->nama_barang) ?>"
+                                        data-harga="<?= (int) round((float) $p->harga_jual) ?>"
+                                        data-kategori="<?= esc($p->nama_kategori) ?>"
+                                        data-input="<?= esc($p->input ?? '') ?>"
+                                        data-kondisi_barang="<?= esc($p->status_barang) ?>"
+                                        <?= $stokHabis ? 'disabled' : '' ?>>
+                                    <span class="service-sp-item__box">
+                                        <span class="service-sp-tick" aria-hidden="true">
+                                            <i class="bi bi-check-lg"></i>
+                                        </span>
+                                        <span class="service-sp-item__main">
+                                            <span class="service-sp-name"><?= esc($p->nama_barang) ?></span>
+                                            <span class="service-sp-meta">
+                                                <span class="service-sp-code"><?= esc($p->kode_barang ?: '-') ?></span>
+                                                <?php if ($warna !== '' && $warna !== 'Tidak Ada'): ?>
+                                                    <span class="service-sp-meta-item">
+                                                        <i class="bi bi-droplet-half"></i><?= esc($warna) ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                                <?php if ($jenisHp !== '' && $jenisHp !== 'Tidak Ada'): ?>
+                                                    <span class="service-sp-meta-item">
+                                                        <i class="bi bi-phone"></i><?= esc($jenisHp) ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                                <?php if ($namaSuplier !== ''): ?>
+                                                    <span class="service-sp-meta-item">
+                                                        <i class="bi bi-truck"></i><?= esc($namaSuplier) ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                                <?php if ($hppUnit > 0): ?>
+                                                    <span class="service-sp-meta-item">
+                                                        <i class="bi bi-tag"></i>HPP <?= 'Rp ' . number_format($hppUnit, 0, ',', '.') ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </span>
+                                        </span>
+                                        <span class="service-sp-side">
+                                            <span class="service-sp-price"><?= 'Rp ' . number_format((float) $p->harga_jual, 0, ',', '.') ?></span>
+                                            <span class="service-sp-stock <?= ($stokHabis || $stokRendah) ? 'is-low' : '' ?>">
+                                                Stok <?= (int) $stok ?>
+                                            </span>
+                                        </span>
+                                    </span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="service-sp-state" id="produk-empty-state" hidden>
+                            <i class="bi bi-inbox" aria-hidden="true"></i>
+                            <p>Tidak ada produk yang cocok dengan pencarian.</p>
+                        </div>
+                    </div>
+
+                    <!-- Bundle -->
+                    <div class="tab-pane fade" id="bundle-content" role="tabpanel" aria-labelledby="bundle-tab">
+                        <div class="service-sp-list" id="bundle-modal-table">
+                            <?php foreach ($bundle as $p): ?>
+                                <?php $bundleTersedia = ($p->status_stok ?? '') === 'Tersedia'; ?>
+                                <label
+                                    class="service-sp-item <?= $bundleTersedia ? '' : 'is-disabled' ?>"
+                                    data-search="<?= esc(strtolower(($p->nama_bundle ?? '') . ' bundle ' . ($p->status_stok ?? ''))) ?>">
+                                    <input type="checkbox" class="produk-checkbox service-sp-item__input"
+                                        id="pick-bundle-<?= $p->idbundle ?>"
+                                        data-id="bundle<?= $p->idbundle ?>" data-kode="Bundle"
+                                        data-nama="<?= esc($p->nama_bundle) ?>"
+                                        data-harga="<?= $p->harga_jual ?>"
+                                        data-kategori="Bundle" data-input="Bundle"
+                                        <?= $bundleTersedia ? '' : 'disabled' ?>>
+                                    <span class="service-sp-item__box">
+                                        <span class="service-sp-tick" aria-hidden="true">
+                                            <i class="bi bi-check-lg"></i>
+                                        </span>
+                                        <span class="service-sp-item__main">
+                                            <span class="service-sp-name"><?= esc($p->nama_bundle) ?></span>
+                                            <span class="service-sp-meta">
+                                                <span class="service-sp-code">Bundle</span>
+                                                <span class="service-sp-meta-item">
+                                                    <i class="bi bi-box2-heart"></i>Paket beberapa barang dalam satu harga
+                                                </span>
+                                            </span>
+                                        </span>
+                                        <span class="service-sp-side">
+                                            <span class="service-sp-price"><?= 'Rp ' . number_format((float) $p->harga_jual, 0, ',', '.') ?></span>
+                                            <span class="service-sp-stock">
+                                                <?= esc($p->status_stok) ?>
+                                            </span>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm btn-check-bundle"
+                                                data-id="<?= $p->idbundle ?>" data-nama="<?= esc($p->nama_bundle) ?>"
+                                                data-detail="<?= htmlspecialchars(json_encode($p->detail ?: []), ENT_QUOTES, 'UTF-8') ?>">
+                                                Lihat isi
+                                            </button>
+                                        </span>
+                                    </span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="service-sp-state" id="bundle-empty-state" hidden>
+                            <i class="bi bi-inbox" aria-hidden="true"></i>
+                            <p>Tidak ada bundle yang cocok dengan pencarian.</p>
+                        </div>
+                    </div>
+
+                    <!-- Jasa -->
+                    <div class="tab-pane fade" id="jasa-content" role="tabpanel" aria-labelledby="jasa-tab">
+                        <div class="service-sp-list" id="jasa-modal-table">
+                            <?php foreach ($jasa as $j): ?>
+                                <label class="service-sp-item"
+                                    data-search="<?= esc(strtolower(($j->kode_barang ?? '') . ' ' . ($j->nama_barang ?? '') . ' jasa')) ?>">
+                                    <input type="checkbox" class="produk-checkbox service-sp-item__input"
+                                        id="pick-jasa-<?= $j->idbarang ?>"
+                                        data-id="<?= (int) $j->idbarang ?>"
+                                        data-kode="<?= esc($j->kode_barang) ?>"
+                                        data-nama="<?= esc($j->nama_barang) ?>"
+                                        data-harga="<?= (int) round((float) $j->harga_jual) ?>"
+                                        data-kategori="Jasa" data-kondisi_barang="0">
+                                    <span class="service-sp-item__box">
+                                        <span class="service-sp-tick" aria-hidden="true">
+                                            <i class="bi bi-check-lg"></i>
+                                        </span>
+                                        <span class="service-sp-item__main">
+                                            <span class="service-sp-name"><?= esc($j->nama_barang) ?></span>
+                                            <span class="service-sp-meta">
+                                                <span class="service-sp-code"><?= esc($j->kode_barang ?: '-') ?></span>
+                                                <span class="service-sp-meta-item">
+                                                    <i class="bi bi-tools"></i>Jasa
+                                                </span>
+                                            </span>
+                                        </span>
+                                        <span class="service-sp-side">
+                                            <span class="service-sp-price"><?= 'Rp ' . number_format((float) $j->harga_jual, 0, ',', '.') ?></span>
+                                            <span class="service-sp-stock">Jasa</span>
+                                        </span>
+                                    </span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="service-sp-state" id="jasa-empty-state" hidden>
+                            <i class="bi bi-inbox" aria-hidden="true"></i>
+                            <p>Tidak ada jasa yang cocok dengan pencarian.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer justify-content-between">
+                <span class="service-sp-count" id="pj-pick-count" aria-live="polite">Belum ada yang dipilih</span>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" id="confirm-produk-btn" class="btn btn-primary d-inline-flex align-items-center gap-2"
+                        disabled>
+                        <i class="bi bi-plus-lg"></i> Tambahkan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Modal Detail Bundle ===== -->
+<div class="modal fade pj-modal" id="detailBundleModal" tabindex="-1" aria-labelledby="detailBundleLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailBundleLabel">Detail Bundle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                <table class="pj-bundle-detail">
+                    <thead>
+                        <tr>
+                            <th>Nama Barang</th>
+                            <th class="pj-num">Jumlah</th>
+                            <th class="pj-num">Stok Akhir</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bundle-detail-body"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="pj-btn pj-btn--outline" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Modal Tambah Pelanggan (di luar form utama) ===== -->
+<div class="modal fade pj-modal" id="modalTambahPelanggan" tabindex="-1" aria-labelledby="modalTambahLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="formTambahPelanggan">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTambahLabel">Tambah Pelanggan Baru</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="modal_nama">Nama</label>
+                        <input type="text" class="form-control" id="modal_nama" name="nama" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="modal_no_hp">Nomor HP</label>
+                        <input type="text" class="form-control" id="modal_no_hp" name="no_hp" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="modal_provinsi">Provinsi</label>
+                        <select name="provinsi" id="modal_provinsi"
+                            class="js-domisili form-control form-select" style="width: 100%;" required>
+                            <option value="">— Pilih / cari provinsi —</option>
+                            <?php foreach ($provinsi as $prov): ?>
+                                <option value="<?= esc($prov->name) ?>"><?= esc($prov->name) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="modal_kabupaten">Kabupaten</label>
+                        <select name="kabupaten" id="modal_kabupaten"
+                            class="js-domisili form-control form-select" style="width: 100%;" required>
+                            <option value="">— Pilih / cari kabupaten —</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="modal_kecamatan">Kecamatan</label>
+                        <select name="kecamatan" id="modal_kecamatan"
+                            class="js-domisili form-control form-select" style="width: 100%;" required>
+                            <option value="">— Pilih / cari kecamatan —</option>
+                        </select>
+                    </div>
+
+                    <p class="pj-modal-error" id="pj-add-error" hidden></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="btnbataltambah" class="pj-btn pj-btn--outline"
+                        data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="pj-btn pj-btn--primary">Simpan Pelanggan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function formatToRupiah(angka) {
+        angka = String(angka);
+        const cleaned = angka.replace(/[^\d]/g, '');
+        const number = parseInt(cleaned) || 0;
+        return 'Rp ' + number.toLocaleString('id-ID');
+    }
+
+    function unformatRupiah(rupiah) {
+        return parseInt(String(rupiah).replace(/[^\d]/g, '')) || 0;
+    }
+
+    function escapeHtml(value) {
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('form_penjualan');
+        const selectedTable = document.getElementById('selected-produk-table');
+        const emptyRow = document.getElementById('pj-empty-row');
+        const itemCount = document.getElementById('pj-item-count');
+        const produkError = document.getElementById('pj-produk-error');
+        const customerError = document.getElementById('pj-customer-error');
+        const staffError = document.getElementById('pj-staff-error');
+        const bankError = document.getElementById('pj-bank-error');
+        const pelangganInput = document.getElementById('pelanggan');
+        const pelangganMeta = document.getElementById('pj-customer-meta');
+        const salesBy = document.getElementById('sales_by');
+        const saveButtons = [document.getElementById('pj-save'), document.getElementById('pj-save-thermal')];
+        const clearBtn = document.getElementById('pj-clear-cart');
+        const clearLabel = clearBtn.innerHTML;
+
+        const totalDiskonInput = document.getElementById('total-diskon');
+        const totalPPNInput = document.getElementById('total-ppn');
+        const totalHargaInput = document.getElementById('total-harga');
+        const bayarInput = document.getElementById('bayar');
+        const hutangInput = document.getElementById('hutang');
+        const kembalianInput = document.getElementById('kembalian');
+        const dibayarEl = document.getElementById('pj-dibayar');
+        const sisaEl = document.getElementById('pj-sisa');
+
+        const zoneTunai = document.getElementById('pj-zone-tunai');
+        const zoneTransfer = document.getElementById('pj-zone-transfer');
+        const bankContainer = document.getElementById('bank-payment-container');
+        const tambahBankBtn = document.getElementById('tambah-bank');
+        const payStatus = document.getElementById('pj-pay-status');
+        const payIcon = document.getElementById('pj-pay-icon');
+        const payText = document.getElementById('pj-pay-text');
+        const uangPasBtn = document.getElementById('pj-uang-pas');
+
+        const banks = <?= $bankJson ?: '[]' ?>;
+        let bankIndex = 0;
+
+        function metodeTerpilih() {
+            const checked = document.querySelector('input[name="metode_bayar"]:checked');
+            return checked ? checked.value : '';
+        }
+
+        function productRows() {
+            return Array.from(selectedTable.querySelectorAll('tr[id^="produk-row-"]'));
+        }
+
+        function totalHarga() {
+            return unformatRupiah(totalHargaInput.value);
+        }
+
+        function updateItemCount() {
+            const jumlah = productRows().length;
+            itemCount.textContent = jumlah + ' item';
+            emptyRow.hidden = jumlah > 0;
+            saveButtons.forEach(function(btn) {
+                if (btn) {
+                    btn.disabled = jumlah === 0;
+                }
+            });
+        }
+
+        function setPayStatus(kelas, ikon, teks) {
+            payStatus.classList.remove('is-ok', 'is-over', 'is-due', 'is-empty');
+            payStatus.classList.add(kelas);
+            payIcon.setAttribute('icon', ikon);
+            payText.textContent = teks;
+        }
+
+        function hitungPembayaran() {
+            const metode = metodeTerpilih();
+            let cash = 0;
+            let bank = 0;
+
+            if (metode !== 'transfer') {
+                cash = unformatRupiah(bayarInput.value);
+            }
+
+            if (metode !== 'tunai') {
+                document.querySelectorAll('#bank-payment-container .bank-amount').forEach(function(input) {
+                    bank += unformatRupiah(input.value);
+                });
+            }
+
+            return {
+                cash: cash,
+                bank: bank,
+                total: cash + bank,
+                metode: metode
+            };
+        }
+
+        function updatePayment() {
+            const total = totalHarga();
+            const pembayaran = hitungPembayaran();
+            const dibayar = pembayaran.total;
+            const sisa = Math.max(total - dibayar, 0);
+            const kembalian = Math.max(dibayar - total, 0);
+
+            hutangInput.value = formatToRupiah(sisa);
+            kembalianInput.value = formatToRupiah(kembalian);
+            dibayarEl.textContent = formatToRupiah(dibayar);
+            sisaEl.textContent = formatToRupiah(sisa);
+            sisaEl.classList.toggle('is-due', sisa > 0);
+            sisaEl.classList.toggle('is-ok', sisa === 0 && total > 0);
+
+            if (total <= 0) {
+                setPayStatus('is-empty', 'solar:info-circle-outline',
+                    'Tambahkan produk untuk melihat ringkasan pembayaran.');
+                return;
+            }
+
+            if (pembayaran.metode === '') {
+                setPayStatus('is-empty', 'solar:info-circle-outline',
+                    'Pilih metode pembayaran untuk membuka kolom nominal.');
+                return;
+            }
+
+            if (dibayar <= 0) {
+                setPayStatus('is-empty', 'solar:info-circle-outline',
+                    'Masukkan nominal tunai atau transfer yang diterima.');
+                return;
+            }
+
+            if (sisa > 0) {
+                setPayStatus('is-due', 'solar:danger-triangle-outline',
+                    'Kurang ' + formatToRupiah(sisa) +
+                    ' — transaksi akan tercatat belum lunas.');
+                return;
+            }
+
+            if (kembalian > 0) {
+                setPayStatus('is-over', 'solar:check-circle-outline',
+                    'Kembalian ' + formatToRupiah(kembalian) + '.');
+                return;
+            }
+
+            setPayStatus('is-ok', 'solar:check-circle-outline',
+                'Pembayaran pas — transaksi lunas.');
+        }
+
+        function updateTotals() {
+            let total = 0;
+            let totalDiskon = 0;
+            let totalPPN = 0;
+
+            productRows().forEach(function(row) {
+                const hargaInput = row.querySelector('.harga-input');
+                const jumlahInput = row.querySelector('.jumlah-input');
+                const diskonInput = row.querySelector('.diskon-input');
+                const ppnCheckbox = row.querySelector('.ppn-checkbox');
+
+                const harga = unformatRupiah(hargaInput ? hargaInput.value : 'Rp 0');
+                const jumlah = parseInt(jumlahInput ? jumlahInput.value : '0', 10) || 0;
+                const diskon = unformatRupiah(diskonInput ? diskonInput.value : 'Rp 0');
+                const kenaPpn = !!(ppnCheckbox && ppnCheckbox.checked);
+
+                const setelahDiskon = (harga * jumlah) - diskon;
+                const ppnAmount = kenaPpn ? setelahDiskon * 0.11 : 0;
+
+                totalDiskon += diskon;
+                totalPPN += ppnAmount;
+                total += setelahDiskon + ppnAmount;
+
+                const subtotalEl = row.querySelector('.pj-subtotal');
+
+                if (subtotalEl) {
+                    subtotalEl.textContent = formatToRupiah(setelahDiskon + ppnAmount);
+                }
+            });
+
+            totalDiskonInput.value = formatToRupiah(totalDiskon);
+            totalPPNInput.value = formatToRupiah(totalPPN);
+            totalHargaInput.value = formatToRupiah(total);
+
+            updateItemCount();
+            updatePayment();
+        }
+
+        function hapusProduk(id) {
+            const row = document.getElementById('produk-row-' + id);
+
+            if (row) {
+                row.remove();
+            }
+
+            updateTotals();
+        }
+
+        window.hapusProduk = hapusProduk;
+
+        function addProduct(cb) {
+            const id = cb.getAttribute('data-id');
+
+            if (document.getElementById('produk-row-' + id)) {
+                return;
+            }
+
+            const kode = cb.getAttribute('data-kode') || '';
+            const nama = cb.getAttribute('data-nama') || '';
+            const harga = cb.getAttribute('data-harga') || '0';
+            const kategori = cb.getAttribute('data-kategori') || '';
+            const input = cb.getAttribute('data-input') || '';
+            const kondisi = cb.getAttribute('data-kondisi_barang') || '0';
+            const meta = [kode, kategori, input].filter(function(nilai) {
+                return nilai && nilai !== 'Tidak Ada' && nilai !== 'Bundle';
+            }).join(' · ');
+
+            const row = document.createElement('tr');
+            row.id = 'produk-row-' + id;
+            row.innerHTML = `
+                <td data-label="Produk">
+                    <span class="pj-row__name">${escapeHtml(nama)}</span>
+                    <span class="pj-row__meta">${escapeHtml(meta || kategori || 'Produk')}</span>
+                    <input type="hidden" name="produk[${escapeHtml(id)}][id]" value="${escapeHtml(id)}">
+                    <input type="hidden" name="produk[${escapeHtml(id)}][kode]" value="${escapeHtml(kode)}">
+                    <input type="hidden" name="produk[${escapeHtml(id)}][nama]" value="${escapeHtml(nama)}">
+                    <input type="hidden" name="produk[${escapeHtml(id)}][kategori]" value="${escapeHtml(kategori)}">
+                    <input type="hidden" name="produk[${escapeHtml(id)}][kondisi_barang]" value="${escapeHtml(kondisi)}">
+                </td>
+                <td data-label="Harga">
+                    <input type="text" name="produk[${escapeHtml(id)}][harga]"
+                        class="pj-input harga-input pj-num" value="${formatToRupiah(harga)}"
+                        inputmode="numeric" autocomplete="off" aria-label="Harga ${escapeHtml(nama)}">
+                </td>
+                <td data-label="Qty">
+                    <input type="number" name="produk[${escapeHtml(id)}][jumlah]"
+                        class="pj-input jumlah-input pj-num" value="1" min="1" step="1"
+                        aria-label="Jumlah ${escapeHtml(nama)}">
+                </td>
+                <td data-label="Diskon">
+                    <input type="text" name="produk[${escapeHtml(id)}][diskon]"
+                        class="pj-input diskon-input pj-num" value="Rp 0"
+                        inputmode="numeric" autocomplete="off" aria-label="Diskon ${escapeHtml(nama)}">
+                </td>
+                <td data-label="PPN">
+                    <label class="pj-check">
+                        <input type="checkbox" name="produk[${escapeHtml(id)}][ppn]" value="1"
+                            class="ppn-checkbox">
+                        <span>11%</span>
+                    </label>
+                </td>
+                <td data-label="Subtotal">
+                    <span class="pj-subtotal">${formatToRupiah(harga)}</span>
+                </td>
+                <td data-label="">
+                    <button type="button" class="pj-row-del" onclick="hapusProduk('${escapeHtml(id)}')"
+                        aria-label="Hapus ${escapeHtml(nama)}">
+                        <iconify-icon icon="solar:trash-bin-minimalistic-outline" width="17" height="17">
+                        </iconify-icon>
+                    </button>
+                </td>
+            `;
+
+            selectedTable.appendChild(row);
+
+            row.querySelector('.harga-input').addEventListener('input', function() {
+                this.value = formatToRupiah(this.value);
+                updateTotals();
+            });
+            row.querySelector('.diskon-input').addEventListener('input', function() {
+                this.value = formatToRupiah(this.value);
+                updateTotals();
+            });
+            row.querySelector('.jumlah-input').addEventListener('input', updateTotals);
+            row.querySelector('.ppn-checkbox').addEventListener('change', updateTotals);
+        }
+
+        /* ===== Metode & zona pembayaran ===== */
+        function applyMethod() {
+            const metode = metodeTerpilih();
+            const pakaiTunai = metode === 'tunai' || metode === 'tunai_transfer';
+            const pakaiBank = metode === 'transfer' || metode === 'tunai_transfer';
+
+            zoneTunai.hidden = !pakaiTunai;
+            zoneTransfer.hidden = !pakaiBank;
+
+            if (!pakaiTunai) {
+                bayarInput.value = 'Rp 0';
+            }
+
+            if (!pakaiBank) {
+                bankContainer.querySelectorAll('.bank-row').forEach(function(row) {
+                    row.remove();
+                });
+                bankIndex = 0;
+            } else if (banks.length > 0 && bankContainer.querySelectorAll('.bank-row').length === 0) {
+                addBankRow();
+            }
+
+            updatePayment();
+        }
+
+        document.querySelectorAll('input[name="metode_bayar"]').forEach(function(radio) {
+            radio.addEventListener('change', applyMethod);
+        });
+
+        /* ===== Baris bank ===== */
+        function addBankRow() {
+            if (banks.length === 0) {
+                return;
+            }
+
+            const index = bankIndex++;
+            const row = document.createElement('div');
+            row.className = 'pj-bank-row bank-row';
+            row.innerHTML = `
+                <select class="pj-select bank-select" name="bank[${index}][id]" aria-label="Rekening bank">
+                    <option value="" disabled selected>Pilih rekening</option>
+                    ${banks.map(function(bank) {
+                        return '<option value="' + escapeHtml(bank.id) + '">' +
+                            escapeHtml(bank.label) + '</option>';
+                    }).join('')}
+                </select>
+                <input type="text" class="pj-input bank-amount pj-num" name="bank[${index}][jumlah]"
+                    value="Rp 0" inputmode="numeric" autocomplete="off" aria-label="Nominal transfer">
+                <button type="button" class="pj-row-del hapus-bank" aria-label="Hapus rekening transfer">
+                    <iconify-icon icon="solar:close-circle-outline" width="18" height="18"></iconify-icon>
+                </button>
+            `;
+
+            bankContainer.appendChild(row);
+
+            row.querySelector('.bank-amount').addEventListener('input', function() {
+                this.value = formatToRupiah(this.value);
+                updatePayment();
+            });
+
+            row.querySelector('.bank-select').addEventListener('change', function() {
+                this.classList.remove('is-invalid');
+
+                if (!bankContainer.querySelector('.bank-select.is-invalid')) {
+                    bankError.hidden = true;
+                }
+            });
+
+            row.querySelector('.hapus-bank').addEventListener('click', function() {
+                row.remove();
+                updatePayment();
+            });
+        }
+
+        tambahBankBtn.addEventListener('click', addBankRow);
+
+        bayarInput.addEventListener('input', function() {
+            this.value = formatToRupiah(this.value);
+            updatePayment();
+        });
+
+        uangPasBtn.addEventListener('click', function() {
+            const total = totalHarga();
+
+            if (metodeTerpilih() === 'tunai_transfer') {
+                // Uang pas harus menutup sisa setelah transfer, bukan total
+                // penuh; kalau tidak, split payment otomatis kelebihan bayar.
+                const bank = hitungPembayaran().bank;
+                bayarInput.value = formatToRupiah(Math.max(total - bank, 0));
+            } else {
+                bayarInput.value = formatToRupiah(total);
+            }
+
+            updatePayment();
+        });
+
+        /* ===== Picker produk ===== */
+        const pickerModalEl = document.getElementById('pilih-produk-modal');
+        const pickerModal = new bootstrap.Modal(pickerModalEl);
+        const detailModalEl = document.getElementById('detailBundleModal');
+        const detailModal = new bootstrap.Modal(detailModalEl);
+        const pickerSearch = document.getElementById('pj-picker-search');
+        const pickCount = document.getElementById('pj-pick-count');
+        const confirmBtn = document.getElementById('confirm-produk-btn');
+        let detailIntent = false;
+
+        function activePane() {
+            return document.querySelector('#produkTabContent .tab-pane.active');
+        }
+
+        function refreshPicker() {
+            const pane = activePane();
+            const dipilih = pane ? pane.querySelectorAll('.produk-checkbox:checked:not(:disabled)').length : 0;
+            pickCount.textContent = dipilih > 0 ? dipilih + ' dipilih' : 'Belum ada yang dipilih';
+            confirmBtn.disabled = dipilih === 0;
+        }
+
+        function filterPicker(keyword) {
+            const term = String(keyword || '').trim().toLowerCase();
+
+            document.querySelectorAll('#produkTabContent .tab-pane').forEach(function(pane) {
+                let terlihat = 0;
+
+                pane.querySelectorAll('.service-sp-item').forEach(function(row) {
+                    const haystack = (row.getAttribute('data-search') || row.textContent || '').toLowerCase();
+                    const cocok = term === '' || haystack.indexOf(term) !== -1;
+                    row.classList.toggle('is-hidden', !cocok);
+
+                    if (cocok) {
+                        terlihat++;
+                    }
                 });
 
-                $('.select2').select2({
-                    dropdownParent: $('#pelangganModal')
+                const state = pane.querySelector('.service-sp-state');
+
+                if (state) {
+                    state.hidden = terlihat > 0;
+                }
+            });
+        }
+
+        pickerSearch.addEventListener('input', function() {
+            filterPicker(this.value);
+        });
+
+        pickerModalEl.addEventListener('shown.bs.modal', function() {
+            pickerSearch.value = '';
+            filterPicker('');
+            refreshPicker();
+            pickerSearch.focus();
+        });
+
+        pickerModalEl.addEventListener('hidden.bs.modal', function() {
+            // "Lihat isi" menutup picker sebentar; jangan buang centang yang
+            // sedang dipilih. Picker dibuka lagi setelah detail ditutup.
+            if (detailIntent) {
+                detailIntent = false;
+                detailModal.show();
+                return;
+            }
+
+            document.querySelectorAll('.produk-checkbox').forEach(function(cb) {
+                cb.checked = false;
+            });
+
+            refreshPicker();
+        });
+
+        detailModalEl.addEventListener('hidden.bs.modal', function() {
+            pickerModal.show();
+        });
+
+        pickerModalEl.addEventListener('change', function(event) {
+            if (event.target.classList && event.target.classList.contains('produk-checkbox')) {
+                refreshPicker();
+            }
+        });
+
+        pickerModalEl.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function() {
+                filterPicker(pickerSearch.value);
+                refreshPicker();
+            });
+        });
+
+        confirmBtn.addEventListener('click', function() {
+            const pane = activePane();
+
+            if (pane) {
+                pane.querySelectorAll('.produk-checkbox:checked:not(:disabled)').forEach(addProduct);
+            }
+
+            pickerModal.hide();
+            produkError.hidden = true;
+            updateTotals();
+        });
+
+        produkError.hidden = true;
+
+        /* ===== Kosongkan keranjang ===== */
+        let clearArmed = false;
+        let clearTimer = null;
+
+        function resetClearButton() {
+            clearArmed = false;
+            clearBtn.innerHTML = clearLabel;
+
+            if (clearTimer) {
+                clearTimeout(clearTimer);
+                clearTimer = null;
+            }
+        }
+
+        clearBtn.addEventListener('click', function() {
+            if (!clearArmed) {
+                clearArmed = true;
+                clearBtn.textContent = 'Yakin?';
+
+                clearTimer = setTimeout(resetClearButton, 2500);
+                return;
+            }
+
+            resetClearButton();
+            productRows().forEach(function(row) {
+                row.remove();
+            });
+            updateTotals();
+        });
+
+        /* ===== Detail bundle ===== */
+        document.querySelectorAll('.btn-check-bundle').forEach(function(btn) {
+            btn.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const detail = JSON.parse(this.getAttribute('data-detail') || '[]');
+                const tbody = document.getElementById('bundle-detail-body');
+                tbody.innerHTML = '';
+
+                detail.forEach(function(item) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${escapeHtml(item.nama_barang || '-')}</td>
+                        <td class="pj-num">${escapeHtml(item.jumlah || 0)}</td>
+                        <td class="pj-num">${escapeHtml(item.stok_akhir === null || item.stok_akhir ===
+                            undefined ? '-' : item.stok_akhir)}</td>
+                    `;
+                    tbody.appendChild(row);
                 });
 
-                // Select2 searchable untuk domisili di Form Utama
-                $('#form_provinsi, #form_kabupaten, #form_kecamatan').select2({ width: '100%' });
+                document.getElementById('detailBundleLabel').textContent =
+                    'Detail Bundle: ' + (this.getAttribute('data-nama') || '');
+                detailIntent = true;
+                pickerModal.hide();
+            });
+        });
 
-                // Inisialisasi Select2 domisili di dalam modal Tambah Pelanggan
-                $('#modalTambahPelanggan').on('shown.bs.modal', function() {
-                    $('#modalTambahPelanggan .js-domisili').each(function() {
-                        $(this).select2({
-                            dropdownParent: $('#modalTambahPelanggan'),
+        /* ===== Pelanggan ===== */
+        const pelangganModalEl = document.getElementById('pelangganModal');
+        const pelangganModal = new bootstrap.Modal(pelangganModalEl);
+        const tambahModalEl = document.getElementById('modalTambahPelanggan');
+        const tambahModal = new bootstrap.Modal(tambahModalEl);
+        const pelangganSelect = document.getElementById('pelanggan-select');
+        const pelangganError = document.getElementById('pj-pelanggan-error');
+        const pelangganSuccess = document.getElementById('pj-pelanggan-success');
+        const addError = document.getElementById('pj-add-error');
+
+        if (window.jQuery && jQuery.fn.select2) {
+            jQuery('#pelanggan-select').select2({
+                dropdownParent: jQuery('#pelangganModal'),
+                width: '100%'
+            });
+
+            jQuery('#modalTambahPelanggan').on('shown.bs.modal', function() {
+                jQuery('#modalTambahPelanggan .js-domisili').each(function() {
+                    if (!jQuery(this).data('select2')) {
+                        jQuery(this).select2({
+                            dropdownParent: jQuery('#modalTambahPelanggan'),
                             width: '100%'
                         });
-                    });
-                });
-
-                $('#modalTambahPelanggan').on('hidden.bs.modal', function() {
-                    $('#modalTambahPelanggan .js-domisili').select2('destroy');
-                    $('#modalTambahPelanggan select').val('').trigger('change');
-                });
-
-                function pushOption($sel, val) {
-                    if (!val) return;
-                    const escaped = String(val).replace(/"/g, '&quot;');
-                    if (!$sel.find('option[value="' + escaped + '"]').length) {
-                        $sel.append($('<option>', { value: val, text: val }));
                     }
-                }
-
-                function setFormDomisili(d) {
-                    if (!d) return;
-                    pushOption($('#form_provinsi'), d.provinsi);
-                    pushOption($('#form_kabupaten'), d.kabupaten);
-                    pushOption($('#form_kecamatan'), d.kecamatan);
-                    $('#form_provinsi').data('desired', d.provinsi || '');
-                    $('#form_kabupaten').data('desired', d.kabupaten || '');
-                    $('#form_kecamatan').data('desired', d.kecamatan || '');
-                    $('#form_provinsi').val(d.provinsi || '').trigger('change');
-                    $('#form_kabupaten').val(d.kabupaten || '').trigger('change');
-                    $('#form_kecamatan').val(d.kecamatan || '').trigger('change');
-                }
-
-                function bindCascade($provSel, $kabSel, $kecSel) {
-                    $provSel.on('change', function() {
-                        let provinsi = $(this).val();
-
-                        $kabSel.html('<option value="">Loading...</option>').trigger('change');
-                        $kecSel.html('<option value="">-- Pilih Kecamatan --</option>').trigger('change');
-
-                        if (provinsi !== '') {
-                            $.getJSON("<?= base_url('region/kabupaten') ?>/" + encodeURIComponent(provinsi), function(
-                                data) {
-                                let opt = '<option value="">-- Pilih Kabupaten --</option>';
-                                $.each(data, function(i, v) {
-                                    opt += `<option value="${v.name}">${v.name}</option>`;
-                                });
-                                $kabSel.html(opt).trigger('change');
-                                const desiredKab = $kabSel.data('desired');
-                                if (desiredKab) {
-                                    pushOption($kabSel, desiredKab);
-                                    $kabSel.val(desiredKab).trigger('change');
-                                }
-                            });
-                        }
-                    });
-
-                    $kabSel.on('change', function() {
-                        let kabupaten = $(this).val();
-
-                        $kecSel.html('<option value="">Loading...</option>').trigger('change');
-
-                        if (kabupaten !== '') {
-                            $.getJSON("<?= base_url('region/kecamatan') ?>/" + encodeURIComponent(kabupaten), function(
-                                data) {
-                                let opt = '<option value="">-- Pilih Kecamatan --</option>';
-                                $.each(data, function(i, v) {
-                                    opt += `<option value="${v.name}">${v.name}</option>`;
-                                });
-                                $kecSel.html(opt).trigger('change');
-                                const desiredKec = $kecSel.data('desired');
-                                if (desiredKec) {
-                                    pushOption($kecSel, desiredKec);
-                                    $kecSel.val(desiredKec).trigger('change');
-                                }
-                            });
-                        }
-                    });
-                }
-
-                bindCascade($('#form_provinsi'), $('#form_kabupaten'), $('#form_kecamatan'));
-                bindCascade($('#modal_provinsi'), $('#modal_kabupaten'), $('#modal_kecamatan'));
-
-                function domisiliFromOption(selectedData, selectedOption) {
-                    let d = selectedData ? {
-                        provinsi: selectedData.provinsi,
-                        kabupaten: selectedData.kabupaten,
-                        kecamatan: selectedData.kecamatan
-                    } : {};
-                    if ((!d.provinsi && !d.kabupaten && !d.kecamatan) && selectedOption) {
-                        d = {
-                            provinsi: selectedOption.getAttribute('data-provinsi'),
-                            kabupaten: selectedOption.getAttribute('data-kabupaten'),
-                            kecamatan: selectedOption.getAttribute('data-kecamatan')
-                        };
-                    }
-                    return d;
-                }
-
-
-                // ✅ Fix: close pelangganModal before opening modalTambah
-                document.getElementById('btnTambahPelanggan').addEventListener('click', function() {
-
-                    const pelangganModalInstance = bootstrap.Modal.getInstance(pelangganModalEl);
-                    pelangganModalInstance.hide();
-
-                    setTimeout(() => {
-                        modalTambah.show();
-                    }, 500);
                 });
+            });
 
-                // Tombol "Pilih" untuk menutup modal
-                document.getElementById('btnPilihPelanggan').addEventListener('click', function() {
-                    const select = document.getElementById('pelanggan-select');
-                    const selectedOption = select.options[select.selectedIndex];
+            jQuery('#modalTambahPelanggan').on('hidden.bs.modal', function() {
+                jQuery('#modalTambahPelanggan .js-domisili').each(function() {
+                    if (jQuery(this).data('select2')) {
+                        jQuery(this).select2('destroy');
+                    }
+                });
+                jQuery('#modalTambahPelanggan select').val('').trigger('change');
+            });
+        }
 
-                    if (!selectedOption || selectedOption.disabled) {
-                        alert('Silakan pilih pelanggan terlebih dahulu.');
+        function tampilkanAlamat(option) {
+            const bagian = [
+                option.getAttribute('data-provinsi'),
+                option.getAttribute('data-kabupaten'),
+                option.getAttribute('data-kecamatan')
+            ].filter(function(nilai) {
+                return nilai && nilai.trim() !== '';
+            });
+
+            pelangganMeta.innerHTML =
+                '<iconify-icon icon="solar:map-point-outline" width="14" height="14"></iconify-icon> ' +
+                (bagian.length ? escapeHtml(bagian.join(' · ')) : 'Alamat pelanggan belum diisi.');
+        }
+
+        const selectedPelangganInput = document.getElementById('selectedidpelanggan');
+
+        function pakaiPelanggan(option) {
+            pelangganInput.value = option.text.trim();
+            selectedPelangganInput.value = option.value;
+            pelangganInput.classList.remove('is-invalid');
+            customerError.hidden = true;
+            tampilkanAlamat(option);
+        }
+
+        document.getElementById('btnPilihPelanggan').addEventListener('click', function() {
+            const option = pelangganSelect.options[pelangganSelect.selectedIndex];
+
+            if (!option || option.disabled || option.value === '') {
+                pelangganError.hidden = false;
+                return;
+            }
+
+            pelangganError.hidden = true;
+            pelangganSuccess.hidden = true;
+            pakaiPelanggan(option);
+            pelangganModal.hide();
+        });
+
+        let kembaliKePelanggan = false;
+
+        document.getElementById('btnTambahPelanggan').addEventListener('click', function() {
+            pelangganError.hidden = true;
+            pelangganSuccess.hidden = true;
+            kembaliKePelanggan = true;
+            pelangganModal.hide();
+        });
+
+        pelangganModalEl.addEventListener('hidden.bs.modal', function() {
+            if (!kembaliKePelanggan) {
+                return;
+            }
+
+            kembaliKePelanggan = false;
+            tambahModal.show();
+        });
+
+        tambahModalEl.addEventListener('hidden.bs.modal', function() {
+            pelangganModal.show();
+        });
+
+        /* ===== Cascade wilayah khusus modal tambah pelanggan ===== */
+        function pushOption($select, value) {
+            if (!value) {
+                return;
+            }
+
+            const escaped = String(value).replace(/"/g, '&quot;');
+
+            if (!$select.find('option[value="' + escaped + '"]').length) {
+                $select.append(jQuery('<option>', {
+                    value: value,
+                    text: value
+                }));
+            }
+        }
+
+        if (window.jQuery) {
+            const $provinsi = jQuery('#modal_provinsi');
+            const $kabupaten = jQuery('#modal_kabupaten');
+            const $kecamatan = jQuery('#modal_kecamatan');
+
+            $provinsi.on('change', function() {
+                const provinsi = jQuery(this).val();
+
+                $kabupaten.html('<option value="">Memuat...</option>').trigger('change');
+                $kecamatan.html('<option value="">— Pilih kecamatan —</option>').trigger('change');
+
+                if (provinsi === '') {
+                    return;
+                }
+
+                jQuery.getJSON("<?= base_url('region/kabupaten') ?>/" + encodeURIComponent(provinsi),
+                    function(data) {
+                        let opt = '<option value="">— Pilih kabupaten —</option>';
+                        jQuery.each(data, function(i, item) {
+                            opt += '<option value="' + escapeHtml(item.name) + '">' + escapeHtml(
+                                item.name) + '</option>';
+                        });
+                        $kabupaten.html(opt).trigger('change');
+                    });
+            });
+
+            $kabupaten.on('change', function() {
+                const kabupaten = jQuery(this).val();
+
+                $kecamatan.html('<option value="">Memuat...</option>').trigger('change');
+
+                if (kabupaten === '') {
+                    return;
+                }
+
+                jQuery.getJSON("<?= base_url('region/kecamatan') ?>/" + encodeURIComponent(kabupaten),
+                    function(data) {
+                        let opt = '<option value="">— Pilih kecamatan —</option>';
+                        jQuery.each(data, function(i, item) {
+                            opt += '<option value="' + escapeHtml(item.name) + '">' + escapeHtml(
+                                item.name) + '</option>';
+                        });
+                        $kecamatan.html(opt).trigger('change');
+                    });
+            });
+        }
+
+        /* ===== Simpan pelanggan baru ===== */
+        jQuery('#formTambahPelanggan').on('submit', function(event) {
+            event.preventDefault();
+
+            addError.hidden = true;
+
+            jQuery.ajax({
+                url: '<?= base_url('simpan/pelanggan') ?>',
+                method: 'POST',
+                data: jQuery(this).serialize(),
+                dataType: 'json',
+                success: function(response) {
+                    if (!response.success) {
+                        addError.textContent = response.message || 'Pelanggan gagal disimpan.';
+                        addError.hidden = false;
                         return;
                     }
 
-                    document.getElementById('pelanggan-container').style.display = 'block';
-                    document.getElementById('pelanggan').value = selectedOption.text;
+                    jQuery('#formTambahPelanggan')[0].reset();
 
-                    setFormDomisili(domisiliFromOption(null, selectedOption));
+                    const option = new Option(
+                        response.data.nama + ' : ' + response.data.no_hp,
+                        response.data.id_pelanggan,
+                        true,
+                        true
+                    );
+                    option.setAttribute('data-provinsi', response.data.provinsi || '');
+                    option.setAttribute('data-kabupaten', response.data.kabupaten || '');
+                    option.setAttribute('data-kecamatan', response.data.kecamatan || '');
 
-                    document.querySelector('#pelangganModal .btn-close').click();
-                });
+                    jQuery('#pelanggan-select').append(option).trigger('change');
+                    pakaiPelanggan(option);
+                    pelangganSuccess.textContent = 'Pelanggan berhasil ditambahkan.';
+                    pelangganSuccess.hidden = false;
 
-                // Submit form tambah pelanggan via AJAX
-                $('#formTambahPelanggan').on('submit', function(e) {
-                    e.preventDefault();
-                    const formData = $(this).serialize();
-
-                    $.ajax({
-                        url: '<?= base_url('simpan/pelanggan') ?>',
-                        method: 'POST',
-                        data: formData,
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                modalTambah.hide();
-                                $('#formTambahPelanggan')[0].reset();
-
-                                const newOption = new Option(
-                                    response.data.nama + ' : ' + response.data.no_hp,
-                                    response.data.id_pelanggan,
-                                    true,
-                                    true
-                                );
-                                newOption.setAttribute('data-provinsi', response.data.provinsi || '');
-                                newOption.setAttribute('data-kabupaten', response.data.kabupaten || '');
-                                newOption.setAttribute('data-kecamatan', response.data.kecamatan || '');
-                                $('#pelanggan-select').append(newOption).trigger('change');
-                                $('#pelanggan').val(response.data.nama + ' : ' + response.data.no_hp);
-
-                                document.getElementById('pelanggan-container').style.display = 'block';
-                                setFormDomisili(response.data);
-                                alert('Pelanggan berhasil ditambahkan');
-
-                                // ✅ Reopen pelanggan modal automatically
-                                setTimeout(() => {
-                                    pelangganModal.show();
-                                }, 500);
-                            } else {
-                                alert('Error: ' + response.message);
-                            }
-                        },
-                        error: function() {
-                            alert('Terjadi kesalahan saat menyimpan data.');
-                        }
-                    });
-                });
-
-
-
+                    tambahModal.hide();
+                },
+                error: function() {
+                    addError.textContent = 'Terjadi kesalahan saat menyimpan data.';
+                    addError.hidden = false;
+                }
             });
-        </script>
+        });
 
-        <script>
-            $(document).ready(function() {
-                var table = $('#produk-modal-table').DataTable();
-            });
+        /* ===== Validasi submit ===== */
+        salesBy.addEventListener('change', function() {
+            this.classList.remove('is-invalid');
+            staffError.hidden = true;
+        });
 
-            $(document).ready(function() {
-                var table = $('#jasa-modal-table').DataTable();
-            });
+        form.addEventListener('submit', function(event) {
+            let fokusPertama = null;
 
-            $(document).ready(function() {
-                var table = $('#bundle-modal-table').DataTable();
-            });
-        </script>
+            customerError.hidden = true;
+            staffError.hidden = true;
+            produkError.hidden = true;
+            bankError.hidden = true;
+            pelangganInput.classList.remove('is-invalid');
+            salesBy.classList.remove('is-invalid');
 
+            if (pelangganInput.value.trim() === '') {
+                customerError.hidden = false;
+                pelangganInput.classList.add('is-invalid');
+                fokusPertama = fokusPertama || pelangganInput;
+            } else if (!selectedPelangganInput.value) {
+                customerError.hidden = false;
+                pelangganInput.classList.add('is-invalid');
+                fokusPertama = fokusPertama || pelangganInput;
+            }
 
-        <script>
-            $(document).ready(function() {
-                // Sembunyikan section awal
-                $('.tunai-section, .transfer-section').hide();
+            if (productRows().length === 0) {
+                produkError.hidden = false;
+                fokusPertama = fokusPertama || document.getElementById('pj-pilih-produk');
+            }
 
-                $('#metode_bayar').on('change', function() {
-                    var metode = $(this).val();
+            if (!salesBy.value) {
+                staffError.hidden = false;
+                salesBy.classList.add('is-invalid');
+                fokusPertama = fokusPertama || salesBy;
+            }
 
-                    if (metode === 'tunai') {
-                        $('.tunai-section').show();
-                        $('.transfer-section').hide();
-                    } else if (metode === 'transfer') {
-                        $('.tunai-section').hide();
-                        $('.transfer-section').show();
-                    } else if (metode === 'tunai_transfer') {
-                        $('.tunai-section').show();
-                        $('.transfer-section').show();
-                    } else {
-                        $('.tunai-section, .transfer-section').hide();
+            if (metodeTerpilih() !== 'tunai') {
+                let bankTidakValid = false;
+
+                bankContainer.querySelectorAll('.bank-row').forEach(function(row) {
+                    const select = row.querySelector('.bank-select');
+                    const amount = unformatRupiah(row.querySelector('.bank-amount').value);
+
+                    select.classList.remove('is-invalid');
+
+                    if (amount > 0 && !select.value) {
+                        select.classList.add('is-invalid');
+                        bankTidakValid = true;
+                        fokusPertama = fokusPertama || select;
                     }
                 });
 
-                // Function untuk buat baris bank
-                function tambahBarisBank() {
-                    const container = $('#bank-payment-container');
-                    const index = container.children('.bank-row').length;
-
-                    const newRow = $(`
-            <div class="row bank-row mb-2">
-                <div class="col-md-6">
-                    <select name="bank[${index}][id]" class="select2 form-control bank-select" style="width: 100%;" required>
-                        <option disabled selected>Pilih Bank</option>
-                        <?php foreach ($bank as $p): ?>
-                            <option value="<?= htmlspecialchars($p->idbank) ?>">
-                                <?= htmlspecialchars($p->nama_bank) . ' ' . ($p->atas_nama)?> : <?= htmlspecialchars($p->norek) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <input type="text" class="form-control bank-amount" name="bank[${index}][jumlah]" value="Rp 0">
-                </div>
-                <div class="col-md-2 text-end">
-                    <button type="button" class="btn btn-danger btn-sm hapus-bank">&times;</button>
-                </div>
-            </div>
-        `);
-
-                    container.append(newRow);
-
-                    newRow.find('.bank-amount').on('input', function() {
-                        const numeric = this.value.replace(/[^\d]/g, '');
-                        this.value = formatToRupiah(numeric);
-                        updateHutang();
-                    });
-
-                    newRow.find('.hapus-bank').on('click', function() {
-                        $(this).closest('.bank-row').remove();
-                        updateHutang();
-                    });
-
-                    newRow.find('.bank-select').select2({
-                        dropdownParent: $('body')
-                    });
+                if (bankTidakValid) {
+                    bankError.hidden = false;
                 }
+            }
 
-                // Klik tombol tambah bank
-                $('#tambah-bank').on('click', tambahBarisBank);
+            if (fokusPertama) {
+                event.preventDefault();
+                fokusPertama.focus();
+            }
+        });
 
-                // Panggil minimal satu kali jika metode transfer dipilih
-                $('#metode_bayar').on('change', function() {
-                    if ($(this).val() === 'transfer' || $(this).val() === 'tunai_transfer') {
-                        if ($('#bank-payment-container .bank-row').length === 0) {
-                            tambahBarisBank();
-                        }
-                    }
-                });
-
-                $('#bank_idbank').select2({
-                    dropdownParent: $('body')
-                });
-            });
-        </script>
-
-
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                document.querySelectorAll(".btn-check-bundle").forEach(btn => {
-                    btn.addEventListener("click", function() {
-                        let namaBundle = this.getAttribute("data-nama");
-                        let detail = JSON.parse(this.getAttribute("data-detail"));
-
-                        // Ubah judul modal
-                        document.getElementById("detailBundleLabel").innerText = "Detail Bundle: " +
-                            namaBundle;
-
-                        // Isi tabel detail
-                        let tbody = document.getElementById("bundle-detail-body");
-                        tbody.innerHTML = ""; // reset
-                        detail.forEach(item => {
-                            let row = `<tr>
-                    <td>${item.nama_barang}</td>
-                    <td>${item.jumlah}</td>
-                    <td>${item.stok_akhir ?? '-'}</td>
-                </tr>`;
-                            tbody.innerHTML += row;
-                        });
-
-                        // Tampilkan modal
-                        let modal = new bootstrap.Modal(document.getElementById(
-                            "detailBundleModal"));
-                        modal.show();
-                    });
-                });
-            });
-        </script>
-
-        <?php if (session()->getFlashdata('pdf_url')): ?>
-            <script>
-                window.open("<?= session()->getFlashdata('pdf_url') ?>", "_blank");
-            </script>
-        <?php endif; ?>
-
-
-        <script>
-            document.getElementById('form_penjualan').addEventListener('submit', function(e) {
-                const pelanggan = document.getElementById('pelanggan').value.trim();
-
-                if (pelanggan === "") {
-                    e.preventDefault(); // stop submit
-                    alert("Pelanggan belum dipilih!");
-                    return false;
-                }
-            });
-        </script>
-        
-<script>
-    const slider = document.querySelector('.table-scroll')
-
-    let isDown = false
-    let startX
-    let scrollLeft
-
-    slider.addEventListener('mousedown', (e) => {
-        isDown = true
-        slider.classList.add('active')
-        startX = e.pageX - slider.offsetLeft
-        scrollLeft = slider.scrollLeft
-    })
-
-    slider.addEventListener('mouseleave', () => {
-        isDown = false
-    })
-
-    slider.addEventListener('mouseup', () => {
-        isDown = false
-    })
-
-    slider.addEventListener('mousemove', (e) => {
-        if (!isDown) return
-        e.preventDefault()
-        const x = e.pageX - slider.offsetLeft
-        const walk = (x - startX) * 2
-        slider.scrollLeft = scrollLeft - walk
-    })
+        /* ===== Kondisi awal ===== */
+        updateItemCount();
+        applyMethod();
+        updateTotals();
+    });
 </script>

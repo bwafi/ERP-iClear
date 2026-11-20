@@ -33,9 +33,17 @@ use App\Models\ModelBundle;
 use App\Models\ModelDetailBundle;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelRegion;
+use App\Services\Sales\PenjualanPaymentSplit;
 
 class Penjualan extends BaseController
 {
+    /**
+     * ID_JABATAN yang boleh melihat staff lintas unit pada dropdown Staff.
+     *
+     * 0 = Finance, 1 = Admin root, 34 = Manager. Tim toko hanya melihat staff
+     * unitnya sendiri supaya penjualan tidak diatribusikan ke staff unit lain.
+     */
+    private const STAFF_SEMUA_UNIT_ROLES = [0, 1, 34];
 
     protected $BarangModel;
     protected $KategoriModel;
@@ -89,15 +97,49 @@ class Penjualan extends BaseController
         $this->RegionModel = new ModelRegion();
     }
 
+    /**
+     * Apakah role ini boleh melihat staff dari semua unit.
+     */
+    public static function bolehPilihStaffLintasUnit(int $role): bool
+    {
+        return in_array($role, self::STAFF_SEMUA_UNIT_ROLES, true);
+    }
+
+    /**
+     * Unit filter dropdown Staff. null berarti semua unit (role lintas unit).
+     * Tim toko selalu memakai unit sesinya dan tidak boleh memilih unit lain.
+     */
+    public static function resolveStaffUnit(int $role, int $unitSesi): ?int
+    {
+        return self::bolehPilihStaffLintasUnit($role) ? null : $unitSesi;
+    }
+
     public function index()
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
+        $staffUnit = self::resolveStaffUnit((int) session('ID_JABATAN'), (int) session('ID_UNIT'));
+        $unitId = (int) session('ID_UNIT');
+
+        // HPP dan suplier hanya untuk tab Produk di picker. HPP memakai
+        // resolver yang sama dengan transaksi (hpp_unit -> hpp_barang ->
+        // harga_beli); suplier berasal dari stok awal terbaru unit ini.
+        $produk = $this->StokBarangModel->getAllBarang2();
+        $hppUnit = $this->HppUnitModel->resolveMany(
+            array_map(static fn ($p) => (int) $p->idbarang, $produk),
+            $unitId
+        );
+        $suplierUnit = $this->BarangModel->getSuplierPerUnit($unitId)[$unitId] ?? [];
+        foreach ($produk as $p) {
+            $p->hpp_unit = $hppUnit[(int) $p->idbarang] ?? (float) $p->harga_beli;
+            $p->nama_suplier = $suplierUnit[(int) $p->idbarang] ?? '';
+        }
+
         $data = array(
             'akun' => $akun,
-            'produk' => $this->StokBarangModel->getAllBarang2(),
+            'produk' => $produk,
             'jasa' => $this->StokBarangModel->getJasa(),
-            'frontliner' => $this->AuthModel->getdataakun(),
-            'bank' => $this->BankModel->getBank(),
+            'frontliner' => $this->AuthModel->getdataakun($staffUnit),
+            'bank' => $this->BankModel->getBankDalamScopeUnit((int) session('ID_UNIT')),
             'kategori' => $this->KategoriModel->getKategori(),
             'suplier' => $this->SuplierModel->getSuplier(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
@@ -130,10 +172,51 @@ class Penjualan extends BaseController
 
     public function insert_penjualan()
     {
+        $produkData = $this->request->getPost('produk');
+        $total_penjualan = $this->sanitizeCurrency($this->request->getPost('total-harga'));
+
+        if (!is_array($produkData) || $produkData === []) {
+            session()->setFlashdata('gagal', 'Pilih minimal satu produk sebelum menyimpan penjualan.');
+            return redirect()->to(base_url('/penjualan'));
+        }
+
+        if ($total_penjualan <= 0) {
+            session()->setFlashdata('gagal', 'Total penjualan harus lebih besar dari nol.');
+            return redirect()->to(base_url('/penjualan'));
+        }
+
+        // Staff yang diatribusikan harus berasal dari daftar yang tampil di
+        // halaman: tim toko hanya unitnya sendiri, sedangkan Finance/Admin
+        // root/Manager boleh memakai staff lintas unit.
+        $sales_by = $this->request->getPost('sales_by');
+        $staffUnit = self::resolveStaffUnit((int) session('ID_JABATAN'), (int) session('ID_UNIT'));
+        $staffIds = array_map(
+            static fn ($row) => (int) $row->ID_AKUN,
+            $this->AuthModel->getdataakun($staffUnit)
+        );
+
+        if ((int) $sales_by <= 0 || !in_array((int) $sales_by, $staffIds, true)) {
+            session()->setFlashdata('gagal', 'Staff yang dipilih tidak tersedia untuk unit ini.');
+            return redirect()->to(base_url('/penjualan'));
+        }
+
+        // Rekening yang boleh dipakai harus sama dengan yang tampil di halaman:
+        // rekening unit sesi + shared yang dialokasikan, tanpa Finance/HO.
+        $allowedBankIds = [];
+        foreach ($this->BankModel->getBankDalamScopeUnit((int) session('ID_UNIT')) as $bank) {
+            $allowedBankIds[] = (string) $bank->idbank;
+        }
+
+        $pembayaran = (new PenjualanPaymentSplit())->normalize($this->request->getPost(), $allowedBankIds);
+
+        if ($pembayaran['errors'] !== []) {
+            session()->setFlashdata('gagal', $pembayaran['errors'][0]);
+            return redirect()->to(base_url('/penjualan'));
+        }
+
         $db = \Config\Database::connect();
         $db->transStart();
 
-        $produkData = $this->request->getPost('produk');
         $datauser = $this->AuthModel->getById(session('ID_AKUN'));
         $useridunit = $datauser->ID_UNIT;
         $namauser = $datauser->NAMA_AKUN;
@@ -181,42 +264,44 @@ class Penjualan extends BaseController
         $diskon = $this->sanitizeCurrency($this->request->getPost('total-diskon'));
         $harus_dibayar = $total_penjualan;
         $waktu_penjualan = date('Y-m-d H:i:s');
-        // Ambil bayar tunai (tetap sama)
-        $bayar_tunai = $this->sanitizeCurrency($this->request->getPost('bayar'));
 
-
-        $bankData = $this->request->getPost('bank');
-
+        // Nominal tunai/bank sudah dinormalisasi oleh PenjualanPaymentSplit:
+        // metode_bayar menentukan zona mana yang dipakai dan rekening bank
+        // divalidasi terhadap scope unit.
+        $bayar_tunai = $pembayaran['cash'];
+        $bankData = $pembayaran['banks'];
 
         $bankPembayaran = [];
         $totalBayarBank = 0;
+        $jurnal = [];
         $kodePembayaran = 'PJL' . date('Ymd') . session('ID_UNIT') . rand(1000, 9999);
 
-        if (!empty($bankData) && is_array($bankData)) {
-            foreach ($bankData as $b) {
-                $jumlah = $this->sanitizeCurrency($b['jumlah'] ?? '0');
-                $bankId = $b['id'] ?? null; // safe access: matches your view which uses bank[][id]
-                if ($jumlah > 0 && !empty($bankId)) {
-                    $bankPembayaran = array(
-                        'kode_pembayaran' => $kodePembayaran,
-                        'bank_idbank' => $bankId,
-                        'jumlah' => $jumlah,
-                        'tabel_referensi' => 'penjualan'
-                    );
+        foreach ($bankData as $b) {
+            $jumlah = (float) ($b['jumlah'] ?? 0);
 
-                    $this->PembayaranBankModel->insertPembayaranBank($bankPembayaran);
-                    $totalBayarBank += $jumlah;
-                    $jurnal[] = [
-                        'tanggal' => $tanggal_waktu,
-                        'kode_template' => 'penjualan_lunas_bank_' . $b['id'],
-                        'ar_value' => [$jumlah],
-                        'keterangan' => 'Pembayaran Bank - Penjualan ' . $no_invoice,
-                        'id_referensi' => $kodePembayaran,
-                        'tabel_referensi' => 'pembayaran_bank'
-                    ];
-                }
+            if ($jumlah <= 0) {
+                continue;
             }
+
+            $bankPembayaran = array(
+                'kode_pembayaran' => $kodePembayaran,
+                'bank_idbank' => $b['id'],
+                'jumlah' => $jumlah,
+                'tabel_referensi' => 'penjualan'
+            );
+
+            $this->PembayaranBankModel->insertPembayaranBank($bankPembayaran);
+            $totalBayarBank += $jumlah;
+            $jurnal[] = [
+                'tanggal' => $tanggal_waktu,
+                'kode_template' => 'penjualan_lunas_bank_' . $b['id'],
+                'ar_value' => [$jumlah],
+                'keterangan' => 'Pembayaran Bank - Penjualan ' . $no_invoice,
+                'id_referensi' => $kodePembayaran,
+                'tabel_referensi' => 'pembayaran_bank'
+            ];
         }
+
         if ($bayar_tunai > 0) {
             $jurnal[] = [
                 'tanggal' => $tanggal_waktu,
@@ -234,17 +319,13 @@ class Penjualan extends BaseController
         $total_ppn = $this->sanitizeCurrency($this->request->getPost('total-ppn'));
 
         $unit_idunit = $useridunit;
-        $hutang = $this->sanitizeCurrency($this->request->getPost('hutang'));
-        $keterangan = '';
-        if ($hutang == 0) {
-            $keterangan = 'Lunas';
-        } else {
-            $keterangan = 'Belum Lunas';
-        }
+        // Hutang dan status dihitung server dari nominal yang benar-benar
+        // diterima, bukan dari hidden input yang bisa dimanipulasi.
+        $hutang = max(0, $total_penjualan - $total_bayar);
+        $keterangan = $hutang == 0 ? 'Lunas' : 'Belum Lunas';
 
 
         $id_pelanggan = $this->request->getPost('selectedidpelanggan');
-        $sales_by = $this->request->getPost('sales_by');
 
 
         $data1 = array(

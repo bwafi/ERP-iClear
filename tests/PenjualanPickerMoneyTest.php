@@ -104,4 +104,14 @@ final class PenjualanPickerMoneyTest extends CIUnitTestCase
 
         $this->assertStringContainsString("angka.replace(/[^\\d]/g, '')", $html);
     }
+
+    public function testControllerMengirimHppDanSuplierUntukPicker(): void
+    {
+        $source = file_get_contents(APPPATH . 'Controllers/Penjualan.php');
+
+        $this->assertStringContainsString('resolveMany', $source);
+        $this->assertStringContainsString('getSuplierPerUnit', $source);
+        $this->assertStringContainsString('$p->hpp_unit', $source);
+        $this->assertStringContainsString('$p->nama_suplier', $source);
+    }
 }

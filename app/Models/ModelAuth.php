@@ -116,13 +116,22 @@ class ModelAuth extends Model
     }
 
 
-    public function getdataakun()
+    /**
+     * Daftar akun beserta nama jabatan.
+     *
+     * @param int|null $idunit Batasi ke satu unit; null berarti semua unit.
+     */
+    public function getdataakun($idunit = null)
     {
-        return $this->db->table($this->table)
+        $builder = $this->db->table($this->table)
             ->select('akun.*, jabatan.NAMA_JABATAN')
-            ->join('jabatan', 'jabatan.ID_JABATAN = akun.ID_JABATAN', 'left')
-            ->get()
-            ->getResult();
+            ->join('jabatan', 'jabatan.ID_JABATAN = akun.ID_JABATAN', 'left');
+
+        if ($idunit !== null && $idunit !== '') {
+            $builder->where('akun.ID_UNIT', (int) $idunit);
+        }
+
+        return $builder->get()->getResult();
     }
 
     public function getLatLongByAkun($idAkun)
