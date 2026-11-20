@@ -144,4 +144,178 @@ class ModelPembelian extends Model
 
         return $builder->get()->getResult();
     }
+
+    /**
+     * Daftar nota untuk /riwayat_pembelian (DataTables server-side).
+     *
+     * Satu baris = satu `pembelian`, bukan satu detail. Detail barang diambil
+     * terpisah lewat ModelDetailPembelian::getByPembelianId() supaya halaman
+     * tidak menarik seluruh isi detail_pembelian.
+     *
+     * `no_batch` TIDAK unik (baris lama bisa tertinggal setelah header
+     * dihapus), jadi identitas nota selalu `pembelian.idpembelian`.
+     *
+     * @param  int[] $allowedUnitIds unit dalam scope user; kosong = tidak ada data
+     * @return array{data: object[], recordsFiltered: int}
+     */
+    public function getRiwayatServerSide(
+        $start,
+        $length,
+        $searchValue,
+        $orderColumn,
+        $orderDir,
+        $startDate = '',
+        $endDate = '',
+        $unitId = 0,
+        array $allowedUnitIds = []
+    ) {
+        $orderColumns = [
+            0 => 'no_batch',
+            1 => 'pembelian.tanggal_masuk',
+            2 => 'nama_barang',
+            3 => 'unit.NAMA_UNIT',
+            4 => 'pembelian.suplier_id_suplier',
+            5 => 'pembelian.total_transaksi',
+        ];
+        $orderDir = strtoupper((string) $orderDir) === 'ASC' ? 'ASC' : 'DESC';
+        $orderBy = $orderColumns[(int) $orderColumn] ?? 'pembelian.tanggal_masuk';
+
+        [$where, $params] = $this->riwayatFilters(
+            $searchValue,
+            $startDate,
+            $endDate,
+            $unitId,
+            $allowedUnitIds
+        );
+
+        $sql = "SELECT
+                pembelian.idpembelian,
+                COALESCE(
+                    pembelian.no_nota_supplier,
+                    (SELECT dp_batch.no_batch
+                        FROM detail_pembelian dp_batch
+                        WHERE dp_batch.pembelian_idpembelian = pembelian.idpembelian
+                        ORDER BY dp_batch.iddetail_pembelian ASC
+                        LIMIT 1)
+                ) AS no_batch,
+                pembelian.tanggal_masuk,
+                pembelian.suplier_id_suplier,
+                pembelian.total_transaksi,
+                pembelian.status,
+                pembelian.sisa,
+                unit.NAMA_UNIT,
+                suplier.nama_suplier,
+                (SELECT COUNT(*)
+                    FROM detail_pembelian dp_count
+                    WHERE dp_count.pembelian_idpembelian = pembelian.idpembelian) AS jumlah_item,
+                (SELECT b_first.nama_barang
+                    FROM detail_pembelian dp_first
+                    JOIN barang b_first ON b_first.idbarang = dp_first.barang_idbarang
+                    WHERE dp_first.pembelian_idpembelian = pembelian.idpembelian
+                    ORDER BY dp_first.iddetail_pembelian ASC
+                    LIMIT 1) AS nama_barang
+            FROM pembelian
+            JOIN unit ON unit.idunit = pembelian.unit_idunit
+            LEFT JOIN suplier ON suplier.id_suplier = pembelian.suplier_id_suplier
+            WHERE {$where}
+            ORDER BY {$orderBy} {$orderDir}, pembelian.idpembelian DESC
+            LIMIT ? OFFSET ?";
+
+        $dataParams = array_merge($params, [(int) $length, (int) $start]);
+        $data = $this->db->query($sql, $dataParams)->getResult();
+
+        $countSql = "SELECT COUNT(*) AS total
+            FROM pembelian
+            JOIN unit ON unit.idunit = pembelian.unit_idunit
+            LEFT JOIN suplier ON suplier.id_suplier = pembelian.suplier_id_suplier
+            WHERE {$where}";
+        $totalFiltered = (int) $this->db->query($countSql, $params)->getRow()->total;
+
+        return [
+            'data' => $data,
+            'recordsFiltered' => $totalFiltered,
+        ];
+    }
+
+    /**
+     * Jumlah seluruh nota dalam scope user (tanpa filter tanggal/cari/unit).
+     *
+     * @param int[] $allowedUnitIds
+     */
+    public function countRiwayat(array $allowedUnitIds = []): int
+    {
+        if ($allowedUnitIds === []) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($allowedUnitIds), '?'));
+
+        $row = $this->db->query(
+            "SELECT COUNT(*) AS total FROM pembelian WHERE unit_idunit IN ({$placeholders})",
+            array_map('intval', $allowedUnitIds)
+        )->getRow();
+
+        return (int) ($row->total ?? 0);
+    }
+
+    /**
+     * @param  int[] $allowedUnitIds
+     * @return array{0: string, 1: array}
+     */
+    private function riwayatFilters(
+        $searchValue,
+        $startDate,
+        $endDate,
+        $unitId,
+        array $allowedUnitIds
+    ): array {
+        $where = ['1=1'];
+        $params = [];
+
+        // Scope unit selalu menang; unit dari request hanya mempersempit.
+        if ($allowedUnitIds === []) {
+            return ['1=0', []];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($allowedUnitIds), '?'));
+        $where[] = "pembelian.unit_idunit IN ({$placeholders})";
+        foreach ($allowedUnitIds as $allowed) {
+            $params[] = (int) $allowed;
+        }
+
+        $unitId = (int) $unitId;
+        if ($unitId > 0 && in_array($unitId, $allowedUnitIds, true)) {
+            $where[] = 'pembelian.unit_idunit = ?';
+            $params[] = $unitId;
+        }
+
+        if (is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) {
+            $where[] = 'pembelian.tanggal_masuk >= ?';
+            $params[] = $startDate;
+        }
+        if (is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate)) {
+            // Rentang eksklusif sehari setelah tanggal akhir: tetap benar untuk
+            // kolom DATE maupun DATETIME, dan tidak mematikan index seperti DATE().
+            $where[] = 'pembelian.tanggal_masuk < DATE_ADD(?, INTERVAL 1 DAY)';
+            $params[] = $endDate;
+        }
+
+        if (is_string($searchValue) && $searchValue !== '') {
+            // Cari di level nota lewat EXISTS agar satu nota tidak terpecah
+            // hanya karena satu barang cocok.
+            $where[] = '(pembelian.no_nota_supplier LIKE ?
+                OR unit.NAMA_UNIT LIKE ?
+                OR suplier.nama_suplier LIKE ?
+                OR EXISTS (
+                    SELECT 1 FROM detail_pembelian dp_search
+                    LEFT JOIN barang b_search ON b_search.idbarang = dp_search.barang_idbarang
+                    WHERE dp_search.pembelian_idpembelian = pembelian.idpembelian
+                    AND (b_search.nama_barang LIKE ? OR dp_search.no_batch LIKE ?)
+                ))';
+            $like = '%' . $searchValue . '%';
+            array_push($params, $like, $like, $like, $like, $like);
+        }
+
+        return [implode(' AND ', $where), $params];
+    }
 }

@@ -136,7 +136,7 @@ class ModelDetailPembelian extends Model
     }
 
 
-    public function exportfilter($tanggalAwal = null, $tanggalAkhir = null, $namaUnit = null)
+    public function exportfilter($tanggalAwal = null, $tanggalAkhir = null, $namaUnit = null, array $unitIds = [])
     {
 
         $builder = $this->db->table('detail_pembelian')
@@ -159,7 +159,44 @@ class ModelDetailPembelian extends Model
             $builder->where('unit.NAMA_UNIT', $namaUnit);
         }
 
+        // Scope unit dari server; dipakai /riwayat_pembelian agar role unit
+        // tidak bisa mengunduh data unit lain lewat POST yang dimanipulasi.
+        if ($unitIds !== []) {
+            $builder->whereIn('detail_pembelian.unit_idunit', array_map('intval', $unitIds));
+        }
+
         return $builder->orderBy('detail_pembelian.tanggal', 'DESC')
+            ->get()
+            ->getResult();
+    }
+
+    /**
+     * Rincian satu nota untuk modal /riwayat_pembelian.
+     *
+     * Dikunci ke `pembelian_idpembelian`, bukan `no_batch`, karena no_batch
+     * tidak unik (baris yatim bisa berbagi nomor batch dengan nota lain).
+     *
+     * @return object[]
+     */
+    public function getByPembelianId(int $idPembelian): array
+    {
+        return $this->db->table('detail_pembelian')
+            ->select('
+                detail_pembelian.iddetail_pembelian,
+                detail_pembelian.no_batch,
+                detail_pembelian.tanggal,
+                detail_pembelian.jumlah,
+                detail_pembelian.hrg_beli,
+                detail_pembelian.diskon,
+                detail_pembelian.ppn,
+                detail_pembelian.total_harga,
+                detail_pembelian.satuan_beli,
+                barang.nama_barang,
+                barang.kode_barang,
+                barang.imei')
+            ->join('barang', 'barang.idbarang = detail_pembelian.barang_idbarang', 'left')
+            ->where('detail_pembelian.pembelian_idpembelian', $idPembelian)
+            ->orderBy('detail_pembelian.iddetail_pembelian', 'ASC')
             ->get()
             ->getResult();
     }

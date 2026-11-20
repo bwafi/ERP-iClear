@@ -293,6 +293,8 @@ $routes->post('insert_mutasi', 'MutasiStok::insert', ['filter' => 'auth']);
 
 //riwayat pembelian
 $routes->get('riwayat_pembelian', 'Riwayat_pembelian::index', ['filter' => 'auth']);
+$routes->post('riwayat_pembelian/ajax', 'Riwayat_pembelian::ajax', ['filter' => 'auth']);
+$routes->get('riwayat_pembelian/detail/(:num)', 'Riwayat_pembelian::detail/$1', ['filter' => 'auth']);
 $routes->post('riwayat_pembelian/export', 'Riwayat_pembelian::export', ['filter' => 'auth']);
 
 //riwayat penjualan
