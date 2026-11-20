@@ -164,6 +164,16 @@ final class PenjualanPageTest extends CIUnitTestCase
         $this->assertStringNotContainsString('select-all-bundle', $html);
     }
 
+    public function testPanahSelect2ModalSejajarDenganInput(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('.pj-modal .select2-selection--single::after', $html);
+        $this->assertStringContainsString('.pj-modal .select2-selection--single .select2-selection__arrow', $html);
+        $this->assertStringContainsString('padding-right: 34px', $html);
+        $this->assertStringContainsString('rotate(45deg)', $html);
+    }
+
     public function testModalPelangganDanTambahPelanggan(): void
     {
         $html = $this->render();

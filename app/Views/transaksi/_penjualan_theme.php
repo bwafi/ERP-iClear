@@ -968,6 +968,40 @@
         box-shadow: 0 0 0 3px var(--pj-accent-soft);
     }
 
+    /* Select2 di dalam modal: aturan global template memakai
+       `top: 24px; right: 20px; width: auto` untuk panah sehingga chevron
+       jatuh di luar box 40px. Panah bawaan disembunyikan dan chevron
+       digambar ulang agar selalu di tengah kanan box, termasuk saat
+       dropdown terbuka. */
+    .pj-modal .select2-selection--single {
+        position: relative;
+    }
+
+    .pj-modal .select2-selection--single .select2-selection__arrow {
+        display: none;
+    }
+
+    .pj-modal .select2-selection--single::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        width: 7px;
+        height: 7px;
+        border-right: 2px solid var(--bs-body-color);
+        border-bottom: 2px solid var(--bs-body-color);
+        transform: translateY(-65%) rotate(45deg);
+        pointer-events: none;
+    }
+
+    .pj-modal .select2-container--open .select2-selection--single::after {
+        transform: translateY(-20%) rotate(-135deg);
+    }
+
+    .pj-modal .select2-selection--single .select2-selection__rendered {
+        padding-right: 34px;
+    }
+
     .pj-modal-actions {
         display: flex;
         align-items: center;
