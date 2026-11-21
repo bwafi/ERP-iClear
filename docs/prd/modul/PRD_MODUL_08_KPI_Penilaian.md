@@ -63,6 +63,8 @@ Mengelola template KPI, penilaian kinerja, evaluasi KPI otomatis dari data opera
 
 24. [✅] **Nama halaman `/penilaian/absen` = "Penilaian Harian".** Setelah KEHADIRAN dan SERAGAM otomatis, halaman ini hanya untuk skor manual Kebersihan dan Kepatuhan SOP; status/shift/jam kehadiran tidak lagi diinput di sini. Label menu idmenu 10027 diganti lewat migrasi `RenamePenilaianAbsensiMenu`; judul halaman, breadcrumb, dan judul form memakai nama baru. Route, permission `penilaian_absen`, query, dan rumus tidak berubah. Seluruh input kehadiran (status, shift, jenis absensi, jam masuk) dihapus dari form karena punch dan status libur berasal dari absen mobile/roster; koreksi jam dilakukan di modul presensi. — `2026-11-03-000100_RenamePenilaianAbsensiMenu`, `penilaian/penilaian_absen.php`; `tests/RenamePenilaianAbsensiMenuTest.php`, `tests/PenilaianAbsenKehadiranFormTest.php`
 
+25. [✅] **SPV melihat seluruh tim unit binaan di `/penilaian/absen` (read-only bila tidak berwenang).** Untuk SPV (40), daftar karyawan = semua pegawai aktif (`STATUS_PEGAWAI = 1`, tidak dihapus) di unit `spv_units`, fallback unit sesi bila mapping kosong, **plus dirinya sendiri**; bukan lagi hanya jabatan target di matriks evaluator. Pegawai yang tidak berwenang dinilai tetap bisa dipilih dan dilihat: grid harian tampil read-only dengan banner "Mode baca saja", tanpa input tanggal/tombol simpan. `allowedComponentCodes` (dari `canEvaluateComponent`) tetap menjadi penentu boleh-isi, dan `save_absen` tetap menolak penulisan untuk target di luar otorisasi dengan pesan "hanya dapat melihat". `?karyawan=` di luar daftar unit binaan diabaikan. Role selain SPV tidak berubah, dan `isInScope` global tidak diperluas. — `AbsenEmployeeScopeService`, `PenilaianKPI::penilaian_absen/save_absen`, `penilaian/penilaian_absen.php`; `tests/unit/AbsenEmployeeScopeServiceTest.php`, `tests/PenilaianAbsenReadOnlyViewTest.php`
+
 ## 6. Acceptance Criteria
 - [ ] Template KPI & penilaian dapat dikelola.
 - [ ] Evaluasi KPI otomatis dipicu dari data operasional & menghasilkan skor/grading.
@@ -72,6 +74,7 @@ Mengelola template KPI, penilaian kinerja, evaluasi KPI otomatis dari data opera
 - [ ] Customer satisfaction & input kehadiran tersimpan.
 - [ ] SERAGAM dari centang foto (seragam 2, sepatu 1, ID card 2) tersimpan per tanggal absen; role/unit divalidasi server; Manager tetap rata-rata tim.
 - [ ] Menu dan halaman `/penilaian/absen` memakai nama "Penilaian Harian" tanpa mengubah route atau permission.
+- [ ] SPV melihat seluruh pegawai aktif di unit `spv_units` + dirinya sendiri; target tanpa otorisasi tampil read-only dengan peringatan dan tidak bisa disimpan lewat `save_absen`.
 - [ ] Punch `/absen` otomatis mengisi KEHADIRAN dengan evaluator SPV unit (cabang) / Manager (HO); OFF/IZIN/SAKIT/CUTI tidak dinilai; koreksi manual menimpa nilai otomatis tanpa rata-rata ganda.
 - [ ] Approve izin/sakit/cuti otomatis mengisi roster sesuai jenis (`IZIN`/`SAKIT`/`CUTI`) untuk seluruh rentang dan mengecualikan tanggal itu dari KPI seperti OFF; menolak setelah approve menghapus shift jenis tersebut pada rentang pengajuan.
 - [ ] KPI omzet lintas cabang (HO/SPV) tidak memuat unit trial; KPI non-omzet dan KPI karyawan unit trial tetap berjalan.

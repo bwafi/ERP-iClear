@@ -109,11 +109,18 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
             </div>
         </section>
 
-        <?php $allowedCount = is_array($allowedComponentCodes ?? null) ? count($allowedComponentCodes) : 0; ?>
+        <?php
+        $allowedCount = is_array($allowedComponentCodes ?? null) ? count($allowedComponentCodes) : 0;
+        // Grid read-only hanya untuk SPV (scope lihat tim). Role lain tetap
+        // memakai empty state lama agar perilakunya tidak berubah.
+        $showLedger = $allowedCount > 0 || !empty($readOnlyView);
 
-        <?php if ($allowedCount > 0) : ?>
-            <?php
-            $paCell = static function ($component, int $day) use (&$existing, &$offDays, &$attendanceDetails): array {
+        $jumlahHari = (int) ($jumlahHari ?? 0);
+        if ($jumlahHari <= 0) {
+            $jumlahHari = (int) date('t', strtotime(sprintf('%04d-%02d-01', $tahun, $bulan)));
+        }
+
+        $paCell = static function ($component, int $day) use (&$existing, &$offDays, &$attendanceDetails): array {
                 if (isset($offDays[$day])) {
                     $label = (string) $offDays[$day];
 
@@ -162,8 +169,18 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
                     'title' => $title,
                 ];
             };
-            ?>
 
+        $totalLateMonth = 0;
+        if (!empty($attendanceDetails)) {
+            foreach ($attendanceDetails as $dayDetails) {
+                foreach ($dayDetails as $det) {
+                    $totalLateMonth += (int) ($det->late_minutes ?? 0);
+                }
+            }
+        }
+        ?>
+
+        <?php if ($allowedCount > 0) : ?>
             <form method="post" action="<?= base_url('/penilaian/absen/save') ?>" class="pa-sheet">
                 <input type="hidden" name="employee_id" value="<?= $target->ID_AKUN ?>">
                 <input type="hidden" name="bulan" value="<?= $bulan ?>">
@@ -224,34 +241,37 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
                     </p>
                 </footer>
             </form>
+        <?php elseif (!empty($readOnlyView)) : ?>
+            <div class="pa-flash pa-flash--warn" role="alert">
+                <iconify-icon icon="solar:shield-keyhole-bold-duotone" class="fs-5" aria-hidden="true"></iconify-icon>
+                <div>
+                    <strong>Mode baca saja.</strong>
+                    Anda tidak berwenang mengisi penilaian pegawai ini. Data tetap dapat dilihat.
+                </div>
+            </div>
+        <?php else : ?>
+            <section class="pa-empty pa-empty--warn" role="status">
+                <iconify-icon icon="solar:shield-keyhole-bold-duotone" aria-hidden="true"></iconify-icon>
+                <h2>Akses terbatas</h2>
+                <p>Anda tidak berwenang menginput absensi pegawai ini (mode baca saja).</p>
+            </section>
+        <?php endif; ?>
 
-            <?php
-            $totalLateMonth = 0;
-            if (!empty($attendanceDetails)) {
-                foreach ($attendanceDetails as $dayDetails) {
-                    foreach ($dayDetails as $det) {
-                        $totalLateMonth += (int) ($det->late_minutes ?? 0);
-                    }
-                }
-            }
-            ?>
-
-            <section class="pa-ledger" aria-labelledby="paRiwayat">
-                <header class="pa-ledger__head">
-                    <div>
-                        <h2 class="pa-ledger__title" id="paRiwayat">Riwayat nilai &amp; matriks bulanan</h2>
-                        <p class="pa-help">Arahkan kursor ke angka matriks untuk melihat detail jam masuk.</p>
-                    </div>
-                    <div class="pa-facts">
-                        <span class="pa-fact">Hari efektif <strong><?= (int) $hariEfektif ?></strong> / <?= (int) $jumlahHari ?></span>
-                        <span class="pa-fact">Libur/izin <strong><?= (int) $hariLibur ?></strong> hari</span>
-                        <?php if (!empty($attendanceDetails)) : ?>
-                            <span class="pa-fact">Akumulasi telat <strong><?= (int) $totalLateMonth ?></strong> menit</span>
-                        <?php endif; ?>
-                    </div>
-                </header>
-
-                <?php $jumlahHari = (int) date('t', strtotime("$tahun-$bulan-01")); ?>
+        <?php if ($showLedger) : ?>
+        <section class="pa-ledger" aria-labelledby="paRiwayat">
+            <header class="pa-ledger__head">
+                <div>
+                    <h2 class="pa-ledger__title" id="paRiwayat">Riwayat nilai &amp; matriks bulanan</h2>
+                    <p class="pa-help">Arahkan kursor ke angka matriks untuk melihat detail jam masuk.</p>
+                </div>
+                <div class="pa-facts">
+                    <span class="pa-fact">Hari efektif <strong><?= (int) $hariEfektif ?></strong> / <?= (int) $jumlahHari ?></span>
+                    <span class="pa-fact">Libur/izin <strong><?= (int) $hariLibur ?></strong> hari</span>
+                    <?php if (!empty($attendanceDetails)) : ?>
+                        <span class="pa-fact">Akumulasi telat <strong><?= (int) $totalLateMonth ?></strong> menit</span>
+                    <?php endif; ?>
+                </div>
+            </header>
 
                 <div class="pa-table-wrap">
                     <table class="pa-table">
@@ -307,12 +327,6 @@ $periodeLabel = ($namaBulan[$bulan - 1] ?? (string) $bulan) . ' ' . $tahun;
                     <span class="pa-legend__item"><span class="pa-cell pa-cell--mid">3</span> Cukup</span>
                     <span class="pa-legend__item"><span class="pa-cell pa-cell--good">4–5</span> Baik / sangat baik</span>
                 </footer>
-            </section>
-        <?php else : ?>
-            <section class="pa-empty pa-empty--warn" role="status">
-                <iconify-icon icon="solar:shield-keyhole-bold-duotone" aria-hidden="true"></iconify-icon>
-                <h2>Akses terbatas</h2>
-                <p>Anda tidak berwenang menginput absensi pegawai ini (mode baca saja).</p>
             </section>
         <?php endif; ?>
     <?php else : ?>

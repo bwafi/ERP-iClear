@@ -260,6 +260,12 @@
         color: var(--pa-danger);
     }
 
+    .pa-flash--warn {
+        border-color: transparent;
+        background: var(--pa-warn-soft);
+        color: var(--pa-warn);
+    }
+
     .pa-flash .btn-close {
         flex: 0 0 auto;
         padding: 2px;

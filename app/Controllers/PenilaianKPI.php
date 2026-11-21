@@ -1774,55 +1774,70 @@ class PenilaianKPI extends BaseController
 
         $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
 
-        $builder = $this->db->table('akun a')
-            ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
-            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
-            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
-            ->where('a.STATUS_PEGAWAI', 1)
-            ->groupStart()
-            ->where('a.deleted', null)
-            ->orWhere('a.deleted', 0)
-            ->groupEnd();
+        // SPV melihat seluruh tim di unit binaannya (read-only bila tidak berwenang),
+        // bukan hanya jabatan yang ada di matriks evaluator.
+        $isSpv = $myRole === 40;
+        $absenScope = new \App\Services\Kpi\AbsenEmployeeScopeService($this->db);
 
-        // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
-        $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
-
-        if (in_array($myRole, [1, 2], true)) {
-            // Admin root / Direktur: semua pegawai, semua unit.
-        } elseif (!empty($allowedTargets)) {
-            $builder->whereIn('a.ID_JABATAN', $allowedTargets);
-
-            if ($scopeUnits !== null) {
-                $hqTargets = array_values(array_filter(
-                    $allowedTargets,
-                    fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
-                ));
-
-                // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
-                if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
-                    $hqTargets = array_values(array_filter(
-                        $hqTargets,
-                        fn($j) => (int)$j !== 42
-                    ));
-                }
-
-                if (!empty($hqTargets)) {
-                    $builder->groupStart()
-                        ->whereIn('a.ID_UNIT', $scopeUnits)
-                        ->orWhereIn('a.ID_JABATAN', $hqTargets)
-                        ->groupEnd();
-                } else {
-                    $builder->whereIn('a.ID_UNIT', $scopeUnits);
-                }
-            }
+        if ($isSpv) {
+            $list_karyawan = $absenScope->daftarKaryawanSpv($myId, $myUnit);
         } else {
-            // Pegawai/team tanpa target evaluasi: hanya dirinya sendiri.
-            $builder->where('a.ID_AKUN', (int)session()->get('ID_AKUN'));
+            $builder = $this->db->table('akun a')
+                ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
+                ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
+                ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
+                ->where('a.STATUS_PEGAWAI', 1)
+                ->groupStart()
+                ->where('a.deleted', null)
+                ->orWhere('a.deleted', 0)
+                ->groupEnd();
+
+            // Filter target berdasarkan matriks evaluator, plus izinkan target HQ lintas unit.
+            $allowedTargets = \App\Services\Kpi\EvaluatorAuthorizationService::allowedTargetJabatans($myRole, $myUnit);
+
+            if (in_array($myRole, [1, 2], true)) {
+                // Admin root / Direktur: semua pegawai, semua unit.
+            } elseif (!empty($allowedTargets)) {
+                $builder->whereIn('a.ID_JABATAN', $allowedTargets);
+
+                if ($scopeUnits !== null) {
+                    $hqTargets = array_values(array_filter(
+                        $allowedTargets,
+                        fn($j) => \App\Services\Kpi\EvaluatorAuthorizationService::isHqTargetJabatan((int)$j)
+                    ));
+
+                    // CS (42) hanya boleh dinilai Admin/Kasir & Kepala Toko di Unit 1.
+                    if (in_array($myRole, [35, 41], true) && $myUnit !== 1) {
+                        $hqTargets = array_values(array_filter(
+                            $hqTargets,
+                            fn($j) => (int)$j !== 42
+                        ));
+                    }
+
+                    if (!empty($hqTargets)) {
+                        $builder->groupStart()
+                            ->whereIn('a.ID_UNIT', $scopeUnits)
+                            ->orWhereIn('a.ID_JABATAN', $hqTargets)
+                            ->groupEnd();
+                    } else {
+                        $builder->whereIn('a.ID_UNIT', $scopeUnits);
+                    }
+                }
+            } else {
+                // Pegawai/team tanpa target evaluasi: hanya dirinya sendiri.
+                $builder->where('a.ID_AKUN', (int)session()->get('ID_AKUN'));
+            }
+
+            $list_karyawan = $builder->orderBy('a.ID_UNIT', 'ASC')->get()->getResultArray();
         }
 
-        $list_karyawan = $builder->orderBy('a.ID_UNIT', 'ASC')->get()->getResultArray();
+        $allowedViewIds = array_map(static fn ($row) => (int) $row['ID_AKUN'], $list_karyawan);
 
         $selected_karyawan = (int)($this->request->getGet('karyawan') ?: 0);
+        // SPV tidak boleh membuka karyawan di luar daftar unit binaannya.
+        if ($isSpv && $selected_karyawan && !in_array($selected_karyawan, $allowedViewIds, true)) {
+            $selected_karyawan = 0;
+        }
         if (!$selected_karyawan && !empty($list_karyawan)) {
             $selected_karyawan = (int)$list_karyawan[0]['ID_AKUN'];
         }
@@ -1831,9 +1846,12 @@ class PenilaianKPI extends BaseController
         $targetUnitName = null;
         if ($selected_karyawan) {
             $target = $this->AuthModel->getById($selected_karyawan);
-            // Otorisasi: pegawai harus dalam scope evaluator
+            // Otorisasi: pegawai harus dalam scope evaluator. SPV tetap boleh
+            // MELIHAT tim di unit binaannya; izin isi dicek per komponen.
             if ($target && !$this->isInScope($me, $target)) {
-                $target = null;
+                if (!$isSpv || !in_array((int)$target->ID_AKUN, $allowedViewIds, true)) {
+                    $target = null;
+                }
             }
 
             // Ambil nama unit untuk ditampilkan
@@ -1990,6 +2008,7 @@ class PenilaianKPI extends BaseController
             'target'                => $target,
             'targetUnitName'        => $targetUnitName,
             'allowedComponentCodes' => $allowedComponentCodes,
+            'readOnlyView'          => $isSpv,
             'kpi'                   => $kpi,
             'detail_absen'          => $kpi['detail_absen'] ?? [],
             'skor_total2'           => $kpi['skor_total2'] ?? 0,
@@ -2010,6 +2029,8 @@ class PenilaianKPI extends BaseController
     {
         $me      = $this->AuthModel->getById((int)session()->get('ID_AKUN'));
         $myRole  = (int)($me->ID_JABATAN ?? 0);
+        $myUnit  = (int)($me->ID_UNIT ?? 0);
+        $myId    = (int)($me->ID_AKUN ?? 0);
 
         $employeeId = (int)$this->request->getPost('employee_id');
         $bulan      = (int)($this->request->getPost('bulan') ?: date('m'));
@@ -2017,8 +2038,23 @@ class PenilaianKPI extends BaseController
 
         $target = $this->AuthModel->getById($employeeId);
         if (!$target || !$this->isInScope($me, $target)) {
+            $pesan = 'Pegawai tidak ditemukan / tidak dalam lingkup Anda.';
+            if ($target && $myRole === 40) {
+                $absenScope = new \App\Services\Kpi\AbsenEmployeeScopeService($this->db);
+                $unitIds = $absenScope->spvUnitIds($myId, $myUnit);
+                if (\App\Services\Kpi\AbsenEmployeeScopeService::canView(
+                    $myRole,
+                    $myId,
+                    (int)$target->ID_AKUN,
+                    (int)$target->ID_UNIT,
+                    $unitIds
+                )) {
+                    $pesan = 'Anda hanya dapat melihat data pegawai ini, tidak dapat mengisi penilaian.';
+                }
+            }
+
             return redirect()->to('/penilaian/absen')
-                ->with('error', 'Pegawai tidak ditemukan / tidak dalam lingkup Anda.');
+                ->with('error', $pesan);
         }
 
         $attendanceCodes = ['KEHADIRAN', 'KEBERSIHAN', 'SERAGAM', 'KEPATUHAN_SOP'];
