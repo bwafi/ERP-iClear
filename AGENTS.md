@@ -98,10 +98,12 @@ Setelah approval, urutannya:
 
 ### D.1 Format commit message (wajib)
 
+**Seluruh commit message (subject dan body) wajib berbahasa Inggris.**
+
 Gunakan Conventional Commits agar riwayat konsisten dan mudah difilter:
 
 ```
-<type>(<scope>): <ringkasan> (refs #<nomor-issue>)
+<type>(<scope>): <summary> (refs #<nomor-issue>)
 ```
 
 - `type` wajib, lowercase:
@@ -117,21 +119,21 @@ Gunakan Conventional Commits agar riwayat konsisten dan mudah difilter:
   - `ci` — pipeline CI.
   - `revert` — membatalkan commit lain.
 - `scope` lowercase dan sedekat mungkin dengan area yang berubah, mis. `service`, `service_dp`, `kas_bank`, `penjualan`, `pembelian`, `finance`, `payroll`, `kpi`, `marketing`, `master`, `auth`, `ui`, `docs`.
-- `ringkasan` berbahasa Indonesia, imperatif, huruf kecil, tanpa titik akhir, maksimal ~72 karakter. Tulis apa yang berubah, bukan cara implementasinya.
+- `summary` wajib berbahasa Inggris, imperatif, huruf kecil, tanpa titik akhir, maksimal ~72 karakter. Tulis apa yang berubah, bukan cara implementasinya.
 - Cantumkan `(refs #<nomor>)` di akhir subject bila ada issue. Jangan gunakan `closes` kecuali issue memang harus tertutup otomatis saat merge.
-- Body opsional, dipisahkan satu baris kosong. Jelaskan alasan, dampak, migrasi, atau perilaku yang berubah; bungkus ~72 karakter dan boleh berupa bullet.
-- Breaking change: tambahkan `!` setelah scope (mis. `feat(api)!: ...`) dan footer `BREAKING CHANGE: <dampak>`.
+- Body opsional, berbahasa Inggris, dipisahkan satu baris kosong. Jelaskan alasan, dampak, migrasi, atau perilaku yang berubah; bungkus ~72 karakter dan boleh berupa bullet.
+- Breaking change: tambahkan `!` setelah scope (mis. `feat(api)!: ...`) dan footer `BREAKING CHANGE: <dampak>` (berbahasa Inggris).
 - Satu commit satu tujuan. Jangan mencampur modul atau perubahan tidak terkait; pisahkan refactor dari fix/feat.
 - Jika commit di-amend/rebase sehingga hash berubah, perbarui komentar hash di issue.
 
 Contoh:
 
 ```
-feat(service): pilih metode dan rekening refund DP (refs #218)
-fix(service): sisa tagihan berkurang live saat pembayaran diketik (refs #219)
-fix(kas_bank): arus kas dan posisi mengikuti filter tanggal
-docs(prd): perbarui aturan refund DP Modul 04 (refs #218)
-refactor(kpi): ekstrak formula penilaian ke service
+feat(service): select refund method and account for down payment (refs #218)
+fix(service): remaining bill updates live while payment is typed (refs #219)
+fix(kas_bank): cash flow and position follow the date filter
+docs(prd): update refund rules for Module 04 (refs #218)
+refactor(kpi): extract scoring formula into a service
 ```
 
 ## E. PRD maintenance
