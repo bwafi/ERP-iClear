@@ -41,6 +41,7 @@ Mengelola pencatatan kas masuk/keluar, jurnal, laporan posisi keuangan & laba ru
 - One-time closing harian per unit; saldo awal laci; `cash_laci` dari browser; perhitungan server-side (`TutupKasirClosing::hitung`); selisih kas fisik vs sistem; PDF bukti.
 - `kasirbulanan`, `omsetbulanan`, `arusKasHarian`, `valueHarian`, `assetberjalan`, `detailPengeluaran`.
 - Detail Omset Harian punya mode **Omset** (default, memakai payload awal `$listHari`) dan **Value** (`SUM(detail_penjualan.sub_total)` per tanggal, dikurangi HPP Klaim dan refund garansi pada tanggalnya, tanpa mengurangi HPP penjualan). Data Value tidak ikut render awal; baru diambil lewat `valueHarian` saat mode Value dipilih (`auth`, unit mengikuti `resolveUnitScope([43])`). Grafik tetap omset. Kartu Value bulanan memakai aturan yang sama (`$value = $omset_bulan + $hpp`).
+- ✅ **Rata-rata / Hari** = `$omset_bulan` dibagi jumlah hari: bulan berjalan memakai hari yang sudah lewat (`min(tanggal hari ini, jumlah hari bulan)`), bulan lain memakai seluruh hari bulan tersebut. **Total Pelanggan Masuk** = jumlah service yang dibuat pada bulan itu (semua status, `created_at`) + penjualan ber-`id_pelanggan`; rinciannya dikirim sebagai `countService`/`countSales`. — `TutupKasir::omsetbulanan`; `tests/OmsetBulananUnitFilterTest.php`
 ### 4.6 Aset & Penyusutan
 - `Asset::insert/update/delete_asset/export_asset/pulihkan_asset/prosesPenyusutan` (cron), `KategoriAsset`, `TemplateJurnalAsset`, `RiwayatPenyusutanAsset`.
 ### 4.7 Dashboard Finance

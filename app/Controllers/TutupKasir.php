@@ -800,6 +800,11 @@ class TutupKasir extends BaseController
             ];
         }
 
+        // Rata-rata per hari memakai jumlah hari yang benar-benar sudah lewat
+        // untuk bulan berjalan; bulan lain memakai seluruh hari bulan itu.
+        $hariRataRata   = $isBulanBerjalan ? min((int) date('j'), $jumlahHari) : $jumlahHari;
+        $omset_rata_rata = $hariRataRata > 0 ? round($omset_bulan / $hariRataRata) : 0;
+
         return view('template', [
             'list_unit'      => $list_unit,
             'selected_unit'  => $unit,
@@ -823,6 +828,10 @@ class TutupKasir extends BaseController
             'periodeLaluLabel'  => $periodeLaluLabel,
             'selisih_omset'     => $selisih_omset,
             'pelanggan_bulan'   => $pelanggan_bulan,
+            'countService'      => $countService,
+            'countSales'        => $countSales,
+            'omset_rata_rata'   => $omset_rata_rata,
+            'hari_rata_rata'    => $hariRataRata,
             'sparepart_keluar'  => $sparepart_keluar,
             'omset_hari_ini'    => $omset_hari_ini,
             'dp_hari_ini'       => (int) ($dpHariIni['total'] ?? 0),

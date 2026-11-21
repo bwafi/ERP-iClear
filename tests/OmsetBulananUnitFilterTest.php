@@ -349,6 +349,72 @@ class OmsetBulananUnitFilterTest extends CIUnitTestCase
         $this->assertStringContainsString('total: 680000', $html);
     }
 
+    // ── Kartu Rata-rata / Hari & rincian pelanggan masuk ───────────────────
+
+    public function testKartuRataRataMemakaiSeluruhHariBulanLampau(): void
+    {
+        $this->db->setPrefix('');
+
+        // Bulan lampau selalu memakai jumlah hari penuh bulan tersebut.
+        $awalBulanLalu = strtotime('first day of last month');
+        $bulan         = (int) date('n', $awalBulanLalu);
+        $tahun         = (int) date('Y', $awalBulanLalu);
+        $jumlahHari    = (int) date('t', $awalBulanLalu);
+        $tanggal       = date('Y-m-05', $awalBulanLalu);
+
+        // Omset = jumlahHari x 25.000 -> rata-rata tepat Rp 25.000.
+        $this->db->query("INSERT INTO penjualan
+            (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan)
+            VALUES (9501, 'INV-AVG', '{$tanggal} 10:00:00', 1, 501)");
+        $this->db->query("INSERT INTO detail_penjualan
+            (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan)
+            VALUES (9501, NULL, " . ($jumlahHari * 25000) . ", 0)");
+        $this->db->query("INSERT INTO service
+            (idservice, status_service, unit_idunit, tanggal_selesai, created_at, no_service, service_by)
+            VALUES (9501, 4, 1, '{$tanggal} 10:00:00', '{$tanggal} 09:00:00', 'SRV-AVG', 43)");
+
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=1&bulan=' . $bulan . '&tahun=' . $tahun);
+
+        $this->assertStringContainsString('Rp 25.000', $html, 'Rata-rata / Hari harus terisi');
+        $this->assertStringContainsString(
+            'Rata-rata ' . $jumlahHari . ' hari pada bulan ini',
+            $html,
+            'Pembagi rata-rata harus jumlah hari penuh bulan lampau'
+        );
+        $this->assertStringContainsString(
+            '1 service / 1 sales',
+            $html,
+            'Rincian pelanggan masuk harus memakai countService & countSales'
+        );
+    }
+
+    public function testKartuRataRataMemakaiHariBerjalanBulanIni(): void
+    {
+        $this->db->setPrefix('');
+
+        $hariBerjalan = (int) date('j');
+        $tanggal      = date('Y-m-01');
+
+        // Omset = hariBerjalan x 100.000 -> rata-rata tepat Rp 100.000.
+        $this->db->query("INSERT INTO penjualan
+            (idpenjualan, kode_invoice, tanggal, unit_idunit, id_pelanggan)
+            VALUES (9601, 'INV-AVG-NOW', '{$tanggal} 10:00:00', 1, NULL)");
+        $this->db->query("INSERT INTO detail_penjualan
+            (penjualan_idpenjualan, barang_idbarang, sub_total, hpp_penjualan)
+            VALUES (9601, NULL, " . ($hariBerjalan * 100000) . ", 0)");
+
+        $this->sesi(44, 50, 0);
+        $html = $this->halaman('?unit=1&bulan=' . date('n') . '&tahun=' . date('Y'));
+
+        $this->assertStringContainsString('Rp 100.000', $html, 'Rata-rata / Hari harus terisi');
+        $this->assertStringContainsString(
+            'Rata-rata ' . $hariBerjalan . ' hari berjalan',
+            $html,
+            'Bulan berjalan harus dibagi jumlah hari yang sudah lewat'
+        );
+    }
+
     // ── Detail Omset Harian mode Value (endpoint lazy) ─────────────────────
 
     /**
