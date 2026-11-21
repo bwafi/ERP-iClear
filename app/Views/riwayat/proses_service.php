@@ -1,6 +1,6 @@
 <?= view('riwayat/_proses_service_theme') ?>
 <?php
-$showUnitFilter = !empty($is_ho) && $is_ho;
+$showUnitFilter = !empty($can_filter_units) || (!empty($is_ho) && $is_ho);
 $unitLabel = $showUnitFilter ? 'Semua unit' : (session('NAMA_UNIT') ?: 'Unit Anda');
 ?>
 

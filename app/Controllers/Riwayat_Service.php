@@ -31,6 +31,7 @@ use App\Services\Service\ServiceDpService;
 use App\Services\Service\GaransiClaimService;
 use App\Services\Service\SparepartKeluarHardDeleteService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
+use App\Services\Service\ServiceUnitScopeService;
 use App\Models\ModelServiceDp;
 
 class Riwayat_Service extends BaseController
@@ -58,6 +59,7 @@ class Riwayat_Service extends BaseController
     protected $RegionModel;
     protected $DpService;
     protected $DpLedgerModel;
+    protected $ServiceScope;
 
 
 
@@ -84,21 +86,25 @@ class Riwayat_Service extends BaseController
         $this->DetailPenjualanModel = new ModelDetailPenjualan();
         $this->DpService = new ServiceDpService();
         $this->DpLedgerModel = new ModelServiceDp();
+        $this->ServiceScope = new ServiceUnitScopeService();
     }
 
     public function index()
     {
-        $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42' || $idJabatan == 34 || $idJabatan == '34');
+        $idJabatan = (int) session('ID_JABATAN');
+        $isHO = in_array($idJabatan, [0, 1, 42, 34], true);
+        $isSpv = $idJabatan === ServiceUnitScopeService::SPV_ROLE;
 
         $data =  array(
 
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'pelanggan' => $this->PelangganModel->getPelanggan(),
             'service' => [],
-            'unit' => $this->UnitModel->getUnit(),
-            'is_admin' => session()->get('ID_JABATAN') == 1,
+            'unit' => $isSpv ? $this->ServiceScope->spvUnits() : $this->UnitModel->getUnit(),
+            'is_admin' => $idJabatan === 1,
             'is_ho' => $isHO,
+            'is_spv' => $isSpv,
+            'can_filter_units' => $isHO || $isSpv,
             'user_unit' => (int) session('ID_UNIT'),
             'body'  => 'riwayat/service'
         );
@@ -120,10 +126,17 @@ class Riwayat_Service extends BaseController
         $endDate = $request->getPost('endDate') ?? '';
         $unitFilter = $request->getPost('unitFilter') ?? '';
 
-        $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42' || $idJabatan == 34 || $idJabatan == '34');
-        if (!$isHO) {
-            $unitFilter = (int) session('ID_UNIT');
+        $idJabatan = (int) session('ID_JABATAN');
+        $isHO = in_array($idJabatan, [0, 1, 42, 34], true);
+        $isSpv = $idJabatan === ServiceUnitScopeService::SPV_ROLE;
+
+        if ($isHO) {
+            $unitFilter = $request->getPost('unitFilter');
+        } elseif ($isSpv) {
+            $unitFilter = $this->ServiceScope->resolveSpvFilter($request->getPost('unitFilter'));
+        } else {
+            $unitSesi = (int) session('ID_UNIT');
+            $unitFilter = $unitSesi > 0 ? $unitSesi : -1;
         }
 
         $result = $this->ServiceModel->getRiwayatServiceServerSide(
@@ -137,7 +150,7 @@ class Riwayat_Service extends BaseController
             $unitFilter
         );
 
-        $recordsTotal = $this->ServiceModel->getRiwayatServiceTotal();
+        $recordsTotal = $this->ServiceModel->getRiwayatServiceTotal($unitFilter);
 
         return $this->response->setJSON([
             'draw' => intval($draw),
@@ -912,16 +925,21 @@ class Riwayat_Service extends BaseController
 
     public function proses_service()
     {
-        $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 34 || $idJabatan == '34');
+        $idJabatan = (int) session('ID_JABATAN');
+        $isHO = in_array($idJabatan, [0, 1, 34], true);
+        $isSpv = $idJabatan === ServiceUnitScopeService::SPV_ROLE;
 
         // Hanya unit operasional yang boleh dipilih di filter role lintas unit.
-        $unitList = $isHO
-            ? array_values(array_filter(
+        if ($isHO) {
+            $unitList = array_values(array_filter(
                 $this->UnitModel->getUnit(),
                 static fn ($u) => (int) ($u->is_operational ?? 1) === 1
-            ))
-            : [];
+            ));
+        } elseif ($isSpv) {
+            $unitList = $this->ServiceScope->spvUnits();
+        } else {
+            $unitList = [];
+        }
         usort($unitList, static fn ($a, $b) => strcmp((string) $a->NAMA_UNIT, (string) $b->NAMA_UNIT));
 
         $data =  array(
@@ -930,6 +948,8 @@ class Riwayat_Service extends BaseController
             'service' => [],
             'unit' => $unitList,
             'is_ho' => $isHO,
+            'is_spv' => $isSpv,
+            'can_filter_units' => $isHO || $isSpv,
             'user_unit' => (int) session('ID_UNIT'),
             'body'  => 'riwayat/proses_service'
         );
@@ -951,10 +971,17 @@ class Riwayat_Service extends BaseController
         $endDate = $request->getPost('endDate') ?? '';
         $unitFilter = $request->getPost('unitFilter') ?? '';
 
-        $idJabatan = session()->get('ID_JABATAN');
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 34 || $idJabatan == '34');
-        if (!$isHO) {
-            $unitFilter = (int) session('ID_UNIT');
+        $idJabatan = (int) session('ID_JABATAN');
+        $isHO = in_array($idJabatan, [0, 1, 34], true);
+        $isSpv = $idJabatan === ServiceUnitScopeService::SPV_ROLE;
+
+        if ($isHO) {
+            $unitFilter = $request->getPost('unitFilter');
+        } elseif ($isSpv) {
+            $unitFilter = $this->ServiceScope->resolveSpvFilter($request->getPost('unitFilter'));
+        } else {
+            $unitSesi = (int) session('ID_UNIT');
+            $unitFilter = $unitSesi > 0 ? $unitSesi : -1;
         }
 
         $result = $this->ServiceModel->ProsesServiceAktifServerSide(
@@ -968,7 +995,7 @@ class Riwayat_Service extends BaseController
             $unitFilter
         );
 
-        $recordsTotal = $this->ServiceModel->ProsesServiceAktifTotal();
+        $recordsTotal = $this->ServiceModel->ProsesServiceAktifTotal($unitFilter);
 
         return $this->response->setJSON([
             'draw' => intval($draw),
@@ -981,22 +1008,24 @@ class Riwayat_Service extends BaseController
     /** Halaman daftar penerimaan DP service — akses dan cakupan unit mengikuti Proses Service. */
     public function dp_service()
     {
-        $idJabatan = session()->get('ID_JABATAN');
+        $idJabatan = (int) session('ID_JABATAN');
         // Customer Service (42) ikut boleh memilih unit, sama seperti daftar
         // riwayat service (Riwayat_Service::index/riwayat_service_ajax).
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42' || $idJabatan == 34 || $idJabatan == '34');
-        $isAdminRoot = ((int) $idJabatan === 1);
-        $unitList = $this->UnitModel->getUnit();
+        $isHO = in_array($idJabatan, [0, 1, 42, 34], true);
+        $isSpv = $idJabatan === ServiceUnitScopeService::SPV_ROLE;
+        $isAdminRoot = ($idJabatan === 1);
+        $semuaUnit = $this->UnitModel->getUnit();
+        $unitList = $isSpv ? $this->ServiceScope->spvUnits() : $semuaUnit;
 
         // Rekening untuk modal refund/koreksi. Koreksi hanya Admin Root, tetapi
         // refund bisa dilakukan role HO maupun user unit sendiri, jadi daftar
         // rekening mengikuti hak refund: role 0/1 semua unit, role lain unit
         // sesi saja (server tetap menolak unit lain).
-        $isRefundHO = in_array((int) $idJabatan, [0, 1], true);
-        $unitUntukBank = $unitList;
+        $isRefundHO = in_array($idJabatan, [0, 1], true);
+        $unitUntukBank = $semuaUnit;
         if (! $isRefundHO) {
             $unitSendiri = (int) session('ID_UNIT');
-            $unitUntukBank = array_values(array_filter($unitList, static function ($u) use ($unitSendiri) {
+            $unitUntukBank = array_values(array_filter($semuaUnit, static function ($u) use ($unitSendiri) {
                 return (int) $u->idunit === $unitSendiri;
             }));
         }
@@ -1017,6 +1046,8 @@ class Riwayat_Service extends BaseController
         return view('template', [
             'unit'           => $unitList,
             'is_ho'          => $isHO,
+            'is_spv'         => $isSpv,
+            'can_filter_units' => $isHO || $isSpv,
             'is_admin_root'  => $isAdminRoot,
             'is_refund_ho'   => $isRefundHO,
             'bank_by_unit'   => $bankByUnit,
@@ -1032,9 +1063,10 @@ class Riwayat_Service extends BaseController
     {
         $request = \Config\Services::request();
         $draw = (int) ($request->getPost('draw') ?? 0);
-        $idJabatan = session()->get('ID_JABATAN');
+        $idJabatan = (int) session('ID_JABATAN');
         // Sama dengan dp_service(): Customer Service (42) boleh memfilter unit.
-        $isHO = ($idJabatan == 1 || $idJabatan == '1' || $idJabatan == 0 || $idJabatan == 42 || $idJabatan == '42' || $idJabatan == 34 || $idJabatan == '34');
+        $isHO = in_array($idJabatan, [0, 1, 42, 34], true);
+        $isSpv = $idJabatan === ServiceUnitScopeService::SPV_ROLE;
         $userUnit = (int) session('ID_UNIT');
 
         if (! $this->DpService->punyaTabelLedger()) {
@@ -1051,6 +1083,8 @@ class Riwayat_Service extends BaseController
             $unitFilter = is_numeric($unitRaw) && (int) $unitRaw > 0
                 ? (int) $unitRaw
                 : null;
+        } elseif ($isSpv) {
+            $unitFilter = $this->ServiceScope->resolveSpvFilter($request->getPost('unitFilter'));
         } else {
             $unitFilter = $userUnit > 0 ? $userUnit : -1;
         }
@@ -1072,18 +1106,16 @@ class Riwayat_Service extends BaseController
         $start = max(0, (int) ($request->getPost('start') ?? 0));
         $length = min(100, max(1, (int) ($request->getPost('length') ?? 10)));
 
-        $result = $unitFilter === -1
-            ? ['recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]
-            : $this->DpLedgerModel->datatable(
-                $start,
-                $length,
-                $searchValue,
-                $dateFilter($request->getPost('startDate')),
-                $dateFilter($request->getPost('endDate')),
-                $unitFilter,
-                (int) ($orderRow['column'] ?? 0),
-                (string) ($orderRow['dir'] ?? 'desc')
-            );
+        $result = $this->DpLedgerModel->datatable(
+            $start,
+            $length,
+            $searchValue,
+            $dateFilter($request->getPost('startDate')),
+            $dateFilter($request->getPost('endDate')),
+            $unitFilter,
+            (int) ($orderRow['column'] ?? 0),
+            (string) ($orderRow['dir'] ?? 'desc')
+        );
 
         return $this->response->setJSON([
             'draw'            => $draw,

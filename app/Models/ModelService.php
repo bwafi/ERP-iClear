@@ -277,6 +277,66 @@ class ModelService extends Model
         return $row ? (int) $row->idunit : null;
     }
 
+    /**
+     * Filter unit yang bisa berisi satu ID, daftar ID ("1,2" atau [1,2]),
+     * nama unit, atau sentinel -1 untuk "tidak ada unit".
+     *
+     * @return int[]
+     */
+    public function resolveUnitFilterIds($unitFilter): array
+    {
+        if (is_array($unitFilter)) {
+            return $this->normalisasiUnitIds($unitFilter);
+        }
+
+        $unitFilter = trim((string) ($unitFilter ?? ''));
+        if ($unitFilter === '') {
+            return [];
+        }
+
+        if (strpos($unitFilter, ',') !== false) {
+            $bagian = array_map('trim', explode(',', $unitFilter));
+            $semuaNumerik = true;
+            foreach ($bagian as $nilai) {
+                if (preg_match('/^-?\d+$/', $nilai) !== 1) {
+                    $semuaNumerik = false;
+                    break;
+                }
+            }
+
+            if ($semuaNumerik) {
+                return $this->normalisasiUnitIds($bagian);
+            }
+        }
+
+        if (preg_match('/^-?\d+$/', $unitFilter) === 1) {
+            $id = (int) $unitFilter;
+
+            return $id !== 0 ? [$id] : [];
+        }
+
+        $unitId = $this->resolveUnitFilter($unitFilter);
+
+        return $unitId !== null ? [$unitId] : [];
+    }
+
+    /**
+     * @param array<int|string> $ids
+     * @return int[]
+     */
+    private function normalisasiUnitIds(array $ids): array
+    {
+        $hasil = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id !== 0) {
+                $hasil[$id] = $id;
+            }
+        }
+
+        return array_values($hasil);
+    }
+
     public function getRiwayatServiceServerSide($start, $length, $searchValue, $orderColumn, $orderDir, $startDate, $endDate, $unitFilter)
     {
         $allowedColumns = [
@@ -305,10 +365,10 @@ class ModelService extends Model
             $params[] = $endDate;
         }
         if (!empty($unitFilter)) {
-            $unitId = $this->resolveUnitFilter($unitFilter);
-            if ($unitId !== null) {
-                $whereConditions[] = 'service.unit_idunit = ?';
-                $params[] = $unitId;
+            $unitIds = $this->resolveUnitFilterIds($unitFilter);
+            if ($unitIds !== []) {
+                $whereConditions[] = 'service.unit_idunit IN (' . implode(', ', array_fill(0, count($unitIds), '?')) . ')';
+                $params = array_merge($params, $unitIds);
             }
         }
 
@@ -361,8 +421,13 @@ class ModelService extends Model
         ];
     }
 
-    public function getRiwayatServiceTotal()
+    public function getRiwayatServiceTotal($unitFilter = '')
     {
+        $unitIds = $this->resolveUnitFilterIds($unitFilter);
+        if ($unitIds !== []) {
+            $this->whereIn('unit_idunit', $unitIds);
+        }
+
         return $this->countAllResults();
     }
 
@@ -881,10 +946,10 @@ class ModelService extends Model
             $params[] = $endDate;
         }
         if (!empty($unitFilter)) {
-            $unitId = $this->resolveUnitFilter($unitFilter);
-            if ($unitId !== null) {
-                $whereConditions[] = 'service.unit_idunit = ?';
-                $params[] = $unitId;
+            $unitIds = $this->resolveUnitFilterIds($unitFilter);
+            if ($unitIds !== []) {
+                $whereConditions[] = 'service.unit_idunit IN (' . implode(', ', array_fill(0, count($unitIds), '?')) . ')';
+                $params = array_merge($params, $unitIds);
             }
         }
 
@@ -956,9 +1021,16 @@ class ModelService extends Model
         ];
     }
 
-    public function ProsesServiceAktifTotal()
+    public function ProsesServiceAktifTotal($unitFilter = '')
     {
-        return $this->whereIn('status_service', [1, 2])->countAllResults();
+        $this->whereIn('status_service', [1, 2]);
+
+        $unitIds = $this->resolveUnitFilterIds($unitFilter);
+        if ($unitIds !== []) {
+            $this->whereIn('unit_idunit', $unitIds);
+        }
+
+        return $this->countAllResults();
     }
 
 

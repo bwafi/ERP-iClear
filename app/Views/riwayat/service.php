@@ -24,12 +24,13 @@
                 <input type="date" id="endDate" class="form-control">
             </div>
             <?php $isHO = !empty($is_ho) && $is_ho; ?>
+            <?php $canFilterUnits = !empty($can_filter_units) || $isHO; ?>
             <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold mb-2">Unit</label>
-                <select id="unitFilter" class="form-select" <?= $isHO ? '' : 'disabled' ?>>
+                <select id="unitFilter" class="form-select" <?= $canFilterUnits ? '' : 'disabled' ?>>
                     <option value="">Semua Unit</option>
                     <?php foreach (($unit ?? []) as $u): ?>
-                        <option value="<?= (int) $u->idunit ?>" <?= (!$isHO && (int) $u->idunit === (int) ($user_unit ?? 0)) ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
+                        <option value="<?= (int) $u->idunit ?>" <?= (!$canFilterUnits && (int) $u->idunit === (int) ($user_unit ?? 0)) ? 'selected' : '' ?>><?= esc($u->NAMA_UNIT) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

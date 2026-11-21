@@ -27,27 +27,50 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
         $this->prefixAsli = (string) $this->db->DBPrefix;
         $this->db->setPrefix('');
 
+        $this->matikanForeignKey();
+        $this->hapusSkema();
         $this->buatSkema();
+        $this->nyalakanForeignKey();
         $this->sebarData();
     }
 
     protected function tearDown(): void
     {
+        $this->matikanForeignKey();
+        $this->hapusSkema();
+        $this->nyalakanForeignKey();
         $this->db->setPrefix($this->prefixAsli);
         parent::tearDown();
+    }
+
+    private function matikanForeignKey(): void
+    {
+        if ($this->db->DBDriver === 'MySQLi') {
+            $this->db->query('SET FOREIGN_KEY_CHECKS=0');
+        }
+    }
+
+    private function nyalakanForeignKey(): void
+    {
+        if ($this->db->DBDriver === 'MySQLi') {
+            $this->db->query('SET FOREIGN_KEY_CHECKS=1');
+        }
+    }
+
+    private function hapusSkema(): void
+    {
+        foreach ([
+            'unit', 'akun', 'jabatan', 'menu', 'stok_barang', 'service',
+            'pelanggan', 'service_dp', 'bank', 'penjualan', 'service_sparepart',
+            'fungsi', 'service_kerusakan', 'spv_units',
+        ] as $tabel) {
+            $this->db->query('DROP TABLE IF EXISTS ' . $tabel);
+        }
     }
 
     private function buatSkema(): void
     {
         $q = function (string $sql): void { $this->db->query($sql); };
-
-        foreach ([
-            'unit', 'akun', 'jabatan', 'menu', 'stok_barang', 'service',
-            'pelanggan', 'service_dp', 'bank', 'penjualan', 'service_sparepart',
-            'fungsi', 'service_kerusakan',
-        ] as $tabel) {
-            $q('DROP TABLE IF EXISTS ' . $tabel);
-        }
 
         // Template + BaseController (notifikasi stok/service/expired).
         $q('CREATE TABLE unit (idunit INTEGER PRIMARY KEY, NAMA_UNIT TEXT NULL, LOGO TEXT NULL, is_operational INT NULL DEFAULT 1)');
@@ -86,6 +109,12 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
         $q('CREATE TABLE bank (idbank INT PRIMARY KEY, nama_bank TEXT NULL)');
         $q('CREATE TABLE penjualan (idpenjualan INT PRIMARY KEY)');
         $q('CREATE TABLE service_sparepart (idservice_sparepart INT PRIMARY KEY, service_idservice INT NULL)');
+        $q('CREATE TABLE spv_units (
+                id INT PRIMARY KEY,
+                spv_id INT NOT NULL,
+                unit_id INT NOT NULL,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL)');
     }
 
     private function sebarData(): void
@@ -94,13 +123,16 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
 
         $q("INSERT INTO unit (idunit, NAMA_UNIT, LOGO) VALUES
             (1, 'ICLEAR Probolinggo', 'logo.png'),
-            (2, 'ICLEAR Jember', 'logo.png')");
+            (2, 'ICLEAR Jember', 'logo.png'),
+            (3, 'ICLEAR Genteng', 'logo.png')");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN) VALUES
-            (34, 'Manager', '[]'), (35, 'ADMIN / KASIR', '[]'), (42, 'Customer Service', '[]')");
+            (34, 'Manager', '[]'), (35, 'ADMIN / KASIR', '[]'), (40, 'SPV', '[]'), (42, 'Customer Service', '[]')");
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ROLES) VALUES
             (340, 1, 34, 'Manager Probolinggo', NULL),
             (350, 1, 35, 'Kasir Probolinggo', NULL),
+            (400, 1, 40, 'SPV Probolinggo', NULL),
             (420, 1, 42, 'CS Probolinggo', NULL)");
+        $q("INSERT INTO spv_units (id, spv_id, unit_id) VALUES (1, 400, 1), (2, 400, 2)");
         $q("INSERT INTO pelanggan (id_pelanggan, nama) VALUES (1, 'Pelanggan A')");
         $q("INSERT INTO service
             (idservice, status_service, pelanggan_id_pelanggan, unit_idunit, no_service, tipe_hp, created_at, tanggal_selesai)
@@ -108,12 +140,14 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
             (1, 5, 1, 1, 'SRV-UNIT1', 'iPhone 11', '2026-10-01 09:00:00', '2026-10-01 10:00:00'),
             (2, 5, 1, 2, 'SRV-UNIT2', 'iPhone 12', '2026-10-02 09:00:00', '2026-10-02 10:00:00'),
             (3, 1, 1, 1, 'AKTIF-UNIT1', 'iPhone 13', '2026-10-03 09:00:00', NULL),
-            (4, 1, 1, 2, 'AKTIF-UNIT2', 'iPhone 14', '2026-10-04 09:00:00', NULL)");
+            (4, 1, 1, 2, 'AKTIF-UNIT2', 'iPhone 14', '2026-10-04 09:00:00', NULL),
+            (5, 1, 1, 3, 'AKTIF-UNIT3', 'iPhone 15', '2026-10-05 09:00:00', NULL)");
         $q("INSERT INTO service_dp
             (id, service_idservice, kode_dp, tanggal, jumlah, metode, status)
             VALUES
             (1, 1, 'DP-UNIT1', '2026-10-01', 100000, 'tunai', 'aktif'),
-            (2, 2, 'DP-UNIT2', '2026-10-02', 200000, 'tunai', 'aktif')");
+            (2, 2, 'DP-UNIT2', '2026-10-02', 200000, 'tunai', 'aktif'),
+            (3, 5, 'DP-UNIT3', '2026-10-05', 300000, 'tunai', 'aktif')");
     }
 
     private function sesi(int $akun, int $unit, int $jabatan): void
@@ -132,7 +166,7 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
     /**
      * @return array{recordsTotal:int, recordsFiltered:int, data:array<int,array<string,mixed>>}
      */
-    private function ajaxDp(int $unitFilter): array
+    private function ajaxDp($unitFilter): array
     {
         $this->db->setPrefix('');
         $result = $this->post('dp_service/ajax', [
@@ -280,7 +314,138 @@ class DpServiceUnitFilterTest extends CIUnitTestCase
         $this->assertNull($row['refund_nama_bank']);
     }
 
-    private function ajax(string $route, int $unitFilter): array
+    public function testSpvMelihatSemuaCabangBinaanDiDpService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $body = $this->ajaxDp('');
+
+        $kode = array_column($body['data'], 'kode_dp');
+        sort($kode);
+
+        $this->assertSame(['DP-UNIT1', 'DP-UNIT2'], $kode);
+        $this->assertSame(2, $body['recordsTotal']);
+    }
+
+    public function testSpvBisaMemfilterSatuCabangDiDpService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $body = $this->ajaxDp(2);
+
+        $this->assertCount(1, $body['data']);
+        $this->assertSame('DP-UNIT2', $body['data'][0]['kode_dp']);
+    }
+
+    public function testSpvTidakBisaMelihatUnitDiLuarBinaanDiDpService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $body = $this->ajaxDp(3);
+
+        $kode = array_column($body['data'], 'kode_dp');
+        sort($kode);
+
+        $this->assertSame(['DP-UNIT1', 'DP-UNIT2'], $kode);
+    }
+
+    public function testSpvMendapatSelectCabangDiHalamanDpService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('dp_service')->getBody();
+
+        preg_match('/<select[^>]*id="dpUnitFilter"[^>]*>/', $html, $m);
+        $this->assertStringNotContainsString('disabled', $m[0]);
+        $this->assertStringContainsString('ICLEAR Probolinggo', $html);
+        $this->assertStringContainsString('ICLEAR Jember', $html);
+        $this->assertStringNotContainsString('ICLEAR Genteng', $html);
+    }
+
+    public function testSpvMelihatCabangBinaanDiProsesService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('proses_service')->getBody();
+        $this->assertStringContainsString('<select id="unitFilter"', $html);
+        $this->assertStringNotContainsString('class="ps-locked"', $html);
+
+        $body = $this->ajax('proses_service/ajax', '');
+        $service = array_column($body['data'], 'no_service');
+        sort($service);
+
+        $this->assertSame(['AKTIF-UNIT1', 'AKTIF-UNIT2'], $service);
+    }
+
+    public function testSpvTidakBisaMelihatUnitDiLuarBinaanDiProsesService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $body = $this->ajax('proses_service/ajax', 3);
+        $service = array_column($body['data'], 'no_service');
+        sort($service);
+
+        $this->assertSame(['AKTIF-UNIT1', 'AKTIF-UNIT2'], $service);
+    }
+
+    public function testSpvMelihatCabangBinaanDiRiwayatService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $this->db->setPrefix('');
+        $html = (string) $this->get('riwayat_service')->getBody();
+        preg_match('/<select[^>]*id="unitFilter"[^>]*>/', $html, $m);
+        $this->assertStringNotContainsString('disabled', $m[0]);
+
+        $body = $this->ajax('riwayat_service/ajax', '');
+        $unit = array_values(array_unique(array_map(
+            static fn ($row) => (int) $row['unit_idunit'],
+            $body['data']
+        )));
+        sort($unit);
+
+        $this->assertSame([1, 2], $unit);
+    }
+
+    public function testSpvTidakBisaMelihatUnitDiLuarBinaanDiRiwayatService(): void
+    {
+        $this->sesi(400, 1, 40);
+
+        $body = $this->ajax('riwayat_service/ajax', 3);
+        $unit = array_values(array_unique(array_map(
+            static fn ($row) => (int) $row['unit_idunit'],
+            $body['data']
+        )));
+        sort($unit);
+
+        $this->assertSame([1, 2], $unit);
+    }
+
+    public function testSpvTanpaMappingMemakaiUnitSesi(): void
+    {
+        $this->db->table('spv_units')->where('spv_id', 400)->delete();
+        $this->sesi(400, 1, 40);
+
+        $body = $this->ajaxDp('');
+
+        $this->assertCount(1, $body['data']);
+        $this->assertSame('DP-UNIT1', $body['data'][0]['kode_dp']);
+        $this->assertSame(1, $body['recordsTotal']);
+    }
+
+    public function testRoleTanpaUnitTidakMelihatSemuaData(): void
+    {
+        $this->sesi(350, 0, 35);
+
+        $body = $this->ajaxDp('');
+
+        $this->assertSame([], $body['data']);
+        $this->assertSame(0, $body['recordsTotal']);
+    }
+
+    private function ajax(string $route, $unitFilter): array
     {
         $this->db->setPrefix('');
         $result = $this->post($route, [

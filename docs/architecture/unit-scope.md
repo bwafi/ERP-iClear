@@ -30,7 +30,7 @@ Jangan menambah daftar unit hardcoded atau helper baru sebelum memeriksa kedua m
 | Area | Perilaku | Bukti |
 |---|---|---|
 | Pembelian | Role lintas unit (0, 1, 34) memilih dari unit operasional. GET/POST unit non-operasional ditolak; akun lintas unit yang bernaung di unit non-operasional default ke unit operasional pertama. Tim toko selalu memakai unit akun. | ✅ `Pembelian::resolveUnitPembelian`, `Pembelian::daftarIdUnitOperasional`, `ModelUnit::getUnitOperasional`; PRD Modul 03 rule 18 |
-| Service — proses service | Filter unit untuk role lintas unit hanya berisi unit operasional. | ✅ `Riwayat_Service::proses_service` |
+| Service — proses service | Filter unit untuk role lintas unit hanya berisi unit operasional. SPV (40) memakai cabang `spv_units` yang operasional (fallback unit sesi). | ✅ `Riwayat_Service::proses_service`, `ServiceUnitScopeService` |
 | Service — sparepart/garansi | `GaransiClaimService::canSeeAllUnits` → filter `is_operasional = 1`; role lain dikunci ke unit akun. | ✅ `Riwayat_Service::sparepartUnitScope` |
 | Status garansi | Sama: role lintas unit hanya melihat unit operasional. | ✅ `StatusGaransi::index` |
 | KasBank — kewajiban opening KAS | Hanya laci KAS unit operasional yang wajib punya baseline opening. Rekening Finance/HO diatur terpisah oleh `is_finance_ho`. | ✅ `KasBank::index`, `KasBankCutoffService::unitOperasional` |

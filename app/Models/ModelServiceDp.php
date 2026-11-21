@@ -109,23 +109,36 @@ class ModelServiceDp extends Model
         string $search,
         string $tanggalAwal,
         string $tanggalAkhir,
-        ?int $unitId,
+        $unitId,
         int $orderColumn,
         string $orderDir
     ): array {
+        $unitIds = [];
+        if (is_array($unitId)) {
+            foreach ($unitId as $id) {
+                $id = (int) $id;
+                if ($id !== 0) {
+                    $unitIds[$id] = $id;
+                }
+            }
+            $unitIds = array_values($unitIds);
+        } elseif ($unitId !== null && (int) $unitId !== 0) {
+            $unitIds = [(int) $unitId];
+        }
+
         $base = fn () => $this->db->table($this->table . ' sd')
             ->join('service s', 's.idservice = sd.service_idservice')
             ->join('pelanggan p', 'p.id_pelanggan = s.pelanggan_id_pelanggan', 'left');
 
         $totalBuilder = $base();
-        if ($unitId !== null && $unitId > 0) {
-            $totalBuilder->where('s.unit_idunit', $unitId);
+        if ($unitIds !== []) {
+            $totalBuilder->whereIn('s.unit_idunit', $unitIds);
         }
         $recordsTotal = $totalBuilder->countAllResults();
 
         $filterBuilder = $base();
-        if ($unitId !== null && $unitId > 0) {
-            $filterBuilder->where('s.unit_idunit', $unitId);
+        if ($unitIds !== []) {
+            $filterBuilder->whereIn('s.unit_idunit', $unitIds);
         }
         if ($tanggalAwal !== '') {
             $filterBuilder->where('DATE(sd.tanggal) >=', $tanggalAwal);
@@ -192,8 +205,8 @@ class ModelServiceDp extends Model
             $builder->join('bank rb', 'rb.idbank = sd.refund_bank_idbank', 'left');
         }
 
-        if ($unitId !== null && $unitId > 0) {
-            $builder->where('s.unit_idunit', $unitId);
+        if ($unitIds !== []) {
+            $builder->whereIn('s.unit_idunit', $unitIds);
         }
         if ($tanggalAwal !== '') {
             $builder->where('DATE(sd.tanggal) >=', $tanggalAwal);

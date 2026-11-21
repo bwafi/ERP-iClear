@@ -27,6 +27,7 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-lg-4">
             <?php $isHO = !empty($is_ho) && $is_ho; ?>
+            <?php $canFilterUnits = !empty($can_filter_units) || $isHO; ?>
             <?php $isAdminRoot = !empty($is_admin_root) && $is_admin_root; ?>
             <div class="row g-3 align-items-end">
                 <div class="col-sm-6 col-lg-2">
@@ -39,12 +40,12 @@
                 </div>
                 <div class="col-sm-6 col-lg-2">
                     <label for="dpUnitFilter" class="form-label fw-semibold mb-2">Unit</label>
-                    <select id="dpUnitFilter" class="form-select" <?= $isHO ? '' : 'disabled' ?>>
-                        <?php if ($isHO): ?>
+                    <select id="dpUnitFilter" class="form-select" <?= $canFilterUnits ? '' : 'disabled' ?>>
+                        <?php if ($canFilterUnits): ?>
                             <option value="">Semua Unit</option>
                         <?php endif; ?>
                         <?php foreach (($unit ?? []) as $u): ?>
-                            <option value="<?= (int) $u->idunit ?>" <?= (!$isHO && (int) $u->idunit === (int) ($user_unit ?? 0)) ? 'selected' : '' ?>>
+                            <option value="<?= (int) $u->idunit ?>" <?= (!$canFilterUnits && (int) $u->idunit === (int) ($user_unit ?? 0)) ? 'selected' : '' ?>>
                                 <?= esc($u->NAMA_UNIT) ?>
                             </option>
                         <?php endforeach; ?>
@@ -429,7 +430,7 @@
             resetButton.addEventListener('click', function () {
                 startDate.value = toDateInputValue(sebulanLalu);
                 endDate.value = toDateInputValue(hariIni);
-                if (unitFilter && <?= $isHO ? 'true' : 'false' ?>) unitFilter.value = '';
+                if (unitFilter && <?= $canFilterUnits ? 'true' : 'false' ?>) unitFilter.value = '';
                 searchInput.value = '';
                 pageLength.value = '10';
                 datatable.page.len(10).draw();
