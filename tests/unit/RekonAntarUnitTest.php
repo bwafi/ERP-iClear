@@ -25,7 +25,7 @@ final class RekonAntarUnitTest extends CIUnitTestCase
     private const D4 = '2026-02-12'; // hanya atribusi
     private const D5 = '2026-02-13'; // hanya leg MASUK
 
-    private const TABEL = ['penjualan', 'kas_keluar', 'service_dp', 'service', 'transaksi_kas_bank'];
+    private const TABEL = ['penjualan', 'kas_keluar', 'service_dp', 'service', 'transaksi_kas_bank', 'kas_masuk'];
 
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
@@ -96,6 +96,11 @@ final class RekonAntarUnitTest extends CIUnitTestCase
             idbank VARCHAR(20) NULL,
             jumlah BIGINT DEFAULT 0,
             tanggal DATE NULL)');
+
+        $this->db->query('CREATE TABLE kas_masuk (
+            idkas_masuk INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            tanggal DATE NULL, deskripsi TEXT NULL, jumlah BIGINT DEFAULT 0,
+            idunit INT NULL, idbank VARCHAR(20) NULL, jenis VARCHAR(15) NULL)');
 
         $this->db->query('CREATE TABLE transaksi_kas_bank (
             idtransaksi INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

@@ -536,6 +536,17 @@ class KasBankSourceMovement
                 ->dpMasukTransferBankRange((string) $bankId, $unitId, $dari, $sampai);
         }
 
+        // Kas Masuk manual ber-rekening. Sama seperti kas_keluar:
+        //  - $unitId null  -> seluruh unit (saldo fisik rekening)
+        //  - $unitId diisi -> hanya unit yang berhak atas rekening ini
+        $srcDef = new TutupKasirSourceDefinition($this->db);
+
+        if ($unitId === null) {
+            $masuk += $srcDef->kasMasukManualTransferBankRange((string) $bankId, null, $dari, $sampai);
+        } elseif ($this->unitBerhakAtasRekening($akun, $unitId)) {
+            $masuk += $srcDef->kasMasukManualTransferBankRange((string) $bankId, $unitId, $dari, $sampai);
+        }
+
         return $masuk - $keluar;
     }
 
@@ -576,7 +587,8 @@ class KasBankSourceMovement
 
         return (int) ($p->get()->getRow()->s ?? 0)
             + (int) ($s->get()->getRow()->s ?? 0)
-            + (new TutupKasirSourceDefinition($this->db))->dpMasukTunaiRange($unitId, $dari, $sampai);
+            + (new TutupKasirSourceDefinition($this->db))->dpMasukTunaiRange($unitId, $dari, $sampai)
+            + (new TutupKasirSourceDefinition($this->db))->kasMasukManualCashRange($unitId, $dari, $sampai);
     }
 
     /**

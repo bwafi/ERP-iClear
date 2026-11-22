@@ -15,8 +15,10 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use App\Models\ModelUnit;
+use App\Models\ModelAkunKasBank;
 use App\Libraries\ModeKasBank;
 use App\Services\Finance\BankRekeningValidator;
+use App\Services\Finance\FinanceScopeService;
 use App\Exceptions\PostingLedgerException;
 
 
@@ -31,6 +33,7 @@ class Kas_Masuk extends BaseController
     protected $JurnalModel;
     protected $UnitModel;
     protected $KasBankLib;
+    protected $FinanceScope;
 
     public function __construct()
     {
@@ -43,23 +46,230 @@ class Kas_Masuk extends BaseController
         $this->JurnalModel = new ModelJurnal();
         $this->UnitModel = new ModelUnit();
         $this->KasBankLib = new ModeKasBank();
+        $this->FinanceScope = new FinanceScopeService();
+    }
+
+    private function bebasPilihUnit(): bool
+    {
+        return in_array((int) session('ID_JABATAN'), FinanceScopeService::inputRoles(), true);
+    }
+
+    /**
+     * Unit untuk dropdown filter. Role lintas melihat semua unit, SPV hanya
+     * unit binaannya (spv_units), role lain hanya unitnya sendiri.
+     *
+     * @return object[]
+     */
+    private function unitFilterList(): array
+    {
+        if ($this->bebasPilihUnit()) {
+            return $this->UnitModel->getUnit();
+        }
+
+        return $this->FinanceScope->resolveAllowedUnits();
+    }
+
+    /**
+     * Unit filter yang benar-benar dipakai. Request dari role terbatas tidak
+     * dipercaya: unit di luar scope jatuh ke unit pertama yang diizinkan.
+     */
+    private function unitFilterTerpilih($requested): int
+    {
+        $req = (int) $requested;
+
+        if ($this->bebasPilihUnit()) {
+            return $req;
+        }
+
+        $allowed = array_map('intval', $this->FinanceScope->allowedUnitIds());
+        if ($req > 0 && in_array($req, $allowed, true)) {
+            return $req;
+        }
+
+        return (int) ($allowed[0] ?? session('ID_UNIT'));
     }
 
     public function index()
     {
         $akun = $this->AuthModel->getById(session('ID_AKUN'));
+        $unitList = $this->UnitModel->getUnit();
+
+        // Dropdown "No. Rekening" hanya menawarkan rekening yang bisa dipakai
+        // unit itu. Rekening Finance/HO tetap ikut untuk role yang berhak.
+        $role = isset($akun->ID_JABATAN) ? (int) $akun->ID_JABATAN : null;
+        $bolehFinanceHo = $role !== null && in_array(
+            $role,
+            array_map('intval', config(\Config\Finance::class)->financeHoSourceRoles ?? []),
+            true
+        );
+
+        $financeHoBankIds = [];
+        if ($bolehFinanceHo) {
+            $financeHo = (new ModelAkunKasBank())
+                ->where('tipe', 'BANK')
+                ->where('is_finance_ho', 1)
+                ->where('status', 'aktif')
+                ->findAll();
+            foreach ($financeHo as $a) {
+                $financeHoBankIds[] = trim((string) $a->bank_idbank);
+            }
+        }
+
+        // Daftar rekening dibangun untuk SEMUA unit sekaligus supaya unit yang
+        // dipilih di form bisa langsung mengganti isi dropdown tanpa request
+        // tambahan.
+        $bankPerUnit = [];
+        foreach ($unitList as $u) {
+            $unitId = (int) $u->idunit;
+            $daftar = [];
+            foreach ($this->BankModel->getBankDalamScopeUnit($unitId) as $b) {
+                $daftar[(string) $b->idbank] = $b;
+            }
+            foreach ($financeHoBankIds as $idbank) {
+                $b = $this->BankModel->getById($idbank);
+                if ($b) {
+                    $daftar[(string) $b->idbank] = $b;
+                }
+            }
+            $bankPerUnit[$unitId] = array_values($daftar);
+        }
+
+        $loginUnit = (int) ($akun->ID_UNIT ?? session('ID_UNIT'));
+        $bebasPilihUnit = $this->bebasPilihUnit();
+        $unitFilter = $this->unitFilterList();
+        $unitFilterIds = array_map(static fn ($u) => (int) $u->idunit, $unitFilter);
 
         $data = [
             'akun' => $akun,
-            'kas_masuk' => $this->KasMasukModel->getKasMasuk(),
             'kategori_kas' => $this->KategoriKasModel->getKategoriKas(),
-            'no_akun' =>  $this->NoAkunModel->getAkun(),
-            'bank' => $this->BankModel->getBank(),
-            'unit' => $this->UnitModel->getUnit(),
+            'no_akun' =>  $this->NoAkunModel->getAkunMasuk(),
+            'bank' => $bankPerUnit[$loginUnit] ?? [],
+            'bank_per_unit' => $bankPerUnit,
+            'unit' => $unitList,
+            'unit_filter' => $unitFilter,
+            'can_filter_unit' => $bebasPilihUnit || count($unitFilterIds) > 1,
+            'show_all_units' => $bebasPilihUnit,
+            'default_filter_unit' => $bebasPilihUnit ? 0 : (int) ($unitFilterIds[0] ?? $loginUnit),
+            // Tombol Edit/Hapus hanya untuk Admin Root. Server tetap memakai
+            // filter `auth` seperti sebelumnya; ini hanya kontrol tampilan.
+            'can_act' => (int) session('ID_JABATAN') === 1,
             'body' => 'jurnal/kas_masuk'
         ];
 
         return view('template', $data);
+    }
+
+    /** DataTables server-side untuk daftar kas masuk. */
+    public function datatable()
+    {
+        $draw   = (int) $this->request->getGet('draw');
+        $start  = (int) $this->request->getGet('start');
+        $length = (int) $this->request->getGet('length');
+        if ($start < 0) {
+            $start = 0;
+        }
+        if ($length < 1) {
+            $length = 25;
+        }
+
+        $search = $this->request->getGet('search');
+        $search = is_array($search) ? trim((string) ($search['value'] ?? '')) : trim((string) $search);
+
+        $order = $this->request->getGet('order');
+        $orderColIdx = isset($order[0]['column']) ? (int) $order[0]['column'] : 0;
+        $orderDir    = isset($order[0]['dir']) ? strtoupper($order[0]['dir']) : 'DESC';
+
+        $columnMap = [
+            0 => 'kas_masuk.tanggal',
+            1 => 'unit.NAMA_UNIT',
+            2 => 'kas_masuk.no_akun',
+            3 => 'kategori_kas.kategori',
+            4 => 'kas_masuk.deskripsi',
+            5 => 'bank.nama_bank',
+            6 => 'kas_masuk.penerima',
+            7 => 'bank.norek',
+            8 => 'kas_masuk.jumlah',
+            9 => null, // aksi — tidak urutkan
+        ];
+        $orderCol = $columnMap[$orderColIdx] ?? 'kas_masuk.tanggal';
+
+        $startDate = trim((string) $this->request->getGet('tanggal_awal'));
+        $endDate   = trim((string) $this->request->getGet('tanggal_akhir'));
+        $unitId    = $this->unitFilterTerpilih($this->request->getGet('unit_id'));
+
+        $kategoriId = (int) $this->request->getGet('kategori_id');
+        if ($kategoriId <= 0) {
+            $kategoriId = null;
+        }
+
+        // recordsTotal adalah "semua baris yang boleh dilihat user", bukan
+        // seluruh perusahaan: role terbatas tidak boleh membaca hitungan unit
+        // lain lewat angka ini.
+        $total = $this->bebasPilihUnit()
+            ? $this->KasMasukModel->countAllKasMasuk()
+            : $this->KasMasukModel->countKasMasukFiltered('', null, null, $unitId ?: null);
+
+        $filtered = $this->KasMasukModel->countKasMasukFiltered(
+            $search,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null,
+            $kategoriId
+        );
+        $summary = $this->KasMasukModel->sumKasMasukFiltered(
+            $search,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null,
+            $kategoriId
+        );
+        $rows = $this->KasMasukModel->getKasMasukDataTable(
+            $length,
+            $start,
+            $search,
+            $orderCol,
+            $orderDir,
+            $startDate ?: null,
+            $endDate ?: null,
+            $unitId ?: null,
+            $kategoriId
+        );
+
+        // Nilai dikembalikan terpisah, tanpa HTML: sel disusun di tampilan agar
+        // escaping punya satu tempat yang jelas.
+        $data = [];
+        foreach ($rows as $r) {
+            $data[] = [
+                'id'         => (int) $r->idkas_masuk,
+                'tanggal'    => (string) $r->tanggal,
+                'unit'       => (string) ($r->NAMA_UNIT ?? ''),
+                'no_akun'    => (string) ($r->no_akun ?? ''),
+                'nama_akun'  => trim((string) ($r->nama_akun ?? '')),
+                'kategori'   => (string) ($r->kategori ?? ''),
+                'kategori_id' => (int) ($r->kategori_idkategori ?? 0),
+                // idbank VARCHAR: jangan cast ke int, 'BNI-001' akan jadi 0.
+                'idbank'     => (string) ($r->idbank ?? ''),
+                'deskripsi'  => (string) ($r->deskripsi ?? ''),
+                'nama_bank'  => (string) ($r->nama_bank ?? ''),
+                'norek'      => (string) ($r->norek ?? ''),
+                'penerima'   => (string) ($r->penerima ?? ''),
+                'jumlah'     => (float) $r->jumlah,
+                'jenis'      => trim((string) ($r->jenis ?? '')),
+                'idunit'     => (int) ($r->idunit ?? 0),
+                'aksi'       => null,
+            ];
+        }
+
+        return $this->response->setJSON([
+            'draw'            => $draw,
+            'recordsTotal'    => $total,
+            'recordsFiltered' => $filtered,
+            'sumTotal'        => $summary['total'],
+            'sumTunai'        => $summary['tunai'],
+            'sumTransfer'     => $summary['transfer'],
+            'countFiltered'   => $summary['n'],
+            'data'            => $data,
+        ]);
     }
 
     public function insert_kas_masuk()
@@ -70,6 +280,30 @@ class Kas_Masuk extends BaseController
 
 
         $akunData = $this->request->getPost('akun');
+
+        if (! is_array($akunData) || $akunData === []) {
+            session()->setFlashdata('gagal', 'Minimal satu baris akun harus diisi.');
+            return redirect()->to(base_url('/kas_masuk'));
+        }
+
+        // Validasi SEMUA baris sebelum transaksi: satu baris terlarang
+        // membatalkan seluruh batch tanpa menulis apa pun.
+        foreach ($akunData as $baris) {
+            $noAkun = trim((string) ($baris['no_akun'] ?? ''));
+            $akun   = $noAkun === '' ? null : $this->NoAkunModel->getByNoAkun($noAkun);
+
+            if ($akun === null) {
+                session()->setFlashdata('gagal', 'Akun "' . $noAkun . '" tidak terdaftar.');
+                return redirect()->to(base_url('/kas_masuk'));
+            }
+            if (! $this->NoAkunModel->bolehUntukKasMasuk($akun)) {
+                session()->setFlashdata(
+                    'gagal',
+                    'Akun "' . $noAkun . '" (' . ($akun->jenis_akun ?? 'tanpa jenis') . ') tidak boleh dipakai untuk Kas Masuk.'
+                );
+                return redirect()->to(base_url('/kas_masuk'));
+            }
+        }
 
         // Simpan source + posting ledger + jurnal dalam SATU transaksi.
         //
@@ -90,7 +324,9 @@ class Kas_Masuk extends BaseController
                 }
                 $jumlah = preg_replace('/[^0-9]/', '', $data['jumlah']);
                 $penerima = $data['penerima'];
-                $jenis = $data['posisi_drk']; // debet/kredit
+                // COA yang dipilih adalah akun lawan; sisi kas/bank didebit
+                // implisit, jadi baris jurnal selalu kredit.
+                $jenis = 'kredit';
                 $kategori_idkategori = $data['kategori_idkategori'];
 
                 // Validasi rekening SEBELUM sumber disimpan.
@@ -229,7 +465,9 @@ class Kas_Masuk extends BaseController
 
         $penerima  = $cekRek['idbank'];
         $atasnama  = $cekRek['bank']->atas_nama ?? null;
-        $posisi_drk = $this->request->getPost('posisi_drk');
+
+        // Nominal dari form bisa berformat "75.000"; simpan digitnya saja.
+        $jumlah = preg_replace('/[^0-9]/', '', (string) $jumlah);
 
 
 
@@ -238,7 +476,7 @@ class Kas_Masuk extends BaseController
             'kategori_idkategori' =>  $kategori_idkategori,
             'deskripsi' => $deskripsi,
             'jumlah' =>   $jumlah,
-            'jenis' => $posisi_drk,
+            'jenis' => 'kredit',
             'penerima' => $atasnama,
             'idbank' => $penerima,
             'updated_on' => date('Y-m-d H:i:s')
@@ -254,6 +492,20 @@ class Kas_Masuk extends BaseController
         $db->transStart();
         try {
             $this->KasMasukModel->update($id, $data);
+
+            // Baris jurnal referensi `kas_masuk` ikut berubah dalam transaksi
+            // yang sama. Tanpa ini nominal jurnal tetap angka lama sementara
+            // sumber sudah berubah.
+            $this->JurnalModel->builder()
+                ->where('tabel_referensi', 'kas_masuk')
+                ->where('id_referensi', (string) $id)
+                ->update([
+                    'tanggal'    => $tanggal,
+                    'debet'      => 0,
+                    'kredit'     => $jumlah,
+                    'keterangan' => $deskripsi,
+                ]);
+
             $this->KasBankLib->hapusPosting('kas_masuk', (int)$id);
 
             $posting = $this->KasBankLib->postingKasMasuk((int)$id);
@@ -287,9 +539,26 @@ class Kas_Masuk extends BaseController
 
         $db = \Config\Database::connect();
         $db->transStart();
-        $this->KasBankLib->hapusPosting('kas_masuk', (int)$id);
-        $this->KasMasukModel->delete($id);
-        $db->transComplete();
+        try {
+            // Hapus jurnal referensi lebih dulu, lalu posting ledger, lalu
+            // sumbernya — semuanya atomik. Jurnal modul lain tidak tersentuh.
+            $this->JurnalModel->hapusByReferensi('kas_masuk', (int) $id);
+            $this->KasBankLib->hapusPosting('kas_masuk', (int) $id);
+            $this->KasMasukModel->delete($id);
+
+            $db->transComplete();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', 'KasBank: gagal hapus kas_masuk #' . $id . ': ' . $e->getMessage());
+            session()->setFlashdata('gagal', 'Gagal menghapus data kas masuk.');
+
+            return redirect()->to(base_url('/kas_masuk'));
+        }
+
+        if ($db->transStatus() === false) {
+            session()->setFlashdata('gagal', 'Gagal menghapus data kas masuk.');
+            return redirect()->to(base_url('/kas_masuk'));
+        }
 
         session()->setFlashdata('sukses', 'Data kas masuk berhasil dihapus.');
         return redirect()->to(base_url('/kas_masuk'));

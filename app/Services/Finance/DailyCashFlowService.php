@@ -27,11 +27,11 @@ use Config\Database;
  *    yang tidak punya `transfer_ref` diabaikan supaya satu transaksi tidak
  *    tampil dua kali. Tidak ada lagi penggantian baris sumber dengan
  *    baris mirror.
+ *  - `kas_masuk` manual (deskripsi bukan 'kas awal') ikut sebagai penerimaan
+ *    harian: idbank NULL = tunai, idbank terisi = transfer. `jenis` tidak
+ *    dipakai karena halaman Kas Masuk adalah kontrak inflow.
  *  - Baris deskripsi 'kas awal' TIDAK dipakai sebagai penerimaan harian:
- *    itu saldo awal periode berikutnya. `kas_masuk` tidak menjadi subtotal
- *    masuk karena TutupKasir, core Finance movement, dan RekonDaily
- *    sama-sama tidak menghitungnya — kalau dihitung di sini, drill-down
- *    tidak akan sama dengan angka tutup kasir.
+ *    itu saldo awal periode berikutnya.
  *  - Perpindahan antar kas/rekening ditandai terpisah dan tidak masuk
  *    subtotal/net karena bukan pendapatan maupun beban.
  *  - Klasifikasi tunai vs transfer mengikuti TutupKasir: idbank NULL = tunai,
@@ -73,6 +73,7 @@ class DailyCashFlowService
             'service'   => $this->fetchService($unitId, $tanggal),
             'dp_masuk'  => array_map(static fn (array $row) => (object) $row, $dpMasuk['rincian']),
             'dp_service_selesai' => array_map(static fn (array $row) => (object) $row, $dpServiceSelesai),
+            'kas_masuk' => $this->fetchKasMasuk($unitId, $tanggal),
             'kas_keluar' => $this->fetchKasKeluar($unitId, $tanggal),
             'ledger'    => $this->fetchLedger($unitId, $tanggal),
             'hpp_klaim' => (new \App\Models\ModelHppKlaimLoss())->getLoss($tanggal, $tanggal, $unitId),
@@ -175,6 +176,29 @@ class DailyCashFlowService
                 $this->waktu($row->created_at ?? null),
                 'DP Service',
                 $keterangan,
+                $jumlah
+            );
+        }
+
+        // Kas Masuk manual: inflow-only, tunai vs transfer dari idbank.
+        // Filter 'kas awal' diulang di sini supaya assemble() tetap benar
+        // saat dipanggil langsung dengan row mentah.
+        foreach ($sources['kas_masuk'] ?? [] as $row) {
+            $jumlah = (int) ($row->jumlah ?? 0);
+            if ($jumlah === 0) {
+                continue;
+            }
+
+            $deskripsi = trim((string) ($row->deskripsi ?? ''));
+            if (strtolower($deskripsi) === 'kas awal') {
+                continue;
+            }
+
+            $metode = $this->isTunai($row) ? 'tunai' : 'transfer';
+            $masuk[$metode][] = $this->row(
+                $this->waktu($row->created_on ?? null, $row->updated_on ?? null),
+                'Kas Masuk',
+                $deskripsi !== '' ? $deskripsi : 'Kas masuk',
                 $jumlah
             );
         }
@@ -315,6 +339,24 @@ class DailyCashFlowService
             ->where('DATE(tanggal_selesai)', $tanggal)
             ->where('status_service', 4)
             ->orderBy('tanggal_selesai', 'ASC')
+            ->get()
+            ->getResult();
+    }
+
+    /**
+     * Kas Masuk manual non-'kas awal' untuk tanggal+unit ini.
+     *
+     * `idbank` NULL = tunai, terisi = transfer. `jenis` tidak dipakai:
+     * halaman Kas Masuk adalah kontrak inflow.
+     */
+    protected function fetchKasMasuk(int $unitId, string $tanggal): array
+    {
+        return $this->db->table('kas_masuk')
+            ->select('kas_masuk.deskripsi, kas_masuk.jumlah, kas_masuk.penerima, kas_masuk.idbank, kas_masuk.created_on, kas_masuk.updated_on')
+            ->where('kas_masuk.idunit', $unitId)
+            ->where('DATE(kas_masuk.tanggal)', $tanggal)
+            ->where('(kas_masuk.deskripsi IS NULL OR LOWER(TRIM(kas_masuk.deskripsi)) <> \'kas awal\')', null, false)
+            ->orderBy('kas_masuk.tanggal', 'ASC')
             ->get()
             ->getResult();
     }

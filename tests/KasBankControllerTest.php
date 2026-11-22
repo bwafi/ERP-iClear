@@ -87,6 +87,7 @@ class KasBankControllerTest extends CIUnitTestCase
             'db_jurnal',
             'db_pembelian',
             'db_pembayaran_hutang',
+            'db_no_akun',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
         }
@@ -196,7 +197,7 @@ class KasBankControllerTest extends CIUnitTestCase
         $q("INSERT INTO db_jabatan (ID_JABATAN, NAMA_JABATAN, ROLES_JABATAN)
             VALUES (1, 'Root', '[1]'), (35, 'Admin Cabang', '[1]')");
         $q('CREATE TABLE IF NOT EXISTS db_spv_units (spv_id INT NULL, unit_id INT NULL)');
-        $q('CREATE TABLE IF NOT EXISTS db_no_akun (no_akun TEXT NULL, nama_akun TEXT NULL)');
+        $q('CREATE TABLE IF NOT EXISTS db_no_akun (no_akun TEXT NULL, nama_akun TEXT NULL, jenis_akun TEXT NULL)');
         // Opening KAS hidup di tabel sendiri (bukan db_saldo_awal_kas_bank) dan
         // WAJUNYA status TERVERIFIKASI di tanggal cut-off.|posisiUnit() untuk
         // rekening KAS membacanya dari sini, jadi tanpa tabel ini leg KELUAR
@@ -2922,10 +2923,10 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         );
     }
 
-    private function seedNoAkun(string $no = '5-1010'): void
+    private function seedNoAkun(string $no = '5-1010', string $nama = 'Pendapatan Operasional', string $jenis = 'Pendapatan'): void
     {
         $this->db->query(
-            "INSERT INTO db_no_akun (no_akun, nama_akun) VALUES ('{$no}', 'Beban Operasional')"
+            "INSERT INTO db_no_akun (no_akun, nama_akun, jenis_akun) VALUES ('{$no}', '{$nama}', '{$jenis}')"
         );
     }
 
@@ -3183,6 +3184,88 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame('skipped', $r2['status']);
         $this->assertSame('sudah terposting', $r2['reason']);
         $this->assertSame(1, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c);
+    }
+
+    // ---- Kas Masuk: COA terlarang ditolak, jenis selalu kredit ----
+
+    public function testKasMasukMenolakCoaBebanTanpaMenulis(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun('5-2000', 'Beban Operasional', 'Beban Operasional');
+
+        $r = $this->post('insert_kas_masuk', [
+            'tanggal'     => $this->tglMulai,
+            'deskripsi'   => 'Pengeluaran lewat kas masuk',
+            'unit_idunit' => '1',
+            'akun'        => [[
+                'no_akun'             => '5-2000',
+                'jumlah'              => '50000',
+                'penerima'            => 'BNI-001',
+                'no_rekening'         => 'BNI-001',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_masuk')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_jurnal')->getRow()->c);
+        $this->assertStringContainsString('tidak boleh dipakai', $this->flashGagal());
+    }
+
+    public function testKasMasukMenyimpanJenisKreditTanpaPosisiDrk(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+
+        $r = $this->post('insert_kas_masuk', [
+            'tanggal'     => $this->tglMulai,
+            'deskripsi'   => 'Pendapatan lain',
+            'unit_idunit' => '1',
+            'akun'        => [[
+                'no_akun'             => '5-1010',
+                'jumlah'              => '50000',
+                'penerima'            => '',
+                'no_rekening'         => '',
+                'kategori_idkategori' => '1',
+            ]],
+        ]);
+
+        $r->assertStatus(302);
+        $row = $this->db->query('SELECT * FROM db_kas_masuk')->getRow();
+        $this->assertSame('kredit', $row->jenis);
+
+        $jurnal = $this->db->query('SELECT * FROM db_jurnal')->getRow();
+        $this->assertSame(0, (int) $jurnal->debet);
+        $this->assertSame(50000, (int) $jurnal->kredit);
+    }
+
+    public function testKasMasukMenolakBatchCampuran(): void
+    {
+        $this->sesi();
+        $this->seedNoAkun();
+        $this->seedNoAkun('5-2000', 'Beban Operasional', 'Beban Operasional');
+
+        $r = $this->post('insert_kas_masuk', [
+            'tanggal'     => $this->tglMulai,
+            'deskripsi'   => 'Campuran',
+            'unit_idunit' => '1',
+            'akun'        => [
+                ['no_akun' => '5-1010', 'jumlah' => '10000', 'penerima' => 'BNI-001', 'no_rekening' => 'BNI-001', 'kategori_idkategori' => '1'],
+                ['no_akun' => '5-2000', 'jumlah' => '20000', 'penerima' => 'BNI-001', 'no_rekening' => 'BNI-001', 'kategori_idkategori' => '1'],
+            ],
+        ]);
+
+        $r->assertStatus(302);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_masuk')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_jurnal')->getRow()->c);
+    }
+
+    public function testViewKasMasukTidakLagiMemilikiPosisiDrk(): void
+    {
+        $html = file_get_contents(APPPATH . 'Views/jurnal/kas_masuk.php');
+
+        $this->assertStringNotContainsString('posisi_drk', $html);
+        $this->assertStringNotContainsString('edit_posisi_drk', $html);
     }
 
     // =================================================================
@@ -3512,5 +3595,56 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame($cfg->kasBankPeriodeMulaiDate, FinanceScopeService::kasBankPeriodeMulaiDate());
         $this->assertSame($cfg->bankCutoffDate, FinanceScopeService::bankCutoffDate());
         $this->assertSame($cfg->bankPeriodeMulaiDate, FinanceScopeService::bankPeriodeMulaiDate());
+    }
+
+    // ---- Update/delete kas masuk harus menjaga jurnal referensi ----
+
+    public function testUpdateKasMasukMenyinkronkanJurnal(): void
+    {
+        $this->sesi();
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, jenis, penerima, idbank, idunit, no_akun)
+            VALUES (801, '$this->tglMulai', 'lama', 50000, 'kredit', 'PT Contoh', 'BNI-001', 1, '5-1010')");
+        $this->db->query("INSERT INTO db_jurnal (tanggal, no_akun, nama_akun, debet, kredit, keterangan, id_referensi, tabel_referensi, id_unit, id_akun)
+            VALUES ('$this->tglMulai', '5-1010', 'Pendapatan', 0, 50000, 'lama', 801, 'kas_masuk', 1, 43)");
+        $this->db->query("INSERT INTO db_jurnal (tanggal, no_akun, nama_akun, debet, kredit, keterangan, id_referensi, tabel_referensi, id_unit, id_akun)
+            VALUES ('$this->tglMulai', '9-9999', 'Lain', 0, 7000, 'jangan sentuh', 801, 'kas_keluar', 1, 43)");
+
+        $r = $this->post('update_kas_masuk', [
+            'idkas_masuk' => '801',
+            'tanggal' => $this->tglBerikut,
+            'deskripsi' => 'baru',
+            'kategori_idkategori' => '1',
+            'jumlah' => '75000',
+            'penerima' => '',
+            'idunit' => '1',
+        ]);
+        $r->assertStatus(302);
+
+        $jurnal = $this->db->query("SELECT * FROM db_jurnal WHERE tabel_referensi='kas_masuk' AND id_referensi=801")->getRow();
+        $this->assertSame(0.0, (float) $jurnal->debet);
+        $this->assertSame(75000.0, (float) $jurnal->kredit);
+        $this->assertSame('baru', $jurnal->keterangan);
+        $this->assertSame($this->tglBerikut, $jurnal->tanggal);
+
+        $lain = $this->db->query("SELECT * FROM db_jurnal WHERE tabel_referensi='kas_keluar'")->getRow();
+        $this->assertSame(7000.0, (float) $lain->kredit, 'Jurnal modul lain tidak boleh berubah.');
+    }
+
+    public function testDeleteKasMasukMenghapusJurnalReferensi(): void
+    {
+        $this->sesi();
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, jenis, penerima, idbank, idunit, no_akun)
+            VALUES (802, '$this->tglMulai', 'hapus', 30000, 'kredit', 'PT Contoh', 'BNI-001', 1, '5-1010')");
+        $this->db->query("INSERT INTO db_jurnal (tanggal, no_akun, nama_akun, debet, kredit, keterangan, id_referensi, tabel_referensi, id_unit, id_akun)
+            VALUES ('$this->tglMulai', '5-1010', 'Pendapatan', 0, 30000, 'hapus', 802, 'kas_masuk', 1, 43)");
+        $this->db->query("INSERT INTO db_jurnal (tanggal, no_akun, nama_akun, debet, kredit, keterangan, id_referensi, tabel_referensi, id_unit, id_akun)
+            VALUES ('$this->tglMulai', '9-9999', 'Lain', 0, 5000, 'tetap', 802, 'kas_keluar', 1, 43)");
+
+        $r = $this->post('delete_kas_masuk', ['idkas_masuk' => '802']);
+        $r->assertStatus(302);
+
+        $this->assertSame(0, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_kas_masuk WHERE idkas_masuk=802")->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_jurnal WHERE tabel_referensi='kas_masuk' AND id_referensi=802")->getRow()->c);
+        $this->assertSame(1, (int) $this->db->query("SELECT COUNT(*) AS c FROM db_jurnal WHERE tabel_referensi='kas_keluar'")->getRow()->c);
     }
 }

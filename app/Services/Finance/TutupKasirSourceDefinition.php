@@ -472,7 +472,8 @@ class TutupKasirSourceDefinition
     public function kasMasukDp(int $unitId, string $tanggal): int
     {
         return $this->cashMasuk($unitId, $tanggal)
-            + $this->dpMasukTunai($unitId, $tanggal);
+            + $this->dpMasukTunai($unitId, $tanggal)
+            + $this->kasMasukManualCash($unitId, $tanggal);
     }
 
     /**
@@ -488,7 +489,8 @@ class TutupKasirSourceDefinition
     {
         return $this->transferMasuk($unitId, $tanggal)
             + $this->dpMasukTransfer($unitId, $tanggal)
-            - $this->dpServiceSelesai($unitId, $tanggal);
+            - $this->dpServiceSelesai($unitId, $tanggal)
+            + $this->kasMasukManualTransfer($unitId, $tanggal);
     }
 
     /**
@@ -641,6 +643,132 @@ class TutupKasirSourceDefinition
     }
 
     // =================================================================
+    // KAS MASUK MANUAL — baris non-'kas awal' adalah inflow
+    // =================================================================
+    //
+    // `kas_masuk.jenis` adalah posisi COA untuk jurnal, BUKAN arah kas.
+    // Halaman Kas Masuk adalah kontrak inflow: setiap baris non-'kas awal'
+    // menambah saldo. Pengecualian memakai deskripsi, bukan jenis.
+
+    private const KAS_AWAL_SQL = "(deskripsi IS NULL OR LOWER(TRIM(deskripsi)) <> 'kas awal')";
+
+    /** Kas masuk manual TUNAI (idbank IS NULL) pada satu tanggal. */
+    public function kasMasukManualCash(int $unitId, string $tanggal): int
+    {
+        return $this->kasMasukManualCashRange($unitId, $tanggal, $tanggal);
+    }
+
+    /** Kas masuk manual TRANSFER (idbank terisi) pada satu tanggal. */
+    public function kasMasukManualTransfer(int $unitId, string $tanggal): int
+    {
+        return $this->kasMasukManualTransferRange($unitId, $tanggal, $tanggal);
+    }
+
+    /** Kas masuk manual TUNAI dalam rentang [$dari, $sampai]. */
+    public function kasMasukManualCashRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        return $this->memo("kasMasukManualCashRange|$unitId|$dari|" . ($sampai ?? ''), function () use ($unitId, $dari, $sampai) {
+            $b = $this->db->table('kas_masuk')
+                ->selectSum('jumlah', 'total')
+                ->where('idunit', $unitId)
+                ->where('DATE(tanggal) >=', $dari)
+                ->where(self::KAS_AWAL_SQL, null, false)
+                ->where('idbank', null);
+
+            if ($sampai !== null) {
+                $b->where('DATE(tanggal) <=', $sampai);
+            }
+
+            return (int) ($b->get()->getRow()->total ?? 0);
+        });
+    }
+
+    /** Kas masuk manual TRANSFER seluruh rekening unit dalam rentang. */
+    public function kasMasukManualTransferRange(int $unitId, string $dari, ?string $sampai = null): int
+    {
+        return $this->memo("kasMasukManualTransferRange|$unitId|$dari|" . ($sampai ?? ''), function () use ($unitId, $dari, $sampai) {
+            $b = $this->db->table('kas_masuk')
+                ->selectSum('jumlah', 'total')
+                ->where('idunit', $unitId)
+                ->where('DATE(tanggal) >=', $dari)
+                ->where(self::KAS_AWAL_SQL, null, false)
+                ->where('idbank IS NOT NULL', null, false);
+
+            if ($sampai !== null) {
+                $b->where('DATE(tanggal) <=', $sampai);
+            }
+
+            return (int) ($b->get()->getRow()->total ?? 0);
+        });
+    }
+
+    /**
+     * Kas masuk manual TRANSFER untuk satu rekening.
+     *
+     * $unitId null = saldo fisik (semua unit); $unitId terisi = posisi unit.
+     */
+    public function kasMasukManualTransferBankRange(
+        string $bankId,
+        ?int $unitId,
+        string $dari,
+        ?string $sampai = null
+    ): int {
+        $bankId = trim($bankId);
+        if ($bankId === '') {
+            return 0;
+        }
+
+        return $this->memo("kasMasukManualTransferBankRange|$bankId|" . ($unitId ?? 'all') . "|$dari|" . ($sampai ?? ''), function () use ($bankId, $unitId, $dari, $sampai) {
+            $b = $this->db->table('kas_masuk')
+                ->selectSum('jumlah', 'total')
+                ->where('idbank', $bankId)
+                ->where('DATE(tanggal) >=', $dari)
+                ->where(self::KAS_AWAL_SQL, null, false);
+
+            if ($unitId !== null) {
+                $b->where('idunit', $unitId);
+            }
+            if ($sampai !== null) {
+                $b->where('DATE(tanggal) <=', $sampai);
+            }
+
+            return (int) ($b->get()->getRow()->total ?? 0);
+        });
+    }
+
+    /**
+     * Kas masuk manual per tanggal, dipisah tunai/transfer.
+     *
+     * @return array{cash:array<string,int>,transfer:array<string,int>}
+     */
+    public function kasMasukManualHarianRange(int $unitId, string $dari, string $sampai): array
+    {
+        $out = ['cash' => [], 'transfer' => []];
+
+        foreach (['cash' => true, 'transfer' => false] as $key => $tunai) {
+            $b = $this->db->table('kas_masuk')
+                ->select('DATE(tanggal) AS d', false)
+                ->selectSum('jumlah', 'total')
+                ->where('idunit', $unitId)
+                ->where('DATE(tanggal) >=', $dari)
+                ->where('DATE(tanggal) <=', $sampai)
+                ->where(self::KAS_AWAL_SQL, null, false);
+
+            if ($tunai) {
+                $b->where('idbank', null);
+            } else {
+                $b->where('idbank IS NOT NULL', null, false);
+            }
+
+            foreach ($b->groupBy('d')->get()->getResultArray() as $r) {
+                $out[$key][(string) $r['d']] = (int) $r['total'];
+            }
+        }
+
+        return $out;
+    }
+
+    // =================================================================
     // AGREGAT
     // =================================================================
 
@@ -787,8 +915,10 @@ class TutupKasirSourceDefinition
      */
     public function ringkasan(int $unitId, string $tanggal): array
     {
-        $cash    = $this->cashMasuk($unitId, $tanggal);
-        $transfer = $this->transferMasuk($unitId, $tanggal);
+        $manualTunai    = $this->kasMasukManualCash($unitId, $tanggal);
+        $manualTransfer = $this->kasMasukManualTransfer($unitId, $tanggal);
+        $cash     = $this->cashMasuk($unitId, $tanggal) + $manualTunai;
+        $transfer = $this->transferMasuk($unitId, $tanggal) + $manualTransfer;
 
         return [
             'kas_awalcash'         => $this->kasAwalCash($unitId, $tanggal),
@@ -799,6 +929,8 @@ class TutupKasirSourceDefinition
             'cashservice'          => $this->cashService($unitId, $tanggal),
             'tfpenjualan'          => $this->transferPenjualan($unitId, $tanggal),
             'tfservice'            => $this->transferService($unitId, $tanggal),
+            'kas_masuk_tunai'      => $manualTunai,
+            'kas_masuk_transfer'   => $manualTransfer,
 
             // Total — sama dengan yang dihitung TutupKasir.
             'cash'                 => $cash,
@@ -862,8 +994,10 @@ class TutupKasirSourceDefinition
         $dpTunai         = $this->dpMasukTunaiRange($unitId, $dari, $sampai);
         $dpTransfer      = $this->dpMasukTransferRange($unitId, $dari, $sampai);
         $dpServiceSelesai = $this->dpServiceSelesaiRange($unitId, $dari, $sampai);
-        $cash            = $cashPenjualan + $cashService + $dpTunai;
-        $transfer        = $tfPenjualan + $tfService + $dpTransfer - $dpServiceSelesai;
+        $manualTunai     = $this->kasMasukManualCashRange($unitId, $dari, $sampai);
+        $manualTransfer  = $this->kasMasukManualTransferRange($unitId, $dari, $sampai);
+        $cash            = $cashPenjualan + $cashService + $dpTunai + $manualTunai;
+        $transfer        = $tfPenjualan + $tfService + $dpTransfer - $dpServiceSelesai + $manualTransfer;
 
         $kk = function (string $bank) use ($unitId, $dari, $sampai) {
             $b = $this->db->table('kas_keluar')
@@ -887,6 +1021,8 @@ class TutupKasirSourceDefinition
             'tfservice'        => $tfService,
             'dp_transfer'      => $dpTransfer,
             'dp_service_selesai' => $dpServiceSelesai,
+            'kas_masuk_tunai'    => $manualTunai,
+            'kas_masuk_transfer' => $manualTransfer,
             'cash'             => $cash,
             'transfer'         => $transfer,
             'total_pendapatan' => $transfer + $cash,

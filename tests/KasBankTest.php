@@ -46,6 +46,9 @@ class KasBankTest extends CIUnitTestCase
             'db_akun_kas_bank',
             'db_alokasi_saldo_kas_bank',
             'db_saldo_awal_kas_bank',
+            'db_opening_kas',
+            'db_penjualan',
+            'db_service',
             'db_hutang_piutang',
             'db_kas_masuk',
             'db_kas_keluar',
@@ -76,6 +79,23 @@ class KasBankTest extends CIUnitTestCase
                 akun_kas_bank_id INT NULL, tanggal TEXT NULL, saldo REAL NULL,
                 keterangan TEXT NULL, status TEXT DEFAULT \'BELUM_VERIFIKASI\',
                 input_by INT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+        $q('CREATE TABLE IF NOT EXISTS db_opening_kas (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                akun_kas_bank_id INT NULL, unit_id INT NULL, tanggal TEXT NULL,
+                opening BIGINT NULL, real_cash BIGINT NULL, selisih BIGINT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT \'BELUM_VERIFIKASI\',
+                keterangan TEXT NULL, input_by INT NULL, verifikasi_by INT NULL,
+                verifikasi_at TEXT NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+        $q('CREATE TABLE IF NOT EXISTS db_penjualan (
+                idpenjualan INTEGER PRIMARY KEY AUTO_INCREMENT,
+                unit_idunit INT NULL, kode_invoice VARCHAR(64) NULL,
+                bayar_tunai BIGINT DEFAULT 0, bayar_bank BIGINT DEFAULT 0,
+                tanggal TEXT NULL)');
+        $q('CREATE TABLE IF NOT EXISTS db_service (
+                idservice INTEGER PRIMARY KEY AUTO_INCREMENT,
+                unit_idunit INT NULL, status_service INT DEFAULT 1,
+                bayar_tunai BIGINT DEFAULT 0, harus_dibayar BIGINT DEFAULT 0,
+                tanggal_selesai TEXT NULL)');
         $q('CREATE TABLE IF NOT EXISTS db_transaksi_kas_bank (
                 idtransaksi INTEGER PRIMARY KEY AUTO_INCREMENT,
                 tanggal TEXT NULL, unit_id INT NULL, akun_kas_bank_id INT NULL,
@@ -156,6 +176,9 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         $this->db->query('DELETE FROM db_akun_kas_bank');
         $this->db->query('DELETE FROM db_alokasi_saldo_kas_bank');
         $this->db->query('DELETE FROM db_saldo_awal_kas_bank');
+        $this->db->query('DELETE FROM db_opening_kas');
+        $this->db->query('DELETE FROM db_penjualan');
+        $this->db->query('DELETE FROM db_service');
         $this->db->query('DELETE FROM db_hutang_piutang');
         $this->db->query('DELETE FROM db_pembayaran_hutang_piutang');
         $this->db->query('DELETE FROM db_detail_mutasi');
@@ -980,6 +1003,55 @@ $colsTkb = $this->db->query("SHOW COLUMNS FROM db_transaksi_kas_bank LIKE 'submi
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
             $this->assertSame(1, $model->where('submission_key', 'DUPTOK-1')->countAllResults());
         }
+    }
+
+    // =====================================================================
+    // KAS MASUK MANUAL — inflow-only, tunai vs transfer
+    // =====================================================================
+
+    public function testKasMasukTunaiMenambahSaldoKas(): void
+    {
+        $tanggal = \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate();
+
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank)
+            VALUES (801, '{$tanggal}', 'Modal tunai', 25000, 1, NULL)");
+
+        $model = new ModelTransaksiKasBank();
+        $this->assertSame(25000, $model->getSaldoFisikAkun(1));
+    }
+
+    public function testKasMasukTransferMenambahSaldoBank(): void
+    {
+        $tanggal = \App\Services\Finance\FinanceScopeService::bankPeriodeMulaiDate();
+
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank)
+            VALUES (802, '{$tanggal}', 'Transfer masuk', 40000, 1, 'BNI-001')");
+
+        $model = new ModelTransaksiKasBank();
+        $this->assertSame(540000, $model->getSaldoFisikAkun(2));
+    }
+
+    public function testKasMasukKasAwalTidakMenambahSaldo(): void
+    {
+        $tanggal = \App\Services\Finance\FinanceScopeService::kasBankPeriodeMulaiDate();
+
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank)
+            VALUES (803, '{$tanggal}', 'kas awal', 50000, 1, NULL)");
+
+        $model = new ModelTransaksiKasBank();
+        $this->assertSame(0, $model->getSaldoFisikAkun(1));
+    }
+
+    public function testKasMasukTransferTidakBocorKeRekeningLain(): void
+    {
+        $tanggal = \App\Services\Finance\FinanceScopeService::bankPeriodeMulaiDate();
+
+        $this->db->query("INSERT INTO db_kas_masuk (idkas_masuk, tanggal, deskripsi, jumlah, idunit, idbank)
+            VALUES (804, '{$tanggal}', 'Transfer IRA', 30000, 1, 'IRA-001')");
+
+        $model = new ModelTransaksiKasBank();
+        $this->assertSame(30000, $model->getSaldoFisikAkun(9));
+        $this->assertSame(500000, $model->getSaldoFisikAkun(2));
     }
 
     // =====================================================================

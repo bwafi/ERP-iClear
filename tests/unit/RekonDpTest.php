@@ -25,7 +25,7 @@ final class RekonDpTest extends CIUnitTestCase
     private const D2 = '2026-01-15'; // service A selesai
     private const D3 = '2026-01-20'; // DP transfer diterima
 
-    private const TABEL = ['penjualan', 'kas_keluar', 'service_dp', 'service'];
+    private const TABEL = ['penjualan', 'kas_keluar', 'service_dp', 'service', 'kas_masuk'];
 
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
@@ -95,6 +95,11 @@ final class RekonDpTest extends CIUnitTestCase
             idbank VARCHAR(20) NULL,
             jumlah BIGINT DEFAULT 0,
             tanggal DATE NULL)');
+
+        $this->db->query('CREATE TABLE kas_masuk (
+            idkas_masuk INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            tanggal DATE NULL, deskripsi TEXT NULL, jumlah BIGINT DEFAULT 0,
+            idunit INT NULL, idbank VARCHAR(20) NULL, jenis VARCHAR(15) NULL)');
     }
 
     private function seed(): void

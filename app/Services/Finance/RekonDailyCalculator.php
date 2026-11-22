@@ -226,6 +226,19 @@ class RekonDailyCalculator implements FinanceCalculatorInterface
             }
         }
 
+        // Kas Masuk manual: inflow-only, dipisah tunai/transfer.
+        $manual = (new TutupKasirSourceDefinition($this->db))
+            ->kasMasukManualHarianRange($unitId, $startDate, $endDate);
+
+        foreach (['cash' => 'cash_masuk', 'transfer' => 'transfer_masuk'] as $key => $kolom) {
+            foreach ($manual[$key] as $d => $nilai) {
+                if (! isset($out[$d])) {
+                    $out[$d] = ['cash_masuk' => 0, 'transfer_masuk' => 0, 'kas_keluar' => 0];
+                }
+                $out[$d][$kolom] += $nilai;
+            }
+        }
+
         return $out;
     }
 

@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\ModelJurnal;
+use App\Models\ModelKasMasuk;
 use App\Models\ModelUnit;
 use App\Models\ModelHppKlaimLoss;
 use Config\Database;
@@ -10,12 +11,14 @@ use Config\Database;
 class DashboardLabaRugi extends BaseController
 {
     protected $JurnalModel;
+    protected $KasMasukModel;
     protected $UnitModel;
     protected $db;
 
     public function __construct()
     {
         $this->JurnalModel = new ModelJurnal();
+        $this->KasMasukModel = new ModelKasMasuk();
         $this->UnitModel = new ModelUnit();
         $this->db = Database::connect();
     }
@@ -100,18 +103,12 @@ class DashboardLabaRugi extends BaseController
         $service = $builder_service->get()->getRow();
         $total_service = $service->total ?? 0;
 
-        // 3. Pendapatan dari Kas Masuk
-        $builder_kas_masuk = $this->db->table('kas_masuk');
-        $builder_kas_masuk->selectSum('jumlah', 'total');
-        if ($tanggal_awal && $tanggal_akhir) {
-            $builder_kas_masuk->where('tanggal >=', $tanggal_awal)
-                ->where('tanggal <=', $tanggal_akhir);
-        }
-        if ($id_unit) {
-            $builder_kas_masuk->where('idunit', $id_unit);
-        }
-        $kas_masuk = $builder_kas_masuk->get()->getRow();
-        $total_kas_masuk = $kas_masuk->total ?? 0;
+        // 3. Pendapatan dari Kas Masuk (baris 'kas awal' bukan pendapatan)
+        $total_kas_masuk = $this->KasMasukModel->sumPendapatanRange(
+            $tanggal_awal,
+            $tanggal_akhir,
+            $id_unit ? (int) $id_unit : null
+        );
 
         // 4. Biaya dari Kas Keluar
         $builder_kas_keluar = $this->db->table('kas_keluar');

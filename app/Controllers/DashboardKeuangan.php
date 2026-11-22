@@ -50,8 +50,9 @@ class DashboardKeuangan extends BaseController
             $unitCondition = ['id_unit' => $unitId];
         }
 
-        // Total Kas Masuk
+        // Total Kas Masuk (baris 'kas awal' bukan pendapatan)
         $totalKasMasuk = $this->KasMasukModel
+            ->where(ModelKasMasuk::SQL_BUKAN_KAS_AWAL, null, false)
             ->where('DATE(tanggal) >=', $startDate)
             ->where('DATE(tanggal) <=', $endDate);
 
@@ -103,6 +104,7 @@ class DashboardKeuangan extends BaseController
         // Chart data - Kas Masuk/Keluar per hari
         $kasMasukData = $this->KasMasukModel
             ->select("DATE(tanggal) as tanggal, SUM(jumlah) as total")
+            ->where(ModelKasMasuk::SQL_BUKAN_KAS_AWAL, null, false)
             ->where('DATE(tanggal) >=', $startDate)
             ->where('DATE(tanggal) <=', $endDate);
 
@@ -150,21 +152,12 @@ class DashboardKeuangan extends BaseController
             $chartKeluar[] = $values['keluar'];
         }
 
-        // Kategori Kas Masuk
-        $kategoriMasuk = $this->KasMasukModel
-            ->select('kategori_kas.kategori, SUM(kas_masuk.jumlah) as total')
-            ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_masuk.kategori_idkategori')
-            ->where('DATE(kas_masuk.tanggal) >=', $startDate)
-            ->where('DATE(kas_masuk.tanggal) <=', $endDate);
-
-        if ($unitId) {
-            $kategoriMasuk->where('kas_masuk.idunit', $unitId);
-        }
-
-        $kategoriMasuk = $kategoriMasuk->groupBy('kategori_kas.kategori')
-            ->orderBy('total', 'DESC')
-            ->limit(5)
-            ->findAll();
+        // Kategori Kas Masuk (baris 'kas awal' bukan pendapatan)
+        $kategoriMasuk = $this->KasMasukModel->sumPendapatanPerKategori(
+            $startDate,
+            $endDate,
+            $unitId ? (int) $unitId : null
+        );
 
         $kategoriMasukLabels = array_map(fn($row) => $row->kategori ?? 'Unknown', $kategoriMasuk);
         $kategoriMasukData = array_map(fn($row) => (float) ($row->total ?? 0), $kategoriMasuk);
@@ -288,18 +281,12 @@ class DashboardKeuangan extends BaseController
         $service = $builder_service->get()->getRow();
         $total_service = $service->total ?? 0;
 
-        // 3. Pendapatan dari Kas Masuk (yang jenisnya pendapatan)
-        $builder_kas_masuk = $this->db->table('kas_masuk');
-        $builder_kas_masuk->selectSum('jumlah', 'total');
-        if ($tanggal_awal && $tanggal_akhir) {
-            $builder_kas_masuk->where('tanggal >=', $tanggal_awal)
-                ->where('tanggal <=', $tanggal_akhir);
-        }
-        if ($id_unit) {
-            $builder_kas_masuk->where('idunit', $id_unit);
-        }
-        $kas_masuk = $builder_kas_masuk->get()->getRow();
-        $total_kas_masuk = $kas_masuk->total ?? 0;
+        // 3. Pendapatan dari Kas Masuk (baris 'kas awal' bukan pendapatan)
+        $total_kas_masuk = $this->KasMasukModel->sumPendapatanRange(
+            $tanggal_awal,
+            $tanggal_akhir,
+            $id_unit ? (int) $id_unit : null
+        );
 
         // 4. Biaya dari Kas Keluar
         $builder_kas_keluar = $this->db->table('kas_keluar');

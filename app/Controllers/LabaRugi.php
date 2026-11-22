@@ -144,27 +144,9 @@ class LabaRugi extends BaseController
             ->orderBy('service.created_at', 'DESC')
             ->get()->getResult();
 
-        // Pendapatan: Kas Masuk
-        $builder_kas_masuk = $db->table('kas_masuk');
-        $builder_kas_masuk->selectSum('jumlah', 'total');
-        $applyTanggalFilter($builder_kas_masuk, 'kas_masuk.tanggal');
-        if ($id_unit) {
-            $builder_kas_masuk->where('kas_masuk.idunit', $id_unit);
-        }
-        $kas_masuk = $builder_kas_masuk->get()->getRow();
-        $total_kas_masuk = $kas_masuk->total ?? 0;
-
-        $kas_masuk_detail_builder = $db->table('kas_masuk')
-            ->select('kas_masuk.tanggal, kategori_kas.kategori, kas_masuk.deskripsi, kas_masuk.jumlah, unit.NAMA_UNIT as nama_unit')
-            ->join('kategori_kas', 'kategori_kas.idkategori_kas = kas_masuk.kategori_idkategori', 'left')
-            ->join('unit', 'unit.idunit = kas_masuk.idunit', 'left');
-        $applyTanggalFilter($kas_masuk_detail_builder, 'kas_masuk.tanggal');
-        if ($id_unit) {
-            $kas_masuk_detail_builder->where('kas_masuk.idunit', $id_unit);
-        }
-        $kas_masuk_detail = $kas_masuk_detail_builder
-            ->orderBy('kas_masuk.tanggal', 'DESC')
-            ->get()->getResult();
+        // Pendapatan: Kas Masuk (baris 'kas awal' bukan pendapatan)
+        $total_kas_masuk = $this->KasMasukModel->sumPendapatanRange($tanggal_awal, $tanggal_akhir, $id_unit);
+        $kas_masuk_detail = $this->KasMasukModel->getPendapatanDetail($tanggal_awal, $tanggal_akhir, $id_unit);
 
         // Biaya: Kas Keluar
         $builder_kas_keluar = $db->table('kas_keluar');

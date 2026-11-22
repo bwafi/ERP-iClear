@@ -463,7 +463,8 @@ $routes->post('delete_kas_keluar', 'Kas_Keluar::delete_kas_keluar', ['filter' =>
 $routes->post('export_kas_keluar', 'Kas_Keluar::export', ['filter' => 'auth']);
 
 //kas masuk
-$routes->get('/kas_masuk', 'Kas_Masuk::index');
+$routes->get('/kas_masuk', 'Kas_Masuk::index', ['filter' => 'auth']);
+$routes->get('kas_masuk/datatables', 'Kas_Masuk::datatable', ['filter' => 'auth']);
 $routes->post('insert_kas_masuk', 'Kas_Masuk::insert_kas_Masuk', ['filter' => 'auth']);
 $routes->post('update_kas_masuk', 'Kas_Masuk::update_kas_Masuk', ['filter' => 'auth']);
 $routes->post('delete_kas_masuk', 'Kas_Masuk::delete_kas_Masuk', ['filter' => 'auth']);

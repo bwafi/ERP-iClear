@@ -28,7 +28,7 @@ final class TutupKasirDpTest extends CIUnitTestCase
     private const D2 = '2026-01-15'; // tanggal service A selesai/diambil
     private const D3 = '2026-01-20'; // tanggal penerimaan DP transfer service B
 
-    private const TABEL = ['penjualan', 'service_dp', 'service'];
+    private const TABEL = ['penjualan', 'service_dp', 'service', 'kas_masuk'];
 
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
@@ -97,6 +97,11 @@ final class TutupKasirDpTest extends CIUnitTestCase
             bayar_tunai BIGINT DEFAULT 0,
             bayar_bank BIGINT DEFAULT 0,
             tanggal DATE NULL)');
+
+        $this->db->query('CREATE TABLE kas_masuk (
+            idkas_masuk INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            tanggal DATE NULL, deskripsi TEXT NULL, jumlah BIGINT DEFAULT 0,
+            idunit INT NULL, idbank VARCHAR(20) NULL, jenis VARCHAR(15) NULL)');
     }
 
     private function seed(): void

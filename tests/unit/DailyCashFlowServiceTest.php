@@ -238,4 +238,31 @@ final class DailyCashFlowServiceTest extends CIUnitTestCase
         $this->assertSame(0, $result['net']);
         $this->assertSame('SRV-1', $result['hpp_klaim'][0]['no_service']);
     }
+
+    public function testKasAwalTidakMasukSubtotalSaatAssembleLangsung(): void
+    {
+        $result = $this->service()->assemble([
+            'kas_masuk' => [
+                (object) ['deskripsi' => 'kas awal', 'jumlah' => 900000, 'idbank' => null, 'created_on' => '2026-10-01 07:00:00'],
+                (object) ['deskripsi' => 'Setoran', 'jumlah' => 50000, 'idbank' => null, 'created_on' => '2026-10-01 08:00:00'],
+            ],
+        ]);
+
+        $this->assertSame(50000, $result['subtotal']['masuk_tunai']);
+        $this->assertSame('Setoran', $result['masuk']['tunai'][0]['keterangan']);
+        $this->assertSame('Kas Masuk', $result['masuk']['tunai'][0]['sumber']);
+    }
+
+    public function testKasMasukTanpaDeskripsiDiberiLabelDefault(): void
+    {
+        $result = $this->service()->assemble([
+            'kas_masuk' => [
+                (object) ['deskripsi' => null, 'jumlah' => 15000, 'idbank' => '1', 'created_on' => null, 'updated_on' => '2026-10-01 09:00:00'],
+            ],
+        ]);
+
+        $this->assertSame(15000, $result['subtotal']['masuk_transfer']);
+        $this->assertSame('Kas masuk', $result['masuk']['transfer'][0]['keterangan']);
+        $this->assertSame('09:00', $result['masuk']['transfer'][0]['waktu']);
+    }
 }

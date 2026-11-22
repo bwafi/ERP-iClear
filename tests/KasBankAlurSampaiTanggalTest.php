@@ -100,7 +100,7 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
         foreach ([
             'db_transaksi_kas_bank', 'db_alokasi_saldo_kas_bank', 'db_saldo_awal_kas_bank',
             'db_akun_kas_bank', 'db_tutup_kasir', 'db_unit', 'db_bank', 'db_akun',
-            'db_opening_kas', 'db_penjualan', 'db_kas_keluar', 'db_service_dp', 'db_service',
+            'db_opening_kas', 'db_penjualan', 'db_kas_keluar', 'db_kas_masuk', 'db_service_dp', 'db_service',
         ] as $t) {
             $this->q('DROP TABLE IF EXISTS ' . $t);
         }
@@ -169,6 +169,10 @@ class KasBankAlurSampaiTanggalTest extends CIUnitTestCase
                 idkas_keluar INTEGER PRIMARY KEY AUTO_INCREMENT,
                 tanggal TEXT NULL, idunit INT NULL, idbank TEXT NULL,
                 jumlah REAL NULL, deskripsi TEXT NULL, updated_on TEXT NULL)');
+        $this->q('CREATE TABLE db_kas_masuk (
+                idkas_masuk INTEGER PRIMARY KEY AUTO_INCREMENT,
+                tanggal TEXT NULL, deskripsi TEXT NULL, jumlah REAL NULL,
+                idunit INT NULL, idbank TEXT NULL, jenis TEXT NULL)');
     }
 
     private function seed(): void
