@@ -131,4 +131,23 @@ final class AbsenEmployeeScopeServiceTest extends CIUnitTestCase
         $this->assertTrue(AbsenEmployeeScopeService::canView(40, 400, 400, 3, [1, 2]));
         $this->assertFalse(AbsenEmployeeScopeService::canView(35, 350, 401, 1, [1, 2]));
     }
+
+    public function testDaftarKaryawanSemuaMengembalikanPegawaiAktifLintasUnit(): void
+    {
+        $rows = (new AbsenEmployeeScopeService($this->db))->daftarKaryawanSemua();
+        $ids = array_map(static fn ($r) => (int) $r['ID_AKUN'], $rows);
+        sort($ids);
+
+        // 405 nonaktif dan 406 terhapus tidak boleh muncul; 400 (viewer) ikut.
+        $this->assertSame([400, 401, 402, 403, 404], $ids);
+    }
+
+    public function testIsViewAllRoleHanyaUntukFinanceDanManager(): void
+    {
+        $this->assertTrue(AbsenEmployeeScopeService::isViewAllRole(0));
+        $this->assertTrue(AbsenEmployeeScopeService::isViewAllRole(34));
+        $this->assertFalse(AbsenEmployeeScopeService::isViewAllRole(40));
+        $this->assertFalse(AbsenEmployeeScopeService::isViewAllRole(35));
+        $this->assertFalse(AbsenEmployeeScopeService::isViewAllRole(1));
+    }
 }

@@ -1774,13 +1774,16 @@ class PenilaianKPI extends BaseController
 
         $scopeUnits = $this->getScopeUnits($myRole, $myUnit, $myId);
 
-        // SPV melihat seluruh tim di unit binaannya (read-only bila tidak berwenang),
-        // bukan hanya jabatan yang ada di matriks evaluator.
+        // SPV melihat seluruh tim di unit binaannya; Finance/Manager melihat
+        // seluruh pegawai lintas unit. Target tanpa otorisasi tetap read-only.
         $isSpv = $myRole === 40;
+        $isViewAll = \App\Services\Kpi\AbsenEmployeeScopeService::isViewAllRole($myRole);
         $absenScope = new \App\Services\Kpi\AbsenEmployeeScopeService($this->db);
 
         if ($isSpv) {
             $list_karyawan = $absenScope->daftarKaryawanSpv($myId, $myUnit);
+        } elseif ($isViewAll) {
+            $list_karyawan = $absenScope->daftarKaryawanSemua();
         } else {
             $builder = $this->db->table('akun a')
                 ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
@@ -1834,8 +1837,8 @@ class PenilaianKPI extends BaseController
         $allowedViewIds = array_map(static fn ($row) => (int) $row['ID_AKUN'], $list_karyawan);
 
         $selected_karyawan = (int)($this->request->getGet('karyawan') ?: 0);
-        // SPV tidak boleh membuka karyawan di luar daftar unit binaannya.
-        if ($isSpv && $selected_karyawan && !in_array($selected_karyawan, $allowedViewIds, true)) {
+        // SPV/Finance/Manager tidak boleh membuka karyawan di luar daftar scope-nya.
+        if (($isSpv || $isViewAll) && $selected_karyawan && !in_array($selected_karyawan, $allowedViewIds, true)) {
             $selected_karyawan = 0;
         }
         if (!$selected_karyawan && !empty($list_karyawan)) {
@@ -1846,10 +1849,11 @@ class PenilaianKPI extends BaseController
         $targetUnitName = null;
         if ($selected_karyawan) {
             $target = $this->AuthModel->getById($selected_karyawan);
-            // Otorisasi: pegawai harus dalam scope evaluator. SPV tetap boleh
-            // MELIHAT tim di unit binaannya; izin isi dicek per komponen.
+            // Otorisasi: pegawai harus dalam scope evaluator. SPV/Finance/Manager
+            // tetap boleh MELIHAT pegawai di daftar scope-nya; izin isi dicek
+            // per komponen.
             if ($target && !$this->isInScope($me, $target)) {
-                if (!$isSpv || !in_array((int)$target->ID_AKUN, $allowedViewIds, true)) {
+                if (!($isSpv || $isViewAll) || !in_array((int)$target->ID_AKUN, $allowedViewIds, true)) {
                     $target = null;
                 }
             }
@@ -2008,7 +2012,7 @@ class PenilaianKPI extends BaseController
             'target'                => $target,
             'targetUnitName'        => $targetUnitName,
             'allowedComponentCodes' => $allowedComponentCodes,
-            'readOnlyView'          => $isSpv,
+            'readOnlyView'          => $isSpv || $isViewAll,
             'kpi'                   => $kpi,
             'detail_absen'          => $kpi['detail_absen'] ?? [],
             'skor_total2'           => $kpi['skor_total2'] ?? 0,
@@ -2039,16 +2043,22 @@ class PenilaianKPI extends BaseController
         $target = $this->AuthModel->getById($employeeId);
         if (!$target || !$this->isInScope($me, $target)) {
             $pesan = 'Pegawai tidak ditemukan / tidak dalam lingkup Anda.';
-            if ($target && $myRole === 40) {
-                $absenScope = new \App\Services\Kpi\AbsenEmployeeScopeService($this->db);
-                $unitIds = $absenScope->spvUnitIds($myId, $myUnit);
-                if (\App\Services\Kpi\AbsenEmployeeScopeService::canView(
-                    $myRole,
-                    $myId,
-                    (int)$target->ID_AKUN,
-                    (int)$target->ID_UNIT,
-                    $unitIds
-                )) {
+            if ($target) {
+                $bolehLihat = \App\Services\Kpi\AbsenEmployeeScopeService::isViewAllRole($myRole);
+
+                if (!$bolehLihat && $myRole === 40) {
+                    $absenScope = new \App\Services\Kpi\AbsenEmployeeScopeService($this->db);
+                    $unitIds = $absenScope->spvUnitIds($myId, $myUnit);
+                    $bolehLihat = \App\Services\Kpi\AbsenEmployeeScopeService::canView(
+                        $myRole,
+                        $myId,
+                        (int)$target->ID_AKUN,
+                        (int)$target->ID_UNIT,
+                        $unitIds
+                    );
+                }
+
+                if ($bolehLihat) {
                     $pesan = 'Anda hanya dapat melihat data pegawai ini, tidak dapat mengisi penilaian.';
                 }
             }

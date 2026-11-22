@@ -16,6 +16,9 @@ final class AbsenEmployeeScopeService
 {
     public const SPV_ROLE = 40;
 
+    /** Role yang boleh melihat seluruh pegawai lintas unit. */
+    public const VIEW_ALL_ROLES = [0, 34];
+
     /** @var \CodeIgniter\Database\BaseConnection */
     private $db;
 
@@ -66,15 +69,7 @@ final class AbsenEmployeeScopeService
     {
         $unitIds = $this->spvUnitIds($spvId, $unitSesi);
 
-        $builder = $this->db->table('akun a')
-            ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
-            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
-            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
-            ->where('a.STATUS_PEGAWAI', 1)
-            ->groupStart()
-            ->where('a.deleted', null)
-            ->orWhere('a.deleted', 0)
-            ->groupEnd();
+        $builder = $this->activeEmployeeBuilder();
 
         if ($unitIds === []) {
             $builder->where('a.ID_AKUN', $spvId);
@@ -90,6 +85,46 @@ final class AbsenEmployeeScopeService
             ->orderBy('a.NAMA_AKUN', 'ASC')
             ->get()
             ->getResultArray();
+    }
+
+    /**
+     * Apakah role ini boleh melihat seluruh pegawai lintas unit?
+     */
+    public static function isViewAllRole(int $role): bool
+    {
+        return in_array($role, self::VIEW_ALL_ROLES, true);
+    }
+
+    /**
+     * Seluruh pegawai aktif lintas unit (Finance/Manager), termasuk dirinya.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function daftarKaryawanSemua(): array
+    {
+        return $this->activeEmployeeBuilder()
+            ->orderBy('a.ID_UNIT', 'ASC')
+            ->orderBy('a.NAMA_AKUN', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    /**
+     * Builder dasar pegawai aktif yang belum difilter scope.
+     *
+     * @return \CodeIgniter\Database\BaseBuilder
+     */
+    private function activeEmployeeBuilder()
+    {
+        return $this->db->table('akun a')
+            ->select('a.ID_AKUN, a.ID_JABATAN, a.ID_UNIT, a.NAMA_AKUN, j.NAMA_JABATAN, u.NAMA_UNIT')
+            ->join('jabatan j', 'j.ID_JABATAN = a.ID_JABATAN', 'left')
+            ->join('unit u', 'u.idunit = a.ID_UNIT', 'left')
+            ->where('a.STATUS_PEGAWAI', 1)
+            ->groupStart()
+            ->where('a.deleted', null)
+            ->orWhere('a.deleted', 0)
+            ->groupEnd();
     }
 
     /**
