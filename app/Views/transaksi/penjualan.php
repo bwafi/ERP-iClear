@@ -796,8 +796,14 @@ $bankJson = json_encode(
             sisaEl.classList.toggle('is-ok', sisa === 0 && total > 0);
 
             if (total <= 0) {
-                setPayStatus('is-empty', 'solar:info-circle-outline',
-                    'Tambahkan produk untuk melihat ringkasan pembayaran.');
+                if (productRows().length > 0) {
+                    setPayStatus('is-ok', 'solar:check-circle-outline',
+                        'Diskon 100% — transaksi tanpa pembayaran.');
+                } else {
+                    setPayStatus('is-empty', 'solar:info-circle-outline',
+                        'Tambahkan produk untuk melihat ringkasan pembayaran.');
+                }
+
                 return;
             }
 
@@ -1474,6 +1480,17 @@ $bankJson = json_encode(
                 if (bankTidakValid) {
                     bankError.hidden = false;
                 }
+            }
+
+            const total = totalHarga();
+            const pembayaran = hitungPembayaran();
+
+            if (total <= 0 && productRows().length > 0 && pembayaran.total > 0) {
+                setPayStatus('is-due', 'solar:danger-triangle-outline',
+                    'Transaksi diskon 100% tidak memerlukan pembayaran. Kosongkan nominal.');
+                fokusPertama = fokusPertama || (metodeTerpilih() === 'transfer'
+                    ? bankContainer.querySelector('.bank-amount')
+                    : bayarInput);
             }
 
             if (fokusPertama) {

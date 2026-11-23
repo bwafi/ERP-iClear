@@ -34,6 +34,7 @@ use App\Models\ModelDetailBundle;
 use App\Models\ModelPembayaranBank;
 use App\Models\ModelRegion;
 use App\Services\Sales\PenjualanPaymentSplit;
+use App\Services\Sales\PenjualanSaleValidator;
 
 class Penjualan extends BaseController
 {
@@ -174,14 +175,10 @@ class Penjualan extends BaseController
     {
         $produkData = $this->request->getPost('produk');
         $total_penjualan = $this->sanitizeCurrency($this->request->getPost('total-harga'));
+        $diskon = $this->sanitizeCurrency($this->request->getPost('total-diskon'));
 
         if (!is_array($produkData) || $produkData === []) {
             session()->setFlashdata('gagal', 'Pilih minimal satu produk sebelum menyimpan penjualan.');
-            return redirect()->to(base_url('/penjualan'));
-        }
-
-        if ($total_penjualan <= 0) {
-            session()->setFlashdata('gagal', 'Total penjualan harus lebih besar dari nol.');
             return redirect()->to(base_url('/penjualan'));
         }
 
@@ -213,6 +210,25 @@ class Penjualan extends BaseController
             session()->setFlashdata('gagal', $pembayaran['errors'][0]);
             return redirect()->to(base_url('/penjualan'));
         }
+
+        // Total 0 sah bila diskon menutup seluruh nilai produk; validator juga
+        // menolak diskon di luar rincian, total negatif, dan pembayaran pada
+        // transaksi tanpa total. Nilai diskon/kotor dari server dipakai untuk
+        // header dan jurnal, bukan angka kiriman klien.
+        $periksa = (new PenjualanSaleValidator())->periksa(
+            $produkData,
+            $total_penjualan,
+            $diskon,
+            $pembayaran['total']
+        );
+
+        if ($periksa['errors'] !== []) {
+            session()->setFlashdata('gagal', $periksa['errors'][0]);
+            return redirect()->to(base_url('/penjualan'));
+        }
+
+        $gross_penjualan = $periksa['kotor'];
+        $diskon = $periksa['diskon'];
 
         $db = \Config\Database::connect();
         $db->transStart();
@@ -260,8 +276,6 @@ class Penjualan extends BaseController
         $no_invoice = 'SLL' . $useridunit . $ymd . $urutan;
         //end invoice otomatis
 
-        $total_penjualan = $this->sanitizeCurrency($this->request->getPost('total-harga'));
-        $diskon = $this->sanitizeCurrency($this->request->getPost('total-diskon'));
         $harus_dibayar = $total_penjualan;
         $waktu_penjualan = date('Y-m-d H:i:s');
 
@@ -366,10 +380,6 @@ class Penjualan extends BaseController
             // }
         }
 
-        $total_penjualan = array_sum(array_map(function ($p) {
-            return $this->sanitizeCurrency($p['harga']) * $p['jumlah'];
-        }, $produkData));
-
         $total_hp_ppn = 0;
         $total_hp_non_ppn = 0;
         $total_hp_second = 0;
@@ -391,7 +401,7 @@ class Penjualan extends BaseController
             $kode = $produk['kode'];
             $kenaPPN = isset($produk['ppn']) ? 1 : 0;
 
-            $proporsi = $subtotalAwal / ($total_penjualan ?: 1);
+            $proporsi = $subtotalAwal / ($gross_penjualan ?: 1);
 
             if (strpos($produkid, 'bundle') === 0) {
                 // barang bundle
@@ -561,7 +571,10 @@ class Penjualan extends BaseController
 
             session()->setFlashdata('sukses', 'Data Berhasil Di Simpan');
 
-            $sub_total_cetak = $this->sanitizeCurrency($total_penjualan) - $this->sanitizeCurrency($nilaidiskon) + $total_ppn;
+            // Struk menampilkan Subtotal = nilai kotor, Total Diskon, PPN, lalu
+            // Total = nilai bersih. Pola ini sama dengan reprint di
+            // Riwayat_Penjualan::cetak_struk.
+            $sub_total_cetak = $gross_penjualan;
             $kembalian_cetak = max(0, $this->sanitizeCurrency($total_bayar) - $this->sanitizeCurrency($total_penjualan));
             $dataCustomer = $this->PelangganModel->getById($id_pelanggan);
             if ($dataCustomer !== null) {
@@ -596,7 +609,7 @@ class Penjualan extends BaseController
                 'total_ppn' => $total_ppn,
                 'no_invoice' => $no_invoice,
                 'sub_total' => $sub_total_cetak,
-                'diskon' => $nilaidiskon,
+                'diskon' => $diskon,
                 'total' => $total_penjualan,
                 'bayar' => $total_bayar,
                 'kembalian' => $kembalian_cetak,

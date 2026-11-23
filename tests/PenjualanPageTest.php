@@ -237,4 +237,15 @@ final class PenjualanPageTest extends CIUnitTestCase
 
         $this->assertStringContainsString("angka.replace(/[^\\d]/g, '')", $html);
     }
+
+    public function testStatusDiskonPenuhDanPembayaranDitolakDiKlien(): void
+    {
+        $html = $this->render();
+
+        $this->assertStringContainsString('Diskon 100% — transaksi tanpa pembayaran.', $html);
+        $this->assertStringContainsString(
+            'Transaksi diskon 100% tidak memerlukan pembayaran. Kosongkan nominal.',
+            $html
+        );
+    }
 }
