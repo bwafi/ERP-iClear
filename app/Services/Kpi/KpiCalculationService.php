@@ -619,6 +619,7 @@ class KpiCalculationService
                 // DigitalMarketingKpiService::componentData (divisi/HO scope).
                 $targetInfo = [
                     "target" => $digitalData["target"],
+                    "target_toko" => $digitalData["target_toko"] ?? null,
                     "actual" => $digitalData["actual"],
                     "shortfall" => $digitalData["shortfall"],
                     "ho" => true,
@@ -669,6 +670,7 @@ class KpiCalculationService
                 // TARGET_CABANG membawa rincian per-cabang (unit_count/reached/cabang).
                 $targetInfo = [
                     "target" => $managerData["target"] ?? null,
+                    "target_toko" => $managerData["target_toko"] ?? null,
                     "actual" => $managerData["actual"] ?? null,
                     "shortfall" => $managerData["shortfall"] ?? null,
                     "unit_count" => $managerData["unit_count"] ?? null,
@@ -688,6 +690,7 @@ class KpiCalculationService
                 "achievement" => $achievementVal,
                 "weighted_score" => $weightedVal,
                 "target" => $targetInfo["target"] ?? null,
+                "target_toko" => $targetInfo["target_toko"] ?? null,
                 "actual" => $targetInfo["actual"] ?? null,
                 "shortfall" => $targetInfo["shortfall"] ?? null,
                 "unit_count" => $targetInfo["unit_count"] ?? null,

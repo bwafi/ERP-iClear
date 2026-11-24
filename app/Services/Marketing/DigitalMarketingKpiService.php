@@ -17,8 +17,9 @@ use App\Services\Konten\MultimediaKpiService;
  *
  * Komponen (total bobot 100):
  *   OMZET_GLOBAL         50  Global omzet perusahaan
- *                             Target = SUM(target_value OMSET_CABANG posisi 40)
- *                             Skor = actual / target × 100, cap 100.
+ *                             Target Toko (batas bawah) = SUM(OMSET_TOKO)
+ *                             Target HO (batas atas)    = SUM(OMSET_CABANG posisi 40)
+ *                             actual <= Toko → 0; >= HO → 100; selain itu linear.
  *   LEADS_QUALITY        15  Leads (sum Hasil Performa Ads) + Kualitas
  *                             (qualified / leads), avg, cap 100.
  *   CONVERSION           10  Closing CS / Lead CS (target % di kpi_targets).
@@ -75,16 +76,26 @@ class DigitalMarketingKpiService
     // ── Pure scoring (bisa diuji tanpa DB) ─────────────────────────
 
     /**
-     * Skor Omzet Global proporsional terhadap target, cap 100.
-     * Capai target = 100; target <= 0 → null.
+     * Skor Omzet Global bertingkat: 0 bila <= Target Toko, linear sampai 100
+     * di Target HO. Target HO <= 0 → null (target belum dikonfigurasi).
      */
-    public static function scoreOmzetGlobal(float $actual, float $target): ?float
+    public static function scoreOmzetGlobal(float $actual, float $targetToko, float $targetHo): ?float
     {
-        if ($target <= 0) {
+        if ($targetHo <= 0) {
             return null;
         }
+        if ($actual >= $targetHo) {
+            return 100.0;
+        }
+        if ($actual <= $targetToko) {
+            return 0.0;
+        }
+        $range = $targetHo - $targetToko;
+        if ($range <= 0) {
+            return 100.0;
+        }
 
-        return round(max(0.0, min($actual / $target * 100, 100.0)), 4);
+        return round(($actual - $targetToko) / $range * 100, 4);
     }
 
     /**
@@ -338,24 +349,45 @@ class DigitalMarketingKpiService
     }
 
     /**
-     * Target omzet global = SUM(target_value OMSET_CABANG position_id=40) unit non-trial.
+     * Target omzet global: batas bawah (toko) dan batas atas (HO) dari
+     * kpi_targets unit non-trial/non-HO.
+     *
+     * @return array{toko:float,ho:float}
      */
-    public function omzetTarget(string $context, ?string $date): float
+    public function omzetTargets(string $context, ?string $date): array
     {
-        $cabangComp = $this->db->table('kpi_components')->where('code', 'OMSET_CABANG')->get()->getRow();
-        if (!$cabangComp) {
-            return 0.0;
-        }
+        $targets = ['toko' => 0.0, 'ho' => 0.0];
+        $units   = $this->salesUnits();
 
-        $target = 0.0;
-        foreach ($this->salesUnits() as $unit) {
-            $row = $this->targetModel->getTargetByKpiAndUnit((int)$cabangComp->id, $unit, $context, $date, 40);
-            if ($row) {
-                $target += (float)$row->target_value;
+        $tokoComp = $this->db->table('kpi_components')->where('code', 'OMSET_TOKO')->get()->getRow();
+        if ($tokoComp) {
+            foreach ($units as $unit) {
+                $row = $this->targetModel->getTargetByKpiAndUnit((int) $tokoComp->id, $unit, $context, $date);
+                if ($row) {
+                    $targets['toko'] += (float) $row->target_value;
+                }
             }
         }
 
-        return round($target, 2);
+        $cabangComp = $this->db->table('kpi_components')->where('code', 'OMSET_CABANG')->get()->getRow();
+        if ($cabangComp) {
+            foreach ($units as $unit) {
+                $row = $this->targetModel->getTargetByKpiAndUnit((int) $cabangComp->id, $unit, $context, $date, 40);
+                if ($row) {
+                    $targets['ho'] += (float) $row->target_value;
+                }
+            }
+        }
+
+        return ['toko' => round($targets['toko'], 2), 'ho' => round($targets['ho'], 2)];
+    }
+
+    /**
+     * Target omzet global = batas atas (Σ target HO).
+     */
+    public function omzetTarget(string $context, ?string $date): float
+    {
+        return $this->omzetTargets($context, $date)['ho'];
     }
 
     // ── Achievement per komponen (engine existing) ─────────────────
@@ -377,12 +409,13 @@ class DigitalMarketingKpiService
                 foreach ($this->salesUnits() as $unit) {
                     $actual += (float)$omset->calculate(0, $unit, $month, $year);
                 }
-                $target = $this->omzetTarget($context, $date);
+                $targets = $this->omzetTargets($context, $date);
                 return [
-                    'achievement' => self::scoreOmzetGlobal((float)$actual, $target),
-                    'target'      => $target,
+                    'achievement' => self::scoreOmzetGlobal((float)$actual, $targets['toko'], $targets['ho']),
+                    'target'      => $targets['ho'],
+                    'target_toko' => $targets['toko'],
                     'actual'      => round($actual, 2),
-                    'shortfall'   => round(max($target - $actual, 0), 2),
+                    'shortfall'   => round(max($targets['ho'] - $actual, 0), 2),
                     'source'      => 'Omzet Global ERP (penjualan)',
                 ];
 

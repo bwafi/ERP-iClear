@@ -9,7 +9,7 @@ use App\Services\Konten\MultimediaKpiService;
  *
  * Rumus di DigitalMarketingKpiService dipisah ke static pure method agar bisa
  * diuji lintas environment SQL. Berikut verifikasi boundary requirement:
- *   - Omzet Global: proporsional terhadap Target HO, capai target = 100.
+ *   - Omzet Global: 0 di bawah target toko, linear sampai target HO, capai HO = 100.
  *   - Leads & Kualitas: AVERAGE(achievement jumlah leads, ratio qualified),
  *     cap 100, data absent = 0 (bukan 100). Biasanya lead dicatat 0.
  *   - Conversion: target % di kpi_targets (default 30), lead 0 → null.
@@ -26,22 +26,40 @@ final class DigitalMarketingKpiTest extends CIUnitTestCase
 {
     // ── Omzet Global ───────────────────────────────────────────────
 
-    public function testOmzetGlobalProportionalToTarget(): void
+    public function testOmzetGlobalZeroAtOrBelowStoreTarget(): void
     {
-        $this->assertSame(50.0, DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 200_000_000));
-        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(0, 200_000_000));
-        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(-10_000_000, 200_000_000));
+        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(250_000_000, 300_000_000, 338_000_000));
+        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(300_000_000, 300_000_000, 338_000_000));
+        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(-10_000_000, 300_000_000, 338_000_000));
     }
 
-    public function testOmzetGlobalAtOrAboveTargetIsHundred(): void
+    public function testOmzetGlobalLinearBetweenStoreAndHo(): void
     {
-        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(200_000_000, 200_000_000));
-        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(250_000_000, 200_000_000));
+        $this->assertSame(25.0, DigitalMarketingKpiService::scoreOmzetGlobal(309_500_000, 300_000_000, 338_000_000));
+        $this->assertSame(50.0, DigitalMarketingKpiService::scoreOmzetGlobal(319_000_000, 300_000_000, 338_000_000));
     }
 
-    public function testOmzetGlobalInvalidTargetReturnsNull(): void
+    public function testOmzetGlobalZeroStoreTargetFallsBackToHoRatio(): void
     {
-        $this->assertNull(DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 0.0));
+        $this->assertSame(50.0, DigitalMarketingKpiService::scoreOmzetGlobal(169_000_000, 0.0, 338_000_000));
+    }
+
+    public function testOmzetGlobalAtOrAboveHoIsHundred(): void
+    {
+        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(338_000_000, 300_000_000, 338_000_000));
+        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(400_000_000, 300_000_000, 338_000_000));
+    }
+
+    public function testOmzetGlobalStoreTargetAtOrAboveHoCapsAtHo(): void
+    {
+        $this->assertSame(0.0, DigitalMarketingKpiService::scoreOmzetGlobal(337_000_000, 338_000_000, 338_000_000));
+        $this->assertSame(100.0, DigitalMarketingKpiService::scoreOmzetGlobal(338_000_000, 338_000_000, 338_000_000));
+    }
+
+    public function testOmzetGlobalInvalidHoReturnsNull(): void
+    {
+        $this->assertNull(DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 0.0, 0.0));
+        $this->assertNull(DigitalMarketingKpiService::scoreOmzetGlobal(100_000_000, 300_000_000, 0.0));
     }
 
     // ── Leads & Kualitas Leads ─────────────────────────────────────

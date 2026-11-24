@@ -587,6 +587,9 @@
                                             <?php else: ?>
                                                 <span class="badge bg-secondary-subtle text-secondary ms-1">Non HO</span>
                                             <?php endif; ?>
+                                            <?php if (!empty($kpi['target_toko'])): ?>
+                                                <span class="d-block text-muted small">min. Rp <?= number_format((float)$kpi['target_toko'], 0, ',', '.') ?></span>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     <?php elseif ($kpi['unit_count'] !== null): ?>
                                         <span class="fw-medium text-dark"><?= $kpi['unit_count'] ?> Cabang</span>

@@ -87,12 +87,15 @@ final class KpiOmsetTrialUnitTest extends CIUnitTestCase
             ['idunit' => self::UNIT_HO, 'NAMA_UNIT' => 'Head Office', 'is_trial' => 0],
         ]);
 
-        $this->db->table('kpi_components')->insert([
-            'id' => self::COMPONENT, 'code' => 'OMSET_CABANG', 'name' => 'Omset Cabang',
+        $this->db->table('kpi_components')->insertBatch([
+            ['id' => self::COMPONENT, 'code' => 'OMSET_CABANG', 'name' => 'Omset Cabang'],
+            ['id' => 9002, 'code' => 'OMSET_TOKO', 'name' => 'Omset Toko'],
         ]);
         $this->db->table('kpi_targets')->insertBatch([
             ['kpi_component_id' => self::COMPONENT, 'unit_id' => self::UNIT_PROB, 'position_id' => 40, 'context' => 'default', 'target_value' => 100000000, 'effective_from' => '2024-01-01'],
             ['kpi_component_id' => self::COMPONENT, 'unit_id' => self::UNIT_GENTENG, 'position_id' => 40, 'context' => 'default', 'target_value' => 999000000, 'effective_from' => '2024-01-01'],
+            ['kpi_component_id' => 9002, 'unit_id' => self::UNIT_PROB, 'position_id' => null, 'context' => 'default', 'target_value' => 60000000, 'effective_from' => '2024-01-01'],
+            ['kpi_component_id' => 9002, 'unit_id' => self::UNIT_GENTENG, 'position_id' => null, 'context' => 'default', 'target_value' => 999000000, 'effective_from' => '2024-01-01'],
         ]);
 
         // Kedua cabang melampaui target: trial hanya boleh diabaikan di omzet.
@@ -123,6 +126,14 @@ final class KpiOmsetTrialUnitTest extends CIUnitTestCase
         $target = (new DigitalMarketingKpiService())->omzetTarget('default', '2026-11-15');
 
         $this->assertSame(100000000.0, $target, 'target unit trial tidak boleh masuk omzet global');
+    }
+
+    public function testTargetOmzetTokoDanHoMembuangUnitTrial(): void
+    {
+        $targets = (new DigitalMarketingKpiService())->omzetTargets('default', '2026-11-15');
+
+        $this->assertSame(60000000.0, $targets['toko'], 'target toko unit trial tidak boleh masuk');
+        $this->assertSame(100000000.0, $targets['ho'], 'target HO unit trial tidak boleh masuk');
     }
 
     public function testPencapaianCabangManagerHanyaMenghitungCabangNonTrial(): void

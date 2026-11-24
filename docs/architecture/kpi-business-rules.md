@@ -35,7 +35,7 @@ Berlaku untuk jabatan **43 "Kepala Divisi"** (unit HO 50). Engine: `KpiCalculati
 
 | Komponen | Bobot | Rumus ringkas | Sumber data |
 |---|---:|---|---|
-| `OMZET_GLOBAL` | 50 | `min(actual / Σ target OMSET_CABANG posisi 40 unit non-trial × 100, 100)`; target ≤ 0 → null | Penjualan unit non-trial (gross profit) |
+| `OMZET_GLOBAL` | 50 | 0 bila actual ≤ Σ target `OMSET_TOKO` (posisi NULL) unit non-trial; linear sampai 100 di Σ target `OMSET_CABANG` posisi 40 unit non-trial; ≥ Σ target HO → 100; Σ target HO ≤ 0 → null | Penjualan unit non-trial (gross profit) |
 | `LEADS_QUALITY` | 15 | rata-rata `min(leads / 3.000 × 100, 100)` dan `min(qualified / leads × 100, 100)`; leads 0 → 0 | `marketing_ads_performance` |
 | `CONVERSION` | 10 | `min((closing CS / lead CS × 100) / 30% × 100, 100)`; lead 0 → null | Rekap harian CS + prospek closing |
 | `CPL` | 10 | rata-rata `min(250.000 / CPL Datang × 100, 100)` dan `min(250.000 / CPL Closing × 100, 100)`; penyebut 0 → null | Budget ads, datang & closing CS |
