@@ -16,9 +16,10 @@ use App\Models\ModelKpiItMetric;
  *
  * Data mentah bulanan dikumpulkan `spark it:kpi-sync` (ItKpiSyncService) dan
  * disimpan sebagai snapshot `kpi_it_metrics`, sehingga halaman penilaian tidak
- * memanggil GitHub/UptimeRobot dan skor bulan lalu tidak berubah.
+ * memanggil GitHub dan skor bulan lalu tidak berubah. Uptime dibaca dari ledger
+ * `it:uptime-check`, bukan API pihak ketiga.
  *
- * Komponen tanpa data (belum sync, API gagal, key belum diisi) bernilai null
+ * Komponen tanpa data (belum sync, ledger kosong, API gagal) bernilai null
  * dan dikecualikan dari total — BUKAN 0. Hari tanpa entri backup dihitung
  * gagal, sesuai aturan bisnis backup harian.
  */

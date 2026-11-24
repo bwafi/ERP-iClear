@@ -14,26 +14,22 @@ use Throwable;
  * Sumber:
  *   - commit `feat`/`fix`/`docs` dari GitHub (`GITHUB_REPOS`);
  *   - hari backup sukses dari `backups/history.jsonl`;
- *   - hari uptime OK dari UptimeRobot (`UPTIMEROBOT_API_KEY`).
+ *   - hari uptime OK dari ledger `backups/uptime.jsonl` yang diisi
+ *     `it:uptime-check` (cron 3x sehari).
  *
  * Hasil disimpan sebagai snapshot `kpi_it_metrics` per bulan sehingga engine
  * KPI tidak melakukan panggilan jaringan dan angka bulan lalu stabil.
  *
- * Uptime memakai `custom_uptime_ranges` per hari, bukan log 24 jam, supaya
- * tetap bisa menghitung bulan penuh pada paket UptimeRobot yang menyimpan log
- * pendek. Hari dianggap gagal bila downtime > 15 menit (900 detik).
+ * Uptime dinilai per hari: satu cek sukses sudah cukup membuat hari itu OK,
+ * semua cek gagal membuat hari gagal, dan hari tanpa cek setelah pengecekan
+ * pernah berjalan juga gagal. Hari sebelum baris ledger pertama tidak dihitung.
  */
 class ItKpiSyncService
 {
     private const GITHUB_API = 'https://api.github.com';
 
-    private const UPTIME_API = 'https://api.uptimerobot.com/v2/getMonitors';
-
     /** Batas aman pagination GitHub per repo. */
     private const MAX_PAGES = 50;
-
-    /** Downtime maksimal yang masih dianggap hari OK. */
-    public const MAX_DOWNTIME_SECONDS = 900;
 
     /** @var array<string,mixed> */
     private $config;
@@ -43,20 +39,17 @@ class ItKpiSyncService
 
     /**
      * @param array<string,mixed> $config github_token, github_repos, github_authors,
-     *                                    uptime_key, uptime_monitors, backup_dir,
-     *                                    timezone, http (callable untuk test)
+     *                                    backup_dir, timezone, http (callable untuk test)
      */
     public function __construct(array $config = [])
     {
         $this->config = array_merge([
-            'github_token'    => '',
-            'github_repos'    => '',
-            'github_authors'  => '',
-            'uptime_key'      => '',
-            'uptime_monitors' => '',
-            'backup_dir'      => (defined('ROOTPATH') ? ROOTPATH : getcwd() . DIRECTORY_SEPARATOR) . 'backups',
-            'timezone'        => 'Asia/Jakarta',
-            'http'            => null,
+            'github_token'   => '',
+            'github_repos'   => '',
+            'github_authors' => '',
+            'backup_dir'     => (defined('ROOTPATH') ? ROOTPATH : getcwd() . DIRECTORY_SEPARATOR) . 'backups',
+            'timezone'       => 'Asia/Jakarta',
+            'http'           => null,
         ], $config);
 
         $this->http = is_callable($this->config['http']) ? $this->config['http'] : null;
@@ -138,29 +131,26 @@ class ItKpiSyncService
         $metrics['restore_ok'] = $restore === null ? null : ($restore ? 1 : 0);
 
         // ── Uptime harian ─────────────────────────────────────────
-        $uptimeKey = trim((string) $this->config['uptime_key']);
-        if ($uptimeKey === '') {
-            $metrics['detail']['uptime'] = [
-                'status' => 'skipped',
-                'reason' => 'UPTIMEROBOT_API_KEY belum diisi',
-            ];
-        } elseif ($days === []) {
-            $metrics['detail']['uptime'] = ['status' => 'skipped', 'reason' => 'Belum ada hari selesai'];
-        } else {
-            try {
-                $uptime = $this->uptimeStats($days, $tz);
+        $uptimeFile = rtrim((string) $this->config['backup_dir'], '/\\')
+            . DIRECTORY_SEPARATOR . 'uptime.jsonl';
+
+        try {
+            $uptime = self::uptimeSummary($uptimeFile, $days, $tz->getName());
+
+            if ($uptime['start'] !== null) {
                 $metrics['uptime_ok_days']      = $uptime['ok_days'];
                 $metrics['uptime_checked_days'] = $uptime['checked_days'];
-                $metrics['detail']['uptime']    = [
-                    'status'         => 'ok',
-                    'monitors'       => $uptime['monitor_count'],
-                    'failed_indexes' => $uptime['failed_indexes'],
-                    'days'           => $uptime['days'],
-                ];
-            } catch (Throwable $e) {
-                $metrics['errors'][] = 'Uptime: ' . $e->getMessage();
-                $metrics['detail']['uptime'] = ['status' => 'error', 'message' => $e->getMessage()];
             }
+
+            $metrics['detail']['uptime'] = [
+                'status'      => $uptime['start'] === null ? 'no-ledger' : 'ok',
+                'file'        => $uptimeFile,
+                'start'       => $uptime['start'],
+                'failed_days' => $uptime['failed_days'],
+            ];
+        } catch (Throwable $e) {
+            $metrics['errors'][] = 'Uptime: ' . $e->getMessage();
+            $metrics['detail']['uptime'] = ['status' => 'error', 'message' => $e->getMessage()];
         }
 
         return $metrics;
@@ -436,153 +426,91 @@ class ItKpiSyncService
         return $repos;
     }
 
-    /* ═══════════════════════ UptimeRobot ═══════════════════════ */
+    /* ═══════════════════════ Uptime ═══════════════════════ */
 
     /**
+     * Ringkas ledger cek uptime menjadi hari OK / hari diperiksa.
+     *
+     * Hari OK = minimal satu baris `ok` pada hari itu. Hari tanpa baris apa pun
+     * setelah baris pertama di ledger dihitung gagal (server mati total tidak
+     * boleh lolos). Hari sebelum baris pertama tidak dihitung: monitoring belum
+     * berjalan, jadi bukan kegagalan tim.
+     *
      * @param list<string> $days
      *
-     * @return array<string,mixed>
+     * @return array{ok_days:int,checked_days:int,failed_days:list<string>,start:?string}
      */
-    private function uptimeStats(array $days, DateTimeZone $tz): array
+    public static function uptimeSummary(string $ledgerFile, array $days, string $timezone): array
     {
-        $ranges = [];
-        foreach ($days as $day) {
-            $start    = new DateTimeImmutable($day . ' 00:00:00', $tz);
-            $ranges[] = $start->getTimestamp() . '_' . ($start->getTimestamp() + 86399);
-        }
-
-        $form = [
-            'api_key'              => (string) $this->config['uptime_key'],
-            'format'               => 'json',
-            'custom_uptime_ranges' => implode('-', $ranges),
+        $empty = [
+            'ok_days'      => 0,
+            'checked_days' => 0,
+            'failed_days'  => [],
+            'start'        => null,
         ];
 
-        $monitors = trim((string) $this->config['uptime_monitors']);
-        if ($monitors !== '') {
-            $form['monitors'] = $monitors;
+        if (! is_file($ledgerFile)) {
+            return $empty;
         }
 
-        $response = $this->request(
-            'POST',
-            self::UPTIME_API,
-            ['Content-Type: application/x-www-form-urlencoded'],
-            http_build_query($form)
-        );
+        $tz      = self::safeTimezone($timezone);
+        $okByDay = [];
+        $start   = null;
+        $lines   = file($ledgerFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
 
-        $status = (int) $response['status'];
-        if ($status < 200 || $status >= 300) {
-            throw new RuntimeException('HTTP ' . $status . ': ' . substr(trim((string) $response['body']), 0, 200));
-        }
-
-        $data = json_decode((string) $response['body'], true);
-        if (! is_array($data)) {
-            throw new RuntimeException('Respons UptimeRobot bukan JSON.');
-        }
-        if (($data['stat'] ?? '') !== 'ok') {
-            $message = $data['error']['message'] ?? 'stat bukan ok';
-            throw new RuntimeException((string) $message);
-        }
-
-        $monitors = isset($data['monitors']) && is_array($data['monitors']) ? $data['monitors'] : [];
-        $parsed   = self::parseUptimeRatios($monitors, count($days));
-
-        return $parsed + ['monitor_count' => count($monitors)];
-    }
-
-    /**
-     * Satu nilai ratio per hari per monitor. Hari dinilai dari monitor terburuk.
-     *
-     * @param list<array<string,mixed>> $monitors
-     *
-     * @return array{ok_days:int,checked_days:int,failed_indexes:list<int>,days:list<array<string,mixed>>}
-     */
-    public static function parseUptimeRatios(array $monitors, int $expectedRanges): array
-    {
-        $values = array_fill(0, max($expectedRanges, 0), []);
-
-        foreach ($monitors as $monitor) {
-            $raw = (string) ($monitor['custom_uptime_ratio'] ?? '');
-            if ($raw === '') {
+        foreach ($lines as $line) {
+            $row = json_decode($line, true);
+            if (! is_array($row)) {
                 continue;
             }
 
-            foreach (self::parseRatioSeries($raw) as $index => $ratio) {
-                if ($index >= $expectedRanges) {
-                    break;
-                }
-                if ($ratio >= 0) {
-                    $values[$index][] = $ratio;
-                }
+            $at = (string) ($row['at'] ?? '');
+            if ($at === '') {
+                continue;
             }
+
+            try {
+                $day = (new DateTimeImmutable($at))->setTimezone($tz)->format('Y-m-d');
+            } catch (Throwable $e) {
+                continue;
+            }
+
+            if ($start === null || $day < $start) {
+                $start = $day;
+            }
+
+            if (($row['ok'] ?? false) === true) {
+                $okByDay[$day] = true;
+            }
+        }
+
+        if ($start === null) {
+            return $empty;
         }
 
         $ok      = 0;
         $checked = 0;
         $failed  = [];
-        $days    = [];
 
-        foreach ($values as $index => $ratios) {
-            if ($ratios === []) {
+        foreach ($days as $day) {
+            if ($day < $start) {
                 continue;
             }
 
             $checked++;
-            $worst    = min($ratios);
-            $downtime = self::downtimeSecondsFromRatio($worst);
-            $isOk     = $downtime <= self::MAX_DOWNTIME_SECONDS;
-
-            if ($isOk) {
+            if (isset($okByDay[$day])) {
                 $ok++;
             } else {
-                $failed[] = $index;
+                $failed[] = $day;
             }
-
-            $days[] = [
-                'index'            => $index,
-                'ratio'            => round($worst, 3),
-                'downtime_seconds' => (int) round($downtime),
-                'ok'               => $isOk,
-            ];
         }
 
         return [
-            'ok_days'        => $ok,
-            'checked_days'   => $checked,
-            'failed_indexes' => $failed,
-            'days'           => $days,
+            'ok_days'      => $ok,
+            'checked_days' => $checked,
+            'failed_days'  => $failed,
+            'start'        => $start,
         ];
-    }
-
-    public static function downtimeSecondsFromRatio(float $ratio): float
-    {
-        $ratio = max(0.0, min($ratio, 100.0));
-
-        return ((100.0 - $ratio) / 100.0) * 86400.0;
-    }
-
-    /**
-     * UptimeRobot memisahkan ratio dengan '-' dan memakai '-' juga untuk nilai
-     * negatif ("-1.000--1.000"). explode() menghasilkan token kosong sebelum
-     * nilai negatif, dan token kosong itulah penanda tanda minus.
-     *
-     * @return list<float>
-     */
-    private static function parseRatioSeries(string $raw): array
-    {
-        $values  = [];
-        $negative = false;
-
-        foreach (explode('-', $raw) as $part) {
-            if ($part === '') {
-                $negative = true;
-                continue;
-            }
-
-            $values[] = ($negative ? -1.0 : 1.0) * (float) $part;
-            $negative = false;
-        }
-
-        return $values;
     }
 
     /* ═══════════════════════ Backup & restore ═══════════════════════ */

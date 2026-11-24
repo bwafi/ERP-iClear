@@ -16,7 +16,8 @@ use Throwable;
  *   php spark it:kpi-sync --month=2026-11
  *   php spark it:kpi-sync --month=2026-11 --restore=failed
  *
- * Sumber: GitHub commits (feat/fix/docs), backups/history.jsonl, UptimeRobot.
+ * Sumber: GitHub commits (feat/fix/docs), backups/history.jsonl, dan ledger
+ * backups/uptime.jsonl dari `it:uptime-check`.
  * Aman dijalankan berulang (upsert per periode). Cron harian disarankan agar
  * bulan berjalan selalu segar.
  */
@@ -60,13 +61,11 @@ class ItKpiSync extends BaseCommand
         );
 
         $service = new ItKpiSyncService([
-            'github_token'    => (string) env('GITHUB_TOKEN'),
-            'github_repos'    => (string) env('GITHUB_REPOS'),
-            'github_authors'  => (string) env('GITHUB_AUTHORS'),
-            'uptime_key'      => (string) env('UPTIMEROBOT_API_KEY'),
-            'uptime_monitors' => (string) env('UPTIMEROBOT_MONITOR_IDS'),
-            'backup_dir'      => $backupDir,
-            'timezone'        => $timezone->getName(),
+            'github_token'   => (string) env('GITHUB_TOKEN'),
+            'github_repos'   => (string) env('GITHUB_REPOS'),
+            'github_authors' => (string) env('GITHUB_AUTHORS'),
+            'backup_dir'     => $backupDir,
+            'timezone'       => $timezone->getName(),
         ]);
 
         $restore = CLI::getOption('restore');
@@ -118,8 +117,8 @@ class ItKpiSync extends BaseCommand
         if (trim((string) env('GITHUB_REPOS')) === '') {
             CLI::write('  catatan     : GITHUB_REPOS kosong, commit tidak dihitung.', 'yellow');
         }
-        if (trim((string) env('UPTIMEROBOT_API_KEY')) === '') {
-            CLI::write('  catatan     : UPTIMEROBOT_API_KEY kosong, uptime N/A.', 'yellow');
+        if (($result['detail']['uptime']['status'] ?? '') === 'no-ledger') {
+            CLI::write('  catatan     : ledger uptime kosong, uptime N/A (jalankan it:uptime-check).', 'yellow');
         }
 
         if (! empty($result['errors'])) {

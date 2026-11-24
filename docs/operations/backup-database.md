@@ -131,6 +131,10 @@ Komponen **Backup** dinilai dari `backups/history.jsonl`:
 - file histori yang belum ada sama sekali membuat komponen N/A (bukan 0);
 - uji restore bulanan yang gagal membatasi skor maksimal 50.
 
+Backup hanya satu dari lima komponen KPI Team IT. Rangkaian lengkapnya —
+commit GitHub, cek uptime terjadwal, uji restore, cron, dan troubleshooting —
+ada di `docs/operations/kpi-it.md`.
+
 ## Catatan development (Docker)
 
 Container aplikasi dev tidak memasang `mysql-client`, jadi `spark backup:db`

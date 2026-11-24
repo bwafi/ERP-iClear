@@ -9,8 +9,8 @@ use CodeIgniter\Database\Migration;
  *
  * Dipisahkan dari kpi_evaluations karena datanya bukan penilaian manual:
  * satu baris per bulan berisi hasil sinkronisasi commit GitHub, hari backup,
- * dan hari uptime. Kolom metric nullable supaya sumber yang gagal/belum
- * tersedia tampil N/A, bukan 0.
+ * dan hari uptime (dari ledger cek terjadwal). Kolom metric nullable supaya
+ * sumber yang gagal/belum tersedia tampil N/A, bukan 0.
  */
 class CreateItKpiMetrics extends Migration
 {

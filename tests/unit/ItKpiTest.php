@@ -176,39 +176,109 @@ final class ItKpiTest extends CIUnitTestCase
         $this->assertSame([], $summary['failed_days']);
     }
 
-    public function testUptimeGagalHanyaBilaDowntimeLebihDariLimaBelasMenit(): void
+    public function testUptimeSatuCekSuksesCukupUntukHariOk(): void
     {
-        // 99.0% = 14,4 menit (OK), 98.0% = 28,8 menit (gagal).
-        $result = ItKpiSyncService::parseUptimeRatios([
-            ['custom_uptime_ratio' => '100.000-99.000-98.000'],
-        ], 3);
+        $dir = $this->tempDir();
+        $this->writeLines($dir . '/uptime.jsonl', [
+            '{"at":"2026-11-20T02:00:00+07:00","ok":false,"http":503,"ms":20,"url":"u","error":null}',
+            '{"at":"2026-11-20T08:00:00+07:00","ok":true,"http":200,"ms":80,"url":"u","error":null}',
+            '{"at":"2026-11-20T22:00:00+07:00","ok":false,"http":0,"ms":0,"url":"u","error":"timeout"}',
+        ]);
 
-        $this->assertSame(2, $result['ok_days']);
-        $this->assertSame(3, $result['checked_days']);
-        $this->assertSame([2], $result['failed_indexes']);
+        $summary = ItKpiSyncService::uptimeSummary($dir . '/uptime.jsonl', ['2026-11-20'], 'Asia/Jakarta');
+
+        $this->assertSame(1, $summary['ok_days']);
+        $this->assertSame(1, $summary['checked_days']);
+        $this->assertSame([], $summary['failed_days']);
+        $this->assertSame('2026-11-20', $summary['start']);
     }
 
-    public function testUptimeMemakaiMonitorTerburuk(): void
+    public function testUptimeSemuaCekGagalMenjadiHariGagal(): void
     {
-        $result = ItKpiSyncService::parseUptimeRatios([
-            ['custom_uptime_ratio' => '100.000-100.000'],
-            ['custom_uptime_ratio' => '100.000-50.000'],
-        ], 2);
+        $dir = $this->tempDir();
+        $this->writeLines($dir . '/uptime.jsonl', [
+            '{"at":"2026-11-20T02:00:00+07:00","ok":false,"http":503,"ms":20,"url":"u","error":null}',
+            '{"at":"2026-11-20T08:00:00+07:00","ok":false,"http":0,"ms":0,"url":"u","error":"timeout"}',
+        ]);
 
-        $this->assertSame(1, $result['ok_days']);
-        $this->assertSame(2, $result['checked_days']);
-        $this->assertSame([1], $result['failed_indexes']);
+        $summary = ItKpiSyncService::uptimeSummary($dir . '/uptime.jsonl', ['2026-11-20'], 'Asia/Jakarta');
+
+        $this->assertSame(0, $summary['ok_days']);
+        $this->assertSame(1, $summary['checked_days']);
+        $this->assertSame(['2026-11-20'], $summary['failed_days']);
     }
 
-    public function testUptimeTanpaRatioValidTidakDihitung(): void
+    public function testUptimeHariSebelumCekPertamaTidakDihitung(): void
     {
-        $result = ItKpiSyncService::parseUptimeRatios([
-            ['custom_uptime_ratio' => '-1.000--1.000'],
-        ], 2);
+        $dir = $this->tempDir();
+        $this->writeLines($dir . '/uptime.jsonl', [
+            '{"at":"2026-11-20T08:00:00+07:00","ok":true,"http":200,"ms":80,"url":"u","error":null}',
+        ]);
 
-        $this->assertSame(0, $result['ok_days']);
-        $this->assertSame(0, $result['checked_days']);
-        $this->assertSame([], $result['failed_indexes']);
+        $summary = ItKpiSyncService::uptimeSummary(
+            $dir . '/uptime.jsonl',
+            ['2026-11-18', '2026-11-19', '2026-11-20'],
+            'Asia/Jakarta'
+        );
+
+        $this->assertSame('2026-11-20', $summary['start']);
+        $this->assertSame(1, $summary['checked_days']);
+        $this->assertSame(1, $summary['ok_days']);
+        $this->assertSame([], $summary['failed_days']);
+    }
+
+    public function testUptimeHariTanpaCekSetelahMulaiDihitungGagal(): void
+    {
+        $dir = $this->tempDir();
+        $this->writeLines($dir . '/uptime.jsonl', [
+            '{"at":"2026-11-20T08:00:00+07:00","ok":true,"http":200,"ms":80,"url":"u","error":null}',
+        ]);
+
+        $summary = ItKpiSyncService::uptimeSummary(
+            $dir . '/uptime.jsonl',
+            ['2026-11-20', '2026-11-21', '2026-11-22'],
+            'Asia/Jakarta'
+        );
+
+        $this->assertSame(3, $summary['checked_days']);
+        $this->assertSame(1, $summary['ok_days']);
+        $this->assertSame(['2026-11-21', '2026-11-22'], $summary['failed_days']);
+    }
+
+    public function testUptimeTanpaLedgerMenghasilkanNull(): void
+    {
+        $dir = $this->tempDir();
+
+        $summary = ItKpiSyncService::uptimeSummary($dir . '/uptime.jsonl', ['2026-11-20'], 'Asia/Jakarta');
+
+        $this->assertSame(0, $summary['checked_days']);
+        $this->assertNull($summary['start']);
+
+        $service = new ItKpiSyncService([
+            'backup_dir' => $dir,
+            'timezone'   => 'Asia/Jakarta',
+        ]);
+
+        $result = $service->collect(2026, 10, new DateTimeImmutable('2026-11-24 10:00:00', new DateTimeZone('Asia/Jakarta')));
+
+        $this->assertNull($result['uptime_ok_days']);
+        $this->assertNull($result['uptime_checked_days']);
+        $this->assertSame('no-ledger', $result['detail']['uptime']['status']);
+    }
+
+    public function testUptimeBarisRusakDiabaikan(): void
+    {
+        $dir = $this->tempDir();
+        $this->writeLines($dir . '/uptime.jsonl', [
+            'bukan json',
+            '{"at":"2026-11-20T08:00:00+07:00","ok":true,"http":200,"ms":80,"url":"u","error":null}',
+            '{"ok":true}',
+        ]);
+
+        $summary = ItKpiSyncService::uptimeSummary($dir . '/uptime.jsonl', ['2026-11-20'], 'Asia/Jakarta');
+
+        $this->assertSame(1, $summary['checked_days']);
+        $this->assertSame(1, $summary['ok_days']);
     }
 
     public function testRecordRestoreDitulisDanDibacaKembali(): void
@@ -283,6 +353,19 @@ final class ItKpiTest extends CIUnitTestCase
             '{"at":"2026-10-20T10:00:00+07:00","status":"ok"}',
         ]);
 
+        $uptime = [];
+        foreach ($days as $index => $day) {
+            $uptime[] = json_encode([
+                'at'    => $day . 'T08:00:00+07:00',
+                'ok'    => $index !== 5,
+                'http'  => $index === 5 ? 503 : 200,
+                'ms'    => 80,
+                'url'   => 'https://erp.icleargroup.id/login',
+                'error' => null,
+            ]);
+        }
+        $this->writeLines($dir . '/uptime.jsonl', $uptime);
+
         $http = function (string $method, string $url, array $headers, ?string $body): array {
             if (strpos($url, 'api.github.com') !== false) {
                 return ['status' => 200, 'body' => json_encode([
@@ -293,28 +376,16 @@ final class ItKpiTest extends CIUnitTestCase
                 ])];
             }
 
-            if (strpos($url, 'uptimerobot.com') !== false) {
-                $ratios    = array_fill(0, 31, '100.000');
-                $ratios[5] = '90.000'; // satu hari downtime 144 menit
-
-                return ['status' => 200, 'body' => json_encode([
-                    'stat'     => 'ok',
-                    'monitors' => [['custom_uptime_ratio' => implode('-', $ratios)]],
-                ])];
-            }
-
             return ['status' => 404, 'body' => '{}'];
         };
 
         $service = new ItKpiSyncService([
-            'github_token'    => 'token',
-            'github_repos'    => 'bwafi/ERP-iClear:main, bwafi/CrmIclear:main, bwafi/iClear:main',
-            'github_authors'  => 'dev@example.com',
-            'uptime_key'      => 'ur-key',
-            'uptime_monitors' => '1-2',
-            'backup_dir'      => $dir,
-            'timezone'        => 'Asia/Jakarta',
-            'http'            => $http,
+            'github_token'   => 'token',
+            'github_repos'   => 'bwafi/ERP-iClear:main, bwafi/CrmIclear:main, bwafi/iClear:main',
+            'github_authors' => 'dev@example.com',
+            'backup_dir'     => $dir,
+            'timezone'       => 'Asia/Jakarta',
+            'http'           => $http,
         ]);
 
         $result = $service->collect(2026, 10, new DateTimeImmutable('2026-11-24 10:00:00', new DateTimeZone('Asia/Jakarta')));
