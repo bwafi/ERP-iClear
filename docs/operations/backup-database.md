@@ -108,8 +108,17 @@ gunzip -c backups/erp_local_2026-11-25_021503.sql.gz | mysql -u USER -p erp_rest
 ```
 
 Setelah import, cek jumlah tabel dan satu query sederhana (mis.
-`SELECT COUNT(*) FROM penjualan`). Catat tanggal uji restore di catatan
-bulanan; ini dipakai sebagai syarat komponen KPI Backup.
+`SELECT COUNT(*) FROM penjualan`). Catat hasilnya lewat perintah berikut
+agar komponen KPI Backup membacanya otomatis:
+
+```sh
+php spark it:kpi-sync --restore=ok      # uji restore bulan ini berhasil
+php spark it:kpi-sync --restore=failed  # uji restore gagal -> skor backup maks 50
+```
+
+Entri ditulis ke `backups/restore.jsonl` (tanggal + status). Uji restore
+terakhir pada bulan berjalan yang dipakai; bulan tanpa uji restore tidak
+dihukum, tetapi uji restore gagal selalu membatasi skor.
 
 ## Penggunaan untuk KPI Backup
 
@@ -117,7 +126,9 @@ Komponen **Backup** dinilai dari `backups/history.jsonl`:
 
 - hari dengan `status = ok` dan `tables > 0` dihitung sukses;
 - hari tanpa entri dianggap gagal (cron tidak jalan);
-- skor bulanan = `hari sukses / jumlah hari × 100`;
+- skor bulanan = `hari sukses / hari dimonitor × 100`;
+- bulan berjalan hanya menghitung hari yang sudah selesai (sampai kemarin);
+- file histori yang belum ada sama sekali membuat komponen N/A (bukan 0);
 - uji restore bulanan yang gagal membatasi skor maksimal 50.
 
 ## Catatan development (Docker)

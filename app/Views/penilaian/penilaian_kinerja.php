@@ -538,6 +538,8 @@
                                     <span class="fw-bold text-dark d-block mb-1"><?= $kpi['nama'] ?></span>
                                     <?php $isCurrency = ($kpi['format'] ?? 'currency') === 'currency'; ?>
                                     <?php $isPercent = ($kpi['format'] ?? 'currency') === 'percent'; ?>
+                                    <?php $isCount = ($kpi['format'] ?? 'currency') === 'count'; ?>
+                                    <?php $unitLabel = $isCount ? ' ' . ($kpi['unit'] ?? '') : ''; ?>
                                     <?php if (!empty($kpi['cabang'])): ?>
                                         <?php if (($kpi['format'] ?? 'currency') === 'health'): ?>
                                             <?= view('penilaian/_kesehatan_uang', [
@@ -580,7 +582,7 @@
                                 <td class="text-center"><span class="badge bg-light text-secondary border px-2 py-1"><?= $kpi['bobot'] ?>%</span></td>
                                 <td class="text-nowrap">
                                     <?php if ($kpi['target'] !== null): ?>
-                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['target'], $isPercent ? 2 : 0, ',', '.') ?><?= $isPercent ? '%' : '' ?></span>
+                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['target'], $isPercent ? 2 : 0, ',', '.') ?><?= $isPercent ? '%' : '' ?><?= $unitLabel ?></span>
                                         <?php if ($isCurrency): ?>
                                             <?php if (!empty($kpi['ho'])): ?>
                                                 <span class="badge bg-info-subtle text-info ms-1">HO</span>
@@ -602,7 +604,7 @@
                                 </td>
                                 <td class="text-nowrap">
                                     <?php if ($kpi['actual'] !== null): ?>
-                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['actual'], $isPercent ? 2 : 0, ',', '.') ?><?= $isPercent ? '%' : '' ?></span>
+                                        <span class="fw-medium text-dark"><?= $isCurrency ? 'Rp ' : '' ?><?= number_format((float)$kpi['actual'], $isPercent ? 2 : 0, ',', '.') ?><?= $isPercent ? '%' : '' ?><?= $unitLabel ?></span>
                                     <?php elseif ($kpi['reached'] !== null): ?>
                                         <span class="fw-medium text-dark"><?= $kpi['reached'] ?> Cabang</span>
                                     <?php else: ?>
@@ -617,6 +619,8 @@
                                         <?php else: ?>
                                             <span class="text-success fw-medium small"><i class="fa fa-check me-1"></i> Semua tercapai</span>
                                         <?php endif; ?>
+                                    <?php elseif ($isCount && $kpi['shortfall'] !== null && $kpi['shortfall'] > 0): ?>
+                                        <span class="text-danger fw-medium small"><i class="fa fa-arrow-down me-1"></i> Kurang <?= number_format((float)$kpi['shortfall'], 0, ',', '.') ?><?= $unitLabel ?></span>
                                     <?php elseif (!$isCurrency && $kpi['shortfall'] !== null && $kpi['shortfall'] > 0): ?>
                                         <span class="text-danger fw-medium small"><i class="fa fa-arrow-down me-1"></i> Kurang <?= number_format((float)$kpi['shortfall'], 2, ',', '.') ?> poin</span>
                                     <?php elseif ($kpi['shortfall'] !== null && $kpi['shortfall'] > 0): ?>

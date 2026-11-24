@@ -278,6 +278,57 @@ class KPIConfigurationSeeder extends Seeder
                 'calculation_strategy' => NULL,
                 'is_active' => 1,
             ],
+            // ── KPI Team IT (jabatan 45), berlaku 2026-11-01 ────────
+            [
+                'code' => 'IT_DEVELOPMENT',
+                'name' => 'Development (Commit feat)',
+                'description' => 'Jumlah commit feat di repo GitHub pada bulan berjalan',
+                'type' => 'automatic',
+                'category' => 'technical',
+                'unit_of_measure' => 'commit',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'IT_BUG_FIX',
+                'name' => 'Penyelesaian Bug (Commit fix)',
+                'description' => 'Jumlah commit fix di repo GitHub pada bulan berjalan',
+                'type' => 'automatic',
+                'category' => 'technical',
+                'unit_of_measure' => 'commit',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'IT_BACKUP',
+                'name' => 'Backup Database',
+                'description' => 'Hari backup sukses dibagi hari dimonitor',
+                'type' => 'automatic',
+                'category' => 'technical',
+                'unit_of_measure' => 'percent',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'IT_UPTIME',
+                'name' => 'System Uptime',
+                'description' => 'Hari uptime OK (downtime maks 15 menit) dibagi hari dimonitor',
+                'type' => 'automatic',
+                'category' => 'technical',
+                'unit_of_measure' => 'percent',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
+            [
+                'code' => 'IT_DOCS',
+                'name' => 'Dokumentasi (Commit docs)',
+                'description' => 'Jumlah commit docs di repo GitHub pada bulan berjalan',
+                'type' => 'automatic',
+                'category' => 'technical',
+                'unit_of_measure' => 'commit',
+                'calculation_strategy' => NULL,
+                'is_active' => 1,
+            ],
             [
                 'code' => 'OMSET_CABANG',
                 'name' => 'Omzet Cabang',
@@ -454,12 +505,18 @@ class KPIConfigurationSeeder extends Seeder
             ['kpi_component_id' => $componentMap['STORY'], 'position_id' => 44, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
             ['kpi_component_id' => $componentMap['TESTIMONI'], 'position_id' => 44, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
 
-            // IT (45)
-            ['kpi_component_id' => $componentMap['OMSET_TOKO'], 'position_id' => 45, 'weight' => 30, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
-            ['kpi_component_id' => $componentMap['BUG_MINOR'], 'position_id' => 45, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
-            ['kpi_component_id' => $componentMap['BUG_OPERASIONAL'], 'position_id' => 45, 'weight' => 25, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
-            ['kpi_component_id' => $componentMap['ECOMMERCE'], 'position_id' => 45, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
-            ['kpi_component_id' => $componentMap['FITUR'], 'position_id' => 45, 'weight' => 20, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => NULL, 'created_by' => NULL],
+            // IT (45) — komponen lama berlaku s/d 2026-10-31.
+            ['kpi_component_id' => $componentMap['OMSET_TOKO'], 'position_id' => 45, 'weight' => 30, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => '2026-10-31', 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['BUG_MINOR'], 'position_id' => 45, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => '2026-10-31', 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['BUG_OPERASIONAL'], 'position_id' => 45, 'weight' => 25, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => '2026-10-31', 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['ECOMMERCE'], 'position_id' => 45, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => '2026-10-31', 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['FITUR'], 'position_id' => 45, 'weight' => 20, 'weight_group' => 'kpi', 'effective_from' => '2024-01-01', 'effective_to' => '2026-10-31', 'created_by' => NULL],
+            // IT (45) — KPI objektif mulai 2026-11-01 (total 100%).
+            ['kpi_component_id' => $componentMap['IT_DEVELOPMENT'], 'position_id' => 45, 'weight' => 25, 'weight_group' => 'kpi', 'effective_from' => '2026-11-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['IT_BUG_FIX'], 'position_id' => 45, 'weight' => 25, 'weight_group' => 'kpi', 'effective_from' => '2026-11-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['IT_BACKUP'], 'position_id' => 45, 'weight' => 25, 'weight_group' => 'kpi', 'effective_from' => '2026-11-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['IT_UPTIME'], 'position_id' => 45, 'weight' => 15, 'weight_group' => 'kpi', 'effective_from' => '2026-11-01', 'effective_to' => NULL, 'created_by' => NULL],
+            ['kpi_component_id' => $componentMap['IT_DOCS'], 'position_id' => 45, 'weight' => 10, 'weight_group' => 'kpi', 'effective_from' => '2026-11-01', 'effective_to' => NULL, 'created_by' => NULL],
         ];
 
         // Absen detail weights (weight_group = 'absen') — sum = 100 per position
@@ -571,6 +628,32 @@ class KPIConfigurationSeeder extends Seeder
                     'created_by' => NULL,
                 ];
             }
+        }
+
+        // Target KPI Team IT (jabatan 45): unit NULL, berlaku 2026-11-01.
+        $itTargets = [
+            'IT_DEVELOPMENT' => 15,
+            'IT_BUG_FIX'     => 30,
+            'IT_BACKUP'      => 100,
+            'IT_UPTIME'      => 100,
+            'IT_DOCS'        => 5,
+        ];
+        foreach ($itTargets as $code => $target) {
+            if (!isset($componentMap[$code])) {
+                continue;
+            }
+            $data[] = [
+                'kpi_component_id' => $componentMap[$code],
+                'unit_id' => NULL,
+                'position_id' => 45,
+                'context' => 'default',
+                'target_value' => $target,
+                'period_type' => 'monthly',
+                'period_month' => NULL,
+                'effective_from' => '2026-11-01',
+                'effective_to' => NULL,
+                'created_by' => NULL,
+            ];
         }
 
         $this->db->table('kpi_targets')->insertBatch($data);

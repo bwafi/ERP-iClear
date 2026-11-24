@@ -112,8 +112,29 @@ Context `gaji` memakai `customer` polos.
 | 42 CS | gaji: omset 70; non: omset 60 + Testimoni 10; + Closing/Upselling/FollowUp 10/10/10 | 80/5/10/5 |
 | 43 Kepala Divisi (legacy "Pengiklan") | **Legacy:** Budg 15/ROAS 15/Omset 70; non: Budg 15/ROAS 15/Omset 10/Customer 60 — **bukan KPI aktif**; lihat §1a | 80/5/10/5 |
 | 44 Multimedia | Omset 30, Feed PL 15, Video 20, Feed Mingguan 15, Story 10, Testimoni 10 | 80/5/10/5 |
-| 45 IT | Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20 | 80/5/10/5 |
+| 45 IT | **Sejak 2026-11-01:** Development 25, Bug Fix 25, Backup 25, Uptime 15, Dokumentasi 10. **Sebelumnya (s/d 2026-10-31):** Omset 30, Bug Minor 10, Operasional 25, Ecommerce 15, Fitur 20. Lihat §Team IT di bawah | 80/5/10/5 |
 | 46 PIC (non-gaji) | Budget Toko 20, Budget Global 30, Omset Cabang 50 | 80/5/10/5 |
+
+### Team IT (jabatan 45) — KPI objektif (sejak 2026-11-01)
+
+Bobot total kpi-group = 100 (`kpi_weights` posisi 45). Sumber data adalah snapshot bulanan `kpi_it_metrics` yang diisi `php spark it:kpi-sync --month=YYYY-MM` (idempoten/upsert). Halaman penilaian tidak memanggil GitHub/UptimeRobot.
+
+| Komponen | Bobot | Rumus ringkas | Sumber data |
+|---|---|---|---|
+| `IT_DEVELOPMENT` | 25 | `min(jumlah commit feat ÷ target 15 × 100, 100)` | GitHub `GITHUB_REPOS`, prefix Conventional Commits |
+| `IT_BUG_FIX` | 25 | `min(jumlah commit fix ÷ target 30 × 100, 100)` | GitHub |
+| `IT_BACKUP` | 25 | `hari backup sukses ÷ hari dimonitor × 100`; uji restore gagal → maks 50 | `backups/history.jsonl`, `backups/restore.jsonl` |
+| `IT_UPTIME` | 15 | `hari uptime OK ÷ hari dimonitor × 100`; hari gagal bila downtime > 15 menit | UptimeRobot `custom_uptime_ranges` |
+| `IT_DOCS` | 10 | `min(jumlah commit docs ÷ target 5 × 100, 100)` | GitHub |
+
+- **Commit:** hanya subject yang diawali `feat(scope):`, `fix(scope):`, `docs(scope):`, atau tanpa scope; `!` breaking-change tetap dihitung. `GITHUB_AUTHORS` (email/login, opsional) membatasi author; kosong = semua commit.
+- **Backup:** hari sukses = ada entry `history.jsonl` dengan `status=ok` dan `tables>0` pada hari itu di zona `KPI_TIMEZONE`. Hari tanpa entry dihitung **gagal**. Bila file histori belum ada sama sekali → komponen N/A.
+- **Uptime:** satu ratio per hari per monitor; hari dinilai dari monitor terburuk. `downtime = (100 − ratio)/100 × 86400`; hari OK bila downtime ≤ 900 detik. Key kosong → komponen N/A.
+- **Periode:** bulan berjalan hanya menghitung hari yang sudah selesai (sampai kemarin) agar cron hari ini yang belum jalan tidak dihitung gagal. Bulan lampau memakai seluruh hari.
+- **Data kosong:** komponen tanpa snapshot/API gagal bernilai `null` (N/A) dan dikecualikan dari total, **bukan 0**.
+- **Target** disimpan di `kpi_targets` (`unit_id NULL`, `position_id 45`, `context=default`) dengan fallback service 15/30/100/100/5.
+- **Berlaku sejak 2026-11-01.** Bobot lama ditutup per 2026-10-31 agar skor historis tidak berubah.
+- Sumber: `ItKpiService`, `ItKpiSyncService`, `App\Commands\ItKpiSync`; migrasi `2026-11-24-000100_CreateItKpiMetrics`, `2026-11-24-000200_AddItKpiJabatan45`; test `tests/unit/ItKpiTest.php`.
 
 ### Total Pelanggan (CUSTOMER_COUNT) — Teknisi & Kepala Toko
 

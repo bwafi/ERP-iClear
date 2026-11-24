@@ -80,6 +80,7 @@ class KpiCalculationService
     protected $digitalMarketingService;
     protected $financeKpiService;
     protected $managerKpiService;
+    protected $itKpiService;
 
     public function __construct()
     {
@@ -186,6 +187,7 @@ class KpiCalculationService
         $digitalData = null; // cache data target/actual KPI Digital Marketing (jabatan 43)
         $financeData = null; // cache data target/actual KPI Finance (jabatan 0)
         $managerData = null; // cache data target/actual KPI Manager (jabatan 34)
+        $itData = null; // cache data target/actual KPI Team IT (jabatan 45)
         foreach ($weights as $w) {
             $component = $this->componentById((int) $w->kpi_component_id);
             if (!$component || !(int) $component->is_active) {
@@ -270,6 +272,19 @@ class KpiCalculationService
                     $date,
                 );
                 $achievement = $managerData["achievement"];
+                // ==== TEAM IT (jabatan 45): commit GitHub, backup, uptime, dokumentasi ====
+                // Sumber: snapshot kpi_it_metrics dari `spark it:kpi-sync`.
+                // Komponen tanpa data bernilai null (N/A), bukan 0.
+            } elseif (
+                $positionId === ItKpiService::POSITION_ID &&
+                in_array($component->code, ItKpiService::CODES, true)
+            ) {
+                $itData = $this->itKpiService()->componentData(
+                    $component->code,
+                    (int) $month,
+                    (int) $year,
+                );
+                $achievement = $itData["achievement"];
                 // ==== CLOSING RATE (otomatis): prospek lead CLOSING ÷ prospek rekap harian ====
             } elseif ($component->code === "CLOSING_RATE") {
                 $achievement = (new \App\Services\Kpi\Calculators\ClosingRateCalculator())->calculate(
@@ -678,6 +693,19 @@ class KpiCalculationService
                     "ho" => true,
                     "cabang" => $managerData["cabang"] ?? null,
                 ];
+            } elseif (
+                $itData !== null &&
+                in_array($component->code, ItKpiService::CODES, true)
+            ) {
+                // KPI Team IT (jabatan 45): target/actual snapshot bulanan.
+                // Backup & uptime memakai persentase hari; commit memakai jumlah.
+                $targetInfo = [
+                    "target" => $itData["target"] ?? null,
+                    "actual" => $itData["actual"] ?? null,
+                    "shortfall" => $itData["shortfall"] ?? null,
+                    "ho" => true,
+                    "cabang" => null,
+                ];
             }
 
             $items[] = [
@@ -792,6 +820,59 @@ class KpiCalculationService
             $this->managerKpiService = new ManagerKpiService();
         }
         return $this->managerKpiService;
+    }
+
+    public function itKpiService(): ItKpiService
+    {
+        if ($this->itKpiService === null) {
+            $this->itKpiService = new ItKpiService();
+        }
+        return $this->itKpiService;
+    }
+
+    /**
+     * Format tampilan angka KPI: currency, percent, count, health, accuracy,
+     * cashflow, atau number. Kode Team IT didelegasikan ke ItKpiService agar
+     * aturan tampilan tetap satu sumber.
+     */
+    protected function formatKodeKpi(string $code): string
+    {
+        $itFormat = ItKpiService::displayFormat($code);
+        if ($itFormat !== null) {
+            return $itFormat;
+        }
+
+        if (in_array($code, ["CONVERSION", "CAMPAIGN_PERFORMANCE", "REPORTING"], true)) {
+            return "percent";
+        }
+
+        if ($code === "FIN_KESEHATAN_UANG") {
+            return "health";
+        }
+
+        if ($code === "FIN_AKURASI") {
+            return "accuracy";
+        }
+
+        if ($code === "FIN_CASH_FLOW") {
+            return "cashflow";
+        }
+
+        if (in_array($code, [
+            "OMSET_TOKO",
+            "OMSET_CABANG",
+            "OMSET_TEKNISI",
+            "OPERASIONAL",
+            "OMZET_WILAYAH",
+            "TARGET_CABANG",
+            "OMZET_GLOBAL",
+            "CPL",
+            "BUDGETING",
+        ], true)) {
+            return "currency";
+        }
+
+        return "number";
     }
 
     protected function getPositionOfEmployee(int $employeeId): ?int
@@ -1116,32 +1197,8 @@ class KpiCalculationService
                 "reached" => $item["reached"] ?? null,
                 "ho" => $item["ho"] ?? null,
                 "cabang" => $item["cabang"] ?? null,
-                "format" =>
-                    in_array($item["code"], ["CONVERSION", "CAMPAIGN_PERFORMANCE", "REPORTING"], true)
-                        ? "percent"
-                        : ($item["code"] === "FIN_KESEHATAN_UANG"
-                            ? "health"
-                            : ($item["code"] === "FIN_AKURASI"
-                                ? "accuracy"
-                                : ($item["code"] === "FIN_CASH_FLOW"
-                                    ? "cashflow"
-                                    : (in_array(
-                                        $item["code"],
-                                        [
-                                            "OMSET_TOKO",
-                                            "OMSET_CABANG",
-                                            "OMSET_TEKNISI",
-                                            "OPERASIONAL",
-                                            "OMZET_WILAYAH",
-                                            "TARGET_CABANG",
-                                            "OMZET_GLOBAL",
-                                            "CPL",
-                                            "BUDGETING",
-                                        ],
-                                        true,
-                                    )
-                                        ? "currency"
-                                        : "number")))),
+                "unit" => ItKpiService::displayUnit($item["code"]),
+                "format" => $this->formatKodeKpi((string) $item["code"]),
             ];
         }
 
