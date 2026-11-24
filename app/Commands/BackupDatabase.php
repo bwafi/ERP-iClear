@@ -27,11 +27,12 @@ class BackupDatabase extends BaseCommand
     protected $group       = 'Database';
     protected $name        = 'backup:db';
     protected $description = 'Backup database default (MySQLi) ke backups/*.sql.gz: verifikasi, retensi, histori JSONL.';
-    protected $usage       = 'backup:db [--keep-days 14] [--dir backups] [--bin mysqldump]';
+    protected $usage       = 'backup:db [--keep-days 14] [--dir backups] [--bin mysqldump] [--timezone Asia/Jakarta]';
     protected $options     = [
         '-keep-days' => 'Retensi backup dalam hari (default 14, atau env BACKUP_KEEP_DAYS).',
         '-dir'       => 'Folder tujuan (default ROOTPATH/backups, atau env BACKUP_DIR).',
         '-bin'       => 'Binary dump: mysqldump atau mariadb-dump (default deteksi otomatis).',
+        '-timezone'  => 'Zona waktu nama file dan histori (default Asia/Jakarta, atau env BACKUP_TIMEZONE).',
     ];
 
     public function run(array $params)
@@ -62,10 +63,11 @@ class BackupDatabase extends BaseCommand
         );
 
         $requested = CLI::getOption('bin');
+        $timezone  = (string) (CLI::getOption('timezone') ?: env('BACKUP_TIMEZONE') ?: 'Asia/Jakarta');
 
         try {
             $binary  = $this->detectBinary($requested !== null ? (string) $requested : null);
-            $service = new DatabaseBackupService($db, $binary, $dir, $keepDays);
+            $service = new DatabaseBackupService($db, $binary, $dir, $keepDays, $timezone);
             $result  = $service->run();
         } catch (Throwable $e) {
             CLI::error('Backup gagal: ' . $e->getMessage());
@@ -82,6 +84,7 @@ class BackupDatabase extends BaseCommand
             count($result['deleted'])
         ));
         CLI::write('  histori: ' . rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . 'history.jsonl');
+        CLI::write('  zona waktu: ' . $timezone);
 
         return 0;
     }

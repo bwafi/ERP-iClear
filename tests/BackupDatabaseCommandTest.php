@@ -81,6 +81,17 @@ final class BackupDatabaseCommandTest extends CIUnitTestCase
         $this->assertSame('ok', $history[0]['status']);
         $this->assertSame(1, $history[0]['tables']);
         $this->assertSame($result['file'], $history[0]['file']);
+        $this->assertStringEndsWith('+07:00', (string) $history[0]['at']);
+    }
+
+    public function testTimezoneTidakValidKembaliKeWib(): void
+    {
+        $service = $this->service($this->okBin, 'Bukan/Zona');
+        $service->run();
+
+        $history = $this->history();
+        $this->assertCount(1, $history);
+        $this->assertStringEndsWith('+07:00', (string) $history[0]['at']);
     }
 
     public function testDumpGagalTidakMeninggalkanFileDanMencatatHistori(): void
@@ -172,7 +183,7 @@ final class BackupDatabaseCommandTest extends CIUnitTestCase
         $this->assertSame('database', DatabaseBackupService::sanitizeName('///'));
     }
 
-    private function service(string $bin): DatabaseBackupService
+    private function service(string $bin, string $timezone = 'Asia/Jakarta'): DatabaseBackupService
     {
         return new DatabaseBackupService([
             'hostname' => 'localhost',
@@ -180,7 +191,7 @@ final class BackupDatabaseCommandTest extends CIUnitTestCase
             'password' => 'rahasia',
             'database' => 'erp_test',
             'port'     => 3306,
-        ], $bin, $this->dir, 14);
+        ], $bin, $this->dir, 14, $timezone);
     }
 
     private function stub(string $name, string $content): string

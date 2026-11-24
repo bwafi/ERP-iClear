@@ -30,15 +30,18 @@ class DatabaseBackupService
 
     private int $keepDays;
 
+    private string $timezone;
+
     /**
      * @param array<string, mixed> $db konfigurasi group database (hostname, username, password, database, port)
      */
-    public function __construct(array $db, string $binary, string $dir, int $keepDays = 14)
+    public function __construct(array $db, string $binary, string $dir, int $keepDays = 14, string $timezone = 'Asia/Jakarta')
     {
         $this->db       = $db;
         $this->binary   = $binary;
         $this->dir      = rtrim($dir, '/\\');
         $this->keepDays = max(1, $keepDays);
+        $this->timezone = $this->resolveTimezone($timezone);
     }
 
     /**
@@ -76,7 +79,7 @@ class DatabaseBackupService
             throw new RuntimeException('Nama database kosong pada konfigurasi database default.');
         }
 
-        $base = self::sanitizeName($dbName) . '_' . date('Y-m-d_His');
+        $base = self::sanitizeName($dbName) . '_' . $this->now()->format('Y-m-d_His');
         $path = $this->uniquePath($base);
         $part = $path . '.part';
 
@@ -97,7 +100,7 @@ class DatabaseBackupService
             @unlink($part);
 
             $this->appendHistory([
-                'at'        => date('c'),
+                'at'        => $this->now()->format('c'),
                 'status'    => 'failed',
                 'database'  => $dbName,
                 'file'      => null,
@@ -117,7 +120,7 @@ class DatabaseBackupService
         $deleted = self::prune($this->dir, $dbName, $this->keepDays);
 
         $this->appendHistory([
-            'at'        => date('c'),
+            'at'        => $this->now()->format('c'),
             'status'    => 'ok',
             'database'  => $dbName,
             'file'      => basename($path),
@@ -310,6 +313,29 @@ class DatabaseBackupService
         if (! is_dir($this->dir) && ! @mkdir($this->dir, 0755, true) && ! is_dir($this->dir)) {
             throw new RuntimeException('Folder backup tidak bisa dibuat: ' . $this->dir);
         }
+    }
+
+    private function resolveTimezone(string $timezone): string
+    {
+        try {
+            new \DateTimeZone($timezone);
+        } catch (\Throwable $e) {
+            return 'Asia/Jakarta';
+        }
+
+        return $timezone;
+    }
+
+    /**
+     * Waktu bisnis (default WIB), bukan timezone aplikasi yang UTC.
+     *
+     * Nama file dan histori harus memakai tanggal toko; kalau memakai UTC,
+     * backup pukul 02:15 WIB akan tercatat sebagai tanggal kemarin dan
+     * perhitungan KPI harian jadi salah hari.
+     */
+    private function now(): \DateTimeImmutable
+    {
+        return new \DateTimeImmutable('now', new \DateTimeZone($this->timezone));
     }
 
     /**

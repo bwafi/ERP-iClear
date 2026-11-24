@@ -20,6 +20,11 @@ php spark backup:db --bin mariadb-dump
 | `--keep-days` | `14` (atau env `BACKUP_KEEP_DAYS`) | Backup lebih tua dihapus; backup terbaru selalu disisakan. |
 | `--dir` | `ROOTPATH/backups` (atau env `BACKUP_DIR`) | Folder tujuan. |
 | `--bin` | deteksi `mysqldump` lalu `mariadb-dump` | Binary dump. |
+| `--timezone` | `Asia/Jakarta` (atau env `BACKUP_TIMEZONE`) | Zona waktu untuk nama file dan histori. |
+
+Zona waktu default sengaja WIB, bukan UTC milik aplikasi. Backup pukul 02:15
+WIB harus tercatat sebagai tanggal toko, bukan tanggal kemarin UTC; kalau
+tidak, perhitungan KPI Backup harian bisa salah hari.
 
 Yang dilakukan perintah ini:
 
