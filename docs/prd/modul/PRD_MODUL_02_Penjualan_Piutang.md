@@ -26,7 +26,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 1. Ambil `produk[]` dari form; sanitasi angka (`sanitizeCurrency`: buang `Rp`, `.`, spasi).
 2. Generate kode invoice: `SLL{idunit}{Ymd}{seq4}` (per unit per hari; last invoice hari itu).
 3. Normalisasi pembayaran: `PenjualanPaymentSplit::normalize()` membaca `metode_bayar`, `bayar`, dan `bank[]`; rekening divalidasi terhadap `ModelBank::getBankDalamScopeUnit(session('ID_UNIT'))`. Setelah itu `PenjualanSaleValidator::periksa()` menghitung nilai kotor + total diskon dari `produk[]` dan memvalidasi total/pembayaran sebelum transaksi dimulai. — `insert_penjualan`
-4. Susun jurnal: tunai (`penjualan_lunas_tunai`), bank (`penjualan_lunas_bank_{bankid}`), PPN, diskon, aksesoris/sparepart (`penjualan_acc_cash`), HP baru PPN/non-PPN, HP second.
+4. Susun jurnal: tunai (`penjualan_lunas_tunai`), bank (`penjualan_lunas_bank_{bankid}`), PPN (`penjualan_bayar_ppn`), diskon (`penjualan_diskon`), aksesoris/sparepart (`penjualan_acc_cash`), HP baru PPN/non-PPN (`penjualan_hp_baru_ppn`/`penjualan_hp_baru_cash`), HP second (`penjualan_hp_second_cash`). Template disemai oleh migration `2026-11-26-000100_SeedPenjualanJurnal`; setiap template hanya berisi satu sisi (debit pembayaran, kredit pendapatan/PPN, atau debit diskon) dan keseimbangan dijaga gabungan grup referensi `pembayaran_bank` + `penjualan`.
 5. Insert header `penjualan` + detail `detail_penjualan` (HPP per item dari `hpp_unit` unit transaksi, fallback `hpp_barang` lalu `barang.harga_beli`; bundle dipecah per barang penyusun).
 6. Eksekusi dalam satu transaksi `transStart/transComplete`; bila gagal `transRollback` + flashdata.
 7. Cetak struk/invoice mPDF (thermal/default) ke `uploads/Struk-{invoice}.pdf` + output ke browser.
@@ -41,7 +41,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 3. Pembayaran terpecah tunai + bank; `bank_idbank` header menyimpan `kode_pembayaran` (bukan id bank asli). — `insert_penjualan`
 4. Status keterangan = `Lunas` bila `hutang==0`, else `Belum Lunas`. — `insert_penjualan`
 5. HPP per item diambil dari `hpp_unit` produk+unit transaksi; fallback `hpp_barang` (global) lalu `barang.harga_beli`. Baris `hpp_unit` unit itu diperbarui pembelian terbaru dengan harga beli terakhir (lihat PRD Modul 03 rule 15). Bundle dipecah (jumlah × qty bundle) dan tiap komponen memakai HPP unit transaksi. — `ModelHppUnit::resolve`; `Penjualan::insert_penjualan`
-6. Kategori akun jurnal dibedakan: HP baru PPN/non-PPN/second, sparepart, aksesoris, PPN, diskon. — `insert_penjualan`
+6. Kategori akun jurnal dibedakan: HP baru PPN (`4010101000`), HP baru non-PPN (`4010102000`), HP second (`4010103000`), aksesoris/sparepart (`4010104000`), PPN keluaran (`2010401000`), diskon (`4010108000`), kas tunai (`1010101000`), dan kas bank (`1010102000`). — `insert_penjualan`; `2026-11-26-000100_SeedPenjualanJurnal`
 7. Penjualan berjalan dalam SATU transaksi (header+detail+jurnal+pembayaran bank). — `insert_penjualan`
 8. Kode pembayaran bank = `PJL{date}{unit}{rand4}`; di-refer ke `id_referensi` penjualan setelah insert. — `insert_penjualan`
 9. Potongan stok penjualan **tidak** dilakukan oleh `Penjualan::insert_penjualan`; stok dihitung oleh VIEW `stok_barang` yang mengurangi `total_penjualan` dari `SUM(detail_penjualan.jumlah)`. — `2026-10-23-000500_StokBarangKurangiSparepartGaransi.php:103-105` (SL-01)
@@ -60,6 +60,7 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 21. Dropdown **Staff** (`sales_by`) hanya memuat akun dari unit sesi. Pengecualian: Finance (`ID_JABATAN` 0), Admin root (1), dan Manager (34) melihat staff semua unit. Server memvalidasi ulang `sales_by` terhadap daftar yang sama sebelum menyimpan; staff di luar scope ditolak dengan pesan `Staff yang dipilih tidak tersedia untuk unit ini.` — `Penjualan::resolveStaffUnit`; `Penjualan::index`; `Penjualan::insert_penjualan`; `ModelAuth::getdataakun`; `PenjualanStaffScopeTest`
 22. Picker tidak menyediakan kontrol "Pilih semua"; setiap produk/bundle/jasa dicentang manual. Baris tab Produk menampilkan HPP efektif (`hpp_unit` → `hpp_barang` → `barang.harga_beli`, resolver yang sama dengan `detail_penjualan.hpp_penjualan`) dan suplier dari baris `stok_awal` terbaru unit (`ModelBarang::getSuplierPerUnit`). Bundle dan jasa tidak menampilkan HPP/suplier karena tidak punya pasangan biaya/suplier tunggal. Suplier ikut menjadi kata kunci pencarian. — `Penjualan::index`; `Views/transaksi/penjualan.php`; `PenjualanPageTest`; `PenjualanPickerMoneyTest`
 23. Diskon 100% (total `Rp 0`) sah dan bisa disimpan. Server menghitung nilai kotor dan total diskon dari rincian `produk[]`, lalu menolak: nilai kotor ≤ 0, diskon negatif atau melebihi nilai kotor, total negatif, total 0 tanpa diskon yang menutup seluruh nilai kotor, total diskon yang tidak sama dengan rincian, dan pembayaran tunai/bank pada transaksi total 0. Header `penjualan` memakai total bersih dan diskon hasil validasi server. Struk menampilkan Subtotal = nilai kotor, Total Diskon, PPN, Total = nilai bersih (sama dengan reprint riwayat). — `App\Services\Sales\PenjualanSaleValidator`; `Penjualan::insert_penjualan`; `Views/cetak/cetak_penjualan_thermal.php`; `PenjualanSaleValidatorTest`; `PenjualanReceiptDiscountTest`
+24. Template jurnal penjualan disemai migration `2026-11-26-000100_SeedPenjualanJurnal` (delete + insert per kode, idempoten, termasuk `penjualan_lunas_bank_<idbank>` untuk setiap rekening di tabel `bank`). Untuk penjualan lunas, jurnal gabungan seimbang selama nilai yang diposting konsisten (`total = kotor - diskon + PPN`): debit kas/bank + debit diskon = kredit pendapatan + kredit PPN. Baris `jurnal` historis tidak disentuh. — `SeedPenjualanJurnal`; `PenjualanJurnalTemplateTest`
 
 ## 6. Acceptance Criteria
 - [ ] Input penjualan menyimpan header+detail+pembayaran bank+jurnal dalam satu transaksi.
@@ -94,11 +95,14 @@ Mencatat transaksi penjualan (POS), menghasilkan invoice & struk, mencatat pemba
 - ✅ Terverifikasi: dropdown Staff dibatasi ke unit sesi, dengan pengecualian Finance/Admin root/Manager, dan server menolak `sales_by` di luar scope. — `PenjualanStaffScopeTest`
 - ✅ Terverifikasi: picker produk menampilkan HPP efektif dan suplier unit, tanpa kontrol "Pilih semua". — `PenjualanPageTest`; `PenjualanPickerMoneyTest`
 - ✅ Terverifikasi: total 0 karena diskon 100% diterima validator, sedangkan diskon berlebih/total 0 tanpa diskon penuh/pembayaran pada total 0 ditolak; struk memakai Subtotal kotor dan Total bersih. — `PenjualanSaleValidatorTest`; `PenjualanReceiptDiscountTest`
+- ✅ Terverifikasi: seluruh template jurnal penjualan yang dipanggil controller tersedia setelah migration, dan jurnal gabungan tunai/bank + PPN + diskon seimbang. — `PenjualanJurnalTemplateTest`
 - ⚠️ Gap tinggi:
   1. Penjualan kredit tidak membentuk piutang pelanggan/registry H/P; `Piutang` legacy adalah piutang pegawai. — SL-02
   2. `detail_penjualan.sub_total` bundle digandakan per komponen; laporan omzet/laba dapat salah. — SL-03
   3. `Piutang::bayar_piutang` mengambil `sisa` dari POST, tidak memposting kas/jurnal, dan status Lunas tidak pernah tercapai. — SL-06/HP-02
   4. `kode_invoice` tidak dijamin unik oleh database. — SL-04
   5. Tidak ada validasi stok sebelum penjualan. — SL-05
+  6. Controller belum memeriksa nilai balik `ModelJurnal::insertJurnal()`; bila template hilang lagi, penjualan tetap commit tanpa jurnal. — `Penjualan::insert_penjualan`
+  7. `total-harga` dan `total-ppn` masih dibaca dari POST; `PenjualanSaleValidator` hanya membatasi rentang, belum menghitung ulang PPN/total dari rincian, sehingga nominal yang dimanipulasi dapat membuat jurnal tidak seimbang. — `PenjualanSaleValidator::periksa`; `Penjualan::insert_penjualan`
 - 🔶 Inferensi: aturan bisnis penjualan kredit dan definisi omzet bundle memerlukan konfirmasi user.
-- Test: hanya `tests/RiwayatPenjualanViewTest.php` untuk view riwayat; tidak ada test end-to-end `Penjualan`/piutang legacy. Lihat `docs/prd/audit/PRD_AUDIT_REPORT.md` X-08.
+- Test: `tests/PenjualanJurnalTemplateTest.php` untuk ketersediaan template dan keseimbangan jurnal; belum ada test end-to-end `Penjualan`/piutang legacy. Lihat `docs/prd/audit/PRD_AUDIT_REPORT.md` X-08.
