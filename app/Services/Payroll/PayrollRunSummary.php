@@ -11,7 +11,7 @@ namespace App\Services\Payroll;
  */
 class PayrollRunSummary
 {
-    public static function build(array $payrollRows, array $bonusRows = [], ?string $today = null): array
+    public static function build(array $payrollRows, array $bonusRows = [], ?string $today = null, array $lemburOtomatis = []): array
     {
         $run = [
             'auto'   => ['count' => 0, 'total' => 0],
@@ -71,6 +71,12 @@ class PayrollRunSummary
             $run['bonus']['count']++;
             $run['bonus']['total'] += (int) ($row->jumlah ?? 0);
         }
+
+        // Lembur otomatis (roster FULL) tidak lagi punya baris kas_keluar sendiri, jadi
+        // angkanya dilaporkan terpisah ke bucket bonus supaya papan payroll
+        // tetap menunjukkan nilai lembur yang ikut di total gaji.
+        $run['bonus']['count'] += (int) ($lemburOtomatis['count'] ?? 0);
+        $run['bonus']['total'] += (int) ($lemburOtomatis['total'] ?? 0);
 
         $totals['employees'] = count($employees);
 

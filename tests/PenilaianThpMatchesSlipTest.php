@@ -58,6 +58,7 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
             'unit', 'akun', 'jabatan', 'menu', 'spv_units',
             'stok_barang', 'penjualan', 'detail_penjualan', 'service', 'pelanggan',
             'kas_keluar', 'kategori_kas', 'hutang_piutang', 'finance_payroll',
+            'presensi_roster',
             'incentive_members', 'salary_components', 'salary_structures',
             'kpi_components', 'kpi_weights', 'kpi_targets', 'kpi_evaluations',
             'kpi_attendance_detail', 'kpi_attendance_off',
@@ -107,6 +108,9 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
                 idkas_keluar INTEGER PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
                 kategori_idkategori INT NULL, deskripsi TEXT NULL, jumlah REAL NULL,
                 penerima TEXT NULL, idunit INT NULL)');
+        $q('CREATE TABLE presensi_roster (
+                id INT PRIMARY KEY AUTO_INCREMENT, akun_idakun INT NULL,
+                tanggal DATE NULL, shift VARCHAR(10) NULL, unit_idunit INT NULL)');
         $q('CREATE TABLE hutang_piutang (
                 id INTEGER PRIMARY KEY AUTO_INCREMENT, deleted INT NULL,
                 scope TEXT NULL, sumber_tipe TEXT NULL, pihak_tipe TEXT NULL,
@@ -450,5 +454,44 @@ final class PenilaianThpMatchesSlipTest extends CIUnitTestCase
         $this->get(
             'penilaian/slip_gaji/' . self::SPV . '?bulan=10&tahun=2026',
         )->assertStatus(200);
+    }
+
+    public function testSlipNovemberMenghitungLemburDariRosterFull(): void
+    {
+        $this->sesi();
+
+        foreach (['2026-11-03', '2026-11-04'] as $tanggal) {
+            $this->db->table('presensi_roster')->insert([
+                'akun_idakun' => self::PEGAWAI, 'tanggal' => $tanggal,
+                'shift' => 'FULL', 'unit_idunit' => self::UNIT,
+            ]);
+        }
+
+        $this->db->table('kas_keluar')->insert([
+            'tanggal' => '2026-11-10', 'kategori_idkategori' => 10,
+            'deskripsi' => 'LEMBUR', 'jumlah' => 999000,
+            'penerima' => (string) self::PEGAWAI, 'idunit' => self::UNIT,
+        ]);
+
+        $slip = (string) $this->get(
+            'penilaian/slip_gaji/' . self::PEGAWAI . '?bulan=11&tahun=2026',
+        )->getBody();
+
+        $this->assertSame(
+            70000,
+            $this->angka($slip, '/Lembur<\/td>\s*<td>\s*Rp([\d.]+)/s', 'Lembur'),
+            'lembur November dari 2 roster FULL, bukan 999.000 manual',
+        );
+    }
+
+    public function testSlipOktoberTetapMemakaiKasKeluar(): void
+    {
+        $this->sesi();
+
+        $slip = (string) $this->get(
+            'penilaian/slip_gaji/' . self::PEGAWAI . '?bulan=10&tahun=2026',
+        )->getBody();
+
+        $this->assertSame(100000, $this->angka($slip, '/Lembur<\/td>\s*<td>\s*Rp([\d.]+)/s', 'Lembur'));
     }
 }

@@ -63,4 +63,20 @@ class PayrollRunSummaryTest extends TestCase
         $this->assertSame(200000, $summary['run']['bonus']['total']);
         $this->assertSame(0, $summary['totals']['count']);
     }
+
+    public function testLemburOtomatisMasukBucketBonus(): void
+    {
+        $summary = PayrollRunSummary::build([], [], '2026-11-26', ['count' => 3, 'total' => 105000]);
+
+        $this->assertSame(3, $summary['run']['bonus']['count']);
+        $this->assertSame(105000, $summary['run']['bonus']['total']);
+    }
+
+    public function testTanpaLemburOtomatisBucketBonusTetap(): void
+    {
+        $summary = PayrollRunSummary::build([], [], '2026-11-26');
+
+        $this->assertSame(0, $summary['run']['bonus']['count']);
+        $this->assertSame(0, $summary['run']['bonus']['total']);
+    }
 }

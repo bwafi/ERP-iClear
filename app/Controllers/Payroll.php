@@ -217,7 +217,21 @@ class Payroll extends BaseController
 
         $kas_keluar = $builder->get()->getResult();
 
-        $runSummary = \App\Services\Payroll\PayrollRunSummary::build($payrollItems, $kas_keluar);
+        // Lembur periode presensi tidak lagi berupa baris kas_keluar; angkanya
+        // diambil dari roster shift FULL supaya papan fase tetap menampilkan total yang
+        // benar. Lembur manual yang masih tersisa hanya memicu peringatan.
+        $lemburOtomatis = ['count' => 0, 'total' => 0];
+        $lemburManual   = false;
+        if (!$showAll) {
+            $overtime = new \App\Services\Payroll\AttendanceOvertimeService($this->db);
+            foreach ($overtime->ringkasanPeriode($bulan) as $ringkasan) {
+                $lemburOtomatis['count']++;
+                $lemburOtomatis['total'] += (int) $ringkasan['nominal'];
+            }
+            $lemburManual = $overtime->adaLemburManual($bulan);
+        }
+
+        $runSummary = \App\Services\Payroll\PayrollRunSummary::build($payrollItems, $kas_keluar, null, $lemburOtomatis);
 
         // Data unit
         $unit = $this->db->table('unit')
@@ -255,6 +269,7 @@ class Payroll extends BaseController
             'show_all'      => $showAll,
             'can_input'     => $scope->canInput(),
             'kas_keluar'    => $kas_keluar,
+            'lemburManual'  => $lemburManual,
             'unit'          => $unit,
             'kategori_kas'  => $kategori_kas,
             'akun'          => $akun,

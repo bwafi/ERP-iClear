@@ -1628,6 +1628,8 @@ class PenilaianKPI extends BaseController
             'bulan'                => $bulan,
             'tahun'                => $tahun,
             'show_gaji'            => $showGaji,
+            'lemburManual'         => (new \App\Services\Payroll\AttendanceOvertimeService($this->db))
+                ->adaLemburManual(sprintf('%04d-%02d', (int) $tahun, (int) $bulan)),
             'body'                 => 'penilaian/penilaian_kinerja'
         ];
 
@@ -2439,13 +2441,43 @@ class PenilaianKPI extends BaseController
 
         return [
             'bon' => $sum('bon'),
-            'lembur' => $sum('lembur'),
+            'lembur' => $this->lemburPeriode($employeeId, $startMonth),
             'kasbon' => $kasbon,
             'potongan' => $potongan,
             'bonus' => $bonus,
             'potongan_keterangan' => $potonganKeterangan,
             'bonus_keterangan' => $bonusKeterangan,
         ];
+    }
+
+    /**
+     * Lembur satu periode dengan sumber yang sama seperti PayrollGenerator.
+     *
+     * Sejak November 2026 lembur dihitung dari roster shift FULL yang sudah
+     * lewat (Teknisi & Kepala Toko); periode sebelumnya tetap memakai kas_keluar
+     * kategori 10.
+     */
+    private function lemburPeriode(int $employeeId, string $startMonth): float
+    {
+        $bulan = substr($startMonth, 0, 7);
+        $service = new \App\Services\Payroll\AttendanceOvertimeService($this->db);
+
+        if ($service->sumberPeriode($bulan) === 'presensi') {
+            return (float) $service->untukPegawai($employeeId, $bulan)['nominal'];
+        }
+
+        $endMonth = date('Y-m-t', strtotime($startMonth));
+
+        return (float) ($this->db->table('kas_keluar kk')
+            ->selectSum('kk.jumlah', 'total')
+            ->where('kk.kategori_idkategori', 10)
+            ->where('kk.penerima', $employeeId)
+            ->where('kk.tanggal >=', $startMonth)
+            ->where('kk.tanggal <=', $endMonth)
+            ->like('kk.deskripsi', 'lembur')
+            ->get()
+            ->getRow()
+            ->total ?? 0);
     }
 
     public function slip_gaji($idakun)

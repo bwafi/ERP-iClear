@@ -469,6 +469,12 @@
 </div>
 
 <?php if ($show_gaji): ?>
+<?php $lemburManual = $lemburManual ?? false; ?>
+<?php if (!empty($lemburManual)): ?>
+<div class="alert alert-warning border-0" role="alert">
+    Lembur manual terdeteksi pada periode ini dan tidak dihitung lagi. Lembur sekarang dihitung otomatis dari roster shift FULL yang sudah lewat (Teknisi &amp; Kepala Toko).
+</div>
+<?php endif; ?>
 <!-- RINCIAN LEMBUR & POTONGAN -->
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-3">

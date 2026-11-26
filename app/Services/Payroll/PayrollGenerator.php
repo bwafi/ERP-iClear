@@ -105,7 +105,7 @@ class PayrollGenerator
         $unitIds = array_values(array_filter(array_map('intval', (array) ($options['unit_ids'] ?? []))));
         $overwrite = (bool) ($options['overwrite'] ?? false);
         $sudah  = $this->daftarSudahAda($from, $to);
-        $lembur = $this->daftarLembur($from, $to);
+        $lembur = $this->lemburPeriode($bulan, $from, $to);
 
         $hasil = [
             'bulan'           => $bulan,
@@ -182,9 +182,10 @@ class PayrollGenerator
                 continue;
             }
 
-            // Hanya baris payroll yang menunjuk ID_AKUN. Baris /kas_keluar
-            // mengisi `penerima` dengan teks nama, jadi tidak ikut dihitung.
-            $lemburOrg = $lembur[$id] ?? 0.0;
+            // Sumber lembur dipilih per periode: presensi sejak November 2026,
+            // kas_keluar untuk periode sebelumnya.
+            $lemburOrg  = (float) ($lembur['nominal'][$id] ?? 0.0);
+            $lemburHari = (int) ($lembur['hari'][$id] ?? 0);
 
             try {
                 $gaji = $this->hitungGaji($id, $karyawan, $bln, (string) $tahun, $lemburOrg);
@@ -206,7 +207,7 @@ class PayrollGenerator
             }
 
             $total = (int) round((float) $gaji['total_gaji']);
-            $notes = $this->susunCatatan($gaji, $lemburOrg);
+            $notes = $this->susunCatatan($gaji, $lemburOrg, $lemburHari);
 
             // Model::insert()/update() mengembalikan false tanpa melempar
             // error kalau kueri ditolak, jadi hasilnya wajib diperiksa.
@@ -300,7 +301,7 @@ class PayrollGenerator
         $bln   = (int) substr($bulan, 5, 2);
         $from  = $bulan . '-01';
         $to    = date('Y-m-t', strtotime($from));
-        $lembur = $this->daftarLembur($from, $to);
+        $lembur = $this->lemburPeriode($bulan, $from, $to);
 
         $hasil = [];
 
@@ -312,7 +313,7 @@ class PayrollGenerator
             $id = (int) $karyawan['ID_AKUN'];
 
             try {
-                $gaji = $this->hitungGaji($id, $karyawan, $bln, (string) $tahun, $lembur[$id] ?? 0.0);
+                $gaji = $this->hitungGaji($id, $karyawan, $bln, (string) $tahun, (float) ($lembur['nominal'][$id] ?? 0.0));
             } catch (\Throwable $e) {
                 log_message('error', 'PayrollGenerator: hitung gaji #' . $id . ' gagal: ' . $e->getMessage());
                 continue;
@@ -398,7 +399,7 @@ class PayrollGenerator
     }
 
     /** Catatan yang menjelaskan asal angkanya, supaya Finance bisa mengcek. */
-    protected function susunCatatan(array $gaji, float $lembur): string
+    protected function susunCatatan(array $gaji, float $lembur, int $lemburHari = 0): string
     {
         if (!empty($gaji['probation'])) {
             $catatan = 'Probation: Gaji Pokok ' . $this->rupiah((float) ($gaji['gaji_pokok_bulanan'] ?? 0))
@@ -434,7 +435,9 @@ class PayrollGenerator
         }
 
         if ($lembur != 0.0) {
-            $bagian[] = 'Lembur ' . $this->rupiah($lembur);
+            $bagian[] = $lemburHari > 0
+                ? 'Lembur ' . $lemburHari . ' hari × Rp 35.000 = ' . $this->rupiah($lembur)
+                : 'Lembur ' . $this->rupiah($lembur);
         }
 
         return 'Otomatis dari salary_structures: ' . implode(' + ', $bagian)
@@ -504,7 +507,7 @@ class PayrollGenerator
      * (mis. "ICLEAR"). Karena itu hanya isian angka yang dipakai sebagai
      * ID_AKUN; sisanya bukan karyawan dan diabaikan.
      */
-    protected function daftarLembur(string $from, string $to): array
+    protected function daftarLemburKasKeluar(string $from, string $to): array
     {
         $hasil = [];
 
@@ -527,6 +530,31 @@ class PayrollGenerator
         }
 
         return $hasil;
+    }
+
+    /**
+     * Lembur per karyawan untuk satu periode.
+     *
+     * Sejak November 2026 sumbernya roster shift FULL yang tanggalnya sudah
+     * lewat (hanya Teknisi & Kepala Toko). Periode sebelumnya tetap memakai
+     * kas_keluar supaya draft lama tidak kehilangan angka.
+     *
+     * @return array{nominal: array<int, float>, hari: array<int, int>}
+     */
+    protected function lemburPeriode(string $bulan, string $from, string $to): array
+    {
+        $service = new AttendanceOvertimeService($this->db);
+
+        if ($service->sumberPeriode($bulan) !== 'presensi') {
+            return ['nominal' => $this->daftarLemburKasKeluar($from, $to), 'hari' => []];
+        }
+
+        $ringkasan = $service->ringkasanPeriode($bulan);
+
+        return [
+            'nominal' => array_map(static fn ($row) => (float) $row['nominal'], $ringkasan),
+            'hari'    => array_map(static fn ($row) => (int) $row['hari'], $ringkasan),
+        ];
     }
 
     protected function rupiah(float $nilai): string

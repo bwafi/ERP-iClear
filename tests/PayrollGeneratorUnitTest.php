@@ -32,6 +32,7 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
 
         foreach ([
             'unit', 'akun', 'jabatan', 'kas_keluar', 'finance_payroll',
+            'presensi_roster',
             'salary_components', 'salary_structures',
             'incentive_members', 'incentive_groups', 'incentive_rules',
             'kpi_weights', 'kpi_components', 'kpi_targets', 'kpi_evaluations',
@@ -51,7 +52,7 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
                 penjualan_idpenjualan INT NULL, sub_total REAL NULL,
                 hpp_penjualan REAL NULL)');
 
-        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT TEXT NULL, KABUPATEN_UNIT TEXT NULL)');
+        $q('CREATE TABLE unit (idunit INT PRIMARY KEY, NAMA_UNIT TEXT NULL, KABUPATEN_UNIT TEXT NULL, is_operational INT NULL)');
         $q('CREATE TABLE jabatan (ID_JABATAN INT PRIMARY KEY, NAMA_JABATAN TEXT NULL)');
         $q('CREATE TABLE akun (
                 ID_AKUN INT PRIMARY KEY, ID_UNIT INT NULL, ID_JABATAN INT NULL,
@@ -61,6 +62,10 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
                 idkas_keluar INT PRIMARY KEY AUTO_INCREMENT, tanggal TEXT NULL,
                 kategori_idkategori INT NULL, deskripsi TEXT NULL, jumlah REAL NULL,
                 penerima TEXT NULL, idunit INT NULL)');
+
+        $q('CREATE TABLE presensi_roster (
+                id INT PRIMARY KEY AUTO_INCREMENT, akun_idakun INT NULL,
+                tanggal DATE NULL, shift VARCHAR(10) NULL, unit_idunit INT NULL)');
 
         $q('CREATE TABLE finance_payroll (
                 id INT PRIMARY KEY AUTO_INCREMENT, unit_id INT NULL,
@@ -115,7 +120,7 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
     {
         $q = function (string $sql): void { $this->db->query($sql); };
 
-        $q("INSERT INTO unit (idunit, NAMA_UNIT, KABUPATEN_UNIT) VALUES (3, 'ICLEAR Banyuwangi', 'Banyuwangi')");
+        $q("INSERT INTO unit (idunit, NAMA_UNIT, KABUPATEN_UNIT, is_operational) VALUES (3, 'ICLEAR Banyuwangi', 'Banyuwangi', 1)");
         $q("INSERT INTO jabatan (ID_JABATAN, NAMA_JABATAN) VALUES (41, 'Kepala Toko')");
         // 501 aktif & menerima gaji; 502 nonaktif; 503 tidak menerima gaji.
         $q("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ALAMAT, TERIMA_GAJI, STATUS_PEGAWAI, deleted) VALUES
@@ -136,6 +141,15 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         // Lembur kategori 10; penerima = ID_AKUN (angka).
         $q("INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, penerima, idunit) VALUES
             ('2026-09-10', 10, 'Lembur closing', 100000, '501', 3)");
+
+        // Roster November 2026: 501 punya 2 tanggal shift FULL; baris ganda
+        // tanggal 4 tidak menambah hari. 502/503 tidak layak dan diabaikan.
+        $q("INSERT INTO presensi_roster (akun_idakun, tanggal, shift, unit_idunit) VALUES
+            (501, '2026-11-03', 'FULL', 3),
+            (501, '2026-11-04', 'FULL', 3),
+            (501, '2026-11-04', 'FULL', 3),
+            (502, '2026-11-05', 'FULL', 3),
+            (503, '2026-11-06', 'FULL', 3)");
     }
 
     public function testHitungGajiUnitMemakaiMesinPayrollDanLembur(): void
@@ -273,5 +287,64 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         $this->assertNotNull($row, 'riwayat yang sudah dibayar tidak boleh dihapus');
         $this->assertSame('dibayar', $row->status);
         $this->assertSame(200, (int) $row->total);
+    }
+
+    public function testNovemberMemakaiRosterFullDanMenulisRincianHari(): void
+    {
+        $hasil = (new PayrollGenerator())->generate('2026-11', ['unit_ids' => [3], 'overwrite' => true]);
+
+        $row = $this->db->table('finance_payroll')->where('pegawai_id', 501)->get()->getRow();
+        $this->assertNotNull($row);
+        $this->assertStringContainsString('2 hari × Rp 35.000 = Rp 70.000', (string) $row->notes);
+        $this->assertSame(2420000.0, (float) $row->total, 'gaji 2.350.000 + lembur 70.000');
+        $this->assertSame(1, $hasil['created']);
+    }
+
+    public function testLemburKasKeluarDiabaikanPadaPeriodeRoster(): void
+    {
+        $this->db->query("INSERT INTO kas_keluar (tanggal, kategori_idkategori, deskripsi, jumlah, penerima, idunit)
+            VALUES ('2026-11-10', 10, 'LEMBUR', 999000, '501', 3)");
+
+        $baris = (new PayrollGenerator())->hitungGajiUnit('2026-11', 3)[0];
+
+        $this->assertSame(70000.0, $baris['lembur'], 'manual 999.000 tidak boleh ikut');
+    }
+
+    public function testKaryawanTanpaRosterFullTetapDigajiTanpaLembur(): void
+    {
+        $this->db->query("INSERT INTO akun (ID_AKUN, ID_UNIT, ID_JABATAN, NAMA_AKUN, ALAMAT, TERIMA_GAJI, STATUS_PEGAWAI, deleted)
+            VALUES (506, 3, 41, 'Tanpa Presensi', 'Jalan Test', 1, 1, NULL)");
+
+        $hasil = (new PayrollGenerator())->hitungGajiUnit('2026-11', 3);
+        $baris = array_values(array_filter($hasil, fn ($r) => $r['id_akun'] === 506))[0];
+
+        $this->assertSame(0.0, $baris['lembur']);
+        $this->assertGreaterThan(0.0, $baris['total']);
+    }
+
+    public function testBarisKeduaTidakMendapatLemburGanda(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES (10, 3, 501, '2026-11-30', 'rencana', 100, 'baris pertama', 'auto', '2026-11-01', '2026-11-01'),
+                   (11, 3, 501, '2026-11-30', 'rencana', 200, 'baris kedua', 'auto', '2026-11-01', '2026-11-01')");
+
+        (new PayrollGenerator())->generate('2026-11', ['unit_ids' => [3], 'overwrite' => true]);
+
+        $kedua = $this->db->table('finance_payroll')->where('id', 11)->get()->getRow();
+        $this->assertSame(200.0, (float) $kedua->total, 'baris kedua tidak boleh ikut dihitung');
+    }
+
+    public function testBarisDibayarNovemberTidakBerubah(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES (12, 3, 501, '2026-11-30', 'dibayar', 500000, 'sudah dibayar', 'auto', '2026-11-01', '2026-11-01')");
+
+        (new PayrollGenerator())->generate('2026-11', ['unit_ids' => [3], 'overwrite' => true]);
+
+        $row = $this->db->table('finance_payroll')->where('id', 12)->get()->getRow();
+        $this->assertSame(500000.0, (float) $row->total);
+        $this->assertSame('sudah dibayar', $row->notes);
     }
 }

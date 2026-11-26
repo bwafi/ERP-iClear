@@ -35,6 +35,7 @@ $payrollLocks   = $payrollLocks ?? [];
 $locks          = $payrollLocks;
 $adjustment_map = $adjustment_map ?? [];
 $kasbon_map     = $kasbon_map ?? [];
+$lemburManual   = $lemburManual ?? false;
 
 $namaBulan = [
     '01' => 'Januari', '02' => 'Februari', '03' => 'Maret', '04' => 'April',
@@ -55,6 +56,11 @@ $fmtTanggal = static function ($value): string {
 };
 ?>
 <div class="payroll-page">
+    <?php if (!empty($lemburManual)): ?>
+    <div class="alert alert-warning border-0 mb-3" role="alert">
+        Lembur manual terdeteksi pada periode ini dan tidak dihitung lagi di payroll. Lembur sekarang dihitung otomatis dari roster shift FULL yang sudah lewat (Teknisi &amp; Kepala Toko).
+    </div>
+    <?php endif; ?>
     <section class="pay-sheet" aria-labelledby="payroll-title">
         <header class="pay-head">
             <div class="pay-head-main">
