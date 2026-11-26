@@ -115,6 +115,54 @@ class StokOpnameService
     }
 
     /**
+     * Baris yang benar-benar berselisih pada satu periode, untuk modal
+     * "Detail" di riwayat.
+     *
+     * Sumber baris mengikuti status periode: FINAL dibaca dari stok_opname
+     * (hanya revisi aktif, is_reverted = 0), DRAFT masih di
+     * stok_opname_draft. BATAL tidak punya hasil yang berlaku, jadi kosong.
+     *
+     * Selisih total periode bisa 0 walau ada baris yang berselisih (plus dan
+     * minus saling menutup), jadi daftar ini tidak boleh disaring dari total.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function selisihItems(int $periodeId, string $status): array
+    {
+        if ($periodeId <= 0 || ! in_array($status, ['FINAL', 'DRAFT'], true)) {
+            return [];
+        }
+
+        $table = $status === 'FINAL' ? 'stok_opname' : 'stok_opname_draft';
+
+        $builder = $this->db->table($table . ' o')
+            ->select('o.jumlah_real, o.jumlah_komp, o.jumlah_selisih, b.kode_barang, b.nama_barang, b.jenis_hp, b.warna')
+            ->join('barang b', 'b.idbarang = o.barang_idbarang')
+            ->where('o.periode_id', $periodeId)
+            ->where('o.jumlah_selisih !=', 0)
+            ->orderBy('b.kode_barang', 'ASC');
+
+        if ($status === 'FINAL') {
+            $builder->where('o.is_reverted', 0);
+        }
+
+        $items = [];
+        foreach ($builder->get()->getResultArray() as $r) {
+            $items[] = [
+                'kode'    => (string) $r['kode_barang'],
+                'nama'    => (string) $r['nama_barang'],
+                'jenis'   => (string) $r['jenis_hp'],
+                'warna'   => (string) $r['warna'],
+                'real'    => (float) $r['jumlah_real'],
+                'komp'    => (float) $r['jumlah_komp'],
+                'selisih' => (float) $r['jumlah_selisih'],
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
      * Mulai opname: buat periode DRAFT + seed daftar barang berstok.
      *
      * Hanya barang dengan stok_akhir <> 0 yang masuk daftar. Barang stok 0 tidak

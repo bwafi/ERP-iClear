@@ -93,14 +93,7 @@ class StokOpname extends BaseController
         $periode = $this->svc->periode($unit, $tanggal);
         $audit   = $this->auditTrail($unit, $tanggal);
 
-        // Ambil data stokopname untuk modal filter selisih
-        $stokopname = (new \App\Models\ModelStokOpname())->getStokOpnameAll();
-        $stokopname_grouped = [];
-        foreach ($stokopname as $row) {
-            if((int)$row->unit_idunit === (int)$unit) {
-                $stokopname_grouped[$row->tanggal][] = $row;
-            }
-        }
+        $historis = $this->PeriodeModel->getByUnit($unit, 20);
 
         return view('template', [
             'akun'             => $this->AuthModel->getById(session('ID_AKUN')),
@@ -115,11 +108,11 @@ class StokOpname extends BaseController
             'periode'          => $periode,
             'namaUnit'         => ($this->UnitModel->where('idunit', $unit)->first()->NAMA_UNIT ?? '-'),
             'items'            => $this->svc->periodeItems($unit, $tanggal),
-            'historis'         => $this->PeriodeModel->getByUnit($unit, 20),
+            'historis'         => $historis,
+            'detailSelisih'    => $this->detailSelisihByPeriode($historis),
             'draftTerbuka'     => $draftTerbuka,
             'kpiBulanIni'      => $this->kpiBulan($unit),
             'auditTrail'       => $audit,
-            'stokopname_grouped' => $stokopname_grouped,
             'akunNama'         => $this->akunNamaMap(array_merge(
                 [(int) ($periode->mulai_by ?? 0), (int) ($periode->finalisasi_by ?? 0)],
                 array_column($audit, 'actor_id')
@@ -149,6 +142,42 @@ class StokOpname extends BaseController
         $map = [];
         foreach ($rows as $r) {
             $map[(int) $r['ID_AKUN']] = (string) $r['NAMA_AKUN'];
+        }
+
+        return $map;
+    }
+
+    /**
+     * Rincian selisih per periode untuk modal Detail di riwayat.
+     *
+     * Kunci array adalah periode_id, bukan tanggal: satu unit bisa punya
+     * lebih dari satu periode pada tanggal yang sama (mis. draft dibatalkan
+     * lalu dimulai ulang), dan detail tidak boleh tertukar.
+     *
+     * @param array<int, object> $historis
+     * @return array<int, array{tanggal: string, status: string, total_selisih: float|null, items: array<int, array<string, mixed>>}>
+     */
+    private function detailSelisihByPeriode(array $historis): array
+    {
+        $map = [];
+        foreach ($historis as $hp) {
+            $id = (int) ($hp->id ?? 0);
+            $status = (string) ($hp->status ?? '');
+            if ($id <= 0) {
+                continue;
+            }
+
+            $items = $this->svc->selisihItems($id, $status);
+            if ($items === []) {
+                continue;
+            }
+
+            $map[$id] = [
+                'tanggal'       => (string) $hp->tanggal,
+                'status'        => $status,
+                'total_selisih' => $hp->jumlah_selisih !== null ? (float) $hp->jumlah_selisih : null,
+                'items'         => $items,
+            ];
         }
 
         return $map;

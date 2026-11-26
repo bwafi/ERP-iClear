@@ -412,7 +412,7 @@ class RenderProbeTest extends CIUnitTestCase
             'kpiBulanIni'        => [],
             'auditTrail'         => [],
             'historis'           => [],
-            'stokopname_grouped' => [],
+            'detailSelisih'      => [],
             'akunNama'           => [43 => 'Admin Unit 1'],
         ];
     }
@@ -463,5 +463,87 @@ class RenderProbeTest extends CIUnitTestCase
 
         $this->assertStringContainsString('<th scope="col" class="text-center">Stok Komputer</th>', $html);
         $this->assertStringContainsString('var soShowKomp = true;', $html);
+    }
+
+    // =====================================================================
+    // Riwayat Periode Opname: detail selisih harus mengikuti baris yang
+    // benar-benar berselisih, bukan total periode (plus & minus bisa saling
+    // menutup), dan status BATAL tidak boleh tampil sebagai DRAFT.
+    // =====================================================================
+
+    private function dataOpnameRiwayat(string $status, float $totalSelisih, array $detail): array
+    {
+        return array_replace($this->dataOpname('FINAL'), [
+            'historis' => [
+                (object) [
+                    'id'             => 9,
+                    'unit_idunit'    => 1,
+                    'tanggal'        => '2026-07-14',
+                    'status'         => $status,
+                    'total_barang'   => 100,
+                    'terisi_barang'  => 100,
+                    'jumlah_komp'    => 141,
+                    'jumlah_selisih' => $totalSelisih,
+                ],
+            ],
+            'detailSelisih' => $detail,
+        ]);
+    }
+
+    public function testRiwayatMenampilkanDetailWalauTotalSelisihNol(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpnameRiwayat('FINAL', 0.0, [
+            9 => [
+                'tanggal' => '2026-07-14',
+                'status'  => 'FINAL',
+                'total_selisih' => 0.0,
+                'items'   => [
+                    ['kode' => 'BRG-1', 'nama' => 'Barang Plus', 'jenis' => '', 'warna' => '', 'real' => 6, 'komp' => 5, 'selisih' => 1],
+                    ['kode' => 'BRG-2', 'nama' => 'Barang Minus', 'jenis' => '', 'warna' => '', 'real' => 4, 'komp' => 5, 'selisih' => -1],
+                ],
+            ],
+        ]), 'stok_opname');
+
+        $this->assertStringContainsString('onclick="bukaDetailSelisih(9)"', $html, 'Detail harus tetap bisa dibuka saat total selisih 0');
+        $this->assertStringNotContainsString("bukaDetailSelisih('", $html, 'Detail memakai periode_id, bukan tanggal');
+        $this->assertStringContainsString('const detailSelisih = {"9":', $html);
+        $this->assertStringContainsString('"total_selisih":0', $html);
+        $this->assertStringContainsString('Total selisih periode', $html, 'Modal harus menampilkan total, bukan hanya nilai per baris');
+        $this->assertStringContainsString('plus dan minus saling menutup', $html);
+        $this->assertStringContainsString('class="modal-content so-detail"', $html);
+        $this->assertStringContainsString('id="detailSelisihSummary"', $html);
+        $this->assertStringContainsString('data-so-filter="plus"', $html);
+        $this->assertStringContainsString('so-diverge', $html);
+    }
+
+    public function testRiwayatTanpaBarisBerselisihTidakMenampilkanDetail(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpnameRiwayat('FINAL', 0.0, []), 'stok_opname');
+
+        $this->assertStringNotContainsString('onclick="bukaDetailSelisih(', $html);
+    }
+
+    public function testRiwayatMenampilkanStatusBatal(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpnameRiwayat('BATAL', -5.0, []), 'stok_opname');
+
+        $this->assertStringContainsString('is-batal">BATAL', $html);
+        $this->assertStringNotContainsString('is-draft">DRAFT', $html);
+    }
+
+    public function testRiwayatTidakMenyisakanScriptMati(): void
+    {
+        $html = $this->render('stok/stok_opname', $this->dataOpnameRiwayat('FINAL', 0.0, [
+            9 => [
+                'tanggal' => '2026-07-14',
+                'status'  => 'FINAL',
+                'items'   => [
+                    ['kode' => 'BRG-1', 'nama' => 'Barang Plus', 'jenis' => '', 'warna' => '', 'real' => 6, 'komp' => 5, 'selisih' => 1],
+                ],
+            ],
+        ]), 'stok_opname');
+
+        $this->assertStringNotContainsString('selectTanggalSelisih', $html, 'Handler tanggal lama harus sudah dihapus');
+        $this->assertDoesNotMatchRegularExpression('#</script>\s*\}\);\s*</script>#', $html, 'Tidak boleh ada teks }); nyasar');
     }
 }

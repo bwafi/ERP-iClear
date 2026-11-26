@@ -18,6 +18,9 @@ $selisih   = ($periode && $periode->jumlah_selisih !== null) ? (float)$periode->
 // Kepala Toko (41) agar hitung fisik tidak terpengaruh angka acuan.
 $showKomp = $showKomp ?? true;
 
+// Rincian selisih per periode_id untuk modal Detail di riwayat.
+$detailSelisih = $detailSelisih ?? [];
+
 // Stempel pembekuan: kapan stok komputer disalin dari stok_barang ke daftar opname.
 $freezeTs  = $periode ? strtotime((string)($periode->created_at ?? '')) : false;
 $freezeBy  = $periode ? (int)($periode->mulai_by ?? 0) : 0;
@@ -557,13 +560,19 @@ $who      = static function ($id) use ($akunNama): string {
                                             <th>Tanggal</th>
                                             <th class="text-center">Status</th>
                                             <th class="text-center">Barang</th>
-                                            <th class="text-end">Stok Komputer</th>                                            <th class="text-end">Selisih</th>
+                                            <th class="text-end">Stok Komputer</th>
+                                            <th class="text-end">Selisih</th>
                                             <th class="text-center">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <?php foreach ($historis as $hp) : ?>
-                                            <?php $hpSelisih = $hp->jumlah_selisih; ?>
+                                            <?php
+                                                $hpId       = (int) $hp->id;
+                                                $hpStatus   = (string) $hp->status;
+                                                $hpSelisih  = $hp->jumlah_selisih;
+                                                $hpDetail   = $detailSelisih[$hpId] ?? null;
+                                            ?>
                                             <tr>
                                                 <td>
                                                     <?= esc(date('d/m/Y', strtotime($hp->tanggal))) ?>
@@ -572,8 +581,10 @@ $who      = static function ($id) use ($akunNama): string {
                                                     <?php endif; ?>
                                                 </td>
                                                 <td class="text-center">
-                                                    <?php if ($hp->status === 'FINAL') : ?>
+                                                    <?php if ($hpStatus === 'FINAL') : ?>
                                                         <span class="so-state-chip is-final">FINAL</span>
+                                                    <?php elseif ($hpStatus === 'BATAL') : ?>
+                                                        <span class="so-state-chip is-batal">BATAL</span>
                                                     <?php else : ?>
                                                         <span class="so-state-chip is-draft">DRAFT</span>
                                                     <?php endif; ?>
@@ -581,11 +592,11 @@ $who      = static function ($id) use ($akunNama): string {
                                                 <td class="text-center"><?= (int)$hp->total_barang ?> (<?= (int)$hp->terisi_barang ?> terisi)</td>
                                                 <td class="text-end"><?= number_format((float)$hp->jumlah_komp, 0, ',', '.') ?></td>
                                                 <td class="text-end <?= ($hpSelisih !== null && (float)$hpSelisih != 0) ? 'fw-bold' : 'text-muted' ?>">
-                                                    <?= $hpSelisih !== null ? number_format((float)$hpSelisih, 0, ',', '.') : '—' ?>
+                                                    <?= $hpSelisih !== null ? (($hpSelisih > 0 ? '+' : '') . number_format((float)$hpSelisih, 0, ',', '.')) : '—' ?>
                                                 </td>
                                                 <td class="text-center">
-                                                    <?php if ($hpSelisih !== null && (float)$hpSelisih != 0) : ?>
-                                                        <button type="button" class="btn btn-sm btn-outline-info" onclick="bukaDetailSelisih('<?= esc($hp->tanggal) ?>')">
+                                                    <?php if ($hpDetail !== null) : ?>
+                                                        <button type="button" class="btn btn-sm btn-outline-info" onclick="bukaDetailSelisih(<?= $hpId ?>)">
                                                             <iconify-icon icon="solar:magnifer-linear"></iconify-icon> Detail
                                                         </button>
                                                     <?php else : ?>
@@ -629,78 +640,249 @@ $who      = static function ($id) use ($akunNama): string {
 ?>
 
 <!-- Modal Detail Selisih -->
-<div class="modal fade" id="modalDetailSelisih" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Detail Barang Selisih (Data Final)</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<div class="modal fade" id="modalDetailSelisih" tabindex="-1" aria-labelledby="modalDetailSelisihTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content so-detail">
+            <div class="modal-header so-detail__head">
+                <div class="so-detail__heading">
+                    <span class="so-detail__eyebrow">Riwayat Opname</span>
+                    <h5 class="modal-title" id="modalDetailSelisihTitle">Detail Barang Selisih</h5>
+                    <p class="so-detail__meta" id="detailSelisihMeta"></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
-            <div class="modal-body" id="containerDetailSelisih">
+
+            <div class="so-detail__summary" id="detailSelisihSummary"></div>
+
+            <div class="so-detail__toolbar">
+                <div class="so-detail__filter" role="group" aria-label="Saring baris selisih">
+                    <button type="button" class="so-detail__chip is-active" data-so-filter="all" aria-pressed="true">
+                        Semua <span class="so-detail__chip-n">0</span>
+                    </button>
+                    <button type="button" class="so-detail__chip" data-so-filter="plus" aria-pressed="false">
+                        Plus <span class="so-detail__chip-n">0</span>
+                    </button>
+                    <button type="button" class="so-detail__chip" data-so-filter="minus" aria-pressed="false">
+                        Minus <span class="so-detail__chip-n">0</span>
+                    </button>
+                </div>
             </div>
+
+            <div class="modal-body so-detail__body" id="containerDetailSelisih"></div>
+
+            <div class="modal-footer so-detail__foot" id="detailSelisihFoot"></div>
         </div>
     </div>
 </div>
 
 <script>
-    const stokopname_grouped = <?= json_encode($stokopname_grouped ?? []) ?>;
+    // Rincian selisih per periode_id (bukan per tanggal) supaya dua periode
+    // pada tanggal yang sama tidak saling tertukar.
+    const detailSelisih = <?= json_encode($detailSelisih ?? [], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
-    function bukaDetailSelisih(tanggal) {
+    var soDetailState = { periodeId: null, filter: 'all' };
+
+    function detailSelisihEsc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function detailSelisihFmt(n) {
+        return Number(n || 0).toLocaleString('id-ID');
+    }
+
+    function detailSelisihDate(iso) {
+        var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? m[3] + '/' + m[2] + '/' + m[1] : String(iso || '');
+    }
+
+    function detailSelisihTone(n) {
+        n = Number(n);
+        return n > 0 ? 'is-pos' : (n < 0 ? 'is-neg' : 'is-zero');
+    }
+
+    function detailSelisihSign(n) {
+        return Number(n) > 0 ? '+' : '';
+    }
+
+    function detailSelisihSum(list) {
+        return list.reduce(function(acc, it) {
+            return acc + Number(it.selisih || 0);
+        }, 0);
+    }
+
+    function detailSelisihChips() {
+        return document.querySelectorAll('#modalDetailSelisih [data-so-filter]');
+    }
+
+    function detailSelisihRenderSummary(payload, items) {
+        var plus   = items.filter(function(it) { return Number(it.selisih) > 0; });
+        var minus  = items.filter(function(it) { return Number(it.selisih) < 0; });
+        var sumPlus  = detailSelisihSum(plus);
+        var sumMinus = detailSelisihSum(minus);
+        var totalBaris = sumPlus + sumMinus;
+        var totalPeriode = (payload.total_selisih === null || payload.total_selisih === undefined)
+            ? totalBaris
+            : Number(payload.total_selisih);
+        var beda = Math.abs(totalBaris - totalPeriode) > 0.001;
+        var tone = detailSelisihTone(totalPeriode);
+
+        document.getElementById('detailSelisihSummary').innerHTML =
+            '<div class="so-detail__stat">'
+            + '<span class="so-detail__stat-label">Total selisih periode</span>'
+            + '<span class="so-detail__stat-value ' + tone + '">'
+            + detailSelisihSign(totalPeriode) + detailSelisihFmt(totalPeriode) + '</span>'
+            + '<span class="so-detail__stat-sub">' + items.length + ' barang berselisih</span>'
+            + '</div>'
+            + '<div class="so-detail__stat">'
+            + '<span class="so-detail__stat-label">Selisih plus</span>'
+            + '<span class="so-detail__stat-value is-pos">'
+            + (plus.length ? '+' + detailSelisihFmt(sumPlus) : '—') + '</span>'
+            + '<span class="so-detail__stat-sub">' + plus.length + ' barang</span>'
+            + '</div>'
+            + '<div class="so-detail__stat">'
+            + '<span class="so-detail__stat-label">Selisih minus</span>'
+            + '<span class="so-detail__stat-value is-neg">'
+            + (minus.length ? detailSelisihFmt(sumMinus) : '—') + '</span>'
+            + '<span class="so-detail__stat-sub">' + minus.length + ' barang</span>'
+            + '</div>'
+            + (beda
+                ? '<div class="so-detail__warn">Jumlah baris ' + detailSelisihFmt(totalBaris)
+                    + ' tidak sama dengan ringkasan periode. Laporkan ke Admin Root.</div>'
+                : '');
+
+        document.getElementById('detailSelisihFoot').innerHTML =
+            '<div class="so-detail__total"><span>Total selisih periode</span>'
+            + '<strong class="' + tone + '">' + detailSelisihSign(totalPeriode)
+            + detailSelisihFmt(totalPeriode) + '</strong></div>'
+            + '<p class="so-detail__note mb-0">Nilai per barang bisa lebih besar dari total karena '
+            + 'selisih plus dan minus saling menutup.</p>';
+
+        var counts = { all: items.length, plus: plus.length, minus: minus.length };
+        Array.prototype.forEach.call(detailSelisihChips(), function(chip) {
+            var key = chip.getAttribute('data-so-filter');
+            var badge = chip.querySelector('.so-detail__chip-n');
+            if (badge) badge.textContent = counts[key] || 0;
+            chip.disabled = (counts[key] || 0) === 0;
+        });
+    }
+
+    function detailSelisihRenderRows() {
+        var payload = detailSelisih[soDetailState.periodeId];
+        var body = document.getElementById('containerDetailSelisih');
+        if (!payload) { body.innerHTML = ''; return; }
+
+        var filter = soDetailState.filter;
+        var items = payload.items.filter(function(it) {
+            var v = Number(it.selisih);
+            return filter === 'all' || (filter === 'plus' ? v > 0 : v < 0);
+        });
+
+        if (items.length === 0) {
+            body.innerHTML = '<div class="so-detail__empty">Tidak ada baris selisih '
+                + (filter === 'plus' ? 'plus' : (filter === 'minus' ? 'minus' : ''))
+                + ' pada periode ini.</div>';
+            return;
+        }
+
+        var maxAbs = items.reduce(function(acc, it) {
+            return Math.max(acc, Math.abs(Number(it.selisih)));
+        }, 0) || 1;
+
+        var html = '<table class="so-detail__table">'
+            + '<caption class="visually-hidden">Barang yang berselisih pada periode '
+            + detailSelisihEsc(detailSelisihDate(payload.tanggal)) + '</caption>'
+            + '<thead><tr>'
+            + '<th scope="col">Barang</th>'
+            + '<th scope="col" class="so-detail__num so-detail__komp">Stok Komputer</th>'
+            + '<th scope="col" class="so-detail__num">Jumlah Real</th>'
+            + '<th scope="col" class="so-detail__sel">Selisih</th>'
+            + '</tr></thead><tbody>';
+
+        items.forEach(function(item) {
+            var v = Number(item.selisih);
+            var tone = detailSelisihTone(v);
+            // Batang tumbuh dari garis tengah; lebar 3–50% supaya selisih
+            // kecil tetap terlihat dan selisih besar tidak meluber.
+            var width = Math.max(3, Math.min(50, (Math.abs(v) / maxAbs) * 50));
+            var metaParts = [];
+            if (item.jenis) metaParts.push(detailSelisihEsc(item.jenis));
+            if (item.warna) metaParts.push(detailSelisihEsc(item.warna));
+            var sub = metaParts.length
+                ? '<span class="so-detail__sub">' + metaParts.join(' · ') + '</span>'
+                : '';
+
+            html += '<tr>'
+                + '<td class="so-detail__item">'
+                + '<span class="so-detail__kode">' + detailSelisihEsc(item.kode) + '</span>'
+                + '<span class="so-detail__nama">' + detailSelisihEsc(item.nama) + '</span>'
+                + sub + '</td>'
+                + '<td class="so-detail__num so-detail__komp">' + detailSelisihFmt(item.komp) + '</td>'
+                + '<td class="so-detail__num">' + detailSelisihFmt(item.real) + '</td>'
+                + '<td class="so-detail__sel">'
+                + '<span class="so-delta ' + tone + '">' + detailSelisihSign(v) + detailSelisihFmt(v) + '</span>'
+                + '<span class="so-diverge" aria-hidden="true"><i class="' + tone
+                + '" style="width:' + width + '%"></i></span>'
+                + '</td>'
+                + '</tr>';
+        });
+
+        body.innerHTML = html + '</tbody></table>';
+    }
+
+    function detailSelisihSetFilter(filter) {
+        soDetailState.filter = filter;
+        Array.prototype.forEach.call(detailSelisihChips(), function(chip) {
+            var on = chip.getAttribute('data-so-filter') === filter;
+            chip.classList.toggle('is-active', on);
+            chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        detailSelisihRenderRows();
+    }
+
+    function bukaDetailSelisih(periodeId) {
         var modalEl = document.getElementById('modalDetailSelisih');
         var myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        
-        var items = stokopname_grouped[tanggal] ? stokopname_grouped[tanggal].filter(item => parseFloat(item.jumlah_selisih) !== 0) : [];
-        var container = document.getElementById('containerDetailSelisih');
-        
-        if (!tanggal || items.length === 0) {
-            container.innerHTML = '<div class="alert alert-success">Tidak ada selisih pada tanggal ' + (tanggal || '') + '.</div>';
-        } else {
-            var html = '<h6 class="mb-3 text-muted">Tanggal: ' + tanggal + '</h6>';
-            html += '<table class="table table-sm table-striped">';
-            html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
-            html += '<tbody>';
-            items.forEach(function(item) {
-                var selisih = parseFloat(item.jumlah_selisih);
-                var classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
-                html += '<tr><td>' + item.nama_barang + '</td><td class="text-center">' + parseInt(item.jumlah_real) + '</td><td class="text-center">' + parseInt(item.jumlah_komp) + '</td><td class="text-center fw-bold ' + classSelisih + '">' + parseInt(item.jumlah_selisih) + '</td></tr>';
-            });
-            html += '</tbody></table>';
-            container.innerHTML = html;
+        var titleEl = document.getElementById('modalDetailSelisihTitle');
+        var metaEl  = document.getElementById('detailSelisihMeta');
+        var body    = document.getElementById('containerDetailSelisih');
+        var payload = detailSelisih[periodeId];
+
+        soDetailState.periodeId = periodeId;
+        soDetailState.filter = 'all';
+
+        if (!payload || !payload.items || payload.items.length === 0) {
+            if (titleEl) titleEl.textContent = 'Detail Barang Selisih';
+            if (metaEl) metaEl.innerHTML = '';
+            document.getElementById('detailSelisihSummary').innerHTML = '';
+            document.getElementById('detailSelisihFoot').innerHTML = '';
+            body.innerHTML = '<div class="so-detail__empty">Tidak ada barang yang berselisih pada periode ini.</div>';
+            myModal.show();
+            return;
         }
+
+        if (titleEl) titleEl.textContent = 'Detail Barang Selisih';
+        if (metaEl) {
+            metaEl.innerHTML = '<span>' + detailSelisihEsc(detailSelisihDate(payload.tanggal)) + '</span>'
+                + '<span aria-hidden="true">·</span>'
+                + '<span class="so-detail__status ' + (payload.status === 'FINAL' ? 'is-final' : 'is-draft') + '">'
+                + (payload.status === 'FINAL' ? 'FINAL' : 'DRAFT') + '</span>';
+        }
+
+        detailSelisihRenderSummary(payload, payload.items);
+        detailSelisihSetFilter('all');
 
         myModal.show();
     }
 
-    $('#selectTanggalSelisih').on('change', function() {
-        const tanggal = $(this).val();
-        const container = $('#containerDetailSelisih');
-        
-        if (!tanggal || !stokopname_grouped[tanggal]) {
-            container.html('<p class="text-muted">Pilih tanggal untuk melihat barang yang selisih.</p>');
-            return;
-        }
-
-        // Filter selisih != 0
-        const items = stokopname_grouped[tanggal].filter(item => parseFloat(item.jumlah_selisih) !== 0);
-        
-        if (items.length === 0) {
-            container.html('<div class="alert alert-success">Tidak ada selisih pada tanggal ini.</div>');
-            return;
-        }
-
-        let html = '<p class="text-muted small mb-3">Menampilkan selisih pada tanggal: <strong>' + tanggal + '</strong></p>';
-        html += '<table class="table table-sm table-striped">';
-        html += '<thead class="table-light"><tr><th>Barang</th><th class="text-center">Real</th><th class="text-center">Komp</th><th class="text-center">Selisih</th></tr></thead>';
-        html += '<tbody>';
-        items.forEach(function(item) {
-            var selisih = parseFloat(item.jumlah_selisih);
-            var classSelisih = selisih > 0 ? 'text-success' : 'text-danger';
-            html += '<tr><td>' + item.nama_barang + '</td><td class="text-center">' + parseInt(item.jumlah_real) + '</td><td class="text-center">' + parseInt(item.jumlah_komp) + '</td><td class="text-center fw-bold ' + classSelisih + '">' + parseInt(item.jumlah_selisih) + '</td></tr>';
-        });
-        html += '</tbody></table>';
-        container.html(html);
-    });
-</script>
+    // Saringan dipasang sekali; isi tabel dirender ulang tiap pilihan.
+    document.addEventListener('click', function(e) {
+        var chip = (e.target && e.target.closest)
+            ? e.target.closest('#modalDetailSelisih [data-so-filter]')
+            : null;
+        if (!chip || chip.disabled) return;
+        detailSelisihSetFilter(chip.getAttribute('data-so-filter'));
     });
 </script>
 
