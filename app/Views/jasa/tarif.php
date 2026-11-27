@@ -156,11 +156,7 @@ $angka  = static fn (float $nilai): string => $jumlah > 0 ? number_format($nilai
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
             </div>
             <div class="modal-body">
-                <div class="tj-field">
-                    <label for="tj-kode">Kode</label>
-                    <input type="text" id="tj-kode" name="kode_barang" required autocomplete="off">
-                    <p class="tj-hint">Harus unik; dipakai kasir untuk mencari jasa ini.</p>
-                </div>
+                <p class="tj-hint">Kode jasa dibuat otomatis dengan format <strong>JS-DDMMYYNNN</strong> dan urut per hari.</p>
                 <div class="tj-field">
                     <label for="tj-nama">Nama Jasa</label>
                     <input type="text" id="tj-nama" name="nama_barang" required autocomplete="off">

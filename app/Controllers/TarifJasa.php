@@ -53,12 +53,11 @@ class TarifJasa extends BaseController
     public function simpan()
     {
         $nama  = trim((string) $this->request->getPost('nama_barang'));
-        $kode  = trim((string) $this->request->getPost('kode_barang'));
         $harga = $this->angka($this->request->getPost('harga'));
         $fee   = $this->angka($this->request->getPost('harga_beli'));
 
-        if ($nama === '' || $kode === '' || $harga <= 0) {
-            session()->setFlashdata('gagal', 'Kode, nama, dan harga jasa wajib diisi.');
+        if ($nama === '' || $harga <= 0) {
+            session()->setFlashdata('gagal', 'Nama dan harga jasa wajib diisi.');
             return redirect()->to(base_url('tarif_jasa'));
         }
 
@@ -77,10 +76,7 @@ class TarifJasa extends BaseController
             return redirect()->to(base_url('tarif_jasa'));
         }
 
-        if ($this->BarangModel->getBykode($kode)) {
-            session()->setFlashdata('gagal', 'Kode jasa sudah dipakai barang lain.');
-            return redirect()->to(base_url('tarif_jasa'));
-        }
+        $kode = $this->kodeJasaBerikutnya();
 
         $idbarang = (int) $this->BarangModel->insert([
             'kode_barang'  => $kode,
@@ -93,11 +89,14 @@ class TarifJasa extends BaseController
             'input'        => session('ID_AKUN'),
         ]);
 
-        if ($idbarang > 0) {
-            $this->sinkronFeeTeknisi($idbarang, $fee);
+        if ($idbarang <= 0) {
+            session()->setFlashdata('gagal', 'Jasa gagal disimpan. Coba lagi.');
+            return redirect()->to(base_url('tarif_jasa'));
         }
 
-        session()->setFlashdata('sukses', 'Jasa berhasil disimpan.');
+        $this->sinkronFeeTeknisi($idbarang, $fee);
+
+        session()->setFlashdata('sukses', 'Jasa ' . $kode . ' berhasil disimpan.');
         return redirect()->to(base_url('tarif_jasa'));
     }
 
@@ -177,30 +176,47 @@ class TarifJasa extends BaseController
     }
 
     /**
-     * HPP jasa adalah bagian teknisi. `barang.harga_beli` menjadi sumber,
-     * dicerminkan ke hpp_barang/hpp_unit supaya resolver transaksi memakai
-     * angka yang sama dan fee tidak ikut dihitung sebagai omset.
+     * Kode jasa otomatis: `JS-<ddmmyy><urut 3 digit>`, urut per hari.
+     * Contoh: JS-271126001, lalu JS-271126002 pada hari yang sama.
+     * Kode yang sudah dipakai (termasuk barang terhapus) dilewati supaya
+     * tidak bentrok dengan riwayat.
+     */
+    private function kodeJasaBerikutnya(): string
+    {
+        $prefix = 'JS-' . date('dmy');
+
+        $terpakai = $this->BarangModel
+            ->select('kode_barang')
+            ->like('kode_barang', $prefix, 'after')
+            ->findAll();
+
+        $urut = 0;
+        foreach ($terpakai as $baris) {
+            $sisa = substr((string) $baris->kode_barang, strlen($prefix));
+            if ($sisa !== '' && ctype_digit($sisa)) {
+                $urut = max($urut, (int) $sisa);
+            }
+        }
+
+        do {
+            $urut++;
+            $kode = $prefix . str_pad((string) $urut, 3, '0', STR_PAD_LEFT);
+        } while ($this->BarangModel->getBykode($kode) !== null);
+
+        return $kode;
+    }
+
+    /**
+     * HPP jasa adalah bagian teknisi. `barang.harga_beli` menjadi sumber dan
+     * `hpp_barang` adalah VIEW turunan barang + detail_pembelian (read-only),
+     * jadi nilainya otomatis ikut tanpa ditulis. Yang perlu diselaraskan hanya
+     * override `hpp_unit` supaya resolver transaksi memakai angka yang sama
+     * dan fee tidak ikut dihitung sebagai omset.
      */
     private function sinkronFeeTeknisi(int $idbarang, int $fee): void
     {
-        $barang = $this->BarangModel->find($idbarang);
-        if ($barang === null) {
-            return;
-        }
-
-        $db = \Config\Database::connect();
-
-        $db->table('hpp_barang')->upsert([
-            'idbarang'    => $idbarang,
-            'kode_barang' => $barang->kode_barang,
-            'nama_barang' => $barang->nama_barang,
-            'harga'       => (int) $barang->harga,
-            'harga_beli'  => $fee,
-            'idkategori'  => 3,
-            'hpp'         => $fee,
-        ]);
-
-        $db->table('hpp_unit')
+        \Config\Database::connect()
+            ->table('hpp_unit')
             ->where('barang_idbarang', $idbarang)
             ->update([
                 'hpp'        => $fee,

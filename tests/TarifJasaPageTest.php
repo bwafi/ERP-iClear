@@ -18,7 +18,7 @@ final class TarifJasaPageTest extends CIUnitTestCase
 
     private const TABEL = [
         'unit', 'akun', 'jabatan', 'menu', 'barang', 'barang_unit',
-        'stok_awal', 'hpp_unit', 'hpp_barang', 'stok_barang', 'service', 'pelanggan',
+        'stok_awal', 'hpp_unit', 'stok_barang', 'service', 'pelanggan',
         'harga_jual_unit',
     ];
 
@@ -33,6 +33,7 @@ final class TarifJasaPageTest extends CIUnitTestCase
             $this->db->query('DROP TABLE IF EXISTS ' . $tabel);
         }
 
+        $this->hapusHppBarang();
         $this->buatSkema();
         $this->sebarData();
     }
@@ -43,9 +44,30 @@ final class TarifJasaPageTest extends CIUnitTestCase
             $this->db->query('DROP TABLE IF EXISTS ' . $tabel);
         }
 
+        $this->hapusHppBarang();
+
         $this->db->close();
         $this->db->setPrefix($this->prefixAsli);
         parent::tearDown();
+    }
+
+    /**
+     * Di database nyata `hpp_barang` adalah VIEW turunan barang +
+     * detail_pembelian, jadi tidak bisa ditulis maupun di-DROP TABLE.
+     */
+    private function hapusHppBarang(): void
+    {
+        try {
+            $this->db->query('DROP VIEW IF EXISTS hpp_barang');
+        } catch (\Throwable $e) {
+            // Bukan view (mis. sisa skema test lama); lanjut ke DROP TABLE.
+        }
+
+        try {
+            $this->db->query('DROP TABLE IF EXISTS hpp_barang');
+        } catch (\Throwable $e) {
+            // Sudah berupa view yang gagal dihapus; tidak ada yang bisa dibersihkan.
+        }
     }
 
     private function buatSkema(): void
@@ -77,10 +99,8 @@ final class TarifJasaPageTest extends CIUnitTestCase
         $q('CREATE TABLE harga_jual_unit (barang_idbarang INT NOT NULL, unit_idunit INT NOT NULL,
                 harga_jual REAL NOT NULL, updated_by INT NULL, updated_at DATETIME NULL,
                 UNIQUE KEY (barang_idbarang, unit_idunit))');
-        $q('CREATE TABLE hpp_barang (idbarang INT PRIMARY KEY, kode_barang TEXT NOT NULL,
-                nama_barang TEXT NOT NULL, harga INT NOT NULL, harga_beli INT NULL,
-                idkategori INT NULL, hpp DECIMAL(44,0) NOT NULL DEFAULT 0,
-                input VARCHAR(255) NOT NULL DEFAULT "Faisal")');
+        $q('CREATE VIEW hpp_barang AS SELECT idbarang, kode_barang, nama_barang, harga,
+                harga_beli, idkategori, COALESCE(harga_beli, 0) AS hpp FROM barang');
 
         // BaseController::initController membaca notifikasi stok minimum.
         $q('CREATE TABLE stok_barang (idbarang INT NULL, id_unit INT NULL,
@@ -107,8 +127,6 @@ final class TarifJasaPageTest extends CIUnitTestCase
             (2, 'J02', 'Cleaning', 50000, 0, 3, '0', 'jasa'),
             (3, 'P01', 'Produk Biasa', 90000, 70000, 1, '0', 'produk'),
             (4, 'J99', 'Jasa Dihapus', 10000, 0, 3, '1', 'jasa')");
-        $q("INSERT INTO hpp_barang (idbarang, kode_barang, nama_barang, harga, harga_beli, idkategori, hpp)
-            VALUES (1, 'J01', 'Ganti LCD', 150000, 15000, 3, 15000)");
         $q("INSERT INTO hpp_unit (barang_idbarang, unit_idunit, hpp, sumber) VALUES (1, 1, 0, 'stok_awal')");
         // Legacy: fee hanya ada di hpp_unit, barang.harga_beli masih 0.
         $q("INSERT INTO hpp_unit (barang_idbarang, unit_idunit, hpp, sumber) VALUES (2, 1, 25000, 'stok_awal')");
@@ -145,7 +163,8 @@ final class TarifJasaPageTest extends CIUnitTestCase
         $result->assertSee('Rp 150.000');
         $result->assertSee('Rp 50.000');
         $result->assertSee('Rp 100.000'); // rata-rata dua jasa
-        $result->assertSee('name="kode_barang"');
+        $result->assertDontSee('name="kode_barang"');
+        $result->assertSee('JS-DDMMYYNNN');
         $result->assertSee('name="nama_barang"');
         $result->assertSee('name="harga"');
         $result->assertSee('>HPP<');
@@ -166,18 +185,18 @@ final class TarifJasaPageTest extends CIUnitTestCase
             'kolom HPP tampil sebelum harga jual');
     }
 
-    public function testSimpanDanUbahTetapMemakaiFieldLama(): void
+    public function testSimpanMembuatKodeOtomatisDanUbahTetapMemakaiFieldLama(): void
     {
         $this->sesi();
 
         $this->post('tarif_jasa/simpan', $this->token() + [
-            'kode_barang' => 'J03',
             'nama_barang' => 'Ganti Baterai',
             'harga'       => '250000',
         ])->assertRedirect();
 
-        $baru = $this->db->table('barang')->where('kode_barang', 'J03')->get()->getRow();
+        $baru = $this->db->table('barang')->where('nama_barang', 'Ganti Baterai')->get()->getRow();
         $this->assertNotNull($baru, 'jasa baru tersimpan');
+        $this->assertSame('JS-' . date('dmy') . '001', $baru->kode_barang, 'kode dibuat otomatis');
         $this->assertSame('jasa', $baru->jenis_barang);
         $this->assertSame(250000, (int) $baru->harga);
 
@@ -190,19 +209,30 @@ final class TarifJasaPageTest extends CIUnitTestCase
         $ubah = $this->db->table('barang')->where('idbarang', $baru->idbarang)->get()->getRow();
         $this->assertSame('Ganti Baterai Original', $ubah->nama_barang);
         $this->assertSame(275000, (int) $ubah->harga);
+        $this->assertSame($baru->kode_barang, $ubah->kode_barang, 'kode tidak berubah saat diubah');
     }
 
-    public function testKodeDuplikatDitolakTanpaMenambahBaris(): void
+    public function testKodeOtomatisBerurutanPerHariDanMengabaikanInputManual(): void
     {
         $this->sesi();
 
         $this->post('tarif_jasa/simpan', $this->token() + [
-            'kode_barang' => 'J01',
-            'nama_barang' => 'Duplikat',
+            'kode_barang' => 'MANUAL-1',
+            'nama_barang' => 'Jasa Pertama',
             'harga'       => '1000',
         ])->assertRedirect();
 
-        $this->assertSame(4, $this->db->table('barang')->countAllResults(), 'tidak ada baris baru');
+        $this->post('tarif_jasa/simpan', $this->token() + [
+            'nama_barang' => 'Jasa Kedua',
+            'harga'       => '2000',
+        ])->assertRedirect();
+
+        $pertama = $this->db->table('barang')->where('nama_barang', 'Jasa Pertama')->get()->getRow();
+        $kedua   = $this->db->table('barang')->where('nama_barang', 'Jasa Kedua')->get()->getRow();
+
+        $this->assertSame('JS-' . date('dmy') . '001', $pertama->kode_barang);
+        $this->assertSame('JS-' . date('dmy') . '002', $kedua->kode_barang);
+        $this->assertSame(6, $this->db->table('barang')->countAllResults(), 'dua jasa baru tersimpan');
     }
 
     public function testFeeTeknisiDisimpanSebagaiHpp(): void
@@ -210,17 +240,16 @@ final class TarifJasaPageTest extends CIUnitTestCase
         $this->sesi();
 
         $this->post('tarif_jasa/simpan', $this->token() + [
-            'kode_barang' => 'J03',
             'nama_barang' => 'Servis Mesin',
             'harga'       => '1000000',
             'harga_beli'  => '100000',
         ])->assertRedirect();
 
-        $baru = $this->db->table('barang')->where('kode_barang', 'J03')->get()->getRow();
+        $baru = $this->db->table('barang')->where('nama_barang', 'Servis Mesin')->get()->getRow();
         $this->assertSame(100000, (int) $baru->harga_beli, 'fee tersimpan di master');
 
         $hpp = $this->db->table('hpp_barang')->where('idbarang', $baru->idbarang)->get()->getRow();
-        $this->assertNotNull($hpp, 'baris hpp_barang dibuat');
+        $this->assertNotNull($hpp, 'view hpp_barang mengikuti master');
         $this->assertSame(100000, (int) $hpp->hpp);
 
         $resolve = (new \App\Models\ModelHppUnit())->resolve((int) $baru->idbarang, 1);
@@ -270,14 +299,13 @@ final class TarifJasaPageTest extends CIUnitTestCase
         $this->sesi();
 
         $this->post('tarif_jasa/simpan', $this->token() + [
-            'kode_barang' => 'J05',
             'nama_barang' => 'Servis Mesin Persen',
             'harga'       => '1000000',
             'harga_beli'  => '0',
             'fee_persen'  => '10',
         ])->assertRedirect();
 
-        $baru = $this->db->table('barang')->where('kode_barang', 'J05')->get()->getRow();
+        $baru = $this->db->table('barang')->where('nama_barang', 'Servis Mesin Persen')->get()->getRow();
         $this->assertSame(100000, (int) $baru->harga_beli, '10% dari 1.000.000');
 
         $hpp = $this->db->table('hpp_barang')->where('idbarang', $baru->idbarang)->get()->getRow();
