@@ -228,6 +228,18 @@
         border-top: 1px solid var(--bs-border-color);
     }
 
+    /* Quiet action in the Service Baru dialog: body-color label keeps it
+       readable while the outline keeps it secondary to the primary action. */
+    .service-dialog-quiet {
+        --bs-btn-color: var(--bs-body-color);
+        --bs-btn-hover-color: var(--bs-body-color);
+        --bs-btn-hover-bg: var(--bs-tertiary-bg);
+        --bs-btn-hover-border-color: var(--bs-body-color);
+        --bs-btn-active-color: var(--bs-body-color);
+        --bs-btn-active-bg: var(--bs-secondary-bg);
+        --bs-btn-active-border-color: var(--bs-body-color);
+    }
+
     @media (max-width: 1199.98px) {
         .service-rail {
             flex-direction: row;
@@ -303,6 +315,13 @@
         .service-ticket-head .btn {
             width: 100%;
         }
+
+        #serviceBaruModal .modal-footer > * {
+            flex: 1 1 100%;
+            width: 100%;
+            justify-content: center;
+            text-align: center;
+        }
     }
 </style>
 
@@ -346,7 +365,7 @@
                         <span class="service-ticket-hint">Data di bawah tersimpan di tiket ini.</span>
                     </div>
                     <a href="<?= base_url('service/clear_session') ?>" class="btn btn-sm btn-outline-primary"
-                       onclick="return confirm('Mulai service baru? Tiket ini tetap tersimpan dan bisa dilanjutkan dari halaman Proses Service.')">
+                       data-bs-toggle="modal" data-bs-target="#serviceBaruModal">
                         <i class="bi bi-plus-lg me-1"></i> Service Baru
                     </a>
                 </div>
@@ -461,6 +480,46 @@
         </div>
     </div>
 </div>
+
+<?php if (!empty($idservice) && !empty($intake_ticket)): ?>
+    <div class="modal fade" id="serviceBaruModal" tabindex="-1"
+         aria-labelledby="serviceBaruModalLabel" aria-describedby="serviceBaruModalDesc">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header align-items-start">
+                    <div class="d-flex align-items-start gap-2">
+                        <span class="bg-primary-subtle text-primary rounded-2 d-flex align-items-center justify-content-center flex-shrink-0"
+                              style="width: 36px; height: 36px;">
+                            <iconify-icon icon="solar:add-circle-bold" width="20" height="20"></iconify-icon>
+                        </span>
+                        <div>
+                            <h5 class="modal-title" id="serviceBaruModalLabel">Mulai service baru?</h5>
+                            <p class="text-muted fs-3 mb-0" id="serviceBaruModalDesc">Tiket yang sedang aktif tetap tersimpan.</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close mt-1" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body pt-3">
+                    <div class="d-flex flex-wrap align-items-center gap-2 pb-3 border-bottom">
+                        <span class="service-ticket-status <?= $statusClass ?>"><?= esc($statusLabel) ?></span>
+                        <span class="service-ticket-no"><span class="service-ticket-label">Tiket</span> <?= esc($intake_ticket->no_service) ?></span>
+                    </div>
+                    <p class="text-muted fs-3 mt-3 mb-0 d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle mt-1"></i>
+                        <span>Tiket ini bisa dilanjutkan kapan saja dari halaman Proses Service. Halaman akan kembali ke langkah Pelanggan.</span>
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary service-dialog-quiet" data-bs-dismiss="modal">Lanjutkan Tiket</button>
+                    <a href="<?= base_url('service/clear_session') ?>" class="btn btn-primary d-inline-flex align-items-center gap-2">
+                        <iconify-icon icon="solar:add-circle-bold" width="18" height="18"></iconify-icon>
+                        Mulai Service Baru
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif ?>
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {

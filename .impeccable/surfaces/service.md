@@ -90,3 +90,17 @@ Provenance — shipping rasters (captured 2026-11-27, live `/service` with activ
 - `.impeccable/review/service-ticket-bar-desktop-light.png` — summary card, 1440 light.
 - `.impeccable/review/service-ticket-bar-desktop-dark.png` — summary card, 1440 dark.
 - `.impeccable/review/service-ticket-bar-mobile-dark.png` — summary card, 390 dark (stacked identity, full-width action).
+
+## Extension — Service Baru confirmation dialog (2026-11-28)
+
+Replaced the native `window.confirm()` on the active-ticket **Service Baru** action with an in-world Bootstrap dialog in `app/Views/transaksi/service.php`. Scope: the confirmation affordance only; `service/clear_session`, the trigger label, and ticket-session logic are unchanged.
+
+- Trigger keeps its `href` as a no-JS fallback and opens `#serviceBaruModal` with `data-bs-toggle="modal"`; the dialog only renders while an active ticket exists. Escape/backdrop and the explicit "Lanjutkan Tiket" quiet button dismiss without navigating.
+- Dialog: centered `modal-content`, primary-subtle plus tile, title "Mulai service baru?", a status-pill + `Tiket <no_service>` row, and one consequence line (ticket stays saved; continue from Proses Service; the page returns to the Pelanggan step).
+- Footer: quiet outline "Lanjutkan Tiket" (body-color label via `.service-dialog-quiet`) and primary "Mulai Service Baru". At ≤575.98px both stack full width.
+- Tokens: existing `--bs-*` subtle/body tokens and `.service-ticket-status`; iconify solar. No new palette, gradient, or hard shadow. Light/dark safe.
+- Verification: `php -l` clean; `ServiceIntakeSessionTest` 21/21 (78 assertions) including the modal trigger/guard; live `/service` with active ticket SRV120261128001 in Ardia — desktop light/dark rasters; 390px geometry (modal 374px, `scrollWidth === innerWidth`, footer children 342px full-width stacked); "Lanjutkan Tiket" dismissed with modal count 0 and URL still `/service`.
+
+Provenance — shipping rasters (captured 2026-11-28, live `/service` with active ticket, Ardia/Chromium):
+- `.impeccable/review/service-baru-modal-light.png` — dialog, desktop light.
+- `.impeccable/review/service-baru-modal-dark.png` — dialog, desktop dark.

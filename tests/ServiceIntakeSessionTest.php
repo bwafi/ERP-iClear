@@ -310,6 +310,7 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
         $this->assertStringContainsString('insert/pelanggan_service', $html);
         $this->assertStringNotContainsString('update/pelanggan_service', $html);
         $this->assertStringNotContainsString('service/clear_session', $html);
+        $this->assertStringNotContainsString('id="serviceBaruModal"', $html);
     }
 
     public function testSesiTiketBisaDiambilDiresetKeFormServiceBaru(): void
@@ -359,6 +360,14 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
         $this->assertStringContainsString('SRV-AKTIF', $html);
         $this->assertStringContainsString('Service Baru', $html);
         $this->assertStringContainsString('service/clear_session', $html);
+
+        // Konfirmasi Service Baru memakai modal, bukan confirm() bawaan browser.
+        $this->assertStringContainsString('data-bs-target="#serviceBaruModal"', $html);
+        $this->assertStringContainsString('id="serviceBaruModal"', $html);
+        $this->assertStringContainsString('aria-labelledby="serviceBaruModalLabel"', $html);
+        $this->assertStringContainsString('Lanjutkan Tiket', $html);
+        $this->assertStringContainsString('Mulai Service Baru', $html);
+        $this->assertStringNotContainsString("confirm('Mulai service baru?", $html);
     }
 
     public function testBannerTiketMenungguMemakaiPenandaStatusMenunggu(): void
