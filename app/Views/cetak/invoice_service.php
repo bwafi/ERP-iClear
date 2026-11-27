@@ -56,7 +56,7 @@
 
         <thead>
             <tr>
-                <td style="text-align: left;" colspan="2"><img src="<?= base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></td>
+                <td style="text-align: left;" colspan="2"><img src="<?= (isset($logoPath) && is_file($logoPath)) ? $logoPath : base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></td>
             </tr>
             <tr>
                 <td style="text-align: left;" colspan="2">No.Faktur : <?= @$service->no_service ?></td>
@@ -101,7 +101,7 @@
             <tr>
                 <!-- KOLOM GAMBAR -->
                 <td colspan="2" style="width:50%; text-align:left;">
-                    <img src="<?= base_url('template/assets/images/hp.png') ?>" style="height: 200px;">
+                    <img src="<?= (isset($hpImagePath) && is_file($hpImagePath)) ? $hpImagePath : base_url('template/assets/images/hp.png') ?>" style="height: 200px;">
                 </td>
 
                 <?php
@@ -233,9 +233,9 @@
         <tr class="ttd">
             <td colspan="1" style="text-align: center;">Teknisi</td>
             <td rowspan="2" colspan="3" style="text-align: center;">
-                <?php if (isset($qrImageUrl)): ?>
+                <?php if (isset($qrImageUrl) || isset($qrImagePath)): ?>
                     <div>
-                        <img src="<?= $qrImageUrl ?>" width="70" alt="QR Code">
+                        <img src="<?= (isset($qrImagePath) && is_file($qrImagePath)) ? $qrImagePath : ($qrImageUrl ?? '') ?>" width="70" alt="QR Code">
                         <p style="font-size: 11px;">Scan untuk melihat detail service</p>
                     </div>
                 <?php endif; ?>

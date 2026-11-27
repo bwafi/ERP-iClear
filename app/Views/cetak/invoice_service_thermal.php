@@ -60,7 +60,7 @@
 <body>
     <!-- Header -->
     <div class="center">
-        <div style="text-align: center;" colspan="2"><img src="<?= base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></div>
+        <div style="text-align: center;" colspan="2"><img src="<?= (isset($logoPath) && is_file($logoPath)) ? $logoPath : base_url('template/assets/images/logo.png') ?>" style="height: 40px; display: left; margin: auto;"></div>
         <div class="bold"><?= @$dataunit->NAMA_UNIT ?></div>
         <div>
             <?= @$dataunit->JALAN_UNIT . ', ' . @$dataunit->KABUPATEN_UNIT ?><br>
@@ -226,9 +226,9 @@
     <div class="line"></div>
     <?php endforeach; ?>
     <!-- QR Code -->
-    <?php if (isset($qrImageUrl)): ?>
+    <?php if (isset($qrImageUrl) || isset($qrImagePath)): ?>
     <div class="center">
-        <img src="<?= $qrImageUrl ?>" width="100" alt="QR Code">
+        <img src="<?= (isset($qrImagePath) && is_file($qrImagePath)) ? $qrImagePath : ($qrImageUrl ?? '') ?>" width="100" alt="QR Code">
         <div style="font-size: 10px;">Scan untuk detail service</div>
     </div>
     <?php endif; ?>

@@ -711,7 +711,8 @@ class Riwayat_Service extends BaseController
 
     $qrData = base_url('status_service/' . $idservice);
     $uniqueName = 'qr_' . md5($idservice . time()) . '.png';
-    $qrImageUrl = generateQrToFile($qrData, $uniqueName);
+    $qrImagePath = generateQrToFilePath($qrData, $uniqueName);
+    $qrImageUrl  = base_url('qr_service/' . $uniqueName);
 
     $data = [
         'sparepart'  => $sparepart,
@@ -719,6 +720,12 @@ class Riwayat_Service extends BaseController
         'kerusakan'  => $kerusakan,
         'human'      => $human,
         'qrImageUrl' => $qrImageUrl,
+        // Pakai path file lokal untuk aset cetak. Kalau memakai base_url(),
+        // mPDF akan fetch HTTP ke server sendiri; di dev server single-thread
+        // request itu tidak pernah dilayani dan seluruh aplikasi ikut macet.
+        'qrImagePath' => $qrImagePath,
+        'logoPath'    => FCPATH . 'template/assets/images/logo.png',
+        'hpImagePath' => FCPATH . 'template/assets/images/hp.png',
         // Header invoice memakai unit milik service-nya, bukan unit user yang
         // sedang login. Kalau dicetak user unit lain, kopnya jadi unit yang
         // salah (mis. service Genteng dicetak dari user Banyuwangi).
@@ -737,13 +744,16 @@ class Riwayat_Service extends BaseController
             'margin_right'  => 2,
             'margin_top'    => 2,
             'margin_bottom' => 2,
+            // Pengaman: jangan biarkan fetch remote menggantung tanpa batas.
+            'curlExecutionTimeout' => 10,
         ]);
 
     } else {
         $html = view('cetak/invoice_service', $data);
 
         $mpdf = new \Mpdf\Mpdf([
-            'curlUserAgent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:108.0) Gecko/20100101 Firefox/108.0'
+            'curlUserAgent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:108.0) Gecko/20100101 Firefox/108.0',
+            'curlExecutionTimeout' => 10,
         ]);
     }
 
