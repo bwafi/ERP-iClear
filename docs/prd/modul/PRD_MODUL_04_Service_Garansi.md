@@ -24,12 +24,16 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 
 ## 4. Alur Utama
 ### 4.1 Intake Service — `Service::insert_service`
-1. Validasi: hanya satu transaksi aktif per user (guard `session('idservice')`); bila ada transaksi aktif → tolak sampai diselesaikan/dibatalkan.
-2. Wajib pelanggan (`idpelanggan` valid).
-3. DP opsional (`dp_bayar`): tolak negatif; metode `tunai|bank`; simpan ke ledger `service_dp` (melalui `ServiceDpService`) + jurnal DP; `kode_dp='DP{no_service}'`.
-4. Set `session('idservice')`; seluruh operasi lanjutan memakai id service itu.
+1. Saat `GET /service`, sesi `idservice` hanya dipertahankan bila tiket berstatus 1/2 dan unit tiket berada dalam cakupan user (`ServiceIntakeGuard`: HO role 0/1/34 = semua unit, SPV 40 via `spv_units`, role lain `ID_UNIT`). Status selain 1/2 (termasuk 3, 4, 90, 91) atau unit lain → sesi dihapus, muncul pesan, dan form mulai dari service baru. Tiket aktif menampilkan banner status + tombol **Service Baru** (`service/clear_session`). — ✅ `Service::index`; test `ServiceIntakeSessionTest`
+2. Validasi: hanya satu transaksi aktif per user (guard `session('idservice')`); bila ada transaksi aktif → tolak dan tawarkan **Service Baru** (hapus sesi tanpa menghapus tiket lama).
+3. Wajib pelanggan (`idpelanggan` valid).
+4. DP opsional (`dp_bayar`): tolak negatif; metode `tunai|bank`; simpan ke ledger `service_dp` (melalui `ServiceDpService`) + jurnal DP; `kode_dp='DP{no_service}'`.
+5. Set `session('idservice')`; seluruh operasi lanjutan memakai id service itu.
 ### 4.2 Kerusakan & Sparepart
 - `insert_kerusakan`, `insert_sparepart` (potong stok sparepart; set `garansi_hari`).
+  - Keduanya menolak tiket di luar status 1/2, unit di luar cakupan, atau `idservice` yang berbeda dari `session('idservice')`; kerusakan yang ditolak tidak mencetak nota. — ✅ `Service::insert_kerusakan/insert_sparepart`; test `ServiceIntakeSessionTest`
+  - Penyuntingan pelanggan dari `/service` (`update/pelanggan_service` dengan `return_to=service`) ditolak bila pelanggan berbeda atau `idservice` tidak sama dengan `session('idservice')`; dari halaman detail, `selectedidpelanggan` hanya mengubah pelanggan service bila tombol **Pilih** mengirim penanda `pelanggan_changed=1` dan pelanggan tujuan ada serta tidak terhapus (`deleted=0`). — ✅ `Riwayat_Service::update_service_pelanggan`; test `ServiceIntakeSessionTest`
+  - Domisili pelanggan hanya ditulis bila minimal satu field `domisili_*` dikirim tidak kosong, sehingga memilih pelanggan baru dari halaman detail tidak menimpa domisili dengan string kosong. — ✅ `Riwayat_Service::update_service_pelanggan`; test `ServiceIntakeSessionTest`
 - `search_sparepart_ajax`, `search_pelanggan_ajax`.
 ### 4.3 Pembayaran
 - `Service::insert_pembayaran` (GROSS) — menulis `harus_dibayar` bruto.
@@ -77,7 +81,7 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - 🔶 Porsi DP sudah dijurnal ke `2010302000`; pembayaran non-DP belum dijurnal (#37), sehingga seluruh refund saat ini mendebit akun diterima di muka. Pemisahan akun menunggu posting pendapatan service.
 
 ## 5. Business Rules (Bukti)
-1. Satu transaksi service aktif per user (session `idservice`). — `Service::insert_service`
+1. Satu transaksi service aktif per user (session `idservice`); sesi hanya dipertahankan untuk tiket status 1/2 dalam cakupan unit, dan pengguna bisa memilih **Service Baru** (hapus sesi) tanpa menghapus tiket lama. — `Service::index`; `ServiceIntakeGuard`; test `ServiceIntakeSessionTest`
 2. Pelanggan wajib di pilih sebelum simpan service. — `Service::insert_service`
 3. DP tidak boleh negatif; bila DP>0 → ledger `service_dp` + jurnal DP; DP 0 dilewati (tanpa baris/jurnal). — `Service::insert_service`
 4. `kode_dp` stabil `DP{no_service}`. — `Service::insert_service`
@@ -94,6 +98,8 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 15. Pengambilan service dengan total 0 mengambil total dari `SUM(service_sparepart.sub_total)`; total yang sudah terisi tidak ditimpa, dan DP>0 tanpa total ditolak. — `Riwayat_Service::update_sudah_diambil`; test `ServicePengambilanDpTest`
 16. HPP sparepart service (`service_sparepart.hpp_penjualan`), HPP invoice sparepart, dan HPP klaim garansi (`hpp_penjualan_garansi`/`hpp_omset_garansi`) memakai `hpp_unit` produk+unit service; fallback `hpp_barang` lalu `barang.harga_beli`. Prefill HPP di halaman klaim memakai resolver yang sama. — `ModelHppUnit::resolve/resolveMany`; `Service/Riwayat_Service::insert_sparepart`; `StatusGaransi`
 17. Picker service (`service/search_sparepart`, dipakai `/service` dan `/detail/riwayat_service/{id}?tab=sparepart`) punya **dua tombol/mode**: "Pilih Sparepart" menampilkan produk sparepart/aksesoris berstok dari view `stok_barang` (kode sprt/acc, stok 0 tersaring), dan "Pilih Jasa" menampilkan master `barang.jenis_barang='jasa'` tanpa syarat stok. Mode dipilih lewat parameter `jenis` (`sparepart` default, `jasa`); kedua mode menambahkan baris ke `service_sparepart` seperti biasa. Harga jual di modal untuk kedua mode mengikuti unit sesi: `COALESCE(harga_jual_unit.harga_jual, barang.harga)`, tanpa baris override berarti ikut master. Nilai yang dipilih menjadi snapshot `service_sparepart.harga_penjualan`; baris lama tidak di-backfill dan tidak berubah saat override/master diubah. HPP yang tampil di modal memakai resolver per unit yang sama dengan jalur simpan (`hpp_unit` barang+unit login, fallback `hpp_barang`, lalu `barang.harga_beli`), sehingga angka di picker sama dengan yang disimpan. — `Service::search_sparepart_ajax`; `ModelHargaJualUnit::resolve`; `Views/riwayat/table/sparepart_table.php`; `Views/transaksi/table/sparepart_table.php`; test `ServiceSparepartJasaTest`, `ServiceSparepartSearchDedupTest`
+18. Tiket service hanya boleh disunting dari intake bila berstatus 1/2 dan unitnya dalam cakupan user; status lain atau unit lain mereset sesi, bukan menyunting tiket lama. — ✅ `Service::index`; `ServiceIntakeGuard`; test `ServiceIntakeSessionTest`
+19. `service/saveKerusakan` dan `service/saveSparepart` menolak tiket yang sudah selesai/unit lain atau `idservice` yang tidak sama dengan sesi; penolakan tidak menulis data dan tidak membuka halaman cetak nota. — ✅ `Service::insert_kerusakan/insert_sparepart`; test `ServiceIntakeSessionTest`
 
 ## 6. Acceptance Criteria
 - [ ] Intake service menolak transaksi aktif kedua; memaksa pelanggan.
@@ -104,6 +110,8 @@ Mengelola siklus service perangkat (intake, diagnosis, sparepart, pengerjaan, pe
 - [ ] Klaim garansi tercatat & bisa dilihat riwayatnya.
 - [ ] Picker sparepart/jasa memakai harga jual unit service dan transaksi service lama tidak berubah.
 - [ ] Invoice & ekspor riwayat service tersedia.
+- [ ] Sesi intake menunjuk tiket status 3/4/90/91 atau unit lain → form mulai dari service baru tanpa menyunting tiket lama.
+- [ ] Simpan kerusakan/sparepart dari tiket selesai atau `idservice` yang tidak sama dengan sesi ditolak dan tidak mencetak nota.
 
 ## 7. Dependensi
 - `ModelService/ModelProsesService/ModelServiceKerusakan/ModelServiceSparepart/ModelServiceDp`, `ModelRiwayatKlaimGaransi`, `ModelBarangRusakClaim`, `ModelStokBarang`, `ModelPelanggan`.

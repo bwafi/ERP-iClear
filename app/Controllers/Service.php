@@ -24,6 +24,7 @@ use App\Models\ModelKartuStok;
 use App\Models\ModelRegion;
 use App\Services\Service\ServiceDpService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
+use App\Services\Service\ServiceIntakeGuard;
 
 class Service extends BaseController
 
@@ -78,7 +79,29 @@ class Service extends BaseController
     {
         $akun =   $this->AuthModel->getById(session('ID_AKUN'));
         $teknisi = $this->AuthModel->getdataakun();
+
+        $guard = new ServiceIntakeGuard();
         $idservice = session('idservice') ?? null;
+        $intakeTicket = null;
+
+        if (!empty($idservice)) {
+            $ticket = $this->ServiceModel->find($idservice);
+            $check = $guard->checkTicket($ticket, $guard->allowedUnitIds());
+
+            if ($check['ok']) {
+                $intakeTicket = $ticket;
+            } else {
+                session()->remove('idservice');
+                $idservice = null;
+                $pesan = [
+                    'closed' => 'Tiket sebelumnya sudah selesai atau dibatalkan. Form dimulai dari service baru.',
+                    'unit'   => 'Tiket sebelumnya milik unit lain. Form dimulai dari service baru.',
+                ][$check['reason']] ?? '';
+                if ($pesan !== '') {
+                    session()->setFlashdata('gagal', $pesan);
+                }
+            }
+        }
 
         $unitId = session('ID_UNIT');
 
@@ -91,6 +114,7 @@ class Service extends BaseController
             'dp_bank' => $this->BankModel->getBankDalamScopeUnit((int) $unitId),
             'fungsi' => $this->KerusakanModel->getKerusakan(),
             'idservice' => $idservice,
+            'intake_ticket' => $intakeTicket,
             'old_service_pelanggan' => $this->ServiceModel->getByIdWithPelanggan($idservice),
             'oldkerusakan' => $oldkerusakan,
             'oldsparepart' => $oldsparepart,
@@ -141,7 +165,7 @@ class Service extends BaseController
             $existingService = $this->ServiceModel->find($existingId);
             
             if ($existingService && in_array($existingService->status_service, [1, 2, 3])) {
-                session()->setFlashdata('gagal', 'Gagal! Anda masih memiliki transaksi aktif (No: ' . $existingService->no_service . '). Selesaikan terlebih dahulu atau <a href="' . base_url('service/cancel/' . $existingId) . '">batalkan</a>.');
+                session()->setFlashdata('gagal', 'Gagal! Anda masih memiliki service aktif (No: ' . $existingService->no_service . '). Selesaikan dulu, atau klik <a href="' . base_url('service/clear_session') . '">Service Baru</a> untuk memulai tiket lain.');
                 return redirect()->back();
             } else {
                 session()->remove('idservice');
@@ -308,6 +332,15 @@ class Service extends BaseController
         $keteranganInput = $this->request->getPost('keterangan');
         $idservice = $this->request->getPost('idservice_k');
 
+        $guard = new ServiceIntakeGuard();
+        $ticket = $idservice ? $this->ServiceModel->find($idservice) : null;
+        $check = $guard->checkTicket($ticket, $guard->allowedUnitIds());
+
+        if (! $check['ok'] || (int) $idservice !== (int) session('idservice')) {
+            session()->setFlashdata('gagal', 'Data service tidak valid atau sudah selesai. Kerusakan tidak disimpan dan nota tidak dicetak.');
+            return redirect()->to(base_url('service?tab=kerusakan'));
+        }
+
         if (empty($fungsiTerpilih)) {
             return redirect()->to('/service?tab=kerusakan')->with('gagal', 'Pilih minimal satu jenis kerusakan sebelum melanjutkan.');
         }
@@ -367,6 +400,14 @@ class Service extends BaseController
 
         if ($idservice <= 0) {
             return redirect()->to('/service?tab=sparepart')->with('gagal', 'ID service tidak valid. Sparepart tidak disimpan.');
+        }
+
+        $guard = new ServiceIntakeGuard();
+        $ticket = $this->ServiceModel->find($idservice);
+        $check = $guard->checkTicket($ticket, $guard->allowedUnitIds());
+
+        if (! $check['ok'] || $idservice !== (int) session('idservice')) {
+            return redirect()->to('/service?tab=sparepart')->with('gagal', 'Data service tidak valid atau sudah selesai. Sparepart tidak disimpan.');
         }
 
         $db = Database::connect();

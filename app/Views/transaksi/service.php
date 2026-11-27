@@ -123,6 +123,80 @@
         border: 1px solid var(--bs-border-color);
     }
 
+    /* Active ticket context row — satu kartu dengan ringkasan tiket */
+    .service-ticket-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px 16px;
+        padding-bottom: 12px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .service-ticket-identity {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+        min-width: 0;
+    }
+
+    .service-ticket-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 9px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: .7rem;
+        font-weight: 600;
+        letter-spacing: .03em;
+        line-height: 1.4;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .service-ticket-status::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .service-ticket-status.is-menunggu {
+        color: var(--bs-warning-text-emphasis);
+        background: var(--bs-warning-bg-subtle);
+        border-color: var(--bs-warning-border-subtle);
+    }
+
+    .service-ticket-status.is-proses {
+        color: var(--bs-primary-text-emphasis);
+        background: var(--bs-primary-bg-subtle);
+        border-color: var(--bs-primary-border-subtle);
+    }
+
+    .service-ticket-no {
+        color: var(--bs-heading-color);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: .01em;
+        overflow-wrap: anywhere;
+    }
+
+    .service-ticket-no .service-ticket-label {
+        color: var(--bs-secondary-color);
+        font-weight: 400;
+    }
+
+    .service-ticket-hint {
+        color: var(--bs-secondary-color);
+        font-size: .78rem;
+        line-height: 1.4;
+    }
+
     .service-summary-metric .sv-label {
         font-size: .72rem;
         letter-spacing: .02em;
@@ -216,6 +290,19 @@
         .service-rail-title {
             font-size: .72rem;
         }
+
+        .service-ticket-head {
+            align-items: flex-start;
+        }
+
+        .service-ticket-identity {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .service-ticket-head .btn {
+            width: 100%;
+        }
     }
 </style>
 
@@ -246,6 +333,24 @@
     <!-- Running ticket summary -->
     <div class="col-12 <?= empty($idservice) ? 'd-none' : '' ?>" id="service-summary-col">
         <div class="service-summary-strip rounded-2 px-4 py-3">
+            <?php if (!empty($idservice) && !empty($intake_ticket)): ?>
+                <?php
+                $statusMenunggu = (int) $intake_ticket->status_service === 1;
+                $statusLabel    = $statusMenunggu ? 'Menunggu' : 'Proses';
+                $statusClass    = $statusMenunggu ? 'is-menunggu' : 'is-proses';
+                ?>
+                <div class="service-ticket-head" role="status">
+                    <div class="service-ticket-identity">
+                        <span class="service-ticket-status <?= $statusClass ?>"><?= esc($statusLabel) ?></span>
+                        <span class="service-ticket-no"><span class="service-ticket-label">Tiket</span> <?= esc($intake_ticket->no_service) ?></span>
+                        <span class="service-ticket-hint">Isian di bawah akan disimpan ke tiket ini.</span>
+                    </div>
+                    <a href="<?= base_url('service/clear_session') ?>" class="btn btn-sm btn-outline-primary"
+                       onclick="return confirm('Mulai service baru? Tiket ini tetap tersimpan dan bisa dilanjutkan dari halaman Proses Service.')">
+                        <i class="bi bi-plus-lg me-1"></i> Service Baru
+                    </a>
+                </div>
+            <?php endif ?>
             <div class="d-flex flex-wrap align-items-center gap-3 gap-xl-4">
                 <div class="service-summary-metric">
                     <div class="sv-label d-inline-flex align-items-center gap-1"><i class="bi bi-person-fill"></i> Pelanggan</div>

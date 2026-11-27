@@ -32,6 +32,7 @@ use App\Services\Service\GaransiClaimService;
 use App\Services\Service\SparepartKeluarHardDeleteService;
 use App\Services\Service\ServiceSparepartPenjualanSyncService;
 use App\Services\Service\ServiceUnitScopeService;
+use App\Services\Service\ServiceIntakeGuard;
 use App\Models\ModelServiceDp;
 
 class Riwayat_Service extends BaseController
@@ -261,6 +262,26 @@ class Riwayat_Service extends BaseController
     public function update_service_pelanggan()
     {
         $idservice = $this->request->getPost('idservice');
+
+        $dariIntake = $this->request->getPost('return_to') === 'service';
+
+        if ($dariIntake) {
+            $guard = new ServiceIntakeGuard();
+            $ticket = $this->ServiceModel->find($idservice);
+            $check = $guard->checkTicket($ticket, $guard->allowedUnitIds());
+
+            if (! $check['ok'] || (int) $idservice !== (int) session('idservice')) {
+                session()->setFlashdata('gagal', 'Tiket ini sudah selesai atau bukan milik unit Anda. Gunakan tombol Service Baru untuk memulai tiket lain.');
+                return redirect()->to(base_url('service'));
+            }
+
+            $pelangganDipilih = (int) $this->request->getPost('selectedidpelanggan');
+            if ($pelangganDipilih > 0 && $pelangganDipilih !== (int) $ticket->pelanggan_id_pelanggan) {
+                session()->setFlashdata('gagal', 'Pelanggan tiket tidak bisa diubah dari form ini. Gunakan tombol Service Baru untuk pelanggan lain.');
+                return redirect()->to(base_url('service'));
+            }
+        }
+
         $imei = $this->request->getPost('imei');
         $dp_bayar = $this->rupiahToInt($this->request->getPost('dp_bayar'));
         $tipe_passcode = $this->request->getPost('tipe_passcode');
@@ -287,12 +308,31 @@ class Riwayat_Service extends BaseController
         $this->ServiceModel->updateService($idservice, $data);
 
         $service = $this->ServiceModel->find($idservice);
-        if ($service && !empty($service->pelanggan_id_pelanggan)) {
-            $this->PelangganModel->update($service->pelanggan_id_pelanggan, [
-                'provinsi' => $this->request->getPost('domisili_provinsi'),
-                'kabupaten' => $this->request->getPost('domisili_kabupaten'),
-                'kecamatan' => $this->request->getPost('domisili_kecamatan'),
-            ]);
+
+        if (! $dariIntake) {
+            $pelangganDipilih = (int) $this->request->getPost('selectedidpelanggan');
+            $konfirmasiGanti = $this->request->getPost('pelanggan_changed') === '1';
+
+            if ($konfirmasiGanti
+                && $pelangganDipilih > 0
+                && $pelangganDipilih !== (int) ($service->pelanggan_id_pelanggan ?? 0)) {
+                $pelangganBaru = $this->PelangganModel->getById($pelangganDipilih);
+
+                if ($pelangganBaru && (int) ($pelangganBaru->deleted ?? 0) === 0) {
+                    $this->ServiceModel->updateService($idservice, ['pelanggan_id_pelanggan' => $pelangganDipilih]);
+                    $service = $this->ServiceModel->find($idservice);
+                }
+            }
+        }
+
+        $domisili = array_filter([
+            'provinsi'  => $this->request->getPost('domisili_provinsi'),
+            'kabupaten' => $this->request->getPost('domisili_kabupaten'),
+            'kecamatan' => $this->request->getPost('domisili_kecamatan'),
+        ], static fn ($nilai) => $nilai !== null && $nilai !== '');
+
+        if ($service && !empty($service->pelanggan_id_pelanggan) && $domisili !== []) {
+            $this->PelangganModel->update($service->pelanggan_id_pelanggan, $domisili);
         }
 
         // Form di /service memakai endpoint yang sama untuk menyunting ticket

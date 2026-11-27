@@ -105,7 +105,7 @@ Alasan (komentar kode baris 186–192): `Riwayat_Service::insert_pembayaran` men
 ## 3. Alur Pengguna Utama & Alternatif
 
 ### 3.1 Intake Service (alur baru 4 langkah)
-1. **Pelanggan** — `Service::index` (tab pelanggan) → pilih/buat pelanggan. `insert_service` memvalidasi pelanggan harus ada (`ModelPelanggan::getById`), menolak `dp_bayar` negatif, dan mencegah dua ticket aktif per sesi (session `idservice` + status 1/2/3).
+1. **Pelanggan** — `Service::index` (tab pelanggan) → pilih/buat pelanggan. `insert_service` memvalidasi pelanggan harus ada (`ModelPelanggan::getById`), menolak `dp_bayar` negatif, dan mencegah dua ticket aktif per sesi (session `idservice` + status 1/2). Sesi yang menunjuk status 3/4/90/91 atau unit di luar cakupan direset di `Service::index`; tiket lama tetap bisa disunting dari halaman detail.
 2. **Kerusakan** — `insert_kerusakan` (route `service/saveKerusakan`) upsert baris `service_kerusakan` per `fungsi`; yang tidak dipilih dihapus. Wajib ≥1 fungsi.
 3. **Sparepart** — `insert_sparepart` (route `service/saveSparepart`) menulis ulang `service_sparepart`, menetapkan `garansi_hari`, lalu **menghapus invoice penjualan lama** dan **membuat invoice baru** via `buatPenjualanDariService()`.
 4. **Pembayaran** — `insert_pembayaran` (route `insert/service/savePembayaran`) — **GROSS**; DP tambahan dicatat via `ServiceDpService::catatDp`. Setelah selesai, session `idservice` dibersihkan.

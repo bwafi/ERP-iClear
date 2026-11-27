@@ -29,6 +29,7 @@
     <div class="row g-3">
 
         <input hidden type="text" name="idservice" value="<?php echo @$idservice ?>">
+        <input hidden type="text" name="pelanggan_changed" id="pelanggan_changed" value="0">
         <input hidden type="text" id="created_at" value="<?php echo @$old_service_pelanggan->created_at ?>">
 
 
@@ -286,6 +287,10 @@
                 return;
             }
 
+            // Tandai bahwa pelanggan benar-benar dipilih lewat tombol Pilih,
+            // bukan sekadar dipilih di dropdown lalu modal ditutup.
+            document.getElementById('pelanggan_changed').value = '1';
+
             const nama = selectedOption.getAttribute('data-nama');
             const no_hp = selectedOption.getAttribute('data-nohp');
 
@@ -302,6 +307,11 @@
 
 
             pelangganModal.hide();
+        });
+
+        // Memilih pelanggan lain di dropdown membatalkan konfirmasi sebelumnya.
+        document.getElementById('pelanggan-select').addEventListener('change', function() {
+            document.getElementById('pelanggan_changed').value = '0';
         });
 
         function pushOption($sel, val) {

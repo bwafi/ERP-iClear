@@ -73,3 +73,20 @@ Provenance — shipping rasters (captured 2026-10-14, detail render `?tab=pembay
 - `.impeccable/review/service-pembayaran-desktop.png` — 1440×1750 light.
 - `.impeccable/review/service-pembayaran-mobile.png` — 390×2600 light (method grid 1 column).
 - `.impeccable/review/service-pembayaran-dark.png` — 1440×1750 dark.
+
+## Extension — Active ticket bar (2026-11-27)
+
+Scoped redesign of the stale-session affordance in `app/Views/transaksi/service.php`. Before, a stock `alert alert-warning` (then `alert-info`) sat between the page header and the running summary, producing three stacked full-width bars and reading like an error. Scope: the active-ticket identity, its status, and the **Service Baru** action. No route, field name, JS id, `?tab=` behavior, or business rule changed.
+
+- The bar now lives inside `.service-summary-strip` as `.service-ticket-head`, so ticket identity and running metrics are one card separated by a hairline instead of two stacked surfaces.
+- Identity: status pill + `Tiket <no_service>` + one-line consequence (`Isian di bawah akan disimpan ke tiket ini.`). The pill is text, not color-only: `is-menunggu` (warning subtle tokens) for status 1, `is-proses` (primary subtle tokens) for status 2, each with a leading dot.
+- Action: outline-primary `Service Baru` with the existing `service/clear_session` route and confirmation copy, kept secondary so it never competes with the form's Simpan/Selanjutnya.
+- Tokens: `--bs-secondary-bg`, `--bs-border-color`, `--bs-heading-color`, `--bs-secondary-color`, `--bs-warning-bg-subtle`/`-text-emphasis`/`-border-subtle`, `--bs-primary-*` subtle tokens; tabular numerals; no gradients, shadows, or colored left borders. Light/dark safe.
+- Responsive: at ≤575.98px the identity stacks and the action becomes full width; the metrics row keeps its existing wrap behavior.
+
+Verification: `php -l` clean; `ServiceIntakeSessionTest` 18/18 (58 assertions) including the status-1/status-2 class mapping; Impeccable detector `[]`; live render on `localhost:8080/service` with an active ticket in desktop light, desktop dark, and 390px mobile.
+
+Provenance — shipping rasters (captured 2026-11-27, live `/service` with active ticket, Ardia/Chromium):
+- `.impeccable/review/service-ticket-bar-desktop-light.png` — summary card, 1440 light.
+- `.impeccable/review/service-ticket-bar-desktop-dark.png` — summary card, 1440 dark.
+- `.impeccable/review/service-ticket-bar-mobile-dark.png` — summary card, 390 dark (stacked identity, full-width action).
