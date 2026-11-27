@@ -343,7 +343,7 @@
                     <div class="service-ticket-identity">
                         <span class="service-ticket-status <?= $statusClass ?>"><?= esc($statusLabel) ?></span>
                         <span class="service-ticket-no"><span class="service-ticket-label">Tiket</span> <?= esc($intake_ticket->no_service) ?></span>
-                        <span class="service-ticket-hint">Isian di bawah akan disimpan ke tiket ini.</span>
+                        <span class="service-ticket-hint">Data di bawah tersimpan di tiket ini.</span>
                     </div>
                     <a href="<?= base_url('service/clear_session') ?>" class="btn btn-sm btn-outline-primary"
                        onclick="return confirm('Mulai service baru? Tiket ini tetap tersimpan dan bisa dilanjutkan dari halaman Proses Service.')">
