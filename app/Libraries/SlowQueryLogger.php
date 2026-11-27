@@ -4,6 +4,7 @@ namespace App\Libraries;
 
 use CodeIgniter\Log\Handlers\FileHandler;
 use CodeIgniter\Log\Logger;
+use Config\Logger as LoggerConfig;
 
 class SlowQueryLogger
 {
@@ -15,20 +16,29 @@ class SlowQueryLogger
         try {
             $this->threshold = (float) (env('database.slowQueryThreshold') ?? 1.0);
 
-            $handler = new FileHandler([
-                'path' => WRITEPATH . 'logs/slow_queries/',
-                'fileExtension' => 'log',
-                'filePermissions' => 0644,
-            ]);
+            $path = WRITEPATH . 'logs/slow_queries/';
+            if (! is_dir($path) && ! mkdir($path, 0755, true) && ! is_dir($path)) {
+                throw new \RuntimeException('Folder slow query tidak bisa dibuat: ' . $path);
+            }
 
-            $this->logger = new Logger([
-                'handlers' => [$handler],
-                'threshold' => 9, // Log semua level
-            ]);
-        } catch (\Exception $e) {
+            // Logger CI 4.4 wajib menerima objek config, bukan array. Clone
+            // supaya threshold/handler logger utama tidak ikut berubah.
+            $config            = clone config(LoggerConfig::class);
+            $config->threshold = 9;
+            $config->handlers  = [
+                FileHandler::class => [
+                    'handles'         => ['warning'],
+                    'path'            => $path,
+                    'fileExtension'   => 'log',
+                    'filePermissions' => 0644,
+                ],
+            ];
+
+            $this->logger = new Logger($config, false);
+        } catch (\Throwable $e) {
             // Fallback ke system log jika error
             log_message('error', 'Failed to initialize SlowQueryLogger: ' . $e->getMessage());
-            $this->logger = service('logger');
+            $this->logger    = service('logger');
             $this->threshold = 1.0;
         }
     }
@@ -46,7 +56,7 @@ class SlowQueryLogger
 
                 $this->logger->log('warning', $message);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             log_message('error', 'Failed to log slow query: ' . $e->getMessage());
         }
     }
