@@ -1,7 +1,7 @@
 # Unit Operasional vs Non-Operasional
 
 **Berlaku sejak:** 11 Oktober 2026 (`unit.is_operational`)
-**Diperbarui:** 16 November 2026 — konsolidasi aturan lintas modul untuk agent.
+**Diperbarui:** 27 November 2026 — tambah §7 sinkronisasi unit sesi (sebelumnya 16 November 2026).
 **Status bukti:** `✅` terverifikasi di kode/migration · `🔶` inferensi · `⚠️` belum terverifikasi.
 
 Dokumen ini adalah sumber detail untuk guardrail **Unit operasional vs Head Office** di `AGENTS.md`. PRD modul tetap menjadi sumber aturan bisnis per modul; dokumen ini menjelaskan cara flag `unit.is_operational` dipakai di seluruh aplikasi.
@@ -68,7 +68,21 @@ Jangan menyaring unit non-operasional di area tersebut tanpa instruksi eksplisit
 - ✅ Test: `PembelianUnitInputTest`, `PembelianPageTest`, `PembelianHppUnitTest` (unit pembelian & fallback unit operasional).
 - ⚠️ Service/garansi/KasBank/payroll belum memiliki test khusus yang mengunci aturan `is_operational`; perilaku di tabel §3 diverifikasi lewat pembacaan kode, bukan test regresi.
 
-## 7. Referensi
+## 7. Sinkronisasi unit sesi
+
+`session('ID_UNIT')` disalin dari `akun.ID_UNIT` saat login, lalu disinkronkan ulang pada setiap **GET non-AJAX** oleh `AuthFilter` lewat `SessionUnitSyncService`. ✅
+
+- POST/PUT/DELETE dan AJAX sengaja tidak menyinkronkan: form yang sedang disubmit harus memakai unit saat form dirender, dan lookup AJAX di tengah pengisian form tidak boleh memindahkan unit. ✅
+- Saat unit berbeda, `ID_UNIT` + `NAMA_UNIT` diganti, `idservice` dihapus, dan pengguna menerima notifikasi. ✅
+- Unit `0` tetap nilai valid; `NAMA_UNIT` fallback `Unit <id>` bila baris `unit` tidak ada. ✅
+- Akun tidak ditemukan, `ID_AKUN` kosong, atau `ID_UNIT` akun NULL: sesi dibiarkan. ✅
+- Kegagalan baca database tidak menjatuhkan request; sinkron dilewati dan dicatat di log. ✅
+
+Konsekuensi: perubahan `akun.ID_UNIT` berlaku pada page load berikutnya tanpa login ulang. Transaksi lama tetap tercatat di `unit_idunit` aslinya. Tiket service yang sedang dikerjakan direset dari intake tetapi tetap bisa dibuka dari halaman Proses Service.
+
+Test: `tests/unit/SessionUnitSyncServiceTest.php`, `tests/ServiceIntakeSessionTest.php` (kasus GET/POST/AJAX).
+
+## 8. Referensi
 
 - `AGENTS.md` §C — guardrail ringkas.
 - `docs/prd/modul/PRD_MODUL_03_Pembelian_Persediaan.md` rule 18 — aturan unit pembelian.

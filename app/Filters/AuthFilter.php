@@ -6,6 +6,7 @@ use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Filters\FilterInterface;
 use App\Services\Auth\LoginRedirectService;
+use App\Services\Auth\SessionUnitSyncService;
 
 class AuthFilter implements FilterInterface
 {
@@ -24,6 +25,27 @@ class AuthFilter implements FilterInterface
             (new LoginRedirectService())->simpan($request);
 
             return redirect()->to(base_url('/login'))->with('error', "Invalid Credential Login");
+        }
+
+        // Sinkronkan unit sesi dengan master akun pada GET non-AJAX. POST/AJAX
+        // sengaja tidak menyentuh unit agar form yang sedang disubmit tetap
+        // memakai unit saat form dirender.
+        $isAjax   = method_exists($request, 'isAJAX') ? $request->isAJAX() : false;
+        $syncUnit = (new SessionUnitSyncService())->sync($request->getMethod(), $isAjax);
+        if ($syncUnit !== null) {
+            $pesan = 'Unit Anda berubah dari ' . $syncUnit['old_name'] . ' ke ' . $syncUnit['new_name']
+                . '. Transaksi baru memakai unit ' . $syncUnit['new_name'] . '.';
+            if ($syncUnit['ticket_reset']) {
+                $pesan .= ' Tiket service yang sedang dikerjakan direset; buka dari halaman Proses Service untuk melanjutkan.';
+            }
+
+            // Jangan hapus pesan sukses dari request sebelumnya (mis. hasil simpan).
+            $pesanSebelumnya = (string) session()->getFlashdata('sukses');
+            if ($pesanSebelumnya !== '') {
+                $pesan = $pesanSebelumnya . ' ' . $pesan;
+            }
+
+            session()->setFlashdata('sukses', $pesan);
         }
             // $ID_AKUN = session()->get("ID_AKUN");
             // $data_user = db_connect()->table("akun")->where("ID_AKUN", "$ID_AKUN")->get()->getRow();

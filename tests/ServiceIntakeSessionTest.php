@@ -45,9 +45,11 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
     {
         $db = $this->koneksiFresh();
 
+        $db->query('SET FOREIGN_KEY_CHECKS=0');
         foreach (self::TABEL as $t) {
             $db->query("DROP TABLE IF EXISTS {$t}");
         }
+        $db->query('SET FOREIGN_KEY_CHECKS=1');
 
         parent::tearDown();
     }
@@ -60,6 +62,11 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
     private function buatTabel(): void
     {
         $q = fn (string $sql) => $this->db->query($sql);
+
+        // Tabel sisa kelas test lain bisa memiliki FK ke db_unit/db_akun.
+        // Matikan pengecekan saat menyiapkan skema agar drop/create tidak gagal
+        // karena tipe kolom induk berbeda.
+        $q('SET FOREIGN_KEY_CHECKS=0');
 
         // `stok_barang` di produksi berupa VIEW turunan banyak tabel. Di
         // lingkungan uji view itu bisa sudah tidak valid (tabel sumber di-drop
@@ -262,6 +269,8 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
         $q("INSERT INTO db_pelanggan (id_pelanggan, nama) VALUES (10, 'Pelanggan Sepuluh'), (11, 'Pelanggan Sebelas')");
         $q("INSERT INTO db_unit (idunit, NAMA_UNIT) VALUES (1, 'Unit Satu'), (2, 'Unit Dua')");
         $q("INSERT INTO db_fungsi (idfungsi, nama_fungsi) VALUES (1, 'Layar')");
+
+        $q('SET FOREIGN_KEY_CHECKS=1');
     }
 
     private function sesi(array $extra = []): void
@@ -363,6 +372,55 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
 
         $this->assertStringContainsString('service-ticket-status is-menunggu', $html);
         $this->assertStringContainsString('SRV-MENUNGGU', $html);
+    }
+
+    public function testUnitAkunBerubahMenyinkronkanSesiDanMerisetTiket(): void
+    {
+        $id = $this->seedService(['status_service' => 1, 'no_service' => 'SRV-UNIT-LAMA']);
+        $this->sesi(['idservice' => $id]);
+        $this->koneksiFresh()->table('akun')->where('ID_AKUN', 43)->update(['ID_UNIT' => 2]);
+
+        $r = $this->get('service');
+
+        $r->assertStatus(200);
+        $this->assertSame(2, (int) session('ID_UNIT'));
+        $this->assertSame('Unit Dua', session('NAMA_UNIT'));
+        $this->assertNull(session('idservice'));
+        $this->assertStringContainsString('Unit Dua', $this->flashSukses());
+        $this->assertStringContainsString('Proses Service', $this->flashSukses());
+
+        $html = (string) $r->getBody();
+        $this->assertStringNotContainsString('service/clear_session', $html);
+        $this->assertStringContainsString('insert/pelanggan_service', $html);
+    }
+
+    public function testPostTidakMenyinkronkanUnitSaatAkunBerubah(): void
+    {
+        $id = $this->seedService(['status_service' => 1]);
+        $this->sesi(['idservice' => $id]);
+        $this->koneksiFresh()->table('akun')->where('ID_AKUN', 43)->update(['ID_UNIT' => 2]);
+
+        $this->post('service/saveKerusakan', [
+            'idservice_k' => $id,
+            'fungsi'      => [1],
+            'keterangan'  => [1 => 'retak'],
+        ])->assertStatus(302);
+
+        $this->assertSame(1, (int) session('ID_UNIT'));
+    }
+
+    public function testAjaxGetTidakMenyinkronkanUnitSaatAkunBerubah(): void
+    {
+        $id = $this->seedService(['status_service' => 1]);
+        $this->sesi(['idservice' => $id]);
+        $this->koneksiFresh()->table('akun')->where('ID_AKUN', 43)->update(['ID_UNIT' => 2]);
+
+        $this->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+            ->get('service')
+            ->assertStatus(200);
+
+        $this->assertSame(1, (int) session('ID_UNIT'));
+        $this->assertSame($id, (int) session('idservice'));
     }
 
     public function testEditPelangganDariIntakeDitolakSaatTiketSelesai(): void
@@ -504,6 +562,11 @@ final class ServiceIntakeSessionTest extends CIUnitTestCase
     private function flashGagal(): string
     {
         return (string) ($_SESSION['gagal'] ?? '');
+    }
+
+    private function flashSukses(): string
+    {
+        return (string) ($_SESSION['sukses'] ?? '');
     }
 
     public function testKerusakanTidakDisimpanDanTidakMencetakSaatTiketSelesai(): void

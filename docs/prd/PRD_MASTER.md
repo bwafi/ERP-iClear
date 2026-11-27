@@ -35,7 +35,7 @@ Baseline repository yang diverifikasi: **88 controller · 127 model · 86 servic
 ### 3.1 Autentikasi & Otorisasi
 - `AuthFilter` hanya memeriksa `logged_in=true`; **tidak ada penegakan menu/role global**. Role dipakai untuk menampilkan sidebar (`Core::get_role/get_menu_show`) dan untuk guard di dalam controller (mis. `FinanceScopeService::inputRoles()`, `ContentScopeService::ROLES_*`). Konsekuensi: sebagian besar otorisasi bergantung pada disiplin per-controller.
 - **Auth bukan authz.** Banyak route hanya memakai `['filter'=>'auth']`; sejumlah route tulis bahkan tidak memakai filter `auth` (lihat `audit/PRD_AUDIT_REPORT.md` X-05). CRUD master (`Pegawai`, `Unit`, `Produk`) juga tidak memiliki guard role.
-- Login: `ModelAuth::cekUsername` (NOID|KTP|EMAIL) + `password_verify`; sesi berisi `ID_AKUN, ID_JABATAN, ID_UNIT, NAMA_UNIT, logged_in`.
+- Login: `ModelAuth::cekUsername` (NOID|KTP|EMAIL) + `password_verify`; sesi berisi `ID_AKUN, ID_JABATAN, ID_UNIT, NAMA_UNIT, logged_in`. `ID_UNIT`/`NAMA_UNIT` disinkronkan ulang dari `akun` pada GET non-AJAX (`AuthFilter` + `SessionUnitSyncService`), sehingga perubahan unit di master berlaku tanpa login ulang. — ✅ `app/Services/Auth/SessionUnitSyncService.php`; test `SessionUnitSyncServiceTest`, `ServiceIntakeSessionTest`
 
 ### 3.2 Transaksi & Atomisitas
 - Pola `transStart/transComplete/transRollback` dipakai pada beberapa alur, dan modul keuangan tertentu memakai `PostingLedgerException` untuk membatalkan batch bila ledger gagal.
