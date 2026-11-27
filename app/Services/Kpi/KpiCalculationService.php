@@ -71,6 +71,14 @@ class KpiCalculationService
     /** Jabatan staff toko yang ikut pool insentif Probolinggo. */
     private const STORE_POSITION_IDS = [35, 36, 41, 42];
 
+    /**
+     * Jabatan HO yang tidak menerima pool insentif HO.
+     *
+     * Teknisi Mesin (49) punya skema komisi sendiri dan tidak boleh ikut
+     * pembagi, supaya porsinya tidak mengurangi bagian pegawai HO lain.
+     */
+    private const HO_EXCLUDED_POSITION_IDS = [49];
+
     protected $componentModel;
     protected $targetModel;
     protected $weightModel;
@@ -1510,7 +1518,11 @@ class KpiCalculationService
         string $year,
         string $date
     ): float {
-        $ids = $this->activePaidEmployeeIds(self::HO_UNIT_ID);
+        $ids = $this->activePaidEmployeeIds(
+            self::HO_UNIT_ID,
+            null,
+            self::HO_EXCLUDED_POSITION_IDS,
+        );
         if (!$ids || !in_array($employeeId, $ids, true)) {
             return 0.0;
         }
@@ -1607,13 +1619,17 @@ class KpiCalculationService
      *
      * Probation (JENIS_PEGAWAI = 2) dikecualikan: insentifnya tidak dibayarkan
      * (lihat PRD 07), jadi tidak boleh ikut mengurangi bagian pegawai lain.
+     * `$excludePositions` dipakai pool HO untuk mengeluarkan jabatan yang
+     * tidak menerima insentif (mis. Teknisi Mesin).
      *
      * @param list<int>|null $positions
+     * @param list<int>      $excludePositions
      * @return list<int>
      */
     private function activePaidEmployeeIds(
         int $unitId,
-        ?array $positions = null
+        ?array $positions = null,
+        array $excludePositions = []
     ): array {
         $builder = \Config\Database::connect()
             ->table("akun")
@@ -1632,6 +1648,10 @@ class KpiCalculationService
 
         if ($positions !== null) {
             $builder->whereIn("ID_JABATAN", $positions);
+        }
+
+        if ($excludePositions !== []) {
+            $builder->whereNotIn("ID_JABATAN", $excludePositions);
         }
 
         return array_map(

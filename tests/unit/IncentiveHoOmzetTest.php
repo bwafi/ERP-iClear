@@ -15,7 +15,7 @@ use CodeIgniter\Test\CIUnitTestCase;
  *   - Pool global = 1,5% × Σ GP semua cabang non-trial bila Σ GP ≥
  *     Σ target OMSET_TOKO cabang non-trial.
  *   - Individual = (pool cabang + pool global) / jumlah karyawan HO aktif
- *     yang menerima gaji.
+ *     yang menerima gaji, kecuali jabatan yang tidak berhak (Teknisi Mesin).
  *
  * Fixture terisolasi, tidak memakai data produksi.
  *
@@ -32,6 +32,7 @@ final class IncentiveHoOmzetTest extends CIUnitTestCase
     private const HO_C = 703;
     private const HO_NONAKTIF = 704;
     private const HO_TANPA_GAJI = 705;
+    private const HO_TEKNISI_MESIN = 706;
 
     /** @var \CodeIgniter\Database\BaseConnection */
     protected $db;
@@ -265,6 +266,22 @@ final class IncentiveHoOmzetTest extends CIUnitTestCase
         $this->assertEqualsWithDelta(166666.6667, $this->insentif(self::HO_A), 0.01);
         $this->assertSame(0.0, $this->insentif(self::HO_NONAKTIF));
         $this->assertSame(0.0, $this->insentif(self::HO_TANPA_GAJI));
+    }
+
+    public function testTeknisiMesinTidakIkutPembagiPoolHo(): void
+    {
+        $this->db->table('akun')->insert([
+            'ID_AKUN' => self::HO_TEKNISI_MESIN, 'ID_UNIT' => 50,
+            'ID_JABATAN' => 49, 'NAMA_AKUN' => 'Teknisi Mesin',
+            'TERIMA_GAJI' => 1, 'STATUS_PEGAWAI' => 1, 'deleted' => null,
+        ]);
+        $this->cabang(1, 50000000, 50000000);
+        $this->cabang(2, 0, 50000000);
+
+        // Pool 500rb tetap dibagi 2 penerima; Teknisi Mesin bukan penerima
+        // dan tidak mengurangi bagian pegawai HO lain.
+        $this->assertSame(250000.0, $this->insentif(self::HO_A));
+        $this->assertSame(0.0, $this->insentif(self::HO_TEKNISI_MESIN));
     }
 
     public function testSumberOmzetAdalahGrossProfitBukanTotalPenjualan(): void
