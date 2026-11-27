@@ -289,6 +289,47 @@ class PayrollGeneratorUnitTest extends CIUnitTestCase
         $this->assertSame(200, (int) $row->total);
     }
 
+    /** Draft pegawai nonaktif/resign dibersihkan; riwayat dibayar tetap. */
+    public function testGenerateMenghapusDraftPegawaiNonaktif(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES
+            (1, 3, 502, '2026-09-30', 'rencana', 100, 'draft resign', 'auto', '2026-09-01', '2026-09-01'),
+            (2, 3, 502, '2026-09-30', 'dibayar', 200, 'sudah dibayar', 'auto', '2026-09-01', '2026-09-01')");
+
+        $hasil = (new PayrollGenerator())->generate('2026-09', [
+            'unit_ids' => [3],
+            'overwrite' => true,
+        ]);
+
+        $this->assertSame(1, $hasil['dihapus'], 'draft rencana pegawai nonaktif dihapus');
+        $this->assertSame(
+            0,
+            $this->db->table('finance_payroll')->where('id', 1)->countAllResults(),
+            'draft rencana pegawai nonaktif hilang'
+        );
+
+        $row = $this->db->table('finance_payroll')->where('id', 2)->get()->getRow();
+        $this->assertNotNull($row, 'riwayat dibayar pegawai nonaktif tidak boleh dihapus');
+        $this->assertSame('dibayar', $row->status);
+    }
+
+    /** Tanpa overwrite, draft pegawai nonaktif tidak disentuh. */
+    public function testGenerateTanpaOverwriteTidakMenghapusDraftNonaktif(): void
+    {
+        $this->db->query("INSERT INTO finance_payroll
+            (id, unit_id, pegawai_id, due_date, status, total, notes, sumber, created_at, updated_at)
+            VALUES (1, 3, 502, '2026-09-30', 'rencana', 100, 'draft resign', 'auto', '2026-09-01', '2026-09-01')");
+
+        (new PayrollGenerator())->generate('2026-09', ['unit_ids' => [3]]);
+
+        $this->assertNotNull(
+            $this->db->table('finance_payroll')->where('id', 1)->get()->getRow(),
+            'draft hanya dibersihkan saat overwrite'
+        );
+    }
+
     public function testNovemberMemakaiRosterFullDanMenulisRincianHari(): void
     {
         $hasil = (new PayrollGenerator())->generate('2026-11', ['unit_ids' => [3], 'overwrite' => true]);

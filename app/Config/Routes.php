@@ -558,6 +558,7 @@ $routes->post('payroll/delete', 'Payroll::delete', ['filter' => 'auth']);
 $routes->post('payroll/lock', 'Payroll::lockPayroll', ['filter' => 'auth']);
 $routes->post('payroll/unlock', 'Payroll::unlockPayroll', ['filter' => 'auth']);
 $routes->post('payroll/bayar', 'Payroll::bayar', ['filter' => 'auth']);
+$routes->post('payroll/batalkan-draft', 'Payroll::batalkanDraft', ['filter' => ['auth', 'csrf']]);
 
 //penilaian kpi
 $routes->get('penilaian_kpi', 'PenilaianKPI::index', ['filter' => 'auth']);

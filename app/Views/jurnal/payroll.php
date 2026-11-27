@@ -375,6 +375,17 @@ $fmtTanggal = static function ($value): string {
                                                 title="Tandai sudah dibayar">
                                                 <i class="ti ti-check" aria-hidden="true"></i>
                                             </button>
+                                            <form action="<?= base_url('payroll/batalkan-draft') ?>" method="post"
+                                                onsubmit="return confirm('Batalkan draft payroll ini? Baris yang sudah dibayar tidak terpengaruh.');">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="id" value="<?= esc($row->id) ?>">
+                                                <button type="submit"
+                                                    class="pay-icon-btn pay-icon-btn--cancel"
+                                                    aria-label="Batalkan draft payroll <?= esc($row->NAMA_AKUN ?? '') ?>"
+                                                    title="Batalkan draft">
+                                                    <i class="ti ti-trash" aria-hidden="true"></i>
+                                                </button>
+                                            </form>
                                         </div>
                                     <?php else: ?>
                                         <span class="pay-muted">—</span>
@@ -665,7 +676,7 @@ $fmtTanggal = static function ($value): string {
                             <label class="form-label fw-semibold">Karyawan</label>
                             <select class="form-select select" name="pegawai_id" id="input_pegawai" required>
                                 <option value="">-- Pilih Karyawan --</option>
-                                <?php foreach ($akun as $a): ?>
+                                <?php foreach ($akun_aktif as $a): ?>
                                     <option value="<?= esc($a->ID_AKUN) ?>" data-unit="<?= esc($a->ID_UNIT ?? '') ?>"><?= esc($a->NAMA_AKUN) ?></option>
                                 <?php endforeach; ?>
                             </select>

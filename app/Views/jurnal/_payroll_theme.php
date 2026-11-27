@@ -789,6 +789,11 @@
         color: var(--pay-success-ink);
     }
 
+    .payroll-page .pay-icon-btn--cancel:hover {
+        border-color: var(--bs-danger-border-subtle);
+        color: var(--pay-danger-ink);
+    }
+
     .payroll-page .pay-type {
         display: block;
         margin-top: .12rem;

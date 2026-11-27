@@ -121,6 +121,12 @@ class PayrollGenerator
             'rows'            => [],
         ];
 
+        // Draft pegawai yang sudah nonaktif/resign tidak boleh tertinggal
+        // sebagai baris 'rencana'. Riwayat 'dibayar' tetap utuh.
+        if ($overwrite) {
+            $hasil['dihapus'] += $this->hapusDraftPegawaiNonaktif($from, $to, $unitIds);
+        }
+
         foreach ($this->daftarKaryawan($unitIds) as $karyawan) {
             $id = (int) $karyawan['ID_AKUN'];
 
@@ -442,6 +448,42 @@ class PayrollGenerator
 
         return 'Otomatis dari salary_structures: ' . implode(' + ', $bagian)
             . '. Kasbon dipotong saat dibayar.';
+    }
+
+    /**
+     * Hapus draft 'rencana' milik pegawai yang sudah tidak aktif pada periode
+     * yang disusun. Baris 'dibayar' tidak pernah disentuh.
+     *
+     * Filter unit dihormati supaya menyusun satu unit tidak menghapus draft
+     * unit lain. Akun tanpa baris di tabel akun (mis. payroll manual lama)
+     * tidak ikut karena join-nya inner.
+     */
+    protected function hapusDraftPegawaiNonaktif(string $from, string $to, array $unitIds): int
+    {
+        $builder = $this->db->table('finance_payroll fp')
+            ->select('fp.id')
+            ->join('akun a', 'a.ID_AKUN = fp.pegawai_id', 'inner')
+            ->where('fp.status', 'rencana')
+            ->where('fp.due_date >=', $from)
+            ->where('fp.due_date <=', $to)
+            ->where(
+                "NOT (a.STATUS_PEGAWAI = 1 AND (a.deleted IS NULL OR a.deleted = ''))",
+                null,
+                false
+            );
+
+        if ($unitIds !== []) {
+            $builder->whereIn('fp.unit_id', $unitIds);
+        }
+
+        $ids = array_map('intval', array_column($builder->get()->getResultArray(), 'id'));
+        if ($ids === []) {
+            return 0;
+        }
+
+        $this->db->table('finance_payroll')->whereIn('id', $ids)->delete();
+
+        return (int) $this->db->affectedRows();
     }
 
     /** Karyawan aktif, opsional dibatasi unit tertentu. */

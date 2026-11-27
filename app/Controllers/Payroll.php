@@ -251,6 +251,20 @@ class Payroll extends BaseController
             ->orderBy('NAMA_AKUN', 'ASC')
             ->get()
             ->getResult();
+
+        // Picker karyawan untuk Input Payroll manual hanya pegawai aktif.
+        // Penerima Bonus/Lembur tetap memakai $akun karena pembayaran terakhir
+        // pegawai yang sudah resign masih mungkin dicatat lewat jalur itu.
+        $akunAktif = $this->db->table('akun')
+            ->select('ID_AKUN, NAMA_AKUN, ID_UNIT')
+            ->where('STATUS_PEGAWAI', 1)
+            ->groupStart()
+            ->where('deleted', null)
+            ->orWhere('deleted', '')
+            ->groupEnd()
+            ->orderBy('NAMA_AKUN', 'ASC')
+            ->get()
+            ->getResult();
         
         $this->BankModel = new ModelBank();
         
@@ -273,6 +287,7 @@ class Payroll extends BaseController
             'unit'          => $unit,
             'kategori_kas'  => $kategori_kas,
             'akun'          => $akun,
+            'akun_aktif'    => $akunAktif,
             'bank'          => $this->BankModel->getBank(),
             'body'          => 'jurnal/payroll'
         ]);
@@ -590,6 +605,55 @@ class Payroll extends BaseController
 
         return redirect()->to(base_url('payroll'))
             ->with('sukses', 'Data kas keluar berhasil dihapus.');
+    }
+
+    /**
+     * Batalkan satu draft register gaji (`finance_payroll` status `rencana`).
+     *
+     * Baris `dibayar` adalah riwayat dan tidak boleh dihapus. Guard role,
+     * scope unit, dan CSRF dipasang di route; method ini memvalidasi ulang
+     * status baris sebelum service menghapusnya.
+     */
+    public function batalkanDraft()
+    {
+        $scope = new \App\Services\Finance\FinanceScopeService();
+
+        if (! $scope->canInput()) {
+            return redirect()->back()->with('gagal', 'Anda tidak berhak membatalkan payroll.');
+        }
+
+        $id = (int) ($this->request->getPost('id') ?? 0);
+        if ($id <= 0) {
+            return redirect()->back()->with('gagal', 'Data payroll tidak valid.');
+        }
+
+        $model = new \App\Models\ModelFinancePayroll();
+        $row   = $model->find($id);
+
+        if (! $row) {
+            return redirect()->back()->with('gagal', 'Data payroll tidak ditemukan.');
+        }
+
+        $allowedIds = array_map('intval', array_column(
+            array_map('get_object_vars', $scope->resolveAllowedUnits()),
+            'idunit'
+        ));
+
+        if (! in_array((int) $row->unit_id, $allowedIds, true)) {
+            return redirect()->back()->with('gagal', 'Unit tidak diperbolehkan.');
+        }
+
+        if (($row->status ?? '') !== 'rencana') {
+            return redirect()->back()->with('gagal', 'Payroll yang sudah dibayar tidak bisa dibatalkan.');
+        }
+
+        try {
+            (new \App\Services\Payroll\PayrollDraftService())->batalkan($id);
+        } catch (\RuntimeException $e) {
+            return redirect()->back()->with('gagal', $e->getMessage());
+        }
+
+        return redirect()->back()->with('sukses', 'Draft payroll berhasil dibatalkan.');
     }
 
 
