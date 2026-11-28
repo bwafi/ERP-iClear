@@ -24,6 +24,9 @@ use Config\Finance;
  *    pembelian stok dan register payroll.
  *    Rasio berarti "saldo cukup untuk berapa bulan biaya"; target 120% =
  *    saldo >= 1,2x biaya sebulan.
+ *  - Kategori `SEWA TAHUNAN` dikecualikan karena dibayar untuk 12 bulan
+ *    sekaligus, bukan biaya bulan berjalan. Kategori `SEWA` (bulanan) tetap
+ *    dihitung.
  *  - Periode biaya = BULAN PENUH (tanggal 1 s/d akhir bulan evaluasi), tanpa
  *    batas cut-off, supaya biaya bulan itu utuh.
  *  - Transfer internal (Setor/Tarik, Pindah Saldo, pelunasan H/P antar unit)
@@ -53,6 +56,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     public const KATEGORI_BEBAN_CABANG = 'BEBAN CABANG';
     public const KATEGORI_TEMPO = 'TEMPO';
     public const KATEGORI_KASBON = 'KASBON';
+    public const KATEGORI_SEWA_TAHUNAN = 'SEWA TAHUNAN';
 
     protected ?ConnectionInterface $db = null;
     protected Finance $config;
@@ -270,14 +274,15 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Kas Keluar operasional = kas_keluar di luar kategori HPP dan SDM.
+     * Kas Keluar operasional = kas_keluar di luar kategori yang dikecualikan.
      *
-     * Kategori HPP (pembelian stok), SDM, BEBAN CABANG, TEMPO, dan KASBON
-     * sengaja tidak dihitung sebagai komponen Kesehatan Uang; SDM sudah
-     * diwakili register Payroll, sedangkan TEMPO adalah utang dagang. Tabel
-     * `kas_keluar` tidak pernah memuat transfer internal (Setor/Tarik, Pindah
-     * Saldo, pelunasan H/P antar unit hidup di `transaksi_kas_bank`), jadi
-     * arus internal tidak ikut terhitung.
+     * Kategori HPP (pembelian stok), SDM, BEBAN CABANG, TEMPO, KASBON, dan
+     * SEWA TAHUNAN sengaja tidak dihitung sebagai komponen Kesehatan Uang;
+     * SDM sudah diwakili register Payroll, TEMPO adalah utang dagang, dan
+     * sewa tahunan dibayar untuk 12 bulan sekaligus. Tabel `kas_keluar` tidak
+     * pernah memuat transfer internal (Setor/Tarik, Pindah Saldo, pelunasan
+     * H/P antar unit hidup di `transaksi_kas_bank`), jadi arus internal tidak
+     * ikut terhitung.
      */
     public function kasKeluarOperasional(int $unitId, string $dari, string $sampai): int
     {
@@ -303,10 +308,11 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
     }
 
     /**
-     * Nominal kas_keluar kategori HPP, SDM, BEBAN CABANG, TEMPO & KASBON yang
-     * SENGAJA dikeluarkan dari komponen operasional (untuk transparansi di UI).
+     * Nominal kas_keluar kategori HPP, SDM, BEBAN CABANG, TEMPO, KASBON &
+     * SEWA TAHUNAN yang SENGAJA dikeluarkan dari komponen operasional (untuk
+     * transparansi di UI).
      *
-     * @return array{hpp:int,sdm:int,beban_cabang:int,tempo:int,kasbon:int}
+     * @return array{hpp:int,sdm:int,beban_cabang:int,tempo:int,kasbon:int,sewa_tahunan:int}
      */
     public function kasKeluarDikecualikan(int $unitId, string $dari, string $sampai): array
     {
@@ -326,7 +332,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             ->get()
             ->getResultArray();
 
-        $out = ['hpp' => 0, 'sdm' => 0, 'beban_cabang' => 0, 'tempo' => 0, 'kasbon' => 0];
+        $out = ['hpp' => 0, 'sdm' => 0, 'beban_cabang' => 0, 'tempo' => 0, 'kasbon' => 0, 'sewa_tahunan' => 0];
         foreach ($rows as $r) {
             $kategori = strtoupper((string) $r['kategori']);
             if ($kategori === self::KATEGORI_HPP) {
@@ -339,6 +345,8 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
                 $out['tempo'] = (int) $r['total'];
             } elseif ($kategori === self::KATEGORI_KASBON) {
                 $out['kasbon'] = (int) $r['total'];
+            } elseif ($kategori === self::KATEGORI_SEWA_TAHUNAN) {
+                $out['sewa_tahunan'] = (int) $r['total'];
             }
         }
 
@@ -354,6 +362,7 @@ class KesehatanUangCalculator implements FinanceCalculatorInterface
             self::KATEGORI_BEBAN_CABANG,
             self::KATEGORI_TEMPO,
             self::KATEGORI_KASBON,
+            self::KATEGORI_SEWA_TAHUNAN,
         ];
     }
 

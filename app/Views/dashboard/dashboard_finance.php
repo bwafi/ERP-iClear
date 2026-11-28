@@ -1010,7 +1010,8 @@
                                     SDM Rp <?= number_format((float) ($ex['sdm'] ?? 0), 0, ',', '.') ?>,
                                     Beban Cabang Rp <?= number_format((float) ($ex['beban_cabang'] ?? 0), 0, ',', '.') ?>,
                                     Tempo Rp <?= number_format((float) ($ex['tempo'] ?? 0), 0, ',', '.') ?>,
-                                    Kasbon Rp <?= number_format((float) ($ex['kasbon'] ?? 0), 0, ',', '.') ?>.
+                                    Kasbon Rp <?= number_format((float) ($ex['kasbon'] ?? 0), 0, ',', '.') ?>,
+                                    Sewa Tahunan Rp <?= number_format((float) ($ex['sewa_tahunan'] ?? 0), 0, ',', '.') ?>.
                                     Transfer internal tidak dihitung sebagai pengeluaran operasional.
                                 </div>
                             </div>

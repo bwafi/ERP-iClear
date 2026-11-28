@@ -15,8 +15,9 @@ use Config\Database;
  *
  * Fokus pengujian (bagian yang tidak bisa diuji murni):
  *  - periode biaya = BULAN PENUH (1 s/d akhir bulan), tidak dibatasi cut-off;
- *  - kategori `HPP`, `SDM`, `BEBAN CABANG`, `TEMPO`, dan `KASBON` pada
- *    `kas_keluar` dikeluarkan dari komponen "Kas Keluar operasional";
+ *  - kategori `HPP`, `SDM`, `BEBAN CABANG`, `TEMPO`, `KASBON`, dan
+ *    `SEWA TAHUNAN` pada `kas_keluar` dikeluarkan dari komponen
+ *    "Kas Keluar operasional";
  *  - HPP penjualan TIDAK dipakai sebagai komponen biaya (keputusan bisnis
  *    2026-10-30); method `hpp()` dipertahankan untuk verifikasi memo/query;
  *  - payroll diambil dari register per unit.
@@ -114,7 +115,8 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
     {
         $this->q("INSERT INTO db_kategori_kas (idkategori_kas, kategori) VALUES
             (1,'OPERASIONAL'), (7,'HPP'), (10,'SDM'),
-            (11,'BEBAN CABANG'), (12,'TEMPO'), (19,'Kasbon')");
+            (11,'BEBAN CABANG'), (12,'TEMPO'), (13,'SEWA'),
+            (19,'Kasbon'), (21,'SEWA TAHUNAN')");
     }
 
     private function calc(): KesehatanUangCalculator
@@ -174,7 +176,7 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
 
         $calc = $this->calc();
 
-        // Hanya kategori di luar HPP/SDM/BEBAN CABANG/TEMPO/KASBON unit 1.
+        // Hanya kategori di luar HPP/SDM/BEBAN CABANG/TEMPO/KASBON/SEWA TAHUNAN unit 1.
         $this->assertSame(5000000, $calc->kasKeluarOperasional(1, $this->dari, $this->sampai));
 
         $dikecualikan = $calc->kasKeluarDikecualikan(1, $this->dari, $this->sampai);
@@ -183,6 +185,23 @@ final class KesehatanUangCalculatorTest extends CIUnitTestCase
         $this->assertSame(70000000, $dikecualikan['beban_cabang']);
         $this->assertSame(66000000, $dikecualikan['tempo']);
         $this->assertSame(400000, $dikecualikan['kasbon']);
+    }
+
+    public function testKasKeluarSewaTahunanDikecualikan(): void
+    {
+        // Sewa tahunan dibayar 12 bulan sekaligus, jadi bukan biaya bulan
+        // berjalan. Sewa bulanan (kategori SEWA) tetap dihitung.
+        $this->q("INSERT INTO db_kas_keluar (tanggal, deskripsi, jumlah, idunit, idbank, kategori_idkategori) VALUES
+            ('{$this->tglData}', 'Sewa ruko 1 tahun', 50000000, 1, NULL, 21),
+            ('{$this->tglData}', 'Sewa ruko bulanan',  3000000, 1, NULL, 13),
+            ('{$this->tglData}', 'Listrik',            5000000, 1, NULL, 1)");
+
+        $calc = $this->calc();
+
+        $this->assertSame(8000000, $calc->kasKeluarOperasional(1, $this->dari, $this->sampai));
+
+        $dikecualikan = $calc->kasKeluarDikecualikan(1, $this->dari, $this->sampai);
+        $this->assertSame(50000000, $dikecualikan['sewa_tahunan']);
     }
 
     public function testPerhitunganTidakMenghitungHppDuaKali(): void
