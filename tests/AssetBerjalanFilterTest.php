@@ -42,7 +42,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         foreach ([
             'unit', 'akun', 'jabatan', 'menu',
             'spv_units',
-            'stok_barang', 'service', 'pelanggan',
+            'stok_barang', 'service', 'service_sparepart', 'pelanggan',
             'penjualan', 'detail_penjualan', 'barang',
             'kas_keluar', 'kategori_kas',
             'penilaian', 'tutup_kasir', 'stok_opname_periode',
@@ -50,6 +50,7 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
             'salary_components', 'salary_structures',
             'kpi_weights', 'kpi_components', 'kpi_targets', 'kpi_evaluations',
             'kpi_attendance_detail', 'kpi_attendance_off',
+            'presensi_roster',
             'tanggungan_asset_bulanan',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
@@ -77,7 +78,16 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
                 idservice INT PRIMARY KEY, status_service INT NULL,
                 pelanggan_id_pelanggan INT NULL, unit_idunit INT NULL,
                 tanggal_selesai TEXT NULL, tanggal_bisa_diambil TEXT NULL,
-                tipe_hp TEXT NULL, created_at TEXT NULL)');
+                tipe_hp TEXT NULL, created_at TEXT NULL,
+                no_service TEXT NULL, service_by INT NULL,
+                refund_garansi_tanggal TEXT NULL, refund_garansi_jumlah INT NULL DEFAULT 0,
+                refund_garansi_omset INT NULL DEFAULT 0)');
+        $q('CREATE TABLE service_sparepart (
+                idservice_sparepart INTEGER PRIMARY KEY AUTO_INCREMENT,
+                service_idservice INT NULL, barang_idbarang INT NULL,
+                unit_idunit INT NULL, hpp_omset_garansi REAL NULL,
+                jumlah_tambahan_garansi INT NULL, status_retur TEXT NULL,
+                tanggal_hpp_klaim TEXT NULL)');
         $q('CREATE TABLE pelanggan (id_pelanggan INT PRIMARY KEY, nama TEXT NULL, kabupaten TEXT NULL, kecamatan TEXT NULL, deleted TEXT NULL)');
 
         $q('CREATE TABLE penjualan (
@@ -144,6 +154,14 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
                 id INT PRIMARY KEY AUTO_INCREMENT, employee_id INT NULL,
                 evaluation_date TEXT NULL, period_month INT NULL,
                 period_year INT NULL, evaluator_id INT NULL)');
+
+        // Payroll menanyakan roster untuk periode presensi; tanpa tabel ini
+        // halaman bulan berjalan gagal sebelum angka omset diuji.
+        $q('CREATE TABLE presensi_roster (
+                id INT PRIMARY KEY AUTO_INCREMENT, akun_idakun INT NULL,
+                tanggal TEXT NULL, shift TEXT NULL, keterangan TEXT NULL,
+                created_by INT NULL, updated_by INT NULL,
+                created_at TEXT NULL, updated_at TEXT NULL)');
     }
 
     private function sebarData(): void
@@ -241,6 +259,31 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
         $this->assertSame('3.496.682', $this->kartu($html, 'Biaya Terkontrol (Maks 6%)'));
         // Omset September (10jt - 5jt), bukan omset Oktober (8jt - 4jt).
         $this->assertSame('5.000.000', $this->kartu($html, 'Omset Bulan Ini'));
+    }
+
+    /**
+     * Definisi omset /asset_berjalan harus sama dengan /omset_bulanan:
+     * gross profit penjualan dikurangi HPP Klaim service dan refund garansi.
+     */
+    public function testOmsetBulanIniDikurangiHppKlaimDanRefund(): void
+    {
+        $this->sesi(44, 50, 0);
+        $this->db->setPrefix('');
+        $this->db->query("INSERT INTO service
+            (idservice, status_service, unit_idunit, tanggal_selesai, created_at, no_service, service_by,
+             refund_garansi_tanggal, refund_garansi_jumlah, refund_garansi_omset)
+            VALUES (9001, 4, 3, '2026-10-20 10:00:00', '2026-10-20 09:00:00', 'SRV-REFUND', 100,
+                    '2026-10-20', 500000, 300000)");
+        $this->db->query("INSERT INTO service_sparepart
+            (service_idservice, barang_idbarang, unit_idunit, hpp_omset_garansi,
+             jumlah_tambahan_garansi, status_retur, tanggal_hpp_klaim)
+            VALUES (9001, NULL, 3, 25000, 2, 'tidak_bisa', '2026-10-21')");
+
+        $html = $this->halaman('?unit=3&bulan=10&tahun=2026');
+
+        // Omset dasar Oktober unit 3 = 8.000.000 - 4.000.000 = 4.000.000.
+        // HPP Klaim 2 x 25.000 = 50.000; refund garansi (porsi omset) 300.000.
+        $this->assertSame('3.650.000', $this->kartu($html, 'Omset Bulan Ini'));
     }
 
     /** Filter harus mengikuti parameter, bukan hanya bekerja untuk satu bulan tertentu. */
@@ -446,12 +489,12 @@ class AssetBerjalanFilterTest extends CIUnitTestCase
 
         // Agustus: omset 60.000.000 -> batas 3.600.000; realisasi 1.234.567.
         $aman = $this->halaman('?unit=3&bulan=8&tahun=2026');
-        $this->assertStringContainsString('dari batas — Aman', $aman);
+        $this->assertMatchesRegularExpression('/dari batas (?:—|&mdash;) Aman/', $aman);
         $this->assertStringNotContainsString('Melebihi batas 6%', $aman);
 
         // Juli unit 1: batas 600.000, realisasi 550.000 -> 91,7%.
         $hampir = $this->halaman('?unit=1&bulan=7&tahun=2026');
-        $this->assertStringContainsString('91,7% dari batas — Hampir mencapai batas', $hampir);
+        $this->assertMatchesRegularExpression('/91,7% dari batas (?:—|&mdash;) Hampir mencapai batas/', $hampir);
     }
 
     /** Kartu di luar 6% = seluruh kas keluar dikurangi biaya terkontrol, termasuk HPP. */

@@ -159,6 +159,37 @@ class TutupKasir extends BaseController
         return (new \App\Models\ModelRefundGaransiLoss())->getByDateRange($start, $end, $unit);
     }
 
+    /**
+     * Satu sumber omset bulanan untuk /omset_bulanan dan /asset_berjalan:
+     * gross profit penjualan dikurangi HPP Klaim service dan refund garansi
+     * pada bulan itu.
+     *
+     * @return array{total: float, hpp_klaim: array<string, int>, refund: array<string, int>}
+     */
+    private function omsetBulan(int $unit, int $bulan, int $tahun): array
+    {
+        $gross = (float) ($this->db->table('detail_penjualan')
+            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
+            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
+            ->where('MONTH(penjualan.tanggal)', $bulan)
+            ->where('YEAR(penjualan.tanggal)', $tahun)
+            ->where('penjualan.unit_idunit', $unit)
+            ->get()
+            ->getRow()
+            ->total ?? 0);
+
+        $awalBulan  = sprintf('%04d-%02d-01', $tahun, $bulan);
+        $akhirBulan = date('Y-m-t', strtotime($awalBulan));
+        $hppKlaim   = $this->hppKlaimHarian($awalBulan, $akhirBulan, $unit);
+        $refund     = $this->refundHarian($awalBulan, $akhirBulan, $unit);
+
+        return [
+            'total'     => $gross - array_sum($hppKlaim) - array_sum($refund),
+            'hpp_klaim' => $hppKlaim,
+            'refund'    => $refund,
+        ];
+    }
+
     public function index()
     {
         $today = date('Y-m-d');
@@ -409,41 +440,16 @@ class TutupKasir extends BaseController
         // ==========================
         // TOTAL OMSET BULAN INI
         // ==========================
-        $omset_bulan = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow()
-            ->total ?? 0;
-
         // Omset halaman ini = penjualan - HPP Klaim service pada tanggal klaim
-        // - refund garansi pada tanggal refund.
-        $awalBulan = sprintf('%04d-%02d-01', (int) $tahun, (int) $bulan);
-        $hppKlaimBulan = $this->hppKlaimHarian($awalBulan, date('Y-m-t', strtotime($awalBulan)), (int) $unit);
-        $omset_bulan -= array_sum($hppKlaimBulan);
-        $refundBulan = $this->refundHarian($awalBulan, date('Y-m-t', strtotime($awalBulan)), (int) $unit);
-        $omset_bulan -= array_sum($refundBulan);
+        // - refund garansi pada tanggal refund. Sumber rumus sama dengan
+        // /asset_berjalan lewat omsetBulan().
+        $omset         = $this->omsetBulan((int) $unit, (int) $bulan, (int) $tahun);
+        $omset_bulan   = $omset['total'];
+        $hppKlaimBulan = $omset['hpp_klaim'];
+        $refundBulan   = $omset['refund'];
 
         // HITUNG PERTUMBUHAN OMSET VS BULAN SEBELUMNYA
-        $omset_bulan_sebelum = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', $bulanSebelum)
-            ->where('YEAR(penjualan.tanggal)', $tahunSebelum)
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow()
-            ->total ?? 0;
-
-        $awalBulanSebelum = sprintf('%04d-%02d-01', (int) $tahunSebelum, (int) $bulanSebelum);
-        $hppKlaimBulanSebelum = $this->hppKlaimHarian($awalBulanSebelum, date('Y-m-t', strtotime($awalBulanSebelum)), (int) $unit);
-        $omset_bulan_sebelum -= array_sum($hppKlaimBulanSebelum);
-        $omset_bulan_sebelum -= array_sum(
-            $this->refundHarian($awalBulanSebelum, date('Y-m-t', strtotime($awalBulanSebelum)), (int) $unit)
-        );
+        $omset_bulan_sebelum = $this->omsetBulan((int) $unit, $bulanSebelum, $tahunSebelum)['total'];
 
         if ($omset_bulan_sebelum > 0) {
             $pertumbuhan_omset = (($omset_bulan - $omset_bulan_sebelum) / $omset_bulan_sebelum) * 100;
@@ -901,26 +907,12 @@ class TutupKasir extends BaseController
         // ==========================
         // TOTAL OMSET BULAN INI
         // ==========================
-        $omset_bulan = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', $bulan)
-            ->where('YEAR(penjualan.tanggal)', $tahun)
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow()
-            ->total ?? 0;
+        // Definisi sama dengan /omset_bulanan: net setelah HPP Klaim service
+        // dan refund garansi (satu sumber di omsetBulan()).
+        $omset_bulan = $this->omsetBulan((int) $unit, (int) $bulan, (int) $tahun)['total'];
 
         // HITUNG PERTUMBUHAN OMSET VS BULAN SEBELUMNYA
-        $omset_bulan_sebelum = $this->db->table('detail_penjualan')
-            ->select('SUM(detail_penjualan.sub_total - detail_penjualan.hpp_penjualan) AS total')
-            ->join('penjualan', 'penjualan.idpenjualan = detail_penjualan.penjualan_idpenjualan')
-            ->where('MONTH(penjualan.tanggal)', $bulanSebelum)
-            ->where('YEAR(penjualan.tanggal)', $tahunSebelum)
-            ->where('penjualan.unit_idunit', $unit)
-            ->get()
-            ->getRow()
-            ->total ?? 0;
+        $omset_bulan_sebelum = $this->omsetBulan((int) $unit, $bulanSebelum, $tahunSebelum)['total'];
 
         if ($omset_bulan_sebelum > 0) {
             $pertumbuhan_omset = (($omset_bulan - $omset_bulan_sebelum) / $omset_bulan_sebelum) * 100;
