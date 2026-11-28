@@ -21,6 +21,9 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 
 class PenilaianKPI extends BaseController
 {
+    /** Jabatan HO yang boleh membuka KPI Saya: Kepala Divisi (43) & Multimedia (44). */
+    private const JABATAN_HO_KPI_SAYA = [43, 44];
+
     protected $AuthModel;
     protected $TemplatePenilaianModel;
     protected $PenilaianKPIModel;
@@ -1684,14 +1687,15 @@ class PenilaianKPI extends BaseController
     /**
      * Halaman "KPI Saya" — read-only, hanya skor KPI milik pegawai yang login.
      *
-     * Khusus pegawai cabang (unit != HO). ID pegawai selalu diambil dari
-     * session; tidak ada parameter untuk memilih pegawai lain, sehingga halaman
-     * ini tidak bisa dipakai melihat skor pegawai lain.
+     * Untuk pegawai cabang (unit != HO), ditambah Kepala Divisi (43) dan
+     * Multimedia (44) di HO. ID pegawai selalu diambil dari session; tidak ada
+     * parameter untuk memilih pegawai lain, sehingga halaman ini tidak bisa
+     * dipakai melihat skor pegawai lain.
      */
     public function kpi_saya()
     {
-        if (! self::kpiSayaUnitAllowed(session()->get('ID_UNIT'))) {
-            return redirect()->to(base_url('/'))->with('error', 'Halaman KPI Saya hanya untuk pegawai cabang.');
+        if (! self::kpiSayaUnitAllowed(session()->get('ID_UNIT'), session()->get('ID_JABATAN'))) {
+            return redirect()->to(base_url('/'))->with('error', 'Halaman KPI Saya hanya untuk pegawai cabang, Multimedia, dan Kepala Divisi Head Office.');
         }
 
         [$bulan, $tahun] = self::kpiSayaPeriod(
@@ -1720,12 +1724,25 @@ class PenilaianKPI extends BaseController
         ]);
     }
 
-    /** Halaman KPI Saya hanya untuk pegawai unit cabang (bukan HO / tanpa unit). */
-    public static function kpiSayaUnitAllowed($unit): bool
+    /**
+     * Halaman KPI Saya untuk pegawai unit cabang (bukan HO / tanpa unit),
+     * ditambah jabatan Kepala Divisi (43) dan Multimedia (44) yang berkantor
+     * di Head Office. Unit kosong dan HO jabatan lain tetap ditolak.
+     */
+    public static function kpiSayaUnitAllowed($unit, $jabatan = null): bool
     {
-        $unit = (int) $unit;
+        $unit    = (int) $unit;
+        $jabatan = (int) $jabatan;
 
-        return $unit > 0 && $unit !== \App\Services\Kpi\KpiCalculationService::HO_UNIT_ID;
+        if ($unit <= 0) {
+            return false;
+        }
+
+        if ($unit !== \App\Services\Kpi\KpiCalculationService::HO_UNIT_ID) {
+            return true;
+        }
+
+        return in_array($jabatan, self::JABATAN_HO_KPI_SAYA, true);
     }
 
     /** Normalisasi periode dari query string: bulan 01-12, tahun 2000-2100. */

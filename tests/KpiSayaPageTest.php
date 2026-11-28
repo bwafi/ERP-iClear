@@ -13,13 +13,24 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class KpiSayaPageTest extends CIUnitTestCase
 {
-    public function testGuardHanyaUntukUnitCabang(): void
+    public function testGuardUnitCabangDanJabatanHeadOffice(): void
     {
         $this->assertTrue(PenilaianKPI::kpiSayaUnitAllowed(1));
         $this->assertTrue(PenilaianKPI::kpiSayaUnitAllowed('5'));
-        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(50), 'Head Office tidak boleh');
-        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(0), 'Tanpa unit tidak boleh');
-        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(null), 'Unit kosong tidak boleh');
+
+        // Kepala Divisi (43) dan Multimedia (44) di HO boleh melihat KPI sendiri.
+        $this->assertTrue(PenilaianKPI::kpiSayaUnitAllowed(50, 43), 'Kepala Divisi HO boleh');
+        $this->assertTrue(PenilaianKPI::kpiSayaUnitAllowed(50, 44), 'Multimedia HO boleh');
+        $this->assertTrue(PenilaianKPI::kpiSayaUnitAllowed('50', '43'));
+        $this->assertTrue(PenilaianKPI::kpiSayaUnitAllowed('50', '44'));
+
+        // HO jabatan lain dan unit kosong tetap ditolak.
+        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(50, 1), 'HO jabatan lain ditolak');
+        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(50, 34), 'Manager HO ditolak');
+        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(50), 'HO tanpa jabatan ditolak');
+        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(0, 43), 'Tanpa unit ditolak');
+        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(0, 44), 'Tanpa unit ditolak');
+        $this->assertFalse(PenilaianKPI::kpiSayaUnitAllowed(null, 44), 'Unit kosong ditolak');
     }
 
     public function testPeriodeDinormalisasi(): void
