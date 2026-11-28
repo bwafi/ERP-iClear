@@ -43,6 +43,10 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 2. `HutangPiutangService::ubahJatuhTempo()` menolak baris projection dan legacy; baris lunas tetap bisa diubah Admin Root.
 3. Untuk `mutasi_unit`, baris hutang dan piutang diubah bersamaan dalam satu transaksi.
 4. Audit saat ini hanya `log_message('notice')`; tabel audit khusus belum ada.
+### 4.7 Bayar tagihan supplier legacy — `PembayaranHutang::insert_cicilan`
+1. `POST update_cicilan_hutang` menyimpan `pembayaran_hutang`, memperbarui `pembelian` (`total_bayar`, `bayar`, `bayar_tunai`, `bayar_bank`, `sisa`, `status`), dan menyinkronkan proyeksi `hutang_piutang`.
+2. Setelah pembayaran tersimpan, alur menulis satu baris `kas_keluar` per komponen pembayaran (kategori TEMPO, `no_akun 2010100000`, `jenis debet`, `idunit` unit pembelian) dan jurnal `Dr Utang Usaha / Cr Kas-Bank` per komponen (PRD 05 BR 32).
+3. Semua penulisan berada dalam satu transaksi; kategori TEMPO atau template jurnal yang hilang membatalkan pembayaran tanpa baris parsial.
 
 ## 5. Business Rules (Bukti)
 1. Hanya sumber authoritative yang bisa dibayar/dikompensasi/ditandai lunas. — `HutangPiutangService::AUTHORITATIVE_SUMBER`, `bayar`, `kompensasi`, `tandaiLunasLegacy`
@@ -59,10 +63,12 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 12. `syncFromPiutangLegacy` hanya menyinkronkan projection; tidak memperbaiki pembayaran legacy di atas. — `HutangPiutangService`
 13. Ubah jatuh tempo hanya Admin Root; projection/legacy ditolak; baris lunas tetap bisa diubah; pasangan `mutasi_unit` selalu diubah bersama. — `HutangPiutang::ubahJatuhTempo`, `HutangPiutangService::ubahJatuhTempo`
 14. ✅ Form pelunasan antar unit di detail H/P memakai aturan rekening yang sama dengan Kas & Bank: sumber = rekening unit penghutang, tujuan = rekening hak unit berpiutang (boleh di luar scope user). Pelunasan yang tersimpan tetap satu catatan di ledger `transaksi_kas_bank`; leg KELUAR-nya tampil read-only di `/kas_keluar` (PRD 05 BR 19), jadi tidak perlu input Kas Keluar terpisah dan tidak terjadi dobel. — `HutangPiutang::antarUnitPaymentData`; `KasBankScopeService::canReceiveAsCreditor`
+15. ✅ Pembayaran tagihan supplier legacy (`/daftar_tagihan`) tidak lagi hanya menandai hutang Lunas tanpa arus kas: setiap komponen pembayaran menulis `kas_keluar` kategori TEMPO (`no_akun 2010100000`, `jenis debet`, `idunit` unit pembelian) dan jurnal `Dr Utang Usaha / Cr Kas-Bank` yang seimbang, semuanya atomik dengan `pembayaran_hutang` dan update `pembelian`. Kategori/template yang hilang membatalkan seluruh pembayaran. — `PembayaranHutang::insert_cicilan`; `App\Services\Finance\PembayaranHutangKasKeluar`; PRD 05 BR 32; `tests/PembayaranHutangKasKeluarTest.php`; `tests/KasBankControllerTest.php`; issue #254
 
 ## 6. Acceptance Criteria
 - [ ] Buat hutang/piutang authoritative tersimpan; jenis manual divalidasi.
 - [ ] Bayar cicilan tidak bisa melebihi sisa; transaksi diserialisasi.
+- [ ] Bayar tagihan supplier legacy menulis `kas_keluar` TEMPO + jurnal `Dr Utang Usaha / Cr Kas-Bank` per komponen secara atomik; kategori/template hilang membatalkan seluruh pembayaran (BR 15).
 - [ ] Kompensasi hanya untuk pihak yang sama; tercatat + audit 2 baris.
 - [ ] Lunas legacy konsisten (tanpa jurnal/movement) & dapat dibatalkan.
 - [ ] Dashboard/ringkasan tidak double counting; legacy dikecualikan.
@@ -75,7 +81,7 @@ Menyediakan registry terpusat posisi hutang & piutang (tabel `hutang_piutang`), 
 
 ## 7. Dependensi
 - `ModelHutangPiutang`, `ModelPembayaranHutangPiutang`, `ModelKompensasiHutangPiutang` (migration 000400), `ModelJurnal`.
-- Service: `HutangPiutangService`, `FinanceScopeService`, `KasBankScopeService`, `HutangTimelinessCalculator`, `PiutangTimelinessCalculator`.
+- Service: `HutangPiutangService`, `FinanceScopeService`, `KasBankScopeService`, `HutangTimelinessCalculator`, `PiutangTimelinessCalculator`, `PembayaranHutangKasKeluar`.
 - Modul: KasBank (antar-unit), Pembelian (projection), Payroll (kasbon), Kas keluar, KPI Finance.
 
 ## 8. Status & Tandai

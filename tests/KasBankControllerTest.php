@@ -85,8 +85,11 @@ class KasBankControllerTest extends CIUnitTestCase
             'db_pelanggan',
             'db_jabatan',
             'db_jurnal',
+            'db_template_jurnal',
+            'db_kategori_kas',
             'db_pembelian',
             'db_pembayaran_hutang',
+            'db_suplier',
             'db_no_akun',
         ] as $tabel) {
             $q('DROP TABLE IF EXISTS ' . $tabel);
@@ -241,14 +244,30 @@ class KasBankControllerTest extends CIUnitTestCase
                 id_referensi INT NULL, tabel_referensi TEXT NULL,
                 id_unit INT NULL, id_akun INT NULL)');
 
+        // Dipakai alur baru pembayaran hutang -> kas_keluar TEMPO + jurnal.
+        $q('CREATE TABLE db_kategori_kas (
+                idkategori_kas INTEGER PRIMARY KEY AUTO_INCREMENT,
+                kategori TEXT NULL, kode_template_jurnal TEXT NULL,
+                jenis_kas TEXT NULL)');
+        $q('CREATE TABLE db_template_jurnal (
+                idtemplate_jurnal INTEGER PRIMARY KEY AUTO_INCREMENT,
+                kode_template TEXT NULL, no_akun TEXT NULL, nama_akun TEXT NULL,
+                debet_kredit TEXT NULL, array_value INT NULL, keterangan TEXT NULL)');
+
         // Siklus hutang: dipakai test A1 insert_cicilan (payment + status lunas
         // + ledger harus satu transaksi).
         $q('CREATE TABLE db_pembelian (
                 idpembelian INTEGER PRIMARY KEY AUTO_INCREMENT,
-                unit_idunit INT NULL, no_nota TEXT NULL, tanggal TEXT NULL,
-                jatuh_tempo TEXT NULL, total REAL NULL, sisa REAL NULL,
+                unit_idunit INT NULL, no_nota TEXT NULL, no_nota_supplier TEXT NULL,
+                tanggal TEXT NULL, tanggal_masuk TEXT NULL,
+                jatuh_tempo TEXT NULL, total REAL NULL, total_transaksi REAL NULL,
+                sisa REAL NULL, suplier_id_suplier INT NULL,
                 total_bayar REAL NULL, bayar REAL NULL,
                 bayar_tunai REAL NULL, bayar_bank REAL NULL, status TEXT NULL)');
+        $q('CREATE TABLE db_suplier (
+                id_suplier INTEGER PRIMARY KEY AUTO_INCREMENT,
+                nama_suplier TEXT NULL, alamat TEXT NULL, no_hp TEXT NULL,
+                deleted INT NULL, unit_idunit INT NULL)');
         $q('CREATE TABLE db_pembayaran_hutang (
                 idpembayaran_hutang INTEGER PRIMARY KEY AUTO_INCREMENT,
                 tanggal_bayar TEXT NULL, bayar REAL NULL,
@@ -280,9 +299,12 @@ class KasBankControllerTest extends CIUnitTestCase
             'db_hpp_barang',
             'db_barang',
             'db_opening_kas',
+            'db_suplier',
         ] as $tabel) {
             $q('DELETE FROM ' . $tabel);
         }
+
+        $q("INSERT INTO db_suplier (id_suplier, nama_suplier, deleted) VALUES (5, 'PT Contoh', 0)");
 
         $q("INSERT INTO db_unit (idunit, NAMA_UNIT) VALUES (1, 'Unit A'), (2, 'Unit B')");
         $q("INSERT INTO db_bank (idbank, nama_bank, atas_nama, norek) VALUES
@@ -3150,7 +3172,130 @@ public function testAdminCabangHanyaAksesRekeningUnitnya(): void
         $this->assertSame(0, (int)$p->bayar_bank);
     }
 
-    // ---- [A1-7]Happy path tetap commit; posting ulang tetap idempoten ----
+    // ---- [A1-7] Cicilan hutang sukses -> kas_keluar TEMPO + jurnal ----
+
+    private function seedKategoriTempoDanTemplate(): void
+    {
+        $this->db->query(
+            "INSERT INTO db_kategori_kas (idkategori_kas, kategori, jenis_kas)
+             VALUES (16, 'TEMPO', 'kas_keluar')"
+        );
+        $this->db->query(
+            "INSERT INTO db_template_jurnal (kode_template, no_akun, nama_akun, debet_kredit, array_value) VALUES
+             ('pembelian_lunas_tunai', '2010100000', 'Utang Usaha', 'debet', 0),
+             ('pembelian_lunas_tunai', '1010101000', 'Kas', 'kredit', 0),
+             ('pembelian_lunas_bank', '2010100000', 'Utang Usaha', 'debet', 0),
+             ('pembelian_lunas_bank', '1010202000', 'Bank', 'kredit', 0)"
+        );
+    }
+
+    public function testA1CicilanHutangMencatatKasKeluarTempoDanJurnal(): void
+    {
+        $this->sesi();
+        $this->seedKategoriTempoDanTemplate();
+
+        $this->db->query("INSERT INTO db_pembelian (idpembelian, unit_idunit, no_nota_supplier, tanggal_masuk, total_transaksi, sisa, suplier_id_suplier, total_bayar, bayar, bayar_tunai, bayar_bank, status, jatuh_tempo)
+            VALUES (3, 1, 'INV-3', '2026-11-20', 1000000, 1000000, 5, 0, 0, 0, 0, 'Belum Lunas', '2026-12-31')");
+
+        $r = $this->post('update_cicilan_hutang', [
+            'bayar_tunai' => '1000000',
+            'bayar_bank'  => '0',
+            'bank_idbank' => '',
+            'idpembelian' => '3',
+            'sisa'        => '0',
+        ]);
+        $r->assertStatus(302);
+
+        $this->assertSame('', $this->flashGagal());
+
+        $rows = $this->db->query('SELECT * FROM db_kas_keluar')->getResult();
+        $this->assertCount(1, $rows, 'pembayaran tunai harus menghasilkan satu baris kas keluar');
+        $this->assertSame(16, (int) $rows[0]->kategori_idkategori, 'kategori harus TEMPO');
+        $this->assertSame('2010100000', $rows[0]->no_akun);
+        $this->assertSame('debet', $rows[0]->jenis);
+        $this->assertSame(1, (int) $rows[0]->idunit, 'unit mengikuti pembelian');
+        $this->assertNull($rows[0]->idbank, 'tunai memakai idbank NULL');
+        $this->assertSame(1000000, (int) $rows[0]->jumlah);
+        $this->assertSame('PT Contoh', $rows[0]->penerima);
+        $this->assertStringContainsString('INV-3', (string) $rows[0]->deskripsi);
+
+        $jurnal = $this->db->query('SELECT * FROM db_jurnal')->getResult();
+        $this->assertCount(2, $jurnal);
+        $this->assertSame('pembayaran_hutang', $jurnal[0]->tabel_referensi);
+        $this->assertSame(
+            1000000,
+            (int) $this->db->query('SELECT SUM(debet) AS s FROM db_jurnal')->getRow()->s
+        );
+        $this->assertSame(
+            1000000,
+            (int) $this->db->query('SELECT SUM(kredit) AS s FROM db_jurnal')->getRow()->s
+        );
+
+        // Kontrak hybrid: kas_keluar adalah sumber arus kas, ledger tidak diisi.
+        $this->assertSame(
+            0,
+            (int) $this->db->query('SELECT COUNT(*) AS c FROM db_transaksi_kas_bank')->getRow()->c
+        );
+    }
+
+    public function testA1CicilanHutangCampuranMenghasilkanDuaBarisKasKeluar(): void
+    {
+        $this->sesi();
+        $this->seedKategoriTempoDanTemplate();
+
+        $this->db->query("INSERT INTO db_pembelian (idpembelian, unit_idunit, no_nota_supplier, tanggal_masuk, total_transaksi, sisa, suplier_id_suplier, total_bayar, bayar, bayar_tunai, bayar_bank, status, jatuh_tempo)
+            VALUES (4, 1, 'INV-4', '2026-11-20', 1000000, 1000000, 5, 0, 0, 0, 0, 'Belum Lunas', '2026-12-31')");
+
+        $r = $this->post('update_cicilan_hutang', [
+            'bayar_tunai' => '400000',
+            'bayar_bank'  => '600000',
+            'bank_idbank' => 'BNI-001',
+            'idpembelian' => '4',
+            'sisa'        => '0',
+        ]);
+        $r->assertStatus(302);
+
+        $this->assertSame('', $this->flashGagal());
+
+        $rows = $this->db->query('SELECT * FROM db_kas_keluar ORDER BY idkas_keluar')->getResult();
+        $this->assertCount(2, $rows);
+        $this->assertNull($rows[0]->idbank);
+        $this->assertSame('BNI-001', $rows[1]->idbank);
+        $this->assertSame(
+            1000000,
+            (int) $rows[0]->jumlah + (int) $rows[1]->jumlah
+        );
+        $this->assertSame(4, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_jurnal')->getRow()->c);
+    }
+
+    public function testA1CicilanHutangRollbackSaatKategoriTempoHilang(): void
+    {
+        $this->sesi();
+        // Kategori TEMPO sengaja tidak di-seed.
+
+        $this->db->query("INSERT INTO db_pembelian (idpembelian, unit_idunit, no_nota_supplier, tanggal_masuk, total_transaksi, sisa, suplier_id_suplier, total_bayar, bayar, bayar_tunai, bayar_bank, status, jatuh_tempo)
+            VALUES (5, 1, 'INV-5', '2026-11-20', 1000000, 1000000, 5, 0, 0, 0, 0, 'Belum Lunas', '2026-12-31')");
+
+        $r = $this->post('update_cicilan_hutang', [
+            'bayar_tunai' => '1000000',
+            'bayar_bank'  => '0',
+            'bank_idbank' => '',
+            'idpembelian' => '5',
+            'sisa'        => '0',
+        ]);
+        $r->assertStatus(302);
+
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_pembayaran_hutang')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_kas_keluar')->getRow()->c);
+        $this->assertSame(0, (int) $this->db->query('SELECT COUNT(*) AS c FROM db_jurnal')->getRow()->c);
+
+        $p = $this->db->query('SELECT * FROM db_pembelian WHERE idpembelian=5')->getRow();
+        $this->assertNotSame('Lunas', $p->status);
+        $this->assertSame(0, (int) $p->total_bayar);
+        $this->assertStringContainsString('TEMPO', $this->flashGagal());
+    }
+
+    // ---- [A1-8]Happy path tetap commit; posting ulang tetap idempoten ----
 
     public function testA1KasMasukValidTetapCommitDanIdempoten(): void
     {

@@ -19,6 +19,7 @@ use App\Models\ModelPembelian;
 use App\Models\ModelDetailPembelian;
 use App\Libraries\ModeKasBank;
 use App\Exceptions\PostingLedgerException;
+use App\Exceptions\PembayaranHutangKasKeluarException;
 use App\Services\Finance\BankRekeningValidator;
 use App\Services\Finance\FinanceScopeService;
 
@@ -308,6 +309,20 @@ class PembayaranHutang extends BaseController
                 // dalam transaksi, leg yang sudah terlanjur ditulis ikut
                 // hilang saat rollback.
                 PostingLedgerException::wajibBerhasil($posting, 'Cicilan hutang');
+
+                // Kontrak hybrid: arus kas operasional dibaca dari tabel
+                // sumber `kas_keluar`, bukan dari ledger. `pembayaran_hutang`
+                // tidak punya `transfer_ref`, jadi posting di atas selalu
+                // 'skipped'. Tanpa baris di bawah, hutang bisa Lunas tanpa
+                // uang keluar tercatat di Kas Keluar/Tutup Kasir.
+                (new \App\Services\Finance\PembayaranHutangKasKeluar())->catat(
+                    (int) $idPembayaran,
+                    (string) $data['tanggal_bayar'],
+                    (int) $bayar_tunai,
+                    (int) $bayar_bank,
+                    is_string($bank_idbank) ? $bank_idbank : null,
+                    $datapembelian
+                );
             }
 
             $status_hutang = '';
@@ -340,6 +355,12 @@ class PembayaranHutang extends BaseController
         } catch (PostingLedgerException $e) {
             $db->transRollback();
             log_message('error', 'KasBank: cicilan hutang #' . (int)$idPembayaran . ' dibatalkan, posting ledger gagal: ' . $e->getAlasan());
+            session()->setFlashdata('gagal', $e->getMessage());
+
+            return redirect()->to(base_url('daftar_tagihan'));
+        } catch (PembayaranHutangKasKeluarException $e) {
+            $db->transRollback();
+            log_message('error', 'KasKeluar: cicilan hutang #' . (int)$idPembayaran . ' dibatalkan: ' . $e->getMessage());
             session()->setFlashdata('gagal', $e->getMessage());
 
             return redirect()->to(base_url('daftar_tagihan'));
